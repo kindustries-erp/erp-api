@@ -1,0 +1,119 @@
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsUUID,
+  IsNotEmpty,
+  IsIn,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class CreatePaymentVouchersDto {
+  @ApiProperty() @IsString() @IsNotEmpty() voucher_no!: string;
+
+  @ApiProperty({ enum: ['CASH', 'BANK'] })
+  @IsString()
+  @IsNotEmpty()
+  voucher_channel!: string;
+
+  @ApiProperty({ enum: ['IN', 'OUT'] })
+  @IsString()
+  @IsNotEmpty()
+  voucher_direction!: string;
+
+  @ApiProperty({
+    enum: ['CASH_RECEIPT', 'CASH_PAYMENT', 'BANK_RECEIPT', 'BANK_PAYMENT'],
+  })
+  @IsString()
+  @IsNotEmpty()
+  voucher_type!: string;
+
+  @ApiProperty() @IsString() @IsNotEmpty() document_date!: string;
+  @ApiProperty() @IsString() @IsNotEmpty() posting_date!: string;
+
+  @ApiProperty({
+    enum: ['INTERNAL', 'EXTERNAL'],
+    description: 'Nguồn đối tác: nội bộ (nhân viên) hoặc bên ngoài (đối tác)',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['INTERNAL', 'EXTERNAL'])
+  counterparty_source!: string;
+
+  @ApiPropertyOptional({
+    description: 'UUID nhân viên — bắt buộc khi counterparty_source = INTERNAL',
+  })
+  @IsOptional()
+  @IsUUID()
+  employee_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'UUID đối tác — bắt buộc khi counterparty_source = EXTERNAL',
+  })
+  @IsOptional()
+  @IsUUID()
+  counterparty_id?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() counterparty_role?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_id_no?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_phone?: string;
+
+  @ApiProperty() @IsString() @IsNotEmpty() description!: string;
+  @ApiProperty() @IsUUID() @IsNotEmpty() debit_account_id!: string;
+  @ApiProperty() @IsUUID() @IsNotEmpty() credit_account_id!: string;
+
+  @ApiPropertyOptional({ description: 'Bắt buộc khi voucher_channel = CASH' })
+  @IsOptional()
+  @IsUUID()
+  cash_fund_id?: string;
+
+  @ApiPropertyOptional({ description: 'Bắt buộc khi voucher_channel = BANK' })
+  @IsOptional()
+  @IsUUID()
+  company_bank_account_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  beneficiary_bank_account_id?: string;
+
+  @ApiProperty() @IsNumber() @IsNotEmpty() amount!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() currency?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() amount_in_words?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+
+  // Snapshot — backend tự fill nếu không truyền
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_name_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_tax_code_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_address_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_phone_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_identity_no_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  beneficiary_bank_name_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  beneficiary_bank_account_snapshot?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  beneficiary_account_holder_snapshot?: string;
+}

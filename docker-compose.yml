@@ -1,0 +1,17 @@
+services:
+  erp-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: erp-backend
+    ports:
+      - "10000:10000"
+    env_file:
+      - .env
+    restart: always
+    networks:
+      - erp-network
+
+networks:
+  erp-network:
+    driver: bridge
