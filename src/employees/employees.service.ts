@@ -52,7 +52,7 @@ export class EmployeesService {
       const token = userToken;
 
       // Dùng native fetch để gọi thẳng REST API và lấy cả block "meta"
-      const url = new URL(`/items/gw_employees`, directusUrl);
+      const url = new URL(`/items/employees`, directusUrl);
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
@@ -111,7 +111,7 @@ export class EmployeesService {
     try {
       // 1. Cập nhật employee data
       const updatedEmployee = await (userClient as any).request(
-        (updateItem as any)('gw_employees', id, employeeData),
+        (updateItem as any)('employees', id, employeeData),
       );
 
       const adminToken = this.configService.get<string>('DIRECTUS_ADMIN_TOKEN');
@@ -141,7 +141,7 @@ export class EmployeesService {
       if (policy_id !== undefined) {
         // Lấy directus_user_id của employee này
         const employee = await (userClient as any).request(
-          (readItem as any)('gw_employees', id, {
+          (readItem as any)('employees', id, {
             fields: ['directus_user_id'],
           }),
         );
@@ -189,14 +189,14 @@ export class EmployeesService {
         if (policy_id === undefined) {
           // If policy_id was defined, we already fetched it
           const employee = await (userClient as any).request(
-            (readItem as any)('gw_employees', id, {
+            (readItem as any)('employees', id, {
               fields: ['directus_user_id'],
             }),
           );
           directusUserId = employee?.directus_user_id;
         } else {
           const employee = await (userClient as any).request(
-            (readItem as any)('gw_employees', id, {
+            (readItem as any)('employees', id, {
               fields: ['directus_user_id'],
             }),
           );
@@ -232,9 +232,9 @@ export class EmployeesService {
       .with(staticToken(userToken))
       .with(rest());
     try {
-      // Gọi Directus SDK để lấy chi tiết 1 bản ghi trong collection gw_employees
+      // Gọi Directus SDK để lấy chi tiết 1 bản ghi trong collection employees
       const employee = await (userClient as any).request(
-        (readItem as any)('gw_employees', id, {
+        (readItem as any)('employees', id, {
           fields: [
             '*',
             'department_id.*',
@@ -267,7 +267,7 @@ export class EmployeesService {
     try {
       // 1. Get user id from employee
       const employee = await (userClient as any).request(
-        (readItem as any)('gw_employees', id, { fields: ['directus_user_id'] }),
+        (readItem as any)('employees', id, { fields: ['directus_user_id'] }),
       );
       const directusUserId = employee?.directus_user_id;
 
@@ -330,7 +330,7 @@ export class EmployeesService {
     try {
       // 1. Get user id from employee
       const employee = await (userClient as any).request(
-        (readItem as any)('gw_employees', id, {
+        (readItem as any)('employees', id, {
           fields: ['directus_user_id', 'full_name'],
         }),
       );

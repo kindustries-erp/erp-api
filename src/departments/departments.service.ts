@@ -30,7 +30,7 @@ import {
 @Injectable()
 export class DepartmentsService {
   private readonly logger = new Logger(DepartmentsService.name);
-  private readonly collection = 'gw_departments';
+  private readonly collection = 'departments';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

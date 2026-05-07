@@ -39,7 +39,7 @@ interface DirectusError {
 @Injectable()
 export class PositionsService {
   private readonly logger = new Logger(PositionsService.name);
-  private readonly collection = 'gw_positions';
+  private readonly collection = 'positions';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

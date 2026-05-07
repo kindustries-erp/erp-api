@@ -38,7 +38,7 @@ interface DirectusError {
 @Injectable()
 export class VoucherNumberingConfigsService {
   private readonly logger = new Logger(VoucherNumberingConfigsService.name);
-  private readonly collection = 'gw_voucher_numbering_configs';
+  private readonly collection = 'voucher_numbering_configs';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

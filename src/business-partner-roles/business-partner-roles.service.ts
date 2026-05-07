@@ -29,7 +29,7 @@ import {
 @Injectable()
 export class BusinessPartnerRolesService {
   private readonly logger = new Logger(BusinessPartnerRolesService.name);
-  private readonly collection = 'gw_business_partner_roles';
+  private readonly collection = 'business_partner_roles';
 
   // Fields thực tế trong Directus: id, business_partner_id, role, is_default, is_active, note, created_at
   private readonly VALID_SORT_FIELDS = [

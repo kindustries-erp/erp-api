@@ -28,7 +28,7 @@ import {
 @Injectable()
 export class CashFundsService {
   private readonly logger = new Logger(CashFundsService.name);
-  private readonly collection = 'gw_cash_funds';
+  private readonly collection = 'cash_funds';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

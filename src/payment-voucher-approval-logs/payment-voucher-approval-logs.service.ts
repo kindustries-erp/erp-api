@@ -29,7 +29,7 @@ import {
 @Injectable()
 export class PaymentVoucherApprovalLogsService {
   private readonly logger = new Logger(PaymentVoucherApprovalLogsService.name);
-  private readonly collection = 'gw_payment_voucher_approval_logs';
+  private readonly collection = 'payment_voucher_approval_logs';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
@@ -79,7 +79,7 @@ export class PaymentVoucherApprovalLogsService {
       const filter: any = {};
       if (query.payment_voucher_id) {
         await (this.getClient(userToken) as any).request(
-          (readItem as any)('gw_payment_vouchers', query.payment_voucher_id),
+          (readItem as any)('payment_vouchers', query.payment_voucher_id),
         );
         filter.payment_voucher_id = { _eq: query.payment_voucher_id };
       }

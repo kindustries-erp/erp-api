@@ -49,7 +49,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 @Injectable()
 export class PaymentVouchersService {
   private readonly logger = new Logger(PaymentVouchersService.name);
-  private readonly collection = 'gw_payment_vouchers';
+  private readonly collection = 'payment_vouchers';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
@@ -94,7 +94,7 @@ export class PaymentVouchersService {
   private async fetchEmployeeSnapshot(
     employeeId: string,
   ): Promise<Record<string, string>> {
-    const url = new URL(`/items/gw_employees/${employeeId}`, this.directusUrl);
+    const url = new URL(`/items/employees/${employeeId}`, this.directusUrl);
     url.searchParams.append('fields[]', 'id');
     url.searchParams.append('fields[]', 'full_name');
     url.searchParams.append('fields[]', 'phone');
@@ -116,7 +116,7 @@ export class PaymentVouchersService {
     counterpartyId: string,
   ): Promise<Record<string, string>> {
     const res = await fetch(
-      `${this.directusUrl}/items/gw_business_partners/${counterpartyId}`,
+      `${this.directusUrl}/items/business_partners/${counterpartyId}`,
       {
         headers: { Authorization: `Bearer ${this.adminToken}` },
       },
@@ -138,7 +138,7 @@ export class PaymentVouchersService {
     bankAccountId: string,
   ): Promise<Record<string, string>> {
     const res = await fetch(
-      `${this.directusUrl}/items/gw_business_partner_bank_accounts/${bankAccountId}`,
+      `${this.directusUrl}/items/business_partner_bank_accounts/${bankAccountId}`,
       { headers: { Authorization: `Bearer ${this.adminToken}` } },
     );
     if (!res.ok) return {};
@@ -369,7 +369,7 @@ export class PaymentVouchersService {
   ) {
     try {
       await client.request(
-        (createItem as any)('gw_payment_voucher_approval_logs', {
+        (createItem as any)('payment_voucher_approval_logs', {
           payment_voucher_id: voucherId,
           action,
           note: note || null,
@@ -489,7 +489,7 @@ export class PaymentVouchersService {
   async findEmployeeOptions(query: PaymentVoucherQueryDto, userToken: string) {
     this.guard(userToken);
     try {
-      return await this.adminListItems('gw_employees', {
+      return await this.adminListItems('employees', {
         fields: ['id', 'full_name', 'phone'],
         search: query.search,
         page: query.page,
@@ -514,7 +514,7 @@ export class PaymentVouchersService {
   ) {
     this.guard(userToken);
     try {
-      return await this.adminListItems('gw_business_partners', {
+      return await this.adminListItems('business_partners', {
         fields: ['id', 'display_name', 'name', 'tax_code', 'address', 'phone'],
         search: query.search,
         page: query.page,
@@ -543,7 +543,7 @@ export class PaymentVouchersService {
         ? { business_partner_id: { _eq: query.counterparty_id } }
         : undefined;
 
-      return await this.adminListItems('gw_business_partner_bank_accounts', {
+      return await this.adminListItems('business_partner_bank_accounts', {
         fields: [
           'id',
           'business_partner_id',
@@ -620,7 +620,7 @@ export class PaymentVouchersService {
 
       let base_opening = 0;
       {
-        const obUrl = new URL('/items/gw_opening_balances', this.directusUrl);
+        const obUrl = new URL('/items/opening_balances', this.directusUrl);
         obUrl.searchParams.append('aggregate[sum]', 'debit_amount');
         obUrl.searchParams.append('aggregate[sum]', 'credit_amount');
 
@@ -773,7 +773,7 @@ export class PaymentVouchersService {
     const client = this.getClient(userToken);
     try {
       const attachments = await (client as any).request(
-        (readItems as any)('gw_payment_voucher_attachments', {
+        (readItems as any)('payment_voucher_attachments', {
           filter: { payment_voucher_id: { _eq: id } },
           fields: ['id'],
         }),
@@ -781,7 +781,7 @@ export class PaymentVouchersService {
       const attachmentIds = attachments?.map((a: any) => a.id) || [];
 
       const logs = await (client as any).request(
-        (readItems as any)('gw_payment_voucher_approval_logs', {
+        (readItems as any)('payment_voucher_approval_logs', {
           filter: { payment_voucher_id: { _eq: id } },
           fields: ['id'],
         }),
@@ -790,7 +790,7 @@ export class PaymentVouchersService {
 
       if (attachmentIds.length > 0) {
         await (client as any).request(
-          (deleteItems as any)('gw_payment_voucher_attachments', attachmentIds),
+          (deleteItems as any)('payment_voucher_attachments', attachmentIds),
         );
         this.logger.log(
           `Đã xóa ${attachmentIds.length} đính kèm của phiếu ${id}`,
@@ -798,7 +798,7 @@ export class PaymentVouchersService {
       }
       if (logIds.length > 0) {
         await (client as any).request(
-          (deleteItems as any)('gw_payment_voucher_approval_logs', logIds),
+          (deleteItems as any)('payment_voucher_approval_logs', logIds),
         );
         this.logger.log(
           `Đã xóa ${logIds.length} nhật ký duyệt của phiếu ${id}`,

@@ -28,7 +28,7 @@ import {
 @Injectable()
 export class OpeningBalancesService {
   private readonly logger = new Logger(OpeningBalancesService.name);
-  private readonly collection = 'gw_opening_balances';
+  private readonly collection = 'opening_balances';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

@@ -127,7 +127,7 @@ export class RbacService {
       { id: string; directus_user_id: string | { id: string } | null }[]
     >(
       'GET',
-      `/items/gw_employees?filter[id][_in]=${unresolvedIds.join(',')}&fields=id,directus_user_id&limit=-1`,
+      `/items/employees?filter[id][_in]=${unresolvedIds.join(',')}&fields=id,directus_user_id&limit=-1`,
     );
     const employeeUserIds = (employees || [])
       .map((employee) => {

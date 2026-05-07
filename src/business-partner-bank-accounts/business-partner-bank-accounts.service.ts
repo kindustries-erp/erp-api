@@ -28,7 +28,7 @@ import {
 @Injectable()
 export class BusinessPartnerBankAccountsService {
   private readonly logger = new Logger(BusinessPartnerBankAccountsService.name);
-  private readonly collection = 'gw_business_partner_bank_accounts';
+  private readonly collection = 'business_partner_bank_accounts';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

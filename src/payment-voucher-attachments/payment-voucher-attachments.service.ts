@@ -25,7 +25,7 @@ import { GetPaymentVoucherAttachmentsDto } from './dto/get-payment-voucher-attac
 @Injectable()
 export class PaymentVoucherAttachmentsService {
   private readonly logger = new Logger(PaymentVoucherAttachmentsService.name);
-  private readonly collection = 'gw_payment_voucher_attachments';
+  private readonly collection = 'payment_voucher_attachments';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
