@@ -1,29 +1,54 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Shared Types ─────────────────────────────────────────────────────────────
 
-export type NodeType = 'module' | 'process' | 'status';
-export type EdgeType =
-  | 'depends_on'
-  | 'creates'
-  | 'triggers'
-  | 'reads'
-  | 'belongs_to'
-  | 'settles'
+export type NodeKind = 'root' | 'admin' | 'department' | 'process' | 'status';
+export type EdgeKind =
+  | 'hierarchy'
+  | 'manages'
+  | 'process_step'
   | 'workflow_transition';
+
+export interface EmployeeSnippet {
+  id: string;
+  name: string;
+  position: string;
+}
+
+export interface StatusDef {
+  value: string;
+  label: string;
+  color: string;
+  terminal: boolean;
+}
+
+export interface TransitionDef {
+  from: string;
+  to: string;
+  action: string;
+  rule: string;
+  actor: string;
+}
 
 export interface WorkflowNode {
   id: string;
-  type: NodeType;
+  type: NodeKind;
+  level: number;
   label: string;
-  labelEn: string;
   description: string;
   group: string;
+  employees: EmployeeSnippet[];
+  roles: string[];
+  rules: string[];
+  statuses: StatusDef[];
   meta: {
     color: string;
     icon: string;
     endpoints?: string[];
+    parentId?: string;
     statusValue?: string;
+    terminal?: boolean;
   };
 }
 
@@ -32,825 +57,685 @@ export interface WorkflowEdge {
   source: string;
   target: string;
   label: string;
-  type: EdgeType;
-  meta: {
-    description: string;
-    field?: string;
-  };
-}
-
-export interface WorkflowGroup {
-  id: string;
-  label: string;
-  labelEn: string;
-  color: string;
-  description: string;
+  type: EdgeKind;
+  rule?: string;
+  actor?: string;
+  meta: { description: string };
 }
 
 export interface WorkflowGraph {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  groups: WorkflowGroup[];
   meta: {
     version: string;
     generatedAt: string;
+    layout: 'vertical';
     totalNodes: number;
     totalEdges: number;
-    totalGroups: number;
   };
 }
+
+// ─── Static process definitions ───────────────────────────────────────────────
+
+interface ProcessDef {
+  id: string;
+  label: string;
+  description: string;
+  deptKeywords: string[];
+  color: string;
+  icon: string;
+  rules: string[];
+  statuses: StatusDef[];
+  transitions: TransitionDef[];
+  endpoints: string[];
+}
+
+const PROCESS_DEFS: ProcessDef[] = [
+  {
+    id: 'proc-payment-vouchers',
+    label: 'Quy trình Phiếu Thu/Chi',
+    description:
+      'Lập, trình duyệt và hạch toán phiếu thu/chi tiền mặt và chuyển khoản',
+    deptKeywords: [
+      'kế toán',
+      'tài chính',
+      'ke toan',
+      'tai chinh',
+      'finance',
+      'accounting',
+    ],
+    color: '#ec4899',
+    icon: 'file-text',
+    rules: [
+      'Kế toán viên tạo phiếu → trạng thái DRAFT',
+      'Chỉ phiếu DRAFT mới được sửa hoặc xóa',
+      'Gửi duyệt: DRAFT → PENDING_APPROVAL (không thể hoàn tác)',
+      'Kế toán trưởng duyệt phiếu có số tiền ≤ 50.000.000 VND',
+      'Ban Giám Đốc phê duyệt phiếu có số tiền > 50.000.000 VND',
+      'Hạch toán: APPROVED → POSTED (ghi sổ, không thể hoàn tác)',
+      'Chỉ phiếu POSTED mới được dùng để bù trừ công nợ',
+      'Hủy cho phép ở trạng thái DRAFT, PENDING_APPROVAL, APPROVED',
+    ],
+    statuses: [
+      { value: 'DRAFT', label: 'Nháp', color: '#94a3b8', terminal: false },
+      {
+        value: 'PENDING_APPROVAL',
+        label: 'Chờ duyệt',
+        color: '#f59e0b',
+        terminal: false,
+      },
+      { value: 'APPROVED', label: 'Đã duyệt', color: '#3b82f6', terminal: false },
+      {
+        value: 'POSTED',
+        label: 'Đã hạch toán',
+        color: '#10b981',
+        terminal: true,
+      },
+      { value: 'REJECTED', label: 'Từ chối', color: '#ef4444', terminal: true },
+      { value: 'CANCELLED', label: 'Đã hủy', color: '#6b7280', terminal: true },
+    ],
+    transitions: [
+      {
+        from: 'DRAFT',
+        to: 'PENDING_APPROVAL',
+        action: 'submit',
+        rule: 'Kế toán viên gửi phiếu chờ duyệt',
+        actor: 'Kế toán viên',
+      },
+      {
+        from: 'PENDING_APPROVAL',
+        to: 'APPROVED',
+        action: 'approve',
+        rule: '≤ 50tr VND: Kế toán trưởng; > 50tr VND: Ban Giám Đốc',
+        actor: 'Kế toán trưởng / Ban Giám Đốc',
+      },
+      {
+        from: 'PENDING_APPROVAL',
+        to: 'REJECTED',
+        action: 'reject',
+        rule: 'Từ chối kèm lý do bắt buộc',
+        actor: 'Kế toán trưởng / Ban Giám Đốc',
+      },
+      {
+        from: 'APPROVED',
+        to: 'POSTED',
+        action: 'post',
+        rule: 'Hạch toán vào sổ kế toán',
+        actor: 'Kế toán trưởng',
+      },
+      {
+        from: 'DRAFT',
+        to: 'CANCELLED',
+        action: 'cancel',
+        rule: 'Hủy phiếu nháp',
+        actor: 'Người tạo / Kế toán trưởng',
+      },
+      {
+        from: 'PENDING_APPROVAL',
+        to: 'CANCELLED',
+        action: 'cancel',
+        rule: 'Hủy khi đang chờ duyệt',
+        actor: 'Người tạo / Kế toán trưởng',
+      },
+      {
+        from: 'APPROVED',
+        to: 'CANCELLED',
+        action: 'cancel',
+        rule: 'Hủy phiếu đã duyệt nhưng chưa hạch toán',
+        actor: 'Kế toán trưởng / Ban Giám Đốc',
+      },
+    ],
+    endpoints: [
+      'POST   /api/v1/payment-vouchers',
+      'POST   /api/v1/payment-vouchers/:id/submit',
+      'POST   /api/v1/payment-vouchers/:id/approve',
+      'POST   /api/v1/payment-vouchers/:id/reject',
+      'POST   /api/v1/payment-vouchers/:id/post',
+      'POST   /api/v1/payment-vouchers/:id/cancel',
+    ],
+  },
+  {
+    id: 'proc-partner-ledger',
+    label: 'Quy trình Công Nợ',
+    description:
+      'Quản lý khoản phải thu, phải trả và bù trừ công nợ với đối tác',
+    deptKeywords: [
+      'kế toán',
+      'tài chính',
+      'ke toan',
+      'tai chinh',
+      'finance',
+      'accounting',
+    ],
+    color: '#8b5cf6',
+    icon: 'book-open',
+    rules: [
+      'Kế toán viên tạo khoản công nợ: RECEIVABLE (phải thu) hoặc PAYABLE (phải trả)',
+      'Nguồn gốc: OPENING (đầu kỳ), MANUAL (thủ công), SALES_DOC, PURCHASE_DOC, ADJUSTMENT',
+      'Bù trừ chỉ áp dụng khi phiếu thu/chi ở trạng thái POSTED',
+      'Số tiền bù trừ ≤ remaining_amount của khoản công nợ',
+      'Khoản công nợ đã SETTLED không thể bù trừ thêm',
+    ],
+    statuses: [
+      { value: 'OPEN', label: 'Còn nợ đầy đủ', color: '#ef4444', terminal: false },
+      {
+        value: 'PARTIAL',
+        label: 'Bù trừ một phần',
+        color: '#f59e0b',
+        terminal: false,
+      },
+      {
+        value: 'SETTLED',
+        label: 'Đã tất toán',
+        color: '#10b981',
+        terminal: true,
+      },
+    ],
+    transitions: [
+      {
+        from: 'OPEN',
+        to: 'PARTIAL',
+        action: 'partial settle',
+        rule: 'Bù trừ một phần qua phiếu POSTED',
+        actor: 'Kế toán viên',
+      },
+      {
+        from: 'OPEN',
+        to: 'SETTLED',
+        action: 'full settle',
+        rule: 'Bù trừ toàn bộ số tiền một lần',
+        actor: 'Kế toán viên',
+      },
+      {
+        from: 'PARTIAL',
+        to: 'SETTLED',
+        action: 'settle remaining',
+        rule: 'Bù trừ phần tiền còn lại',
+        actor: 'Kế toán viên',
+      },
+    ],
+    endpoints: [
+      'POST   /api/v1/partner-ledger-items',
+      'GET    /api/v1/partner-ledger-items',
+      'POST   /api/v1/partner-ledger-settlements',
+      'DELETE /api/v1/partner-ledger-settlements/:id',
+    ],
+  },
+  {
+    id: 'proc-hr-employees',
+    label: 'Quản lý Nhân Viên',
+    description: 'Hồ sơ nhân viên, phòng ban, chức vụ và cơ cấu tổ chức',
+    deptKeywords: [
+      'nhân sự',
+      'hành chính',
+      'nhan su',
+      'hr',
+      'human',
+      'personnel',
+    ],
+    color: '#10b981',
+    icon: 'users',
+    rules: [
+      'HR Specialist tạo và cập nhật hồ sơ nhân viên',
+      'Nhân viên bắt buộc thuộc một phòng ban và chức vụ hợp lệ',
+      'HR Manager phê duyệt thay đổi chức vụ và bậc lương',
+      'Chỉ Admin mới được xóa hồ sơ nhân viên',
+      'Nhân viên nội bộ được dùng làm đối tượng thu/chi (counterparty_source = INTERNAL)',
+    ],
+    statuses: [
+      {
+        value: 'ACTIVE',
+        label: 'Đang làm việc',
+        color: '#10b981',
+        terminal: false,
+      },
+      {
+        value: 'ON_LEAVE',
+        label: 'Nghỉ phép',
+        color: '#f59e0b',
+        terminal: false,
+      },
+      {
+        value: 'INACTIVE',
+        label: 'Đã nghỉ việc',
+        color: '#6b7280',
+        terminal: true,
+      },
+    ],
+    transitions: [
+      {
+        from: 'ACTIVE',
+        to: 'ON_LEAVE',
+        action: 'leave',
+        rule: 'HR Specialist ghi nhận nghỉ phép có thời hạn',
+        actor: 'HR Specialist',
+      },
+      {
+        from: 'ON_LEAVE',
+        to: 'ACTIVE',
+        action: 'return',
+        rule: 'Kết thúc nghỉ phép, trở lại làm việc',
+        actor: 'HR Specialist',
+      },
+      {
+        from: 'ACTIVE',
+        to: 'INACTIVE',
+        action: 'offboard',
+        rule: 'HR Manager xử lý thủ tục nghỉ việc',
+        actor: 'HR Manager',
+      },
+    ],
+    endpoints: [
+      'GET    /api/v1/employees',
+      'POST   /api/v1/employees',
+      'PATCH  /api/v1/employees/:id',
+      'DELETE /api/v1/employees/:id',
+    ],
+  },
+  {
+    id: 'proc-business-partners',
+    label: 'Quản lý Đối Tác',
+    description:
+      'Khách hàng, nhà cung cấp, liên hệ và tài khoản ngân hàng đối tác',
+    deptKeywords: [
+      'kinh doanh',
+      'bán hàng',
+      'mua hàng',
+      'sales',
+      'purchase',
+      'kd',
+      'business',
+    ],
+    color: '#f59e0b',
+    icon: 'globe',
+    rules: [
+      'Nhân viên kinh doanh tạo và cập nhật thông tin đối tác',
+      'Phân loại đối tác theo vai trò: Khách hàng, Nhà cung cấp, hoặc cả hai',
+      'Mỗi đối tác nên có ít nhất một liên hệ (Business Partner Contacts)',
+      'TK ngân hàng đối tác cần xác nhận trước khi thanh toán chuyển khoản',
+      'Đối tác ngoài (EXTERNAL) được dùng làm đối tượng thu/chi phiếu',
+    ],
+    statuses: [
+      {
+        value: 'ACTIVE',
+        label: 'Đang hợp tác',
+        color: '#10b981',
+        terminal: false,
+      },
+      {
+        value: 'SUSPENDED',
+        label: 'Tạm ngừng',
+        color: '#f59e0b',
+        terminal: false,
+      },
+      {
+        value: 'INACTIVE',
+        label: 'Ngừng hợp tác',
+        color: '#6b7280',
+        terminal: true,
+      },
+    ],
+    transitions: [
+      {
+        from: 'ACTIVE',
+        to: 'SUSPENDED',
+        action: 'suspend',
+        rule: 'Quản lý tạm ngừng hợp tác',
+        actor: 'Sales Manager',
+      },
+      {
+        from: 'SUSPENDED',
+        to: 'ACTIVE',
+        action: 'reactivate',
+        rule: 'Khôi phục quan hệ hợp tác',
+        actor: 'Sales Manager',
+      },
+      {
+        from: 'ACTIVE',
+        to: 'INACTIVE',
+        action: 'deactivate',
+        rule: 'Kết thúc hợp tác vĩnh viễn',
+        actor: 'Sales Manager / Ban Giám Đốc',
+      },
+    ],
+    endpoints: [
+      'GET    /api/v1/business-partners',
+      'POST   /api/v1/business-partners',
+      'PATCH  /api/v1/business-partners/:id',
+    ],
+  },
+  {
+    id: 'proc-rbac',
+    label: 'Phân Quyền & Bảo Mật',
+    description:
+      'Quản lý vai trò, quyền truy cập người dùng và nhật ký hệ thống',
+    deptKeywords: ['it', 'system', 'admin', 'quản trị', 'công nghệ', 'technology'],
+    color: '#6366f1',
+    icon: 'shield',
+    rules: [
+      'Chỉ Admin mới có thể tạo/sửa/xóa vai trò (Roles) và chính sách (Policies)',
+      'Mỗi người dùng phải được gán ít nhất một vai trò',
+      'Quyền hoạt động theo chuỗi: Role → Policy → Permission (collection + action)',
+      'Nhật ký hoạt động ghi lại toàn bộ thao tác của mọi người dùng',
+      'Access token tự động hết hạn và cần refresh định kỳ',
+    ],
+    statuses: [],
+    transitions: [],
+    endpoints: [
+      'GET    /api/v1/rbac/roles',
+      'POST   /api/v1/rbac/roles',
+      'PATCH  /api/v1/rbac/roles/:id/permissions',
+      'PATCH  /api/v1/rbac/roles/:id/users',
+      'GET    /api/v1/activity-logs',
+    ],
+  },
+];
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 @Injectable()
 export class WorkflowGraphService {
-  getGraph(): WorkflowGraph {
-    const nodes = this.buildNodes();
-    const edges = this.buildEdges();
-    const groups = this.buildGroups();
+  private readonly logger = new Logger(WorkflowGraphService.name);
+
+  constructor(private readonly configService: ConfigService) {}
+
+  private get directusUrl(): string | null {
+    return this.configService.get<string>('DIRECTUS_URL') ?? null;
+  }
+
+  private get adminToken(): string | null {
+    return this.configService.get<string>('DIRECTUS_ADMIN_TOKEN') ?? null;
+  }
+
+  private async fetchDirectus<T>(path: string): Promise<T[]> {
+    if (!this.directusUrl || !this.adminToken) return [];
+    try {
+      const res = await fetch(`${this.directusUrl}${path}`, {
+        headers: { Authorization: `Bearer ${this.adminToken}` },
+      });
+      if (!res.ok) return [];
+      const json = (await res.json()) as { data?: T[] };
+      return json.data ?? [];
+    } catch (err) {
+      this.logger.warn(`fetchDirectus ${path} failed: ${err}`);
+      return [];
+    }
+  }
+
+  async getGraph(): Promise<WorkflowGraph> {
+    const [rawDepts, rawEmployees, rawUsers] = await Promise.all([
+      this.fetchDirectus<any>(
+        '/items/departments?fields[]=id&fields[]=name&fields[]=description&limit=50',
+      ),
+      this.fetchDirectus<any>(
+        '/items/employees?fields[]=id&fields[]=full_name&fields[]=department_id.id&fields[]=department_id.name&fields[]=position_id.name&limit=200',
+      ),
+      this.fetchDirectus<any>(
+        '/users?fields[]=id&fields[]=first_name&fields[]=last_name&fields[]=role.name&fields[]=role.admin_access&limit=100',
+      ),
+    ]);
+
+    return this.buildGraph(rawDepts, rawEmployees, rawUsers);
+  }
+
+  // ─── Graph builder ──────────────────────────────────────────────────────────
+
+  private buildGraph(
+    rawDepts: any[],
+    rawEmployees: any[],
+    rawUsers: any[],
+  ): WorkflowGraph {
+    const nodes: WorkflowNode[] = [];
+    const edges: WorkflowEdge[] = [];
+
+    // ── Level 0: Root ─────────────────────────────────────────────────────────
+    nodes.push({
+      id: 'root',
+      type: 'root',
+      level: 0,
+      label: 'Hệ thống ERP Liouni',
+      description:
+        'Trung tâm quản lý toàn bộ nghiệp vụ tài chính, nhân sự và đối tác',
+      group: 'system',
+      employees: [],
+      roles: [],
+      rules: [
+        'Tất cả người dùng phải xác thực qua Bearer Token (Directus)',
+        'Mọi thao tác được kiểm tra quyền theo Role → Policy → Permission',
+        'Toàn bộ hoạt động được ghi vào nhật ký (Activity Log)',
+      ],
+      statuses: [],
+      meta: { color: '#1e40af', icon: 'layers' },
+    });
+
+    // ── Level 1: Admin / BGĐ ──────────────────────────────────────────────────
+    const adminEmployees: EmployeeSnippet[] = rawUsers
+      .filter((u) => {
+        const role = u.role;
+        if (!role || typeof role !== 'object') return false;
+        return (
+          role.admin_access === true ||
+          role.name?.toLowerCase().includes('admin') ||
+          role.name?.toLowerCase().includes('director') ||
+          role.name?.toLowerCase().includes('giám đốc')
+        );
+      })
+      .slice(0, 10)
+      .map((u) => ({
+        id: u.id,
+        name:
+          `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.id.slice(0, 8),
+        position:
+          typeof u.role === 'object' ? (u.role?.name ?? 'Admin') : 'Admin',
+      }));
+
+    nodes.push({
+      id: 'admin',
+      type: 'admin',
+      level: 1,
+      label: 'Ban Giám Đốc / Quản trị viên',
+      description:
+        'Toàn quyền hệ thống. Phê duyệt giao dịch giá trị cao và quản lý người dùng.',
+      group: 'management',
+      employees: adminEmployees,
+      roles: ['Administrator', 'Director / CEO'],
+      rules: [
+        'Toàn quyền đọc/ghi/xóa trên tất cả phân hệ',
+        'Phê duyệt phiếu thu/chi có số tiền > 50.000.000 VND',
+        'Quản lý vai trò và phân quyền người dùng (RBAC)',
+        'Cấu hình danh mục dùng chung (sơ đồ tài khoản, quỹ, số phiếu)',
+        'Xem toàn bộ nhật ký hoạt động',
+      ],
+      statuses: [],
+      meta: { color: '#1e40af', icon: 'crown' },
+    });
+
+    edges.push({
+      id: 'e-root-admin',
+      source: 'root',
+      target: 'admin',
+      label: 'Quản trị toàn hệ thống',
+      type: 'hierarchy',
+      rule: 'Tài khoản có admin_access = true trong Directus',
+      actor: 'Administrator',
+      meta: { description: 'Root → Admin' },
+    });
+
+    // ── Level 2: Departments ──────────────────────────────────────────────────
+    const deptNodes: WorkflowNode[] = rawDepts.map((dept) => {
+      const emps: EmployeeSnippet[] = rawEmployees
+        .filter((e) => {
+          const dId =
+            typeof e.department_id === 'object'
+              ? e.department_id?.id
+              : e.department_id;
+          return dId === dept.id;
+        })
+        .map((e) => ({
+          id: e.id,
+          name: e.full_name ?? e.id.slice(0, 8),
+          position:
+            typeof e.position_id === 'object'
+              ? (e.position_id?.name ?? '')
+              : '',
+        }));
+
+      return {
+        id: `dept-${dept.id}`,
+        type: 'department' as NodeKind,
+        level: 2,
+        label: dept.name,
+        description: dept.description ?? `Phòng ${dept.name}`,
+        group: 'department',
+        employees: emps,
+        roles: [],
+        rules: [],
+        statuses: [],
+        meta: { color: '#0369a1', icon: 'building', parentId: 'admin' },
+      };
+    });
+
+    if (deptNodes.length === 0) {
+      deptNodes.push({
+        id: 'dept-default',
+        type: 'department',
+        level: 2,
+        label: 'Các Phòng Ban',
+        description: 'Phòng ban trong tổ chức',
+        group: 'department',
+        employees: [],
+        roles: [],
+        rules: [],
+        statuses: [],
+        meta: { color: '#0369a1', icon: 'building', parentId: 'admin' },
+      });
+    }
+
+    nodes.push(...deptNodes);
+
+    for (const dn of deptNodes) {
+      edges.push({
+        id: `e-admin-${dn.id}`,
+        source: 'admin',
+        target: dn.id,
+        label: 'Giám sát phòng ban',
+        type: 'hierarchy',
+        rule: 'Ban Giám Đốc giám sát hoạt động tất cả phòng ban',
+        actor: 'Ban Giám Đốc',
+        meta: { description: `Admin → ${dn.label}` },
+      });
+    }
+
+    // ── Level 3: Processes (matched to dept by keyword) ───────────────────────
+    const matchDeptId = (keywords: string[]): string => {
+      for (const dn of deptNodes) {
+        const name = dn.label.toLowerCase();
+        if (keywords.some((k) => name.includes(k.toLowerCase()))) return dn.id;
+      }
+      return 'admin';
+    };
+
+    for (const proc of PROCESS_DEFS) {
+      const parentId = matchDeptId(proc.deptKeywords);
+      const parentNode = nodes.find((n) => n.id === parentId);
+
+      nodes.push({
+        id: proc.id,
+        type: 'process',
+        level: 3,
+        label: proc.label,
+        description: proc.description,
+        group: 'process',
+        employees: [],
+        roles: [],
+        rules: proc.rules,
+        statuses: proc.statuses,
+        meta: {
+          color: proc.color,
+          icon: proc.icon,
+          endpoints: proc.endpoints,
+          parentId,
+        },
+      });
+
+      edges.push({
+        id: `e-${parentId}-${proc.id}`,
+        source: parentId,
+        target: proc.id,
+        label: 'Vận hành quy trình',
+        type: 'manages',
+        meta: {
+          description: `${parentNode?.label ?? 'Admin'} → ${proc.label}`,
+        },
+      });
+
+      // ── Level 4: Status nodes ───────────────────────────────────────────────
+      if (proc.statuses.length === 0) continue;
+
+      // Process → first status (init edge)
+      const first = proc.statuses[0];
+      edges.push({
+        id: `e-${proc.id}-init`,
+        source: proc.id,
+        target: `${proc.id}-${first.value}`,
+        label: 'Khởi tạo',
+        type: 'process_step',
+        rule: `Tạo mới → ${first.label}`,
+        actor: 'Người dùng có quyền tạo',
+        meta: { description: `Tạo mới bắt đầu ở trạng thái ${first.label}` },
+      });
+
+      for (const status of proc.statuses) {
+        nodes.push({
+          id: `${proc.id}-${status.value}`,
+          type: 'status',
+          level: 4,
+          label: status.label,
+          description: status.terminal
+            ? 'Trạng thái kết thúc — không thể chuyển tiếp'
+            : 'Trạng thái trung gian',
+          group: `status-${proc.id}`,
+          employees: [],
+          roles: [],
+          rules: [],
+          statuses: [],
+          meta: {
+            color: status.color,
+            icon: status.terminal ? 'check-circle' : 'circle',
+            parentId: proc.id,
+            statusValue: status.value,
+            terminal: status.terminal,
+          },
+        });
+      }
+
+      // Transition edges between status nodes
+      for (const t of proc.transitions) {
+        edges.push({
+          id: `e-${proc.id}-${t.from}-${t.to}`,
+          source: `${proc.id}-${t.from}`,
+          target: `${proc.id}-${t.to}`,
+          label: t.action,
+          type: 'workflow_transition',
+          rule: t.rule,
+          actor: t.actor,
+          meta: {
+            description: `${t.from} → ${t.to} | ${t.rule}`,
+          },
+        });
+      }
+    }
 
     return {
       nodes,
       edges,
-      groups,
       meta: {
-        version: '1.0.0',
+        version: '2.0.0',
         generatedAt: new Date().toISOString(),
+        layout: 'vertical',
         totalNodes: nodes.length,
         totalEdges: edges.length,
-        totalGroups: groups.length,
       },
     };
-  }
-
-  // ─── Groups ────────────────────────────────────────────────────────────────
-
-  private buildGroups(): WorkflowGroup[] {
-    return [
-      {
-        id: 'system',
-        label: 'Hệ thống',
-        labelEn: 'System',
-        color: '#6366f1',
-        description: 'Xác thực, phân quyền, file và nhật ký hoạt động',
-      },
-      {
-        id: 'hr',
-        label: 'Nhân sự',
-        labelEn: 'Human Resources',
-        color: '#10b981',
-        description: 'Nhân viên, phòng ban, chức vụ',
-      },
-      {
-        id: 'master',
-        label: 'Danh mục đối tác',
-        labelEn: 'Business Partner Master',
-        color: '#f59e0b',
-        description: 'Đối tác, liên hệ, tài khoản ngân hàng đối tác, vai trò',
-      },
-      {
-        id: 'finance-setup',
-        label: 'Thiết lập tài chính',
-        labelEn: 'Finance Setup',
-        color: '#3b82f6',
-        description:
-          'Sơ đồ tài khoản, quỹ tiền mặt, tài khoản ngân hàng công ty, số dư đầu kỳ, cấu hình số phiếu',
-      },
-      {
-        id: 'voucher',
-        label: 'Phiếu thu/chi',
-        labelEn: 'Payment Vouchers',
-        color: '#ec4899',
-        description: 'Quy trình lập, duyệt và hạch toán phiếu thu/chi',
-      },
-      {
-        id: 'voucher-workflow',
-        label: 'Luồng duyệt phiếu',
-        labelEn: 'Voucher Approval Workflow',
-        color: '#f97316',
-        description: 'Các trạng thái trong vòng đời của phiếu thu/chi',
-      },
-      {
-        id: 'ledger',
-        label: 'Công nợ',
-        labelEn: 'Partner Ledger',
-        color: '#8b5cf6',
-        description: 'Khoản công nợ và bù trừ công nợ với đối tác',
-      },
-    ];
-  }
-
-  // ─── Nodes ─────────────────────────────────────────────────────────────────
-
-  private buildNodes(): WorkflowNode[] {
-    return [
-      // ── System ──────────────────────────────────────────────────────────────
-      {
-        id: 'auth',
-        type: 'module',
-        label: 'Xác thực',
-        labelEn: 'Authentication',
-        description:
-          'Đăng nhập, đăng ký, làm mới token. Tất cả API đều xác thực qua Directus Bearer token.',
-        group: 'system',
-        meta: {
-          color: '#6366f1',
-          icon: 'lock',
-          endpoints: ['POST /auth/login', 'POST /auth/register', 'POST /auth/refresh'],
-        },
-      },
-      {
-        id: 'rbac',
-        type: 'module',
-        label: 'Phân quyền (RBAC)',
-        labelEn: 'Role-Based Access Control',
-        description:
-          'Quản lý vai trò (roles), chính sách (policies), quyền (permissions) và gán người dùng vào vai trò.',
-        group: 'system',
-        meta: {
-          color: '#6366f1',
-          icon: 'shield',
-          endpoints: [
-            'GET /rbac/roles',
-            'POST /rbac/roles',
-            'GET /rbac/policies',
-            'PATCH /rbac/roles/:id/permissions',
-            'PATCH /rbac/roles/:id/users',
-          ],
-        },
-      },
-      {
-        id: 'files',
-        type: 'module',
-        label: 'Quản lý file',
-        labelEn: 'File Management',
-        description: 'Upload và quản lý file qua Directus Files API.',
-        group: 'system',
-        meta: {
-          color: '#6366f1',
-          icon: 'paperclip',
-          endpoints: ['POST /files/upload', 'GET /files/:id'],
-        },
-      },
-      {
-        id: 'activity-logs',
-        type: 'module',
-        label: 'Nhật ký hoạt động',
-        labelEn: 'Activity Logs',
-        description:
-          'Ghi lại mọi thao tác của người dùng trên hệ thống để phục vụ audit.',
-        group: 'system',
-        meta: {
-          color: '#6366f1',
-          icon: 'history',
-          endpoints: ['GET /activity-logs'],
-        },
-      },
-
-      // ── HR ───────────────────────────────────────────────────────────────────
-      {
-        id: 'departments',
-        type: 'module',
-        label: 'Phòng ban',
-        labelEn: 'Departments',
-        description: 'Danh mục phòng ban trong tổ chức.',
-        group: 'hr',
-        meta: {
-          color: '#10b981',
-          icon: 'building',
-          endpoints: ['GET /departments', 'POST /departments', 'PATCH /departments/:id', 'DELETE /departments/:id'],
-        },
-      },
-      {
-        id: 'positions',
-        type: 'module',
-        label: 'Chức vụ',
-        labelEn: 'Positions',
-        description: 'Danh mục chức vụ, liên kết với phòng ban.',
-        group: 'hr',
-        meta: {
-          color: '#10b981',
-          icon: 'briefcase',
-          endpoints: ['GET /positions', 'POST /positions', 'PATCH /positions/:id'],
-        },
-      },
-      {
-        id: 'employees',
-        type: 'module',
-        label: 'Nhân viên',
-        labelEn: 'Employees',
-        description:
-          'Hồ sơ nhân viên: thông tin cá nhân, phòng ban, chức vụ. Được dùng làm đối tượng thanh toán nội bộ trong phiếu thu/chi.',
-        group: 'hr',
-        meta: {
-          color: '#10b981',
-          icon: 'users',
-          endpoints: ['GET /employees', 'POST /employees', 'PATCH /employees/:id', 'DELETE /employees/:id'],
-        },
-      },
-
-      // ── Business Partner Master ───────────────────────────────────────────
-      {
-        id: 'business-partner-roles',
-        type: 'module',
-        label: 'Vai trò đối tác',
-        labelEn: 'Business Partner Roles',
-        description:
-          'Danh mục vai trò: Khách hàng, Nhà cung cấp, v.v. Dùng để phân loại đối tác.',
-        group: 'master',
-        meta: {
-          color: '#f59e0b',
-          icon: 'tag',
-          endpoints: ['GET /business-partner-roles', 'POST /business-partner-roles'],
-        },
-      },
-      {
-        id: 'business-partners',
-        type: 'module',
-        label: 'Đối tác',
-        labelEn: 'Business Partners',
-        description:
-          'Danh mục đối tác bên ngoài: khách hàng, nhà cung cấp. Được dùng làm đối tượng thanh toán trong phiếu thu/chi và khoản công nợ.',
-        group: 'master',
-        meta: {
-          color: '#f59e0b',
-          icon: 'globe',
-          endpoints: ['GET /business-partners', 'POST /business-partners', 'PATCH /business-partners/:id'],
-        },
-      },
-      {
-        id: 'business-partner-contacts',
-        type: 'module',
-        label: 'Liên hệ đối tác',
-        labelEn: 'Business Partner Contacts',
-        description: 'Danh sách đầu mối liên hệ thuộc từng đối tác.',
-        group: 'master',
-        meta: {
-          color: '#f59e0b',
-          icon: 'phone',
-          endpoints: ['GET /business-partner-contacts', 'POST /business-partner-contacts'],
-        },
-      },
-      {
-        id: 'business-partner-bank-accounts',
-        type: 'module',
-        label: 'TK ngân hàng đối tác',
-        labelEn: 'Business Partner Bank Accounts',
-        description:
-          'Tài khoản ngân hàng của đối tác. Được dùng khi lập phiếu chi chuyển khoản.',
-        group: 'master',
-        meta: {
-          color: '#f59e0b',
-          icon: 'credit-card',
-          endpoints: ['GET /business-partner-bank-accounts', 'POST /business-partner-bank-accounts'],
-        },
-      },
-
-      // ── Finance Setup ─────────────────────────────────────────────────────
-      {
-        id: 'chart-of-accounts',
-        type: 'module',
-        label: 'Sơ đồ tài khoản',
-        labelEn: 'Chart of Accounts',
-        description:
-          'Danh mục tài khoản kế toán theo chuẩn VAS. Là nền tảng để ghi nhận hạch toán Nợ/Có trên mọi phiếu.',
-        group: 'finance-setup',
-        meta: {
-          color: '#3b82f6',
-          icon: 'list',
-          endpoints: ['GET /chart-of-accounts', 'POST /chart-of-accounts', 'PATCH /chart-of-accounts/:id'],
-        },
-      },
-      {
-        id: 'cash-funds',
-        type: 'module',
-        label: 'Quỹ tiền mặt',
-        labelEn: 'Cash Funds',
-        description:
-          'Danh mục quỹ tiền mặt. Bắt buộc chọn khi lập phiếu thu/chi tiền mặt.',
-        group: 'finance-setup',
-        meta: {
-          color: '#3b82f6',
-          icon: 'dollar-sign',
-          endpoints: ['GET /cash-funds', 'POST /cash-funds', 'PATCH /cash-funds/:id'],
-        },
-      },
-      {
-        id: 'company-bank-accounts',
-        type: 'module',
-        label: 'TK ngân hàng công ty',
-        labelEn: 'Company Bank Accounts',
-        description:
-          'Tài khoản ngân hàng của công ty. Bắt buộc chọn khi lập phiếu thu/chi chuyển khoản.',
-        group: 'finance-setup',
-        meta: {
-          color: '#3b82f6',
-          icon: 'landmark',
-          endpoints: ['GET /company-bank-accounts', 'POST /company-bank-accounts'],
-        },
-      },
-      {
-        id: 'opening-balances',
-        type: 'module',
-        label: 'Số dư đầu kỳ',
-        labelEn: 'Opening Balances',
-        description:
-          'Nhập số dư đầu kỳ cho từng tài khoản kế toán, quỹ, tài khoản ngân hàng.',
-        group: 'finance-setup',
-        meta: {
-          color: '#3b82f6',
-          icon: 'database',
-          endpoints: ['GET /opening-balances', 'POST /opening-balances', 'PATCH /opening-balances/:id'],
-        },
-      },
-      {
-        id: 'voucher-numbering-configs',
-        type: 'module',
-        label: 'Cấu hình số phiếu',
-        labelEn: 'Voucher Numbering Configs',
-        description:
-          'Cấu hình quy tắc đánh số tự động cho từng loại phiếu (PT, PC, UNC, v.v.).',
-        group: 'finance-setup',
-        meta: {
-          color: '#3b82f6',
-          icon: 'hash',
-          endpoints: ['GET /voucher-numbering-configs', 'POST /voucher-numbering-configs', 'PATCH /voucher-numbering-configs/:id'],
-        },
-      },
-
-      // ── Payment Vouchers ──────────────────────────────────────────────────
-      {
-        id: 'payment-vouchers',
-        type: 'module',
-        label: 'Phiếu thu/chi',
-        labelEn: 'Payment Vouchers',
-        description:
-          'Lập và quản lý phiếu thu (IN) / chi (OUT) theo kênh tiền mặt (CASH) hoặc chuyển khoản (BANK). Hỗ trợ đối tượng nội bộ (nhân viên) và bên ngoài (đối tác).',
-        group: 'voucher',
-        meta: {
-          color: '#ec4899',
-          icon: 'file-text',
-          endpoints: [
-            'GET /payment-vouchers',
-            'POST /payment-vouchers',
-            'GET /payment-vouchers/:id',
-            'PATCH /payment-vouchers/:id',
-            'DELETE /payment-vouchers/:id',
-            'POST /payment-vouchers/:id/submit',
-            'POST /payment-vouchers/:id/approve',
-            'POST /payment-vouchers/:id/reject',
-            'POST /payment-vouchers/:id/post',
-            'POST /payment-vouchers/:id/cancel',
-            'GET /payment-vouchers/summary',
-          ],
-        },
-      },
-      {
-        id: 'payment-voucher-attachments',
-        type: 'module',
-        label: 'Đính kèm phiếu',
-        labelEn: 'Payment Voucher Attachments',
-        description: 'File đính kèm cho phiếu thu/chi (hóa đơn, chứng từ, v.v.).',
-        group: 'voucher',
-        meta: {
-          color: '#ec4899',
-          icon: 'paperclip',
-          endpoints: ['GET /payment-voucher-attachments', 'POST /payment-voucher-attachments', 'DELETE /payment-voucher-attachments/:id'],
-        },
-      },
-      {
-        id: 'payment-voucher-approval-logs',
-        type: 'module',
-        label: 'Nhật ký duyệt phiếu',
-        labelEn: 'Payment Voucher Approval Logs',
-        description:
-          'Lịch sử duyệt/từ chối phiếu: ai duyệt, thời gian, ghi chú.',
-        group: 'voucher',
-        meta: {
-          color: '#ec4899',
-          icon: 'check-circle',
-          endpoints: ['GET /payment-voucher-approval-logs'],
-        },
-      },
-
-      // ── Voucher Workflow Status ────────────────────────────────────────────
-      {
-        id: 'status-draft',
-        type: 'status',
-        label: 'Nháp',
-        labelEn: 'Draft',
-        description: 'Phiếu vừa tạo, chưa gửi duyệt. Có thể sửa và xóa.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#94a3b8',
-          icon: 'edit-3',
-          statusValue: 'DRAFT',
-        },
-      },
-      {
-        id: 'status-pending',
-        type: 'status',
-        label: 'Chờ duyệt',
-        labelEn: 'Pending Approval',
-        description: 'Phiếu đã gửi duyệt, đang chờ người có thẩm quyền phê duyệt.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#f59e0b',
-          icon: 'clock',
-          statusValue: 'PENDING_APPROVAL',
-        },
-      },
-      {
-        id: 'status-approved',
-        type: 'status',
-        label: 'Đã duyệt',
-        labelEn: 'Approved',
-        description: 'Phiếu được duyệt, sẵn sàng hạch toán hoặc có thể hủy.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#3b82f6',
-          icon: 'check',
-          statusValue: 'APPROVED',
-        },
-      },
-      {
-        id: 'status-posted',
-        type: 'status',
-        label: 'Đã hạch toán',
-        labelEn: 'Posted',
-        description:
-          'Phiếu đã hạch toán vào sổ kế toán. Trạng thái cuối, không thể thay đổi.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#10b981',
-          icon: 'check-square',
-          statusValue: 'POSTED',
-        },
-      },
-      {
-        id: 'status-rejected',
-        type: 'status',
-        label: 'Từ chối',
-        labelEn: 'Rejected',
-        description: 'Phiếu bị từ chối bởi người duyệt. Trạng thái cuối.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#ef4444',
-          icon: 'x-circle',
-          statusValue: 'REJECTED',
-        },
-      },
-      {
-        id: 'status-cancelled',
-        type: 'status',
-        label: 'Đã hủy',
-        labelEn: 'Cancelled',
-        description:
-          'Phiếu bị hủy trước khi hạch toán. Trạng thái cuối.',
-        group: 'voucher-workflow',
-        meta: {
-          color: '#6b7280',
-          icon: 'slash',
-          statusValue: 'CANCELLED',
-        },
-      },
-
-      // ── Partner Ledger ────────────────────────────────────────────────────
-      {
-        id: 'partner-ledger-items',
-        type: 'module',
-        label: 'Khoản công nợ',
-        labelEn: 'Partner Ledger Items',
-        description:
-          'Ghi nhận từng khoản phải thu (RECEIVABLE) / phải trả (PAYABLE) đối với đối tác. Nguồn gốc: số dư đầu kỳ, thủ công, chứng từ bán/mua hàng.',
-        group: 'ledger',
-        meta: {
-          color: '#8b5cf6',
-          icon: 'book-open',
-          endpoints: ['GET /partner-ledger-items', 'POST /partner-ledger-items', 'PATCH /partner-ledger-items/:id'],
-        },
-      },
-      {
-        id: 'partner-ledger-settlements',
-        type: 'module',
-        label: 'Bù trừ công nợ',
-        labelEn: 'Partner Ledger Settlements',
-        description:
-          'Liên kết phiếu thu/chi đã hạch toán với khoản công nợ để bù trừ, giảm số dư còn lại.',
-        group: 'ledger',
-        meta: {
-          color: '#8b5cf6',
-          icon: 'refresh-cw',
-          endpoints: ['GET /partner-ledger-settlements', 'POST /partner-ledger-settlements', 'DELETE /partner-ledger-settlements/:id'],
-        },
-      },
-    ];
-  }
-
-  // ─── Edges ─────────────────────────────────────────────────────────────────
-
-  private buildEdges(): WorkflowEdge[] {
-    return [
-      // ── Auth guards everything ─────────────────────────────────────────────
-      {
-        id: 'e-auth-rbac',
-        source: 'auth',
-        target: 'rbac',
-        label: 'Xác thực → Phân quyền',
-        type: 'triggers',
-        meta: { description: 'Mỗi request đã xác thực đều được kiểm tra quyền qua RBAC trước khi thực thi' },
-      },
-
-      // ── HR hierarchy ──────────────────────────────────────────────────────
-      {
-        id: 'e-dept-pos',
-        source: 'departments',
-        target: 'positions',
-        label: 'Phòng ban → Chức vụ',
-        type: 'belongs_to',
-        meta: { description: 'Chức vụ thuộc phòng ban', field: 'department_id' },
-      },
-      {
-        id: 'e-pos-emp',
-        source: 'positions',
-        target: 'employees',
-        label: 'Chức vụ → Nhân viên',
-        type: 'belongs_to',
-        meta: { description: 'Nhân viên giữ một chức vụ', field: 'position_id' },
-      },
-      {
-        id: 'e-dept-emp',
-        source: 'departments',
-        target: 'employees',
-        label: 'Phòng ban → Nhân viên',
-        type: 'belongs_to',
-        meta: { description: 'Nhân viên thuộc phòng ban', field: 'department_id' },
-      },
-
-      // ── Business partner hierarchy ─────────────────────────────────────────
-      {
-        id: 'e-bprole-bp',
-        source: 'business-partner-roles',
-        target: 'business-partners',
-        label: 'Vai trò đối tác → Đối tác',
-        type: 'belongs_to',
-        meta: { description: 'Đối tác được gán một hoặc nhiều vai trò', field: 'role_id' },
-      },
-      {
-        id: 'e-bp-contact',
-        source: 'business-partners',
-        target: 'business-partner-contacts',
-        label: 'Đối tác → Liên hệ',
-        type: 'creates',
-        meta: { description: 'Đối tác có nhiều đầu mối liên hệ', field: 'business_partner_id' },
-      },
-      {
-        id: 'e-bp-bankacct',
-        source: 'business-partners',
-        target: 'business-partner-bank-accounts',
-        label: 'Đối tác → TK ngân hàng',
-        type: 'creates',
-        meta: { description: 'Đối tác có nhiều tài khoản ngân hàng', field: 'business_partner_id' },
-      },
-
-      // ── Finance setup dependencies ──────────────────────────────────────────
-      {
-        id: 'e-coa-ob',
-        source: 'chart-of-accounts',
-        target: 'opening-balances',
-        label: 'Tài khoản → Số dư đầu kỳ',
-        type: 'depends_on',
-        meta: { description: 'Số dư đầu kỳ được nhập theo từng tài khoản kế toán', field: 'account_id' },
-      },
-      {
-        id: 'e-cashfund-ob',
-        source: 'cash-funds',
-        target: 'opening-balances',
-        label: 'Quỹ → Số dư đầu kỳ',
-        type: 'depends_on',
-        meta: { description: 'Số dư đầu kỳ có thể gắn với quỹ tiền mặt', field: 'cash_fund_id' },
-      },
-      {
-        id: 'e-compbank-ob',
-        source: 'company-bank-accounts',
-        target: 'opening-balances',
-        label: 'TK công ty → Số dư đầu kỳ',
-        type: 'depends_on',
-        meta: { description: 'Số dư đầu kỳ có thể gắn với tài khoản ngân hàng công ty', field: 'company_bank_account_id' },
-      },
-
-      // ── Voucher depends on master data ──────────────────────────────────────
-      {
-        id: 'e-coa-pv-debit',
-        source: 'chart-of-accounts',
-        target: 'payment-vouchers',
-        label: 'TK Nợ',
-        type: 'depends_on',
-        meta: { description: 'Phiếu thu/chi bắt buộc chọn tài khoản Nợ', field: 'debit_account_id' },
-      },
-      {
-        id: 'e-coa-pv-credit',
-        source: 'chart-of-accounts',
-        target: 'payment-vouchers',
-        label: 'TK Có',
-        type: 'depends_on',
-        meta: { description: 'Phiếu thu/chi bắt buộc chọn tài khoản Có', field: 'credit_account_id' },
-      },
-      {
-        id: 'e-cashfund-pv',
-        source: 'cash-funds',
-        target: 'payment-vouchers',
-        label: 'Quỹ tiền mặt',
-        type: 'depends_on',
-        meta: { description: 'Bắt buộc chọn quỹ khi phiếu là CASH', field: 'cash_fund_id' },
-      },
-      {
-        id: 'e-compbank-pv',
-        source: 'company-bank-accounts',
-        target: 'payment-vouchers',
-        label: 'TK ngân hàng công ty',
-        type: 'depends_on',
-        meta: { description: 'Bắt buộc chọn TK ngân hàng khi phiếu là BANK', field: 'company_bank_account_id' },
-      },
-      {
-        id: 'e-bp-pv',
-        source: 'business-partners',
-        target: 'payment-vouchers',
-        label: 'Đối tác bên ngoài',
-        type: 'depends_on',
-        meta: { description: 'Phiếu có counterparty_source = EXTERNAL dùng đối tác', field: 'counterparty_id' },
-      },
-      {
-        id: 'e-emp-pv',
-        source: 'employees',
-        target: 'payment-vouchers',
-        label: 'Nhân viên nội bộ',
-        type: 'depends_on',
-        meta: { description: 'Phiếu có counterparty_source = INTERNAL dùng nhân viên', field: 'employee_id' },
-      },
-      {
-        id: 'e-bpbankacct-pv',
-        source: 'business-partner-bank-accounts',
-        target: 'payment-vouchers',
-        label: 'TK nhận tiền đối tác',
-        type: 'depends_on',
-        meta: { description: 'TK ngân hàng đối tác nhận chuyển khoản', field: 'beneficiary_bank_account_id' },
-      },
-      {
-        id: 'e-vnc-pv',
-        source: 'voucher-numbering-configs',
-        target: 'payment-vouchers',
-        label: 'Số phiếu tự động',
-        type: 'depends_on',
-        meta: { description: 'Cấu hình đánh số tự động cho phiếu thu/chi' },
-      },
-
-      // ── Voucher approval workflow transitions ────────────────────────────────
-      {
-        id: 'e-wf-draft-pending',
-        source: 'status-draft',
-        target: 'status-pending',
-        label: 'submit → Chờ duyệt',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/submit — DRAFT → PENDING_APPROVAL' },
-      },
-      {
-        id: 'e-wf-pending-approved',
-        source: 'status-pending',
-        target: 'status-approved',
-        label: 'approve → Duyệt',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/approve — PENDING_APPROVAL → APPROVED' },
-      },
-      {
-        id: 'e-wf-pending-rejected',
-        source: 'status-pending',
-        target: 'status-rejected',
-        label: 'reject → Từ chối',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/reject — PENDING_APPROVAL → REJECTED' },
-      },
-      {
-        id: 'e-wf-approved-posted',
-        source: 'status-approved',
-        target: 'status-posted',
-        label: 'post → Hạch toán',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/post — APPROVED → POSTED' },
-      },
-      {
-        id: 'e-wf-draft-cancelled',
-        source: 'status-draft',
-        target: 'status-cancelled',
-        label: 'cancel → Hủy',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/cancel — DRAFT → CANCELLED' },
-      },
-      {
-        id: 'e-wf-pending-cancelled',
-        source: 'status-pending',
-        target: 'status-cancelled',
-        label: 'cancel → Hủy',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/cancel — PENDING_APPROVAL → CANCELLED' },
-      },
-      {
-        id: 'e-wf-approved-cancelled',
-        source: 'status-approved',
-        target: 'status-cancelled',
-        label: 'cancel → Hủy',
-        type: 'workflow_transition',
-        meta: { description: 'POST /payment-vouchers/:id/cancel — APPROVED → CANCELLED' },
-      },
-      {
-        id: 'e-pv-wf',
-        source: 'payment-vouchers',
-        target: 'status-draft',
-        label: 'Tạo mới → DRAFT',
-        type: 'creates',
-        meta: { description: 'Phiếu thu/chi khi tạo mới luôn có trạng thái DRAFT' },
-      },
-
-      // ── Voucher sub-documents ──────────────────────────────────────────────
-      {
-        id: 'e-pv-attach',
-        source: 'payment-vouchers',
-        target: 'payment-voucher-attachments',
-        label: 'File đính kèm',
-        type: 'creates',
-        meta: { description: 'Phiếu thu/chi có thể đính kèm nhiều file chứng từ', field: 'payment_voucher_id' },
-      },
-      {
-        id: 'e-pv-approvallog',
-        source: 'payment-vouchers',
-        target: 'payment-voucher-approval-logs',
-        label: 'Lịch sử duyệt',
-        type: 'triggers',
-        meta: { description: 'Mỗi thao tác duyệt/từ chối tạo ra một bản ghi nhật ký', field: 'payment_voucher_id' },
-      },
-      {
-        id: 'e-attach-files',
-        source: 'payment-voucher-attachments',
-        target: 'files',
-        label: 'File upload',
-        type: 'depends_on',
-        meta: { description: 'Đính kèm tham chiếu tới file được upload qua Files module', field: 'file_id' },
-      },
-
-      // ── Ledger relationships ───────────────────────────────────────────────
-      {
-        id: 'e-bp-ledger',
-        source: 'business-partners',
-        target: 'partner-ledger-items',
-        label: 'Đối tác → Công nợ',
-        type: 'creates',
-        meta: { description: 'Khoản công nợ gắn với một đối tác cụ thể', field: 'business_partner_id' },
-      },
-      {
-        id: 'e-coa-ledger',
-        source: 'chart-of-accounts',
-        target: 'partner-ledger-items',
-        label: 'TK kế toán → Công nợ',
-        type: 'depends_on',
-        meta: { description: 'Khoản công nợ gắn với tài khoản kế toán phải thu/trả', field: 'accounting_account_id' },
-      },
-      {
-        id: 'e-ledger-settlement',
-        source: 'partner-ledger-items',
-        target: 'partner-ledger-settlements',
-        label: 'Khoản công nợ → Bù trừ',
-        type: 'settles',
-        meta: { description: 'Bù trừ liên kết khoản công nợ với phiếu thanh toán', field: 'partner_ledger_item_id' },
-      },
-      {
-        id: 'e-pv-settlement',
-        source: 'payment-vouchers',
-        target: 'partner-ledger-settlements',
-        label: 'Phiếu đã hạch toán → Bù trừ',
-        type: 'settles',
-        meta: {
-          description: 'Phiếu thu/chi trạng thái POSTED được dùng để bù trừ công nợ',
-          field: 'payment_voucher_id',
-        },
-      },
-
-      // ── Activity log catches everything ────────────────────────────────────
-      {
-        id: 'e-pv-actlog',
-        source: 'payment-vouchers',
-        target: 'activity-logs',
-        label: 'Ghi nhật ký',
-        type: 'triggers',
-        meta: { description: 'Mọi thao tác trên phiếu thu/chi được ghi vào nhật ký hoạt động' },
-      },
-      {
-        id: 'e-bp-actlog',
-        source: 'business-partners',
-        target: 'activity-logs',
-        label: 'Ghi nhật ký',
-        type: 'triggers',
-        meta: { description: 'Mọi thao tác trên đối tác được ghi nhật ký' },
-      },
-    ];
   }
 }

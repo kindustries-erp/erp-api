@@ -17,7 +17,7 @@ export class WorkflowGraphController {
       'dưới dạng graph để render canvas tại ERP UI.',
   })
   @Get()
-  getGraph() {
+  async getGraph() {
     return this.workflowGraphService.getGraph();
   }
 }
