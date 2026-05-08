@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createDirectus, rest, staticToken } from '@directus/sdk';
+import { createDirectus } from '@directus/sdk';
 import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 
 @Injectable()

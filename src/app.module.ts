@@ -22,6 +22,8 @@ import { PaymentVoucherApprovalLogsModule } from './payment-voucher-approval-log
 import { VoucherNumberingConfigsModule } from './voucher-numbering-configs/voucher-numbering-configs.module';
 import { FilesModule } from './files/files.module';
 import { RbacModule } from './rbac/rbac.module';
+import { PartnerLedgerItemsModule } from './partner-ledger-items/partner-ledger-items.module';
+import { PartnerLedgerSettlementsModule } from './partner-ledger-settlements/partner-ledger-settlements.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { RbacModule } from './rbac/rbac.module';
     VoucherNumberingConfigsModule,
     FilesModule,
     RbacModule,
+    PartnerLedgerItemsModule,
+    PartnerLedgerSettlementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

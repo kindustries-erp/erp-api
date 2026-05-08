@@ -1,9 +1,4 @@
-import {
-  createDirectus,
-  rest,
-  authentication,
-  staticToken,
-} from '@directus/sdk';
+import { createDirectus, rest, staticToken } from '@directus/sdk';
 import { ConfigService } from '@nestjs/config';
 
 export const DIRECTUS_CLIENT = 'DIRECTUS_CLIENT';

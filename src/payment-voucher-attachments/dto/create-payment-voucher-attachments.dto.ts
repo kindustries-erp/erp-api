@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsNumber,
-  IsUUID,
-  IsNotEmpty,
-} from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsNotEmpty } from 'class-validator';
 
 export class CreatePaymentVoucherAttachmentsDto {
   @IsUUID() @IsNotEmpty() payment_voucher_id: string;

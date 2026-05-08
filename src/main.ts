@@ -50,4 +50,4 @@ async function bootstrap() {
   logger.log(`🚀 Swagger UI đang chạy tại http://localhost:${port}/api/docs`);
   logger.log(`🚀 Server đang chạy tại http://localhost:${port}/api/v1`);
 }
-bootstrap();
+void bootstrap();

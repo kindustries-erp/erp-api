@@ -1,8 +1,6 @@
 import {
   UnauthorizedException,
   Injectable,
-  Inject,
-  InternalServerErrorException,
   Logger,
   ForbiddenException,
   BadRequestException,
@@ -35,9 +33,9 @@ export class ActivityLogsService {
 
       // Tách các query parameters liên quan đến filter/fields ra khỏi page/pageSize
       const {
-        page: _p,
-        pageSize: _ps,
-        sort: _s,
+        page: _page,
+        pageSize: _pageSize,
+        sort: _sort,
         search: _search,
         action,
         date_from,
@@ -46,6 +44,9 @@ export class ActivityLogsService {
         user,
         ...directusFilters
       } = query;
+      void _page;
+      void _pageSize;
+      void _sort;
 
       // Khởi tạo filter object nếu chưa có
       if (!directusFilters.filter) {

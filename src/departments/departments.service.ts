@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import {
   createDirectus,
-  readItems,
   readItem,
   createItem,
   updateItem,
@@ -58,10 +57,6 @@ export class DepartmentsService {
 
   async findAll(query: PaginationDto, userToken: string) {
     if (!userToken) throw new UnauthorizedException('Yêu cầu User Token');
-    const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
-    const userClient = createDirectus(directusUrl)
-      .with(staticToken(userToken))
-      .with(rest());
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;

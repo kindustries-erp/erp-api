@@ -10,16 +10,11 @@ import {
 import {
   createDirectus,
   updateItem,
-  updateUser,
   readItem,
-  readItems,
-  createItem,
-  deleteItem,
   rest,
   staticToken,
 } from '@directus/sdk';
 import { DIRECTUS_CLIENT } from '../directus/directus.provider';
-import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdateRolePermissionsDto } from '../rbac/dto/update-permission.dto';
 import {
   rethrowHttpException,
@@ -38,10 +33,6 @@ export class EmployeesService {
 
   async findAll(query: PaginationDto, userToken: string) {
     if (!userToken) throw new UnauthorizedException('Yêu cầu User Token');
-    const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
-    const userClient = createDirectus(directusUrl)
-      .with(staticToken(userToken))
-      .with(rest());
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
@@ -185,7 +176,7 @@ export class EmployeesService {
 
       // 3. Cập nhật base role cho user (nếu có yêu cầu từ client)
       if (role_id !== undefined) {
-        let directusUserId = null;
+        let directusUserId: string | null = null;
         if (policy_id === undefined) {
           // If policy_id was defined, we already fetched it
           const employee = await (userClient as any).request(
@@ -216,7 +207,7 @@ export class EmployeesService {
       };
     } catch (error: any) {
       this.logger.error(
-        `Lỗi khi cập nhật employee ${id}: ${error?.message || JSON.stringify(error)}`,
+        `Lỗi khi cập nhật employee ${id}: ${error?.message || String(error)}`,
         error?.errors || error,
       );
       throw new InternalServerErrorException(
