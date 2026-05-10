@@ -296,7 +296,7 @@ export class JournalEntriesService {
           date: dto.date,
           period_id,
           description: dto.description || null,
-          status: 'draft',
+          status: 'posted',
           reference_type: dto.reference_type || null,
           reference_id: dto.reference_id || null,
           total_debit: totalDebit,
@@ -382,31 +382,13 @@ export class JournalEntriesService {
     const entryJson = await entryRes.json();
     const entry = entryJson.data;
 
-    if (entry.status !== 'draft') {
-      throw new BadRequestException(
-        `Chỉ có thể hạch toán bút toán ở trạng thái draft. Trạng thái hiện tại: ${entry.status}`,
-      );
+    if (entry.status === 'posted') {
+      return { message: 'Bút toán đã ở trạng thái posted', data: entry };
     }
 
-    const patchRes = await fetch(
-      `${this.directusUrl}/items/${this.collection}/${id}`,
-      {
-        method: 'PATCH',
-        headers: {
-          ...this.getAdminHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'posted' }),
-      },
+    throw new BadRequestException(
+      `Journal Entry không còn workflow Draft/Post thủ công. Trạng thái hiện tại: ${entry.status}`,
     );
-
-    if (!patchRes.ok)
-      await throwDirectusResponseError(
-        patchRes,
-        'Không thể hạch toán bút toán',
-      );
-    const patchJson = await patchRes.json();
-    return { message: 'Hạch toán bút toán thành công', data: patchJson.data };
   }
 
   // ─── reverse (đảo bút toán) ──────────────────────────────────────────────

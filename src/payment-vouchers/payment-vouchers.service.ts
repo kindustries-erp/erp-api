@@ -385,6 +385,162 @@ export class PaymentVouchersService {
     }
   }
 
+  private async findOpenAccountingPeriod(date: string): Promise<number | null> {
+    const url = new URL('/items/accounting_periods', this.directusUrl);
+    url.searchParams.append(
+      'filter',
+      JSON.stringify({
+        _and: [
+          { status: { _eq: 'open' } },
+          { start_date: { _lte: date } },
+          { end_date: { _gte: date } },
+        ],
+      }),
+    );
+    url.searchParams.append('limit', '1');
+    url.searchParams.append('fields[]', 'id');
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.adminToken}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data?.[0]?.id ?? null;
+  }
+
+  private async findJournalEntryByReference(
+    referenceType: string,
+    referenceId: string,
+  ): Promise<any | null> {
+    const url = new URL('/items/journal_entries', this.directusUrl);
+    url.searchParams.append(
+      'filter',
+      JSON.stringify({
+        _and: [
+          { reference_type: { _eq: referenceType } },
+          { reference_id: { _eq: referenceId } },
+        ],
+      }),
+    );
+    url.searchParams.append('limit', '1');
+    url.searchParams.append('fields[]', '*');
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.adminToken}` },
+    });
+    if (!res.ok) {
+      await throwDirectusResponseError(res, 'Không thể kiểm tra bút toán nguồn');
+    }
+    const json = await res.json();
+    return json.data?.[0] ?? null;
+  }
+
+  private async createPostedJournalEntryForVoucher(
+    voucher: any,
+    userId: string,
+  ): Promise<any> {
+    const existing = await this.findJournalEntryByReference(
+      'payment_vouchers',
+      voucher.id,
+    );
+    if (existing) return existing;
+
+    const amount = Number(voucher.amount) || 0;
+    if (!voucher.debit_account_id || !voucher.credit_account_id || amount <= 0) {
+      throw new BadRequestException(
+        'Không thể hạch toán: phiếu thiếu tài khoản nợ/có hoặc số tiền không hợp lệ',
+      );
+    }
+
+    const date = voucher.posting_date || new Date().toISOString().slice(0, 10);
+    const periodId = await this.findOpenAccountingPeriod(date);
+    const voucherNo = `JNL-${voucher.voucher_no || voucher.id}`;
+
+    const headerRes = await fetch(`${this.directusUrl}/items/journal_entries`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        voucher_no: voucherNo,
+        date,
+        period_id: periodId,
+        description: voucher.description
+          ? `Hạch toán phiếu ${voucher.voucher_no}: ${voucher.description}`
+          : `Hạch toán phiếu ${voucher.voucher_no || voucher.id}`,
+        status: 'posted',
+        reference_type: 'payment_vouchers',
+        reference_id: voucher.id,
+        total_debit: amount,
+        total_credit: amount,
+        created_by: userId,
+      }),
+    });
+
+    if (!headerRes.ok) {
+      await throwDirectusResponseError(
+        headerRes,
+        'Không thể tạo bút toán từ phiếu đã hạch toán',
+      );
+    }
+    const headerJson = await headerRes.json();
+    const journalEntryId = headerJson.data?.id;
+    if (!journalEntryId) {
+      throw new InternalServerErrorException(
+        'Tạo bút toán từ phiếu thất bại: không có ID',
+      );
+    }
+
+    const linesPayload = [
+      {
+        journal_entry_id: journalEntryId,
+        account_id:
+          typeof voucher.debit_account_id === 'object'
+            ? voucher.debit_account_id.id
+            : voucher.debit_account_id,
+        debit: amount,
+        credit: 0,
+        description: voucher.description || null,
+        sort: 0,
+      },
+      {
+        journal_entry_id: journalEntryId,
+        account_id:
+          typeof voucher.credit_account_id === 'object'
+            ? voucher.credit_account_id.id
+            : voucher.credit_account_id,
+        debit: 0,
+        credit: amount,
+        description: voucher.description || null,
+        sort: 1,
+      },
+    ];
+
+    const linesRes = await fetch(`${this.directusUrl}/items/journal_entry_lines`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(linesPayload),
+    });
+
+    if (!linesRes.ok) {
+      await fetch(`${this.directusUrl}/items/journal_entries/${journalEntryId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${this.adminToken}` },
+      });
+      await throwDirectusResponseError(
+        linesRes,
+        'Không thể tạo dòng bút toán từ phiếu đã hạch toán',
+      );
+    }
+
+    const linesJson = await linesRes.json();
+    return { ...headerJson.data, lines: linesJson.data || [] };
+  }
+
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   async create(dto: CreatePaymentVouchersDto, userToken: string) {
@@ -930,6 +1086,7 @@ export class PaymentVouchersService {
 
   async post(id: string, userToken: string) {
     this.guard(userToken);
+    const userId = await this.getCurrentUserId(userToken);
     const data = await this.transitionStatus(
       id,
       'POSTED',
@@ -938,7 +1095,11 @@ export class PaymentVouchersService {
       undefined,
       userToken,
     );
-    return { message: 'Phiếu đã được hạch toán', data };
+    const journal_entry = await this.createPostedJournalEntryForVoucher(
+      data,
+      userId,
+    );
+    return { message: 'Phiếu đã được hạch toán', data, journal_entry };
   }
 
   async cancel(id: string, dto: VoucherCancelDto, userToken: string) {
