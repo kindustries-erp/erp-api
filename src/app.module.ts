@@ -25,6 +25,7 @@ import { RbacModule } from './rbac/rbac.module';
 import { PartnerLedgerItemsModule } from './partner-ledger-items/partner-ledger-items.module';
 import { PartnerLedgerSettlementsModule } from './partner-ledger-settlements/partner-ledger-settlements.module';
 import { WorkflowGraphModule } from './workflow-graph/workflow-graph.module';
+import { JournalEntriesModule } from './journal-entries/journal-entries.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { WorkflowGraphModule } from './workflow-graph/workflow-graph.module';
     PartnerLedgerItemsModule,
     PartnerLedgerSettlementsModule,
     WorkflowGraphModule,
+    JournalEntriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
