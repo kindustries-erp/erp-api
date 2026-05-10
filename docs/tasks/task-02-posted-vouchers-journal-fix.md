@@ -62,11 +62,11 @@
 - [x] 5.0 Validate
   - [x] 5.1 `npm run build`
   - [x] 5.2 Smoke test affected endpoints
-- [ ] 6.0 Close
-  - [ ] 6.1 Lessons learned entry (if issue)
-  - [ ] 6.2 Commit + push code (web/api)
-  - [ ] 6.3 DB apply+verify+document handoff
-  - [ ] 6.4 Summary with evidence
+- [x] 6.0 Close
+  - [x] 6.1 Lessons learned entry (if issue)
+  - [x] 6.2 Commit + push code (web/api)
+  - [x] 6.3 DB apply+verify+document handoff
+  - [x] 6.4 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: `DB_GAP_FOUND`.
@@ -86,12 +86,12 @@
 - Build:
   - API `npm run build`: PASS.
   - Web `npm run build`: PASS.
-- Smoke: DB smoke PASS; API/Web runtime smoke pending deploy.
+- Smoke: DB smoke PASS; API/Web runtime smoke PASS after Compose redeploy.
 
 ## Lessons Learned
-- Link: Pending
+- Link: `docs/lessons-learned/LL-2026-05-001-voucher-journal-trigger-fields.md`
 
 ## Commit/Push Status
-- API repo: Pending
-- Web repo (if affected): Pending
-- DB/directus staging: Pending apply+verify+document (no code push required)
+- API repo: pushed `7911859 fix: post vouchers to journal entries`; close evidence follow-up pending in current edit.
+- Web repo: pushed `7d14676 fix: remove journal entry draft workflow`.
+- DB/directus staging: applied+verified live; documented in `/opt/docs/deployment/liouni-erp.md`.
