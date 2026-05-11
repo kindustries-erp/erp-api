@@ -60,6 +60,6 @@ Cho phép operator chọn 1 advance voucher (POSTED, còn remaining_amount > 0) 
 - `ar_applications.source_document_id` là FK tới `ar_documents`; với advance voucher source phải dùng `payment_voucher_id`, không set `source_document_id` bằng voucher id.
 
 ## Commit/Push Status
-- API repo: committed + pushed `1b7ece4 feat(ar): apply customer advances to invoices`; follow-up task evidence commit pending after this update.
+- API repo: committed + pushed `1b7ece4 feat(ar): apply customer advances to invoices`; task close-out evidence pushed in `0e44865 docs(ar): close advance application task`.
 - Web repo: committed + pushed `845fab8 feat(ar): apply advances to invoices in workbench`.
 - DB: migration applied to Directus staging; DB repo file created for evidence; per ops rule DB repo commit/push not required.
