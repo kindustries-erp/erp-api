@@ -41,23 +41,29 @@ Expose AR workbench endpoints for unified AR documents, allocations/applications
   - [x] 2.1 Implement module/controller/service/DTOs
   - [x] 2.2 Preserve existing endpoint contracts: added `/api/v1/ar-workbench/*`; no changes to partner-ledger/payment-voucher/journal routes
 - [x] 3.0 UI handoff gate done
-- [ ] 4.0 Validate
+- [x] 4.0 Validate
   - [x] 4.1 `npm run build`: passed (`nest build`)
-  - [ ] 4.2 Smoke test affected endpoints
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+  - [x] 4.2 Smoke test affected endpoints
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
-- DB precheck result: pending DB migration verification
+- DB precheck result: `DB_READY` after Directus phase 1 migration created additive `ar_*` collections and transaction+rollback smoke passed.
 - Build:
+  - Repo build: `npm run build` passed before commit.
+  - Runtime image build: `/opt/stacks/liouni-erp-api docker compose build` passed after commit `da06319`.
+- Deploy:
+  - `/opt/stacks/liouni-erp-api docker compose up -d` recreated and started container `liouni-erp-api`.
 - Smoke:
+  - API startup logs mapped `/api/v1/ar-workbench/coverage`, `/summary`, `/documents`, `/applications`, `/collection-activities` routes.
+  - Public unauthenticated `GET https://dev.api.erp.liouni.com/api/v1/ar-workbench/coverage` returned HTTP 401 `Không tìm thấy access token`, confirming route exists and auth guard is active (not 404).
 
 ## Lessons Learned
-- Link: No issue
+- Link: DB lesson only: `/opt/repos/liouni-erp/directus-staging/ops/lessons-learned/20260511-directus-permission-json-distinct.md`
 
 ## Commit/Push Status
-- API repo: pending
-- Web repo (if affected): pending in web task
+- API repo: committed and pushed `da06319` (`Add AR workbench API foundation`)
+- Web repo (if affected): tracked in web task
 - DB/directus staging: apply+verify+document in DB task
