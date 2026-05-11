@@ -11,11 +11,10 @@ import { CreateArDocumentDto } from './dto/create-ar-document.dto';
 import { UpdateArDocumentDto } from './dto/update-ar-document.dto';
 import { CreateArApplicationDto } from './dto/create-ar-application.dto';
 import { CreateArCollectionActivityDto } from './dto/create-ar-collection-activity.dto';
-import {
-  CreateArSalesInvoiceDto,
-  CreateArSalesInvoiceLineDto,
-} from './dto/create-ar-sales-invoice.dto';
+import { CreateArSalesInvoiceDto, CreateArSalesInvoiceLineDto } from './dto/create-ar-sales-invoice.dto';
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
+import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
+import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
 import {
   rethrowHttpException,
   throwDirectusResponseError,
@@ -465,6 +464,90 @@ export class ArWorkbenchService {
         `Không tìm thấy tài khoản kế toán ${accountCode}`,
       );
     return accountId;
+  }
+
+  private async getBusinessPartnerName(partnerId: string, userToken: string) {
+    const url = new URL(`/items/business_partners/${partnerId}`, this.directusUrl);
+    url.searchParams.append('fields[]', 'legal_name');
+    url.searchParams.append('fields[]', 'display_name');
+    url.searchParams.append('fields[]', 'partner_code');
+    const result = await this.request<{ data?: { legal_name?: string | null; display_name?: string | null; partner_code?: string | null } }>(
+      url.pathname + url.search,
+      userToken,
+    );
+    return (
+      result.data?.legal_name ||
+      result.data?.display_name ||
+      result.data?.partner_code ||
+      ''
+    );
+  }
+
+  private paymentMethodToDebitAccountCode(paymentMethod: string) {
+    return this.ACCOUNT_CODES[paymentMethod] || this.ACCOUNT_CODES.BANK;
+  }
+
+  private paymentMethodToVoucherType(paymentMethod: string) {
+    if (paymentMethod === 'CASH') return 'CASH_RECEIPT';
+    if (paymentMethod === 'EWALLET') return 'EWALLET_RECEIPT';
+    return 'BANK_RECEIPT';
+  }
+
+  private buildReceiptNo(prefix: string, documentDate: string) {
+    return `${prefix}-${documentDate.replace(/-/g, '')}-${Date.now().toString(36).toUpperCase()}`;
+  }
+
+  private async fetchJournalByReference(
+    referenceType: string,
+    referenceId: string,
+    userToken: string,
+  ) {
+    const jeUrl = new URL('/items/journal_entries', this.directusUrl);
+    jeUrl.searchParams.append('limit', '1');
+    jeUrl.searchParams.append(
+      'filter',
+      JSON.stringify({ reference_type: { _eq: referenceType }, reference_id: { _eq: referenceId } }),
+    );
+    const journal = await this.request<DirectusList<JournalEntry>>(
+      jeUrl.pathname + jeUrl.search,
+      userToken,
+    );
+    return journal.data?.[0] || null;
+  }
+
+  private buildPaymentVoucherPayload(params: {
+    voucherNo: string;
+    voucherType: string;
+    documentDate: string;
+    postingDate: string;
+    counterpartyId: string;
+    counterpartyNameSnapshot: string;
+    paymentMethod: string;
+    debitAccountId: string;
+    creditAccountId: string;
+    amount: number;
+    currency?: string;
+    description?: string;
+    status?: string;
+  }) {
+    return {
+      voucher_no: params.voucherNo,
+      voucher_channel: 'MANUAL',
+      voucher_direction: 'RECEIPT',
+      voucher_type: params.voucherType,
+      document_date: params.documentDate,
+      posting_date: params.postingDate,
+      counterparty_id: params.counterpartyId,
+      counterparty_role: 'CUSTOMER',
+      counterparty_name_snapshot: params.counterpartyNameSnapshot,
+      counterparty_source: 'EXTERNAL',
+      debit_account_id: params.debitAccountId,
+      credit_account_id: params.creditAccountId,
+      amount: params.amount,
+      currency: params.currency || 'VND',
+      description: params.description || '',
+      status: params.status || 'DRAFT',
+    };
   }
 
   private buildSalesInvoiceLinePayload(
@@ -951,5 +1034,426 @@ export class ArWorkbenchService {
 
   getCoverage() {
     return { items: AR_COVERAGE, total: AR_COVERAGE.length };
+  }
+
+  // ─── Payment Voucher / Receipt ───────────────────────────────────────────
+
+  private readonly ACCOUNT_CODES: Record<string, string> = {
+    CASH: '111',
+    BANK: '112',
+    EWALLET: '113',
+    AR: '131',
+    WRITEOFF_EXP: '635',
+    SUSPENSE: '3388',
+  };
+
+  async findPaymentVouchers(query: ArWorkbenchQueryDto, userToken: string) {
+    try {
+      const { page, pageSize, offset, sort } = this.pagination(query);
+      const url = new URL('/items/payment_vouchers', this.directusUrl);
+      url.searchParams.append('limit', pageSize.toString());
+      url.searchParams.append('offset', offset.toString());
+      url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('sort[]', sort);
+      const filterAnd: any[] = [
+        { voucher_direction: { _eq: 'RECEIPT' } },
+        { counterparty_role: { _in: ['CUSTOMER', 'customer'] } },
+      ];
+      if (query.business_partner_id)
+        filterAnd.push({ counterparty_id: { _eq: query.business_partner_id } });
+      if (query.status) filterAnd.push({ status: { _eq: query.status } });
+      url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
+      const result = await this.request<DirectusList<any>>(
+        url.pathname + url.search,
+        userToken,
+      );
+      const total = result.meta?.filter_count || 0;
+      return {
+        items: result.data || [],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi lấy danh sách phiếu thu', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể lấy danh sách phiếu thu');
+    }
+  }
+
+  async createPaymentReceipt(dto: CreatePaymentReceiptDto, userToken: string) {
+    try {
+      const debitAccountId =
+        dto.debit_account_id ||
+        (await this.getAccountIdByCode(
+          this.paymentMethodToDebitAccountCode(dto.payment_method),
+          userToken,
+        ));
+      const creditAccountId =
+        dto.credit_account_id ||
+        (await this.getAccountIdByCode(this.ACCOUNT_CODES.AR, userToken));
+
+      const postingDate = dto.posting_date || dto.document_date;
+      const voucher: any = this.buildPaymentVoucherPayload({
+        voucherNo: dto.voucher_no || this.buildReceiptNo('REC', dto.document_date),
+        voucherType: this.paymentMethodToVoucherType(dto.payment_method),
+        documentDate: dto.document_date,
+        postingDate,
+        counterpartyId: dto.counterparty_id,
+        counterpartyNameSnapshot:
+          dto.counterparty_name_snapshot ||
+          (await this.getBusinessPartnerName(dto.counterparty_id, userToken)),
+        paymentMethod: dto.payment_method,
+        debitAccountId,
+        creditAccountId,
+        amount: dto.amount,
+        currency: dto.currency,
+        description: dto.description,
+      });
+
+      const created = await this.request<{ data: any }>(
+        '/items/payment_vouchers',
+        userToken,
+        { method: 'POST', body: JSON.stringify(voucher) },
+      );
+      const voucherId = created.data.id;
+
+      // Auto-allocate if allocations provided
+      const applications: any[] = [];
+      if (dto.allocations?.length) {
+        for (const alloc of dto.allocations) {
+          const appNo = `APP-${dto.voucher_no || voucherId.slice(0, 8)}-${alloc.target_document_id.slice(0, 6)}`;
+          const appPayload: any = {
+            application_no: appNo,
+            application_type: 'PAYMENT',
+            payment_voucher_id: voucherId,
+            target_document_id: alloc.target_document_id,
+            application_date: dto.document_date,
+            amount: alloc.amount,
+            status: 'POSTED',
+          };
+          if ((alloc.writeoff_amount || 0) > 0) {
+            appPayload.writeoff_amount = alloc.writeoff_amount;
+            appPayload.metadata = {
+              writeoff_account_id:
+                alloc.writeoff_account_id ||
+                (await this.getAccountIdByCode(this.ACCOUNT_CODES['WRITEOFF_EXP'], userToken)),
+              writeoff_reason: alloc.reason || 'Writeoff chênh lệch nhỏ',
+            };
+          }
+          const app = await this.request<{ data: any }>(
+            '/items/ar_applications',
+            userToken,
+            { method: 'POST', body: JSON.stringify(appPayload) },
+          );
+          applications.push(app.data);
+        }
+      }
+
+      return {
+        message: 'Tạo phiếu thu nháp thành công',
+        data: { voucher: created.data, applications },
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi tạo phiếu thu', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể tạo phiếu thu');
+    }
+  }
+
+  async postPaymentVoucher(id: string, userToken: string) {
+    try {
+      const voucherResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+      );
+      const voucher = voucherResult.data;
+      if (!['RECEIPT'].includes(voucher.voucher_direction)) {
+        throw new BadRequestException('Endpoint này chỉ dùng cho phiếu thu');
+      }
+      if (voucher.status !== 'DRAFT') {
+        throw new BadRequestException('Chỉ được post phiếu thu trạng thái DRAFT');
+      }
+
+      const posted = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+        { method: 'PATCH', body: JSON.stringify({ status: 'POSTED' }) },
+      );
+
+      // Fetch JE created by trigger
+      const jeUrl = new URL('/items/journal_entries', this.directusUrl);
+      jeUrl.searchParams.append('limit', '1');
+      jeUrl.searchParams.append(
+        'filter',
+        JSON.stringify({ reference_type: { _eq: 'payment_vouchers' }, reference_id: { _eq: id } }),
+      );
+      const journal = await this.request<DirectusList<JournalEntry>>(
+        jeUrl.pathname + jeUrl.search,
+        userToken,
+      );
+
+      return {
+        message: 'Post phiếu thu thành công và đã sinh bút toán',
+        data: { voucher: posted.data, journal_entry: journal.data?.[0] || null },
+      };
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi post phiếu thu ${id}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể post phiếu thu');
+    }
+  }
+
+  async allocatePayment(
+    voucherId: string,
+    allocations: { target_document_id: string; amount: number; writeoff_amount?: number; writeoff_account_id?: string; reason?: string }[],
+    userToken: string,
+  ) {
+    try {
+      if (!allocations?.length)
+        throw new BadRequestException('Cần ít nhất một allocation');
+
+      const voucherResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${voucherId}`,
+        userToken,
+      );
+      const voucher = voucherResult.data;
+      if (voucher.status !== 'POSTED') {
+        throw new BadRequestException('Chỉ allocate phiếu thu đã POSTED');
+      }
+
+      const writeoffAccountId = await this.getAccountIdByCode(
+        this.ACCOUNT_CODES['WRITEOFF_EXP'],
+        userToken,
+      );
+
+      const results: any[] = [];
+      for (const alloc of allocations) {
+        const appNo = `APP-${voucher.voucher_no || voucherId.slice(0, 8)}-${alloc.target_document_id.slice(0, 6)}-${Date.now()}`;
+        const appPayload: any = {
+          application_no: appNo,
+          application_type: 'PAYMENT',
+          payment_voucher_id: voucherId,
+          target_document_id: alloc.target_document_id,
+          application_date: voucher.posting_date || voucher.document_date,
+          amount: alloc.amount,
+          status: 'POSTED',
+        };
+        if ((alloc.writeoff_amount || 0) > 0) {
+          appPayload.writeoff_amount = alloc.writeoff_amount;
+          appPayload.metadata = {
+            writeoff_account_id: alloc.writeoff_account_id || writeoffAccountId,
+            writeoff_reason: alloc.reason || 'Writeoff chênh lệch nhỏ',
+          };
+        }
+        const app = await this.request<{ data: any }>(
+          '/items/ar_applications',
+          userToken,
+          { method: 'POST', body: JSON.stringify(appPayload) },
+        );
+        results.push(app.data);
+      }
+      return { message: `Allocate ${results.length} khoản thành công`, data: results };
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi allocate phiếu thu ${voucherId}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể allocate phiếu thu');
+    }
+  }
+
+  async reversePaymentVoucher(
+    id: string,
+    dto: { reason?: string; posting_date?: string },
+    userToken: string,
+  ) {
+    try {
+      const voucherResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+      );
+      const voucher = voucherResult.data;
+      if (voucher.voucher_direction !== 'RECEIPT') {
+        throw new BadRequestException('Endpoint này chỉ dùng cho phiếu thu');
+      }
+      if (voucher.status !== 'POSTED') {
+        throw new BadRequestException('Chỉ được reverse phiếu thu đã POSTED');
+      }
+
+      // Check no active allocations
+      const appUrl = new URL('/items/ar_applications', this.directusUrl);
+      appUrl.searchParams.append('limit', '1');
+      appUrl.searchParams.append(
+        'filter',
+        JSON.stringify({ payment_voucher_id: { _eq: id }, status: { _eq: 'POSTED' } }),
+      );
+      const apps = await this.request<DirectusList<any>>(
+        appUrl.pathname + appUrl.search,
+        userToken,
+      );
+      if (apps.data?.length) {
+        throw new BadRequestException(
+          'Phiếu thu đã có allocation đang active — cần hủy allocation trước khi reverse',
+        );
+      }
+
+      const cancelled = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'CANCELLED',
+            cancel_reason: dto.reason || 'Reverse phiếu thu',
+            cancelled_at: new Date().toISOString(),
+          }),
+        },
+      );
+
+      const reversalJournal = await this.fetchJournalByReference(
+        'payment_vouchers_reversal',
+        id,
+        userToken,
+      );
+
+      return {
+        message: 'Reverse phiếu thu thành công',
+        data: { voucher: cancelled.data, reversal_journal_entry: reversalJournal },
+      };
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi reverse phiếu thu ${id}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể reverse phiếu thu');
+    }
+  }
+
+  async findCustomerAdvances(query: ArWorkbenchQueryDto, userToken: string) {
+    try {
+      const { page, pageSize, offset, sort } = this.pagination(query);
+      const url = new URL('/items/payment_vouchers', this.directusUrl);
+      url.searchParams.append('limit', pageSize.toString());
+      url.searchParams.append('offset', offset.toString());
+      url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('sort[]', sort);
+      const filterAnd: any[] = [{ voucher_type: { _eq: 'CUSTOMER_ADVANCE_RECEIPT' } }];
+      if (query.business_partner_id)
+        filterAnd.push({ counterparty_id: { _eq: query.business_partner_id } });
+      if (query.status) filterAnd.push({ status: { _eq: query.status } });
+      url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
+      const result = await this.request<DirectusList<any>>(
+        url.pathname + url.search,
+        userToken,
+      );
+      const total = result.meta?.filter_count || 0;
+      return {
+        items: result.data || [],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi lấy danh sách đặt cọc khách hàng', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể lấy danh sách đặt cọc');
+    }
+  }
+
+  async createCustomerAdvance(dto: CreateCustomerAdvanceDto, userToken: string) {
+    try {
+      const debitAccountId =
+        dto.debit_account_id ||
+        (await this.getAccountIdByCode(
+          this.paymentMethodToDebitAccountCode(dto.payment_method),
+          userToken,
+        ));
+      const creditAccountId =
+        dto.credit_account_id ||
+        (await this.getAccountIdByCode(this.ACCOUNT_CODES.AR, userToken));
+      const postingDate = dto.posting_date || dto.document_date;
+      const voucher = this.buildPaymentVoucherPayload({
+        voucherNo: dto.voucher_no || this.buildReceiptNo('ADV', dto.document_date),
+        voucherType: 'CUSTOMER_ADVANCE_RECEIPT',
+        documentDate: dto.document_date,
+        postingDate,
+        counterpartyId: dto.counterparty_id,
+        counterpartyNameSnapshot:
+          dto.counterparty_name_snapshot ||
+          (await this.getBusinessPartnerName(dto.counterparty_id, userToken)),
+        paymentMethod: dto.payment_method,
+        debitAccountId,
+        creditAccountId,
+        amount: dto.amount,
+        currency: dto.currency,
+        description:
+          dto.description ||
+          'Khách đặt cọc trước — chưa ghi nhận doanh thu/VAT',
+      });
+
+      const created = await this.request<{ data: any }>(
+        '/items/payment_vouchers',
+        userToken,
+        { method: 'POST', body: JSON.stringify(voucher) },
+      );
+      return {
+        message: 'Tạo phiếu đặt cọc nháp thành công',
+        data: created.data,
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi tạo phiếu đặt cọc khách hàng', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể tạo phiếu đặt cọc');
+    }
+  }
+
+  async postCustomerAdvance(id: string, userToken: string) {
+    try {
+      const voucherResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+      );
+      const voucher = voucherResult.data;
+      if (voucher.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
+        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+      }
+      if (voucher.status !== 'DRAFT') {
+        throw new BadRequestException('Chỉ được post phiếu đặt cọc trạng thái DRAFT');
+      }
+      const posted = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+        { method: 'PATCH', body: JSON.stringify({ status: 'POSTED' }) },
+      );
+      const journal = await this.fetchJournalByReference('payment_vouchers', id, userToken);
+      return {
+        message: 'Post phiếu đặt cọc thành công và đã sinh bút toán N111/112/113 C131 advance',
+        data: { voucher: posted.data, journal_entry: journal },
+      };
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi post phiếu đặt cọc ${id}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể post phiếu đặt cọc');
+    }
+  }
+
+  async reverseCustomerAdvance(
+    id: string,
+    dto: { reason?: string; posting_date?: string },
+    userToken: string,
+  ) {
+    try {
+      const voucherResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${id}`,
+        userToken,
+      );
+      if (voucherResult.data?.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
+        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+      }
+      return this.reversePaymentVoucher(id, dto, userToken);
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi reverse phiếu đặt cọc ${id}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể reverse phiếu đặt cọc');
+    }
   }
 }

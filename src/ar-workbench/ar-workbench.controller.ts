@@ -19,6 +19,8 @@ import { CreateArApplicationDto } from './dto/create-ar-application.dto';
 import { CreateArCollectionActivityDto } from './dto/create-ar-collection-activity.dto';
 import { CreateArSalesInvoiceDto } from './dto/create-ar-sales-invoice.dto';
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
+import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
+import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
 
 @ApiTags('AR Workbench')
 @ApiBearerAuth()
@@ -119,4 +121,96 @@ export class ArWorkbenchController {
   ) {
     return this.service.createCollectionActivity(dto, token);
   }
+
+  // ─── Payment Receipts ────────────────────────────────────────────────────
+
+  @Get('payment-vouchers')
+  @ApiOperation({ summary: 'Danh sách phiếu thu (payment_vouchers direction=RECEIPT)' })
+  findPaymentVouchers(
+    @Query() query: ArWorkbenchQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.findPaymentVouchers(query, token);
+  }
+
+  @Post('payment-vouchers')
+  @ApiOperation({ summary: 'Tạo phiếu thu DRAFT (UC#2,#37,#38,#39)' })
+  createPaymentReceipt(
+    @Body() dto: CreatePaymentReceiptDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.createPaymentReceipt(dto, token);
+  }
+
+  @Post('payment-vouchers/:id/post')
+  @ApiOperation({ summary: 'Post phiếu thu → sinh JE N111/112 C131' })
+  postPaymentVoucher(@Param('id') id: string, @UserToken() token: string) {
+    return this.service.postPaymentVoucher(id, token);
+  }
+
+  @Post('payment-vouchers/:id/allocate')
+  @ApiOperation({ summary: 'Allocate phiếu thu vào invoice(s) (UC#5,#6,#7,#8)' })
+  allocatePayment(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      allocations: {
+        target_document_id: string;
+        amount: number;
+        writeoff_amount?: number;
+        writeoff_account_id?: string;
+        reason?: string;
+      }[];
+    },
+    @UserToken() token: string,
+  ) {
+    return this.service.allocatePayment(id, body.allocations, token);
+  }
+
+  @Post('payment-vouchers/:id/reverse')
+  @ApiOperation({ summary: 'Reverse phiếu thu đã POSTED (UC#31)' })
+  reversePaymentVoucher(
+    @Param('id') id: string,
+    @Body() body: { reason?: string; posting_date?: string },
+    @UserToken() token: string,
+  ) {
+    return this.service.reversePaymentVoucher(id, body, token);
+  }
+
+  // ─── Customer Advances / Deposits ────────────────────────────────────────
+
+  @Get('customer-advances')
+  @ApiOperation({ summary: 'Danh sách tiền khách đặt cọc trước (UC#3)' })
+  findCustomerAdvances(
+    @Query() query: ArWorkbenchQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.findCustomerAdvances(query, token);
+  }
+
+  @Post('customer-advances')
+  @ApiOperation({ summary: 'Tạo phiếu đặt cọc khách hàng DRAFT (UC#3)' })
+  createCustomerAdvance(
+    @Body() dto: CreateCustomerAdvanceDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.createCustomerAdvance(dto, token);
+  }
+
+  @Post('customer-advances/:id/post')
+  @ApiOperation({ summary: 'Post phiếu đặt cọc → sinh JE N111/112/113 C131 advance' })
+  postCustomerAdvance(@Param('id') id: string, @UserToken() token: string) {
+    return this.service.postCustomerAdvance(id, token);
+  }
+
+  @Post('customer-advances/:id/reverse')
+  @ApiOperation({ summary: 'Reverse phiếu đặt cọc đã POSTED (immutable reversal JE)' })
+  reverseCustomerAdvance(
+    @Param('id') id: string,
+    @Body() body: { reason?: string; posting_date?: string },
+    @UserToken() token: string,
+  ) {
+    return this.service.reverseCustomerAdvance(id, body, token);
+  }
 }
+
