@@ -21,6 +21,7 @@ import { CreateArSalesInvoiceDto } from './dto/create-ar-sales-invoice.dto';
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
 import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
 import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
+import { ApplyAdvanceToInvoiceDto } from './dto/apply-advance-to-invoice.dto';
 
 @ApiTags('AR Workbench')
 @ApiBearerAuth()
@@ -211,6 +212,36 @@ export class ArWorkbenchController {
     @UserToken() token: string,
   ) {
     return this.service.reverseCustomerAdvance(id, body, token);
+  }
+
+  // ─── UC#4 Apply Advance to Invoice / Cấn trừ cọc ────────────────────────────
+
+  @Get('advance-applications')
+  @ApiOperation({ summary: 'Danh sách cấn trừ cọc (ADVANCE_APPLICATION records) — UC#4' })
+  findAdvanceApplications(
+    @Query() query: { advance_voucher_id?: string; ar_document_id?: string; page?: number; pageSize?: number },
+    @UserToken() token: string,
+  ) {
+    return this.service.findAdvanceApplications(query, token);
+  }
+
+  @Post('advance-applications')
+  @ApiOperation({ summary: 'Cấn trừ tiền cọc vào invoice — UC#4 (N131-advance/C131-invoice internal settlement)' })
+  applyAdvanceToInvoice(
+    @Body() dto: ApplyAdvanceToInvoiceDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.applyAdvanceToInvoice(dto, token);
+  }
+
+  @Post('advance-applications/:id/reverse')
+  @ApiOperation({ summary: 'Hủy cấn trừ cọc — khôi phục số dư advance và open_amount invoice' })
+  reverseAdvanceApplication(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @UserToken() token: string,
+  ) {
+    return this.service.reverseAdvanceApplication(id, body, token);
   }
 }
 

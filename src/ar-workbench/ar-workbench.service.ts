@@ -15,6 +15,7 @@ import { CreateArSalesInvoiceDto, CreateArSalesInvoiceLineDto } from './dto/crea
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
 import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
 import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
+import { ApplyAdvanceToInvoiceDto } from './dto/apply-advance-to-invoice.dto';
 import {
   rethrowHttpException,
   throwDirectusResponseError,
@@ -1356,6 +1357,179 @@ export class ArWorkbenchService {
       this.logger.error('Lỗi khi lấy danh sách đặt cọc khách hàng', error);
       rethrowHttpException(error);
       throw new InternalServerErrorException('Không thể lấy danh sách đặt cọc');
+    }
+  }
+
+  // ─── UC#4 Apply Advance to Invoice ──────────────────────────────────────────
+
+  async findAdvanceApplications(
+    query: { advance_voucher_id?: string; ar_document_id?: string; page?: number; pageSize?: number },
+    userToken: string,
+  ) {
+    try {
+      const page = query.page || 1;
+      const pageSize = query.pageSize || 20;
+      const url = new URL('/items/ar_applications', this.directusUrl);
+      url.searchParams.append('limit', String(pageSize));
+      url.searchParams.append('offset', String((page - 1) * pageSize));
+      url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('sort', '-created_at');
+      const filterAnd: any[] = [{ application_type: { _eq: 'ADVANCE_APPLICATION' } }];
+      if (query.advance_voucher_id)
+        filterAnd.push({ payment_voucher_id: { _eq: query.advance_voucher_id } });
+      if (query.ar_document_id)
+        filterAnd.push({ target_document_id: { _eq: query.ar_document_id } });
+      url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
+      const result = await this.request<DirectusList<any>>(url.pathname + url.search, userToken);
+      const total = result.meta?.filter_count || 0;
+      return { items: result.data || [], total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi lấy danh sách cấn trừ cọc', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể lấy danh sách cấn trừ cọc');
+    }
+  }
+
+  async applyAdvanceToInvoice(dto: ApplyAdvanceToInvoiceDto, userToken: string) {
+    try {
+      // 1. Validate advance voucher
+      const advResult = await this.request<{ data: any }>(
+        `/items/payment_vouchers/${dto.advance_voucher_id}`,
+        userToken,
+      );
+      const adv = advResult.data;
+      if (adv.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
+        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+      }
+      if (adv.status !== 'POSTED') {
+        throw new BadRequestException('Phiếu đặt cọc phải ở trạng thái POSTED');
+      }
+      const remaining = Number(adv.ar_advance_remaining_amount || 0);
+      if (remaining <= 0) {
+        throw new BadRequestException('Phiếu đặt cọc không còn số dư để cấn trừ');
+      }
+
+      // 2. Validate AR document
+      const docResult = await this.request<{ data: any }>(
+        `/items/ar_documents/${dto.ar_document_id}`,
+        userToken,
+      );
+      const doc = docResult.data;
+      if (!['POSTED', 'PARTIAL'].includes(doc.status)) {
+        throw new BadRequestException('AR document phải ở trạng thái POSTED hoặc PARTIAL');
+      }
+      const openAmount = Number(doc.open_amount || 0);
+      if (openAmount <= 0) {
+        throw new BadRequestException('Invoice không còn công nợ mở để cấn trừ');
+      }
+
+      // 3. Validate amount
+      const maxApply = Math.min(remaining, openAmount);
+      if (dto.amount > maxApply + 0.001) {
+        throw new BadRequestException(
+          `Số tiền cấn trừ (${dto.amount}) vượt quá giới hạn cho phép: min(advance_remaining=${remaining}, invoice_open=${openAmount}) = ${maxApply}`,
+        );
+      }
+
+      // 4. Build and post ar_application
+      const applicationNo = dto.application_no ||
+        `ADVA-${adv.voucher_no?.slice(-8) || dto.advance_voucher_id.slice(0, 8)}-${Date.now()}`;
+
+      const appPayload = {
+        application_no: applicationNo,
+        application_type: 'ADVANCE_APPLICATION',
+        payment_voucher_id: dto.advance_voucher_id,
+        target_document_id: dto.ar_document_id,        // invoice is target
+        application_date: dto.application_date,
+        amount: dto.amount,
+        status: 'POSTED',
+        reason: dto.reason || `Cấn trừ tiền cọc ${adv.voucher_no} vào invoice`,
+        metadata: {
+          advance_voucher_no: adv.voucher_no,
+          advance_remaining_before: remaining,
+          invoice_open_before: openAmount,
+        },
+      };
+
+      const app = await this.request<{ data: any }>(
+        '/items/ar_applications',
+        userToken,
+        { method: 'POST', body: JSON.stringify(appPayload) },
+      );
+
+      // 5. Fetch updated states
+      const [updatedAdv, updatedDoc] = await Promise.all([
+        this.request<{ data: any }>(`/items/payment_vouchers/${dto.advance_voucher_id}`, userToken),
+        this.request<{ data: any }>(`/items/ar_documents/${dto.ar_document_id}`, userToken),
+      ]);
+
+      return {
+        message: `Cấn trừ ${dto.amount.toLocaleString('vi-VN')} đ thành công`,
+        data: {
+          application: app.data,
+          advance_after: {
+            id: updatedAdv.data.id,
+            voucher_no: updatedAdv.data.voucher_no,
+            ar_advance_remaining_amount: updatedAdv.data.ar_advance_remaining_amount,
+            ar_advance_status: updatedAdv.data.ar_advance_status,
+          },
+          invoice_after: {
+            id: updatedDoc.data.id,
+            document_no: updatedDoc.data.document_no,
+            open_amount: updatedDoc.data.open_amount,
+            settled_amount: updatedDoc.data.settled_amount,
+            status: updatedDoc.data.status,
+          },
+        },
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi khi cấn trừ tiền cọc vào invoice', error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể cấn trừ tiền cọc');
+    }
+  }
+
+  async reverseAdvanceApplication(
+    applicationId: string,
+    dto: { reason?: string },
+    userToken: string,
+  ) {
+    try {
+      const appResult = await this.request<{ data: any }>(
+        `/items/ar_applications/${applicationId}`,
+        userToken,
+      );
+      const app = appResult.data;
+      if (app.application_type !== 'ADVANCE_APPLICATION') {
+        throw new BadRequestException('Không phải bản ghi cấn trừ cọc');
+      }
+      if (app.status !== 'POSTED') {
+        throw new BadRequestException('Chỉ được reverse bản ghi POSTED');
+      }
+      if (app.reversed_by_application_id) {
+        throw new BadRequestException('Bản ghi đã bị reverse trước đó');
+      }
+
+      const metadata = {
+        ...(app.metadata || {}),
+        reversal_reason: dto.reason || `Hủy cấn trừ cọc ${app.application_no}`,
+        reversed_at: new Date().toISOString(),
+      };
+
+      const reversed = await this.request<{ data: any }>(
+        `/items/ar_applications/${applicationId}`,
+        userToken,
+        { method: 'PATCH', body: JSON.stringify({ status: 'REVERSED', metadata }) },
+      );
+
+      return {
+        message: 'Hủy cấn trừ cọc thành công, đã khôi phục số dư advance và invoice',
+        data: { original_application_id: applicationId, reversal: reversed.data },
+      };
+    } catch (error: any) {
+      this.logger.error(`Lỗi khi reverse advance application ${applicationId}`, error);
+      rethrowHttpException(error);
+      throw new InternalServerErrorException('Không thể hủy cấn trừ cọc');
     }
   }
 
