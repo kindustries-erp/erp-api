@@ -69,6 +69,6 @@ Expose protected AR Workbench endpoints để tạo/post/reverse/list customer a
 - Actual Phase 2C advance status values are `UNAPPLIED`, `PARTIALLY_APPLIED`, `FULLY_APPLIED`, `REVERSED`; Web type and reusable skill reference were corrected.
 
 ## Commit/Push Status
-- API repo: pending
-- Web repo (if affected): pending
+- API repo: committed and pushed to `master` (`d40c206`)
+- Web repo (if affected): committed and pushed to `master` (`0dd450f`)
 - DB/directus staging: apply+verify+document done in Directus task
