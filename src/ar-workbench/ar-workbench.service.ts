@@ -329,6 +329,10 @@ export class ArWorkbenchService {
     return this.configService.getOrThrow<string>('DIRECTUS_URL');
   }
 
+  private get adminToken() {
+    return this.configService.getOrThrow<string>('DIRECTUS_ADMIN_TOKEN');
+  }
+
   private guard(userToken: string) {
     if (!userToken) throw new UnauthorizedException('Yêu cầu User Token');
   }
@@ -344,6 +348,33 @@ export class ArWorkbenchService {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${userToken}`,
+        ...(init.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      await throwDirectusResponseError(
+        response,
+        'Không thể xử lý AR Workbench',
+      );
+    }
+    return (await response.json()) as T;
+  }
+
+  /**
+   * Write operations (POST/PATCH/DELETE) cần quyền admin vì user role
+   * không có write permission trên collections AR.
+   */
+  private async requestWrite<T>(
+    path: string,
+    userToken: string,
+    init: RequestInit = {},
+  ): Promise<T> {
+    this.guard(userToken);
+    const response = await fetch(new URL(path, this.directusUrl), {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.adminToken}`,
         ...(init.headers || {}),
       },
     });
@@ -433,7 +464,7 @@ export class ArWorkbenchService {
         'Không tạo mới trực tiếp chứng từ trạng thái reversed/cancelled',
       );
     }
-    const result = await this.request<{ data: ArDocument }>(
+    const result = await this.requestWrite<{ data: ArDocument }>(
       '/items/ar_documents',
       userToken,
       {
@@ -590,7 +621,7 @@ export class ArWorkbenchService {
     ]);
 
     try {
-      const documentResult = await this.request<{ data: ArDocument }>(
+      const documentResult = await this.requestWrite<{ data: ArDocument }>(
         '/items/ar_documents',
         userToken,
         {
@@ -619,7 +650,7 @@ export class ArWorkbenchService {
       const document = documentResult.data;
       const lines: ArDocumentLine[] = [];
       for (const [index, line] of dto.lines.entries()) {
-        const lineResult = await this.request<{ data: ArDocumentLine }>(
+        const lineResult = await this.requestWrite<{ data: ArDocumentLine }>(
           '/items/ar_document_lines',
           userToken,
           {
@@ -675,7 +706,7 @@ export class ArWorkbenchService {
         );
       }
 
-      const posted = await this.request<{ data: ArDocument }>(
+      const posted = await this.requestWrite<{ data: ArDocument }>(
         `/items/ar_documents/${id}`,
         userToken,
         {
@@ -802,7 +833,7 @@ export class ArWorkbenchService {
         Number(originalJournal.total_debit) ||
         Number(document.total_amount) ||
         0;
-      const reversalEntry = await this.request<{ data: JournalEntry }>(
+      const reversalEntry = await this.requestWrite<{ data: JournalEntry }>(
         '/items/journal_entries',
         userToken,
         {
@@ -822,7 +853,7 @@ export class ArWorkbenchService {
       );
 
       for (const [index, line] of originalLines.data.entries()) {
-        await this.request<{ data: JournalEntryLine }>(
+        await this.requestWrite<{ data: JournalEntryLine }>(
           '/items/journal_entry_lines',
           userToken,
           {
@@ -839,7 +870,7 @@ export class ArWorkbenchService {
         );
       }
 
-      const reversed = await this.request<{ data: ArDocument }>(
+      const reversed = await this.requestWrite<{ data: ArDocument }>(
         `/items/ar_documents/${id}`,
         userToken,
         {
@@ -878,7 +909,7 @@ export class ArWorkbenchService {
     dto: UpdateArDocumentDto,
     userToken: string,
   ) {
-    const result = await this.request<{ data: ArDocument }>(
+    const result = await this.requestWrite<{ data: ArDocument }>(
       `/items/ar_documents/${id}`,
       userToken,
       {
@@ -916,7 +947,7 @@ export class ArWorkbenchService {
         'Application cần target_document_id hoặc payment_voucher_id',
       );
     }
-    const result = await this.request<{ data: any }>(
+    const result = await this.requestWrite<{ data: any }>(
       '/items/ar_applications',
       userToken,
       {
@@ -963,7 +994,7 @@ export class ArWorkbenchService {
     dto: CreateArCollectionActivityDto,
     userToken: string,
   ) {
-    const result = await this.request<{ data: any }>(
+    const result = await this.requestWrite<{ data: any }>(
       '/items/ar_collection_activities',
       userToken,
       {
@@ -1113,7 +1144,7 @@ export class ArWorkbenchService {
         description: dto.description,
       });
 
-      const created = await this.request<{ data: any }>(
+      const created = await this.requestWrite<{ data: any }>(
         '/items/payment_vouchers',
         userToken,
         { method: 'POST', body: JSON.stringify(voucher) },
@@ -1143,7 +1174,7 @@ export class ArWorkbenchService {
               writeoff_reason: alloc.reason || 'Writeoff chênh lệch nhỏ',
             };
           }
-          const app = await this.request<{ data: any }>(
+          const app = await this.requestWrite<{ data: any }>(
             '/items/ar_applications',
             userToken,
             { method: 'POST', body: JSON.stringify(appPayload) },
@@ -1177,7 +1208,7 @@ export class ArWorkbenchService {
         throw new BadRequestException('Chỉ được post phiếu thu trạng thái DRAFT');
       }
 
-      const posted = await this.request<{ data: any }>(
+      const posted = await this.requestWrite<{ data: any }>(
         `/items/payment_vouchers/${id}`,
         userToken,
         { method: 'PATCH', body: JSON.stringify({ status: 'POSTED' }) },
@@ -1248,7 +1279,7 @@ export class ArWorkbenchService {
             writeoff_reason: alloc.reason || 'Writeoff chênh lệch nhỏ',
           };
         }
-        const app = await this.request<{ data: any }>(
+        const app = await this.requestWrite<{ data: any }>(
           '/items/ar_applications',
           userToken,
           { method: 'POST', body: JSON.stringify(appPayload) },
@@ -1298,7 +1329,7 @@ export class ArWorkbenchService {
         );
       }
 
-      const cancelled = await this.request<{ data: any }>(
+      const cancelled = await this.requestWrite<{ data: any }>(
         `/items/payment_vouchers/${id}`,
         userToken,
         {
@@ -1451,7 +1482,7 @@ export class ArWorkbenchService {
         },
       };
 
-      const app = await this.request<{ data: any }>(
+      const app = await this.requestWrite<{ data: any }>(
         '/items/ar_applications',
         userToken,
         { method: 'POST', body: JSON.stringify(appPayload) },
@@ -1516,7 +1547,7 @@ export class ArWorkbenchService {
         reversed_at: new Date().toISOString(),
       };
 
-      const reversed = await this.request<{ data: any }>(
+      const reversed = await this.requestWrite<{ data: any }>(
         `/items/ar_applications/${applicationId}`,
         userToken,
         { method: 'PATCH', body: JSON.stringify({ status: 'REVERSED', metadata }) },
@@ -1564,7 +1595,7 @@ export class ArWorkbenchService {
           'Khách đặt cọc trước — chưa ghi nhận doanh thu/VAT',
       });
 
-      const created = await this.request<{ data: any }>(
+      const created = await this.requestWrite<{ data: any }>(
         '/items/payment_vouchers',
         userToken,
         { method: 'POST', body: JSON.stringify(voucher) },
@@ -1593,7 +1624,7 @@ export class ArWorkbenchService {
       if (voucher.status !== 'DRAFT') {
         throw new BadRequestException('Chỉ được post phiếu đặt cọc trạng thái DRAFT');
       }
-      const posted = await this.request<{ data: any }>(
+      const posted = await this.requestWrite<{ data: any }>(
         `/items/payment_vouchers/${id}`,
         userToken,
         { method: 'PATCH', body: JSON.stringify({ status: 'POSTED' }) },
