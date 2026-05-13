@@ -5,8 +5,29 @@ import {
   IsUUID,
   IsNotEmpty,
   IsIn,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class CashBankRelatedDocumentDto {
+  @ApiProperty({ enum: ['payment_vouchers', 'ar_documents', 'ap_documents', 'sales_invoices', 'purchase_invoices', 'manual'] })
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['payment_vouchers', 'ar_documents', 'ap_documents', 'sales_invoices', 'purchase_invoices', 'manual'])
+  related_type!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  @IsNotEmpty()
+  related_id!: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() related_no?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() related_date?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() amount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() note?: string;
+}
 
 export class CreatePaymentVouchersDto {
   @ApiProperty() @IsString() @IsNotEmpty() voucher_no!: string;
@@ -62,6 +83,23 @@ export class CreatePaymentVouchersDto {
   @ApiProperty() @IsString() @IsNotEmpty() description!: string;
   @ApiProperty() @IsUUID() @IsNotEmpty() debit_account_id!: string;
   @ApiProperty() @IsUUID() @IsNotEmpty() credit_account_id!: string;
+
+  @ApiPropertyOptional({ description: 'Cash/Bank tag preset id dùng để auto-fill tài khoản' })
+  @IsOptional()
+  @IsUUID()
+  cash_bank_tag_preset_id?: string;
+
+  @ApiPropertyOptional({ description: 'Cash/Bank tag preset code dùng để auto-fill tài khoản' })
+  @IsOptional()
+  @IsString()
+  cash_bank_tag_code?: string;
+
+  @ApiPropertyOptional({ type: [CashBankRelatedDocumentDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CashBankRelatedDocumentDto)
+  related_documents?: CashBankRelatedDocumentDto[];
 
   @ApiPropertyOptional({ description: 'Bắt buộc khi voucher_channel = CASH' })
   @IsOptional()

@@ -68,6 +68,15 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.findBusinessPartnerOptions(query, token);
   }
 
+  @ApiOperation({ summary: 'Danh sách tag gợi ý Cash/Bank để auto-fill tài khoản' })
+  @Get('lookup/cash-bank-tag-presets')
+  findCashBankTagPresets(
+    @Query() query: PaymentVoucherQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.paymentVouchersService.findCashBankTagPresets(query, token);
+  }
+
   @ApiOperation({
     summary: 'Danh sách tài khoản ngân hàng đối tác phục vụ lập phiếu thu chi',
   })
