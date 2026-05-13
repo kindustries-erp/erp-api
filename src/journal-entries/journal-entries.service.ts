@@ -87,6 +87,8 @@ export class JournalEntriesService {
       if (query.search) url.searchParams.append('search', query.search);
 
       const filterAnd: any[] = [];
+      // Journal list only shows posted entries
+      filterAnd.push({ status: { _in: ['posted', 'reversed'] } });
       if (query.status) filterAnd.push({ status: { _eq: query.status } });
       if (query.period_id)
         filterAnd.push({ period_id: { _eq: query.period_id } });
@@ -150,8 +152,38 @@ export class JournalEntriesService {
 
       const result = await response.json();
       const total = result.meta?.filter_count || 0;
+      const entries = result.data || [];
+
+      // Fetch all lines for entries on this page in one call
+      let linesMap: Record<string, any[]> = {};
+      if (entries.length > 0) {
+        const entryIds = entries.map((e: any) => e.id);
+        const lUrl = new URL(`/items/${this.linesCollection}`, this.directusUrl);
+        lUrl.searchParams.append('filter', JSON.stringify({ journal_entry_id: { _in: entryIds } }));
+        lUrl.searchParams.append('fields[]', 'id');
+        lUrl.searchParams.append('fields[]', 'journal_entry_id');
+        lUrl.searchParams.append('fields[]', 'account_id.id');
+        lUrl.searchParams.append('fields[]', 'account_id.account_code');
+        lUrl.searchParams.append('fields[]', 'account_id.account_name');
+        lUrl.searchParams.append('fields[]', 'debit');
+        lUrl.searchParams.append('fields[]', 'credit');
+        lUrl.searchParams.append('fields[]', 'description');
+        lUrl.searchParams.append('fields[]', 'sort');
+        lUrl.searchParams.append('sort[]', 'sort');
+        lUrl.searchParams.append('limit', '-1');
+        const lRes = await fetch(lUrl.toString(), { headers: this.getAdminHeaders() });
+        if (lRes.ok) {
+          const lJson = await lRes.json();
+          for (const line of lJson.data || []) {
+            const eid = typeof line.journal_entry_id === 'object' ? line.journal_entry_id?.id : line.journal_entry_id;
+            if (!linesMap[eid]) linesMap[eid] = [];
+            linesMap[eid].push(line);
+          }
+        }
+      }
+
       return {
-        items: result.data || [],
+        items: entries.map((e: any) => ({ ...e, lines: linesMap[e.id] || [] })),
         total,
         page,
         pageSize,
