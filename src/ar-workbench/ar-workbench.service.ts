@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ArWorkbenchQueryDto } from './dto/ar-workbench-query.dto';
@@ -39,6 +40,8 @@ type ArDocument = {
   risk_status?: string;
   collection_status?: string;
   metadata?: Record<string, unknown> | null;
+  business_partner_name_snapshot?: string | null;
+  can_delete?: boolean;
 };
 
 type ArDocumentLine = {
@@ -427,6 +430,63 @@ export class ArWorkbenchService {
       url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
   }
 
+
+  private async decorateDocuments(docs: ArDocument[], userToken: string) {
+    if (docs.length === 0) return docs;
+    const docIds = docs.map((doc) => doc.id);
+    const partnerIds = [...new Set(docs.map((doc) => doc.business_partner_id).filter(Boolean) as string[])];
+    const linkedIds = new Set<string>();
+
+    const relatedUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
+    relatedUrl.searchParams.append('limit', '-1');
+    relatedUrl.searchParams.append('fields[]', 'related_id');
+    relatedUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _in: docIds } }));
+    const related = await this.request<DirectusList<{ related_id?: string | null }>>(relatedUrl.pathname + relatedUrl.search, userToken);
+    for (const item of related.data || []) if (item.related_id) linkedIds.add(item.related_id);
+
+    const appUrl = new URL('/items/ar_applications', this.directusUrl);
+    appUrl.searchParams.append('limit', '-1');
+    appUrl.searchParams.append('fields[]', 'source_document_id');
+    appUrl.searchParams.append('fields[]', 'target_document_id');
+    appUrl.searchParams.append('filter', JSON.stringify({ _or: [{ source_document_id: { _in: docIds } }, { target_document_id: { _in: docIds } }] }));
+    const apps = await this.request<DirectusList<{ source_document_id?: string | null; target_document_id?: string | null }>>(appUrl.pathname + appUrl.search, userToken);
+    for (const item of apps.data || []) {
+      if (item.source_document_id) linkedIds.add(item.source_document_id);
+      if (item.target_document_id) linkedIds.add(item.target_document_id);
+    }
+
+    const partnerNames = new Map<string, string>();
+    if (partnerIds.length > 0) {
+      const partnerUrl = new URL('/items/business_partners', this.directusUrl);
+      partnerUrl.searchParams.append('limit', '-1');
+      partnerUrl.searchParams.append('fields[]', 'id');
+      partnerUrl.searchParams.append('fields[]', 'display_name');
+      partnerUrl.searchParams.append('fields[]', 'legal_name');
+      partnerUrl.searchParams.append('fields[]', 'partner_code');
+      partnerUrl.searchParams.append('filter', JSON.stringify({ id: { _in: partnerIds } }));
+      const partners = await this.request<DirectusList<{ id: string; display_name?: string | null; legal_name?: string | null; partner_code?: string | null }>>(partnerUrl.pathname + partnerUrl.search, userToken);
+      for (const partner of partners.data || []) partnerNames.set(partner.id, partner.display_name || partner.legal_name || partner.partner_code || partner.id);
+    }
+
+    return docs.map((doc) => ({
+      ...doc,
+      business_partner_name_snapshot: doc.business_partner_id ? partnerNames.get(doc.business_partner_id) || null : null,
+      can_delete: !linkedIds.has(doc.id),
+    }));
+  }
+
+  private async ensureDocumentCanDelete(id: string, userToken: string) {
+    const docUrl = new URL(`/items/ar_documents/${id}`, this.directusUrl);
+    docUrl.searchParams.append('fields[]', 'id');
+    const doc = await this.request<{ data?: { id: string } }>(docUrl.pathname + docUrl.search, userToken);
+    if (!doc.data?.id) throw new NotFoundException('Không tìm thấy AR document');
+
+    const decorated = await this.decorateDocuments([{ id } as ArDocument], userToken);
+    if (decorated[0]?.can_delete === false) {
+      throw new BadRequestException('Không thể xóa chứng từ đã có liên kết thanh toán/cấn trừ');
+    }
+  }
+
   async findDocuments(query: ArWorkbenchQueryDto, userToken: string) {
     try {
       const { page, pageSize, offset, sort } = this.pagination(query);
@@ -443,7 +503,7 @@ export class ArWorkbenchService {
       );
       const total = result.meta?.filter_count || 0;
       return {
-        items: result.data || [],
+        items: await this.decorateDocuments(result.data || [], userToken),
         total,
         page,
         pageSize,
@@ -909,15 +969,34 @@ export class ArWorkbenchService {
     dto: UpdateArDocumentDto,
     userToken: string,
   ) {
+    const payload: Record<string, unknown> = { ...dto };
+    if (dto.settled_amount !== undefined) {
+      const docUrl = new URL(`/items/ar_documents/${id}`, this.directusUrl);
+      docUrl.searchParams.append('fields[]', 'total_amount');
+      const current = await this.request<{ data?: { total_amount?: number | string } }>(
+        docUrl.pathname + docUrl.search,
+        userToken,
+      );
+      const totalAmount = Number(current.data?.total_amount ?? dto.total_amount ?? 0);
+      const settledAmount = Math.min(Math.max(Number(dto.settled_amount) || 0, 0), totalAmount);
+      payload.settled_amount = settledAmount;
+      payload.status = settledAmount <= 0 ? 'POSTED' : settledAmount >= totalAmount ? 'SETTLED' : 'PARTIAL';
+    }
     const result = await this.requestWrite<{ data: ArDocument }>(
       `/items/ar_documents/${id}`,
       userToken,
       {
         method: 'PATCH',
-        body: JSON.stringify(dto),
+        body: JSON.stringify(payload),
       },
     );
     return { message: 'Cập nhật AR document thành công', data: result.data };
+  }
+
+  async deleteDocument(id: string, userToken: string) {
+    await this.ensureDocumentCanDelete(id, userToken);
+    await this.requestWrite<any>(`/items/ar_documents/${id}`, userToken, { method: 'DELETE' });
+    return { message: 'Xóa AR document thành công' };
   }
 
   async findApplications(query: ArWorkbenchQueryDto, userToken: string) {

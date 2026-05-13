@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -86,6 +87,11 @@ export class ArWorkbenchController {
     @UserToken() token: string,
   ) {
     return this.service.updateDocument(id, dto, token);
+  }
+
+  @Delete('documents/:id')
+  deleteDocument(@Param('id') id: string, @UserToken() token: string) {
+    return this.service.deleteDocument(id, token);
   }
 
   @Get('applications')
