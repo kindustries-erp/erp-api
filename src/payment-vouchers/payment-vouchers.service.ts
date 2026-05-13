@@ -448,6 +448,8 @@ export class PaymentVouchersService {
 
     const listUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
     listUrl.searchParams.append('fields[]', 'id');
+    listUrl.searchParams.append('fields[]', 'related_type');
+    listUrl.searchParams.append('fields[]', 'related_id');
     listUrl.searchParams.append(
       'filter',
       JSON.stringify({ payment_voucher_id: { _eq: paymentVoucherId } }),
@@ -462,6 +464,13 @@ export class PaymentVouchersService {
       );
     }
     const existing = (await listResponse.json()).data || [];
+    const affectedArDocumentIds = new Set<string>();
+    for (const item of existing) {
+      if (item.related_type === 'ar_documents' && item.related_id) affectedArDocumentIds.add(item.related_id);
+    }
+    for (const doc of relatedDocuments || []) {
+      if (doc.related_type === 'ar_documents' && doc.related_id) affectedArDocumentIds.add(doc.related_id);
+    }
     if (existing.length > 0) {
       const deleteResponse = await fetch(
         `${this.directusUrl}/items/cash_bank_related_documents`,
@@ -509,6 +518,36 @@ export class PaymentVouchersService {
           'Không thể lưu chứng từ liên quan cash/bank',
         );
       }
+    }
+
+    await this.recomputeArDocumentSettlement([...affectedArDocumentIds]);
+  }
+
+  private async recomputeArDocumentSettlement(arDocumentIds: string[]) {
+    for (const arDocumentId of arDocumentIds.filter(Boolean)) {
+      const linksUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
+      linksUrl.searchParams.append('limit', '-1');
+      linksUrl.searchParams.append('fields[]', 'amount');
+      linksUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _eq: arDocumentId } }));
+      const linksResponse = await fetch(linksUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
+      if (!linksResponse.ok) await throwDirectusResponseError(linksResponse, 'Không thể tính lại thanh toán chứng từ công nợ');
+      const links = (await linksResponse.json()).data || [];
+      const linkedAmount = links.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+
+      const docUrl = new URL(`/items/ar_documents/${arDocumentId}`, this.directusUrl);
+      docUrl.searchParams.append('fields[]', 'total_amount');
+      const docResponse = await fetch(docUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
+      if (!docResponse.ok) await throwDirectusResponseError(docResponse, 'Không thể đọc chứng từ công nợ để tính lại số dư');
+      const doc = (await docResponse.json()).data;
+      const totalAmount = Number(doc?.total_amount) || 0;
+      const settledAmount = Math.min(totalAmount, linkedAmount);
+      const status = settledAmount <= 0 ? 'POSTED' : settledAmount >= totalAmount ? 'SETTLED' : 'PARTIAL';
+      const patchResponse = await fetch(`${this.directusUrl}/items/ar_documents/${arDocumentId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${this.adminToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settled_amount: settledAmount, status }),
+      });
+      if (!patchResponse.ok) await throwDirectusResponseError(patchResponse, 'Không thể cập nhật số đã thanh toán/còn lại chứng từ công nợ');
     }
   }
 
