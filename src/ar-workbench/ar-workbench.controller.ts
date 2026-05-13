@@ -19,7 +19,6 @@ import { UpdateArDocumentDto } from './dto/update-ar-document.dto';
 import { CreateArApplicationDto } from './dto/create-ar-application.dto';
 import { CreateArCollectionActivityDto } from './dto/create-ar-collection-activity.dto';
 import { CreateArSalesInvoiceDto } from './dto/create-ar-sales-invoice.dto';
-import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
 
 @ApiTags('AR Workbench')
 @ApiBearerAuth()
@@ -68,17 +67,6 @@ export class ArWorkbenchController {
     return this.service.postDocument(id, token);
   }
 
-  @ApiOperation({
-    summary: 'Reverse posted AR invoice with immutable reversal journal entry',
-  })
-  @Post('documents/:id/reverse')
-  reverseDocument(
-    @Param('id') id: string,
-    @Body() dto: ReverseArDocumentDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.reverseDocument(id, dto, token);
-  }
 
   @Patch('documents/:id')
   updateDocument(

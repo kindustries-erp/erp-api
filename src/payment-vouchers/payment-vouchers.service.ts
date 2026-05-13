@@ -541,11 +541,12 @@ export class PaymentVouchersService {
       const doc = (await docResponse.json()).data;
       const totalAmount = Number(doc?.total_amount) || 0;
       const settledAmount = Math.min(totalAmount, linkedAmount);
+      const openAmount = Math.max(totalAmount - settledAmount, 0);
       const status = settledAmount <= 0 ? 'POSTED' : settledAmount >= totalAmount ? 'SETTLED' : 'PARTIAL';
       const patchResponse = await fetch(`${this.directusUrl}/items/ar_documents/${arDocumentId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${this.adminToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settled_amount: settledAmount, status }),
+        body: JSON.stringify({ settled_amount: settledAmount, open_amount: openAmount, status }),
       });
       if (!patchResponse.ok) await throwDirectusResponseError(patchResponse, 'Không thể cập nhật số đã thanh toán/còn lại chứng từ công nợ');
     }

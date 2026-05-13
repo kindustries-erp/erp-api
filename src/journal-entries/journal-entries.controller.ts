@@ -13,7 +13,6 @@ import { UserToken } from '../common/decorators/user-token.decorator';
 import { JournalEntriesService } from './journal-entries.service';
 import { JournalEntryQueryDto } from './dto/journal-entry-query.dto';
 import { CreateJournalEntryDto } from './dto/create-journal-entry.dto';
-import { ReverseJournalEntryDto } from './dto/reverse-journal-entry.dto';
 
 @ApiTags('JournalEntries')
 @ApiBearerAuth()
@@ -65,15 +64,4 @@ export class JournalEntriesController {
     return this.journalEntriesService.post(id, token);
   }
 
-  @ApiOperation({
-    summary: 'Đảo bút toán (posted -> reversed + tạo entry đảo)',
-  })
-  @Post(':id/reverse')
-  reverse(
-    @Param('id') id: string,
-    @Body() dto: ReverseJournalEntryDto,
-    @UserToken() token: string,
-  ) {
-    return this.journalEntriesService.reverse(id, dto, token);
-  }
 }
