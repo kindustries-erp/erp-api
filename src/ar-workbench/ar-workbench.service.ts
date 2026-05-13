@@ -42,6 +42,7 @@ type ArDocument = {
   metadata?: Record<string, unknown> | null;
   business_partner_name_snapshot?: string | null;
   can_delete?: boolean;
+  related_documents?: any[];
 };
 
 type ArDocumentLine = {
@@ -442,10 +443,23 @@ export class ArWorkbenchService {
 
     const relatedUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
     relatedUrl.searchParams.append('limit', '-1');
+    relatedUrl.searchParams.append('fields[]', 'id');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id');
     relatedUrl.searchParams.append('fields[]', 'related_id');
+    relatedUrl.searchParams.append('fields[]', 'related_no');
+    relatedUrl.searchParams.append('fields[]', 'related_date');
+    relatedUrl.searchParams.append('fields[]', 'amount');
+    relatedUrl.searchParams.append('fields[]', 'note');
     relatedUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _in: docIds } }));
-    const related = await this.request<DirectusList<{ related_id?: string | null }>>(relatedUrl.pathname + relatedUrl.search, userToken);
-    for (const item of related.data || []) if (item.related_id) linkedIds.add(item.related_id);
+    const related = await this.request<DirectusList<{ id?: string; payment_voucher_id?: string | null; related_id?: string | null; related_no?: string | null; related_date?: string | null; amount?: number | string | null; note?: string | null }>>(relatedUrl.pathname + relatedUrl.search, userToken);
+    const relatedByDoc = new Map<string, any[]>();
+    for (const item of related.data || []) {
+      if (!item.related_id) continue;
+      linkedIds.add(item.related_id);
+      const list = relatedByDoc.get(item.related_id) || [];
+      list.push(item);
+      relatedByDoc.set(item.related_id, list);
+    }
 
     const appUrl = new URL('/items/ar_applications', this.directusUrl);
     appUrl.searchParams.append('limit', '-1');
@@ -473,6 +487,7 @@ export class ArWorkbenchService {
       ...doc,
       business_partner_name_snapshot: doc.business_partner_id ? partnerNames.get(doc.business_partner_id) || null : null,
       can_delete: !linkedIds.has(doc.id),
+      related_documents: relatedByDoc.get(doc.id) || [],
     }));
   }
 

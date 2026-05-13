@@ -35,6 +35,10 @@ import {
   throwDirectusResponseError,
   throwDirectusSdkError,
 } from '../common/utils/directus-error.util';
+import {
+  calculateArDocumentSettlement,
+  validateCashBankRelatedArDocuments,
+} from './cash-bank-settlement.util';
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -532,17 +536,14 @@ export class PaymentVouchersService {
       const linksResponse = await fetch(linksUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
       if (!linksResponse.ok) await throwDirectusResponseError(linksResponse, 'Không thể tính lại thanh toán chứng từ công nợ');
       const links = (await linksResponse.json()).data || [];
-      const linkedAmount = links.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+      const linkedAmounts = links.map((item: any) => item.amount);
 
       const docUrl = new URL(`/items/ar_documents/${arDocumentId}`, this.directusUrl);
       docUrl.searchParams.append('fields[]', 'total_amount');
       const docResponse = await fetch(docUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
       if (!docResponse.ok) await throwDirectusResponseError(docResponse, 'Không thể đọc chứng từ công nợ để tính lại số dư');
       const doc = (await docResponse.json()).data;
-      const totalAmount = Number(doc?.total_amount) || 0;
-      const settledAmount = Math.min(totalAmount, linkedAmount);
-      const openAmount = Math.max(totalAmount - settledAmount, 0);
-      const status = settledAmount <= 0 ? 'POSTED' : settledAmount >= totalAmount ? 'SETTLED' : 'PARTIAL';
+      const { settledAmount, openAmount, status } = calculateArDocumentSettlement(doc?.total_amount, linkedAmounts);
       const patchResponse = await fetch(`${this.directusUrl}/items/ar_documents/${arDocumentId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${this.adminToken}`, 'Content-Type': 'application/json' },
@@ -792,6 +793,10 @@ export class PaymentVouchersService {
 
     try {
       const presetPayload = await this.resolveCashBankTagPreset(dto);
+      validateCashBankRelatedArDocuments({
+        voucherAmount: dto.amount,
+        relatedDocuments: dto.related_documents,
+      });
       const baseDto = this.stripCashBankTransientFields(dto);
       const payload = {
         ...baseDto,
@@ -1162,6 +1167,10 @@ export class PaymentVouchersService {
         cash_bank_tag_code: dto.cash_bank_tag_code,
         voucher_channel: channel,
         voucher_direction: dto.voucher_direction ?? current.voucher_direction,
+      });
+      validateCashBankRelatedArDocuments({
+        voucherAmount: dto.amount ?? current.amount,
+        relatedDocuments: dto.related_documents,
       });
       const baseDto = this.stripCashBankTransientFields(dto);
       const result = await (client as any).request(
