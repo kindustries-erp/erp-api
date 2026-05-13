@@ -461,11 +461,9 @@ export class ArWorkbenchService {
       partnerUrl.searchParams.append('limit', '-1');
       partnerUrl.searchParams.append('fields[]', 'id');
       partnerUrl.searchParams.append('fields[]', 'display_name');
-      partnerUrl.searchParams.append('fields[]', 'legal_name');
-      partnerUrl.searchParams.append('fields[]', 'partner_code');
       partnerUrl.searchParams.append('filter', JSON.stringify({ id: { _in: partnerIds } }));
-      const partners = await this.request<DirectusList<{ id: string; display_name?: string | null; legal_name?: string | null; partner_code?: string | null }>>(partnerUrl.pathname + partnerUrl.search, userToken);
-      for (const partner of partners.data || []) partnerNames.set(partner.id, partner.display_name || partner.legal_name || partner.partner_code || partner.id);
+      const partners = await this.request<DirectusList<{ id: string; display_name?: string | null }>>(partnerUrl.pathname + partnerUrl.search, userToken);
+      for (const partner of partners.data || []) partnerNames.set(partner.id, partner.display_name || partner.id);
     }
 
     return docs.map((doc) => ({
