@@ -19,9 +19,6 @@ import { CreateArApplicationDto } from './dto/create-ar-application.dto';
 import { CreateArCollectionActivityDto } from './dto/create-ar-collection-activity.dto';
 import { CreateArSalesInvoiceDto } from './dto/create-ar-sales-invoice.dto';
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
-import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
-import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
-import { ApplyAdvanceToInvoiceDto } from './dto/apply-advance-to-invoice.dto';
 
 @ApiTags('AR Workbench')
 @ApiBearerAuth()
@@ -134,49 +131,8 @@ export class ArWorkbenchController {
     return this.service.findPaymentVouchers(query, token);
   }
 
-  @Post('payment-vouchers')
-  @ApiOperation({ summary: 'Tạo phiếu thu DRAFT (UC#2,#37,#38,#39)' })
-  createPaymentReceipt(
-    @Body() dto: CreatePaymentReceiptDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createPaymentReceipt(dto, token);
-  }
-
-  @Post('payment-vouchers/:id/post')
-  @ApiOperation({ summary: 'Post phiếu thu → sinh JE N111/112 C131' })
-  postPaymentVoucher(@Param('id') id: string, @UserToken() token: string) {
-    return this.service.postPaymentVoucher(id, token);
-  }
-
-  @Post('payment-vouchers/:id/allocate')
-  @ApiOperation({ summary: 'Allocate phiếu thu vào invoice(s) (UC#5,#6,#7,#8)' })
-  allocatePayment(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      allocations: {
-        target_document_id: string;
-        amount: number;
-        writeoff_amount?: number;
-        writeoff_account_id?: string;
-        reason?: string;
-      }[];
-    },
-    @UserToken() token: string,
-  ) {
-    return this.service.allocatePayment(id, body.allocations, token);
-  }
-
-  @Post('payment-vouchers/:id/reverse')
-  @ApiOperation({ summary: 'Reverse phiếu thu đã POSTED (UC#31)' })
-  reversePaymentVoucher(
-    @Param('id') id: string,
-    @Body() body: { reason?: string; posting_date?: string },
-    @UserToken() token: string,
-  ) {
-    return this.service.reversePaymentVoucher(id, body, token);
-  }
+  // AR Workbench no longer creates/posts/allocates/reverses payment receipts.
+  // Cash/Bank screens are the only creation surface for these flows.
 
   // ─── Customer Advances / Deposits ────────────────────────────────────────
 
@@ -189,30 +145,8 @@ export class ArWorkbenchController {
     return this.service.findCustomerAdvances(query, token);
   }
 
-  @Post('customer-advances')
-  @ApiOperation({ summary: 'Tạo phiếu đặt cọc khách hàng DRAFT (UC#3)' })
-  createCustomerAdvance(
-    @Body() dto: CreateCustomerAdvanceDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createCustomerAdvance(dto, token);
-  }
-
-  @Post('customer-advances/:id/post')
-  @ApiOperation({ summary: 'Post phiếu đặt cọc → sinh JE N111/112/113 C131 advance' })
-  postCustomerAdvance(@Param('id') id: string, @UserToken() token: string) {
-    return this.service.postCustomerAdvance(id, token);
-  }
-
-  @Post('customer-advances/:id/reverse')
-  @ApiOperation({ summary: 'Reverse phiếu đặt cọc đã POSTED (immutable reversal JE)' })
-  reverseCustomerAdvance(
-    @Param('id') id: string,
-    @Body() body: { reason?: string; posting_date?: string },
-    @UserToken() token: string,
-  ) {
-    return this.service.reverseCustomerAdvance(id, body, token);
-  }
+  // AR Workbench no longer creates/posts/reverses customer advances.
+  // Use the unified Cash/Bank voucher form instead.
 
   // ─── UC#4 Apply Advance to Invoice / Cấn trừ cọc ────────────────────────────
 
@@ -225,23 +159,7 @@ export class ArWorkbenchController {
     return this.service.findAdvanceApplications(query, token);
   }
 
-  @Post('advance-applications')
-  @ApiOperation({ summary: 'Cấn trừ tiền cọc vào invoice — UC#4 (N131-advance/C131-invoice internal settlement)' })
-  applyAdvanceToInvoice(
-    @Body() dto: ApplyAdvanceToInvoiceDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.applyAdvanceToInvoice(dto, token);
-  }
-
-  @Post('advance-applications/:id/reverse')
-  @ApiOperation({ summary: 'Hủy cấn trừ cọc — khôi phục số dư advance và open_amount invoice' })
-  reverseAdvanceApplication(
-    @Param('id') id: string,
-    @Body() body: { reason?: string },
-    @UserToken() token: string,
-  ) {
-    return this.service.reverseAdvanceApplication(id, body, token);
-  }
+  // AR Workbench no longer applies/reverses customer advances.
+  // Cấn trừ cọc is initiated from the unified Cash/Bank form/context.
 }
 

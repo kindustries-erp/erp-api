@@ -43,7 +43,7 @@ export class CreatePaymentVouchersDto {
   voucher_direction!: string;
 
   @ApiProperty({
-    enum: ['CASH_RECEIPT', 'CASH_PAYMENT', 'BANK_RECEIPT', 'BANK_PAYMENT'],
+    enum: ['CASH_RECEIPT', 'CASH_PAYMENT', 'BANK_RECEIPT', 'BANK_PAYMENT', 'CUSTOMER_ADVANCE_RECEIPT'],
   })
   @IsString()
   @IsNotEmpty()
