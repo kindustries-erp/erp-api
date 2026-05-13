@@ -387,7 +387,10 @@ export class ArWorkbenchService {
         'Không thể xử lý AR Workbench',
       );
     }
-    return (await response.json()) as T;
+    if (response.status === 204) return undefined as T;
+    const body = await response.text();
+    if (!body) return undefined as T;
+    return JSON.parse(body) as T;
   }
 
   private pagination(query: ArWorkbenchQueryDto) {
