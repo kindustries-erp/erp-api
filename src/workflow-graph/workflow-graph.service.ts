@@ -538,7 +538,7 @@ export class WorkflowGraphService {
         'Toàn quyền hệ thống. Phê duyệt giao dịch giá trị cao và quản lý người dùng.',
       group: 'management',
       employees: adminEmployees,
-      roles: ['Administrator', 'Director / CEO'],
+      roles: ['SuperAdmin', 'Director / CEO'],
       rules: [
         'Toàn quyền đọc/ghi/xóa trên tất cả phân hệ',
         'Phê duyệt phiếu thu/chi có số tiền > 50.000.000 VND',
@@ -557,7 +557,7 @@ export class WorkflowGraphService {
       label: 'Quản trị toàn hệ thống',
       type: 'hierarchy',
       rule: 'Tài khoản có admin_access = true trong Directus',
-      actor: 'Administrator',
+      actor: 'SuperAdmin',
       meta: { description: 'Root → Admin' },
     });
 
