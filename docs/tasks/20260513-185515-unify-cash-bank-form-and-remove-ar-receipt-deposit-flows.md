@@ -161,3 +161,14 @@ Thiết kế lại luồng nghiệp vụ để cash/bank là bề mặt thao tá
 ## Sẵn sàng thực thi
 Kế hoạch đã hoàn tất theo ERP PLAN mode, có Gate 0 DB precheck và phân rã DB -> API -> UI.
 Chờ bạn xác nhận để chuyển sang ACT mode và triển khai.
+
+## ACT close-out evidence
+- API commit: `122b66e feat: centralize ar cash bank flows`.
+- Web commit: `f23e549 feat: unify cash bank ar-linked flows`.
+- Docs commit: `/opt/docs` `7ea0eb6 docs: record unified cash bank ar flow`.
+- API build: `npm run build` pass.
+- Web build: `npm run build` pass.
+- Deploy: `/opt/stacks/liouni-erp-api` and `/opt/stacks/liouni-erp-web` rebuilt with no cache and restarted.
+- Negative smoke: removed AR POST routes return 404.
+- Positive smoke: payment voucher and AR document GET routes return auth guard 401 without token, confirming routes are active behind auth.
+- Web smoke: local `/` returns HTTP 200; deployed bundle contains unified AR copy and `Link công nợ` marker.
