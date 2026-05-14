@@ -39,21 +39,22 @@ Chuẩn hóa workflow API cho `payment_vouchers`:
 - [ ] 3.0 UI gate done
 - [ ] 4.0 Validation
   - [x] 4.1 Chạy `npm run build`
-  - [ ] 4.2 Smoke test flow liên quan
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Tổng kết evidence
+  - [x] 4.2 Smoke test flow liên quan
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Tổng kết evidence
 
 ## Validation Evidence
 - DB precheck result: `payment_vouchers|6`, `journal_ref|2`, `cash_bank_related_documents|1`, `idx_journal_entries_payment_voucher_ref_unique` exists.
 - `npm run build`: pass.
-- Smoke test: pending deploy/runtime verification.
+- Deploy: docker compose build `--no-cache` + up -d pass.
+- Runtime smoke: `api_docs:200`, `api_v1_payment_vouchers_unauth:401`; container `liouni-erp-api` Up; startup logs mapped `/api/v1/payment-vouchers/:id/approve`, `/post`, `/cancel`.
 
 ## Lessons Learned
-- Không có issue.
+- Không có issue mới.
 
 ## Commit/Push Status
-- API repo: pending.
-- Web repo: tracked in paired web task.
+- API repo: committed/pushed `8ba1847 Enhance cash bank voucher approval workflow`.
+- Web repo: committed/pushed `74fd889 Enhance cash bank voucher approval workflow`.
 - DB/directus staging: no DB change needed.
