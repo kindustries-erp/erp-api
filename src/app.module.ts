@@ -27,6 +27,7 @@ import { PartnerLedgerSettlementsModule } from './partner-ledger-settlements/par
 import { WorkflowGraphModule } from './workflow-graph/workflow-graph.module';
 import { JournalEntriesModule } from './journal-entries/journal-entries.module';
 import { ArWorkbenchModule } from './ar-workbench/ar-workbench.module';
+import { SinvoiceModule } from './sinvoice/sinvoice.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ArWorkbenchModule } from './ar-workbench/ar-workbench.module';
     WorkflowGraphModule,
     JournalEntriesModule,
     ArWorkbenchModule,
+    SinvoiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
