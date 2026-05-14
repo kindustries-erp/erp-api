@@ -1133,7 +1133,30 @@ export class PaymentVouchersService {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
 
+    const dtoKeys = Object.keys(dto).filter(
+      (key) => (dto as Record<string, any>)[key] !== undefined,
+    );
+    const relatedDocumentsOnly =
+      dtoKeys.length === 1 && dtoKeys[0] === 'related_documents';
+
     if (current.status !== 'DRAFT') {
+      if (
+        relatedDocumentsOnly &&
+        ['APPROVED', 'POSTED'].includes(current.status)
+      ) {
+        validateCashBankRelatedArDocuments({
+          voucherAmount: current.amount,
+          relatedDocuments: dto.related_documents,
+        });
+        await this.syncRelatedDocuments(id, dto.related_documents);
+        const refreshed = await this.loadVoucher(id, userToken);
+        const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+        return {
+          message: 'Cập nhật chứng từ liên quan của phiếu thu chi thành công',
+          data: withRelated,
+        };
+      }
+
       throw new BadRequestException(
         `Chỉ có thể chỉnh sửa phiếu ở trạng thái DRAFT. Trạng thái hiện tại: ${current.status}`,
       );

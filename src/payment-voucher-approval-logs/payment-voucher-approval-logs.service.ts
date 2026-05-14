@@ -94,7 +94,8 @@ export class PaymentVoucherApprovalLogsService {
         }),
       );
 
-      const items = Array.isArray(result) ? result : result.data || [];
+      const rawItems = Array.isArray(result) ? result : result.data || [];
+      const items = await this.decorateActionByNames(rawItems);
       const total = result.meta?.filter_count ?? items.length;
 
       return {
@@ -111,6 +112,44 @@ export class PaymentVoucherApprovalLogsService {
         error,
         'Không thể lấy danh sách nhật ký duyệt phiếu',
       );
+    }
+  }
+
+  private async decorateActionByNames(items: any[]) {
+    const userIds = Array.from(
+      new Set(items.map((item) => item.action_by).filter(Boolean)),
+    );
+    if (userIds.length === 0) return items;
+
+    try {
+      const users: any[] = await (this.getAdminClient() as any).request(
+        (readItems as any)('directus_users', {
+          filter: { id: { _in: userIds } },
+          fields: ['id', 'first_name', 'last_name', 'email'],
+          limit: userIds.length,
+        }),
+      );
+      const userMap = new Map(
+        users.map((user) => {
+          const fullName = [user.first_name, user.last_name]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+          return [user.id, fullName || user.email || user.id];
+        }),
+      );
+      return items.map((item) => ({
+        ...item,
+        action_by_name: item.action_by
+          ? userMap.get(item.action_by) || item.action_by
+          : null,
+      }));
+    } catch (error) {
+      this.logger.warn('Không thể decorate tên người duyệt cho approval logs');
+      return items.map((item) => ({
+        ...item,
+        action_by_name: item.action_by,
+      }));
     }
   }
 
