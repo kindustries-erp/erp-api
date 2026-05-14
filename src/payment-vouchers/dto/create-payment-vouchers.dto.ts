@@ -75,7 +75,6 @@ export class CreatePaymentVouchersDto {
   @IsUUID()
   counterparty_id?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() counterparty_role?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() actual_person_name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() actual_person_id_no?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() actual_person_phone?: string;
