@@ -37,6 +37,8 @@ import {
 } from '../common/utils/directus-error.util';
 import {
   calculateArDocumentSettlement,
+  filterEligibleCashBankSettlementLinks,
+  normalizeCashBankAmount,
   validateCashBankRelatedArDocuments,
 } from './cash-bank-settlement.util';
 
@@ -510,7 +512,7 @@ export class PaymentVouchersService {
             related_id: doc.related_id,
             related_no: doc.related_no || null,
             related_date: doc.related_date || null,
-            amount: doc.amount ?? null,
+            amount: doc.amount == null ? null : normalizeCashBankAmount(doc.amount),
             note: doc.note || null,
             sort: index + 1,
           }),
@@ -532,11 +534,12 @@ export class PaymentVouchersService {
       const linksUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
       linksUrl.searchParams.append('limit', '-1');
       linksUrl.searchParams.append('fields[]', 'amount');
+      linksUrl.searchParams.append('fields[]', 'payment_voucher_id.status');
       linksUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _eq: arDocumentId } }));
       const linksResponse = await fetch(linksUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
       if (!linksResponse.ok) await throwDirectusResponseError(linksResponse, 'Không thể tính lại thanh toán chứng từ công nợ');
       const links = (await linksResponse.json()).data || [];
-      const linkedAmounts = links.map((item: any) => item.amount);
+      const linkedAmounts = filterEligibleCashBankSettlementLinks(links).map((item: any) => item.amount);
 
       const docUrl = new URL(`/items/ar_documents/${arDocumentId}`, this.directusUrl);
       docUrl.searchParams.append('fields[]', 'total_amount');
@@ -551,6 +554,18 @@ export class PaymentVouchersService {
       });
       if (!patchResponse.ok) await throwDirectusResponseError(patchResponse, 'Không thể cập nhật số đã thanh toán/còn lại chứng từ công nợ');
     }
+  }
+
+  private async recomputeArDocumentsForVoucher(paymentVoucherId: string) {
+    const url = new URL('/items/cash_bank_related_documents', this.directusUrl);
+    url.searchParams.append('limit', '-1');
+    url.searchParams.append('fields[]', 'related_id');
+    url.searchParams.append('filter', JSON.stringify({ payment_voucher_id: { _eq: paymentVoucherId }, related_type: { _eq: 'ar_documents' } }));
+    const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
+    if (!response.ok) await throwDirectusResponseError(response, 'Không thể đọc chứng từ công nợ liên quan phiếu');
+    const rows = (await response.json()).data || [];
+    const ids = Array.from(new Set(rows.map((row: any) => row.related_id).filter(Boolean))) as string[];
+    await this.recomputeArDocumentSettlement(ids);
   }
 
   private async loadRelatedDocuments(paymentVoucherIds: string[]) {
@@ -1227,6 +1242,7 @@ export class PaymentVouchersService {
         );
       }
 
+      await this.syncRelatedDocuments(id, []);
       await (client as any).request((deleteItem as any)(this.collection, id));
       return {
         message: 'Xóa phiếu thu chi và các dữ liệu liên quan thành công',
@@ -1299,6 +1315,7 @@ export class PaymentVouchersService {
         targetStatus,
         client,
       );
+      await this.recomputeArDocumentsForVoucher(id);
 
       return result;
     } catch (error: any) {
@@ -1400,6 +1417,7 @@ export class PaymentVouchersService {
         'CANCELLED',
         client,
       );
+      await this.recomputeArDocumentsForVoucher(id);
 
       return { message: 'Phiếu đã được hủy', data: result };
     } catch (error: any) {

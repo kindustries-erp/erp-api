@@ -445,6 +445,12 @@ export class ArWorkbenchService {
     relatedUrl.searchParams.append('limit', '-1');
     relatedUrl.searchParams.append('fields[]', 'id');
     relatedUrl.searchParams.append('fields[]', 'payment_voucher_id');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_no');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_channel');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_direction');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.status');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.document_date');
+    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.amount');
     relatedUrl.searchParams.append('fields[]', 'related_id');
     relatedUrl.searchParams.append('fields[]', 'related_no');
     relatedUrl.searchParams.append('fields[]', 'related_date');
