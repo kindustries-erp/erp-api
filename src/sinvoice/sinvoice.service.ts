@@ -57,7 +57,8 @@ export class SinvoiceService {
       '/items/sinvoice_configs?limit=1&filter=' +
         encodeURIComponent(JSON.stringify({ is_active: { _eq: true } })),
     );
-    const row = result.data?.[0];
+    const data = result.data as any;
+    const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new BadRequestException('Chưa cấu hình SInvoice trong hệ thống');
     return this.normalizeConfig(row);
   }
