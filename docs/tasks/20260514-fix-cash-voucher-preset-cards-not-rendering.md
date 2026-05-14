@@ -121,9 +121,12 @@
 - DB/API Gate: CASH IN returned `CUSTOMER_DEPOSIT_CASH`, `CUSTOMER_RECEIPT_CASH`, `BANK_WITHDRAWAL`, all with debit/credit account IDs.
 - DB/API Gate: CASH OUT returned `PAYMENT_CASH`, `CASH_DEPOSIT_TO_BANK`, all with debit/credit account IDs.
 - UI Source Gate: `CashVoucherDrawer/index.tsx` already renders `CashBankTagPresetCards` in `sectionAccounting` before Debit/Credit account fields.
+- Root cause found by browser test: `src/pages/TienMat.tsx` destructured `tagPresets` and `handleTagPresetSelect` but did not forward them into `TienMatView`, so `CashVoucherDrawer` received undefined/empty presets.
+- Fix: passed `tagPresets` and `handleTagPresetSelect` through the `TienMatView` props object.
 - Validation: `npx tsc --noEmit` in ERP Web exited 0.
-- Deploy: `/opt/stacks/liouni-erp-web docker compose build --no-cache` succeeded; `docker compose up -d` recreated and started `liouni-erp-web`.
-- Browser: `http://localhost:8808` served ERP login screen.
+- Deploy: `/opt/stacks/liouni-erp-web docker compose build --no-cache && docker compose up -d` succeeded.
+- Browser: logged in with test account, opened Tiền mặt -> Lập phiếu thu; verified card labels appear: `Đặt cọc`, `Thu tiền khách hàng`, `Rút TGNH về nhập quỹ` and the empty message is gone.
+- Commit: ERP Web `73a6ade` (`fix(finance): pass cash tag presets to drawer`).
 
 ## Operator Note
-Because source already had the card block and API is verified, the likely cause of the user-visible issue was stale running web bundle/browser cache. ERP Web has been rebuilt and redeployed. User should hard refresh the ERP page, then reopen the cash voucher form.
+The issue was not DB/API. It was missing prop forwarding in the cash page. User should hard refresh ERP and reopen the cash voucher form.
