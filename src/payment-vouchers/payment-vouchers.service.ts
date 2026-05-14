@@ -44,11 +44,11 @@ import {
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  DRAFT: ['PENDING_APPROVAL'],
-  PENDING_APPROVAL: ['APPROVED', 'REJECTED'],
+  DRAFT: ['PENDING_APPROVAL', 'CANCELLED'],
+  PENDING_APPROVAL: ['POSTED', 'REJECTED', 'CANCELLED'],
   APPROVED: ['POSTED', 'CANCELLED'],
   REJECTED: [],
-  POSTED: [],
+  POSTED: ['CANCELLED'],
   CANCELLED: [],
 };
 
@@ -1209,6 +1209,13 @@ export class PaymentVouchersService {
     this.guard(userToken);
     const client = this.getClient(userToken);
     try {
+      const current = await this.loadVoucher(id, userToken);
+      if (current.status !== 'DRAFT') {
+        throw new BadRequestException(
+          `Chỉ được xóa phiếu nháp. Phiếu trạng thái ${current.status} phải dùng luồng hủy.`,
+        );
+      }
+
       const attachments = await (client as any).request(
         (readItems as any)('payment_voucher_attachments', {
           filter: { payment_voucher_id: { _eq: id } },
@@ -1248,6 +1255,7 @@ export class PaymentVouchersService {
         message: 'Xóa phiếu thu chi và các dữ liệu liên quan thành công',
       };
     } catch (error: any) {
+      rethrowHttpException(error);
       const status =
         error.status ||
         error?.response?.status ||
@@ -1343,15 +1351,24 @@ export class PaymentVouchersService {
   async approve(id: string, dto: VoucherApproveDto, userToken: string) {
     this.guard(userToken);
     const userId = await this.getCurrentUserId(userToken);
+    const now = new Date().toISOString();
     const data = await this.transitionStatus(
       id,
-      'APPROVED',
-      { approved_by: userId, approved_at: new Date().toISOString() },
-      'APPROVED',
+      'POSTED',
+      { approved_by: userId, approved_at: now, posted_at: now },
+      'APPROVED_POSTED',
       dto.note,
       userToken,
     );
-    return { message: 'Phiếu đã được duyệt', data };
+    const journal_entry = await this.createPostedJournalEntryForVoucher(
+      data,
+      userId,
+    );
+    return {
+      message: 'Phiếu đã được duyệt và tự động hạch toán',
+      data,
+      journal_entry,
+    };
   }
 
   async reject(id: string, dto: VoucherRejectDto, userToken: string) {
@@ -1388,7 +1405,7 @@ export class PaymentVouchersService {
   async cancel(id: string, dto: VoucherCancelDto, userToken: string) {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
-    const cancellableFrom = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'];
+    const cancellableFrom = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'POSTED'];
 
     if (!cancellableFrom.includes(current.status)) {
       throw new BadRequestException(

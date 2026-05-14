@@ -118,7 +118,7 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.submitForApproval(id, token);
   }
 
-  @ApiOperation({ summary: 'Duyệt phiếu (PENDING_APPROVAL → APPROVED)' })
+  @ApiOperation({ summary: 'Duyệt phiếu và tự động hạch toán (PENDING_APPROVAL → POSTED)' })
   @Post(':id/approve')
   approve(
     @Param('id') id: string,
@@ -138,14 +138,14 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.reject(id, dto, token);
   }
 
-  @ApiOperation({ summary: 'Hạch toán phiếu (APPROVED → POSTED)' })
+  @ApiOperation({ summary: 'Hạch toán thủ công cho phiếu APPROVED cũ (legacy)' })
   @Post(':id/post')
   post(@Param('id') id: string, @UserToken() token: string) {
     return this.paymentVouchersService.post(id, token);
   }
 
   @ApiOperation({
-    summary: 'Hủy phiếu (DRAFT/PENDING_APPROVAL/APPROVED → CANCELLED)',
+    summary: 'Hủy phiếu (DRAFT/PENDING_APPROVAL/APPROVED/POSTED → CANCELLED)',
   })
   @Post(':id/cancel')
   cancel(
