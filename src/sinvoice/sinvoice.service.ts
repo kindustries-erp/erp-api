@@ -77,7 +77,8 @@ export class SinvoiceService {
   }
 
   private async directusRequest<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.directusUrl}${path}`, {
+    const requestUrl = `${this.directusUrl}${path}`;
+    const res = await fetch(requestUrl, {
       ...init,
       headers: {
         Authorization: `Bearer ${this.adminToken}`,
@@ -85,7 +86,11 @@ export class SinvoiceService {
         ...(init?.headers ?? {}),
       },
     });
-    if (!res.ok) await throwDirectusResponseError(res, `Directus request failed: ${path}`);
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      this.logger.error(`Directus request failed ${res.status}: ${requestUrl} :: ${errorText}`);
+      throw new BadRequestException(errorText || `Directus request failed: ${path}`);
+    }
     if (res.status === 204) return undefined as T;
     const text = await res.text();
     if (!text) return undefined as T;
@@ -349,21 +354,21 @@ export class SinvoiceService {
     const pageSize = Math.min(Math.max(Number(query.pageSize ?? 15) || 15, 1), 100);
     const offset = (page - 1) * pageSize;
 
-    const filters: string[] = [];
-    if (query.source) filters.push(`"source":{"_eq":"${query.source}"}`);
-    if (query.direction) filters.push(`"direction":{"_eq":"${query.direction}"}`);
+    const andFilters: Record<string, any>[] = [];
+    if (query.source) andFilters.push({ source: { _eq: query.source } });
+    if (query.direction) andFilters.push({ direction: { _eq: query.direction } });
 
     if (query.startDate) {
-      filters.push(`"invoice_date":{"_gte":"${new Date(query.startDate).toISOString()}"}`);
+      andFilters.push({ invoice_date: { _gte: new Date(query.startDate).toISOString() } });
     }
     if (query.endDate) {
       const endDate = new Date(query.endDate);
       endDate.setHours(23, 59, 59, 999);
-      filters.push(`"invoice_date":{"_lte":"${endDate.toISOString()}"}`);
+      andFilters.push({ invoice_date: { _lte: endDate.toISOString() } });
     }
 
     if (query.search) {
-      const escaped = String(query.search).replace(/"/g, '\\"');
+      const keyword = String(query.search).trim();
       const searchFields = [
         'document_no',
         'invoice_no',
@@ -372,28 +377,27 @@ export class SinvoiceService {
         'buyer_tax_code',
         'seller_tax_code',
       ];
-      const searchFilters = searchFields.map(
-        (field) => `{"${field}":{"_icontains":"${escaped}"}}`,
-      );
-      filters.push(`"_or":[${searchFilters.join(',')}]`);
+      andFilters.push({
+        _or: searchFields.map((field) => ({ [field]: { _icontains: keyword } })),
+      });
     }
 
-    const filter =
-      filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
+    const filterObject = andFilters.length > 0 ? { _and: andFilters } : null;
+    const filterQuery = filterObject ? `&filter=${encodeURIComponent(JSON.stringify(filterObject))}` : '';
 
-    // Fetch data and count
     const result = await this.directusRequest<{
       data: any[];
       meta?: { filter_count?: number };
     }>(
-      `/items/einvoices?sort[]=-invoice_date&sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filter}`,
+      `/items/einvoices?sort[]=-invoice_date&sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filterQuery}`,
     );
 
-    // Fetch totals (aggregate)
-    const aggregateFilter = filter.replace('&filter=', 'filter=');
+    const aggregateQuery = filterObject
+      ? `&filter=${encodeURIComponent(JSON.stringify(filterObject))}`
+      : '';
     const totalsResult = await this.directusRequest<{
       data: Array<{ sum: { total_amount: number; vat_amount: number } }>;
-    }>(`/items/einvoices?aggregate={"sum":["total_amount","vat_amount"]}&${aggregateFilter}`);
+    }>(`/items/einvoices?aggregate=${encodeURIComponent(JSON.stringify({ sum: ['total_amount', 'vat_amount'] }))}${aggregateQuery}`);
 
     const items = result.data ?? [];
     const totalCount = Number(result.meta?.filter_count ?? items.length ?? 0);
