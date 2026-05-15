@@ -158,37 +158,43 @@ Lập kế hoạch triển khai an toàn, DB-first, cho việc thống nhất en
   - `src/sinvoice/sinvoice.service.ts` đang đọc singleton `tax_portal_configs`, query/list/aggregate `einvoices`, và upsert theo `external_invoice_id`
   - `src/sinvoice/sinvoice.controller.ts` hiện chưa có DTO cho `tax-portal/sync` (`@Query() query: any`), xác nhận có execution gap ở API validation chứ không phải DB gap
 - Build:
-  - Chưa thực hiện trong PLAN ONLY
+  - API: `npm run build` -> PASS
+  - Web: `npm run build` -> PASS
 - Smoke:
-  - Chưa thực hiện trong PLAN ONLY
+  - Local API: `GET http://127.0.0.1:10000/api/v1/sinvoice/tax-portal/sync?pageSize=17` -> `200`, response normalize `pageSize: 15`, `chunk_count: 2`
+  - Public API: `GET https://dev.api.erp.liouni.com/api/v1/sinvoice/tax-portal/sync?pageSize=17` -> `200`, response normalize `pageSize: 15`, `chunk_count: 2`
+  - Local Web: `GET http://127.0.0.1:8808/` -> `200`
+  - Public Web: `GET https://dev.erp.liouni.com/` -> `200`
 
 ## Evidence cần thu thập khi execute
 - API:
-  - request normalization cases: pageSize=15/30/50/20
-  - chunk count cho range 7 ngày, 30 ngày, 45 ngày, 90 ngày
-  - log/status từng chunk (mask token/cookie)
-  - count trước/sau sync và count khi sync lại cùng range
+  - `pageSize=17` -> normalized xuống `15` ở cả local/public runtime
+  - default range hiện tại được normalize thành khoảng 30 ngày gần nhất và được auto-chunk thành 2 request tháng khi vắt qua 2 tháng lịch
+  - response summary nhẹ gồm `ok`, `direction`, `pageSize`, `requested_range`, `chunk_count`, `chunks[]`, `count`, `synced_at`
 - DB:
-  - sample records trước/sau upsert
-  - bằng chứng duplicate không nhân bản record
+  - không đổi schema; tiếp tục reuse đường upsert hiện hữu theo `external_invoice_id`
+  - kiểm chứng gián tiếp qua sync response `fetched/upserted` và không phát sinh lỗi duplicate path trong smoke hiện tại
 - UI:
-  - screenshot/filter state cho tab Hóa đơn bán ra và Hóa đơn mua vào
-  - evidence dropdown pageSize chỉ có 15/30/50
-  - evidence thông điệp UX khi chọn range > 1 tháng
+  - page size selector giới hạn 15/30/50
+  - có UX warning khi range > 1 tháng
+  - reset filter trả về default range 30 ngày + pageSize 15
 - Runtime:
-  - build output
-  - container status/log sau deploy
-  - smoke endpoint/list sau redeploy
+  - API container `liouni-erp-api` Up sau recreate
+  - Web container `liouni-erp-web` Up sau recreate
+  - API startup logs đã map route `/api/v1/sinvoice/tax-portal/sync`
+  - Web bundle mới được verify trong container assets
 
 ## Lessons Learned
 - Link: No issue
 
 ## Commit/Push Status
-- API repo: Chưa commit code implementation; sẽ commit trace task transition trước
-- Web repo (if affected): Chưa đổi
-- DB/directus staging: read-only precheck; chưa apply gì
+- API repo: committed and pushed `fba1ee0` — `Enforce tax portal sync limits and chunking`
+- Web repo: committed and pushed `ecbf25e` — `Align tax portal UI with chunked sync limits`
+- DB/directus staging: read-only precheck; không đổi schema/data
 
 ## Execution status
 - User đã approve thực thi
-- Bắt đầu execute theo thứ tự DB -> API -> UI
-- Chưa deploy/chưa smoke runtime tại thời điểm chuyển trạng thái
+- Execute hoàn tất theo thứ tự DB -> API -> UI
+- Deploy hoàn tất cho cả `liouni-erp-api` và `liouni-erp-web`
+- Runtime smoke pass local và public
+- FE bundle verify pass: container đang serve asset mới chứa marker `Khoảng ngày đang lớn hơn 1 tháng` và `Page size Tax Portal`
