@@ -33,18 +33,26 @@
   - [x] 5.1 `npm run build`
   - [x] 5.2 Smoke test sync sold invoices
   - [x] 5.3 Verify UI filter/search
-- [ ] 6.0 Close
-  - [ ] 6.1 Summary with evidence
+- [x] 6.0 Close
+  - [x] 6.1 Summary with evidence
   - [ ] 6.2 Commit + push code (web/api)
+- [x] 7.0 Hotfix timeout sync IN/OUT
+  - [x] 7.1 Root cause confirmed: response payload sync quá nặng, frontend timeout 15000ms
+  - [x] 7.2 Backend chỉ trả summary nhẹ cho sync tax portal
+  - [x] 7.3 Build/deploy/test hotfix
+  - [x] 7.4 Commit + push hotfix
 
 ## Validation Evidence
 - DB precheck result: `DB_READY`
-- Build: Backend & Web build success.
-- Smoke: Sync OUT thành công (count: 1, external_id: 76f0859d...). UI filters đã hiển thị.
+- Build: Backend `npm run build` thành công; Web `npx tsc --noEmit` thành công.
+- Smoke (trước hotfix): Sync OUT thành công nhưng response quá lớn.
+- Smoke (hotfix): gọi `sync?direction=IN&startDate=&endDate=` nội bộ trả `200` trong ~12.15s, payload giảm còn `240 bytes`, body chỉ còn summary `{ok,count,synced_at,invoice_nos,note}`.
+- Deploy: API + Web docker compose build/up -d thành công.
 
 
 ## Lessons Learned
-- 
+- Root cause timeout không nằm ở GDT chết mà ở response sync trả full `items` + `response_payload` rất nặng; nội bộ mất ~11.9s cho IN nên qua browser timeout 15000ms là dễ vỡ.
+- Hotfix đúng là trả summary nhẹ từ backend và tăng timeout riêng cho request sync ở frontend, thay vì chỉ tăng timeout toàn cục.
 
 ## Commit/Push Status
 - API repo:

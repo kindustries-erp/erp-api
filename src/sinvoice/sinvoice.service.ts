@@ -491,7 +491,8 @@ export class SinvoiceService {
       source: 'TAX_PORTAL',
       direction,
       count: saved.length,
-      items: saved,
+      synced_at: new Date().toISOString(),
+      invoice_nos: saved.slice(0, 5).map((item) => item?.data?.invoice_no ?? item?.data?.document_no).filter(Boolean),
       note: 'Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế.',
     };
   }
