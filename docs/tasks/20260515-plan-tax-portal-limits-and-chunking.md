@@ -154,7 +154,9 @@ Lập kế hoạch triển khai an toàn, DB-first, cho việc thống nhất en
 
 ## Validation Evidence
 - DB precheck result:
-  - `DB_READY` (plan-phase read-only evidence từ code hiện tại)
+  - `DB_READY` (execute-phase re-verified)
+  - `src/sinvoice/sinvoice.service.ts` đang đọc singleton `tax_portal_configs`, query/list/aggregate `einvoices`, và upsert theo `external_invoice_id`
+  - `src/sinvoice/sinvoice.controller.ts` hiện chưa có DTO cho `tax-portal/sync` (`@Query() query: any`), xác nhận có execution gap ở API validation chứ không phải DB gap
 - Build:
   - Chưa thực hiện trong PLAN ONLY
 - Smoke:

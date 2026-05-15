@@ -1,4 +1,14 @@
-import { IsString, IsNotEmpty, IsOptional, IsObject } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsInt,
+  Min,
+} from 'class-validator';
 
 export class SinvoiceConfigDto {
   @IsString()
@@ -34,4 +44,39 @@ export class CreateInvoiceDto {
   @IsObject()
   @IsNotEmpty()
   invoiceData: any;
+}
+
+export class TaxPortalSyncQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['IN', 'OUT'])
+  direction?: 'IN' | 'OUT';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  pageSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  size?: number;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
 }

@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
+import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 
 @Controller('sinvoice')
 export class SinvoiceController {
@@ -70,7 +71,7 @@ export class SinvoiceController {
   }
 
   @Get('tax-portal/sync')
-  async syncTaxPortal(@Query() query: any) {
+  async syncTaxPortal(@Query() query: TaxPortalSyncQueryDto) {
     return this.sinvoiceService.syncTaxPortal(query);
   }
 

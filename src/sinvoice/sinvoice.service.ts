@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { throwDirectusResponseError } from '../common/utils/directus-error.util';
+import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 
 type FileType = 'PDF' | 'XML' | 'ZIP';
 type InvoiceSource = 'SINVOICE' | 'TAX_PORTAL';
@@ -476,6 +477,32 @@ export class SinvoiceService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private normalizeTaxPortalPageSize(query: TaxPortalSyncQueryDto) {
+    const requested = Number(query.pageSize ?? query.size ?? 15);
+    return [15, 30, 50].includes(requested) ? requested : 15;
+  }
+
+  private normalizeTaxPortalDateRange(query: TaxPortalSyncQueryDto) {
+    const now = new Date();
+    const normalizedEnd = query.endDate ? new Date(query.endDate) : now;
+    const normalizedStart = query.startDate
+      ? new Date(query.startDate)
+      : new Date(normalizedEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    if (Number.isNaN(normalizedStart.getTime()) || Number.isNaN(normalizedEnd.getTime())) {
+      throw new BadRequestException('startDate/endDate không hợp lệ');
+    }
+
+    if (normalizedStart > normalizedEnd) {
+      throw new BadRequestException('startDate không được lớn hơn endDate');
+    }
+
+    normalizedStart.setHours(0, 0, 0, 0);
+    normalizedEnd.setHours(23, 59, 59, 999);
+
+    return { startDate: normalizedStart, endDate: normalizedEnd };
+  }
+
   private splitDateRangeIntoMonthlyChunks(startDate: Date, endDate: Date) {
     const chunks: { start: Date; end: Date }[] = [];
     let currentStart = new Date(startDate);
@@ -502,7 +529,7 @@ export class SinvoiceService {
     return chunks;
   }
 
-  async syncTaxPortal(query: any = {}) {
+  async syncTaxPortal(query: TaxPortalSyncQueryDto = {}) {
     const config = await this.getTaxPortalConfig();
     if (!config?.gdtJwt || !config?.gdtCookie) {
       throw new BadRequestException('Chưa cấu hình Token và Cookie Tổng cục Thuế trên giao diện');
@@ -513,69 +540,72 @@ export class SinvoiceService {
       throw new BadRequestException('direction phải là IN hoặc OUT');
     }
 
-    // Validate pageSize (size)
-    let size = Number(query.pageSize ?? query.size ?? 15);
-    if (![15, 30, 50].includes(size)) {
-      size = 15;
-    }
-
-    const now = new Date();
-    const endDate = query.endDate ? new Date(query.endDate) : now;
-    const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
+    const pageSize = this.normalizeTaxPortalPageSize(query);
+    const { startDate, endDate } = this.normalizeTaxPortalDateRange(query);
     const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
-    this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction}`);
+    this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction} with pageSize=${pageSize}`);
 
     const allInvoices: any[] = [];
     const invoiceNos: string[] = [];
+    const chunkSummaries: Array<{ index: number; startDate: string; endDate: string; fetched: number; upserted: number }> = [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      
-      // Throttling: Random delay 3-5s between chunks (except first)
+
       if (i > 0) {
         const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
         this.logger.log(`Throttling: Sleeping ${delay}ms before next chunk...`);
         await this.sleep(delay);
       }
 
-      const chunkInvoices = await this.fetchFromGdtApi(
-        direction, 
-        config, 
-        chunk.start, 
-        chunk.end, 
-        { ...query, size }
-      );
+      const chunkInvoices = await this.fetchFromGdtApi(direction, config, chunk.start, chunk.end, pageSize);
+      let upserted = 0;
 
       for (const invoice of chunkInvoices) {
         const persisted = await this.upsertExternalEinvoice(invoice);
         const persistedData = (persisted as any)?.data;
         if (persistedData) {
+          upserted += 1;
           allInvoices.push(persistedData);
           if (invoiceNos.length < 10) {
             invoiceNos.push(persistedData.invoice_no || persistedData.document_no);
           }
         }
       }
+
+      chunkSummaries.push({
+        index: i + 1,
+        startDate: chunk.start.toISOString(),
+        endDate: chunk.end.toISOString(),
+        fetched: chunkInvoices.length,
+        upserted,
+      });
     }
 
     return {
       ok: true,
       source: 'TAX_PORTAL',
       direction,
+      pageSize,
+      requested_range: {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+      chunk_count: chunks.length,
+      chunks: chunkSummaries,
       count: allInvoices.length,
       synced_at: new Date().toISOString(),
       invoice_nos: invoiceNos,
-      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi.`,
+      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi, mỗi lần không quá 1 tháng.`,
     };
   }
 
   private async fetchFromGdtApi(
-    direction: InvoiceDirection, 
-    config: any, 
-    start: Date, 
-    end: Date, 
-    query: any = {}
+    direction: InvoiceDirection,
+    config: any,
+    start: Date,
+    end: Date,
+    pageSize: number,
   ) {
     const endpoint = direction === 'IN' ? 'purchase' : 'sold';
     
@@ -594,8 +624,7 @@ export class SinvoiceService {
       searchStr += ';ttxly==5';
     }
 
-    const size = query.size ?? 15;
-    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=${size}&search=${encodeURIComponent(searchStr)}`;
+    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(searchStr)}`;
 
     let token = config.gdtJwt;
     if (token && !token.startsWith('Bearer ')) {
