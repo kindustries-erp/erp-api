@@ -61,7 +61,15 @@ export class ViettelV2Service {
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
       this.logger.error(`Directus request failed ${res.status}: ${requestUrl} :: ${errorText}`);
-      throw new BadRequestException(errorText || `Directus request failed: ${path}`);
+      let parsedError: any;
+      try {
+        parsedError = JSON.parse(errorText);
+      } catch {}
+      throw new BadRequestException({
+        message: `Directus request failed: ${path}`,
+        status: res.status,
+        detail: parsedError || errorText,
+      });
     }
 
     if (res.status === 204) return undefined as T;
@@ -320,7 +328,7 @@ export class ViettelV2Service {
     return [];
   }
 
-  private async upsertExternalEinvoice(invoice: any) {
+  private async upsertExternalEinvoice(invoice: any, fallbackSupplierTaxCode?: string) {
     const externalId = invoice.external_invoice_id;
     const existing = externalId
       ? await this.directusRequest<{ data: any[] }>(
@@ -330,7 +338,7 @@ export class ViettelV2Service {
 
     const data = {
       document_no: invoice.document_no,
-      supplier_tax_code: invoice.supplier_tax_code ?? invoice.seller_tax_code ?? invoice.buyer_tax_code ?? null,
+      supplier_tax_code: invoice.supplier_tax_code || invoice.seller_tax_code || invoice.buyer_tax_code || fallbackSupplierTaxCode || '',
       invoice_no: invoice.invoice_no ?? null,
       pattern: invoice.pattern ?? null,
       invoice_series: invoice.invoice_series ?? null,
@@ -450,7 +458,7 @@ export class ViettelV2Service {
           ...this.mapInboundInvoice(raw, supplierTaxCode, requestPayload, responsePayload),
           direction, // Ghi đè direction đúng (IN hoặc OUT)
         };
-        const persisted = await this.upsertExternalEinvoice(mapped);
+        const persisted = await this.upsertExternalEinvoice(mapped, supplierTaxCode);
         const persistedData = (persisted as any)?.data;
         if (persistedData) {
           allInvoices.push(persistedData);
