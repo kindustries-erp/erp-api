@@ -526,8 +526,8 @@ export class SinvoiceService {
     const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
     this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction}`);
 
-    const allInvoices = [];
-    const invoiceNos = [];
+    const allInvoices: any[] = [];
+    const invoiceNos: string[] = [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
