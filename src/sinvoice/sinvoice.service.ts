@@ -364,25 +364,50 @@ export class SinvoiceService {
 
     if (query.search) {
       const escaped = String(query.search).replace(/"/g, '\\"');
-      const searchFields = ['document_no', 'invoice_no', 'seller_name', 'buyer_name', 'buyer_tax_code', 'seller_tax_code'];
-      const searchFilters = searchFields.map(field => `{"${field}":{"_icontains":"${escaped}"}}`);
+      const searchFields = [
+        'document_no',
+        'invoice_no',
+        'seller_name',
+        'buyer_name',
+        'buyer_tax_code',
+        'seller_tax_code',
+      ];
+      const searchFilters = searchFields.map(
+        (field) => `{"${field}":{"_icontains":"${escaped}"}}`,
+      );
       filters.push(`"_or":[${searchFilters.join(',')}]`);
     }
 
-    const filter = filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
-    const result = await this.directusRequest<{ data: any[]; meta?: { filter_count?: number } }>(
+    const filter =
+      filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
+
+    // Fetch data and count
+    const result = await this.directusRequest<{
+      data: any[];
+      meta?: { filter_count?: number };
+    }>(
       `/items/einvoices?sort[]=-invoice_date&sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filter}`,
     );
 
+    // Fetch totals (aggregate)
+    const aggregateFilter = filter.replace('&filter=', 'filter=');
+    const totalsResult = await this.directusRequest<{
+      data: Array<{ sum: { total_amount: number; vat_amount: number } }>;
+    }>(`/items/einvoices?aggregate={"sum":["total_amount","vat_amount"]}&${aggregateFilter}`);
+
     const items = result.data ?? [];
-    const total = Number(result.meta?.filter_count ?? items.length ?? 0);
+    const totalCount = Number(result.meta?.filter_count ?? items.length ?? 0);
+    const totals = totalsResult.data?.[0]?.sum ?? { total_amount: 0, vat_amount: 0 };
+
     return {
       data: items,
       meta: {
         page,
         pageSize,
-        total,
-        totalPages: Math.max(Math.ceil(total / pageSize), 1),
+        total: totalCount,
+        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
+        sum_total_amount: Number(totals.total_amount || 0),
+        sum_vat_amount: Number(totals.vat_amount || 0),
       },
     };
   }
