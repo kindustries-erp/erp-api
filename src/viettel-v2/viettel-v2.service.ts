@@ -252,7 +252,11 @@ export class ViettelV2Service {
       throw new BadRequestException('Thiếu cấu hình Viettel v2 để gọi API');
     }
 
-    const res = await fetch(`${config.apiUrl}${path}`, {
+    const baseUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const fullUrl = `${baseUrl}${cleanPath}`;
+
+    const res = await fetch(fullUrl, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`,
@@ -440,17 +444,25 @@ export class ViettelV2Service {
         rowPerPage: Number(body.rowPerPage ?? 100),
         issueStartDate: this.toYyyyMmDd(chunk.start),
         issueEndDate: this.toYyyyMmDd(chunk.end),
-        inputSource: body.inputSource ?? (direction === 'IN' ? 1 : 2), // Giả định 1=IN, 2=OUT theo pattern thường thấy ở Viettel
+        inputSource: body.inputSource ?? (direction === 'IN' ? 1 : 2),
         validatedStatus: body.validatedStatus ?? 0,
         invoiceStatus: body.invoiceStatus ?? 1,
         searchText: body.searchText ?? '',
       };
 
-      const responsePayload = await this.callViettel(
-        `/invoice-sync-tax/search-by-tax-xml/${supplierTaxCode}`,
-        requestPayload,
-        config,
-      );
+      this.logger.log(`Calling Viettel API: ${this.toYyyyMmDd(chunk.start)} -> ${this.toYyyyMmDd(chunk.end)}`);
+      
+      let responsePayload: any;
+      try {
+        responsePayload = await this.callViettel(
+          `/invoice-sync-tax/search-by-tax-xml/${supplierTaxCode}`,
+          requestPayload,
+          config,
+        );
+      } catch (e) {
+        this.logger.error(`Viettel API Error: ${e.message}`, e.stack);
+        throw e;
+      }
 
       const items = this.extractInboundItems(responsePayload);
       for (const raw of items) {
