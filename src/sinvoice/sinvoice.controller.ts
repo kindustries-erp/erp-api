@@ -1,24 +1,44 @@
 import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
 import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
+import { ViettelV2Service } from '../viettel-v2/viettel-v2.service';
+import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from '../viettel-v2/dto/viettel-v2.dto';
 
 @Controller('sinvoice')
 export class SinvoiceController {
-  constructor(private readonly sinvoiceService: SinvoiceService) {}
+  constructor(
+    private readonly sinvoiceService: SinvoiceService,
+    private readonly viettelV2Service: ViettelV2Service,
+  ) {}
 
   @Get('health')
   async health() {
-    return this.sinvoiceService.health();
+    const health = await this.viettelV2Service.health();
+    return {
+      ...health,
+      surface: 'SINVOICE',
+      legacyMode: 'COMMENT_ONLY',
+      hiddenByDefault: false,
+    };
   }
 
   @Get('local')
   async listLocalInvoices(@Query() query: any) {
-    return this.sinvoiceService.listLocalInvoices(query);
+    const result = await this.viettelV2Service.listLocal(query);
+    return {
+      ...result,
+      hiddenByDefault: false,
+      surface: 'SINVOICE',
+    };
   }
 
   @Post('create')
-  async createInvoice(@Body() body: any) {
-    return this.sinvoiceService.createInvoice(body);
+  async createInvoice(@Body() body: CreateViettelV2DraftDto) {
+    const result = await this.viettelV2Service.createDraft(body);
+    return {
+      ...result,
+      surface: 'SINVOICE',
+    };
   }
 
   @Post('cancel')
@@ -37,7 +57,23 @@ export class SinvoiceController {
 
   @Get('sync')
   async getInvoices(@Query() query: any) {
-    return this.sinvoiceService.getInvoices(query);
+    const dto: SyncViettelV2InboundDto = {
+      supplierTaxCode: query?.supplierTaxCode,
+      issueStartDate: query?.issueStartDate ?? query?.startDate,
+      issueEndDate: query?.issueEndDate ?? query?.endDate,
+      pageNum: query?.pageNum,
+      rowPerPage: query?.rowPerPage,
+      inputSource: query?.inputSource,
+      validatedStatus: query?.validatedStatus,
+      invoiceStatus: query?.invoiceStatus,
+      searchText: query?.searchText ?? query?.search,
+    };
+    const result = await this.viettelV2Service.syncInbound(dto);
+    return {
+      ...result,
+      surface: 'SINVOICE',
+      hiddenByDefault: false,
+    };
   }
 
   @Get('config')

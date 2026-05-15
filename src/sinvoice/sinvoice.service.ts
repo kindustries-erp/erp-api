@@ -39,6 +39,9 @@ type DraftInvoiceInput = {
   lines?: DraftInvoiceLineInput[];
 };
 
+// Legacy v1 service is kept for reference/supporting endpoints only.
+// Outbound create/sync surface `/api/v1/sinvoice/*` has been remapped to Viettel v2.49 in controller.
+// Do not extend v1 business flow here unless explicitly requested.
 @Injectable()
 export class SinvoiceService {
   private readonly logger = new Logger(SinvoiceService.name);

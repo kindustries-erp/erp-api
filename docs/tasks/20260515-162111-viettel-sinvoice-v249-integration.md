@@ -9,16 +9,18 @@
 Triển khai module Viettel SInvoice v2.49 theo hướng tách biệt, giữ nguyên legacy `sinvoice` hiện tại, hỗ trợ:
 - inbound sync qua API chính thức Viettel theo tài liệu hiện có trong `/opt/docs/liouni-erp/viettel-sinvoice-docs/`
 - outbound draft-only safety
-- toggle/ẩn mặc định để không ảnh hưởng luồng hiện tại
+- chuyển hẳn surface `sinvoice` hiện tại sang dùng Viettel v2.49, không cần toggle
+- giữ legacy v1 ở dạng tham chiếu/comment để xem lại sau này
 - deploy và verify runtime an toàn
 
 ## Scope
 - In-scope:
   - Inspect schema/config/runtime hiện tại liên quan `sinvoice_configs`, `tax_portal_configs`, `einvoices`
   - Tạo module backend mới riêng cho Viettel v2
-  - Dùng config/toggle để cô lập module mới khỏi luồng legacy
-  - Chặn service/API các action outbound ngoài draft
-  - Nếu cần, bổ sung thay đổi DB tối thiểu để lưu metadata cần thiết cho v2
+- Remap toàn bộ surface route `sinvoice` hiện tại sang service Viettel v2.49
+- Giữ legacy v1 dưới dạng tham chiếu/comment, không xóa code cũ
+- Chặn service/API các action outbound ngoài draft
+
   - Build, smoke, deploy stack liên quan và cập nhật evidence
 - Out-of-scope:
   - Xóa hoặc rewrite module legacy `src/sinvoice`
