@@ -21,8 +21,8 @@ export class SinvoiceController {
   }
 
   @Post('cancel')
-  async cancelInvoice(@Body() body: any) {
-    return this.sinvoiceService.cancelInvoice(body);
+  async cancelInvoice(@Body() _body: any) {
+    return this.sinvoiceService.cancelInvoice();
   }
 
   @Get('download')

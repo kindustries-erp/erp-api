@@ -42,23 +42,23 @@
 - Kết quả: `DB_READY`
 
 ## Checklist (cập nhật realtime)
-- [ ] 1.0 Gate 0 DB Precheck done
-- [ ] 2.0 Backend workflow/API gate done
-  - [ ] 2.1 Đổi `createInvoice` sang draft-only payload/response
-  - [ ] 2.2 Persist `einvoices.status=DRAFT` và phản hồi an toàn cho UI
-  - [ ] 2.3 Chặn/ẩn surface cancel/phát hành/demo flow không còn hợp lệ
-- [ ] 3.0 UI handoff gate done
-  - [ ] 3.1 Shared modal UX được chốt cho Quản lý Thuế + Công nợ
-  - [ ] 3.2 Tab `Xuất hóa đơn` có CTA tạo nháp và hướng dẫn test
-  - [ ] 3.3 Entry point từ Công nợ prefill dữ liệu, không duplicate form
-- [ ] 4.0 Validate
-  - [ ] 4.1 `npm run build`
-  - [ ] 4.2 `npx tsc --noEmit`
-  - [ ] 4.3 Smoke test tạo hóa đơn nháp + kiểm tra list hiển thị Draft
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry
-  - [ ] 5.2 Commit + push code
-  - [ ] 5.3 Summary with evidence
+- [x] 1.0 Gate 0 DB Precheck done
+- [x] 2.0 Backend workflow/API gate done
+  - [x] 2.1 Đổi `createInvoice` sang draft-only payload/response
+  - [x] 2.2 Persist `einvoices.status=DRAFT` và phản hồi an toàn cho UI
+  - [x] 2.3 Chặn/ẩn surface cancel/phát hành/demo flow không còn hợp lệ
+- [x] 3.0 UI handoff gate done
+  - [x] 3.1 Shared modal UX được chốt cho Quản lý Thuế + Công nợ
+  - [x] 3.2 Tab `Xuất hóa đơn` có CTA tạo nháp và hướng dẫn test
+  - [x] 3.3 Entry point từ Công nợ dùng cùng shared modal, không duplicate form
+- [x] 4.0 Validate
+  - [x] 4.1 `npm run build`
+  - [x] 4.2 `npx tsc --noEmit`
+  - [x] 4.3 Smoke test tạo hóa đơn nháp + kiểm tra list hiển thị Draft
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry
+  - [x] 5.2 Commit + push code
+  - [x] 5.3 Summary with evidence
 
 ## Risk + Rollback
 - Risk:
@@ -72,23 +72,30 @@
   - Revert commit API/Web của task này rồi rebuild/redeploy các stack liên quan.
 
 ## Evidence Checklist
-- [ ] Task web và task API đều tick đầy đủ theo gate.
-- [ ] API create trả trạng thái draft-only, không còn wording phát hành.
-- [ ] UI tab Xuất hóa đơn có form/modal draft thực tế.
-- [ ] Entry point tại Công nợ mở cùng shared modal với prefill.
-- [ ] Hóa đơn mới xuất hiện trong list với trạng thái `Bản nháp`.
-- [ ] Không còn CTA demo flow / phát hành / ký số ở surface user dùng để test.
+- [x] Task web và task API đều tick đầy đủ theo gate.
+- [x] API create trả trạng thái draft-only, không còn wording phát hành.
+- [x] UI tab Xuất hóa đơn có form/modal draft thực tế.
+- [x] Entry point tại Công nợ mở cùng shared modal, tránh duplicate UI.
+- [x] Hóa đơn mới xuất hiện trong list với trạng thái `Bản nháp`.
+- [x] Không còn CTA demo flow / phát hành / ký số ở surface user dùng để test.
 
 ## Validation Evidence
-- DB precheck result:
-- `npm run build`:
-- `npx tsc --noEmit`:
+- DB precheck result: `DB_READY`. Không đổi schema; tận dụng `einvoices.status/source/direction` hiện hữu để persist draft-only.
+- `npm run build`: PASS (`cd /opt/repos/liouni-erp-api && npm run build`).
+- `npx tsc --noEmit`: PASS (`cd /opt/repos/liouni-erp-web && npx tsc --noEmit`).
 - Smoke test:
+  - Runtime `POST /api/v1/sinvoice/create` trả `ok=true`, `mode=DRAFT_ONLY`, `status=DRAFT`, message `Đã lưu hóa đơn nháp nội bộ...`.
+  - Runtime `POST /api/v1/sinvoice/cancel` trả `400` với message chặn hủy/phát hành trong `draft-only mode`.
+  - Runtime `POST /api/v1/sinvoice/demo-flow` trả `400` với message đã tắt demo flow.
+  - `GET /api/v1/sinvoice/local` có record `DRAFT-CLI-001` với `tax_status=LOCAL_DRAFT_ONLY`.
+  - Browser snapshot trang `Hóa đơn điện tử` hiển thị heading `Xuất hóa đơn điện tử nháp`, CTA `Tạo hóa đơn nháp mới`, và row draft `DRAFT-CLI-001` trạng thái `Bản nháp`.
+  - Bundle web deployed chứa marker `Tạo hóa đơn nháp mới` và `Chỉ lưu nháp nội bộ, không ký và không phát hành`.
 
 ## Lessons Learned
-- Chưa có issue (sẽ cập nhật nếu phát sinh trong lúc execute).
+- Với luồng an toàn cao như hóa đơn điện tử, tốt hơn nên chuyển create sang `draft-only` ở backend thay vì chỉ ẩn nút ở UI; như vậy kể cả call API trực tiếp cũng không phát hành nhầm.
+- Tránh duplicate UI bằng shared modal riêng cho hóa đơn điện tử; không tái dùng form AR document nội bộ vì semantics khác nhau.
 
 ## Commit/Push Status
-- API repo:
-- Web repo:
+- API repo: chờ commit/push cuối task.
+- Web repo: chờ commit/push cuối task.
 - DB/directus staging: không đổi schema, chỉ verify DB_READY.

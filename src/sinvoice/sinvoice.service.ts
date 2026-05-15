@@ -11,6 +11,33 @@ type FileType = 'PDF' | 'XML' | 'ZIP';
 type InvoiceSource = 'SINVOICE' | 'TAX_PORTAL';
 type InvoiceDirection = 'IN' | 'OUT';
 
+type DraftInvoiceLineInput = {
+  description?: string;
+  itemName?: string;
+  quantity?: number;
+  unitPrice?: number;
+  unit_price?: number;
+  taxRate?: number;
+  tax_rate?: number;
+};
+
+type DraftInvoiceInput = {
+  documentNo?: string;
+  document_no?: string;
+  buyerName?: string;
+  buyer_name?: string;
+  buyerTaxCode?: string;
+  buyer_tax_code?: string;
+  buyerAddress?: string;
+  buyer_address?: string;
+  buyerEmail?: string;
+  buyer_email?: string;
+  description?: string;
+  currencyCode?: string;
+  currency_code?: string;
+  lines?: DraftInvoiceLineInput[];
+};
+
 @Injectable()
 export class SinvoiceService {
   private readonly logger = new Logger(SinvoiceService.name);
@@ -404,29 +431,77 @@ export class SinvoiceService {
     };
   }
 
-  async createInvoice(invoiceData?: any) {
-    const config = await this.getConfig();
-    const payload = invoiceData && Object.keys(invoiceData).length > 0 ? invoiceData : this.buildDemoInvoicePayload(config);
-    try {
-      const response = await this.callViettel(`/InvoiceWS/createInvoice/${config.supplierTaxCode}`, payload);
-      await this.persistEinvoice(payload, response, 'ISSUED');
-      return { ok: true, request: payload, response };
-    } catch (error: any) {
-      await this.persistEinvoice(payload, { error: error.message }, 'ERROR');
-      throw error;
-    }
+  private normalizeDraftLine(line: DraftInvoiceLineInput, index: number) {
+    const quantity = Number(line.quantity ?? 1);
+    const unitPrice = Number(line.unitPrice ?? line.unit_price ?? 0);
+    const taxRate = Number(line.taxRate ?? line.tax_rate ?? 0);
+    const amountWithoutTax = quantity * unitPrice;
+    const taxAmount = amountWithoutTax * (taxRate / 100);
+    return {
+      lineNumber: index + 1,
+      itemName: line.description ?? line.itemName ?? `Dòng hàng ${index + 1}`,
+      quantity,
+      unitPrice,
+      taxRate,
+      amountWithoutTax,
+      taxAmount,
+    };
   }
 
-  async cancelInvoice(dto: any) {
+  private buildDraftInvoicePayload(input?: DraftInvoiceInput) {
+    const config = input ?? {};
+    const lines = (config.lines?.length
+      ? config.lines
+      : [{ description: config.description ?? 'Hóa đơn nháp ERP', quantity: 1, unitPrice: 0, taxRate: 10 }]
+    ).map((line, index) => this.normalizeDraftLine(line, index));
+    const totalWithoutTax = lines.reduce((sum, line) => sum + line.amountWithoutTax, 0);
+    const totalTaxAmount = lines.reduce((sum, line) => sum + line.taxAmount, 0);
+    const totalAmountWithTax = totalWithoutTax + totalTaxAmount;
+
+    return {
+      documentNo: config.documentNo ?? config.document_no ?? `DRAFT-${Date.now()}`,
+      buyerName: config.buyerName ?? config.buyer_name ?? 'Khách hàng nháp ERP',
+      buyerTaxCode: config.buyerTaxCode ?? config.buyer_tax_code ?? null,
+      buyerAddress: config.buyerAddress ?? config.buyer_address ?? null,
+      buyerEmail: config.buyerEmail ?? config.buyer_email ?? null,
+      currencyCode: config.currencyCode ?? config.currency_code ?? 'VND',
+      description: config.description ?? 'Chỉ lưu nháp, không phát hành',
+      lines,
+      totals: {
+        totalWithoutTax,
+        totalTaxAmount,
+        totalAmountWithTax,
+      },
+    };
+  }
+
+  async createInvoice(invoiceData?: any) {
     const config = await this.getConfig();
-    const payload = new URLSearchParams({
-      supplierTaxCode: dto.supplierTaxCode ?? config.supplierTaxCode,
-      invoiceNo: dto.invoiceNo,
-      strIssueDate: dto.strIssueDate,
-      additionalReferenceDesc: dto.additionalReferenceDesc ?? 'ERP demo cancel',
-      additionalReferenceDate: dto.additionalReferenceDate ?? dto.strIssueDate,
-    }).toString();
-    return this.callViettel('/InvoiceWS/cancelTransactionInvoice', payload);
+    const draft = this.buildDraftInvoicePayload(invoiceData);
+    const requestPayload = {
+      mode: 'DRAFT_ONLY',
+      supplierTaxCode: config.supplierTaxCode,
+      draft,
+      warning:
+        'Không gọi Viettel phát hành. Bản ghi này chỉ được lưu nội bộ để user kiểm tra trước khi có flow phát hành riêng.',
+    };
+    const responsePayload = {
+      ok: true,
+      mode: 'DRAFT_ONLY',
+      status: 'DRAFT',
+      provider: 'SINVOICE',
+      draftId: draft.documentNo,
+      message:
+        'Đã lưu hóa đơn nháp nội bộ. Tính năng ký/phát hành đang bị ẩn để tránh phát hành nhầm.',
+    };
+    await this.persistEinvoice(requestPayload, responsePayload, 'DRAFT');
+    return { ok: true, request: requestPayload, response: responsePayload };
+  }
+
+  async cancelInvoice() {
+    throw new BadRequestException(
+      'Tính năng hủy/phát hành hóa đơn đang tạm khóa trong draft-only mode.',
+    );
   }
 
   async getInvoiceFile(invoiceNo: string, pattern: string, fileType: FileType = 'PDF') {
@@ -469,20 +544,9 @@ export class SinvoiceService {
   }
 
   async fullDemoFlow() {
-    const health = await this.health();
-    let create: any;
-    try {
-      create = await this.createInvoice();
-    } catch (error: any) {
-      create = { ok: false, message: error.message };
-    }
-    let list: any;
-    try {
-      list = await this.getInvoices({ rowPerPage: 5 });
-    } catch (error: any) {
-      list = { ok: false, message: error.message };
-    }
-    return { health, create, list };
+    throw new BadRequestException(
+      'Demo flow đã bị tắt. Hệ thống hiện chỉ cho phép lưu hóa đơn nháp nội bộ để tránh phát hành nhầm.',
+    );
   }
 
   private async upsertExternalEinvoice(invoice: any) {
@@ -530,24 +594,25 @@ export class SinvoiceService {
 
   private async persistEinvoice(requestPayload: any, responsePayload: any, status: string) {
     const config = await this.getConfig();
+    const draft = requestPayload?.draft ?? null;
     const data = {
       source: 'SINVOICE' as InvoiceSource,
       direction: 'OUT' as InvoiceDirection,
       supplier_tax_code: config.supplierTaxCode,
-      document_no: requestPayload?.generalInvoiceInfo?.invoiceNo ?? `DEMO-${Date.now()}`,
-      invoice_no: responsePayload?.result?.invoiceNo ?? responsePayload?.invoiceNo ?? null,
+      document_no: draft?.documentNo ?? requestPayload?.generalInvoiceInfo?.invoiceNo ?? `DEMO-${Date.now()}`,
+      invoice_no: status === 'DRAFT' ? null : responsePayload?.result?.invoiceNo ?? responsePayload?.invoiceNo ?? null,
       pattern: requestPayload?.generalInvoiceInfo?.templateCode ?? null,
       invoice_series: requestPayload?.generalInvoiceInfo?.invoiceSeries ?? null,
-      buyer_name: requestPayload?.buyerInfo?.buyerName ?? requestPayload?.buyerInfo?.buyerLegalName ?? null,
-      buyer_tax_code: requestPayload?.buyerInfo?.buyerTaxCode ?? null,
-      buyer_address: requestPayload?.buyerInfo?.buyerAddressLine ?? null,
+      buyer_name: draft?.buyerName ?? requestPayload?.buyerInfo?.buyerName ?? requestPayload?.buyerInfo?.buyerLegalName ?? null,
+      buyer_tax_code: draft?.buyerTaxCode ?? requestPayload?.buyerInfo?.buyerTaxCode ?? null,
+      buyer_address: draft?.buyerAddress ?? requestPayload?.buyerInfo?.buyerAddressLine ?? null,
       seller_name: 'Công ty Liouni',
       seller_tax_code: config.supplierTaxCode,
-      total_amount: Number(requestPayload?.summarizeInfo?.totalAmountWithTax ?? 0),
-      vat_amount: Number(requestPayload?.summarizeInfo?.totalTaxAmount ?? 0),
+      total_amount: Number(draft?.totals?.totalAmountWithTax ?? requestPayload?.summarizeInfo?.totalAmountWithTax ?? 0),
+      vat_amount: Number(draft?.totals?.totalTaxAmount ?? requestPayload?.summarizeInfo?.totalTaxAmount ?? 0),
       status,
-      tax_status: responsePayload?.result?.status ?? null,
-      viettel_transaction_id: responsePayload?.result?.transactionUuid ?? responsePayload?.transactionUuid ?? null,
+      tax_status: status === 'DRAFT' ? 'LOCAL_DRAFT_ONLY' : responsePayload?.result?.status ?? null,
+      viettel_transaction_id: status === 'DRAFT' ? null : responsePayload?.result?.transactionUuid ?? responsePayload?.transactionUuid ?? null,
       request_payload: requestPayload,
       response_payload: responsePayload,
       error_message: status === 'ERROR' ? JSON.stringify(responsePayload) : null,
