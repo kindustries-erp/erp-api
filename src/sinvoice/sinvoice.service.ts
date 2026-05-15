@@ -67,6 +67,8 @@ export class SinvoiceService {
       taxCode: raw.taxCode ?? raw.tax_code,
       providerName: raw.providerName ?? raw.provider_name,
       apiUrl: raw.apiUrl ?? raw.api_url,
+      gdtJwt: raw.gdtJwt ?? raw.gdt_jwt,
+      gdtCookie: raw.gdtCookie ?? raw.gdt_cookie,
     };
   }
 
@@ -292,6 +294,8 @@ export class SinvoiceService {
       password: dto.password,
       provider_name: dto.providerName ?? dto.provider_name ?? 'VIETTEL_TAX_PORTAL',
       api_url: dto.apiUrl ?? dto.api_url ?? null,
+      gdt_jwt: dto.gdtJwt ?? dto.gdt_jwt ?? null,
+      gdt_cookie: dto.gdtCookie ?? dto.gdt_cookie ?? null,
       is_active: dto.isActive ?? dto.is_active ?? true,
     };
 
@@ -317,6 +321,8 @@ export class SinvoiceService {
         password: null,
         provider_name: 'VIETTEL_TAX_PORTAL',
         api_url: null,
+        gdt_jwt: null,
+        gdt_cookie: null,
         is_active: false,
       }),
     });
@@ -405,8 +411,8 @@ export class SinvoiceService {
 
   async syncTaxPortal(query: any = {}) {
     const config = await this.getTaxPortalConfig();
-    if (!config?.username || !config?.password) {
-      throw new BadRequestException('Chưa cấu hình tài khoản cổng thuế');
+    if (!config?.gdtJwt || !config?.gdtCookie) {
+      throw new BadRequestException('Chưa cấu hình Token và Cookie Tổng cục Thuế trên giao diện');
     }
 
     const direction = (query.direction ?? 'OUT') as InvoiceDirection;
@@ -414,7 +420,7 @@ export class SinvoiceService {
       throw new BadRequestException('direction phải là IN hoặc OUT');
     }
 
-    const invoices = this.buildTaxPortalStubInvoices(direction, config, query.startDate, query.endDate);
+    const invoices = await this.fetchFromGdtApi(direction, config, query.startDate, query.endDate);
     const saved = [] as any[];
     for (const invoice of invoices) {
       const persisted = await this.upsertExternalEinvoice(invoice);
@@ -427,7 +433,116 @@ export class SinvoiceService {
       direction,
       count: saved.length,
       items: saved,
-      note: 'Đang dùng stub để khóa luồng ERP trước khi map endpoint CQT thật từ tài liệu Viettel.',
+      note: 'Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế.',
+    };
+  }
+
+  private async fetchFromGdtApi(direction: InvoiceDirection, config: any, startDate?: string, endDate?: string) {
+    const endpoint = direction === 'IN' ? 'purchase' : 'sold';
+    
+    // Default to last 30 days if not provided
+    const now = new Date();
+    const end = endDate ? new Date(endDate) : now;
+    const start = startDate ? new Date(startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const formatDate = (d: Date) => {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
+    const searchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59;ttxly==5`;
+    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=50&search=${encodeURIComponent(searchStr)}`;
+
+    let token = config.gdtJwt;
+    if (token && !token.startsWith('Bearer ')) {
+      token = `Bearer ${token}`;
+    }
+
+    const headers: Record<string, string> = {
+      'Authorization': token,
+      'Accept': 'application/json, text/plain, */*',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Content-Type': 'application/json',
+    };
+    if (config.gdtCookie) {
+      headers['Cookie'] = config.gdtCookie;
+    }
+
+    this.logger.log(`Fetching from GDT: ${url}`);
+    
+    try {
+      const res = await fetch(url, { method: 'GET', headers });
+      if (!res.ok) {
+        if (res.status === 401) {
+           throw new Error('Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.');
+        }
+        throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
+      }
+
+      const data: any = await res.json();
+      if (!data || !Array.isArray(data.datas)) {
+        this.logger.warn(`Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`);
+        return [];
+      }
+
+      return data.datas.map((item: any) => this.mapGdtInvoiceToErp(item, direction, config));
+    } catch (err: any) {
+      this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
+      throw new InternalServerErrorException(err.message ?? 'Lỗi khi gọi API Tổng cục Thuế');
+    }
+  }
+
+  private mapGdtInvoiceToErp(raw: any, direction: InvoiceDirection, cfg: any) {
+    const now = new Date().toISOString();
+    
+    // Parse tdlap (usually something like "2024-05-15T..." or timestamp)
+    let invoiceDate = now;
+    if (raw.tdlap) {
+      try {
+        const d = new Date(raw.tdlap);
+        if (!isNaN(d.getTime())) invoiceDate = d.toISOString();
+      } catch {}
+    }
+
+    // Usually GDT has nbmst (Người bán), nbten, nmmst (Người mua), nmten
+    const sellerTaxCode = raw.nbmst ?? (direction === 'IN' ? null : cfg.taxCode);
+    const sellerName = raw.nbten ?? (direction === 'IN' ? 'Người bán' : 'Công ty Liouni');
+    const buyerTaxCode = raw.nmmst ?? (direction === 'OUT' ? null : cfg.taxCode);
+    const buyerName = raw.nmten ?? (direction === 'OUT' ? 'Khách hàng' : 'Công ty Liouni');
+
+    // Mẫu số, Ký hiệu, Số HĐ
+    const khhdon = raw.khmshdon ?? raw.khhd ?? '';
+    const khmshdon = raw.khhdon ?? raw.khms ?? '';
+    const soHdon = raw.shdon ?? '';
+    
+    const invoiceNo = soHdon ? soHdon.toString().padStart(7, '0') : `GDT-${Date.now().toString().slice(-6)}`;
+    const docNo = `${khmshdon}${khhdon}-${invoiceNo}`.replace(/^-/, '');
+
+    const totalAmount = Number(raw.tgtcthue ?? raw.tgtttbso ?? 0);
+    const vatAmount = Number(raw.tgtthue ?? 0);
+
+    return {
+      external_invoice_id: raw.id ?? `GDT-${raw.khmshdon}-${raw.shdon}-${direction}`,
+      document_no: docNo || `GDT-${Date.now().toString().slice(-6)}`,
+      invoice_no: invoiceNo,
+      invoice_date: invoiceDate,
+      source: 'TAX_PORTAL',
+      direction,
+      tax_status: raw.ttxly === 5 ? 'Đã cấp mã CQT' : (raw.ttxly === 6 ? 'Hóa đơn thay thế' : `Trạng thái: ${raw.ttxly}`),
+      status: 'SYNCED',
+      seller_name: sellerName,
+      seller_tax_code: sellerTaxCode,
+      seller_address: raw.nbdchi ?? '',
+      buyer_name: buyerName,
+      buyer_tax_code: buyerTaxCode,
+      buyer_address: raw.nmdchi ?? '',
+      total_amount: totalAmount,
+      vat_amount: vatAmount,
+      request_payload: {},
+      response_payload: raw,
+      synced_at: now,
     };
   }
 
