@@ -99,32 +99,41 @@ Triển khai module Viettel SInvoice v2.49 theo hướng tách biệt, giữ ngu
 - [x] Không ép `15/30/50`; giữ `rowPerPage` linh hoạt theo doc evidence hiện tại
 
 ### UI
-- [x] Pass này không thêm entrypoint web; module mới hidden-by-default vì chưa nối vào ERP Web
+- [x] Handoff contract sang ERP Web đã thực hiện ở web repo riêng
+- [x] Surface `sinvoice` hiện tại đã remap sang Viettel v2.49; không dùng toggle
 
 ## Validation Evidence
 - DB precheck result: `DB_READY` với evidence từ Directus fields/config singleton
 - Build:
-  - local compile: `node ./node_modules/@nestjs/cli/bin/nest.js build` => exit 0
-  - image build: `/usr/bin/docker compose build --no-cache` tại `/opt/stacks/liouni-erp-api` => success
+  - local compile: `npm run build` => exit 0
+  - image build: `docker compose build --no-cache` tại `/opt/stacks/liouni-erp-api` => success
 - Smoke:
   - container `liouni-erp-api` recreated and `Up`
-  - startup log xác nhận mount route mới:
+  - startup log xác nhận mount route surface remap:
+    - `/api/v1/sinvoice/health`
+    - `/api/v1/sinvoice/local`
+    - `/api/v1/sinvoice/create`
+    - `/api/v1/sinvoice/sync`
     - `/api/v1/viettel-v2/health`
     - `/api/v1/viettel-v2/draft`
     - `/api/v1/viettel-v2/sync/inbound`
     - `/api/v1/viettel-v2/local`
-  - `GET https://dev.api.erp.liouni.com/api/v1/viettel-v2/health` => `{ ok: true, provider: 'VIETTEL_V2', hiddenByDefault: true, draftOnly: true, hasConfig: true }`
-  - `POST https://dev.api.erp.liouni.com/api/v1/viettel-v2/draft` => `201`, trả `mode: DRAFT_ONLY`, `status: DRAFT`
-  - `GET https://dev.api.erp.liouni.com/api/v1/viettel-v2/local?page=1&pageSize=5` => `200`, thấy record draft vừa persist (`document_no = VT2-1778839061092`)
+  - `GET http://127.0.0.1:10000/api/v1/sinvoice/health` => `200`, trả `{ ok: true, provider: 'VIETTEL_V2', surface: 'SINVOICE', legacyMode: 'COMMENT_ONLY', draftOnly: true, hasConfig: true }`
+  - `POST http://127.0.0.1:10000/api/v1/sinvoice/create` => `200`, trả `mode: DRAFT_ONLY`, `status: DRAFT`, `surface: 'SINVOICE'`
+  - `GET http://127.0.0.1:10000/api/v1/sinvoice/sync?issueStartDate=2026-05-01&issueEndDate=2026-05-15` => route remap chạy vào `ViettelV2Service`, nhưng upstream Viettel fail `ECONNRESET` nên response hiện là `500`
+  - API hotfix module wiring bổ sung `imports: [ViettelV2Module]` trong `SinvoiceModule`; sau hotfix container ổn định `Up`
 
 ## Lessons Learned
 - Link: No issue
-- Note: shell wrapper của tool thiếu `sh`, `ssh`, `docker`, `curl`, `git` trong PATH mặc định ở một số call; workaround an toàn là dùng binary tuyệt đối (`/usr/bin/git`, `/usr/bin/ssh`, `/usr/bin/docker`) hoặc Node fetch cho smoke HTTP.
+- Note:
+  - shell wrapper của tool thiếu `sh`, `ssh`, `docker`, `curl`, `git` trong PATH mặc định ở một số call; workaround an toàn là dùng binary tuyệt đối hoặc command trực tiếp từ shell đầy đủ.
+  - khi remap controller cross-module trong Nest, phải import module export provider (`ViettelV2Module`) vào `SinvoiceModule`, nếu không container sẽ restart do DI failure.
 
 ## Commit/Push Status
 - API repo:
-  - commit: `937d880e55e346068b586c5253d6751102a9fcf2`
-  - message: `Add isolated Viettel v2 invoice module`
+  - commit: `937d880` — `Add isolated Viettel v2 invoice module`
+  - commit: `df522c4` — `Switch sinvoice surface to Viettel v2`
+  - commit: `babf7e0` — `Wire Viettel v2 module into sinvoice surface`
   - push: `origin/master` success
-- Web repo (if affected): không đổi
+- Web repo (if affected): handoff đã thực hiện ở web repo riêng
 - DB/directus staging: không đổi schema; chỉ read-only precheck + runtime verify
