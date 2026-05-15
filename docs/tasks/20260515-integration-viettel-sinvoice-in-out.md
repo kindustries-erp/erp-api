@@ -65,6 +65,6 @@ Bổ sung tính năng đồng bộ hóa đơn mua vào (đầu vào) và bán ra
 - Tax portal config trên Directus được expose như singleton item, nên backend phải dùng `GET/PATCH /items/tax_portal_configs` thay vì flow collection thường (`POST /items/...` hoặc `PATCH /items/.../:id`).
 
 ## Commit/Push Status
-- API repo:
-- Web repo (if affected):
-- DB/directus staging:
+- API repo: pushed `7cd7805` (`feat: add tax portal invoice center flow`)
+- Web repo (if affected): pushed `935eb1d` (`feat: add tax management center tabs`)
+- DB/directus staging: schema + metadata đã áp trên Directus staging; không commit DB dump.
