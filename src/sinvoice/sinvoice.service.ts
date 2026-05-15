@@ -39,9 +39,10 @@ type DraftInvoiceInput = {
   lines?: DraftInvoiceLineInput[];
 };
 
-// Legacy v1 service is kept for reference/supporting endpoints only.
-// Outbound create/sync surface `/api/v1/sinvoice/*` has been remapped to Viettel v2.49 in controller.
-// Do not extend v1 business flow here unless explicitly requested.
+// Legacy v1 service is intentionally preserved as comment/reference surface only.
+// Active outbound create/sync runtime now proxies `/api/v1/sinvoice/*` to Viettel v2.49 in controller.
+// Keep v1-style helpers/endpoints here only for backward reference, download/cancel support, or explicit rollback analysis.
+// Do not re-activate or extend v1 business flow unless the user explicitly asks for it.
 @Injectable()
 export class SinvoiceService {
   private readonly logger = new Logger(SinvoiceService.name);
@@ -141,26 +142,25 @@ export class SinvoiceService {
   }
 
   private async testSinvoiceConnectionWithConfig(config: any) {
-    if (!config?.apiUrl || !config?.username || !config?.password || !config?.supplierTaxCode) {
+    if (!config?.apiUrl || !config?.username || !config?.password) {
       return this.buildConnectionResult({
         provider: 'SINVOICE',
         ok: false,
-        message: 'Thiếu thông tin cấu hình SInvoice để kiểm tra kết nối',
+        message: 'Thiếu thông tin cấu hình Viettel v2.49 để kiểm tra kết nối',
       });
     }
 
     try {
-      const res = await fetch(`${config.apiUrl}/InvoiceWS/getInvoiceList`, {
+      const baseUrl = String(config.apiUrl).replace(/\/$/, '');
+      const res = await fetch(`${baseUrl}/auth/login`, {
         method: 'POST',
         headers: {
-          Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
         body: JSON.stringify({
-          supplierTaxCode: config.supplierTaxCode,
-          pageNo: 1,
-          pageSize: 1,
+          username: config.username,
+          password: config.password,
         }),
       });
       const text = await res.text();
@@ -172,21 +172,24 @@ export class SinvoiceService {
         return this.buildConnectionResult({
           provider: 'SINVOICE',
           ok: false,
-          message: `Kết nối SInvoice thất bại (${res.status})`,
+          message: `Kết nối Viettel v2.49 thất bại (${res.status})`,
           detail,
         });
       }
       return this.buildConnectionResult({
         provider: 'SINVOICE',
         ok: true,
-        message: 'Đã kết nối thành công tới SInvoice',
-        detail: { status: res.status },
+        message: 'Đã kết nối thành công tới Viettel v2.49 API',
+        detail: {
+          status: res.status,
+          endpoint: `${baseUrl}/auth/login`,
+        },
       });
     } catch (error: any) {
       return this.buildConnectionResult({
         provider: 'SINVOICE',
         ok: false,
-        message: `Không thể kết nối SInvoice: ${error?.message ?? 'Unknown error'}`,
+        message: `Không thể kết nối Viettel v2.49 API: ${error?.message ?? 'Unknown error'}`,
       });
     }
   }
@@ -197,8 +200,11 @@ export class SinvoiceService {
       username: dto.username,
       password: dto.password,
       app_key: dto.appKey ?? dto.app_key ?? null,
-      api_url: dto.apiUrl ?? dto.api_url ?? 'https://demo-sinvoice.viettel.vn:8443/InvoiceAPI',
-      environment: dto.environment ?? 'demo',
+      api_url:
+        dto.apiUrl ??
+        dto.api_url ??
+        'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/',
+      environment: dto.environment ?? 'production',
       is_active: true,
     };
     const res = await this.directusRequest('/items/sinvoice_configs', {
