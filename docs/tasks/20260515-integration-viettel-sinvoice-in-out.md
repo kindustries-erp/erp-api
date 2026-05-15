@@ -66,6 +66,6 @@ Bổ sung tính năng đồng bộ hóa đơn mua vào (đầu vào) và bán ra
 - Với bước “Lưu cấu hình”, cần tách rõ 2 lớp kết quả cho user: `save ok` và `connection test ok/fail`. Không được ngụ ý đã kết nối thành công chỉ vì Directus lưu thành công; response save nên trả thêm `connection` để UI báo đúng trạng thái.
 
 ## Commit/Push Status
-- API repo: pushed `7cd7805` (`feat: add tax portal invoice center flow`)
-- Web repo (if affected): pushed `935eb1d` (`feat: add tax management center tabs`)
+- API repo: pushed `79c633f` (`feat: add config connection checks`); trước đó có `7cd7805` (`feat: add tax portal invoice center flow`) và `c0f239d` (docs evidence)
+- Web repo (if affected): pushed `566d454` (`feat: show config connection status`); trước đó có `935eb1d` (`feat: add tax management center tabs`) và `4e2cca9` (docs evidence)
 - DB/directus staging: schema + metadata đã áp trên Directus staging; không commit DB dump.
