@@ -345,26 +345,46 @@ export class SinvoiceService {
   }
 
   async listLocalInvoices(query: any = {}) {
+    const page = Math.max(Number(query.page ?? 1) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(query.pageSize ?? 15) || 15, 1), 100);
+    const offset = (page - 1) * pageSize;
+
     const filters: string[] = [];
     if (query.source) filters.push(`"source":{"_eq":"${query.source}"}`);
     if (query.direction) filters.push(`"direction":{"_eq":"${query.direction}"}`);
-    
+
     if (query.startDate) {
       filters.push(`"invoice_date":{"_gte":"${new Date(query.startDate).toISOString()}"}`);
     }
     if (query.endDate) {
-      filters.push(`"invoice_date":{"_lte":"${new Date(query.endDate).toISOString()}"}`);
+      const endDate = new Date(query.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      filters.push(`"invoice_date":{"_lte":"${endDate.toISOString()}"}`);
     }
-    
+
     if (query.search) {
+      const escaped = String(query.search).replace(/"/g, '\\"');
       const searchFields = ['document_no', 'invoice_no', 'seller_name', 'buyer_name', 'buyer_tax_code', 'seller_tax_code'];
-      const searchFilters = searchFields.map(field => `{"${field}":{"_icontains":"${query.search}"}}`);
+      const searchFilters = searchFields.map(field => `{"${field}":{"_icontains":"${escaped}"}}`);
       filters.push(`"_or":[${searchFilters.join(',')}]`);
     }
 
     const filter = filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
-    const result = await this.directusRequest<{ data: any[] }>(`/items/einvoices?sort[]=-invoice_date&limit=100${filter}`);
-    return result.data ?? [];
+    const result = await this.directusRequest<{ data: any[]; meta?: { filter_count?: number } }>(
+      `/items/einvoices?sort[]=-invoice_date&sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filter}`,
+    );
+
+    const items = result.data ?? [];
+    const total = Number(result.meta?.filter_count ?? items.length ?? 0);
+    return {
+      data: items,
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(Math.ceil(total / pageSize), 1),
+      },
+    };
   }
 
   private async callViettel(endpoint: string, body: any, expectJson = true) {
