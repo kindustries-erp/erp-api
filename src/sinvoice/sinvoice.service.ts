@@ -86,6 +86,73 @@ export class SinvoiceService {
     };
   }
 
+  private buildConnectionResult(params: {
+    provider: 'SINVOICE' | 'TAX_PORTAL';
+    ok: boolean;
+    message: string;
+    checkedAt?: string;
+    detail?: any;
+  }) {
+    return {
+      provider: params.provider,
+      ok: params.ok,
+      message: params.message,
+      checkedAt: params.checkedAt ?? new Date().toISOString(),
+      detail: params.detail ?? null,
+    };
+  }
+
+  private async testSinvoiceConnectionWithConfig(config: any) {
+    if (!config?.apiUrl || !config?.username || !config?.password || !config?.supplierTaxCode) {
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: false,
+        message: 'Thiếu thông tin cấu hình SInvoice để kiểm tra kết nối',
+      });
+    }
+
+    try {
+      const res = await fetch(`${config.apiUrl}/InvoiceWS/getInvoiceList`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          supplierTaxCode: config.supplierTaxCode,
+          pageNo: 1,
+          pageSize: 1,
+        }),
+      });
+      const text = await res.text();
+      let detail: any = text;
+      try {
+        detail = text ? JSON.parse(text) : null;
+      } catch {}
+      if (!res.ok) {
+        return this.buildConnectionResult({
+          provider: 'SINVOICE',
+          ok: false,
+          message: `Kết nối SInvoice thất bại (${res.status})`,
+          detail,
+        });
+      }
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: true,
+        message: 'Đã kết nối thành công tới SInvoice',
+        detail: { status: res.status },
+      });
+    } catch (error: any) {
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: false,
+        message: `Không thể kết nối SInvoice: ${error?.message ?? 'Unknown error'}`,
+      });
+    }
+  }
+
   async saveConfig(dto: any) {
     const data = {
       supplier_tax_code: dto.supplierTaxCode ?? dto.supplier_tax_code,
@@ -100,7 +167,13 @@ export class SinvoiceService {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
-    return { ok: true, data: res };
+    const connection = await this.testSinvoiceConnectionWithConfig({
+      supplierTaxCode: data.supplier_tax_code,
+      username: data.username,
+      password: data.password,
+      apiUrl: data.api_url,
+    });
+    return { ok: true, data: res, connection };
   }
 
   async resetConfig() {
@@ -131,6 +204,60 @@ export class SinvoiceService {
     return this.normalizeTaxPortalConfig(row);
   }
 
+  private async testTaxPortalConnectionWithConfig(config: any) {
+    if (!config?.username || !config?.password) {
+      return this.buildConnectionResult({
+        provider: 'TAX_PORTAL',
+        ok: false,
+        message: 'Thiếu thông tin cấu hình cổng thuế để kiểm tra kết nối',
+      });
+    }
+
+    if (!config?.apiUrl) {
+      return this.buildConnectionResult({
+        provider: 'TAX_PORTAL',
+        ok: true,
+        message: 'Đã lưu cấu hình cổng thuế. Chưa có API URL thật nên tạm xác nhận ở mức sẵn sàng đồng bộ stub.',
+        detail: { mode: 'stub-ready' },
+      });
+    }
+
+    try {
+      const res = await fetch(config.apiUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`,
+          Accept: 'application/json,text/plain,*/*',
+        },
+      });
+      const text = await res.text();
+      let detail: any = text;
+      try {
+        detail = text ? JSON.parse(text) : null;
+      } catch {}
+      if (!res.ok) {
+        return this.buildConnectionResult({
+          provider: 'TAX_PORTAL',
+          ok: false,
+          message: `Kết nối cổng thuế thất bại (${res.status})`,
+          detail,
+        });
+      }
+      return this.buildConnectionResult({
+        provider: 'TAX_PORTAL',
+        ok: true,
+        message: 'Đã kết nối thành công tới cổng thuế/Viettel integration',
+        detail: { status: res.status },
+      });
+    } catch (error: any) {
+      return this.buildConnectionResult({
+        provider: 'TAX_PORTAL',
+        ok: false,
+        message: `Không thể kết nối cổng thuế: ${error?.message ?? 'Unknown error'}`,
+      });
+    }
+  }
+
   async saveTaxPortalConfig(dto: any) {
     const data = {
       tax_code: dto.taxCode ?? dto.tax_code,
@@ -145,7 +272,13 @@ export class SinvoiceService {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
-    return { ok: true, data: res };
+    const connection = await this.testTaxPortalConnectionWithConfig({
+      taxCode: data.tax_code,
+      username: data.username,
+      password: data.password,
+      apiUrl: data.api_url,
+    });
+    return { ok: true, data: res, connection };
   }
 
   async resetTaxPortalConfig() {
