@@ -538,75 +538,20 @@ export class SinvoiceService {
     return chunks;
   }
 
+  /**
+   * @deprecated Legacy GDT crawling flow. Replaced by Viettel v2.49 API surface in Controller.
+   * Keeping for reference only.
+   */
   async syncTaxPortal(query: TaxPortalSyncQueryDto = {}) {
-    const config = await this.getTaxPortalConfig();
-    if (!config?.gdtJwt || !config?.gdtCookie) {
-      throw new BadRequestException('Chưa cấu hình Token và Cookie Tổng cục Thuế trên giao diện');
-    }
-
-    const direction = (query.direction ?? 'OUT') as InvoiceDirection;
-    if (!['IN', 'OUT'].includes(direction)) {
-      throw new BadRequestException('direction phải là IN hoặc OUT');
-    }
-
-    const pageSize = this.normalizeTaxPortalPageSize(query);
-    const { startDate, endDate } = this.normalizeTaxPortalDateRange(query);
-    const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
-    this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction} with pageSize=${pageSize}`);
-
-    const allInvoices: any[] = [];
-    const invoiceNos: string[] = [];
-    const chunkSummaries: Array<{ index: number; startDate: string; endDate: string; fetched: number; upserted: number }> = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-
-      if (i > 0) {
-        const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
-        this.logger.log(`Throttling: Sleeping ${delay}ms before next chunk...`);
-        await this.sleep(delay);
-      }
-
-      const chunkInvoices = await this.fetchFromGdtApi(direction, config, chunk.start, chunk.end, pageSize);
-      let upserted = 0;
-
-      for (const invoice of chunkInvoices) {
-        const persisted = await this.upsertExternalEinvoice(invoice);
-        const persistedData = (persisted as any)?.data;
-        if (persistedData) {
-          upserted += 1;
-          allInvoices.push(persistedData);
-          if (invoiceNos.length < 10) {
-            invoiceNos.push(persistedData.invoice_no || persistedData.document_no);
-          }
-        }
-      }
-
-      chunkSummaries.push({
-        index: i + 1,
-        startDate: chunk.start.toISOString(),
-        endDate: chunk.end.toISOString(),
-        fetched: chunkInvoices.length,
-        upserted,
-      });
-    }
-
+    this.logger.warn('Legacy syncTaxPortal called. Logic is preserved as comment for reference only.');
     return {
-      ok: true,
-      source: 'TAX_PORTAL',
-      direction,
-      pageSize,
-      requested_range: {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      },
-      chunk_count: chunks.length,
-      chunks: chunkSummaries,
-      count: allInvoices.length,
-      synced_at: new Date().toISOString(),
-      invoice_nos: invoiceNos,
-      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi, mỗi lần không quá 1 tháng.`,
+      ok: false,
+      message: 'Legacy GDT crawl flow has been disabled. Please use Viettel v2.49 API via Controller.',
     };
+    /*
+    const config = await this.getTaxPortalConfig();
+    ...
+    */
   }
 
   private async fetchFromGdtApi(

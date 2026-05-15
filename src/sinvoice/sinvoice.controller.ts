@@ -107,8 +107,16 @@ export class SinvoiceController {
   }
 
   @Get('tax-portal/sync')
-  async syncTaxPortal(@Query() query: TaxPortalSyncQueryDto) {
-    return this.sinvoiceService.syncTaxPortal(query);
+  async syncTaxPortal(@Query() query: any) {
+    const direction = query?.direction ?? 'IN';
+    const dto: SyncViettelV2InboundDto = {
+      supplierTaxCode: query?.supplierTaxCode,
+      issueStartDate: query?.startDate ?? query?.issueStartDate,
+      issueEndDate: query?.endDate ?? query?.issueEndDate,
+      pageNum: query?.pageNum ?? 0,
+      rowPerPage: query?.pageSize ?? query?.rowPerPage ?? 100,
+    };
+    return this.viettelV2Service.syncInbound(dto, direction);
   }
 
   @Post('demo-flow')

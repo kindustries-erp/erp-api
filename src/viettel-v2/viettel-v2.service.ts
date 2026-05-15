@@ -408,11 +408,11 @@ export class ViettelV2Service {
     };
   }
 
-  async syncInbound(body: SyncViettelV2InboundDto) {
+  async syncInbound(body: SyncViettelV2InboundDto, direction: InvoiceDirection = 'IN') {
     const config = await this.getConfig();
     const supplierTaxCode = body.supplierTaxCode ?? config.supplierTaxCode;
     if (!supplierTaxCode) {
-      throw new BadRequestException('Thiếu supplierTaxCode để đồng bộ hóa đơn đầu vào');
+      throw new BadRequestException('Thiếu supplierTaxCode để đồng bộ hóa đơn');
     }
 
     const startDate = new Date(body.issueStartDate);
@@ -420,7 +420,7 @@ export class ViettelV2Service {
     this.ensureRangeNotReversed(startDate, endDate);
 
     const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
-    this.logger.log(`Viettel v2 inbound sync: ${chunks.length} chunk(s) for ${supplierTaxCode}`);
+    this.logger.log(`Viettel v2 ${direction} sync: ${chunks.length} chunk(s) for ${supplierTaxCode}`);
 
     const allInvoices: any[] = [];
     const invoiceNos: string[] = [];
@@ -432,7 +432,7 @@ export class ViettelV2Service {
         rowPerPage: Number(body.rowPerPage ?? 100),
         issueStartDate: this.toYyyyMmDd(chunk.start),
         issueEndDate: this.toYyyyMmDd(chunk.end),
-        inputSource: body.inputSource ?? 1,
+        inputSource: body.inputSource ?? (direction === 'IN' ? 1 : 2), // Giả định 1=IN, 2=OUT theo pattern thường thấy ở Viettel
         validatedStatus: body.validatedStatus ?? 0,
         invoiceStatus: body.invoiceStatus ?? 1,
         searchText: body.searchText ?? '',
@@ -446,7 +446,10 @@ export class ViettelV2Service {
 
       const items = this.extractInboundItems(responsePayload);
       for (const raw of items) {
-        const mapped = this.mapInboundInvoice(raw, supplierTaxCode, requestPayload, responsePayload);
+        const mapped = {
+          ...this.mapInboundInvoice(raw, supplierTaxCode, requestPayload, responsePayload),
+          direction, // Ghi đè direction đúng (IN hoặc OUT)
+        };
         const persisted = await this.upsertExternalEinvoice(mapped);
         const persistedData = (persisted as any)?.data;
         if (persistedData) {
