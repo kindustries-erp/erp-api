@@ -549,10 +549,11 @@ export class SinvoiceService {
 
       for (const invoice of chunkInvoices) {
         const persisted = await this.upsertExternalEinvoice(invoice);
-        if (persisted?.data) {
-          allInvoices.push(persisted.data);
+        const persistedData = (persisted as any)?.data;
+        if (persistedData) {
+          allInvoices.push(persistedData);
           if (invoiceNos.length < 10) {
-            invoiceNos.push(persisted.data.invoice_no || persisted.data.document_no);
+            invoiceNos.push(persistedData.invoice_no || persistedData.document_no);
           }
         }
       }
