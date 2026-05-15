@@ -472,6 +472,36 @@ export class SinvoiceService {
     ];
   }
 
+  private async sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private splitDateRangeIntoMonthlyChunks(startDate: Date, endDate: Date) {
+    const chunks: { start: Date; end: Date }[] = [];
+    let currentStart = new Date(startDate);
+
+    while (currentStart <= endDate) {
+      // End of current month
+      const currentEnd = new Date(currentStart.getFullYear(), currentStart.getMonth() + 1, 0);
+      
+      const chunkEnd = currentEnd > endDate ? new Date(endDate) : currentEnd;
+      
+      // Set to end of day
+      chunkEnd.setHours(23, 59, 59, 999);
+      
+      chunks.push({
+        start: new Date(currentStart),
+        end: chunkEnd,
+      });
+
+      // Move to first day of next month
+      currentStart = new Date(currentStart.getFullYear(), currentStart.getMonth() + 1, 1);
+      currentStart.setHours(0, 0, 0, 0);
+    }
+
+    return chunks;
+  }
+
   async syncTaxPortal(query: any = {}) {
     const config = await this.getTaxPortalConfig();
     if (!config?.gdtJwt || !config?.gdtCookie) {
@@ -483,31 +513,70 @@ export class SinvoiceService {
       throw new BadRequestException('direction phải là IN hoặc OUT');
     }
 
-    const invoices = await this.fetchFromGdtApi(direction, config, query.startDate, query.endDate, query);
-    const saved = [] as any[];
-    for (const invoice of invoices) {
-      const persisted = await this.upsertExternalEinvoice(invoice);
-      saved.push(persisted);
+    // Validate pageSize (size)
+    let size = Number(query.pageSize ?? query.size ?? 15);
+    if (![15, 30, 50].includes(size)) {
+      size = 15;
+    }
+
+    const now = new Date();
+    const endDate = query.endDate ? new Date(query.endDate) : now;
+    const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
+    this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction}`);
+
+    const allInvoices = [];
+    const invoiceNos = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      
+      // Throttling: Random delay 3-5s between chunks (except first)
+      if (i > 0) {
+        const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
+        this.logger.log(`Throttling: Sleeping ${delay}ms before next chunk...`);
+        await this.sleep(delay);
+      }
+
+      const chunkInvoices = await this.fetchFromGdtApi(
+        direction, 
+        config, 
+        chunk.start, 
+        chunk.end, 
+        { ...query, size }
+      );
+
+      for (const invoice of chunkInvoices) {
+        const persisted = await this.upsertExternalEinvoice(invoice);
+        if (persisted?.data) {
+          allInvoices.push(persisted.data);
+          if (invoiceNos.length < 10) {
+            invoiceNos.push(persisted.data.invoice_no || persisted.data.document_no);
+          }
+        }
+      }
     }
 
     return {
       ok: true,
       source: 'TAX_PORTAL',
       direction,
-      count: saved.length,
+      count: allInvoices.length,
       synced_at: new Date().toISOString(),
-      invoice_nos: saved.slice(0, 5).map((item) => item?.data?.invoice_no ?? item?.data?.document_no).filter(Boolean),
-      note: 'Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế.',
+      invoice_nos: invoiceNos,
+      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi.`,
     };
   }
 
-  private async fetchFromGdtApi(direction: InvoiceDirection, config: any, startDate?: string, endDate?: string, query: any = {}) {
+  private async fetchFromGdtApi(
+    direction: InvoiceDirection, 
+    config: any, 
+    start: Date, 
+    end: Date, 
+    query: any = {}
+  ) {
     const endpoint = direction === 'IN' ? 'purchase' : 'sold';
-    
-    // Default to last 30 days if not provided
-    const now = new Date();
-    const end = endDate ? new Date(endDate) : now;
-    const start = startDate ? new Date(startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
     const formatDate = (d: Date) => {
       const day = String(d.getDate()).padStart(2, '0');
@@ -516,8 +585,15 @@ export class SinvoiceService {
       return `${day}/${month}/${year}`;
     };
 
-    const searchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59;ttxly==5`;
-    const size = query.size ?? 50;
+    // Build search string based on direction and pattern
+    // Purchase: tdlap=ge=DD/MM/YYYYT00:00:00;tdlap=le=DD/MM/YYYYT23:59:59;ttxly==5
+    // Sold: tdlap=ge=DD/MM/YYYYT00:00:00;tdlap=le=DD/MM/YYYYT23:59:59
+    let searchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59`;
+    if (direction === 'IN') {
+      searchStr += ';ttxly==5';
+    }
+
+    const size = query.size ?? 15;
     const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=${size}&search=${encodeURIComponent(searchStr)}`;
 
     let token = config.gdtJwt;
