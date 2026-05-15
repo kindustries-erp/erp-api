@@ -348,8 +348,22 @@ export class SinvoiceService {
     const filters: string[] = [];
     if (query.source) filters.push(`"source":{"_eq":"${query.source}"}`);
     if (query.direction) filters.push(`"direction":{"_eq":"${query.direction}"}`);
+    
+    if (query.startDate) {
+      filters.push(`"invoice_date":{"_gte":"${new Date(query.startDate).toISOString()}"}`);
+    }
+    if (query.endDate) {
+      filters.push(`"invoice_date":{"_lte":"${new Date(query.endDate).toISOString()}"}`);
+    }
+    
+    if (query.search) {
+      const searchFields = ['document_no', 'invoice_no', 'seller_name', 'buyer_name', 'buyer_tax_code', 'seller_tax_code'];
+      const searchFilters = searchFields.map(field => `{"${field}":{"_icontains":"${query.search}"}}`);
+      filters.push(`"_or":[${searchFilters.join(',')}]`);
+    }
+
     const filter = filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
-    const result = await this.directusRequest<{ data: any[] }>(`/items/einvoices?sort[]=-created_at&limit=100${filter}`);
+    const result = await this.directusRequest<{ data: any[] }>(`/items/einvoices?sort[]=-invoice_date&limit=100${filter}`);
     return result.data ?? [];
   }
 
@@ -420,7 +434,7 @@ export class SinvoiceService {
       throw new BadRequestException('direction phải là IN hoặc OUT');
     }
 
-    const invoices = await this.fetchFromGdtApi(direction, config, query.startDate, query.endDate);
+    const invoices = await this.fetchFromGdtApi(direction, config, query.startDate, query.endDate, query);
     const saved = [] as any[];
     for (const invoice of invoices) {
       const persisted = await this.upsertExternalEinvoice(invoice);
@@ -437,7 +451,7 @@ export class SinvoiceService {
     };
   }
 
-  private async fetchFromGdtApi(direction: InvoiceDirection, config: any, startDate?: string, endDate?: string) {
+  private async fetchFromGdtApi(direction: InvoiceDirection, config: any, startDate?: string, endDate?: string, query: any = {}) {
     const endpoint = direction === 'IN' ? 'purchase' : 'sold';
     
     // Default to last 30 days if not provided
@@ -453,7 +467,8 @@ export class SinvoiceService {
     };
 
     const searchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59;ttxly==5`;
-    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=50&search=${encodeURIComponent(searchStr)}`;
+    const size = query.size ?? 50;
+    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=${size}&search=${encodeURIComponent(searchStr)}`;
 
     let token = config.gdtJwt;
     if (token && !token.startsWith('Bearer ')) {
@@ -463,8 +478,11 @@ export class SinvoiceService {
     const headers: Record<string, string> = {
       'Authorization': token,
       'Accept': 'application/json, text/plain, */*',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept-Language': 'vi',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 OPR/130.0.0.0',
       'Content-Type': 'application/json',
+      'Action': encodeURIComponent(direction === 'IN' ? 'Tìm kiếm (hóa đơn mua vào)' : 'Tìm kiếm (hóa đơn bán ra)'),
+      'Referer': 'https://hoadondientu.gdt.gov.vn/tra-cuu/tra-cuu-hoa-don',
     };
     if (config.gdtCookie) {
       headers['Cookie'] = config.gdtCookie;
@@ -473,7 +491,15 @@ export class SinvoiceService {
     this.logger.log(`Fetching from GDT: ${url}`);
     
     try {
-      const res = await fetch(url, { method: 'GET', headers });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+      const res = await fetch(url, { 
+        method: 'GET', 
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         if (res.status === 401) {
            throw new Error('Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.');
