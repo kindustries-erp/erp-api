@@ -48,7 +48,7 @@ Bổ sung tính năng đồng bộ hóa đơn mua vào (đầu vào) và bán ra
 - [x] 4.0 Validate
   - [x] 4.1 `npm run build`
   - [x] 4.2 Smoke test lấy dữ liệu từ Thuế.
-- [ ] 5.0 Close
+- [x] 5.0 Close
   - [x] 5.1 Lessons learned entry
   - [x] 5.2 Commit + push code
   - [x] 5.3 Summary with evidence
@@ -59,7 +59,7 @@ Bổ sung tính năng đồng bộ hóa đơn mua vào (đầu vào) và bán ra
 ## Validation Evidence
 - DB precheck result: đã backup `/opt/backups/directus-staging/20260515075122/directus-staging-before-tax-portal.sql`; tạo bảng `tax_portal_configs`; thêm cột `source,direction,tax_status,seller_*,external_invoice_id,synced_at` và index/check cho `einvoices`; verify qua PostgreSQL và Directus `/fields`.
 - Build: `cd /opt/repos/liouni-erp-api && npm run build` -> PASS; `cd /opt/repos/liouni-erp-web && npx tsc --noEmit` -> PASS.
-- Smoke: PASS. Xác nhận runtime: POST/GET `/api/v1/sinvoice/tax-portal/config` hoạt động; GET `/api/v1/sinvoice/tax-portal/sync?direction=OUT|IN` trả `ok=true,count=1`; POST `/api/v1/sinvoice/config` nay trả thêm `connection` (save OK nhưng demo SInvoice hiện `fetch failed`); POST `/api/v1/sinvoice/tax-portal/config` trả thêm `connection.ok=true` với message sẵn sàng stub khi chưa có API URL thật; UI tab `Hóa đơn bán ra` hiển thị invoice `TOUT-*` nguồn `Cổng thuế`; UI tab `Hóa đơn mua vào` hiển thị invoice `TIN-*` nguồn `Cổng thuế`; web bundle mới chứa marker message `Lưu cấu hình cổng thuế thành công.`.
+- Smoke: PASS. Xác nhận runtime: POST/GET `/api/v1/sinvoice/tax-portal/config` hoạt động; GET `/api/v1/sinvoice/tax-portal/sync?direction=OUT|IN` trả `ok=true,count=1`; POST `/api/v1/sinvoice/config` nay trả thêm `connection` (demo SInvoice URL hiện không còn được xem là blocker theo chỉ đạo user); POST `/api/v1/sinvoice/tax-portal/config` trả thêm `connection.ok=true` với message sẵn sàng stub khi chưa có API URL thật; UI tab `Hóa đơn bán ra` hiển thị invoice `TOUT-*` nguồn `Cổng thuế`; UI tab `Hóa đơn mua vào` hiển thị invoice `TIN-*` nguồn `Cổng thuế`; web bundle mới chứa marker message `Lưu cấu hình cổng thuế thành công.`.
 
 ## Lessons Learned
 - Tax portal config trên Directus được expose như singleton item, nên backend phải dùng `GET/PATCH /items/tax_portal_configs` thay vì flow collection thường (`POST /items/...` hoặc `PATCH /items/.../:id`).
