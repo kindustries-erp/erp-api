@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
 
 @Controller('sinvoice')
@@ -11,8 +11,8 @@ export class SinvoiceController {
   }
 
   @Get('local')
-  async listLocalInvoices() {
-    return this.sinvoiceService.listLocalInvoices();
+  async listLocalInvoices(@Query() query: any) {
+    return this.sinvoiceService.listLocalInvoices(query);
   }
 
   @Post('create')
@@ -37,6 +37,41 @@ export class SinvoiceController {
   @Get('sync')
   async getInvoices(@Query() query: any) {
     return this.sinvoiceService.getInvoices(query);
+  }
+
+  @Get('config')
+  async getConfig() {
+    return this.sinvoiceService.getConfigEndpoint();
+  }
+
+  @Post('config')
+  async saveConfig(@Body() body: any) {
+    return this.sinvoiceService.saveConfig(body);
+  }
+
+  @Delete('config')
+  async resetConfig() {
+    return this.sinvoiceService.resetConfig();
+  }
+
+  @Get('tax-portal/config')
+  async getTaxPortalConfig() {
+    return this.sinvoiceService.getTaxPortalConfig();
+  }
+
+  @Post('tax-portal/config')
+  async saveTaxPortalConfig(@Body() body: any) {
+    return this.sinvoiceService.saveTaxPortalConfig(body);
+  }
+
+  @Delete('tax-portal/config')
+  async resetTaxPortalConfig() {
+    return this.sinvoiceService.resetTaxPortalConfig();
+  }
+
+  @Get('tax-portal/sync')
+  async syncTaxPortal(@Query() query: any) {
+    return this.sinvoiceService.syncTaxPortal(query);
   }
 
   @Post('demo-flow')

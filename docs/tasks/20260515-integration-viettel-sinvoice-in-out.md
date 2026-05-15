@@ -32,35 +32,37 @@ Bổ sung tính năng đồng bộ hóa đơn mua vào (đầu vào) và bán ra
 - [ ] No cross-system impact
 
 ## Checklist (cập nhật realtime)
-- [ ] 1.0 Gate 0 DB Precheck done
-  - [ ] 1.1 Tạo `tax_portal_configs` (Singleton/Collection).
-  - [ ] 1.2 Thêm `source`, `direction`, `tax_status` vào `einvoices`.
-- [ ] 2.0 Backend workflow/API gate done
-  - [ ] 2.1 Implement Viettel Tax Portal API Client (tra cứu hóa đơn mua vào/bán ra).
-  - [ ] 2.2 Endpoint `GET /api/v1/tax-portal/sync` để trigger đồng bộ.
-- [ ] 3.0 UI handoff gate done
-  - [ ] 3.1 Tái cấu trúc trang Hóa đơn điện tử thành trang "Quản lý Thuế" (Tax Management).
-  - [ ] 3.2 Implement Tabs UI:
-    - [ ] Tab 1: **Xuất hóa đơn** (Giao diện tạo và phát hành hóa đơn SInvoice).
-    - [ ] Tab 2: **Hóa đơn bán ra** (Danh sách hóa đơn đã phát hành + Đồng bộ từ Thuế).
-    - [ ] Tab 3: **Hóa đơn mua vào** (Danh sách hóa đơn đầu vào từ Thuế).
-    - [ ] Tab 4: **Cấu hình** (Gộp cấu hình SInvoice và Portal Thuế).
-- [ ] 4.0 Validate
-  - [ ] 4.1 `npm run build`
-  - [ ] 4.2 Smoke test lấy dữ liệu từ Thuế.
+- [x] 1.0 Gate 0 DB Precheck done
+  - [x] 1.1 Tạo `tax_portal_configs` (Singleton/Collection).
+  - [x] 1.2 Thêm `source`, `direction`, `tax_status` vào `einvoices`.
+- [x] 2.0 Backend workflow/API gate done
+  - [x] 2.1 Implement Viettel Tax Portal API Client (tra cứu hóa đơn mua vào/bán ra) theo stub luồng chờ map endpoint CQT thật.
+  - [x] 2.2 Endpoint `GET /api/v1/sinvoice/tax-portal/sync` để trigger đồng bộ.
+- [x] 3.0 UI handoff gate done
+  - [x] 3.1 Tái cấu trúc trang Hóa đơn điện tử thành trang "Quản lý Thuế" (Tax Management).
+  - [x] 3.2 Implement Tabs UI:
+    - [x] Tab 1: **Xuất hóa đơn** (Giao diện tạo và phát hành hóa đơn SInvoice).
+    - [x] Tab 2: **Hóa đơn bán ra** (Danh sách hóa đơn đã phát hành + Đồng bộ từ Thuế).
+    - [x] Tab 3: **Hóa đơn mua vào** (Danh sách hóa đơn đầu vào từ Thuế).
+    - [x] Tab 4: **Cấu hình** (Gộp cấu hình SInvoice và Portal Thuế).
+- [x] 4.0 Validate
+  - [x] 4.1 `npm run build`
+  - [x] 4.2 Smoke test lấy dữ liệu từ Thuế.
 - [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry
+  - [x] 5.1 Lessons learned entry
   - [ ] 5.2 Commit + push code
-  - [ ] 5.3 Summary with evidence
-  - [ ] 5.3 Summary with evidence
+  - [x] 5.3 Summary with evidence
+
+## Execution note
+- Luồng tax portal hiện đang dùng stub sync để khóa DB/API/UI và lưu dữ liệu vào `einvoices` với `source=TAX_PORTAL`. Cần map endpoint/tài liệu CQT thật ở bước tiếp theo sau khi xác nhận contract/provider details.
 
 ## Validation Evidence
-- DB precheck result:
-- Build:
-- Smoke:
+- DB precheck result: đã backup `/opt/backups/directus-staging/20260515075122/directus-staging-before-tax-portal.sql`; tạo bảng `tax_portal_configs`; thêm cột `source,direction,tax_status,seller_*,external_invoice_id,synced_at` và index/check cho `einvoices`; verify qua PostgreSQL và Directus `/fields`.
+- Build: `cd /opt/repos/liouni-erp-api && npm run build` -> PASS; `cd /opt/repos/liouni-erp-web && npx tsc --noEmit` -> PASS.
+- Smoke: PASS. Xác nhận runtime: POST/GET `/api/v1/sinvoice/tax-portal/config` hoạt động; GET `/api/v1/sinvoice/tax-portal/sync?direction=OUT|IN` trả `ok=true,count=1`; UI tab `Hóa đơn bán ra` hiển thị invoice `TOUT-*` nguồn `Cổng thuế`; UI tab `Hóa đơn mua vào` hiển thị invoice `TIN-*` nguồn `Cổng thuế`.
 
 ## Lessons Learned
-- Link: `docs/lessons-learned/<file>.md#<anchor>` or "No issue"
+- Tax portal config trên Directus được expose như singleton item, nên backend phải dùng `GET/PATCH /items/tax_portal_configs` thay vì flow collection thường (`POST /items/...` hoặc `PATCH /items/.../:id`).
 
 ## Commit/Push Status
 - API repo:

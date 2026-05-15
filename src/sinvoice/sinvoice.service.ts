@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import { throwDirectusResponseError } from '../common/utils/directus-error.util';
 
 type FileType = 'PDF' | 'XML' | 'ZIP';
+type InvoiceSource = 'SINVOICE' | 'TAX_PORTAL';
+type InvoiceDirection = 'IN' | 'OUT';
 
 @Injectable()
 export class SinvoiceService {
@@ -32,6 +34,15 @@ export class SinvoiceService {
     };
   }
 
+  private normalizeTaxPortalConfig(raw: any) {
+    return {
+      ...raw,
+      taxCode: raw.taxCode ?? raw.tax_code,
+      providerName: raw.providerName ?? raw.provider_name,
+      apiUrl: raw.apiUrl ?? raw.api_url,
+    };
+  }
+
   private authHeader(config: any) {
     return `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`;
   }
@@ -53,31 +64,126 @@ export class SinvoiceService {
   }
 
   async getConfig() {
-    const result = await this.directusRequest<{ data: any[] }>(
-      '/items/sinvoice_configs?limit=1&filter=' +
-        encodeURIComponent(JSON.stringify({ is_active: { _eq: true } })),
-    );
-    const data = result.data as any;
-    const row = Array.isArray(data) ? data[0] : data;
+    const row = await this.getRawConfig();
     if (!row) throw new BadRequestException('Chưa cấu hình SInvoice trong hệ thống');
     return this.normalizeConfig(row);
   }
 
+  async getRawConfig() {
+    const result = await this.directusRequest<{ data: any }>('/items/sinvoice_configs');
+    return result?.data;
+  }
+
+  async getConfigEndpoint() {
+    const row = await this.getRawConfig();
+    if (!row || !row.supplier_tax_code) return null;
+    return {
+      supplierTaxCode: row.supplier_tax_code,
+      username: row.username,
+      password: row.password,
+      apiUrl: row.api_url,
+      environment: row.environment,
+    };
+  }
+
+  async saveConfig(dto: any) {
+    const data = {
+      supplier_tax_code: dto.supplierTaxCode ?? dto.supplier_tax_code,
+      username: dto.username,
+      password: dto.password,
+      app_key: dto.appKey ?? dto.app_key ?? null,
+      api_url: dto.apiUrl ?? dto.api_url ?? 'https://demo-sinvoice.viettel.vn:8443/InvoiceAPI',
+      environment: dto.environment ?? 'demo',
+      is_active: true,
+    };
+    const res = await this.directusRequest('/items/sinvoice_configs', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return { ok: true, data: res };
+  }
+
+  async resetConfig() {
+    const data = {
+      supplier_tax_code: null,
+      username: null,
+      password: null,
+      app_key: null,
+      api_url: null,
+      environment: null,
+      is_active: false,
+    };
+    await this.directusRequest('/items/sinvoice_configs', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return { ok: true };
+  }
+
+  async getTaxPortalRawConfig() {
+    const result = await this.directusRequest<{ data: any }>('/items/tax_portal_configs');
+    return result?.data ?? null;
+  }
+
+  async getTaxPortalConfig() {
+    const row = await this.getTaxPortalRawConfig();
+    if (!row || (!row.username && !row.tax_code && !row.api_url && !row.is_active)) return null;
+    return this.normalizeTaxPortalConfig(row);
+  }
+
+  async saveTaxPortalConfig(dto: any) {
+    const data = {
+      tax_code: dto.taxCode ?? dto.tax_code,
+      username: dto.username,
+      password: dto.password,
+      provider_name: dto.providerName ?? dto.provider_name ?? 'VIETTEL_TAX_PORTAL',
+      api_url: dto.apiUrl ?? dto.api_url ?? null,
+      is_active: dto.isActive ?? dto.is_active ?? true,
+    };
+
+    const res = await this.directusRequest('/items/tax_portal_configs', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return { ok: true, data: res };
+  }
+
+  async resetTaxPortalConfig() {
+    await this.directusRequest('/items/tax_portal_configs', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        tax_code: null,
+        username: null,
+        password: null,
+        provider_name: 'VIETTEL_TAX_PORTAL',
+        api_url: null,
+        is_active: false,
+      }),
+    });
+    return { ok: true };
+  }
+
   async health() {
     const config = await this.getConfig();
+    const taxPortalConfig = await this.getTaxPortalConfig();
     return {
       ok: true,
       environment: config.environment ?? 'demo',
       supplierTaxCode: config.supplierTaxCode,
       apiUrl: config.apiUrl,
       username: config.username,
+      taxPortalConfigured: Boolean(taxPortalConfig?.username),
+      taxPortalApiUrl: taxPortalConfig?.apiUrl ?? null,
+      taxPortalTaxCode: taxPortalConfig?.taxCode ?? null,
     };
   }
 
-  async listLocalInvoices() {
-    const result = await this.directusRequest<{ data: any[] }>(
-      '/items/einvoices?sort[]=-created_at&limit=50',
-    );
+  async listLocalInvoices(query: any = {}) {
+    const filters: string[] = [];
+    if (query.source) filters.push(`"source":{"_eq":"${query.source}"}`);
+    if (query.direction) filters.push(`"direction":{"_eq":"${query.direction}"}`);
+    const filter = filters.length > 0 ? `&filter={"_and":[${filters.join(',')}]}` : '';
+    const result = await this.directusRequest<{ data: any[] }>(`/items/einvoices?sort[]=-created_at&limit=100${filter}`);
     return result.data ?? [];
   }
 
@@ -106,6 +212,63 @@ export class SinvoiceService {
       throw new InternalServerErrorException(payload?.message ?? payload?.error ?? 'Lỗi khi gọi API Viettel');
     }
     return payload;
+  }
+
+  private buildTaxPortalStubInvoices(direction: InvoiceDirection, cfg: any, startDate?: string, endDate?: string) {
+    const now = new Date().toISOString();
+    const prefix = direction === 'IN' ? 'TIN' : 'TOUT';
+    const partnerName = direction === 'IN' ? 'Nhà cung cấp mẫu từ CQT' : 'Khách hàng mẫu từ CQT';
+    return [
+      {
+        external_invoice_id: `${prefix}-${Date.now()}`,
+        document_no: `${prefix}-${Date.now().toString().slice(-6)}`,
+        invoice_no: `${direction === 'IN' ? 'MV' : 'BR'}-${Date.now().toString().slice(-5)}`,
+        invoice_date: now,
+        source: 'TAX_PORTAL',
+        direction,
+        tax_status: 'SYNCED_STUB',
+        status: 'SYNCED',
+        seller_name: direction === 'IN' ? partnerName : 'Công ty Liouni',
+        seller_tax_code: direction === 'IN' ? '0312345678' : cfg?.taxCode ?? null,
+        seller_address: 'Việt Nam',
+        buyer_name: direction === 'OUT' ? partnerName : 'Công ty Liouni',
+        buyer_tax_code: direction === 'OUT' ? '0309876543' : cfg?.taxCode ?? null,
+        buyer_address: 'Việt Nam',
+        total_amount: direction === 'IN' ? 2200000 : 3300000,
+        vat_amount: direction === 'IN' ? 200000 : 300000,
+        request_payload: { startDate, endDate, direction },
+        response_payload: { note: 'Stub data chờ tích hợp endpoint CQT thật' },
+        synced_at: now,
+      },
+    ];
+  }
+
+  async syncTaxPortal(query: any = {}) {
+    const config = await this.getTaxPortalConfig();
+    if (!config?.username || !config?.password) {
+      throw new BadRequestException('Chưa cấu hình tài khoản cổng thuế');
+    }
+
+    const direction = (query.direction ?? 'OUT') as InvoiceDirection;
+    if (!['IN', 'OUT'].includes(direction)) {
+      throw new BadRequestException('direction phải là IN hoặc OUT');
+    }
+
+    const invoices = this.buildTaxPortalStubInvoices(direction, config, query.startDate, query.endDate);
+    const saved = [] as any[];
+    for (const invoice of invoices) {
+      const persisted = await this.upsertExternalEinvoice(invoice);
+      saved.push(persisted);
+    }
+
+    return {
+      ok: true,
+      source: 'TAX_PORTAL',
+      direction,
+      count: saved.length,
+      items: saved,
+      note: 'Đang dùng stub để khóa luồng ERP trước khi map endpoint CQT thật từ tài liệu Viettel.',
+    };
   }
 
   async createInvoice(invoiceData?: any) {
@@ -189,9 +352,54 @@ export class SinvoiceService {
     return { health, create, list };
   }
 
+  private async upsertExternalEinvoice(invoice: any) {
+    const externalId = invoice.external_invoice_id;
+    const existing = externalId
+      ? await this.directusRequest<{ data: any[] }>(`/items/einvoices?limit=1&filter={"external_invoice_id":{"_eq":"${externalId}"}}`)
+      : { data: [] };
+
+    const data = {
+      document_no: invoice.document_no,
+      supplier_tax_code: invoice.supplier_tax_code ?? invoice.seller_tax_code ?? invoice.buyer_tax_code ?? null,
+      invoice_no: invoice.invoice_no ?? null,
+      invoice_date: invoice.invoice_date ?? null,
+      buyer_name: invoice.buyer_name ?? null,
+      buyer_tax_code: invoice.buyer_tax_code ?? null,
+      buyer_address: invoice.buyer_address ?? null,
+      seller_name: invoice.seller_name ?? null,
+      seller_tax_code: invoice.seller_tax_code ?? null,
+      seller_address: invoice.seller_address ?? null,
+      total_amount: Number(invoice.total_amount ?? 0),
+      vat_amount: Number(invoice.vat_amount ?? 0),
+      status: invoice.status ?? 'SYNCED',
+      source: invoice.source ?? 'TAX_PORTAL',
+      direction: invoice.direction ?? null,
+      tax_status: invoice.tax_status ?? null,
+      external_invoice_id: externalId ?? null,
+      synced_at: invoice.synced_at ?? new Date().toISOString(),
+      request_payload: invoice.request_payload ?? null,
+      response_payload: invoice.response_payload ?? null,
+      error_message: invoice.error_message ?? null,
+    };
+
+    if (existing.data?.[0]?.id) {
+      return this.directusRequest(`/items/einvoices/${existing.data[0].id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    }
+
+    return this.directusRequest('/items/einvoices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   private async persistEinvoice(requestPayload: any, responsePayload: any, status: string) {
     const config = await this.getConfig();
     const data = {
+      source: 'SINVOICE' as InvoiceSource,
+      direction: 'OUT' as InvoiceDirection,
       supplier_tax_code: config.supplierTaxCode,
       document_no: requestPayload?.generalInvoiceInfo?.invoiceNo ?? `DEMO-${Date.now()}`,
       invoice_no: responsePayload?.result?.invoiceNo ?? responsePayload?.invoiceNo ?? null,
@@ -200,13 +408,17 @@ export class SinvoiceService {
       buyer_name: requestPayload?.buyerInfo?.buyerName ?? requestPayload?.buyerInfo?.buyerLegalName ?? null,
       buyer_tax_code: requestPayload?.buyerInfo?.buyerTaxCode ?? null,
       buyer_address: requestPayload?.buyerInfo?.buyerAddressLine ?? null,
+      seller_name: 'Công ty Liouni',
+      seller_tax_code: config.supplierTaxCode,
       total_amount: Number(requestPayload?.summarizeInfo?.totalAmountWithTax ?? 0),
       vat_amount: Number(requestPayload?.summarizeInfo?.totalTaxAmount ?? 0),
       status,
+      tax_status: responsePayload?.result?.status ?? null,
       viettel_transaction_id: responsePayload?.result?.transactionUuid ?? responsePayload?.transactionUuid ?? null,
       request_payload: requestPayload,
       response_payload: responsePayload,
       error_message: status === 'ERROR' ? JSON.stringify(responsePayload) : null,
+      synced_at: new Date().toISOString(),
     };
     await this.directusRequest('/items/einvoices', {
       method: 'POST',
