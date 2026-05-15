@@ -539,19 +539,76 @@ export class SinvoiceService {
   }
 
   /**
-   * @deprecated Legacy GDT crawling flow. Replaced by Viettel v2.49 API surface in Controller.
-   * Keeping for reference only.
+   * Sync invoices from GDT (General Department of Taxation) portal.
+   * Logic restored from V1 legacy flow as requested by user.
    */
   async syncTaxPortal(query: TaxPortalSyncQueryDto = {}) {
-    this.logger.warn('Legacy syncTaxPortal called. Logic is preserved as comment for reference only.');
-    return {
-      ok: false,
-      message: 'Legacy GDT crawl flow has been disabled. Please use Viettel v2.49 API via Controller.',
-    };
-    /*
     const config = await this.getTaxPortalConfig();
-    ...
-    */
+    if (!config?.gdtJwt || !config?.gdtCookie) {
+      throw new BadRequestException('Chưa cấu hình Token và Cookie Tổng cục Thuế trên giao diện');
+    }
+
+    const direction = (query.direction ?? 'OUT') as InvoiceDirection;
+    if (!['IN', 'OUT'].includes(direction)) {
+      throw new BadRequestException('direction phải là IN hoặc OUT');
+    }
+
+    // Normalize Tax Portal PageSize (Accounting Guardrail: 15, 30, 50)
+    let size = this.normalizeTaxPortalPageSize(query);
+
+    const { startDate, endDate } = this.normalizeTaxPortalDateRange(query);
+    const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
+    
+    this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction} (size=${size})`);
+
+    const allInvoices = [];
+    const invoiceNos = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      
+      // Throttling: Random delay 3-5s between chunks (except first) to avoid GDT rate limiting
+      if (i > 0) {
+        const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
+        this.logger.log(`Throttling: Sleeping ${delay}ms before next GDT chunk...`);
+        await this.sleep(delay);
+      }
+
+      const chunkInvoices = await this.fetchFromGdtApi(
+        direction, 
+        config, 
+        chunk.start, 
+        chunk.end, 
+        size
+      );
+
+      for (const invoice of chunkInvoices) {
+        const persisted = await this.upsertExternalEinvoice(invoice);
+        const persistedData = (persisted as any)?.data;
+        if (persistedData) {
+          allInvoices.push(persistedData);
+          if (invoiceNos.length < 10) {
+            invoiceNos.push(persistedData.invoice_no || persistedData.document_no);
+          }
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      source: 'TAX_PORTAL' as InvoiceSource,
+      direction,
+      pageSize: size,
+      requested_range: {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      },
+      chunk_count: chunks.length,
+      count: allInvoices.length,
+      synced_at: new Date().toISOString(),
+      invoice_nos: invoiceNos,
+      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi (chunking hàng tháng).`,
+    };
   }
 
   private async fetchFromGdtApi(

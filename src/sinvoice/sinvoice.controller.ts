@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
-import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 import { ViettelV2Service } from '../viettel-v2/viettel-v2.service';
 import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from '../viettel-v2/dto/viettel-v2.dto';
 
@@ -57,10 +56,13 @@ export class SinvoiceController {
 
   @Get('sync')
   async getInvoices(@Query() query: any) {
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
     const dto: SyncViettelV2InboundDto = {
       supplierTaxCode: query?.supplierTaxCode,
-      issueStartDate: query?.issueStartDate ?? query?.startDate,
-      issueEndDate: query?.issueEndDate ?? query?.endDate,
+      issueStartDate: query?.startDate ?? query?.issueStartDate ?? firstDayOfMonth.toISOString(),
+      issueEndDate: query?.endDate ?? query?.issueEndDate ?? now.toISOString(),
       pageNum: query?.pageNum,
       rowPerPage: query?.rowPerPage,
       inputSource: query?.inputSource,
@@ -108,15 +110,14 @@ export class SinvoiceController {
 
   @Get('tax-portal/sync')
   async syncTaxPortal(@Query() query: any) {
-    const direction = query?.direction ?? 'IN';
-    const dto: SyncViettelV2InboundDto = {
-      supplierTaxCode: query?.supplierTaxCode,
-      issueStartDate: query?.startDate ?? query?.issueStartDate,
-      issueEndDate: query?.endDate ?? query?.issueEndDate,
-      pageNum: query?.pageNum ?? 0,
-      rowPerPage: query?.pageSize ?? query?.rowPerPage ?? 100,
+    const dto: TaxPortalSyncQueryDto = {
+      direction: query?.direction ?? 'IN',
+      startDate: query?.startDate,
+      endDate: query?.endDate,
+      pageSize: query?.pageSize ? Number(query.pageSize) : undefined,
+      size: query?.size ? Number(query.size) : undefined,
     };
-    return this.viettelV2Service.syncInbound(dto, direction);
+    return this.sinvoiceService.syncTaxPortal(dto);
   }
 
   @Post('demo-flow')
