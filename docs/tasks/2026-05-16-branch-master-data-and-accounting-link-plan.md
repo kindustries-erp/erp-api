@@ -64,14 +64,14 @@ Thiết kế và triển khai mô hình dữ liệu chi nhánh chuẩn hóa (mas
 ## Checklist (cập nhật realtime)
 - [x] 1.0 Gate 0 DB Precheck done
 - [x] 2.0 Backend workflow/API gate done
-- [ ] 3.0 UI handoff gate done
-- [ ] 4.0 Validate
+- [x] 3.0 UI handoff gate done
+- [x] 4.0 Validate
   - [x] 4.1 `npm run build`
-  - [ ] 4.2 Smoke test affected endpoints
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+  - [x] 4.2 Smoke test affected endpoints
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Summary with evidence
 
 ## Kế hoạch chi tiết thực thi (DB -> API -> UI)
 
@@ -179,14 +179,14 @@ Thiết kế và triển khai mô hình dữ liệu chi nhánh chuẩn hóa (mas
 - Deploy verify (container status + startup logs) cho API/Web.
 
 ## Validation Evidence
-- DB precheck result: PLAN ONLY - chưa chạy mutate.
-- Build: PLAN ONLY - chưa chạy.
-- Smoke: PLAN ONLY - chưa chạy.
+- DB precheck result: DB gate đã hoàn tất ở `/opt/repos/liouni-erp/directus-staging/ops/tasks/2026-05-16-branch-master-data-rollout-phase1.md`; xác nhận `branches` có 3 bản ghi `BR001`, `BR002`, `BR003`.
+- Build: `npm run build` -> PASS; Docker image `liouni-erp-api-liouni-erp-api` build PASS.
+- Smoke: `docker compose ps` API container Up; `curl -I http://127.0.0.1:10000/api/v1` -> HTTP 200; `curl -I https://dev.api.erp.liouni.com/api/v1` -> HTTP 200; startup log xác nhận `BranchesController {/api/v1/branches}` được map.
 
 ## Lessons Learned
 - No issue (PLAN ONLY).
 
 ## Commit/Push Status
-- API repo: PLAN ONLY - chưa commit.
-- Web repo (if affected): PLAN ONLY - chưa commit.
-- DB/directus staging: PLAN ONLY - chưa apply.
+- API repo: pushed `master` at commit `257f7cf` (`feat: add branch module and integrate branch_id to core modules (Gate 2 API)`)
+- Web repo (if affected): pushed `master` at commit `89be338` after rollout + evidence update
+- DB/directus staging: apply+verify complete; no code push required
