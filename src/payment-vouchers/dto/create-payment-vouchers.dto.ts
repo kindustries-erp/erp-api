@@ -120,6 +120,11 @@ export class CreatePaymentVouchersDto {
   @ApiPropertyOptional() @IsOptional() @IsString() amount_in_words?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branch_id?: string;
+
   // Snapshot — backend tự fill nếu không truyền
   @ApiPropertyOptional()
   @IsOptional()

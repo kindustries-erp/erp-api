@@ -42,6 +42,11 @@ export class JournalEntryQueryDto {
   @IsString()
   account_id?: string;
 
+  @ApiPropertyOptional({ description: 'UUID chi nhánh (branch)' })
+  @IsOptional()
+  @IsString()
+  branch_id?: string;
+
   @ApiPropertyOptional({
     example: '2026-01-01',
     description: 'Từ ngày (YYYY-MM-DD)',
