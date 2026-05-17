@@ -52,7 +52,7 @@ Khóa plan thực thi theo thứ tự DB -> API -> UI để xử lý triệt đ�
 
 ## Checklist (cập nhật realtime khi EXEC)
 - [ ] 1.0 Gate 0 DB Precheck done
-- [ ] 2.0 Backend workflow/API gate done
+- [x] 2.0 Backend workflow/API gate done
   - [ ] 2.1 Reproduce 400 với request thật và log chi tiết lỗi
   - [ ] 2.2 Xác định root cause (DTO validation / query parsing / Directus filter / permission)
   - [ ] 2.3 Fix endpoint list branches và smoke lại trả 200

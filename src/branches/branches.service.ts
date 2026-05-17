@@ -52,24 +52,19 @@ export class BranchesService {
         ];
       }
 
-      const [items, metaRows] = await Promise.all([
-        this.directus.request(
-          readItems('branches', {
-            filter,
-            sort: ['code'],
-            limit: pageSize,
-            offset,
-          })
-        ),
-        this.directus.request(
-          readItems('branches', {
-            filter,
-            aggregate: { count: ['id'] },
-          } as any)
-        ),
-      ]);
+      const response = await this.directus.request(
+        readItems('branches', {
+          filter,
+          sort: ['code'],
+          limit: pageSize,
+          offset,
+          meta: 'filter_count',
+        } as any)
+      );
 
-      const total = Number(metaRows?.[0]?.count?.id ?? 0);
+      const normalizedResponse: any = response;
+      const items = Array.isArray(normalizedResponse) ? normalizedResponse : (normalizedResponse?.data ?? []);
+      const total = Number(normalizedResponse?.meta?.filter_count ?? items.length ?? 0);
       return {
         items,
         total,
