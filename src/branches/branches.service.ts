@@ -36,48 +36,25 @@ export class BranchesService {
   async findAll(query: BranchQueryDto, token?: string) {
     try {
       const filter: any = {};
-
+      
       if (query.is_active !== undefined) {
-        filter.is_active = { _eq: query.is_active };
+          filter.is_active = { _eq: query.is_active };
       }
 
       if (query.search) {
-        filter._or = [
-          { code: { _icontains: query.search } },
-          { name: { _icontains: query.search } },
-        ];
+          filter._or = [
+              { code: { _icontains: query.search } },
+              { name: { _icontains: query.search } }
+          ];
       }
-
-      const page = query.page ?? 1;
-      const pageSize = query.pageSize ?? 100;
-      const offset = (page - 1) * pageSize;
-
-      const allowedSortFields = new Set(['code', 'name', 'created_at', 'id']);
-      const safeSortField = allowedSortFields.has(query.sort ?? '') ? (query.sort as string) : 'code';
-      const safeOrder = query.order === 'desc' ? 'desc' : 'asc';
-      const sort = [`${safeOrder === 'desc' ? '-' : ''}${safeSortField}`];
 
       const result = await this.directus.request(
         readItems('branches', {
           filter,
-          sort,
-          limit: pageSize,
-          offset,
-          meta: ['filter_count'],
+          sort: ['code'],
         })
       );
-
-      const items = (result as any)?.data ?? result;
-      const total = (result as any)?.meta?.filter_count ?? (Array.isArray(items) ? items.length : 0);
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-      return {
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages,
-      };
+      return result;
     } catch (error) {
       this.logger.error(`Error fetching branches: ${error.message}`);
       throwDirectusResponseError(error, 'Failed to fetch branches');
