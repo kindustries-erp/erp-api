@@ -77,9 +77,4 @@ export class UpdateEmployeeDto {
   @ValidateIf((o) => o.role_id !== null)
   @IsString()
   role_id?: string | null;
-
-  @IsOptional()
-  @ValidateIf((o) => o.branch_id !== null)
-  @IsString()
-  branch_id?: string | null;
 }

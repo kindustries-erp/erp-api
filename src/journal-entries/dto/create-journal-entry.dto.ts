@@ -74,10 +74,6 @@ export class CreateJournalEntryDto {
   @IsString()
   reference_id?: string;
 
-  @ApiPropertyOptional({ description: 'UUID chi nhánh (branch)' })
-  @IsOptional()
-  @IsString()
-  branch_id?: string;
 
   @ApiProperty({
     description:

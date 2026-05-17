@@ -29,7 +29,6 @@ import { JournalEntriesModule } from './journal-entries/journal-entries.module';
 import { ArWorkbenchModule } from './ar-workbench/ar-workbench.module';
 import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { ViettelV2Module } from './viettel-v2/viettel-v2.module';
-import { BranchesModule } from './branches/branches.module';
 
 @Module({
   imports: [
@@ -64,7 +63,6 @@ import { BranchesModule } from './branches/branches.module';
     ArWorkbenchModule,
     SinvoiceModule,
     ViettelV2Module,
-    BranchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

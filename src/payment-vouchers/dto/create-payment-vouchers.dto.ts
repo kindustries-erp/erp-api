@@ -123,7 +123,7 @@ export class CreatePaymentVouchersDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  branch_id?: string;
+
 
   // Snapshot — backend tự fill nếu không truyền
   @ApiPropertyOptional()

@@ -40,8 +40,4 @@ export class UpdateCompanyBankAccountDto {
   @IsOptional()
   @IsString()
   note?: string;
-
-  @IsOptional()
-  @IsString()
-  branch_id?: string;
 }

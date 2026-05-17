@@ -46,8 +46,4 @@ export class CreateCompanyBankAccountDto {
   @IsOptional()
   @IsString()
   note?: string;
-
-  @IsOptional()
-  @IsString()
-  branch_id?: string;
 }
