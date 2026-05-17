@@ -12,7 +12,6 @@ import {
 import {
   createDirectus,
   readItem,
-  readItems,
   createItem,
   updateItem,
   deleteItem,
@@ -22,7 +21,10 @@ import {
 import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 import { CreateChartOfAccountDto } from './dto/create-chart-of-account.dto';
 import { UpdateChartOfAccountDto } from './dto/update-chart-of-account.dto';
-import { rethrowHttpException } from '../common/utils/directus-error.util';
+import {
+  rethrowHttpException,
+  throwDirectusResponseError,
+} from '../common/utils/directus-error.util';
 
 @Injectable()
 export class ChartOfAccountsService {
@@ -61,39 +63,40 @@ export class ChartOfAccountsService {
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
-      const allowedSortFields = new Set([
-        'account_code',
-        'account_name',
-        'created_at',
-        'updated_at',
-      ]);
-      const requestedSort = query.sort || '-created_at';
-      const normalizedSortField = requestedSort.replace(/^-/, '');
-      const sort = allowedSortFields.has(normalizedSortField)
-        ? requestedSort
-        : '-created_at';
+      const sort = query.sort || '-created_at';
       const offset = (page - 1) * pageSize;
 
       const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
-      const userClient = createDirectus(directusUrl)
-        .with(staticToken(userToken))
-        .with(rest());
+      const token = userToken;
 
-      const result = await (userClient as any).request(
-        (readItems as any)(this.collection, {
-          limit: pageSize,
-          offset,
-          sort: [sort],
-          search: query.search,
-          meta: 'filter_count',
-        }),
-      );
+      // Dùng native fetch để gọi thẳng REST API và lấy cả block "meta"
+      const url = new URL(`/items/${this.collection}`, directusUrl);
+      url.searchParams.append('limit', pageSize.toString());
+      url.searchParams.append('offset', offset.toString());
+      url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('sort[]', sort);
+      if (query.search) {
+        url.searchParams.append('search', query.search);
+      }
 
-      const total = Number(result?.meta?.filter_count ?? 0);
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        await throwDirectusResponseError(
+          response,
+          'Không thể lấy danh sách tài khoản kế toán',
+        );
+      }
+
+      const result = await response.json();
+      const total = result.meta?.filter_count || 0;
       const totalPages = Math.ceil(total / pageSize);
 
+      // Format chuẩn PaginatedResponse
       return {
-        items: Array.isArray(result?.data) ? result.data : [],
+        items: result.data || [],
         total,
         page,
         pageSize,

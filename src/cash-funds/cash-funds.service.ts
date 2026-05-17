@@ -10,7 +10,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   createDirectus,
   readItem,
-  readItems,
   createItem,
   updateItem,
   deleteItem,
@@ -21,7 +20,10 @@ import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateCashFundsDto } from './dto/create-cash-funds.dto';
 import { UpdateCashFundsDto } from './dto/update-cash-funds.dto';
-import { rethrowHttpException } from '../common/utils/directus-error.util';
+import {
+  rethrowHttpException,
+  throwDirectusResponseError,
+} from '../common/utils/directus-error.util';
 
 @Injectable()
 export class CashFundsService {
@@ -63,27 +65,31 @@ export class CashFundsService {
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
-      const allowedSortFields = new Set(['created_at', 'updated_at', 'fund_code', 'fund_name']);
-      const requestedSort = query.sort || '-created_at';
-      const normalizedSortField = requestedSort.replace(/^-/, '');
-      const sort = allowedSortFields.has(normalizedSortField)
-        ? requestedSort
-        : '-created_at';
+      const sort = query.sort || '-created_at';
       const offset = (page - 1) * pageSize;
-      const client = this.getClient(userToken);
-      const result = await (client as any).request(
-        (readItems as any)(this.collection, {
-          limit: pageSize,
-          offset,
-          sort: [sort],
-          search: query.search,
-          meta: 'filter_count',
-        }),
-      );
+      const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
 
-      const total = Number(result?.meta?.filter_count ?? 0);
+      const url = new URL(`/items/${this.collection}`, directusUrl);
+      url.searchParams.append('limit', pageSize.toString());
+      url.searchParams.append('offset', offset.toString());
+      url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('sort[]', sort);
+      if (query.search) url.searchParams.append('search', query.search);
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      if (!response.ok) {
+        await throwDirectusResponseError(
+          response,
+          'Không thể lấy danh sách quỹ tiền mặt',
+        );
+      }
+
+      const result = await response.json();
+      const total = result.meta?.filter_count || 0;
       return {
-        items: Array.isArray(result?.data) ? result.data : [],
+        items: result.data || [],
         total,
         page,
         pageSize,
