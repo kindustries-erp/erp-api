@@ -12,6 +12,7 @@ import {
 import {
   createDirectus,
   readItem,
+  readItems,
   createItem,
   updateItem,
   deleteItem,
@@ -21,10 +22,7 @@ import {
 import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 import { CreateCompanyBankAccountDto } from './dto/create-company-bank-account.dto';
 import { UpdateCompanyBankAccountDto } from './dto/update-company-bank-account.dto';
-import {
-  rethrowHttpException,
-  throwDirectusResponseError,
-} from '../common/utils/directus-error.util';
+import { rethrowHttpException } from '../common/utils/directus-error.util';
 
 @Injectable()
 export class CompanyBankAccountsService {
@@ -66,44 +64,41 @@ export class CompanyBankAccountsService {
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
-      const sort = query.sort || '-created_at';
+      const allowedSortFields = new Set([
+        'bank_account_code',
+        'bank_name',
+        'created_at',
+        'updated_at',
+      ]);
+      const requestedSort = query.sort || '-created_at';
+      const normalizedSortField = requestedSort.replace(/^-/, '');
+      const sort = allowedSortFields.has(normalizedSortField)
+        ? requestedSort
+        : '-created_at';
       const offset = (page - 1) * pageSize;
 
       const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
-      const token = userToken;
+      const userClient = createDirectus(directusUrl)
+        .with(staticToken(userToken))
+        .with(rest());
 
-      // Dùng native fetch để gọi thẳng REST API và lấy cả block "meta"
-      const url = new URL(`/items/${this.collection}`, directusUrl);
-      url.searchParams.append('limit', pageSize.toString());
-      url.searchParams.append('offset', offset.toString());
-      url.searchParams.append('meta', 'filter_count');
-      url.searchParams.append('sort[]', sort);
-      if (query.search) {
-        url.searchParams.append('search', query.search);
-      }
+      const result = await (userClient as any).request(
+        (readItems as any)(this.collection, {
+          limit: pageSize,
+          offset,
+          sort: [sort],
+          search: query.search,
+          meta: 'filter_count',
+        }),
+      );
 
-      const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        await throwDirectusResponseError(
-          response,
-          'Không thể lấy danh sách tài khoản ngân hàng',
-        );
-      }
-
-      const result = await response.json();
-      const total = result.meta?.filter_count || 0;
-      const totalPages = Math.ceil(total / pageSize);
-
-      // Format chuẩn PaginatedResponse
+      const total = Number(result?.meta?.filter_count ?? 0);
       return {
-        items: result.data || [],
+        items: Array.isArray(result?.data) ? result.data : [],
         total,
         page,
         pageSize,
-        totalPages,
+        totalPages: Math.ceil(total / pageSize),
       };
     } catch (error: any) {
       this.logger.error('Lỗi khi lấy danh sách tài khoản ngân hàng', error);

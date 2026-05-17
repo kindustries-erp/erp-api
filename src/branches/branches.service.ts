@@ -1,16 +1,26 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { DIRECTUS_CLIENT } from '../directus/directus.provider';
+import { ConfigService } from '@nestjs/config';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchQueryDto } from './dto/branch-query.dto';
 import { DirectusClient, RestClient, readItems, createItem, updateItem, deleteItem, readItem } from '@directus/sdk';
+import { createDirectus, rest, staticToken } from '@directus/sdk';
 import { throwDirectusResponseError } from '../common/utils/directus-error.util';
 
 @Injectable()
 export class BranchesService {
   private readonly logger = new Logger(BranchesService.name);
 
-  constructor(@Inject(DIRECTUS_CLIENT) private readonly directus: DirectusClient<any> & RestClient<any>) {}
+  constructor(
+    @Inject(DIRECTUS_CLIENT) private readonly directus: DirectusClient<any> & RestClient<any>,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private getUserClient(token: string) {
+    const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
+    return createDirectus(directusUrl).with(staticToken(token)).with(rest());
+  }
 
   async create(createBranchDto: CreateBranchDto, token?: string) {
     try {
@@ -35,9 +45,16 @@ export class BranchesService {
 
   async findAll(query: BranchQueryDto, token?: string) {
     try {
+      if (!token) {
+        throw new BadRequestException('Missing user token');
+      }
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
       const offset = (page - 1) * pageSize;
+      const allowedSortFields = new Set(['code', 'name', 'created_at', 'updated_at']);
+      const requestedSort = (query as any).sort || 'code';
+      const normalizedSortField = requestedSort.replace(/^-/, '');
+      const sort = allowedSortFields.has(normalizedSortField) ? requestedSort : 'code';
 
       const filter: any = {};
 
@@ -52,14 +69,15 @@ export class BranchesService {
         ];
       }
 
-      const response = await this.directus.request(
-        readItems('branches', {
+      const userClient = this.getUserClient(token);
+      const response = await (userClient as any).request(
+        (readItems as any)('branches', {
           filter,
-          sort: ['code'],
+          sort: [sort],
           limit: pageSize,
           offset,
           meta: 'filter_count',
-        } as any)
+        })
       );
 
       const normalizedResponse: any = response;
