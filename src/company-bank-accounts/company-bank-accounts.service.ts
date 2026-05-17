@@ -66,7 +66,16 @@ export class CompanyBankAccountsService {
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
-      const sort = query.sort || '-created_at';
+
+      const allowedSortFields = new Set([
+        'id', 'bank_account_code', 'bank_name', 'bank_branch', 'account_number', 'account_holder', 'currency', 'accounting_account_id', 'is_active', 'created_at', 'updated_at'
+      ]);
+      let sort = query.sort || '-created_at';
+      const cleanSort = sort.startsWith('-') ? sort.substring(1) : sort;
+      if (!allowedSortFields.has(cleanSort)) {
+        sort = '-created_at';
+      }
+
       const offset = (page - 1) * pageSize;
 
       const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
