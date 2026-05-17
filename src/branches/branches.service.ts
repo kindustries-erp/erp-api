@@ -35,48 +35,26 @@ export class BranchesService {
 
   async findAll(query: BranchQueryDto, token?: string) {
     try {
-      const page = query.page || 1;
-      const pageSize = query.pageSize || 20;
-      const offset = (page - 1) * pageSize;
-
       const filter: any = {};
-
+      
       if (query.is_active !== undefined) {
-        filter.is_active = { _eq: query.is_active };
+          filter.is_active = { _eq: query.is_active };
       }
 
       if (query.search) {
-        filter._or = [
-          { code: { _icontains: query.search } },
-          { name: { _icontains: query.search } },
-        ];
+          filter._or = [
+              { code: { _icontains: query.search } },
+              { name: { _icontains: query.search } }
+          ];
       }
 
-      const [items, metaRows] = await Promise.all([
-        this.directus.request(
-          readItems('branches', {
-            filter,
-            sort: ['code'],
-            limit: pageSize,
-            offset,
-          })
-        ),
-        this.directus.request(
-          readItems('branches', {
-            filter,
-            aggregate: { count: ['id'] },
-          } as any)
-        ),
-      ]);
-
-      const total = Number(metaRows?.[0]?.count?.id ?? 0);
-      return {
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize),
-      };
+      const result = await this.directus.request(
+        readItems('branches', {
+          filter,
+          sort: ['code'],
+        })
+      );
+      return result;
     } catch (error) {
       this.logger.error(`Error fetching branches: ${error.message}`);
       throwDirectusResponseError(error, 'Failed to fetch branches');

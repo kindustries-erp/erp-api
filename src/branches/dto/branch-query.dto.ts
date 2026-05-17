@@ -1,5 +1,4 @@
-import { Type } from 'class-transformer';
-import { IsOptional, IsString, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BranchQueryDto {
@@ -10,22 +9,6 @@ export class BranchQueryDto {
 
   @ApiPropertyOptional({ description: 'Filter by active status' })
   @IsOptional()
-  @Type(() => Boolean)
   @IsBoolean()
   is_active?: boolean;
-
-  @ApiPropertyOptional({ description: 'Page number', default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({ description: 'Page size', default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(200)
-  pageSize?: number;
 }
