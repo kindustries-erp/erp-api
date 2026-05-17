@@ -25,9 +25,4 @@ export class ViettelV2Controller {
   async listLocal(@Query() query: any) {
     return this.viettelV2Service.listLocal(query);
   }
-
-  @Get('templates')
-  async getTemplates() {
-    return this.viettelV2Service.getTemplates();
-  }
 }
