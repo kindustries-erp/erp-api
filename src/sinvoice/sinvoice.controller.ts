@@ -1,57 +1,47 @@
 import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
 import { ViettelV2Service } from '../viettel-v2/viettel-v2.service';
-import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from '../viettel-v2/dto/viettel-v2.dto';
 
 @Controller('sinvoice')
 export class SinvoiceController {
   constructor(
     private readonly sinvoiceService: SinvoiceService,
-    private readonly viettelV2Service: ViettelV2Service,
+    private readonly viettelV2Service: ViettelV2Service
   ) {}
 
   @Get('health')
   async health() {
-    const health = await this.viettelV2Service.health();
-    return {
-      ...health,
-      surface: 'SINVOICE',
-      legacyMode: 'COMMENT_ONLY',
-      hiddenByDefault: false,
-    };
+    return this.viettelV2Service.health();
   }
 
   @Get('local')
-  async listLocalInvoices(@Query() query: any) {
-    const result = await this.viettelV2Service.listLocal(query);
-    return {
-      ...result,
-      hiddenByDefault: false,
-      surface: 'SINVOICE',
-    };
+  async listLocal(@Query() query: any) {
+    return this.viettelV2Service.listLocal(query);
+  }
+
+  @Get('local/draft')
+  async listLocalDraft(@Query() query: any) {
+    return this.viettelV2Service.listLocal({ ...query, status: 'DRAFT', source: 'SINVOICE', direction: 'OUT' });
+  }
+
+  @Get('local/issued')
+  async listLocalIssued(@Query() query: any) {
+    return this.viettelV2Service.listLocal({ ...query, status: 'ISSUED', source: 'SINVOICE', direction: 'OUT' });
+  }
+
+  @Get('sync-draft')
+  async syncDraft(@Query() query: any) {
+    return this.viettelV2Service.syncDraft(query);
+  }
+
+  @Get('sync-issued')
+  async syncIssued(@Query() query: any) {
+    return this.viettelV2Service.syncIssued(query);
   }
 
   @Post('create')
-  async createInvoice(@Body() body: CreateViettelV2DraftDto) {
-    const result = await this.viettelV2Service.createDraft(body);
-    return {
-      ...result,
-      surface: 'SINVOICE',
-    };
-  }
-
-  @Post('cancel')
-  async cancelInvoice(@Body() _body: any) {
-    return this.sinvoiceService.cancelInvoice();
-  }
-
-  @Get('download')
-  async downloadInvoice(
-    @Query('invoiceNo') invoiceNo: string,
-    @Query('pattern') pattern: string,
-    @Query('fileType') fileType: 'PDF' | 'XML' | 'ZIP',
-  ) {
-    return this.sinvoiceService.getInvoiceFile(invoiceNo, pattern, fileType);
+  async createDraft(@Body() body: any) {
+    return this.viettelV2Service.createDraft(body);
   }
 
   @Get('sync')
@@ -59,16 +49,11 @@ export class SinvoiceController {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     
-    const dto: SyncViettelV2InboundDto = {
-      supplierTaxCode: query?.supplierTaxCode,
+    const dto = {
       issueStartDate: query?.startDate ?? query?.issueStartDate ?? firstDayOfMonth.toISOString(),
       issueEndDate: query?.endDate ?? query?.issueEndDate ?? now.toISOString(),
       pageNum: query?.pageNum,
       rowPerPage: query?.rowPerPage,
-      inputSource: query?.inputSource,
-      validatedStatus: query?.validatedStatus,
-      invoiceStatus: query?.invoiceStatus,
-      searchText: query?.searchText ?? query?.search,
     };
     const result = await this.viettelV2Service.syncInbound(dto);
     return {
@@ -110,18 +95,11 @@ export class SinvoiceController {
 
   @Get('tax-portal/sync')
   async syncTaxPortal(@Query() query: any) {
-    const dto: TaxPortalSyncQueryDto = {
-      direction: query?.direction ?? 'IN',
-      startDate: query?.startDate,
-      endDate: query?.endDate,
-      pageSize: query?.pageSize ? Number(query.pageSize) : undefined,
-      size: query?.size ? Number(query.size) : undefined,
-    };
-    return this.sinvoiceService.syncTaxPortal(dto);
+    return this.sinvoiceService.syncTaxPortal(query);
   }
 
   @Post('demo-flow')
-  async fullDemoFlow() {
-    return this.sinvoiceService.fullDemoFlow();
+  async runSinvoiceDemoFlow() {
+    return this.sinvoiceService.runSinvoiceDemoFlow();
   }
 }

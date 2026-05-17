@@ -35,6 +35,10 @@ export class ViettelV2DraftLineDto {
   @Type(() => Number)
   @IsNumber()
   taxRate?: number;
+
+  @IsOptional()
+  @IsString()
+  unitName?: string;
 }
 
 export class CreateViettelV2DraftDto {
@@ -71,6 +75,22 @@ export class CreateViettelV2DraftDto {
   @ValidateNested({ each: true })
   @Type(() => ViettelV2DraftLineDto)
   lines?: ViettelV2DraftLineDto[];
+
+  @IsOptional()
+  @IsString()
+  templateCode?: string;
+
+  @IsOptional()
+  @IsString()
+  invoiceSeries?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerAddress?: string;
 }
 
 export class SyncViettelV2InboundDto {
