@@ -9,9 +9,6 @@ export class UpdateCompanyBankAccountDto {
   @IsString()
   bank_name?: string;
 
-  @IsOptional()
-  @IsString()
-  bank_branch?: string;
 
   @IsOptional()
   @IsString()

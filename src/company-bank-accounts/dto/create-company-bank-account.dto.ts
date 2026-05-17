@@ -15,9 +15,6 @@ export class CreateCompanyBankAccountDto {
   @IsNotEmpty()
   bank_name: string;
 
-  @IsOptional()
-  @IsString()
-  bank_branch?: string;
 
   @IsString()
   @IsNotEmpty()

@@ -9,7 +9,7 @@ import {
 export class CreateBusinessPartnerBankAccountsDto {
   @IsUUID() @IsNotEmpty() business_partner_id: string;
   @IsString() @IsNotEmpty() bank_name: string;
-  @IsOptional() @IsString() bank_branch?: string;
+
   @IsString() @IsNotEmpty() account_number: string;
   @IsString() @IsNotEmpty() account_holder: string;
   @IsOptional() @IsString() currency?: string;
