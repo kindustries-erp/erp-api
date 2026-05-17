@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
 import { ViettelV2Service } from '../viettel-v2/viettel-v2.service';
 import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from '../viettel-v2/dto/viettel-v2.dto';
+import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 
 @Controller('sinvoice')
 export class SinvoiceController {

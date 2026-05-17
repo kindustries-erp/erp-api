@@ -561,8 +561,8 @@ export class SinvoiceService {
     
     this.logger.log(`Syncing Tax Portal in ${chunks.length} chunks for ${direction} (size=${size})`);
 
-    const allInvoices = [];
-    const invoiceNos = [];
+    const allInvoices: any[] = [];
+    const invoiceNos: string[] = [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
