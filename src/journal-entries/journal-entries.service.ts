@@ -94,8 +94,6 @@ export class JournalEntriesService {
       if (query.date_from) filterAnd.push({ date: { _gte: query.date_from } });
       if (query.date_to) filterAnd.push({ date: { _lte: query.date_to } });
 
-      let entryIdsFromAccountFilter: string[] | null = null;
-
       // Filter by account_id: Directus không có O2M alias trên journal_entries,
       // nên query journal_entry_lines trước rồi filter header theo id.
       if (query.account_id) {
@@ -119,7 +117,7 @@ export class JournalEntriesService {
           );
         }
         const lineJson = await lineRes.json();
-        const entryIds: string[] = Array.from(
+        const entryIds = Array.from(
           new Set(
             (lineJson.data || [])
               .map((line: any) =>
@@ -127,31 +125,13 @@ export class JournalEntriesService {
                   ? line.journal_entry_id.id
                   : line.journal_entry_id,
               )
-              .filter((id: unknown): id is string =>
-                typeof id === 'string' && id.length > 0,
-              ),
+              .filter(Boolean),
           ),
         );
         if (entryIds.length === 0) {
           return { items: [], total: 0, page, pageSize, totalPages: 0 };
         }
-
-        // Tránh URL filter _in quá dài gây 502 ở proxy khi có nhiều journal_entry_id.
-        const pagedIds = entryIds.slice(offset, offset + pageSize);
-        if (pagedIds.length === 0) {
-          return {
-            items: [],
-            total: entryIds.length,
-            page,
-            pageSize,
-            totalPages: Math.ceil(entryIds.length / pageSize),
-          };
-        }
-
-        entryIdsFromAccountFilter = entryIds;
-        url.searchParams.set('meta', 'none');
-        url.searchParams.set('offset', '0');
-        filterAnd.push({ id: { _in: pagedIds } });
+        filterAnd.push({ id: { _in: entryIds } });
       }
 
       if (filterAnd.length > 0) {
@@ -170,9 +150,7 @@ export class JournalEntriesService {
       }
 
       const result = await response.json();
-      const total = entryIdsFromAccountFilter
-        ? entryIdsFromAccountFilter.length
-        : result.meta?.filter_count || 0;
+      const total = result.meta?.filter_count || 0;
       const entries = result.data || [];
 
       // Fetch all lines for entries on this page in one call
