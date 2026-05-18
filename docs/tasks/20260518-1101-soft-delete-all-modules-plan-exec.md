@@ -47,9 +47,9 @@ Triển khai soft delete mặc định cho các module có delete/list, đồng 
 - [x] 4.4 UI smoke on affected pages (build/runtime log verification)
 - [x] 5.0 Close
 - [x] 5.1 Lessons learned entry (if issue)
-- [ ] 5.2 Commit + push code (api/web)
+- [x] 5.2 Commit + push code (api/web)
 - [x] 5.3 Deploy + runtime evidence (containers/logs/public smoke)
-- [ ] 5.4 Summary with evidence
+- [x] 5.4 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: DB_READY (các module trong scope đã dùng pattern `is_active`; không cần migrate schema bổ sung cho batch này)
@@ -61,9 +61,9 @@ Triển khai soft delete mặc định cho các module có delete/list, đồng 
   - Runtime deploy: containers `liouni-erp-api`, `liouni-erp-web` đều Up sau rebuild no-cache
 
 ## Lessons Learned
-- Link: pending / No issue yet
+- Mass-edit guardrail: tránh rewrite hàng loạt bằng script thay toàn file; áp patch nhỏ theo module và build verify ngay sau mỗi batch để tránh lỗi format/indent gây nhiễu diff.
 
 ## Commit/Push Status
-- API repo: pending
-- Web repo: pending
+- API repo: pushed `4dbbdeb` (master)
+- Web repo: pushed `68b81cc` (master)
 - DB/directus staging: apply+verify+document (no code push required)
