@@ -103,8 +103,8 @@ export class CreatePaymentVouchersDto {
   @ApiPropertyOptional() @IsOptional() @IsString() actual_person_phone?: string;
 
   @ApiProperty() @IsString() @IsNotEmpty() description!: string;
-  @ApiProperty() @IsUUID() @IsNotEmpty() debit_account_id!: string;
-  @ApiProperty() @IsUUID() @IsNotEmpty() credit_account_id!: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() debit_account_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() credit_account_id?: string;
 
   @ApiPropertyOptional({
     description: 'Cash/Bank tag preset id dùng để auto-fill tài khoản',
