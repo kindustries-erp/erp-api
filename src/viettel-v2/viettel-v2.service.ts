@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   CreateViettelV2DraftDto,
@@ -47,7 +43,10 @@ export class ViettelV2Service {
     };
   }
 
-  private async directusRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  private async directusRequest<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
     const requestUrl = `${this.directusUrl}${path}`;
     const res = await fetch(requestUrl, {
       ...init,
@@ -60,7 +59,9 @@ export class ViettelV2Service {
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
-      this.logger.error(`Directus request failed ${res.status}: ${requestUrl} :: ${errorText}`);
+      this.logger.error(
+        `Directus request failed ${res.status}: ${requestUrl} :: ${errorText}`,
+      );
       let parsedError: any;
       try {
         parsedError = JSON.parse(errorText);
@@ -79,7 +80,9 @@ export class ViettelV2Service {
   }
 
   private async getRawConfig() {
-    const result = await this.directusRequest<{ data: any }>('/items/sinvoice_configs');
+    const result = await this.directusRequest<{ data: any }>(
+      '/items/sinvoice_configs',
+    );
     return result?.data;
   }
 
@@ -90,7 +93,9 @@ export class ViettelV2Service {
     }
     const config = this.normalizeSinvoiceConfig(row);
     if (!config.supplierTaxCode) {
-      throw new BadRequestException('Thiếu supplier_tax_code trong cấu hình SInvoice');
+      throw new BadRequestException(
+        'Thiếu supplier_tax_code trong cấu hình SInvoice',
+      );
     }
     return config;
   }
@@ -135,7 +140,11 @@ export class ViettelV2Service {
     };
   }
 
-  private async persistEinvoice(requestPayload: any, responsePayload: any, status: string) {
+  private async persistEinvoice(
+    requestPayload: any,
+    responsePayload: any,
+    status: string,
+  ) {
     const config = await this.getConfig();
     const draft = requestPayload?.draft ?? null;
     const data = {
@@ -143,7 +152,10 @@ export class ViettelV2Service {
       direction: 'OUT' as InvoiceDirection,
       supplier_tax_code: config.supplierTaxCode,
       document_no: draft?.documentNo ?? `VT2-${Date.now()}`,
-      invoice_no: status === 'DRAFT' ? null : responsePayload?.result?.invoiceNo ?? null,
+      invoice_no:
+        status === 'DRAFT'
+          ? null
+          : (responsePayload?.result?.invoiceNo ?? null),
       buyer_name: draft?.buyerName ?? null,
       buyer_tax_code: draft?.buyerTaxCode ?? null,
       buyer_address: draft?.buyerAddress ?? null,
@@ -152,11 +164,15 @@ export class ViettelV2Service {
       total_amount: Number(draft?.totals?.totalAmountWithTax ?? 0),
       vat_amount: Number(draft?.totals?.totalTaxAmount ?? 0),
       status,
-      tax_status: status === 'DRAFT' ? 'LOCAL_DRAFT_ONLY' : responsePayload?.result?.status ?? null,
+      tax_status:
+        status === 'DRAFT'
+          ? 'LOCAL_DRAFT_ONLY'
+          : (responsePayload?.result?.status ?? null),
       viettel_transaction_id: null,
       request_payload: requestPayload,
       response_payload: responsePayload,
-      error_message: status === 'ERROR' ? JSON.stringify(responsePayload) : null,
+      error_message:
+        status === 'ERROR' ? JSON.stringify(responsePayload) : null,
       synced_at: new Date().toISOString(),
     };
 
@@ -190,9 +206,13 @@ export class ViettelV2Service {
     const result = await this.directusRequest<{
       data: any[];
       meta?: { filter_count?: number };
-    }>(`/items/einvoices?sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filterQuery}`);
+    }>(
+      `/items/einvoices?sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filterQuery}`,
+    );
 
-    const totalCount = Number(result?.meta?.filter_count ?? result?.data?.length ?? 0);
+    const totalCount = Number(
+      result?.meta?.filter_count ?? result?.data?.length ?? 0,
+    );
 
     return {
       data: result?.data ?? [],
@@ -209,10 +229,14 @@ export class ViettelV2Service {
 
   private ensureRangeNotReversed(startDate: Date, endDate: Date) {
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      throw new BadRequestException('issueStartDate hoặc issueEndDate không hợp lệ');
+      throw new BadRequestException(
+        'issueStartDate hoặc issueEndDate không hợp lệ',
+      );
     }
     if (startDate > endDate) {
-      throw new BadRequestException('issueStartDate phải nhỏ hơn hoặc bằng issueEndDate');
+      throw new BadRequestException(
+        'issueStartDate phải nhỏ hơn hoặc bằng issueEndDate',
+      );
     }
   }
 
@@ -247,12 +271,18 @@ export class ViettelV2Service {
     return date.toISOString().slice(0, 10);
   }
 
-  private async callViettel(path: string, payload: any, config: NormalizedSinvoiceConfig) {
+  private async callViettel(
+    path: string,
+    payload: any,
+    config: NormalizedSinvoiceConfig,
+  ) {
     if (!config.apiUrl || !config.username || !config.password) {
       throw new BadRequestException('Thiếu cấu hình Viettel v2 để gọi API');
     }
 
-    const baseUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
+    const baseUrl = config.apiUrl.endsWith('/')
+      ? config.apiUrl.slice(0, -1)
+      : config.apiUrl;
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const fullUrl = `${baseUrl}${cleanPath}`;
 
@@ -282,7 +312,12 @@ export class ViettelV2Service {
     return data;
   }
 
-  private mapInboundInvoice(raw: any, supplierTaxCode: string, requestPayload: any, responsePayload: any) {
+  private mapInboundInvoice(
+    raw: any,
+    supplierTaxCode: string,
+    requestPayload: any,
+    responsePayload: any,
+  ) {
     const docNo =
       raw?.documentNo ??
       raw?.invoiceNo ??
@@ -301,14 +336,17 @@ export class ViettelV2Service {
       invoice_no: raw?.invoiceNo ?? raw?.invoice_number ?? docNo,
       pattern: raw?.pattern ?? raw?.templateCode ?? null,
       invoice_series: raw?.invoiceSeries ?? raw?.seri ?? null,
-      invoice_date: raw?.invoiceDate ?? raw?.issueDate ?? raw?.createdDate ?? null,
+      invoice_date:
+        raw?.invoiceDate ?? raw?.issueDate ?? raw?.createdDate ?? null,
       buyer_name: raw?.buyerName ?? raw?.cusBuyer ?? null,
       buyer_tax_code: raw?.buyerTaxCode ?? null,
       buyer_address: raw?.buyerAddress ?? null,
       seller_name: raw?.sellerName ?? raw?.companyName ?? null,
       seller_tax_code: raw?.sellerTaxCode ?? supplierTaxCode,
       seller_address: raw?.sellerAddress ?? null,
-      total_amount: Number(raw?.paymentAmount ?? raw?.totalAmount ?? raw?.amount ?? 0),
+      total_amount: Number(
+        raw?.paymentAmount ?? raw?.totalAmount ?? raw?.amount ?? 0,
+      ),
       vat_amount: Number(raw?.vatAmount ?? raw?.taxAmount ?? 0),
       status: raw?.status ?? 'SYNCED',
       source: 'TAX_PORTAL' as InvoiceSource,
@@ -324,7 +362,8 @@ export class ViettelV2Service {
   private extractInboundItems(response: any): any[] {
     if (Array.isArray(response?.data?.content)) return response.data.content;
     if (Array.isArray(response?.data?.items)) return response.data.items;
-    if (Array.isArray(response?.result?.content)) return response.result.content;
+    if (Array.isArray(response?.result?.content))
+      return response.result.content;
     if (Array.isArray(response?.result?.items)) return response.result.items;
     if (Array.isArray(response?.content)) return response.content;
     if (Array.isArray(response?.items)) return response.items;
@@ -332,7 +371,10 @@ export class ViettelV2Service {
     return [];
   }
 
-  private async upsertExternalEinvoice(invoice: any, fallbackSupplierTaxCode?: string) {
+  private async upsertExternalEinvoice(
+    invoice: any,
+    fallbackSupplierTaxCode?: string,
+  ) {
     const externalId = invoice.external_invoice_id;
     const existing = externalId
       ? await this.directusRequest<{ data: any[] }>(
@@ -342,7 +384,12 @@ export class ViettelV2Service {
 
     const data = {
       document_no: invoice.document_no,
-      supplier_tax_code: invoice.supplier_tax_code || invoice.seller_tax_code || invoice.buyer_tax_code || fallbackSupplierTaxCode || '',
+      supplier_tax_code:
+        invoice.supplier_tax_code ||
+        invoice.seller_tax_code ||
+        invoice.buyer_tax_code ||
+        fallbackSupplierTaxCode ||
+        '',
       invoice_no: invoice.invoice_no ?? null,
       pattern: invoice.pattern ?? null,
       invoice_series: invoice.invoice_series ?? null,
@@ -400,7 +447,8 @@ export class ViettelV2Service {
       supplierTaxCode: config.supplierTaxCode,
       draft,
       hiddenByDefault: true,
-      warning: 'Không gọi Viettel phát hành. Bản ghi chỉ được lưu nội bộ để tránh phát hành nhầm.',
+      warning:
+        'Không gọi Viettel phát hành. Bản ghi chỉ được lưu nội bộ để tránh phát hành nhầm.',
     };
     const responsePayload = {
       ok: true,
@@ -408,7 +456,8 @@ export class ViettelV2Service {
       mode: 'DRAFT_ONLY',
       status: 'DRAFT',
       draftId: draft.documentNo,
-      message: 'Đã lưu hóa đơn nháp nội bộ cho Viettel v2. Các thao tác ký/phát hành tiếp tục bị khóa.',
+      message:
+        'Đã lưu hóa đơn nháp nội bộ cho Viettel v2. Các thao tác ký/phát hành tiếp tục bị khóa.',
     };
 
     await this.persistEinvoice(requestPayload, responsePayload, 'DRAFT');
@@ -420,7 +469,10 @@ export class ViettelV2Service {
     };
   }
 
-  async syncInbound(body: SyncViettelV2InboundDto, direction: InvoiceDirection = 'IN') {
+  async syncInbound(
+    body: SyncViettelV2InboundDto,
+    direction: InvoiceDirection = 'IN',
+  ) {
     const config = await this.getConfig();
     const supplierTaxCode = body.supplierTaxCode ?? config.supplierTaxCode;
     if (!supplierTaxCode) {
@@ -432,7 +484,9 @@ export class ViettelV2Service {
     this.ensureRangeNotReversed(startDate, endDate);
 
     const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
-    this.logger.log(`Viettel v2 ${direction} sync: ${chunks.length} chunk(s) for ${supplierTaxCode}`);
+    this.logger.log(
+      `Viettel v2 ${direction} sync: ${chunks.length} chunk(s) for ${supplierTaxCode}`,
+    );
 
     const allInvoices: any[] = [];
     const invoiceNos: string[] = [];
@@ -450,8 +504,10 @@ export class ViettelV2Service {
         searchText: body.searchText ?? '',
       };
 
-      this.logger.log(`Calling Viettel API: ${this.toYyyyMmDd(chunk.start)} -> ${this.toYyyyMmDd(chunk.end)}`);
-      
+      this.logger.log(
+        `Calling Viettel API: ${this.toYyyyMmDd(chunk.start)} -> ${this.toYyyyMmDd(chunk.end)}`,
+      );
+
       let responsePayload: any;
       try {
         responsePayload = await this.callViettel(
@@ -467,15 +523,25 @@ export class ViettelV2Service {
       const items = this.extractInboundItems(responsePayload);
       for (const raw of items) {
         const mapped = {
-          ...this.mapInboundInvoice(raw, supplierTaxCode, requestPayload, responsePayload),
+          ...this.mapInboundInvoice(
+            raw,
+            supplierTaxCode,
+            requestPayload,
+            responsePayload,
+          ),
           direction, // Ghi đè direction đúng (IN hoặc OUT)
         };
-        const persisted = await this.upsertExternalEinvoice(mapped, supplierTaxCode);
+        const persisted = await this.upsertExternalEinvoice(
+          mapped,
+          supplierTaxCode,
+        );
         const persistedData = (persisted as any)?.data;
         if (persistedData) {
           allInvoices.push(persistedData);
           if (invoiceNos.length < 10) {
-            invoiceNos.push(persistedData.invoice_no || persistedData.document_no);
+            invoiceNos.push(
+              persistedData.invoice_no || persistedData.document_no,
+            );
           }
         }
       }

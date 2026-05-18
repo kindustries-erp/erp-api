@@ -73,7 +73,6 @@ export class PaymentVoucherQueryDto {
   @IsString()
   employee_id?: string;
 
-
   @ApiPropertyOptional({
     example: '2026-01-01',
     description: 'Ngày hạch toán từ ngày (YYYY-MM-DD)',

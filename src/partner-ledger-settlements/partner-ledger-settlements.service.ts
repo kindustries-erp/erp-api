@@ -159,7 +159,9 @@ export class PartnerLedgerSettlementsService {
     this.guard(userToken);
     const client = this.getClient(userToken);
     try {
-      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
+      await (client as any).request(
+        (updateItem as any)(this.collection, id, { is_active: false }),
+      );
       return { message: 'Xóa bù trừ công nợ thành công' };
     } catch (error: any) {
       this.logger.error(`Lỗi khi xóa bù trừ công nợ ${id}`, error);

@@ -394,7 +394,6 @@ export class PaymentVouchersService {
     }
   }
 
-
   private async resolveCashBankTagPreset(dto: {
     cash_bank_tag_preset_id?: string;
     cash_bank_tag_code?: string;
@@ -428,13 +427,27 @@ export class PaymentVouchersService {
     const json = await response.json();
     const preset = json.data?.[0];
     if (!preset || preset.is_active === false) {
-      throw new BadRequestException('Cash/bank tag preset không tồn tại hoặc đã tắt');
+      throw new BadRequestException(
+        'Cash/bank tag preset không tồn tại hoặc đã tắt',
+      );
     }
-    if (preset.voucher_channel && dto.voucher_channel && preset.voucher_channel !== dto.voucher_channel) {
-      throw new BadRequestException('Cash/bank tag preset không khớp kênh CASH/BANK');
+    if (
+      preset.voucher_channel &&
+      dto.voucher_channel &&
+      preset.voucher_channel !== dto.voucher_channel
+    ) {
+      throw new BadRequestException(
+        'Cash/bank tag preset không khớp kênh CASH/BANK',
+      );
     }
-    if (preset.voucher_direction && dto.voucher_direction && preset.voucher_direction !== dto.voucher_direction) {
-      throw new BadRequestException('Cash/bank tag preset không khớp chiều thu/chi');
+    if (
+      preset.voucher_direction &&
+      dto.voucher_direction &&
+      preset.voucher_direction !== dto.voucher_direction
+    ) {
+      throw new BadRequestException(
+        'Cash/bank tag preset không khớp chiều thu/chi',
+      );
     }
 
     return {
@@ -444,7 +457,9 @@ export class PaymentVouchersService {
     };
   }
 
-  private stripCashBankTransientFields<T extends Record<string, any>>(dto: T): Omit<T, 'cash_bank_tag_code' | 'related_documents'> {
+  private stripCashBankTransientFields<T extends Record<string, any>>(
+    dto: T,
+  ): Omit<T, 'cash_bank_tag_code' | 'related_documents'> {
     const { cash_bank_tag_code, related_documents, ...payload } = dto;
     return payload;
   }
@@ -455,7 +470,10 @@ export class PaymentVouchersService {
   ) {
     if (relatedDocuments === undefined) return;
 
-    const listUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
+    const listUrl = new URL(
+      '/items/cash_bank_related_documents',
+      this.directusUrl,
+    );
     listUrl.searchParams.append('fields[]', 'id');
     listUrl.searchParams.append('fields[]', 'related_type');
     listUrl.searchParams.append('fields[]', 'related_id');
@@ -475,10 +493,12 @@ export class PaymentVouchersService {
     const existing = (await listResponse.json()).data || [];
     const affectedArDocumentIds = new Set<string>();
     for (const item of existing) {
-      if (item.related_type === 'ar_documents' && item.related_id) affectedArDocumentIds.add(item.related_id);
+      if (item.related_type === 'ar_documents' && item.related_id)
+        affectedArDocumentIds.add(item.related_id);
     }
     for (const doc of relatedDocuments || []) {
-      if (doc.related_type === 'ar_documents' && doc.related_id) affectedArDocumentIds.add(doc.related_id);
+      if (doc.related_type === 'ar_documents' && doc.related_id)
+        affectedArDocumentIds.add(doc.related_id);
     }
     if (existing.length > 0) {
       const deleteResponse = await fetch(
@@ -515,7 +535,8 @@ export class PaymentVouchersService {
             related_id: doc.related_id,
             related_no: doc.related_no || null,
             related_date: doc.related_date || null,
-            amount: doc.amount == null ? null : normalizeCashBankAmount(doc.amount),
+            amount:
+              doc.amount == null ? null : normalizeCashBankAmount(doc.amount),
             note: doc.note || null,
             sort: index + 1,
           }),
@@ -534,28 +555,69 @@ export class PaymentVouchersService {
 
   private async recomputeArDocumentSettlement(arDocumentIds: string[]) {
     for (const arDocumentId of arDocumentIds.filter(Boolean)) {
-      const linksUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
+      const linksUrl = new URL(
+        '/items/cash_bank_related_documents',
+        this.directusUrl,
+      );
       linksUrl.searchParams.append('limit', '-1');
       linksUrl.searchParams.append('fields[]', 'amount');
       linksUrl.searchParams.append('fields[]', 'payment_voucher_id.status');
-      linksUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _eq: arDocumentId } }));
-      const linksResponse = await fetch(linksUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
-      if (!linksResponse.ok) await throwDirectusResponseError(linksResponse, 'Không thể tính lại thanh toán chứng từ công nợ');
-      const links = (await linksResponse.json()).data || [];
-      const linkedAmounts = filterEligibleCashBankSettlementLinks(links).map((item: any) => item.amount);
-
-      const docUrl = new URL(`/items/ar_documents/${arDocumentId}`, this.directusUrl);
-      docUrl.searchParams.append('fields[]', 'total_amount');
-      const docResponse = await fetch(docUrl.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
-      if (!docResponse.ok) await throwDirectusResponseError(docResponse, 'Không thể đọc chứng từ công nợ để tính lại số dư');
-      const doc = (await docResponse.json()).data;
-      const { settledAmount, openAmount, status } = calculateArDocumentSettlement(doc?.total_amount, linkedAmounts);
-      const patchResponse = await fetch(`${this.directusUrl}/items/ar_documents/${arDocumentId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${this.adminToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settled_amount: settledAmount, open_amount: openAmount, status }),
+      linksUrl.searchParams.append(
+        'filter',
+        JSON.stringify({
+          related_type: { _eq: 'ar_documents' },
+          related_id: { _eq: arDocumentId },
+        }),
+      );
+      const linksResponse = await fetch(linksUrl.toString(), {
+        headers: { Authorization: `Bearer ${this.adminToken}` },
       });
-      if (!patchResponse.ok) await throwDirectusResponseError(patchResponse, 'Không thể cập nhật số đã thanh toán/còn lại chứng từ công nợ');
+      if (!linksResponse.ok)
+        await throwDirectusResponseError(
+          linksResponse,
+          'Không thể tính lại thanh toán chứng từ công nợ',
+        );
+      const links = (await linksResponse.json()).data || [];
+      const linkedAmounts = filterEligibleCashBankSettlementLinks(links).map(
+        (item: any) => item.amount,
+      );
+
+      const docUrl = new URL(
+        `/items/ar_documents/${arDocumentId}`,
+        this.directusUrl,
+      );
+      docUrl.searchParams.append('fields[]', 'total_amount');
+      const docResponse = await fetch(docUrl.toString(), {
+        headers: { Authorization: `Bearer ${this.adminToken}` },
+      });
+      if (!docResponse.ok)
+        await throwDirectusResponseError(
+          docResponse,
+          'Không thể đọc chứng từ công nợ để tính lại số dư',
+        );
+      const doc = (await docResponse.json()).data;
+      const { settledAmount, openAmount, status } =
+        calculateArDocumentSettlement(doc?.total_amount, linkedAmounts);
+      const patchResponse = await fetch(
+        `${this.directusUrl}/items/ar_documents/${arDocumentId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${this.adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            settled_amount: settledAmount,
+            open_amount: openAmount,
+            status,
+          }),
+        },
+      );
+      if (!patchResponse.ok)
+        await throwDirectusResponseError(
+          patchResponse,
+          'Không thể cập nhật số đã thanh toán/còn lại chứng từ công nợ',
+        );
     }
   }
 
@@ -563,11 +625,25 @@ export class PaymentVouchersService {
     const url = new URL('/items/cash_bank_related_documents', this.directusUrl);
     url.searchParams.append('limit', '-1');
     url.searchParams.append('fields[]', 'related_id');
-    url.searchParams.append('filter', JSON.stringify({ payment_voucher_id: { _eq: paymentVoucherId }, related_type: { _eq: 'ar_documents' } }));
-    const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${this.adminToken}` } });
-    if (!response.ok) await throwDirectusResponseError(response, 'Không thể đọc chứng từ công nợ liên quan phiếu');
+    url.searchParams.append(
+      'filter',
+      JSON.stringify({
+        payment_voucher_id: { _eq: paymentVoucherId },
+        related_type: { _eq: 'ar_documents' },
+      }),
+    );
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.adminToken}` },
+    });
+    if (!response.ok)
+      await throwDirectusResponseError(
+        response,
+        'Không thể đọc chứng từ công nợ liên quan phiếu',
+      );
     const rows = (await response.json()).data || [];
-    const ids = Array.from(new Set(rows.map((row: any) => row.related_id).filter(Boolean))) as string[];
+    const ids = Array.from(
+      new Set(rows.map((row: any) => row.related_id).filter(Boolean)),
+    ) as string[];
     await this.recomputeArDocumentSettlement(ids);
   }
 
@@ -600,13 +676,18 @@ export class PaymentVouchersService {
     const rows = (await response.json()).data || [];
     const grouped = new Map<string, any[]>();
     for (const row of rows) {
-      const key = typeof row.payment_voucher_id === 'object' ? row.payment_voucher_id.id : row.payment_voucher_id;
+      const key =
+        typeof row.payment_voucher_id === 'object'
+          ? row.payment_voucher_id.id
+          : row.payment_voucher_id;
       grouped.set(key, [...(grouped.get(key) || []), row]);
     }
     return grouped;
   }
 
-  private async attachRelatedDocuments<T extends any>(items: T[]): Promise<T[]> {
+  private async attachRelatedDocuments<T extends any>(
+    items: T[],
+  ): Promise<T[]> {
     const ids = items.map((item: any) => item.id).filter(Boolean);
     const grouped = await this.loadRelatedDocuments(ids);
     return items.map((item: any) => ({
@@ -615,15 +696,28 @@ export class PaymentVouchersService {
     }));
   }
 
-  async findCashBankTagPresets(query: PaymentVoucherQueryDto, userToken: string) {
+  async findCashBankTagPresets(
+    query: PaymentVoucherQueryDto,
+    userToken: string,
+  ) {
     this.guard(userToken);
     const filter: any = { is_active: { _eq: true } };
     const andFilter: any[] = [filter];
     if (query.voucher_channel) {
-      andFilter.push({ _or: [{ voucher_channel: { _eq: query.voucher_channel } }, { voucher_channel: { _null: true } }] });
+      andFilter.push({
+        _or: [
+          { voucher_channel: { _eq: query.voucher_channel } },
+          { voucher_channel: { _null: true } },
+        ],
+      });
     }
     if (query.voucher_direction) {
-      andFilter.push({ _or: [{ voucher_direction: { _eq: query.voucher_direction } }, { voucher_direction: { _null: true } }] });
+      andFilter.push({
+        _or: [
+          { voucher_direction: { _eq: query.voucher_direction } },
+          { voucher_direction: { _null: true } },
+        ],
+      });
     }
     return this.adminListItems('cash_bank_tag_presets', {
       fields: [
@@ -688,7 +782,10 @@ export class PaymentVouchersService {
       headers: { Authorization: `Bearer ${this.adminToken}` },
     });
     if (!res.ok) {
-      await throwDirectusResponseError(res, 'Không thể kiểm tra bút toán nguồn');
+      await throwDirectusResponseError(
+        res,
+        'Không thể kiểm tra bút toán nguồn',
+      );
     }
     const json = await res.json();
     return json.data?.[0] ?? null;
@@ -705,7 +802,11 @@ export class PaymentVouchersService {
     if (existing) return existing;
 
     const amount = Number(voucher.amount) || 0;
-    if (!voucher.debit_account_id || !voucher.credit_account_id || amount <= 0) {
+    if (
+      !voucher.debit_account_id ||
+      !voucher.credit_account_id ||
+      amount <= 0
+    ) {
       throw new BadRequestException(
         'Không thể hạch toán: phiếu thiếu tài khoản nợ/có hoặc số tiền không hợp lệ',
       );
@@ -776,20 +877,26 @@ export class PaymentVouchersService {
       },
     ];
 
-    const linesRes = await fetch(`${this.directusUrl}/items/journal_entry_lines`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.adminToken}`,
-        'Content-Type': 'application/json',
+    const linesRes = await fetch(
+      `${this.directusUrl}/items/journal_entry_lines`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(linesPayload),
       },
-      body: JSON.stringify(linesPayload),
-    });
+    );
 
     if (!linesRes.ok) {
-      await fetch(`${this.directusUrl}/items/journal_entries/${journalEntryId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${this.adminToken}` },
-      });
+      await fetch(
+        `${this.directusUrl}/items/journal_entries/${journalEntryId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${this.adminToken}` },
+        },
+      );
       await throwDirectusResponseError(
         linesRes,
         'Không thể tạo dòng bút toán từ phiếu đã hạch toán',
@@ -1134,7 +1241,10 @@ export class PaymentVouchersService {
     this.guard(userToken);
     const voucher = await this.loadVoucher(id, userToken);
     const [withRelated] = await this.attachRelatedDocuments([voucher]);
-    return { message: 'Lấy thông tin phiếu thu chi thành công', data: withRelated };
+    return {
+      message: 'Lấy thông tin phiếu thu chi thành công',
+      data: withRelated,
+    };
   }
 
   async update(id: string, dto: UpdatePaymentVouchersDto, userToken: string) {
@@ -1228,7 +1338,10 @@ export class PaymentVouchersService {
       );
       await this.syncRelatedDocuments(id, dto.related_documents);
       const [withRelated] = await this.attachRelatedDocuments([result]);
-      return { message: 'Cập nhật phiếu thu chi thành công', data: withRelated };
+      return {
+        message: 'Cập nhật phiếu thu chi thành công',
+        data: withRelated,
+      };
     } catch (error: any) {
       this.logger.error(`Lỗi khi cập nhật phiếu thu chi ${id}`, error);
       const msg = error?.errors?.[0]?.message || error.message;
@@ -1281,7 +1394,9 @@ export class PaymentVouchersService {
       }
 
       await this.syncRelatedDocuments(id, []);
-      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
+      await (client as any).request(
+        (updateItem as any)(this.collection, id, { is_active: false }),
+      );
       return {
         message: 'Xóa phiếu thu chi và các dữ liệu liên quan thành công',
       };

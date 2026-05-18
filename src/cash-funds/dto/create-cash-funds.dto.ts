@@ -14,5 +14,4 @@ export class CreateCashFundsDto {
   @IsOptional() @IsUUID() responsible_user_id?: string;
   @IsOptional() @IsBoolean() is_active?: boolean;
   @IsOptional() @IsString() note?: string;
-
 }

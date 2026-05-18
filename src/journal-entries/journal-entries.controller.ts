@@ -63,5 +63,4 @@ export class JournalEntriesController {
   post(@Param('id') id: string, @UserToken() token: string) {
     return this.journalEntriesService.post(id, token);
   }
-
 }

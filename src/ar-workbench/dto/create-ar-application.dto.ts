@@ -1,9 +1,27 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export const AR_APPLICATION_TYPES = [
-  'PAYMENT','ADVANCE_APPLIED','CREDIT_NOTE_APPLIED','REALLOCATION','WRITE_OFF','REFUND','SUSPENSE_CLEARING','CUSTOMER_VENDOR_OFFSET','COD_SETTLEMENT','GATEWAY_SETTLEMENT','FX_REALIZED',
+  'PAYMENT',
+  'ADVANCE_APPLIED',
+  'CREDIT_NOTE_APPLIED',
+  'REALLOCATION',
+  'WRITE_OFF',
+  'REFUND',
+  'SUSPENSE_CLEARING',
+  'CUSTOMER_VENDOR_OFFSET',
+  'COD_SETTLEMENT',
+  'GATEWAY_SETTLEMENT',
+  'FX_REALIZED',
 ] as const;
 
 export class CreateArApplicationDto {
@@ -40,9 +58,12 @@ export class CreateArApplicationDto {
   @Min(0.01)
   amount!: number;
 
-  @ApiPropertyOptional({ enum: ['DRAFT','POSTED','REVERSED','CANCELLED'], default: 'POSTED' })
+  @ApiPropertyOptional({
+    enum: ['DRAFT', 'POSTED', 'REVERSED', 'CANCELLED'],
+    default: 'POSTED',
+  })
   @IsOptional()
-  @IsIn(['DRAFT','POSTED','REVERSED','CANCELLED'])
+  @IsIn(['DRAFT', 'POSTED', 'REVERSED', 'CANCELLED'])
   status?: string;
 
   @ApiPropertyOptional()

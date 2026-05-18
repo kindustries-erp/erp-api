@@ -201,7 +201,9 @@ export class PaymentVoucherApprovalLogsService {
     this.guard(userToken);
     const client = this.getClient(userToken);
     try {
-      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
+      await (client as any).request(
+        (updateItem as any)(this.collection, id, { is_active: false }),
+      );
       return { message: 'Xóa nhật ký duyệt phiếu thành công' };
     } catch (error: any) {
       this.logger.error(`Lỗi khi xóa nhật ký duyệt phiếu ${id}`, error);

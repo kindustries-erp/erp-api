@@ -13,10 +13,26 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CashBankRelatedDocumentDto {
-  @ApiProperty({ enum: ['payment_vouchers', 'ar_documents', 'ap_documents', 'sales_invoices', 'purchase_invoices', 'manual'] })
+  @ApiProperty({
+    enum: [
+      'payment_vouchers',
+      'ar_documents',
+      'ap_documents',
+      'sales_invoices',
+      'purchase_invoices',
+      'manual',
+    ],
+  })
   @IsString()
   @IsNotEmpty()
-  @IsIn(['payment_vouchers', 'ar_documents', 'ap_documents', 'sales_invoices', 'purchase_invoices', 'manual'])
+  @IsIn([
+    'payment_vouchers',
+    'ar_documents',
+    'ap_documents',
+    'sales_invoices',
+    'purchase_invoices',
+    'manual',
+  ])
   related_type!: string;
 
   @ApiProperty()
@@ -44,7 +60,13 @@ export class CreatePaymentVouchersDto {
   voucher_direction!: string;
 
   @ApiProperty({
-    enum: ['CASH_RECEIPT', 'CASH_PAYMENT', 'BANK_RECEIPT', 'BANK_PAYMENT', 'CUSTOMER_ADVANCE_RECEIPT'],
+    enum: [
+      'CASH_RECEIPT',
+      'CASH_PAYMENT',
+      'BANK_RECEIPT',
+      'BANK_PAYMENT',
+      'CUSTOMER_ADVANCE_RECEIPT',
+    ],
   })
   @IsString()
   @IsNotEmpty()
@@ -84,12 +106,16 @@ export class CreatePaymentVouchersDto {
   @ApiProperty() @IsUUID() @IsNotEmpty() debit_account_id!: string;
   @ApiProperty() @IsUUID() @IsNotEmpty() credit_account_id!: string;
 
-  @ApiPropertyOptional({ description: 'Cash/Bank tag preset id dùng để auto-fill tài khoản' })
+  @ApiPropertyOptional({
+    description: 'Cash/Bank tag preset id dùng để auto-fill tài khoản',
+  })
   @IsOptional()
   @IsUUID()
   cash_bank_tag_preset_id?: string;
 
-  @ApiPropertyOptional({ description: 'Cash/Bank tag preset code dùng để auto-fill tài khoản' })
+  @ApiPropertyOptional({
+    description: 'Cash/Bank tag preset code dùng để auto-fill tài khoản',
+  })
   @IsOptional()
   @IsString()
   cash_bank_tag_code?: string;
@@ -129,7 +155,6 @@ export class CreatePaymentVouchersDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-
 
   // Snapshot — backend tự fill nếu không truyền
   @ApiPropertyOptional()

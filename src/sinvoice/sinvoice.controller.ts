@@ -1,7 +1,10 @@
 import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 import { SinvoiceService } from './sinvoice.service';
 import { ViettelV2Service } from '../viettel-v2/viettel-v2.service';
-import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from '../viettel-v2/dto/viettel-v2.dto';
+import {
+  CreateViettelV2DraftDto,
+  SyncViettelV2InboundDto,
+} from '../viettel-v2/dto/viettel-v2.dto';
 import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 
 @Controller('sinvoice')
@@ -59,10 +62,13 @@ export class SinvoiceController {
   async getInvoices(@Query() query: any) {
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     const dto: SyncViettelV2InboundDto = {
       supplierTaxCode: query?.supplierTaxCode,
-      issueStartDate: query?.startDate ?? query?.issueStartDate ?? firstDayOfMonth.toISOString(),
+      issueStartDate:
+        query?.startDate ??
+        query?.issueStartDate ??
+        firstDayOfMonth.toISOString(),
       issueEndDate: query?.endDate ?? query?.issueEndDate ?? now.toISOString(),
       pageNum: query?.pageNum,
       rowPerPage: query?.rowPerPage,

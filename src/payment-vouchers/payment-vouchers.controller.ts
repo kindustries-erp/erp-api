@@ -68,7 +68,9 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.findBusinessPartnerOptions(query, token);
   }
 
-  @ApiOperation({ summary: 'Danh sách tag gợi ý Cash/Bank để auto-fill tài khoản' })
+  @ApiOperation({
+    summary: 'Danh sách tag gợi ý Cash/Bank để auto-fill tài khoản',
+  })
   @Get('lookup/cash-bank-tag-presets')
   findCashBankTagPresets(
     @Query() query: PaymentVoucherQueryDto,
@@ -118,7 +120,9 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.submitForApproval(id, token);
   }
 
-  @ApiOperation({ summary: 'Duyệt phiếu và tự động hạch toán (PENDING_APPROVAL → POSTED)' })
+  @ApiOperation({
+    summary: 'Duyệt phiếu và tự động hạch toán (PENDING_APPROVAL → POSTED)',
+  })
   @Post(':id/approve')
   approve(
     @Param('id') id: string,
@@ -138,7 +142,9 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.reject(id, dto, token);
   }
 
-  @ApiOperation({ summary: 'Hạch toán thủ công cho phiếu APPROVED cũ (legacy)' })
+  @ApiOperation({
+    summary: 'Hạch toán thủ công cho phiếu APPROVED cũ (legacy)',
+  })
   @Post(':id/post')
   post(@Param('id') id: string, @UserToken() token: string) {
     return this.paymentVouchersService.post(id, token);

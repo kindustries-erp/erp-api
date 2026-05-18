@@ -12,7 +12,10 @@ import { CreateArDocumentDto } from './dto/create-ar-document.dto';
 import { UpdateArDocumentDto } from './dto/update-ar-document.dto';
 import { CreateArApplicationDto } from './dto/create-ar-application.dto';
 import { CreateArCollectionActivityDto } from './dto/create-ar-collection-activity.dto';
-import { CreateArSalesInvoiceDto, CreateArSalesInvoiceLineDto } from './dto/create-ar-sales-invoice.dto';
+import {
+  CreateArSalesInvoiceDto,
+  CreateArSalesInvoiceLineDto,
+} from './dto/create-ar-sales-invoice.dto';
 import { ReverseArDocumentDto } from './dto/reverse-ar-document.dto';
 import { CreatePaymentReceiptDto } from './dto/create-payment-receipt.dto';
 import { CreateCustomerAdvanceDto } from './dto/create-customer-advance.dto';
@@ -434,30 +437,61 @@ export class ArWorkbenchService {
       url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
   }
 
-
   private async decorateDocuments(docs: ArDocument[], userToken: string) {
     if (docs.length === 0) return docs;
     const docIds = docs.map((doc) => doc.id);
-    const partnerIds = [...new Set(docs.map((doc) => doc.business_partner_id).filter(Boolean) as string[])];
+    const partnerIds = [
+      ...new Set(
+        docs.map((doc) => doc.business_partner_id).filter(Boolean) as string[],
+      ),
+    ];
     const linkedIds = new Set<string>();
 
-    const relatedUrl = new URL('/items/cash_bank_related_documents', this.directusUrl);
+    const relatedUrl = new URL(
+      '/items/cash_bank_related_documents',
+      this.directusUrl,
+    );
     relatedUrl.searchParams.append('limit', '-1');
     relatedUrl.searchParams.append('fields[]', 'id');
     relatedUrl.searchParams.append('fields[]', 'payment_voucher_id');
     relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_no');
-    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_channel');
-    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.voucher_direction');
+    relatedUrl.searchParams.append(
+      'fields[]',
+      'payment_voucher_id.voucher_channel',
+    );
+    relatedUrl.searchParams.append(
+      'fields[]',
+      'payment_voucher_id.voucher_direction',
+    );
     relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.status');
-    relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.document_date');
+    relatedUrl.searchParams.append(
+      'fields[]',
+      'payment_voucher_id.document_date',
+    );
     relatedUrl.searchParams.append('fields[]', 'payment_voucher_id.amount');
     relatedUrl.searchParams.append('fields[]', 'related_id');
     relatedUrl.searchParams.append('fields[]', 'related_no');
     relatedUrl.searchParams.append('fields[]', 'related_date');
     relatedUrl.searchParams.append('fields[]', 'amount');
     relatedUrl.searchParams.append('fields[]', 'note');
-    relatedUrl.searchParams.append('filter', JSON.stringify({ related_type: { _eq: 'ar_documents' }, related_id: { _in: docIds } }));
-    const related = await this.request<DirectusList<{ id?: string; payment_voucher_id?: string | null; related_id?: string | null; related_no?: string | null; related_date?: string | null; amount?: number | string | null; note?: string | null }>>(relatedUrl.pathname + relatedUrl.search, userToken);
+    relatedUrl.searchParams.append(
+      'filter',
+      JSON.stringify({
+        related_type: { _eq: 'ar_documents' },
+        related_id: { _in: docIds },
+      }),
+    );
+    const related = await this.request<
+      DirectusList<{
+        id?: string;
+        payment_voucher_id?: string | null;
+        related_id?: string | null;
+        related_no?: string | null;
+        related_date?: string | null;
+        amount?: number | string | null;
+        note?: string | null;
+      }>
+    >(relatedUrl.pathname + relatedUrl.search, userToken);
     const relatedByDoc = new Map<string, any[]>();
     for (const item of related.data || []) {
       if (!item.related_id) continue;
@@ -471,8 +505,21 @@ export class ArWorkbenchService {
     appUrl.searchParams.append('limit', '-1');
     appUrl.searchParams.append('fields[]', 'source_document_id');
     appUrl.searchParams.append('fields[]', 'target_document_id');
-    appUrl.searchParams.append('filter', JSON.stringify({ _or: [{ source_document_id: { _in: docIds } }, { target_document_id: { _in: docIds } }] }));
-    const apps = await this.request<DirectusList<{ source_document_id?: string | null; target_document_id?: string | null }>>(appUrl.pathname + appUrl.search, userToken);
+    appUrl.searchParams.append(
+      'filter',
+      JSON.stringify({
+        _or: [
+          { source_document_id: { _in: docIds } },
+          { target_document_id: { _in: docIds } },
+        ],
+      }),
+    );
+    const apps = await this.request<
+      DirectusList<{
+        source_document_id?: string | null;
+        target_document_id?: string | null;
+      }>
+    >(appUrl.pathname + appUrl.search, userToken);
     for (const item of apps.data || []) {
       if (item.source_document_id) linkedIds.add(item.source_document_id);
       if (item.target_document_id) linkedIds.add(item.target_document_id);
@@ -484,14 +531,22 @@ export class ArWorkbenchService {
       partnerUrl.searchParams.append('limit', '-1');
       partnerUrl.searchParams.append('fields[]', 'id');
       partnerUrl.searchParams.append('fields[]', 'display_name');
-      partnerUrl.searchParams.append('filter', JSON.stringify({ id: { _in: partnerIds } }));
-      const partners = await this.request<DirectusList<{ id: string; display_name?: string | null }>>(partnerUrl.pathname + partnerUrl.search, userToken);
-      for (const partner of partners.data || []) partnerNames.set(partner.id, partner.display_name || partner.id);
+      partnerUrl.searchParams.append(
+        'filter',
+        JSON.stringify({ id: { _in: partnerIds } }),
+      );
+      const partners = await this.request<
+        DirectusList<{ id: string; display_name?: string | null }>
+      >(partnerUrl.pathname + partnerUrl.search, userToken);
+      for (const partner of partners.data || [])
+        partnerNames.set(partner.id, partner.display_name || partner.id);
     }
 
     return docs.map((doc) => ({
       ...doc,
-      business_partner_name_snapshot: doc.business_partner_id ? partnerNames.get(doc.business_partner_id) || null : null,
+      business_partner_name_snapshot: doc.business_partner_id
+        ? partnerNames.get(doc.business_partner_id) || null
+        : null,
       can_delete: !linkedIds.has(doc.id),
       related_documents: relatedByDoc.get(doc.id) || [],
     }));
@@ -500,12 +555,21 @@ export class ArWorkbenchService {
   private async ensureDocumentCanDelete(id: string, userToken: string) {
     const docUrl = new URL(`/items/ar_documents/${id}`, this.directusUrl);
     docUrl.searchParams.append('fields[]', 'id');
-    const doc = await this.request<{ data?: { id: string } }>(docUrl.pathname + docUrl.search, userToken);
-    if (!doc.data?.id) throw new NotFoundException('Không tìm thấy AR document');
+    const doc = await this.request<{ data?: { id: string } }>(
+      docUrl.pathname + docUrl.search,
+      userToken,
+    );
+    if (!doc.data?.id)
+      throw new NotFoundException('Không tìm thấy AR document');
 
-    const decorated = await this.decorateDocuments([{ id } as ArDocument], userToken);
+    const decorated = await this.decorateDocuments(
+      [{ id } as ArDocument],
+      userToken,
+    );
     if (decorated[0]?.can_delete === false) {
-      throw new BadRequestException('Không thể xóa chứng từ đã có liên kết thanh toán/cấn trừ');
+      throw new BadRequestException(
+        'Không thể xóa chứng từ đã có liên kết thanh toán/cấn trừ',
+      );
     }
   }
 
@@ -581,14 +645,20 @@ export class ArWorkbenchService {
   }
 
   private async getBusinessPartnerName(partnerId: string, userToken: string) {
-    const url = new URL(`/items/business_partners/${partnerId}`, this.directusUrl);
+    const url = new URL(
+      `/items/business_partners/${partnerId}`,
+      this.directusUrl,
+    );
     url.searchParams.append('fields[]', 'legal_name');
     url.searchParams.append('fields[]', 'display_name');
     url.searchParams.append('fields[]', 'partner_code');
-    const result = await this.request<{ data?: { legal_name?: string | null; display_name?: string | null; partner_code?: string | null } }>(
-      url.pathname + url.search,
-      userToken,
-    );
+    const result = await this.request<{
+      data?: {
+        legal_name?: string | null;
+        display_name?: string | null;
+        partner_code?: string | null;
+      };
+    }>(url.pathname + url.search, userToken);
     return (
       result.data?.legal_name ||
       result.data?.display_name ||
@@ -620,7 +690,10 @@ export class ArWorkbenchService {
     jeUrl.searchParams.append('limit', '1');
     jeUrl.searchParams.append(
       'filter',
-      JSON.stringify({ reference_type: { _eq: referenceType }, reference_id: { _eq: referenceId } }),
+      JSON.stringify({
+        reference_type: { _eq: referenceType },
+        reference_id: { _eq: referenceId },
+      }),
     );
     const journal = await this.request<DirectusList<JournalEntry>>(
       jeUrl.pathname + jeUrl.search,
@@ -995,14 +1068,23 @@ export class ArWorkbenchService {
     if (dto.settled_amount !== undefined) {
       const docUrl = new URL(`/items/ar_documents/${id}`, this.directusUrl);
       docUrl.searchParams.append('fields[]', 'total_amount');
-      const current = await this.request<{ data?: { total_amount?: number | string } }>(
-        docUrl.pathname + docUrl.search,
-        userToken,
+      const current = await this.request<{
+        data?: { total_amount?: number | string };
+      }>(docUrl.pathname + docUrl.search, userToken);
+      const totalAmount = Number(
+        current.data?.total_amount ?? dto.total_amount ?? 0,
       );
-      const totalAmount = Number(current.data?.total_amount ?? dto.total_amount ?? 0);
-      const settledAmount = Math.min(Math.max(Number(dto.settled_amount) || 0, 0), totalAmount);
+      const settledAmount = Math.min(
+        Math.max(Number(dto.settled_amount) || 0, 0),
+        totalAmount,
+      );
       payload.settled_amount = settledAmount;
-      payload.status = settledAmount <= 0 ? 'POSTED' : settledAmount >= totalAmount ? 'SETTLED' : 'PARTIAL';
+      payload.status =
+        settledAmount <= 0
+          ? 'POSTED'
+          : settledAmount >= totalAmount
+            ? 'SETTLED'
+            : 'PARTIAL';
     }
     const result = await this.requestWrite<{ data: ArDocument }>(
       `/items/ar_documents/${id}`,
@@ -1017,7 +1099,9 @@ export class ArWorkbenchService {
 
   async deleteDocument(id: string, userToken: string) {
     await this.ensureDocumentCanDelete(id, userToken);
-    await this.requestWrite<any>(`/items/ar_documents/${id}`, userToken, { method: 'DELETE' });
+    await this.requestWrite<any>(`/items/ar_documents/${id}`, userToken, {
+      method: 'DELETE',
+    });
     return { message: 'Xóa AR document thành công' };
   }
 
@@ -1211,7 +1295,9 @@ export class ArWorkbenchService {
     } catch (error: any) {
       this.logger.error('Lỗi khi lấy danh sách phiếu thu', error);
       rethrowHttpException(error);
-      throw new InternalServerErrorException('Không thể lấy danh sách phiếu thu');
+      throw new InternalServerErrorException(
+        'Không thể lấy danh sách phiếu thu',
+      );
     }
   }
 
@@ -1229,7 +1315,8 @@ export class ArWorkbenchService {
 
       const postingDate = dto.posting_date || dto.document_date;
       const voucher: any = this.buildPaymentVoucherPayload({
-        voucherNo: dto.voucher_no || this.buildReceiptNo('REC', dto.document_date),
+        voucherNo:
+          dto.voucher_no || this.buildReceiptNo('REC', dto.document_date),
         voucherType: this.paymentMethodToVoucherType(dto.payment_method),
         documentDate: dto.document_date,
         postingDate,
@@ -1271,7 +1358,10 @@ export class ArWorkbenchService {
             appPayload.metadata = {
               writeoff_account_id:
                 alloc.writeoff_account_id ||
-                (await this.getAccountIdByCode(this.ACCOUNT_CODES['WRITEOFF_EXP'], userToken)),
+                (await this.getAccountIdByCode(
+                  this.ACCOUNT_CODES['WRITEOFF_EXP'],
+                  userToken,
+                )),
               writeoff_reason: alloc.reason || 'Writeoff chênh lệch nhỏ',
             };
           }
@@ -1306,7 +1396,9 @@ export class ArWorkbenchService {
         throw new BadRequestException('Endpoint này chỉ dùng cho phiếu thu');
       }
       if (voucher.status !== 'DRAFT') {
-        throw new BadRequestException('Chỉ được post phiếu thu trạng thái DRAFT');
+        throw new BadRequestException(
+          'Chỉ được post phiếu thu trạng thái DRAFT',
+        );
       }
 
       const posted = await this.requestWrite<{ data: any }>(
@@ -1320,7 +1412,10 @@ export class ArWorkbenchService {
       jeUrl.searchParams.append('limit', '1');
       jeUrl.searchParams.append(
         'filter',
-        JSON.stringify({ reference_type: { _eq: 'payment_vouchers' }, reference_id: { _eq: id } }),
+        JSON.stringify({
+          reference_type: { _eq: 'payment_vouchers' },
+          reference_id: { _eq: id },
+        }),
       );
       const journal = await this.request<DirectusList<JournalEntry>>(
         jeUrl.pathname + jeUrl.search,
@@ -1329,7 +1424,10 @@ export class ArWorkbenchService {
 
       return {
         message: 'Post phiếu thu thành công và đã sinh bút toán',
-        data: { voucher: posted.data, journal_entry: journal.data?.[0] || null },
+        data: {
+          voucher: posted.data,
+          journal_entry: journal.data?.[0] || null,
+        },
       };
     } catch (error: any) {
       this.logger.error(`Lỗi khi post phiếu thu ${id}`, error);
@@ -1340,7 +1438,13 @@ export class ArWorkbenchService {
 
   async allocatePayment(
     voucherId: string,
-    allocations: { target_document_id: string; amount: number; writeoff_amount?: number; writeoff_account_id?: string; reason?: string }[],
+    allocations: {
+      target_document_id: string;
+      amount: number;
+      writeoff_amount?: number;
+      writeoff_account_id?: string;
+      reason?: string;
+    }[],
     userToken: string,
   ) {
     try {
@@ -1387,7 +1491,10 @@ export class ArWorkbenchService {
         );
         results.push(app.data);
       }
-      return { message: `Allocate ${results.length} khoản thành công`, data: results };
+      return {
+        message: `Allocate ${results.length} khoản thành công`,
+        data: results,
+      };
     } catch (error: any) {
       this.logger.error(`Lỗi khi allocate phiếu thu ${voucherId}`, error);
       rethrowHttpException(error);
@@ -1418,7 +1525,10 @@ export class ArWorkbenchService {
       appUrl.searchParams.append('limit', '1');
       appUrl.searchParams.append(
         'filter',
-        JSON.stringify({ payment_voucher_id: { _eq: id }, status: { _eq: 'POSTED' } }),
+        JSON.stringify({
+          payment_voucher_id: { _eq: id },
+          status: { _eq: 'POSTED' },
+        }),
       );
       const apps = await this.request<DirectusList<any>>(
         appUrl.pathname + appUrl.search,
@@ -1451,7 +1561,10 @@ export class ArWorkbenchService {
 
       return {
         message: 'Reverse phiếu thu thành công',
-        data: { voucher: cancelled.data, reversal_journal_entry: reversalJournal },
+        data: {
+          voucher: cancelled.data,
+          reversal_journal_entry: reversalJournal,
+        },
       };
     } catch (error: any) {
       this.logger.error(`Lỗi khi reverse phiếu thu ${id}`, error);
@@ -1468,7 +1581,9 @@ export class ArWorkbenchService {
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
       url.searchParams.append('sort[]', sort);
-      const filterAnd: any[] = [{ voucher_type: { _eq: 'CUSTOMER_ADVANCE_RECEIPT' } }];
+      const filterAnd: any[] = [
+        { voucher_type: { _eq: 'CUSTOMER_ADVANCE_RECEIPT' } },
+      ];
       if (query.business_partner_id)
         filterAnd.push({ counterparty_id: { _eq: query.business_partner_id } });
       if (query.status) filterAnd.push({ status: { _eq: query.status } });
@@ -1495,7 +1610,12 @@ export class ArWorkbenchService {
   // ─── UC#4 Apply Advance to Invoice ──────────────────────────────────────────
 
   async findAdvanceApplications(
-    query: { advance_voucher_id?: string; ar_document_id?: string; page?: number; pageSize?: number },
+    query: {
+      advance_voucher_id?: string;
+      ar_document_id?: string;
+      page?: number;
+      pageSize?: number;
+    },
     userToken: string,
   ) {
     try {
@@ -1506,23 +1626,41 @@ export class ArWorkbenchService {
       url.searchParams.append('offset', String((page - 1) * pageSize));
       url.searchParams.append('meta', 'filter_count');
       url.searchParams.append('sort', '-created_at');
-      const filterAnd: any[] = [{ application_type: { _eq: 'ADVANCE_APPLICATION' } }];
+      const filterAnd: any[] = [
+        { application_type: { _eq: 'ADVANCE_APPLICATION' } },
+      ];
       if (query.advance_voucher_id)
-        filterAnd.push({ payment_voucher_id: { _eq: query.advance_voucher_id } });
+        filterAnd.push({
+          payment_voucher_id: { _eq: query.advance_voucher_id },
+        });
       if (query.ar_document_id)
         filterAnd.push({ target_document_id: { _eq: query.ar_document_id } });
       url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
-      const result = await this.request<DirectusList<any>>(url.pathname + url.search, userToken);
+      const result = await this.request<DirectusList<any>>(
+        url.pathname + url.search,
+        userToken,
+      );
       const total = result.meta?.filter_count || 0;
-      return { items: result.data || [], total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+      return {
+        items: result.data || [],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
     } catch (error: any) {
       this.logger.error('Lỗi khi lấy danh sách cấn trừ cọc', error);
       rethrowHttpException(error);
-      throw new InternalServerErrorException('Không thể lấy danh sách cấn trừ cọc');
+      throw new InternalServerErrorException(
+        'Không thể lấy danh sách cấn trừ cọc',
+      );
     }
   }
 
-  async applyAdvanceToInvoice(dto: ApplyAdvanceToInvoiceDto, userToken: string) {
+  async applyAdvanceToInvoice(
+    dto: ApplyAdvanceToInvoiceDto,
+    userToken: string,
+  ) {
     try {
       // 1. Validate advance voucher
       const advResult = await this.request<{ data: any }>(
@@ -1531,14 +1669,18 @@ export class ArWorkbenchService {
       );
       const adv = advResult.data;
       if (adv.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
-        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+        throw new BadRequestException(
+          'Voucher không phải phiếu đặt cọc khách hàng',
+        );
       }
       if (adv.status !== 'POSTED') {
         throw new BadRequestException('Phiếu đặt cọc phải ở trạng thái POSTED');
       }
       const remaining = Number(adv.ar_advance_remaining_amount || 0);
       if (remaining <= 0) {
-        throw new BadRequestException('Phiếu đặt cọc không còn số dư để cấn trừ');
+        throw new BadRequestException(
+          'Phiếu đặt cọc không còn số dư để cấn trừ',
+        );
       }
 
       // 2. Validate AR document
@@ -1548,11 +1690,15 @@ export class ArWorkbenchService {
       );
       const doc = docResult.data;
       if (!['POSTED', 'PARTIAL'].includes(doc.status)) {
-        throw new BadRequestException('AR document phải ở trạng thái POSTED hoặc PARTIAL');
+        throw new BadRequestException(
+          'AR document phải ở trạng thái POSTED hoặc PARTIAL',
+        );
       }
       const openAmount = Number(doc.open_amount || 0);
       if (openAmount <= 0) {
-        throw new BadRequestException('Invoice không còn công nợ mở để cấn trừ');
+        throw new BadRequestException(
+          'Invoice không còn công nợ mở để cấn trừ',
+        );
       }
 
       // 3. Validate amount
@@ -1564,14 +1710,15 @@ export class ArWorkbenchService {
       }
 
       // 4. Build and post ar_application
-      const applicationNo = dto.application_no ||
+      const applicationNo =
+        dto.application_no ||
         `ADVA-${adv.voucher_no?.slice(-8) || dto.advance_voucher_id.slice(0, 8)}-${Date.now()}`;
 
       const appPayload = {
         application_no: applicationNo,
         application_type: 'ADVANCE_APPLICATION',
         payment_voucher_id: dto.advance_voucher_id,
-        target_document_id: dto.ar_document_id,        // invoice is target
+        target_document_id: dto.ar_document_id, // invoice is target
         application_date: dto.application_date,
         amount: dto.amount,
         status: 'POSTED',
@@ -1591,8 +1738,14 @@ export class ArWorkbenchService {
 
       // 5. Fetch updated states
       const [updatedAdv, updatedDoc] = await Promise.all([
-        this.request<{ data: any }>(`/items/payment_vouchers/${dto.advance_voucher_id}`, userToken),
-        this.request<{ data: any }>(`/items/ar_documents/${dto.ar_document_id}`, userToken),
+        this.request<{ data: any }>(
+          `/items/payment_vouchers/${dto.advance_voucher_id}`,
+          userToken,
+        ),
+        this.request<{ data: any }>(
+          `/items/ar_documents/${dto.ar_document_id}`,
+          userToken,
+        ),
       ]);
 
       return {
@@ -1602,7 +1755,8 @@ export class ArWorkbenchService {
           advance_after: {
             id: updatedAdv.data.id,
             voucher_no: updatedAdv.data.voucher_no,
-            ar_advance_remaining_amount: updatedAdv.data.ar_advance_remaining_amount,
+            ar_advance_remaining_amount:
+              updatedAdv.data.ar_advance_remaining_amount,
             ar_advance_status: updatedAdv.data.ar_advance_status,
           },
           invoice_after: {
@@ -1651,21 +1805,34 @@ export class ArWorkbenchService {
       const reversed = await this.requestWrite<{ data: any }>(
         `/items/ar_applications/${applicationId}`,
         userToken,
-        { method: 'PATCH', body: JSON.stringify({ status: 'REVERSED', metadata }) },
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'REVERSED', metadata }),
+        },
       );
 
       return {
-        message: 'Hủy cấn trừ cọc thành công, đã khôi phục số dư advance và invoice',
-        data: { original_application_id: applicationId, reversal: reversed.data },
+        message:
+          'Hủy cấn trừ cọc thành công, đã khôi phục số dư advance và invoice',
+        data: {
+          original_application_id: applicationId,
+          reversal: reversed.data,
+        },
       };
     } catch (error: any) {
-      this.logger.error(`Lỗi khi reverse advance application ${applicationId}`, error);
+      this.logger.error(
+        `Lỗi khi reverse advance application ${applicationId}`,
+        error,
+      );
       rethrowHttpException(error);
       throw new InternalServerErrorException('Không thể hủy cấn trừ cọc');
     }
   }
 
-  async createCustomerAdvance(dto: CreateCustomerAdvanceDto, userToken: string) {
+  async createCustomerAdvance(
+    dto: CreateCustomerAdvanceDto,
+    userToken: string,
+  ) {
     try {
       const debitAccountId =
         dto.debit_account_id ||
@@ -1678,7 +1845,8 @@ export class ArWorkbenchService {
         (await this.getAccountIdByCode(this.ACCOUNT_CODES.AR, userToken));
       const postingDate = dto.posting_date || dto.document_date;
       const voucher = this.buildPaymentVoucherPayload({
-        voucherNo: dto.voucher_no || this.buildReceiptNo('ADV', dto.document_date),
+        voucherNo:
+          dto.voucher_no || this.buildReceiptNo('ADV', dto.document_date),
         voucherType: 'CUSTOMER_ADVANCE_RECEIPT',
         documentDate: dto.document_date,
         postingDate,
@@ -1720,19 +1888,28 @@ export class ArWorkbenchService {
       );
       const voucher = voucherResult.data;
       if (voucher.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
-        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+        throw new BadRequestException(
+          'Voucher không phải phiếu đặt cọc khách hàng',
+        );
       }
       if (voucher.status !== 'DRAFT') {
-        throw new BadRequestException('Chỉ được post phiếu đặt cọc trạng thái DRAFT');
+        throw new BadRequestException(
+          'Chỉ được post phiếu đặt cọc trạng thái DRAFT',
+        );
       }
       const posted = await this.requestWrite<{ data: any }>(
         `/items/payment_vouchers/${id}`,
         userToken,
         { method: 'PATCH', body: JSON.stringify({ status: 'POSTED' }) },
       );
-      const journal = await this.fetchJournalByReference('payment_vouchers', id, userToken);
+      const journal = await this.fetchJournalByReference(
+        'payment_vouchers',
+        id,
+        userToken,
+      );
       return {
-        message: 'Post phiếu đặt cọc thành công và đã sinh bút toán N111/112/113 C131 advance',
+        message:
+          'Post phiếu đặt cọc thành công và đã sinh bút toán N111/112/113 C131 advance',
         data: { voucher: posted.data, journal_entry: journal },
       };
     } catch (error: any) {
@@ -1753,7 +1930,9 @@ export class ArWorkbenchService {
         userToken,
       );
       if (voucherResult.data?.voucher_type !== 'CUSTOMER_ADVANCE_RECEIPT') {
-        throw new BadRequestException('Voucher không phải phiếu đặt cọc khách hàng');
+        throw new BadRequestException(
+          'Voucher không phải phiếu đặt cọc khách hàng',
+        );
       }
       return this.reversePaymentVoucher(id, dto, userToken);
     } catch (error: any) {

@@ -43,7 +43,9 @@ export class CreatePaymentReceiptDto {
   @IsDateString()
   document_date!: string;
 
-  @ApiPropertyOptional({ description: 'Ngày hạch toán (mặc định = document_date)' })
+  @ApiPropertyOptional({
+    description: 'Ngày hạch toán (mặc định = document_date)',
+  })
   @IsOptional()
   @IsDateString()
   posting_date?: string;
@@ -52,7 +54,10 @@ export class CreatePaymentReceiptDto {
   @IsIn(PAYMENT_METHODS)
   payment_method!: string;
 
-  @ApiPropertyOptional({ description: 'ID TK tiền (111/112/113) — auto-map từ payment_method nếu bỏ trống' })
+  @ApiPropertyOptional({
+    description:
+      'ID TK tiền (111/112/113) — auto-map từ payment_method nếu bỏ trống',
+  })
   @IsOptional()
   @IsUUID()
   debit_account_id?: string;
@@ -70,7 +75,9 @@ export class CreatePaymentReceiptDto {
   @ApiPropertyOptional({
     description: 'Danh sách invoice cần allocate ngay khi tạo',
     type: [Object],
-    example: [{ target_document_id: 'uuid', amount: 1000000, writeoff_amount: 0 }],
+    example: [
+      { target_document_id: 'uuid', amount: 1000000, writeoff_amount: 0 },
+    ],
   })
   @IsOptional()
   allocations?: {

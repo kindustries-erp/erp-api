@@ -67,7 +67,6 @@ export class ArWorkbenchController {
     return this.service.postDocument(id, token);
   }
 
-
   @Patch('documents/:id')
   updateDocument(
     @Param('id') id: string,
@@ -117,7 +116,9 @@ export class ArWorkbenchController {
   // ─── Payment Receipts ────────────────────────────────────────────────────
 
   @Get('payment-vouchers')
-  @ApiOperation({ summary: 'Danh sách phiếu thu (payment_vouchers direction=RECEIPT)' })
+  @ApiOperation({
+    summary: 'Danh sách phiếu thu (payment_vouchers direction=RECEIPT)',
+  })
   findPaymentVouchers(
     @Query() query: ArWorkbenchQueryDto,
     @UserToken() token: string,
@@ -145,9 +146,17 @@ export class ArWorkbenchController {
   // ─── UC#4 Apply Advance to Invoice / Cấn trừ cọc ────────────────────────────
 
   @Get('advance-applications')
-  @ApiOperation({ summary: 'Danh sách cấn trừ cọc (ADVANCE_APPLICATION records) — UC#4' })
+  @ApiOperation({
+    summary: 'Danh sách cấn trừ cọc (ADVANCE_APPLICATION records) — UC#4',
+  })
   findAdvanceApplications(
-    @Query() query: { advance_voucher_id?: string; ar_document_id?: string; page?: number; pageSize?: number },
+    @Query()
+    query: {
+      advance_voucher_id?: string;
+      ar_document_id?: string;
+      page?: number;
+      pageSize?: number;
+    },
     @UserToken() token: string,
   ) {
     return this.service.findAdvanceApplications(query, token);
@@ -156,4 +165,3 @@ export class ArWorkbenchController {
   // AR Workbench no longer applies/reverses customer advances.
   // Cấn trừ cọc is initiated from the unified Cash/Bank form/context.
 }
-

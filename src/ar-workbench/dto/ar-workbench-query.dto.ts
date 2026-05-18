@@ -1,4 +1,11 @@
-import { IsIn, IsInt, IsOptional, IsString, Min, IsBoolean } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  IsBoolean,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -32,17 +39,47 @@ export class ArWorkbenchQueryDto {
   @IsString()
   business_partner_id?: string;
 
-  @ApiPropertyOptional({ enum: ['INVOICE','IMMEDIATE_SALE','ADVANCE','CREDIT_NOTE','SALES_RETURN','REFUND','WRITE_OFF','SUSPENSE','FX_REVALUATION','RETENTION','COD','GATEWAY','INTERCOMPANY','CONTRACT_MILESTONE','ADJUSTMENT'] })
+  @ApiPropertyOptional({
+    enum: [
+      'INVOICE',
+      'IMMEDIATE_SALE',
+      'ADVANCE',
+      'CREDIT_NOTE',
+      'SALES_RETURN',
+      'REFUND',
+      'WRITE_OFF',
+      'SUSPENSE',
+      'FX_REVALUATION',
+      'RETENTION',
+      'COD',
+      'GATEWAY',
+      'INTERCOMPANY',
+      'CONTRACT_MILESTONE',
+      'ADJUSTMENT',
+    ],
+  })
   @IsOptional()
   @IsString()
   document_type?: string;
 
-  @ApiPropertyOptional({ enum: ['DRAFT','POSTED','PARTIAL','SETTLED','DISPUTED','REVERSED','CANCELLED'] })
+  @ApiPropertyOptional({
+    enum: [
+      'DRAFT',
+      'POSTED',
+      'PARTIAL',
+      'SETTLED',
+      'DISPUTED',
+      'REVERSED',
+      'CANCELLED',
+    ],
+  })
   @IsOptional()
   @IsString()
   status?: string;
 
-  @ApiPropertyOptional({ enum: ['NORMAL','OVERDUE','BAD_DEBT_RISK','LEGAL'] })
+  @ApiPropertyOptional({
+    enum: ['NORMAL', 'OVERDUE', 'BAD_DEBT_RISK', 'LEGAL'],
+  })
   @IsOptional()
   @IsString()
   risk_status?: string;

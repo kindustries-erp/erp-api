@@ -30,7 +30,10 @@ export class ApplyAdvanceToInvoiceDto {
   ar_document_id!: string;
 
   /** Số tiền cấn trừ: phải <= min(advance.remaining, invoice.open_amount) */
-  @ApiProperty({ description: 'Số tiền cấn trừ (≤ advance remaining và ≤ invoice open amount)' })
+  @ApiProperty({
+    description:
+      'Số tiền cấn trừ (≤ advance remaining và ≤ invoice open amount)',
+  })
   @Type(() => Number)
   @IsNumber()
   @Min(0.01)
@@ -40,7 +43,9 @@ export class ApplyAdvanceToInvoiceDto {
   @IsDateString()
   application_date!: string;
 
-  @ApiPropertyOptional({ description: 'Số chứng từ cấn trừ (auto-generate nếu bỏ trống)' })
+  @ApiPropertyOptional({
+    description: 'Số chứng từ cấn trừ (auto-generate nếu bỏ trống)',
+  })
   @IsOptional()
   @IsString()
   application_no?: string;

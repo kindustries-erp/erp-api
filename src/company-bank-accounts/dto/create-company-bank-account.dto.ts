@@ -15,7 +15,6 @@ export class CreateCompanyBankAccountDto {
   @IsNotEmpty()
   bank_name: string;
 
-
   @IsString()
   @IsNotEmpty()
   account_number: string;

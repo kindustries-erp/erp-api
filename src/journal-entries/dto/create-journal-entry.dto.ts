@@ -74,7 +74,6 @@ export class CreateJournalEntryDto {
   @IsString()
   reference_id?: string;
 
-
   @ApiProperty({
     description:
       'Danh sách dòng bút toán (tối thiểu 2 dòng, tổng debit = tổng credit)',

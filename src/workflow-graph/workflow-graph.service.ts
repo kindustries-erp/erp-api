@@ -124,7 +124,12 @@ const PROCESS_DEFS: ProcessDef[] = [
         color: '#f59e0b',
         terminal: false,
       },
-      { value: 'APPROVED', label: 'Đã duyệt', color: '#3b82f6', terminal: false },
+      {
+        value: 'APPROVED',
+        label: 'Đã duyệt',
+        color: '#3b82f6',
+        terminal: false,
+      },
       {
         value: 'POSTED',
         label: 'Đã hạch toán',
@@ -217,7 +222,12 @@ const PROCESS_DEFS: ProcessDef[] = [
       'Khoản công nợ đã SETTLED không thể bù trừ thêm',
     ],
     statuses: [
-      { value: 'OPEN', label: 'Còn nợ đầy đủ', color: '#ef4444', terminal: false },
+      {
+        value: 'OPEN',
+        label: 'Còn nợ đầy đủ',
+        color: '#ef4444',
+        terminal: false,
+      },
       {
         value: 'PARTIAL',
         label: 'Bù trừ một phần',
@@ -409,7 +419,14 @@ const PROCESS_DEFS: ProcessDef[] = [
     label: 'Phân Quyền & Bảo Mật',
     description:
       'Quản lý vai trò, quyền truy cập người dùng và nhật ký hệ thống',
-    deptKeywords: ['it', 'system', 'admin', 'quản trị', 'công nghệ', 'technology'],
+    deptKeywords: [
+      'it',
+      'system',
+      'admin',
+      'quản trị',
+      'công nghệ',
+      'technology',
+    ],
     color: '#6366f1',
     icon: 'shield',
     rules: [
@@ -524,7 +541,8 @@ export class WorkflowGraphService {
       .map((u) => ({
         id: u.id,
         name:
-          `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.id.slice(0, 8),
+          `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() ||
+          u.id.slice(0, 8),
         position:
           typeof u.role === 'object' ? (u.role?.name ?? 'Admin') : 'Admin',
       }));

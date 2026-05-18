@@ -1,5 +1,8 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { CreateViettelV2DraftDto, SyncViettelV2InboundDto } from './dto/viettel-v2.dto';
+import {
+  CreateViettelV2DraftDto,
+  SyncViettelV2InboundDto,
+} from './dto/viettel-v2.dto';
 import { ViettelV2Service } from './viettel-v2.service';
 
 @Controller('viettel-v2')

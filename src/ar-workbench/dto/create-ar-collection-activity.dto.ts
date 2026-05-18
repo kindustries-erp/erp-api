@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateArCollectionActivityDto {
@@ -13,8 +21,28 @@ export class CreateArCollectionActivityDto {
   @IsString()
   business_partner_id?: string;
 
-  @ApiProperty({ enum: ['REMINDER','CALL','EMAIL','DISPUTE','PROMISE_TO_PAY','ESCALATION','LEGAL_CASE','BAD_DEBT_REVIEW'] })
-  @IsIn(['REMINDER','CALL','EMAIL','DISPUTE','PROMISE_TO_PAY','ESCALATION','LEGAL_CASE','BAD_DEBT_REVIEW'])
+  @ApiProperty({
+    enum: [
+      'REMINDER',
+      'CALL',
+      'EMAIL',
+      'DISPUTE',
+      'PROMISE_TO_PAY',
+      'ESCALATION',
+      'LEGAL_CASE',
+      'BAD_DEBT_REVIEW',
+    ],
+  })
+  @IsIn([
+    'REMINDER',
+    'CALL',
+    'EMAIL',
+    'DISPUTE',
+    'PROMISE_TO_PAY',
+    'ESCALATION',
+    'LEGAL_CASE',
+    'BAD_DEBT_REVIEW',
+  ])
   activity_type!: string;
 
   @ApiPropertyOptional()
@@ -22,9 +50,9 @@ export class CreateArCollectionActivityDto {
   @IsDateString()
   activity_date?: string;
 
-  @ApiPropertyOptional({ enum: ['OPEN','DONE','CANCELLED'], default: 'OPEN' })
+  @ApiPropertyOptional({ enum: ['OPEN', 'DONE', 'CANCELLED'], default: 'OPEN' })
   @IsOptional()
-  @IsIn(['OPEN','DONE','CANCELLED'])
+  @IsIn(['OPEN', 'DONE', 'CANCELLED'])
   status?: string;
 
   @ApiPropertyOptional()

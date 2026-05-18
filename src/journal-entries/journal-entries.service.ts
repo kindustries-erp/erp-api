@@ -157,8 +157,14 @@ export class JournalEntriesService {
       let linesMap: Record<string, any[]> = {};
       if (entries.length > 0) {
         const entryIds = entries.map((e: any) => e.id);
-        const lUrl = new URL(`/items/${this.linesCollection}`, this.directusUrl);
-        lUrl.searchParams.append('filter', JSON.stringify({ journal_entry_id: { _in: entryIds } }));
+        const lUrl = new URL(
+          `/items/${this.linesCollection}`,
+          this.directusUrl,
+        );
+        lUrl.searchParams.append(
+          'filter',
+          JSON.stringify({ journal_entry_id: { _in: entryIds } }),
+        );
         lUrl.searchParams.append('fields[]', 'id');
         lUrl.searchParams.append('fields[]', 'journal_entry_id');
         lUrl.searchParams.append('fields[]', 'account_id.id');
@@ -170,11 +176,16 @@ export class JournalEntriesService {
         lUrl.searchParams.append('fields[]', 'sort');
         lUrl.searchParams.append('sort[]', 'sort');
         lUrl.searchParams.append('limit', '-1');
-        const lRes = await fetch(lUrl.toString(), { headers: this.getAdminHeaders() });
+        const lRes = await fetch(lUrl.toString(), {
+          headers: this.getAdminHeaders(),
+        });
         if (lRes.ok) {
           const lJson = await lRes.json();
           for (const line of lJson.data || []) {
-            const eid = typeof line.journal_entry_id === 'object' ? line.journal_entry_id?.id : line.journal_entry_id;
+            const eid =
+              typeof line.journal_entry_id === 'object'
+                ? line.journal_entry_id?.id
+                : line.journal_entry_id;
             if (!linesMap[eid]) linesMap[eid] = [];
             linesMap[eid].push(line);
           }
