@@ -11,6 +11,7 @@ import {
   createDirectus,
   readItem,
   createItem,
+  updateItem,
   deleteItem,
   rest,
   staticToken,
@@ -91,6 +92,7 @@ export class PartnerLedgerSettlementsService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
 
       const filterAnd: any[] = [];
@@ -157,7 +159,7 @@ export class PartnerLedgerSettlementsService {
     this.guard(userToken);
     const client = this.getClient(userToken);
     try {
-      await (client as any).request((deleteItem as any)(this.collection, id));
+      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
       return { message: 'Xóa bù trừ công nợ thành công' };
     } catch (error: any) {
       this.logger.error(`Lỗi khi xóa bù trừ công nợ ${id}`, error);

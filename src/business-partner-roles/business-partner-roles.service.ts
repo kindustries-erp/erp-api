@@ -100,6 +100,7 @@ export class BusinessPartnerRolesService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
       if (query.search) {
         url.searchParams.append('search', query.search);
@@ -177,7 +178,7 @@ export class BusinessPartnerRolesService {
     this.guard(userToken);
     const client = this.getClient(userToken);
     try {
-      await (client as any).request((deleteItem as any)(this.collection, id));
+      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
       return { message: 'Xóa vai trò đối tác thành công' };
     } catch (error: any) {
       this.logger.error(`Lỗi khi xóa vai trò đối tác ${id}`, error);

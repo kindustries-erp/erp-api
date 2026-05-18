@@ -74,6 +74,7 @@ export class ChartOfAccountsService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
       if (query.search) {
         url.searchParams.append('search', query.search);
@@ -163,7 +164,7 @@ export class ChartOfAccountsService {
       .with(rest());
     try {
       await (userClient as any).request(
-        (deleteItem as any)(this.collection, id),
+        (updateItem as any)(this.collection, id, { is_active: false }),
       );
       return { message: 'Xóa tài khoản kế toán thành công' };
     } catch (error: any) {

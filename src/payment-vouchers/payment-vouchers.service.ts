@@ -175,6 +175,7 @@ export class PaymentVouchersService {
     url.searchParams.append('limit', pageSize.toString());
     url.searchParams.append('offset', offset.toString());
     url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('filter[is_active][_eq]', 'true');
     for (const field of options.fields) {
       url.searchParams.append('fields[]', field);
     }
@@ -844,6 +845,7 @@ export class PaymentVouchersService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
+      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
       if (query.search) url.searchParams.append('search', query.search);
 
@@ -1273,7 +1275,7 @@ export class PaymentVouchersService {
       }
 
       await this.syncRelatedDocuments(id, []);
-      await (client as any).request((deleteItem as any)(this.collection, id));
+      await (client as any).request((updateItem as any)(this.collection, id, { is_active: false }));
       return {
         message: 'Xóa phiếu thu chi và các dữ liệu liên quan thành công',
       };
