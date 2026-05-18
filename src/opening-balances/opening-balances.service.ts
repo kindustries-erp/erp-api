@@ -50,7 +50,7 @@ export class OpeningBalancesService {
     const client = this.getClient(userToken);
     try {
       const result = await (client as any).request(
-        (createItem as any)(this.collection, { ...dto }),
+        (createItem as any)(this.collection, { is_active: true, ...dto }),
       );
       return { message: 'Tạo số dư đầu kỳ thành công', data: result };
     } catch (error: any) {
@@ -73,7 +73,6 @@ export class OpeningBalancesService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
-      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
       if (query.search) url.searchParams.append('search', query.search);
 

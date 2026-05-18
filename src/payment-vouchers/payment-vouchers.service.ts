@@ -175,9 +175,11 @@ export class PaymentVouchersService {
     url.searchParams.append('limit', pageSize.toString());
     url.searchParams.append('offset', offset.toString());
     url.searchParams.append('meta', 'filter_count');
-      url.searchParams.append('filter[is_active][_eq]', 'true');
     for (const field of options.fields) {
       url.searchParams.append('fields[]', field);
+    }
+    if (collection === this.collection) {
+      url.searchParams.append('filter[is_active][_eq]', 'true');
     }
     if (options.sort) url.searchParams.append('sort[]', options.sort);
     if (options.search) url.searchParams.append('search', options.search);
@@ -815,6 +817,7 @@ export class PaymentVouchersService {
       });
       const baseDto = this.stripCashBankTransientFields(dto);
       const payload = {
+        is_active: true,
         ...baseDto,
         ...presetPayload,
         ...counterpartyPayload,
@@ -845,11 +848,12 @@ export class PaymentVouchersService {
       url.searchParams.append('limit', pageSize.toString());
       url.searchParams.append('offset', offset.toString());
       url.searchParams.append('meta', 'filter_count');
-      url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
+      // Không ép fields ở endpoint list để tránh lỗi parse fields bất thường theo role/query serializer.
+      // Directus mặc định trả về all allowed fields theo permission của token.
       if (query.search) url.searchParams.append('search', query.search);
 
-      const filterAnd: any[] = [];
+      const filterAnd: any[] = [{ is_active: { _eq: true } }];
       if (query.counterparty_source)
         filterAnd.push({
           counterparty_source: { _eq: query.counterparty_source },
@@ -879,6 +883,8 @@ export class PaymentVouchersService {
       if (filterAnd.length > 0) {
         url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
       }
+
+      this.logger.debug(`Fetching payment vouchers: ${url.toString()}`);
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${userToken}` },

@@ -7,6 +7,7 @@ import {
   IsIn,
   IsArray,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -99,6 +100,11 @@ export class CreatePaymentVouchersDto {
   @ValidateNested({ each: true })
   @Type(() => CashBankRelatedDocumentDto)
   related_documents?: CashBankRelatedDocumentDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 
   @ApiPropertyOptional({ description: 'Bắt buộc khi voucher_channel = CASH' })
   @IsOptional()

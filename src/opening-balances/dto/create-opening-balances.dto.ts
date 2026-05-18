@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsUUID,
   IsNotEmpty,
+  IsBoolean,
 } from 'class-validator';
 
 export class CreateOpeningBalancesDto {
@@ -16,4 +17,5 @@ export class CreateOpeningBalancesDto {
   @IsOptional() @IsNumber() credit_amount?: number;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsBoolean() is_active?: boolean;
 }
