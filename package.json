@@ -23,7 +23,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "docker:build": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml build",
     "docker:up": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml up -d",
-    "docker:deploy": "npm run docker:build && npm run docker:up"
+    "docker:deploy": "npm run docker:build && npm run docker:up",
+    "prepare": "husky"
   },
   "dependencies": {
     "@directus/sdk": "^21.2.2",
@@ -58,7 +59,9 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^17.0.0",
+    "husky": "^9.1.7",
     "jest": "^30.0.0",
+    "lint-staged": "^16.4.0",
     "plop": "^4.0.5",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
