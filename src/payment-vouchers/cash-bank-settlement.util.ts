@@ -11,7 +11,7 @@ export type CashBankSettlementLinkLike = {
   payment_voucher_id?: string | null | { status?: string | null };
 };
 
-const ELIGIBLE_SETTLEMENT_VOUCHER_STATUSES = new Set(['APPROVED', 'POSTED']);
+const ELIGIBLE_SETTLEMENT_VOUCHER_STATUSES = new Set(['CONFIRMED']);
 
 export function normalizeCashBankAmount(
   input: number | string | null | undefined,

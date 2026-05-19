@@ -40,7 +40,7 @@ describe('cash-bank settlement utilities', () => {
     ).toThrow('Tổng số tiền cấn trừ công nợ không được vượt quá số tiền phiếu');
   });
 
-  it('only includes approved or posted voucher links in AR settlement', () => {
+  it('only includes confirmed voucher links in AR settlement', () => {
     expect(
       filterEligibleCashBankSettlementLinks([
         { amount: 15_000_000, payment_voucher_id: { status: 'DRAFT' } },
@@ -48,11 +48,11 @@ describe('cash-bank settlement utilities', () => {
           amount: 4_000_000,
           payment_voucher_id: { status: 'PENDING_APPROVAL' },
         },
-        { amount: 6_000_000, payment_voucher_id: { status: 'APPROVED' } },
-        { amount: 9_000_000, payment_voucher_id: { status: 'POSTED' } },
+        { amount: 6_000_000, payment_voucher_id: { status: 'CONFIRMED' } },
+        { amount: 9_000_000, payment_voucher_id: { status: 'APPROVED' } },
         { amount: 7_000_000, payment_voucher_id: { status: 'CANCELLED' } },
       ]).map((item) => item.amount),
-    ).toEqual([6_000_000, 9_000_000]);
+    ).toEqual([6_000_000]);
   });
 
   it('reopens invoice when all eligible voucher links are removed', () => {

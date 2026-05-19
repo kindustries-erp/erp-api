@@ -180,11 +180,6 @@ export class CreatePaymentVouchersDto {
   @IsUUID()
   company_bank_account_id?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  beneficiary_bank_account_id?: string;
-
   @ApiProperty()
   @IsNumber()
   @IsNotEmpty()
@@ -226,25 +221,6 @@ export class CreatePaymentVouchersDto {
   @IsString()
   counterparty_tax_code_snapshot?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  counterparty_address_snapshot?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  beneficiary_bank_name_snapshot?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  beneficiary_bank_account_snapshot?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  beneficiary_account_holder_snapshot?: string;
 
   @ApiPropertyOptional({ description: 'ID bút toán đã hạch toán thủ công' })
   @IsOptional()

@@ -8,6 +8,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { CreateJournalEntryDto } from '../journal-entries/dto/create-journal-entry.dto';
 import { ConfigService } from '@nestjs/config';
 import {
   createDirectus,
@@ -134,24 +135,7 @@ export class PaymentVouchersService {
     return {
       counterparty_name_snapshot: data.display_name || data.name || '',
       counterparty_tax_code_snapshot: data.tax_code || '',
-      counterparty_address_snapshot: data.address || '',
       counterparty_phone_snapshot: data.phone || '',
-    };
-  }
-
-  private async fetchBankSnapshot(
-    bankAccountId: string,
-  ): Promise<Record<string, string>> {
-    const res = await fetch(
-      `${this.directusUrl}/items/business_partner_bank_accounts/${bankAccountId}`,
-      { headers: { Authorization: `Bearer ${this.adminToken}` } },
-    );
-    if (!res.ok) return {};
-    const { data } = await res.json();
-    return {
-      beneficiary_bank_name_snapshot: data.bank_name || '',
-      beneficiary_bank_account_snapshot: data.account_number || '',
-      beneficiary_account_holder_snapshot: data.account_holder || '',
     };
   }
 
@@ -237,23 +221,13 @@ export class PaymentVouchersService {
       | 'counterparty_source'
       | 'employee_id'
       | 'counterparty_id'
-      | 'beneficiary_bank_account_id'
       | 'counterparty_name_snapshot'
       | 'counterparty_phone_snapshot'
       | 'counterparty_identity_no_snapshot'
       | 'counterparty_tax_code_snapshot'
-      | 'counterparty_address_snapshot'
-      | 'beneficiary_bank_name_snapshot'
-      | 'beneficiary_bank_account_snapshot'
-      | 'beneficiary_account_holder_snapshot'
     >,
   ): Promise<Record<string, any>> {
-    const {
-      counterparty_source,
-      employee_id,
-      counterparty_id,
-      beneficiary_bank_account_id,
-    } = dto;
+    const { counterparty_source, employee_id, counterparty_id } = dto;
 
     if (counterparty_source === 'INTERNAL') {
       if (!employee_id)
@@ -296,38 +270,20 @@ export class PaymentVouchersService {
         );
 
       const snapshot = await this.fetchBusinessPartnerSnapshot(counterparty_id);
-      const bankSnapshot = beneficiary_bank_account_id
-        ? await this.fetchBankSnapshot(beneficiary_bank_account_id)
-        : {};
 
       return {
         counterparty_source,
         counterparty_id,
         employee_id: null,
         ...snapshot,
-        ...bankSnapshot,
         ...(dto.counterparty_name_snapshot && {
           counterparty_name_snapshot: dto.counterparty_name_snapshot,
         }),
         ...(dto.counterparty_tax_code_snapshot && {
           counterparty_tax_code_snapshot: dto.counterparty_tax_code_snapshot,
         }),
-        ...(dto.counterparty_address_snapshot && {
-          counterparty_address_snapshot: dto.counterparty_address_snapshot,
-        }),
         ...(dto.counterparty_phone_snapshot && {
           counterparty_phone_snapshot: dto.counterparty_phone_snapshot,
-        }),
-        ...(dto.beneficiary_bank_name_snapshot && {
-          beneficiary_bank_name_snapshot: dto.beneficiary_bank_name_snapshot,
-        }),
-        ...(dto.beneficiary_bank_account_snapshot && {
-          beneficiary_bank_account_snapshot:
-            dto.beneficiary_bank_account_snapshot,
-        }),
-        ...(dto.beneficiary_account_holder_snapshot && {
-          beneficiary_account_holder_snapshot:
-            dto.beneficiary_account_holder_snapshot,
         }),
       };
     }
@@ -1134,20 +1090,11 @@ export class PaymentVouchersService {
         counterparty_source: source,
         employee_id: dto.employee_id ?? current.employee_id,
         counterparty_id: dto.counterparty_id ?? current.counterparty_id,
-        beneficiary_bank_account_id:
-          dto.beneficiary_bank_account_id ??
-          current.beneficiary_bank_account_id,
         counterparty_name_snapshot: dto.counterparty_name_snapshot,
         counterparty_phone_snapshot: dto.counterparty_phone_snapshot,
         counterparty_identity_no_snapshot:
           dto.counterparty_identity_no_snapshot,
         counterparty_tax_code_snapshot: dto.counterparty_tax_code_snapshot,
-        counterparty_address_snapshot: dto.counterparty_address_snapshot,
-        beneficiary_bank_name_snapshot: dto.beneficiary_bank_name_snapshot,
-        beneficiary_bank_account_snapshot:
-          dto.beneficiary_bank_account_snapshot,
-        beneficiary_account_holder_snapshot:
-          dto.beneficiary_account_holder_snapshot,
       });
     }
 
@@ -1399,5 +1346,130 @@ export class PaymentVouchersService {
       this.logger.error(`Lỗi hủy phiếu ${id}`, error);
       throwDirectusSdkError(error, 'Không thể hủy phiếu thu chi');
     }
+  }
+
+  async postToJournal(id: string, dto: CreateJournalEntryDto, userToken: string) {
+    this.guard(userToken);
+    const current = await this.loadVoucher(id, userToken);
+
+    if (!['CONFIRMED', 'APPROVED'].includes(current.status)) {
+      throw new BadRequestException(
+        `Chỉ có thể hạch toán phiếu ở trạng thái CONFIRMED/APPROVED. Trạng thái hiện tại: ${current.status}`,
+      );
+    }
+
+    if (current.journal_entry_id) {
+      throw new BadRequestException('Phiếu đã được hạch toán trước đó');
+    }
+
+    const totalDebit = (dto.lines || []).reduce(
+      (sum, line) => sum + Number(line.debit || 0),
+      0,
+    );
+    const totalCredit = (dto.lines || []).reduce(
+      (sum, line) => sum + Number(line.credit || 0),
+      0,
+    );
+
+    if (!dto.lines?.length || dto.lines.length < 2) {
+      throw new BadRequestException('Bút toán phải có ít nhất 2 dòng');
+    }
+    if (totalDebit <= 0 || Math.abs(totalDebit - totalCredit) > 0.001) {
+      throw new BadRequestException('Tổng Nợ/Có không cân hoặc không hợp lệ');
+    }
+
+    const payload = {
+      ...dto,
+      reference_type: 'payment_voucher',
+      reference_id: id,
+      description: dto.description || current.description || current.voucher_no,
+      date: dto.date || current.posting_date || current.document_date,
+    };
+
+    const createRes = await fetch(`${this.directusUrl}/items/journal_entries`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        voucher_no: payload.voucher_no || null,
+        date: payload.date,
+        period_id: payload.period_id || null,
+        description: payload.description,
+        status: 'posted',
+        reference_type: payload.reference_type,
+        reference_id: payload.reference_id,
+        total_debit: totalDebit,
+        total_credit: totalCredit,
+        created_by: await this.getCurrentUserId(userToken),
+      }),
+    });
+    if (!createRes.ok) {
+      await throwDirectusResponseError(createRes, 'Không thể tạo bút toán');
+    }
+    const createJson = await createRes.json();
+    const journalEntryId = createJson.data?.id;
+    if (!journalEntryId) {
+      throw new InternalServerErrorException('Tạo bút toán thất bại: không có ID');
+    }
+
+    const linesRes = await fetch(`${this.directusUrl}/items/journal_entry_lines`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.adminToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(
+        dto.lines.map((line, index) => ({
+          journal_entry_id: journalEntryId,
+          account_id: line.account_id,
+          debit: Number(line.debit || 0),
+          credit: Number(line.credit || 0),
+          description: line.description || payload.description || null,
+          sort: line.sort ?? index,
+        })),
+      ),
+    });
+    if (!linesRes.ok) {
+      await fetch(`${this.directusUrl}/items/journal_entries/${journalEntryId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${this.adminToken}` },
+      }).catch(() => undefined);
+      await throwDirectusResponseError(
+        linesRes,
+        'Không thể tạo dòng bút toán (đã rollback header)',
+      );
+    }
+
+    const client = this.getClient(userToken);
+    const postedAt = new Date().toISOString();
+    const updatedVoucher = await (client as any).request(
+      (updateItem as any)(this.collection, id, {
+        journal_entry_id: journalEntryId,
+        status: 'POSTED',
+        posted_at: postedAt,
+      }),
+    );
+    await this.writeApprovalLog(
+      id,
+      'POSTED',
+      payload.description,
+      await this.getCurrentUserId(userToken),
+      current.status,
+      'POSTED',
+      client,
+    );
+    await this.recomputeArDocumentsForVoucher(id);
+
+    const refreshed = await this.loadVoucher(id, userToken);
+    const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+    return {
+      message: 'Hạch toán phiếu thành công',
+      data: withRelated,
+      journal_entry_id: journalEntryId,
+      journal_entry: createJson.data,
+      voucher_update: updatedVoucher,
+    };
   }
 }

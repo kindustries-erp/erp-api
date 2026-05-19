@@ -22,6 +22,7 @@ import {
   VoucherRejectDto,
   VoucherCancelDto,
 } from './dto/voucher-action.dto';
+import { CreateJournalEntryDto } from '../journal-entries/dto/create-journal-entry.dto';
 
 @ApiTags('PaymentVouchers')
 @ApiBearerAuth()
@@ -69,7 +70,7 @@ export class PaymentVouchersController {
   }
 
   @ApiOperation({
-    summary: 'Danh sách tag gợi ý Cash/Bank để auto-fill tài khoản',
+    summary: 'Danh sách tag gợi ý Cash/Bank để gắn preset chứng từ',
   })
   @Get('lookup/cash-bank-tag-presets')
   findCashBankTagPresets(
@@ -121,7 +122,7 @@ export class PaymentVouchersController {
   }
 
   @ApiOperation({
-    summary: 'Duyệt phiếu và tự động hạch toán (PENDING_APPROVAL → POSTED)',
+    summary: 'Duyệt phiếu (PENDING_APPROVAL → CONFIRMED)',
   })
   @Post(':id/approve')
   approve(
@@ -143,15 +144,7 @@ export class PaymentVouchersController {
   }
 
   @ApiOperation({
-    summary: 'Hạch toán thủ công cho phiếu APPROVED cũ (legacy)',
-  })
-  @Post(':id/post')
-  post(@Param('id') id: string, @UserToken() token: string) {
-    return this.paymentVouchersService.post(id, token);
-  }
-
-  @ApiOperation({
-    summary: 'Hủy phiếu (DRAFT/PENDING_APPROVAL/APPROVED/POSTED → CANCELLED)',
+    summary: 'Hủy phiếu (DRAFT/PENDING_APPROVAL/CONFIRMED → CANCELLED)',
   })
   @Post(':id/cancel')
   cancel(
@@ -160,5 +153,17 @@ export class PaymentVouchersController {
     @UserToken() token: string,
   ) {
     return this.paymentVouchersService.cancel(id, dto, token);
+  }
+
+  @ApiOperation({
+    summary: 'Hạch toán phiếu qua Journal Entry và link ngược journal_entry_id',
+  })
+  @Post(':id/post-to-journal')
+  postToJournal(
+    @Param('id') id: string,
+    @Body() dto: CreateJournalEntryDto,
+    @UserToken() token: string,
+  ) {
+    return this.paymentVouchersService.postToJournal(id, dto, token);
   }
 }
