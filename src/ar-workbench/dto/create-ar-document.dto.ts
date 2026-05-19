@@ -52,10 +52,12 @@ export class CreateArDocumentDto {
   @IsString()
   business_partner_id?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'ID bút toán đã liên kết' })
   @IsOptional()
-  @IsString()
-  accounting_account_id?: string;
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  journal_entry_id?: number;
 
   @ApiProperty()
   @IsDateString()

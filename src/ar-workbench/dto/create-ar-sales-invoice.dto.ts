@@ -79,11 +79,13 @@ export class CreateArSalesInvoiceDto {
   business_partner_id!: string;
 
   @ApiPropertyOptional({
-    description: 'AR account id. Defaults to account code 131.',
+    description: 'Linked journal entry id after posting/reconciliation.',
   })
   @IsOptional()
-  @IsString()
-  accounting_account_id?: string;
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  journal_entry_id?: number;
 
   @ApiProperty()
   @IsDateString()

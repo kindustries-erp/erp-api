@@ -8,6 +8,7 @@ import {
   IsArray,
   ValidateNested,
   IsBoolean,
+  IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -40,14 +41,32 @@ export class CashBankRelatedDocumentDto {
   @IsNotEmpty()
   related_id!: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() related_no?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() related_date?: string;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() amount?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() note?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  related_no?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  related_date?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class CreatePaymentVouchersDto {
-  @ApiProperty() @IsString() @IsNotEmpty() voucher_no!: string;
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  voucher_no!: string;
 
   @ApiProperty({ enum: ['CASH', 'BANK'] })
   @IsString()
@@ -72,8 +91,15 @@ export class CreatePaymentVouchersDto {
   @IsNotEmpty()
   voucher_type!: string;
 
-  @ApiProperty() @IsString() @IsNotEmpty() document_date!: string;
-  @ApiProperty() @IsString() @IsNotEmpty() posting_date!: string;
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  document_date!: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  posting_date!: string;
 
   @ApiProperty({
     enum: ['INTERNAL', 'EXTERNAL'],
@@ -98,23 +124,35 @@ export class CreatePaymentVouchersDto {
   @IsUUID()
   counterparty_id?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_name?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_id_no?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() actual_person_phone?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actual_person_name?: string;
 
-  @ApiProperty() @IsString() @IsNotEmpty() description!: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID() debit_account_id?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID() credit_account_id?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actual_person_id_no?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actual_person_phone?: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  description!: string;
 
   @ApiPropertyOptional({
-    description: 'Cash/Bank tag preset id dùng để auto-fill tài khoản',
+    description: 'Cash/Bank tag preset id dùng để gắn preset gợi ý',
   })
   @IsOptional()
   @IsUUID()
   cash_bank_tag_preset_id?: string;
 
   @ApiPropertyOptional({
-    description: 'Cash/Bank tag preset code dùng để auto-fill tài khoản',
+    description: 'Cash/Bank tag preset code dùng để resolve preset gợi ý',
   })
   @IsOptional()
   @IsString()
@@ -147,46 +185,75 @@ export class CreatePaymentVouchersDto {
   @IsUUID()
   beneficiary_bank_account_id?: string;
 
-  @ApiProperty() @IsNumber() @IsNotEmpty() amount!: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() currency?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() amount_in_words?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiProperty()
+  @IsNumber()
+  @IsNotEmpty()
+  amount!: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  currency?: string;
 
-  // Snapshot — backend tự fill nếu không truyền
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  amount_in_words?: string;
+
+  @ApiPropertyOptional({ enum: ['DRAFT', 'CONFIRMED', 'CANCELLED'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['DRAFT', 'CONFIRMED', 'CANCELLED'])
+  status?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   counterparty_name_snapshot?: string;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  counterparty_tax_code_snapshot?: string;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  counterparty_address_snapshot?: string;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  counterparty_phone_snapshot?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   counterparty_identity_no_snapshot?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_phone_snapshot?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_tax_code_snapshot?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  counterparty_address_snapshot?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   beneficiary_bank_name_snapshot?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   beneficiary_bank_account_snapshot?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   beneficiary_account_holder_snapshot?: string;
+
+  @ApiPropertyOptional({ description: 'ID bút toán đã hạch toán thủ công' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  journal_entry_id?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

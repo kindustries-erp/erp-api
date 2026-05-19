@@ -24,14 +24,7 @@ export class PaymentVoucherSummaryQueryDto {
   voucher_direction?: string;
 
   @ApiPropertyOptional({
-    enum: [
-      'DRAFT',
-      'PENDING_APPROVAL',
-      'APPROVED',
-      'POSTED',
-      'REJECTED',
-      'CANCELLED',
-    ],
+    enum: ['DRAFT', 'PENDING_APPROVAL', 'CONFIRMED', 'REJECTED', 'CANCELLED'],
     description: 'Trạng thái chứng từ',
   })
   @IsOptional()

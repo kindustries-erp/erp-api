@@ -32,7 +32,7 @@ type ArDocument = {
   document_no: string;
   document_type: string;
   business_partner_id?: string | null;
-  accounting_account_id?: string | null;
+  journal_entry_id?: number | null;
   document_date: string;
   posting_date: string;
   due_date?: string | null;
@@ -767,10 +767,8 @@ export class ArWorkbenchService {
         'Hóa đơn cần ít nhất một dòng hàng/dịch vụ',
       );
 
-    const [arAccountId, revenueAccountId, taxAccountId] = await Promise.all([
-      dto.accounting_account_id
-        ? Promise.resolve(dto.accounting_account_id)
-        : this.getAccountIdByCode('131', userToken),
+    const [, revenueAccountId, taxAccountId] = await Promise.all([
+      this.getAccountIdByCode('131', userToken),
       this.getAccountIdByCode('511', userToken),
       this.getAccountIdByCode('3331', userToken),
     ]);
@@ -785,7 +783,7 @@ export class ArWorkbenchService {
             document_no: dto.document_no,
             document_type: 'INVOICE',
             business_partner_id: dto.business_partner_id,
-            accounting_account_id: arAccountId,
+            journal_entry_id: dto.journal_entry_id,
             document_date: dto.document_date,
             posting_date: dto.posting_date,
             due_date: dto.due_date,
@@ -884,11 +882,27 @@ export class ArWorkbenchService {
         userToken,
       );
 
+      const linkedJournal = journal.data?.[0] || null;
+      if (linkedJournal && posted.data.journal_entry_id !== linkedJournal.id) {
+        await this.requestWrite<{ data: ArDocument }>(
+          `/items/ar_documents/${id}`,
+          userToken,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ journal_entry_id: linkedJournal.id }),
+          },
+        );
+      }
+
       return {
         message: 'Post hóa đơn AR thành công và đã sinh bút toán',
         data: {
-          document: posted.data,
-          journal_entry: journal.data?.[0] || null,
+          document: {
+            ...posted.data,
+            journal_entry_id:
+              linkedJournal?.id ?? posted.data.journal_entry_id ?? null,
+          },
+          journal_entry: linkedJournal,
         },
       };
     } catch (error: any) {
@@ -1032,6 +1046,7 @@ export class ArWorkbenchService {
           method: 'PATCH',
           body: JSON.stringify({
             status: 'REVERSED',
+            journal_entry_id: reversalEntry.data.id,
             metadata: {
               ...(document.metadata || {}),
               phase2a_reversal: {

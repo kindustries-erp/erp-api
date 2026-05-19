@@ -45,14 +45,7 @@ export class PaymentVoucherQueryDto {
   voucher_direction?: string;
 
   @ApiPropertyOptional({
-    enum: [
-      'DRAFT',
-      'PENDING_APPROVAL',
-      'APPROVED',
-      'POSTED',
-      'REJECTED',
-      'CANCELLED',
-    ],
+    enum: ['DRAFT', 'PENDING_APPROVAL', 'CONFIRMED', 'REJECTED', 'CANCELLED'],
   })
   @IsOptional()
   @IsString()
