@@ -221,7 +221,6 @@ export class CreatePaymentVouchersDto {
   @IsString()
   counterparty_tax_code_snapshot?: string;
 
-
   @ApiPropertyOptional({ description: 'ID bút toán đã hạch toán thủ công' })
   @IsOptional()
   @Type(() => Number)

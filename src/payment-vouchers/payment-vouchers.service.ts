@@ -1348,7 +1348,11 @@ export class PaymentVouchersService {
     }
   }
 
-  async postToJournal(id: string, dto: CreateJournalEntryDto, userToken: string) {
+  async postToJournal(
+    id: string,
+    dto: CreateJournalEntryDto,
+    userToken: string,
+  ) {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
 
@@ -1411,31 +1415,39 @@ export class PaymentVouchersService {
     const createJson = await createRes.json();
     const journalEntryId = createJson.data?.id;
     if (!journalEntryId) {
-      throw new InternalServerErrorException('Tạo bút toán thất bại: không có ID');
+      throw new InternalServerErrorException(
+        'Tạo bút toán thất bại: không có ID',
+      );
     }
 
-    const linesRes = await fetch(`${this.directusUrl}/items/journal_entry_lines`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.adminToken}`,
-        'Content-Type': 'application/json',
+    const linesRes = await fetch(
+      `${this.directusUrl}/items/journal_entry_lines`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(
+          dto.lines.map((line, index) => ({
+            journal_entry_id: journalEntryId,
+            account_id: line.account_id,
+            debit: Number(line.debit || 0),
+            credit: Number(line.credit || 0),
+            description: line.description || payload.description || null,
+            sort: line.sort ?? index,
+          })),
+        ),
       },
-      body: JSON.stringify(
-        dto.lines.map((line, index) => ({
-          journal_entry_id: journalEntryId,
-          account_id: line.account_id,
-          debit: Number(line.debit || 0),
-          credit: Number(line.credit || 0),
-          description: line.description || payload.description || null,
-          sort: line.sort ?? index,
-        })),
-      ),
-    });
+    );
     if (!linesRes.ok) {
-      await fetch(`${this.directusUrl}/items/journal_entries/${journalEntryId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${this.adminToken}` },
-      }).catch(() => undefined);
+      await fetch(
+        `${this.directusUrl}/items/journal_entries/${journalEntryId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${this.adminToken}` },
+        },
+      ).catch(() => undefined);
       await throwDirectusResponseError(
         linesRes,
         'Không thể tạo dòng bút toán (đã rollback header)',
@@ -1443,12 +1455,10 @@ export class PaymentVouchersService {
     }
 
     const client = this.getClient(userToken);
-    const postedAt = new Date().toISOString();
     const updatedVoucher = await (client as any).request(
       (updateItem as any)(this.collection, id, {
         journal_entry_id: journalEntryId,
         status: 'POSTED',
-        posted_at: postedAt,
       }),
     );
     await this.writeApprovalLog(
