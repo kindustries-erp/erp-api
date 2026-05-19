@@ -1052,7 +1052,19 @@ export class PaymentVouchersService {
     this.guard(userToken);
     try {
       return await this.adminListItems('business_partners', {
-        fields: ['id', 'display_name', 'name', 'tax_code', 'address', 'phone'],
+        fields: [
+          'id',
+          'code',
+          'name',
+          'display_name',
+          'partner_kind',
+          'tax_code',
+          'phone',
+          'email',
+          'address',
+          'is_active',
+          'note',
+        ],
         search: query.search,
         page: query.page,
         pageSize: query.pageSize,
