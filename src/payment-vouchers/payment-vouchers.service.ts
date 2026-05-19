@@ -46,8 +46,8 @@ import {
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   DRAFT: ['PENDING_APPROVAL', 'CANCELLED'],
-  PENDING_APPROVAL: ['CONFIRMED', 'REJECTED', 'CANCELLED'],
-  CONFIRMED: ['CANCELLED'],
+  PENDING_APPROVAL: ['APPROVED', 'REJECTED', 'CANCELLED'],
+  APPROVED: ['CANCELLED'],
   REJECTED: [],
   CANCELLED: [],
 };
@@ -913,7 +913,7 @@ export class PaymentVouchersService {
         url.searchParams.append('aggregate[count]', 'id');
         url.searchParams.append('groupBy[]', 'voucher_direction');
 
-        const baseFilter: any[] = [{ status: { _eq: 'CONFIRMED' } }];
+        const baseFilter: any[] = [{ status: { _eq: 'APPROVED' } }];
         if (query.voucher_channel)
           baseFilter.push({ voucher_channel: { _eq: query.voucher_channel } });
         if (query.cash_fund_id)
@@ -1052,7 +1052,7 @@ export class PaymentVouchersService {
       dtoKeys.length === 1 && dtoKeys[0] === 'related_documents';
 
     if (current.status !== 'DRAFT') {
-      if (relatedDocumentsOnly && ['CONFIRMED'].includes(current.status)) {
+      if (relatedDocumentsOnly && ['APPROVED'].includes(current.status)) {
         validateCashBankRelatedArDocuments({
           voucherAmount: current.amount,
           relatedDocuments: dto.related_documents,
@@ -1282,9 +1282,9 @@ export class PaymentVouchersService {
     const now = new Date().toISOString();
     const data = await this.transitionStatus(
       id,
-      'CONFIRMED',
+      'APPROVED',
       { approved_by: userId, approved_at: now },
-      'APPROVED_CONFIRMED',
+      'APPROVED',
       dto.note,
       userToken,
     );
@@ -1310,7 +1310,7 @@ export class PaymentVouchersService {
   async cancel(id: string, dto: VoucherCancelDto, userToken: string) {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
-    const cancellableFrom = ['DRAFT', 'PENDING_APPROVAL', 'CONFIRMED'];
+    const cancellableFrom = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'POSTED'];
 
     if (!cancellableFrom.includes(current.status)) {
       throw new BadRequestException(
@@ -1329,6 +1329,21 @@ export class PaymentVouchersService {
           cancelled_at: new Date().toISOString(),
         }),
       );
+
+      // Nếu phiếu đã hạch toán, xóa bút toán liên quan
+      if (current.journal_entry_id) {
+        await fetch(
+          `${this.directusUrl}/items/journal_entries/${current.journal_entry_id}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${this.adminToken}` },
+          },
+        ).catch((err) =>
+          this.logger.warn(
+            `Không thể xóa bút toán ${current.journal_entry_id} khi hủy phiếu: ${err.message}`,
+          ),
+        );
+      }
 
       await this.writeApprovalLog(
         id,
@@ -1356,14 +1371,30 @@ export class PaymentVouchersService {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
 
-    if (!['CONFIRMED', 'APPROVED'].includes(current.status)) {
+    if (!['APPROVED'].includes(current.status)) {
       throw new BadRequestException(
-        `Chỉ có thể hạch toán phiếu ở trạng thái CONFIRMED/APPROVED. Trạng thái hiện tại: ${current.status}`,
+        `Chỉ có thể hạch toán phiếu ở trạng thái APPROVED. Trạng thái hiện tại: ${current.status}`,
       );
     }
 
+    // Nếu đã có bút toán cũ, xóa trước khi tạo mới
     if (current.journal_entry_id) {
-      throw new BadRequestException('Phiếu đã được hạch toán trước đó');
+      await fetch(
+        `${this.directusUrl}/items/journal_entries/${current.journal_entry_id}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${this.adminToken}` },
+        },
+      ).catch((err) =>
+        this.logger.warn(
+          `Không thể xóa bút toán cũ ${current.journal_entry_id}: ${err.message}`,
+        ),
+      );
+      // Reset journal_entry_id trên phiếu trước khi ghi mới
+      const clientReset = this.getClient(userToken);
+      await (clientReset as any).request(
+        (updateItem as any)(this.collection, id, { journal_entry_id: null }),
+      );
     }
 
     const totalDebit = (dto.lines || []).reduce(
@@ -1458,7 +1489,6 @@ export class PaymentVouchersService {
     const updatedVoucher = await (client as any).request(
       (updateItem as any)(this.collection, id, {
         journal_entry_id: journalEntryId,
-        status: 'POSTED',
       }),
     );
     await this.writeApprovalLog(
@@ -1467,7 +1497,7 @@ export class PaymentVouchersService {
       payload.description,
       await this.getCurrentUserId(userToken),
       current.status,
-      'POSTED',
+      current.status,
       client,
     );
     await this.recomputeArDocumentsForVoucher(id);
