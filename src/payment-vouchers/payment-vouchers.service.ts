@@ -1048,20 +1048,38 @@ export class PaymentVouchersService {
     const dtoKeys = Object.keys(dto).filter(
       (key) => (dto as Record<string, any>)[key] !== undefined,
     );
-    const relatedDocumentsOnly =
-      dtoKeys.length === 1 && dtoKeys[0] === 'related_documents';
+    const allowedApprovedFields = new Set(['related_documents', 'description']);
+    const isApprovedEditableOnly =
+      dtoKeys.length > 0 &&
+      dtoKeys.every((key) => allowedApprovedFields.has(key));
 
     if (current.status !== 'DRAFT') {
-      if (relatedDocumentsOnly && ['APPROVED'].includes(current.status)) {
-        validateCashBankRelatedArDocuments({
-          voucherAmount: current.amount,
-          relatedDocuments: dto.related_documents,
-        });
-        await this.syncRelatedDocuments(id, dto.related_documents);
+      const nonEditableStatuses = ['CANCELLED', 'REJECTED'];
+      if (
+        isApprovedEditableOnly &&
+        !nonEditableStatuses.includes(current.status)
+      ) {
+        const client = this.getClient(userToken);
+        // Update description if provided
+        if (dto.description !== undefined) {
+          await (client as any).request(
+            (updateItem as any)(this.collection, id, {
+              description: dto.description,
+            }),
+          );
+        }
+        // Update related documents if provided
+        if (dto.related_documents !== undefined) {
+          validateCashBankRelatedArDocuments({
+            voucherAmount: current.amount,
+            relatedDocuments: dto.related_documents,
+          });
+          await this.syncRelatedDocuments(id, dto.related_documents);
+        }
         const refreshed = await this.loadVoucher(id, userToken);
         const [withRelated] = await this.attachRelatedDocuments([refreshed]);
         return {
-          message: 'Cập nhật chứng từ liên quan của phiếu thu chi thành công',
+          message: 'Cập nhật phiếu thành công',
           data: withRelated,
         };
       }
