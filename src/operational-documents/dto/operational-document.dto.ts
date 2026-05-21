@@ -39,6 +39,11 @@ export class OperationalQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   source_system?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  inventory_item_id?: string;
 }
 
 export class OperationalLineDto {
@@ -367,6 +372,83 @@ export class CreateDocumentPaymentLinkDto {
   @IsOptional()
   @IsDateString()
   applied_date?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class CreateInventoryItemDto {
+  @IsOptional()
+  @IsString()
+  item_code?: string;
+
+  @IsString()
+  item_name!: string;
+
+  @IsOptional()
+  @IsIn(['PART', 'MATERIAL', 'CONSUMABLE', 'OTHER'])
+  item_type?: string;
+
+  @IsOptional()
+  @IsString()
+  unit?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class CreateInventoryTransactionDto {
+  @IsOptional()
+  @IsUUID()
+  branch_id?: string;
+
+  @IsUUID()
+  inventory_item_id!: string;
+
+  @IsIn([
+    'RECEIPT',
+    'ISSUE',
+    'ADJUSTMENT_IN',
+    'ADJUSTMENT_OUT',
+    'TRANSFER_IN',
+    'TRANSFER_OUT',
+  ])
+  transaction_type!: string;
+
+  @IsOptional()
+  @IsDateString()
+  transaction_date?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  qty!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unit_cost?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  source_type?: string;
+
+  @IsOptional()
+  @IsUUID()
+  source_id?: string;
 
   @IsOptional()
   @IsString()

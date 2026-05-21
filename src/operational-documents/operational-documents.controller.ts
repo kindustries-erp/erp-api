@@ -14,6 +14,8 @@ import { DirectusAuthGuard } from '../auth/guards/directus-auth.guard';
 import { UserToken } from '../common/decorators/user-token.decorator';
 import {
   CreateDocumentPaymentLinkDto,
+  CreateInventoryItemDto,
+  CreateInventoryTransactionDto,
   CreateOperatingExpenseDto,
   CreatePurchaseOrderDto,
   CreateSalesServiceOrderDto,
@@ -136,6 +138,46 @@ export class OperationalDocumentsController {
   @Get('operational-payables')
   payables(@Query() query: OperationalQueryDto, @UserToken() token: string) {
     return this.service.getPayables(query, token);
+  }
+
+  @Get('inventory/items')
+  listInventoryItems(
+    @Query() query: OperationalQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.listInventoryItems(query, token);
+  }
+
+  @Post('inventory/items')
+  createInventoryItem(
+    @Body() dto: CreateInventoryItemDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.createInventoryItem(dto, token);
+  }
+
+  @Get('inventory/transactions')
+  listInventoryTransactions(
+    @Query() query: OperationalQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.listInventoryTransactions(query, token);
+  }
+
+  @Post('inventory/transactions')
+  createInventoryTransaction(
+    @Body() dto: CreateInventoryTransactionDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.createInventoryTransaction(dto, token);
+  }
+
+  @Get('inventory/stock')
+  inventoryStock(
+    @Query() query: OperationalQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.getInventoryStock(query, token);
   }
 
   @Get(':documentType/:id/payment-links')

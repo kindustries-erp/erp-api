@@ -9,6 +9,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   CreateDocumentPaymentLinkDto,
+  CreateInventoryItemDto,
+  CreateInventoryTransactionDto,
   CreateOperatingExpenseDto,
   CreatePurchaseOrderDto,
   CreateSalesServiceOrderDto,
@@ -541,6 +543,184 @@ export class OperationalDocumentsService {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  private async listCollection(collection: string, query: OperationalQueryDto) {
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 20;
+    const offset = (page - 1) * pageSize;
+    const url = new URL(`/items/${collection}`, this.directusUrl);
+    url.searchParams.append('limit', String(pageSize));
+    url.searchParams.append('offset', String(offset));
+    url.searchParams.append('meta', 'filter_count');
+    if (query.sort) url.searchParams.append('sort[]', query.sort);
+    if (query.search) url.searchParams.append('search', query.search);
+    if (query.branch_id)
+      url.searchParams.append('filter[branch_id][_eq]', query.branch_id);
+    if (query.inventory_item_id)
+      url.searchParams.append(
+        'filter[inventory_item_id][_eq]',
+        query.inventory_item_id,
+      );
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${this.adminToken}` },
+    });
+    if (!res.ok) throw new BadRequestException(await res.text());
+    const result = await res.json();
+    const total = result.meta?.filter_count || 0;
+    return {
+      items: result.data || [],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  listInventoryItems(query: OperationalQueryDto, userToken: string) {
+    this.guard(userToken);
+    return this.listCollection('inventory_items', {
+      ...query,
+      sort: query.sort || 'item_code',
+    });
+  }
+
+  listInventoryTransactions(query: OperationalQueryDto, userToken: string) {
+    this.guard(userToken);
+    return this.listCollection('inventory_transactions', {
+      ...query,
+      sort: query.sort || '-transaction_date',
+    });
+  }
+
+  async createInventoryItem(dto: CreateInventoryItemDto, userToken: string) {
+    this.guard(userToken);
+    const fallbackCode = `ITEM-${Date.now().toString(36).toUpperCase()}`;
+    const { data } = await this.request<{ data: any }>(
+      '/items/inventory_items',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          item_code: dto.item_code || fallbackCode,
+          item_name: dto.item_name,
+          item_type: dto.item_type || 'PART',
+          unit: dto.unit || 'PCS',
+          is_active: dto.is_active ?? true,
+          notes: dto.notes,
+        }),
+      },
+    );
+    return { data };
+  }
+
+  async createInventoryTransaction(
+    dto: CreateInventoryTransactionDto,
+    userToken: string,
+  ) {
+    this.guard(userToken);
+    const qty = Number(dto.qty);
+    const unitCost = Number(dto.unit_cost || 0);
+    const amount = Number(dto.amount ?? qty * unitCost);
+    const { data } = await this.request<{ data: any }>(
+      '/items/inventory_transactions',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...dto,
+          qty,
+          unit_cost: unitCost,
+          amount,
+        }),
+      },
+    );
+    return { data };
+  }
+
+  private isInboundInventory(type: string) {
+    return ['RECEIPT', 'ADJUSTMENT_IN', 'TRANSFER_IN'].includes(type);
+  }
+
+  private isOutboundInventory(type: string) {
+    return ['ISSUE', 'ADJUSTMENT_OUT', 'TRANSFER_OUT'].includes(type);
+  }
+
+  async getInventoryStock(query: OperationalQueryDto, userToken: string) {
+    this.guard(userToken);
+    const url = new URL('/items/inventory_transactions', this.directusUrl);
+    url.searchParams.append('limit', '-1');
+    url.searchParams.append('fields[]', '*');
+    if (query.branch_id)
+      url.searchParams.append('filter[branch_id][_eq]', query.branch_id);
+    if (query.inventory_item_id)
+      url.searchParams.append(
+        'filter[inventory_item_id][_eq]',
+        query.inventory_item_id,
+      );
+    const { data: txs } = await this.request<{ data: any[] }>(
+      `${url.pathname}${url.search}`,
+    );
+    const itemIds = Array.from(
+      new Set((txs || []).map((tx) => tx.inventory_item_id).filter(Boolean)),
+    );
+    const itemMap = new Map<string, any>();
+    if (itemIds.length) {
+      const itemUrl = new URL('/items/inventory_items', this.directusUrl);
+      itemUrl.searchParams.append('limit', '-1');
+      itemUrl.searchParams.append('fields[]', '*');
+      for (const id of itemIds)
+        itemUrl.searchParams.append('filter[id][_in][]', id);
+      const { data: items } = await this.request<{ data: any[] }>(
+        `${itemUrl.pathname}${itemUrl.search}`,
+      );
+      for (const item of items || []) itemMap.set(item.id, item);
+    }
+    const byKey = new Map<string, any>();
+    for (const tx of txs || []) {
+      const key = `${tx.inventory_item_id || 'unknown'}:${tx.branch_id || ''}`;
+      const current = byKey.get(key) || {
+        inventory_item_id: tx.inventory_item_id,
+        branch_id: tx.branch_id,
+        item_code: itemMap.get(tx.inventory_item_id)?.item_code || '',
+        item_name: itemMap.get(tx.inventory_item_id)?.item_name || '',
+        unit: itemMap.get(tx.inventory_item_id)?.unit || 'PCS',
+        received_qty: 0,
+        issued_qty: 0,
+        on_hand_qty: 0,
+        stock_value: 0,
+        last_transaction_date: null,
+      };
+      const qty = Number(tx.qty || 0);
+      const amount = Number(tx.amount || 0);
+      if (this.isInboundInventory(tx.transaction_type)) {
+        current.received_qty += qty;
+        current.on_hand_qty += qty;
+        current.stock_value += amount;
+      } else if (this.isOutboundInventory(tx.transaction_type)) {
+        current.issued_qty += qty;
+        current.on_hand_qty -= qty;
+        current.stock_value -= amount;
+      }
+      if (
+        !current.last_transaction_date ||
+        String(tx.transaction_date) > String(current.last_transaction_date)
+      ) {
+        current.last_transaction_date = tx.transaction_date;
+      }
+      byKey.set(key, current);
+    }
+    const items = Array.from(byKey.values()).sort((a, b) =>
+      String(a.item_code).localeCompare(String(b.item_code)),
+    );
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 20;
+    const start = (page - 1) * pageSize;
+    return {
+      items: items.slice(start, start + pageSize),
+      total: items.length,
+      page,
+      pageSize,
+      totalPages: Math.ceil(items.length / pageSize),
     };
   }
 
