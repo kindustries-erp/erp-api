@@ -53,8 +53,9 @@ Hoàn thiện API contract cho phase nghiệm thu: detail/read-only payload, set
 - [x] 2.0 Backend workflow/API gate done
   - [x] settlement partner guard + voucher allocation global draft
   - [x] receipt/issue posting routes draft
-- [x] 3.0 UI handoff gate done
-- [ ] 4.0 Validate
+  - [x] partial receipt + moving-average issue costing harden draft
+- [ ] 3.0 UI handoff gate done
+
   - [x] 4.1 `npm run build`
   - [x] 4.2 Smoke test affected endpoints
 - [ ] 5.0 Close
@@ -63,9 +64,13 @@ Hoàn thiện API contract cho phase nghiệm thu: detail/read-only payload, set
   - [ ] 5.3 Summary with evidence
 
 ## Validation Evidence
-- DB precheck result: `DB_GAP_FOUND` pending DB task apply
-- Build:
+- DB precheck result: `DB_GAP_FOUND` đã được xử lý qua migration inventory status + source_line_id
+- Build: `npm run build` PASS
 - Smoke:
+  - partial receipt line-level nhiều lần trên cùng line: PASS (`2 + 2 + 1`)
+  - status chuyển `PARTIAL -> PARTIAL -> FULLY_RECEIVED`: PASS
+  - lần receipt dư tiếp theo: FAIL đúng với `PO đã nhập đủ, không thể post nhập kho lại`
+  - transaction log đã có `source_line_id`
 
 ## Lessons Learned
 - Link: `docs/lessons-learned/<file>.md#<anchor>` or "No issue"

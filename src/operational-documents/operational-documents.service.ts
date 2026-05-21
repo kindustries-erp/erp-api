@@ -20,6 +20,14 @@ import {
   PostSalesIssueDto,
 } from './dto/operational-document.dto';
 
+type InventoryTransactionType =
+  | 'RECEIPT'
+  | 'ISSUE'
+  | 'ADJUSTMENT_IN'
+  | 'ADJUSTMENT_OUT'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT';
+
 const DOCUMENT_COLLECTIONS = [
   'sales_service_orders',
   'purchase_orders',
@@ -229,6 +237,7 @@ export class OperationalDocumentsService {
     const text = Array.isArray(raw) ? raw.join('; ') : String(raw || '');
     if (
       text.includes('inventory_tx_receipt_issue_source_line_guard_idx') ||
+      text.includes('inventory_tx_issue_source_line_guard_idx') ||
       text.includes('duplicate key value violates unique constraint')
     ) {
       throw new BadRequestException(
@@ -259,6 +268,72 @@ export class OperationalDocumentsService {
     });
   }
 
+  private async listInventoryTransactionsBySource(
+    collection: InventoryPostingCollection,
+    documentId: string,
+    transactionType?: InventoryTransactionType,
+  ) {
+    const url = new URL('/items/inventory_transactions', this.directusUrl);
+    url.searchParams.append('limit', '-1');
+    url.searchParams.append('fields[]', '*');
+    url.searchParams.append('fields[]', 'source_line_id');
+    url.searchParams.append('filter[source_type][_eq]', collection);
+    url.searchParams.append('filter[source_id][_eq]', documentId);
+    if (transactionType) {
+      url.searchParams.append('filter[transaction_type][_eq]', transactionType);
+    }
+    const { data } = await this.request<{ data: any[] }>(
+      `${url.pathname}${url.search}`,
+    );
+    return data || [];
+  }
+
+  private async getInventoryAverageCosts(
+    itemIds: string[],
+    branchId?: string | null,
+  ) {
+    const uniqueItemIds = Array.from(new Set(itemIds.filter(Boolean)));
+    const costs = new Map<
+      string,
+      { onHandQty: number; stockValue: number; avgCost: number }
+    >();
+    if (!uniqueItemIds.length) return costs;
+
+    const url = new URL('/items/inventory_transactions', this.directusUrl);
+    url.searchParams.append('limit', '-1');
+    url.searchParams.append('fields[]', '*');
+    uniqueItemIds.forEach((id) =>
+      url.searchParams.append('filter[inventory_item_id][_in][]', id),
+    );
+    if (branchId) {
+      url.searchParams.append('filter[branch_id][_eq]', branchId);
+    }
+    const { data } = await this.request<{ data: any[] }>(
+      `${url.pathname}${url.search}`,
+    );
+
+    for (const itemId of uniqueItemIds) {
+      let onHandQty = 0;
+      let stockValue = 0;
+      for (const tx of (data || []).filter(
+        (row) => row.inventory_item_id === itemId,
+      )) {
+        const qty = Number(tx.qty || 0);
+        const amount = Number(tx.amount || 0);
+        if (this.isInboundInventory(tx.transaction_type)) {
+          onHandQty += qty;
+          stockValue += amount;
+        } else if (this.isOutboundInventory(tx.transaction_type)) {
+          onHandQty -= qty;
+          stockValue -= amount;
+        }
+      }
+      const avgCost = onHandQty > 0 ? stockValue / onHandQty : 0;
+      costs.set(itemId, { onHandQty, stockValue, avgCost });
+    }
+    return costs;
+  }
+
   private async createInventoryTransactionsForDocument(
     collection: InventoryPostingCollection,
     document: any,
@@ -281,10 +356,23 @@ export class OperationalDocumentsService {
       this.normalizeDate(document.document_date) ||
       this.normalizeDate(new Date().toISOString());
 
+    const averageCosts =
+      transactionType === 'ISSUE'
+        ? await this.getInventoryAverageCosts(
+            eligibleLines.map((line) => line.inventory_item_id),
+            document.branch_id || null,
+          )
+        : new Map();
+
     for (const line of eligibleLines) {
       const qty = Number(line.qty || 0);
-      const unitCost = Number(line.unit_price || 0);
-      const amount = Number(line.amount ?? qty * unitCost);
+      const receiptUnitCost = Number(line.unit_price || 0);
+      const issueCostState = averageCosts.get(line.inventory_item_id);
+      const unitCost =
+        transactionType === 'ISSUE'
+          ? Number(issueCostState?.avgCost || 0)
+          : receiptUnitCost;
+      const amount = Number((qty * unitCost).toFixed(2));
       try {
         await this.request('/items/inventory_transactions', {
           method: 'POST',
@@ -298,6 +386,7 @@ export class OperationalDocumentsService {
             amount,
             source_type: collection,
             source_id: document.id,
+            source_line_id: line.id || null,
             notes:
               notes ||
               `${transactionType === 'RECEIPT' ? 'Receipt' : 'Issue'} từ ${this.documentNoField(collection)} ${document[this.documentNoField(collection)] || document.id}`,
@@ -796,19 +885,100 @@ export class OperationalDocumentsService {
     }
 
     const lines = Array.isArray(document.lines) ? document.lines : [];
+    const inventoryLines = lines.filter((line) =>
+      this.isInventoryEligibleLine(line),
+    );
+    if (!inventoryLines.length) {
+      throw new BadRequestException(
+        'Chứng từ không có dòng vật tư/phụ tùng hợp lệ để post kho',
+      );
+    }
+
+    const existingReceipts = await this.listInventoryTransactionsBySource(
+      'purchase_orders',
+      id,
+      'RECEIPT',
+    );
+    const receivedQtyByLine = new Map<string, number>();
+    for (const tx of existingReceipts) {
+      if (!tx.source_line_id) continue;
+      receivedQtyByLine.set(
+        tx.source_line_id,
+        Number(receivedQtyByLine.get(tx.source_line_id) || 0) +
+          Number(tx.qty || 0),
+      );
+    }
+
+    const lineStates = inventoryLines.map((line) => {
+      const originalQty = Number(line.qty || 0);
+      const receivedQty = Number(receivedQtyByLine.get(line.id) || 0);
+      const remainingQty = Number((originalQty - receivedQty).toFixed(4));
+      return {
+        ...line,
+        originalQty,
+        receivedQty,
+        remainingQty,
+      };
+    });
+
+    let linesToPost = lineStates.filter((line) => line.remainingQty > 0);
+
+    if (Array.isArray(dto.receipt_lines) && dto.receipt_lines.length) {
+      const requestedMap = new Map(
+        dto.receipt_lines
+          .filter((line) => line.line_id)
+          .map((line) => [line.line_id as string, line]),
+      );
+      linesToPost = linesToPost.filter((line) => requestedMap.has(line.id));
+      if (!linesToPost.length) {
+        throw new BadRequestException(
+          'Không còn dòng vật tư hợp lệ để nhập kho theo lựa chọn hiện tại',
+        );
+      }
+      linesToPost = linesToPost.map((line) => {
+        const requested = requestedMap.get(line.id);
+        const requestedQty = Number(requested?.qty || line.remainingQty || 0);
+        if (requestedQty <= 0) {
+          throw new BadRequestException('Số lượng nhập kho phải lớn hơn 0');
+        }
+        if (requestedQty > line.remainingQty) {
+          throw new BadRequestException(
+            'Số lượng nhập kho không được vượt số lượng còn lại của dòng PO',
+          );
+        }
+        return {
+          ...line,
+          qty: requestedQty,
+          amount: Number(
+            (requestedQty * Number(line.unit_price || 0)).toFixed(2),
+          ),
+        };
+      });
+    }
+
+    if (!linesToPost.length) {
+      throw new BadRequestException(
+        'PO không còn số lượng vật tư cần nhập kho',
+      );
+    }
+
     await this.createInventoryTransactionsForDocument(
       'purchase_orders',
       document,
-      lines,
+      linesToPost,
       'RECEIPT',
       dto.transaction_date,
       dto.notes,
     );
 
-    const nextStatus =
-      document.inventory_status === 'PARTIAL'
-        ? 'FULLY_RECEIVED'
-        : 'FULLY_RECEIVED';
+    const nextStatus = lineStates.every((line) => {
+      const postedNow = linesToPost
+        .filter((posted) => posted.id === line.id)
+        .reduce((sum, posted) => sum + Number(posted.qty || 0), 0);
+      return line.receivedQty + postedNow >= line.originalQty;
+    })
+      ? 'FULLY_RECEIVED'
+      : 'PARTIAL';
     await this.updateInventoryStatus('purchase_orders', id, nextStatus);
     return this.findOne('purchase_orders', id, userToken);
   }
@@ -853,6 +1023,7 @@ export class OperationalDocumentsService {
     const url = new URL('/items/inventory_transactions', this.directusUrl);
     url.searchParams.append('limit', '-1');
     url.searchParams.append('fields[]', '*');
+    url.searchParams.append('fields[]', 'source_line_id');
     if (query.branch_id)
       url.searchParams.append('filter[branch_id][_eq]', query.branch_id);
     if (query.inventory_item_id)
