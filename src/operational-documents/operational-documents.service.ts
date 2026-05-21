@@ -16,6 +16,8 @@ import {
   CreateSalesServiceOrderDto,
   OperationalLineDto,
   OperationalQueryDto,
+  PostPurchaseReceiptDto,
+  PostSalesIssueDto,
 } from './dto/operational-document.dto';
 
 const DOCUMENT_COLLECTIONS = [
@@ -25,9 +27,14 @@ const DOCUMENT_COLLECTIONS = [
 ] as const;
 
 const PAYABLE_COLLECTIONS = ['purchase_orders', 'operating_expenses'] as const;
+const PAYMENT_LINK_ALLOWED_VOUCHER_STATUSES = [
+  'APPROVED',
+  'CONFIRMED',
+] as const;
 
 type DocumentCollection = (typeof DOCUMENT_COLLECTIONS)[number];
 type PayableCollection = (typeof PAYABLE_COLLECTIONS)[number];
+type InventoryPostingCollection = 'purchase_orders' | 'sales_service_orders';
 
 interface RecurringCandidate {
   id: string;
@@ -191,6 +198,115 @@ export class OperationalDocumentsService {
     const path = `/items/document_payment_links?filter[document_type][_eq]=${documentType}&filter[document_id][_eq]=${id}&sort[]=-applied_date&fields[]=*`;
     const { data } = await this.request<{ data: any[] }>(path);
     return data || [];
+  }
+
+  private async findPaymentLinksByVoucher(paymentVoucherId: string) {
+    const path = `/items/document_payment_links?filter[payment_voucher_id][_eq]=${paymentVoucherId}&fields[]=id&fields[]=payment_voucher_id&fields[]=applied_amount&fields[]=document_type&fields[]=document_id`;
+    const { data } = await this.request<{ data: any[] }>(path);
+    return data || [];
+  }
+
+  private partnerFieldForDocument(documentType: DocumentCollection) {
+    return documentType === 'sales_service_orders'
+      ? 'customer_id'
+      : 'supplier_id';
+  }
+
+  private expectedPartnerId(documentType: DocumentCollection, document: any) {
+    const field = this.partnerFieldForDocument(documentType);
+    return document?.[field] || null;
+  }
+
+  private normalizeDirectusErrorMessage(error: unknown) {
+    if (!(error instanceof BadRequestException)) throw error;
+    const response = error.getResponse();
+    const raw =
+      typeof response === 'string'
+        ? response
+        : typeof response === 'object' && response && 'message' in response
+          ? (response as any).message
+          : null;
+    const text = Array.isArray(raw) ? raw.join('; ') : String(raw || '');
+    if (
+      text.includes('inventory_tx_receipt_issue_source_line_guard_idx') ||
+      text.includes('duplicate key value violates unique constraint')
+    ) {
+      throw new BadRequestException(
+        'Chứng từ đã được post kho trước đó cho ít nhất một dòng vật tư',
+      );
+    }
+    throw error;
+  }
+
+  private inventoryStatusField(collection: InventoryPostingCollection) {
+    return 'inventory_status';
+  }
+
+  private isInventoryEligibleLine(line: any) {
+    return Boolean(line?.inventory_item_id) && Number(line?.qty || 0) > 0;
+  }
+
+  private async updateInventoryStatus(
+    collection: InventoryPostingCollection,
+    documentId: string,
+    inventoryStatus: string,
+  ) {
+    await this.request(`/items/${collection}/${documentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        [this.inventoryStatusField(collection)]: inventoryStatus,
+      }),
+    });
+  }
+
+  private async createInventoryTransactionsForDocument(
+    collection: InventoryPostingCollection,
+    document: any,
+    lines: any[],
+    transactionType: 'RECEIPT' | 'ISSUE',
+    transactionDate?: string,
+    notes?: string,
+  ) {
+    const eligibleLines = lines.filter((line) =>
+      this.isInventoryEligibleLine(line),
+    );
+    if (!eligibleLines.length) {
+      throw new BadRequestException(
+        'Chứng từ không có dòng vật tư/phụ tùng hợp lệ để post kho',
+      );
+    }
+
+    const normalizedDate =
+      this.normalizeDate(transactionDate) ||
+      this.normalizeDate(document.document_date) ||
+      this.normalizeDate(new Date().toISOString());
+
+    for (const line of eligibleLines) {
+      const qty = Number(line.qty || 0);
+      const unitCost = Number(line.unit_price || 0);
+      const amount = Number(line.amount ?? qty * unitCost);
+      try {
+        await this.request('/items/inventory_transactions', {
+          method: 'POST',
+          body: JSON.stringify({
+            branch_id: document.branch_id || null,
+            inventory_item_id: line.inventory_item_id,
+            transaction_type: transactionType,
+            transaction_date: normalizedDate,
+            qty,
+            unit_cost: unitCost,
+            amount,
+            source_type: collection,
+            source_id: document.id,
+            notes:
+              notes ||
+              `${transactionType === 'RECEIPT' ? 'Receipt' : 'Issue'} từ ${this.documentNoField(collection)} ${document[this.documentNoField(collection)] || document.id}`,
+          }),
+        });
+      } catch (error) {
+        this.normalizeDirectusErrorMessage(error);
+      }
+    }
   }
 
   private sumLines(lines: OperationalLineDto[] = []) {
@@ -424,13 +540,13 @@ export class OperationalDocumentsService {
       throw new BadRequestException('Không tìm thấy chứng từ nghiệp vụ');
 
     const voucher = await this.request<{ data: any }>(
-      `/items/payment_vouchers/${dto.payment_voucher_id}?fields[]=id&fields[]=status&fields[]=document_date&fields[]=amount&fields[]=voucher_direction&fields[]=voucher_type`,
+      `/items/payment_vouchers/${dto.payment_voucher_id}?fields[]=id&fields[]=status&fields[]=document_date&fields[]=amount&fields[]=voucher_direction&fields[]=voucher_type&fields[]=counterparty_id`,
     );
     if (!voucher.data)
       throw new BadRequestException('Không tìm thấy phiếu dòng tiền');
-    if (!['APPROVED', 'POSTED'].includes(voucher.data.status)) {
+    if (!PAYMENT_LINK_ALLOWED_VOUCHER_STATUSES.includes(voucher.data.status)) {
       throw new BadRequestException(
-        'Chỉ liên kết phiếu dòng tiền đã duyệt/ghi sổ',
+        'Chỉ liên kết phiếu dòng tiền đã duyệt/xác nhận',
       );
     }
 
@@ -444,9 +560,27 @@ export class OperationalDocumentsService {
       );
     }
 
+    const expectedPartnerId = this.expectedPartnerId(documentType, document);
+    if (!expectedPartnerId) {
+      throw new BadRequestException(
+        'Chứng từ chưa có đối tác để liên kết dòng tiền',
+      );
+    }
+    if (!voucher.data.counterparty_id) {
+      throw new BadRequestException('Phiếu dòng tiền chưa có đối tác');
+    }
+    if (voucher.data.counterparty_id !== expectedPartnerId) {
+      throw new BadRequestException(
+        'Phiếu dòng tiền không cùng đối tác với chứng từ',
+      );
+    }
+
     const existingLinks = await this.findPaymentLinks(
       documentType,
       dto.document_id,
+    );
+    const voucherLinks = await this.findPaymentLinksByVoucher(
+      dto.payment_voucher_id,
     );
     const currentSettled = existingLinks.reduce(
       (sum, link) => sum + Number(link.applied_amount || 0),
@@ -454,9 +588,10 @@ export class OperationalDocumentsService {
     );
     const documentTotal = Number(document.total_amount || 0);
     const voucherAmount = Number(voucher.data.amount || 0);
-    const voucherAllocated = existingLinks
-      .filter((link) => link.payment_voucher_id === dto.payment_voucher_id)
-      .reduce((sum, link) => sum + Number(link.applied_amount || 0), 0);
+    const voucherAllocated = voucherLinks.reduce(
+      (sum, link) => sum + Number(link.applied_amount || 0),
+      0,
+    );
     const remainingDocument = Math.max(documentTotal - currentSettled, 0);
     const remainingVoucher = Math.max(voucherAmount - voucherAllocated, 0);
 
@@ -622,19 +757,87 @@ export class OperationalDocumentsService {
     const qty = Number(dto.qty);
     const unitCost = Number(dto.unit_cost || 0);
     const amount = Number(dto.amount ?? qty * unitCost);
-    const { data } = await this.request<{ data: any }>(
-      '/items/inventory_transactions',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          ...dto,
-          qty,
-          unit_cost: unitCost,
-          amount,
-        }),
-      },
+    try {
+      const { data } = await this.request<{ data: any }>(
+        '/items/inventory_transactions',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            ...dto,
+            qty,
+            unit_cost: unitCost,
+            amount,
+          }),
+        },
+      );
+      return { data };
+    } catch (error) {
+      this.normalizeDirectusErrorMessage(error);
+    }
+  }
+
+  async postPurchaseReceipt(
+    id: string,
+    dto: PostPurchaseReceiptDto,
+    userToken: string,
+  ) {
+    this.guard(userToken);
+    const document = await this.loadDocument('purchase_orders', id, true);
+    if (!document) throw new NotFoundException('Không tìm thấy chứng từ');
+    if (document.status !== 'CONFIRMED') {
+      throw new BadRequestException(
+        'Chỉ PO trạng thái CONFIRMED mới được nhập kho',
+      );
+    }
+    if (document.inventory_status === 'FULLY_RECEIVED') {
+      throw new BadRequestException(
+        'PO đã nhập đủ, không thể post nhập kho lại',
+      );
+    }
+
+    const lines = Array.isArray(document.lines) ? document.lines : [];
+    await this.createInventoryTransactionsForDocument(
+      'purchase_orders',
+      document,
+      lines,
+      'RECEIPT',
+      dto.transaction_date,
+      dto.notes,
     );
-    return { data };
+
+    const nextStatus =
+      document.inventory_status === 'PARTIAL'
+        ? 'FULLY_RECEIVED'
+        : 'FULLY_RECEIVED';
+    await this.updateInventoryStatus('purchase_orders', id, nextStatus);
+    return this.findOne('purchase_orders', id, userToken);
+  }
+
+  async postSalesIssue(id: string, dto: PostSalesIssueDto, userToken: string) {
+    this.guard(userToken);
+    const document = await this.loadDocument('sales_service_orders', id, true);
+    if (!document) throw new NotFoundException('Không tìm thấy chứng từ');
+    if (!['CONFIRMED', 'IN_PROGRESS'].includes(document.status)) {
+      throw new BadRequestException(
+        'Chỉ Sales/Service trạng thái CONFIRMED hoặc IN_PROGRESS mới được xuất kho',
+      );
+    }
+    if (document.inventory_status === 'ISSUED') {
+      throw new BadRequestException('Chứng từ đã xuất kho, không thể post lại');
+    }
+
+    const lines = Array.isArray(document.lines) ? document.lines : [];
+    await this.createInventoryTransactionsForDocument(
+      'sales_service_orders',
+      document,
+      lines,
+      'ISSUE',
+      dto.transaction_date,
+      dto.notes,
+    );
+
+    await this.updateInventoryStatus('sales_service_orders', id, 'ISSUED');
+    return this.findOne('sales_service_orders', id, userToken);
   }
 
   private isInboundInventory(type: string) {

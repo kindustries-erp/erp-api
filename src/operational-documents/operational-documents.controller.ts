@@ -20,6 +20,8 @@ import {
   CreatePurchaseOrderDto,
   CreateSalesServiceOrderDto,
   OperationalQueryDto,
+  PostPurchaseReceiptDto,
+  PostSalesIssueDto,
 } from './dto/operational-document.dto';
 import { OperationalDocumentsService } from './operational-documents.service';
 
@@ -70,6 +72,15 @@ export class OperationalDocumentsController {
     return this.service.updateDocument('sales_service_orders', id, dto, token);
   }
 
+  @Post('sales-service-orders/:id/issue')
+  postSalesIssue(
+    @Param('id') id: string,
+    @Body() dto: PostSalesIssueDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.postSalesIssue(id, dto, token);
+  }
+
   @Get('purchase-orders')
   listPurchase(
     @Query() query: OperationalQueryDto,
@@ -98,6 +109,15 @@ export class OperationalDocumentsController {
     @UserToken() token: string,
   ) {
     return this.service.updateDocument('purchase_orders', id, dto, token);
+  }
+
+  @Post('purchase-orders/:id/receipt')
+  postPurchaseReceipt(
+    @Param('id') id: string,
+    @Body() dto: PostPurchaseReceiptDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.postPurchaseReceipt(id, dto, token);
   }
 
   @Get('operating-expenses')

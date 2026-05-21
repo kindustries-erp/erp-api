@@ -454,3 +454,23 @@ export class CreateInventoryTransactionDto {
   @IsString()
   notes?: string;
 }
+
+export class PostPurchaseReceiptDto {
+  @IsOptional()
+  @IsDateString()
+  transaction_date?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class PostSalesIssueDto {
+  @IsOptional()
+  @IsDateString()
+  transaction_date?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
