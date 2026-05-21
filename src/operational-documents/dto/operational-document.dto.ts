@@ -455,6 +455,18 @@ export class CreateInventoryTransactionDto {
   notes?: string;
 }
 
+export class PostPurchaseReceiptLineDto {
+  @IsOptional()
+  @IsString()
+  line_id?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  qty?: number;
+}
+
 export class PostPurchaseReceiptDto {
   @IsOptional()
   @IsDateString()
@@ -463,6 +475,24 @@ export class PostPurchaseReceiptDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PostPurchaseReceiptLineDto)
+  receipt_lines?: PostPurchaseReceiptLineDto[];
+}
+
+export class PostSalesIssueLineDto {
+  @IsOptional()
+  @IsString()
+  line_id?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  qty?: number;
 }
 
 export class PostSalesIssueDto {
@@ -473,4 +503,10 @@ export class PostSalesIssueDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PostSalesIssueLineDto)
+  issue_lines?: PostSalesIssueLineDto[];
 }

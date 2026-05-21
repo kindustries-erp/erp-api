@@ -986,7 +986,8 @@ export class OperationalDocumentsService {
   async postSalesIssue(id: string, dto: PostSalesIssueDto, userToken: string) {
     this.guard(userToken);
     const document = await this.loadDocument('sales_service_orders', id, true);
-    if (!document) throw new NotFoundException('Không tìm thấy chứng từ');
+    if (!document)
+      throw new NotFoundException('Không tìm thấy Sales/Service Order');
     if (!['CONFIRMED', 'IN_PROGRESS'].includes(document.status)) {
       throw new BadRequestException(
         'Chỉ Sales/Service trạng thái CONFIRMED hoặc IN_PROGRESS mới được xuất kho',
@@ -997,16 +998,100 @@ export class OperationalDocumentsService {
     }
 
     const lines = Array.isArray(document.lines) ? document.lines : [];
+    const eligibleLines = lines.filter((line) =>
+      this.isInventoryEligibleLine(line),
+    );
+    if (!eligibleLines.length) {
+      throw new BadRequestException(
+        'Chứng từ không có dòng vật tư/phụ tùng hợp lệ để xuất kho',
+      );
+    }
+
+    const existingIssues = await this.listInventoryTransactionsBySource(
+      'sales_service_orders',
+      id,
+      'ISSUE',
+    );
+    const issuedQtyByLine = new Map<string, number>();
+    for (const tx of existingIssues) {
+      const lineId = tx.source_line_id || null;
+      if (!lineId) continue;
+      issuedQtyByLine.set(
+        lineId,
+        Number((issuedQtyByLine.get(lineId) || 0) + Number(tx.qty || 0)),
+      );
+    }
+
+    const requestLines = Array.isArray(dto.issue_lines) ? dto.issue_lines : [];
+    const requestLineMap = new Map<string, number>();
+    for (const line of requestLines) {
+      if (!line?.line_id) {
+        throw new BadRequestException('issue_lines.line_id là bắt buộc');
+      }
+      const qty = Number(line.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new BadRequestException('issue_lines.qty phải lớn hơn 0');
+      }
+      requestLineMap.set(line.line_id, qty);
+    }
+
+    const linesToPost = eligibleLines
+      .map((line) => {
+        const lineQty = Number(line.qty || 0);
+        const issuedQty = Number(issuedQtyByLine.get(line.id) || 0);
+        const remainingQty = Number((lineQty - issuedQty).toFixed(4));
+        if (remainingQty <= 0) return null;
+        const requestedQty = requestLineMap.has(line.id)
+          ? Number(requestLineMap.get(line.id) || 0)
+          : requestLines.length
+            ? 0
+            : remainingQty;
+        if (requestedQty <= 0) return null;
+        if (requestedQty > remainingQty) {
+          throw new BadRequestException(
+            `Dòng ${line.line_no || line.id}: số lượng xuất vượt quá còn lại ${remainingQty}`,
+          );
+        }
+        return {
+          ...line,
+          qty: requestedQty,
+          source_payload: {
+            ...(line.source_payload || {}),
+            requested_qty: requestedQty,
+            remaining_qty_before_post: remainingQty,
+          },
+        };
+      })
+      .filter(Boolean) as any[];
+
+    if (!linesToPost.length) {
+      throw new BadRequestException(
+        'Sales/Service không còn số lượng vật tư cần xuất kho',
+      );
+    }
+
     await this.createInventoryTransactionsForDocument(
       'sales_service_orders',
       document,
-      lines,
+      linesToPost,
       'ISSUE',
       dto.transaction_date,
       dto.notes,
     );
 
-    await this.updateInventoryStatus('sales_service_orders', id, 'ISSUED');
+    const totalIssueQty = eligibleLines.reduce(
+      (sum, line) => sum + Number(line.qty || 0),
+      0,
+    );
+    const issuedAfterPost =
+      existingIssues.reduce((sum, tx) => sum + Number(tx.qty || 0), 0) +
+      linesToPost.reduce((sum, line) => sum + Number(line.qty || 0), 0);
+
+    await this.updateInventoryStatus(
+      'sales_service_orders',
+      id,
+      issuedAfterPost >= totalIssueQty ? 'ISSUED' : 'PARTIAL',
+    );
     return this.findOne('sales_service_orders', id, userToken);
   }
 
