@@ -30,6 +30,7 @@ import { ArWorkbenchModule } from './ar-workbench/ar-workbench.module';
 import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { ViettelV2Module } from './viettel-v2/viettel-v2.module';
 import { BranchesModule } from './branches/branches.module';
+import { OperationalDocumentsModule } from './operational-documents/operational-documents.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { BranchesModule } from './branches/branches.module';
     ArWorkbenchModule,
     SinvoiceModule,
     ViettelV2Module,
+    OperationalDocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
