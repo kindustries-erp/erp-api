@@ -72,7 +72,7 @@ Hoàn thiện API contract cho phase nghiệm thu: detail/read-only payload, set
   - lần receipt dư tiếp theo: FAIL đúng với `PO đã nhập đủ, không thể post nhập kho lại`
   - transaction log đã có `source_line_id`
   - DB partial issue guard update: dropped unique index `inventory_tx_issue_source_line_guard_idx`; sales inventory status CHECK now allows `NOT_ISSUED | PARTIAL | ISSUED`.
-  - Sales partial issue smoke: `SMOKE-PARTIAL-ISSUE-20260522062113`, line qty 3: issue `1 -> 1 -> 1` PASS (`PARTIAL -> PARTIAL -> ISSUED`, issued_line `1 -> 2 -> 3`); 4th issue FAIL 400 `Chứng từ đã xuất kho, không thể post lại`.
+  - Sales partial issue smoke after deploy: `SMOKE-PARTIAL-ISSUE-20260522062422`, line qty 3: issue `1 -> 1 -> 1` PASS (`PARTIAL -> PARTIAL -> ISSUED`, issued_line `1 -> 2 -> 3`, stock_issued `1 -> 2 -> 3`); 4th issue FAIL 400 `Chứng từ đã xuất kho, không thể post lại`.
 
 ## Lessons Learned
 - Link: `docs/lessons-learned/<file>.md#<anchor>` or "No issue"
