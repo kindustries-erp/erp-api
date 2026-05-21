@@ -22,7 +22,34 @@ const DOCUMENT_COLLECTIONS = [
   'operating_expenses',
 ] as const;
 
+const PAYABLE_COLLECTIONS = ['purchase_orders', 'operating_expenses'] as const;
+
 type DocumentCollection = (typeof DOCUMENT_COLLECTIONS)[number];
+type PayableCollection = (typeof PAYABLE_COLLECTIONS)[number];
+
+interface RecurringCandidate {
+  id: string;
+  purchase_no?: string;
+  expense_no?: string;
+  branch_id?: string | null;
+  supplier_id?: string | null;
+  supplier_name_snapshot?: string | null;
+  expense_category?: string | null;
+  title?: string | null;
+  document_date?: string | null;
+  due_date?: string | null;
+  invoice_status?: string | null;
+  status?: string | null;
+  total_amount?: number | string | null;
+  recurrence_type?: string | null;
+  recurrence_interval?: number | string | null;
+  recurrence_start_date?: string | null;
+  recurrence_end_date?: string | null;
+  next_due_date?: string | null;
+  auto_generate_next?: boolean | null;
+  parent_recurring_id?: string | null;
+  notes?: string | null;
+}
 
 @Injectable()
 export class OperationalDocumentsService {
@@ -126,16 +153,13 @@ export class OperationalDocumentsService {
 
   async findOne(collection: string, id: string, userToken: string) {
     this.guard(userToken);
-    const { data } = await this.request<{ data: any }>(
-      `/items/${collection}/${id}?fields[]=*`,
-    );
-    if (!data) throw new NotFoundException('Không tìm thấy chứng từ');
-    const lines = await this.findLines(collection, id);
-    const payments = await this.findPaymentLinks(
+    const data = await this.loadDocument(
       collection as DocumentCollection,
       id,
+      true,
     );
-    return { data: { ...data, lines, payments } };
+    if (!data) throw new NotFoundException('Không tìm thấy chứng từ');
+    return { data };
   }
 
   private lineCollection(collection: string) {
@@ -174,6 +198,55 @@ export class OperationalDocumentsService {
       );
       return sum + (Number.isFinite(amount) ? amount : 0);
     }, 0);
+  }
+
+  private normalizeDate(value?: string | null) {
+    if (!value) return undefined;
+    return String(value).slice(0, 10);
+  }
+
+  private shiftDate(
+    dateText: string,
+    recurrenceType: string,
+    recurrenceInterval = 1,
+  ) {
+    const base = new Date(`${dateText}T00:00:00.000Z`);
+    const next = new Date(base);
+    const step = Math.max(1, Number(recurrenceInterval || 1));
+    switch (recurrenceType) {
+      case 'MONTHLY':
+        next.setUTCMonth(next.getUTCMonth() + step);
+        break;
+      case 'QUARTERLY':
+        next.setUTCMonth(next.getUTCMonth() + step * 3);
+        break;
+      case 'YEARLY':
+        next.setUTCFullYear(next.getUTCFullYear() + step);
+        break;
+      default:
+        next.setUTCDate(next.getUTCDate() + step);
+        break;
+    }
+    return this.normalizeDate(next.toISOString())!;
+  }
+
+  private recurringCollections() {
+    return PAYABLE_COLLECTIONS;
+  }
+
+  async loadDocument(
+    collection: DocumentCollection,
+    id: string,
+    includeRelations = false,
+  ) {
+    const { data } = await this.request<{ data: any }>(
+      `/items/${collection}/${id}?fields[]=*`,
+    );
+    if (!data) return null;
+    if (!includeRelations) return data;
+    const lines = await this.findLines(collection, id);
+    const payments = await this.findPaymentLinks(collection, id);
+    return { ...data, lines, payments };
   }
 
   private async createWithLines(
@@ -294,18 +367,62 @@ export class OperationalDocumentsService {
     return this.findOne(collection, id, userToken);
   }
 
+  async listPaymentLinks(
+    documentType: DocumentCollection,
+    documentId: string,
+    userToken: string,
+  ) {
+    this.guard(userToken);
+    return {
+      items: await this.findPaymentLinks(documentType, documentId),
+    };
+  }
+
+  async deletePaymentLink(
+    documentType: DocumentCollection,
+    documentId: string,
+    linkId: string,
+    userToken: string,
+  ) {
+    this.guard(userToken);
+    const { data } = await this.request<{ data: any }>(
+      `/items/document_payment_links/${linkId}?fields[]=id&fields[]=document_type&fields[]=document_id`,
+    );
+    if (!data)
+      throw new NotFoundException('Không tìm thấy liên kết thanh toán');
+    if (
+      data.document_type !== documentType ||
+      data.document_id !== documentId
+    ) {
+      throw new BadRequestException('Liên kết không thuộc chứng từ yêu cầu');
+    }
+    await this.request(`/items/document_payment_links/${linkId}`, {
+      method: 'DELETE',
+    });
+    await this.recomputeSettlement(documentType, documentId);
+    return { message: 'Đã gỡ liên kết thanh toán' };
+  }
+
   async createPaymentLink(
     dto: CreateDocumentPaymentLinkDto,
     userToken: string,
   ) {
     this.guard(userToken);
-    if (
-      !DOCUMENT_COLLECTIONS.includes(dto.document_type as DocumentCollection)
-    ) {
+    const documentType = dto.document_type as DocumentCollection;
+    if (!DOCUMENT_COLLECTIONS.includes(documentType)) {
       throw new BadRequestException('document_type không hợp lệ');
     }
+
+    const document = await this.loadDocument(
+      documentType,
+      dto.document_id,
+      false,
+    );
+    if (!document)
+      throw new BadRequestException('Không tìm thấy chứng từ nghiệp vụ');
+
     const voucher = await this.request<{ data: any }>(
-      `/items/payment_vouchers/${dto.payment_voucher_id}?fields[]=id&fields[]=status&fields[]=document_date`,
+      `/items/payment_vouchers/${dto.payment_voucher_id}?fields[]=id&fields[]=status&fields[]=document_date&fields[]=amount&fields[]=voucher_direction&fields[]=voucher_type`,
     );
     if (!voucher.data)
       throw new BadRequestException('Không tìm thấy phiếu dòng tiền');
@@ -314,17 +431,56 @@ export class OperationalDocumentsService {
         'Chỉ liên kết phiếu dòng tiền đã duyệt/ghi sổ',
       );
     }
+
+    const expectedDirection =
+      documentType === 'sales_service_orders' ? 'IN' : 'OUT';
+    if (voucher.data.voucher_direction !== expectedDirection) {
+      throw new BadRequestException(
+        expectedDirection === 'IN'
+          ? 'Chứng từ phải thu chỉ được liên kết phiếu thu'
+          : 'Chứng từ phải trả chỉ được liên kết phiếu chi',
+      );
+    }
+
+    const existingLinks = await this.findPaymentLinks(
+      documentType,
+      dto.document_id,
+    );
+    const currentSettled = existingLinks.reduce(
+      (sum, link) => sum + Number(link.applied_amount || 0),
+      0,
+    );
+    const documentTotal = Number(document.total_amount || 0);
+    const voucherAmount = Number(voucher.data.amount || 0);
+    const voucherAllocated = existingLinks
+      .filter((link) => link.payment_voucher_id === dto.payment_voucher_id)
+      .reduce((sum, link) => sum + Number(link.applied_amount || 0), 0);
+    const remainingDocument = Math.max(documentTotal - currentSettled, 0);
+    const remainingVoucher = Math.max(voucherAmount - voucherAllocated, 0);
+
+    if (dto.applied_amount > remainingDocument) {
+      throw new BadRequestException(
+        'Số tiền cấn trừ vượt số dư còn mở của chứng từ',
+      );
+    }
+    if (dto.applied_amount > remainingVoucher) {
+      throw new BadRequestException(
+        'Số tiền cấn trừ vượt số tiền khả dụng của phiếu dòng tiền',
+      );
+    }
+
     const { data } = await this.request<{ data: any }>(
       `/items/document_payment_links`,
       {
         method: 'POST',
-        body: JSON.stringify(dto),
+        body: JSON.stringify({
+          ...dto,
+          applied_date:
+            dto.applied_date || this.normalizeDate(voucher.data.document_date),
+        }),
       },
     );
-    await this.recomputeSettlement(
-      dto.document_type as DocumentCollection,
-      dto.document_id,
-    );
+    await this.recomputeSettlement(documentType, dto.document_id);
     return { message: 'Liên kết thanh toán thành công', data };
   }
 
@@ -357,9 +513,10 @@ export class OperationalDocumentsService {
   }
 
   async getPayables(query: OperationalQueryDto, userToken: string) {
+    this.guard(userToken);
     const purchase = await this.list('purchase_orders', query, userToken);
     const expense = await this.list('operating_expenses', query, userToken);
-    const items = [
+    const merged = [
       ...purchase.items.map((item: any) => ({
         ...item,
         document_type: 'purchase_orders',
@@ -371,13 +528,145 @@ export class OperationalDocumentsService {
     ].sort((a, b) =>
       String(b.document_date).localeCompare(String(a.document_date)),
     );
+
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 20;
+    const total = merged.length;
+    const start = (page - 1) * pageSize;
+    const items = merged.slice(start, start + pageSize);
+
     return {
       items,
-      total: purchase.total + expense.total,
-      page: 1,
-      pageSize: items.length,
-      totalPages: 1,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async findRecurringCandidates(
+    collection: PayableCollection,
+    dueOnOrBefore: string,
+  ) {
+    const url = new URL(`/items/${collection}`, this.directusUrl);
+    url.searchParams.append('limit', '200');
+    url.searchParams.append('sort[]', 'next_due_date');
+    url.searchParams.append('fields[]', '*');
+    url.searchParams.append('filter[auto_generate_next][_eq]', 'true');
+    url.searchParams.append('filter[status][_neq]', 'CANCELLED');
+    url.searchParams.append('filter[next_due_date][_nnull]', 'true');
+    url.searchParams.append('filter[next_due_date][_lte]', dueOnOrBefore);
+    const { data } = await this.request<{ data: RecurringCandidate[] }>(
+      `${url.pathname}${url.search}`,
+    );
+    return data || [];
+  }
+
+  async generateRecurringDocument(
+    collection: PayableCollection,
+    candidate: RecurringCandidate,
+  ) {
+    if (!candidate.auto_generate_next || !candidate.next_due_date) return null;
+
+    const nextDueDate = this.normalizeDate(candidate.next_due_date);
+    if (!nextDueDate) return null;
+
+    const recurrenceEndDate = this.normalizeDate(candidate.recurrence_end_date);
+    if (recurrenceEndDate && nextDueDate > recurrenceEndDate) return null;
+
+    const parentRecurringId = candidate.parent_recurring_id || candidate.id;
+    const existingUrl = new URL(`/items/${collection}`, this.directusUrl);
+    existingUrl.searchParams.append('limit', '10');
+    existingUrl.searchParams.append('fields[]', 'id');
+    existingUrl.searchParams.append(
+      'filter[parent_recurring_id][_eq]',
+      parentRecurringId,
+    );
+    existingUrl.searchParams.append('filter[document_date][_eq]', nextDueDate);
+    const existing = await this.request<{ data: Array<{ id: string }> }>(
+      `${existingUrl.pathname}${existingUrl.search}`,
+    );
+    const duplicate = (existing.data || []).find(
+      (row) => row.id !== candidate.id,
+    );
+    if (duplicate) return duplicate;
+
+    const lines = await this.findLines(collection, candidate.id);
+    const recurrenceType = candidate.recurrence_type || 'ONE_TIME';
+    const recurrenceInterval = Number(candidate.recurrence_interval || 1);
+    const nextCycleDueDate = this.shiftDate(
+      nextDueDate,
+      recurrenceType,
+      recurrenceInterval,
+    );
+
+    const payload: Record<string, unknown> = {
+      branch_id: candidate.branch_id || undefined,
+      supplier_id: candidate.supplier_id || undefined,
+      supplier_name_snapshot: candidate.supplier_name_snapshot || '',
+      document_date: nextDueDate,
+      due_date: nextDueDate,
+      invoice_status: candidate.invoice_status || 'NO_INVOICE',
+      status: 'CONFIRMED',
+      total_amount: Number(candidate.total_amount || 0),
+      recurrence_type: recurrenceType,
+      recurrence_interval: recurrenceInterval,
+      recurrence_start_date:
+        this.normalizeDate(candidate.recurrence_start_date) || nextDueDate,
+      recurrence_end_date: recurrenceEndDate,
+      next_due_date:
+        recurrenceEndDate && nextCycleDueDate > recurrenceEndDate
+          ? undefined
+          : nextCycleDueDate,
+      auto_generate_next:
+        !recurrenceEndDate || nextCycleDueDate <= recurrenceEndDate,
+      parent_recurring_id: parentRecurringId,
+      notes: candidate.notes || undefined,
+      lines: lines.map((line) => ({
+        line_no: line.line_no,
+        line_type: line.line_type,
+        item_code: line.item_code,
+        item_name: line.item_name,
+        description: line.description,
+        qty: Number(line.qty ?? 1),
+        unit_price: Number(line.unit_price ?? 0),
+        amount: Number(line.amount ?? 0),
+        notes: line.notes,
+      })),
+    };
+
+    if (collection === 'operating_expenses') {
+      payload.expense_category = candidate.expense_category || undefined;
+      payload.title = candidate.title || candidate.expense_no || undefined;
+    }
+
+    const { data } = await this.request<{ data: { id: string } }>(
+      `/items/${collection}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    );
+
+    await this.replaceLines(
+      collection,
+      data.id,
+      payload.lines as OperationalLineDto[],
+    );
+    await this.request(`/items/${collection}/${candidate.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        parent_recurring_id: parentRecurringId,
+        next_due_date:
+          recurrenceEndDate && nextCycleDueDate > recurrenceEndDate
+            ? null
+            : nextCycleDueDate,
+        auto_generate_next:
+          !recurrenceEndDate || nextCycleDueDate <= recurrenceEndDate,
+      }),
+    });
+
+    return data;
   }
 
   async importKgara(dto: any, userToken: string) {

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DirectusModule } from './directus/directus.module';
@@ -36,6 +37,7 @@ import { OperationalDocumentsModule } from './operational-documents/operational-
   imports: [
     // Tải .env toàn cục, không cần import ConfigModule ở các module con
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     // Directus SDK client (global provider)
     DirectusModule,
     // Register + Login

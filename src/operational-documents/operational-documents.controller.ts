@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -137,11 +138,35 @@ export class OperationalDocumentsController {
     return this.service.getPayables(query, token);
   }
 
+  @Get(':documentType/:id/payment-links')
+  listPaymentLinks(
+    @Param('documentType') documentType: string,
+    @Param('id') id: string,
+    @UserToken() token: string,
+  ) {
+    return this.service.listPaymentLinks(documentType as any, id, token);
+  }
+
   @Post('document-payment-links')
   createPaymentLink(
     @Body() dto: CreateDocumentPaymentLinkDto,
     @UserToken() token: string,
   ) {
     return this.service.createPaymentLink(dto, token);
+  }
+
+  @Delete(':documentType/:id/payment-links/:linkId')
+  deletePaymentLink(
+    @Param('documentType') documentType: string,
+    @Param('id') id: string,
+    @Param('linkId') linkId: string,
+    @UserToken() token: string,
+  ) {
+    return this.service.deletePaymentLink(
+      documentType as any,
+      id,
+      linkId,
+      token,
+    );
   }
 }
