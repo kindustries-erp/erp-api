@@ -54,14 +54,14 @@ Hoàn thiện API contract cho phase nghiệm thu: detail/read-only payload, set
   - [x] settlement partner guard + voucher allocation global draft
   - [x] receipt/issue posting routes draft
   - [x] partial receipt + moving-average issue costing harden draft
-- [ ] 3.0 UI handoff gate done
+- [x] 3.0 UI handoff gate done
 
   - [x] 4.1 `npm run build`
   - [x] 4.2 Smoke test affected endpoints
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: `DB_GAP_FOUND` đã được xử lý qua migration inventory status + source_line_id
@@ -75,9 +75,9 @@ Hoàn thiện API contract cho phase nghiệm thu: detail/read-only payload, set
   - Sales partial issue smoke after deploy: `SMOKE-PARTIAL-ISSUE-20260522062422`, line qty 3: issue `1 -> 1 -> 1` PASS (`PARTIAL -> PARTIAL -> ISSUED`, issued_line `1 -> 2 -> 3`, stock_issued `1 -> 2 -> 3`); 4th issue FAIL 400 `Chứng từ đã xuất kho, không thể post lại`.
 
 ## Lessons Learned
-- Link: `docs/lessons-learned/<file>.md#<anchor>` or "No issue"
+- No issue
 
 ## Commit/Push Status
-- API repo:
-- Web repo (if affected):
+- API repo: pushed `331e4ed fix operational partial sales issue posting`, `4f3a243 docs record operational partial issue smoke`
+- Web repo (if affected): pushed `d0eb568 add operational line-level inventory posting UI`
 - DB/directus staging: apply+verify+document (no code push required)
