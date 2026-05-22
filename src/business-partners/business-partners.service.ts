@@ -60,7 +60,7 @@ export class BusinessPartnersService {
     }
   }
 
-  async findAll(query: PaginationDto, userToken: string) {
+  async findAll(query: PaginationDto & { role?: string }, userToken: string) {
     this.guard(userToken);
     try {
       const page = query.page || 1;
@@ -76,6 +76,15 @@ export class BusinessPartnersService {
       url.searchParams.append('filter[is_active][_eq]', 'true');
       url.searchParams.append('sort[]', sort);
       if (query.search) url.searchParams.append('search', query.search);
+
+      // Filter by role via business_partner_roles join
+      if (query.role) {
+        url.searchParams.append('filter[partner_roles][role][_eq]', query.role);
+        url.searchParams.append(
+          'filter[partner_roles][is_active][_eq]',
+          'true',
+        );
+      }
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${userToken}` },
