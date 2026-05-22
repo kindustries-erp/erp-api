@@ -115,20 +115,17 @@ export class BusinessPartnersService {
         ];
       }
 
-      const result: any = await (client as any).request(
+      const result: any[] = await (client as any).request(
         (readItems as any)(this.collection, {
           filter,
-          limit: pageSize,
-          offset,
+          limit: -1,
           sort: [sort],
-          meta: ['filter_count'],
         }),
       );
 
-      const items = Array.isArray(result) ? result : result?.data || [];
-      const total = Array.isArray(result)
-        ? items.length
-        : (result?.meta?.filter_count ?? 0);
+      const allItems = Array.isArray(result) ? result : [];
+      const total = allItems.length;
+      const items = allItems.slice(offset, offset + pageSize);
 
       return {
         items,
