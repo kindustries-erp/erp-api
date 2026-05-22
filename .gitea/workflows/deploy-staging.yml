@@ -1,0 +1,25 @@
+name: Deploy ERP API Staging
+on:
+  push:
+    branches: [ staging ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+      - name: Deploy API on Elite
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no lio@100.75.67.115 '
+            set -e
+            cd /opt/repos/liouni-erp/liouni-erp-api
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+            cd /opt/stacks/liouni-erp-api
+            docker compose up -d --build
+            curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10000/api/v1/auth/profile | grep -q "401"
+          '
