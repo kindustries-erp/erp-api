@@ -12,10 +12,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { DirectusAuthGuard } from '../auth/guards/directus-auth.guard';
-import { PaginationDto } from '../common/dto/pagination.dto';
 import { BusinessPartnersService } from './business-partners.service';
 import { CreateBusinessPartnersDto } from './dto/create-business-partners.dto';
 import { UpdateBusinessPartnersDto } from './dto/update-business-partners.dto';
+import { BusinessPartnerQueryDto } from './dto/business-partner-query.dto';
 
 @ApiTags('BusinessPartners')
 @ApiBearerAuth()
@@ -32,7 +32,7 @@ export class BusinessPartnersController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationDto, @UserToken() token: string) {
+  findAll(@Query() query: BusinessPartnerQueryDto, @UserToken() token: string) {
     return this.businessPartnersService.findAll(query, token);
   }
 
