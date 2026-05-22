@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   createDirectus,
   readItem,
+  readItems,
   createItem,
   updateItem,
   deleteItem,
@@ -20,10 +21,7 @@ import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateBusinessPartnersDto } from './dto/create-business-partners.dto';
 import { UpdateBusinessPartnersDto } from './dto/update-business-partners.dto';
-import {
-  rethrowHttpException,
-  throwDirectusResponseError,
-} from '../common/utils/directus-error.util';
+import { rethrowHttpException } from '../common/utils/directus-error.util';
 
 @Injectable()
 export class BusinessPartnersService {
@@ -62,44 +60,78 @@ export class BusinessPartnersService {
 
   async findAll(query: PaginationDto & { role?: string }, userToken: string) {
     this.guard(userToken);
+    const client = this.getClient(userToken);
     try {
       const page = query.page || 1;
       const pageSize = query.pageSize || 20;
       const sort = query.sort || '-created_at';
       const offset = (page - 1) * pageSize;
-      const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
 
-      const url = new URL(`/items/${this.collection}`, directusUrl);
-      url.searchParams.append('limit', pageSize.toString());
-      url.searchParams.append('offset', offset.toString());
-      url.searchParams.append('meta', 'filter_count');
-      url.searchParams.append('filter[is_active][_eq]', 'true');
-      url.searchParams.append('sort[]', sort);
-      if (query.search) url.searchParams.append('search', query.search);
+      const filter: Record<string, any> = {
+        is_active: { _eq: true },
+      };
 
-      // Filter by role via business_partner_roles join
       if (query.role) {
-        url.searchParams.append('filter[partner_roles][role][_eq]', query.role);
-        url.searchParams.append(
-          'filter[partner_roles][is_active][_eq]',
-          'true',
+        const roleRows = await (client as any).request(
+          (readItems as any)('business_partner_roles', {
+            filter: {
+              role: { _eq: query.role },
+              is_active: { _eq: true },
+            },
+            fields: ['business_partner_id'],
+            limit: -1,
+          }),
         );
+
+        const partnerIds = Array.from(
+          new Set(
+            (roleRows || [])
+              .map((row: any) => row?.business_partner_id)
+              .filter((id: unknown) => typeof id === 'string' && !!id),
+          ),
+        );
+
+        if (!partnerIds.length) {
+          return {
+            items: [],
+            total: 0,
+            page,
+            pageSize,
+            totalPages: 0,
+          };
+        }
+
+        filter.id = { _in: partnerIds };
       }
 
-      const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${userToken}` },
-      });
-      if (!response.ok) {
-        await throwDirectusResponseError(
-          response,
-          'Không thể lấy danh sách đối tác kinh doanh',
-        );
+      if (query.search) {
+        filter._or = [
+          { code: { _icontains: query.search } },
+          { name: { _icontains: query.search } },
+          { display_name: { _icontains: query.search } },
+          { tax_code: { _icontains: query.search } },
+          { phone: { _icontains: query.search } },
+          { email: { _icontains: query.search } },
+        ];
       }
 
-      const result = await response.json();
-      const total = result.meta?.filter_count || 0;
+      const result: any = await (client as any).request(
+        (readItems as any)(this.collection, {
+          filter,
+          limit: pageSize,
+          offset,
+          sort: [sort],
+          meta: ['filter_count'],
+        }),
+      );
+
+      const items = Array.isArray(result) ? result : result?.data || [];
+      const total = Array.isArray(result)
+        ? items.length
+        : (result?.meta?.filter_count ?? 0);
+
       return {
-        items: result.data || [],
+        items,
         total,
         page,
         pageSize,
