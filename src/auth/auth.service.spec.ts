@@ -364,17 +364,17 @@ describe('AuthService', () => {
     it('should throw ForbiddenException when caller lacks permissions', async () => {
       setupImpersonateMocks({ hasPermission: false });
 
-      await expect(
-        service.impersonate(caller, targetUserId),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.impersonate(caller, targetUserId)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException when trying to impersonate self', async () => {
       setupImpersonateMocks({ hasPermission: true });
 
-      await expect(
-        service.impersonate(caller, caller.id),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.impersonate(caller, caller.id)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException when target user is not found', async () => {
@@ -383,9 +383,9 @@ describe('AuthService', () => {
         targetUser: null,
       });
 
-      await expect(
-        service.impersonate(caller, targetUserId),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.impersonate(caller, targetUserId)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException when target user is not active', async () => {
@@ -401,9 +401,9 @@ describe('AuthService', () => {
         },
       });
 
-      await expect(
-        service.impersonate(caller, targetUserId),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.impersonate(caller, targetUserId)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -450,7 +450,12 @@ describe('AuthService', () => {
           return {
             ok: true,
             json: async () => ({
-              data: { id: 'role-1', name: 'Admin', icon: null, description: null },
+              data: {
+                id: 'role-1',
+                name: 'Admin',
+                icon: null,
+                description: null,
+              },
             }),
           };
         }
@@ -494,7 +499,11 @@ describe('AuthService', () => {
       const mockAdminClient = {
         with: jest.fn().mockReturnThis(),
         request: jest.fn().mockResolvedValue([
-          { id: 'emp-1', full_name: 'Test User', department_id: { name: 'IT' } },
+          {
+            id: 'emp-1',
+            full_name: 'Test User',
+            department_id: { name: 'IT' },
+          },
         ]),
       };
       createDirectus.mockReturnValue(mockAdminClient);
@@ -610,9 +619,9 @@ describe('AuthService', () => {
       };
       createDirectus.mockReturnValue(mockAdminClient);
 
-      await expect(
-        service.updateProfile('user-1', {}),
-      ).rejects.toThrow(InternalServerErrorException);
+      await expect(service.updateProfile('user-1', {})).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 

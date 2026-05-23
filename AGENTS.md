@@ -16,3 +16,10 @@ File này là entrypoint cho mọi AI agent/model làm việc trong repo `liouni
 - Technical instructions: `docs/ai/technical-instructions.md`
 - Task template: `docs/tasks/_template.md`
 - Lessons learned template: `docs/lessons-learned/_template.md`
+
+## Testing rules (NON-NEGOTIABLE)
+- Pre-commit hook runs ALL tests (`npx jest --forceExit`). If tests fail, commit is blocked.
+- **If a test fails, fix the SOURCE CODE — NOT the test.** Tests are the source of truth for expected behavior.
+- Unit tests live in `*.spec.ts` files co-located with source.
+- Run tests: `npx jest --forceExit` (all) or `npx jest --testPathPatterns=<module>` (specific module).
+- ESLint relaxed for test files: `unbound-method` and `no-require-imports` are off in `*.spec.ts`.
