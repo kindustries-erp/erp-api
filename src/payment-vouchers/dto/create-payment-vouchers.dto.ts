@@ -17,7 +17,6 @@ export class CashBankRelatedDocumentDto {
   @ApiProperty({
     enum: [
       'payment_vouchers',
-      'ar_documents',
       'ap_documents',
       'sales_invoices',
       'purchase_invoices',
@@ -28,7 +27,6 @@ export class CashBankRelatedDocumentDto {
   @IsNotEmpty()
   @IsIn([
     'payment_vouchers',
-    'ar_documents',
     'ap_documents',
     'sales_invoices',
     'purchase_invoices',

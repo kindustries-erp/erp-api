@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { DirectusAuthGuard } from './auth/guards/directus-auth.guard';
+import { ConfigService } from '@nestjs/config';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -8,7 +10,17 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        AppService,
+        {
+          provide: DirectusAuthGuard,
+          useValue: { canActivate: () => true },
+        },
+        {
+          provide: ConfigService,
+          useValue: { getOrThrow: () => 'mock-value' },
+        },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
