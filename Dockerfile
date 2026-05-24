@@ -1,34 +1,24 @@
 # --- STAGE 1: Build ---
-FROM node:24-alpine AS builder
+FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
-# Sao chép file định nghĩa package
-COPY package*.json ./
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-# Cài đặt toàn bộ dependencies (bao gồm devDependencies để build)
-RUN npm install
-
-# Sao chép toàn bộ mã nguồn
 COPY . .
-
-# Build dự án NestJS sang thư mục /dist
-RUN npm run build
+RUN bun run build
 
 # --- STAGE 2: Production ---
-FROM node:24-alpine
+FROM oven/bun:1
 
 WORKDIR /app
 
-# Chỉ sao chép các file cần thiết từ builder
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/package.json /app/bun.lock ./
 COPY --from=builder /app/dist ./dist
 
-# Chỉ cài đặt dependencies cho production (nhẹ hơn)
-RUN npm install --omit=dev
+RUN bun install --frozen-lockfile --production
 
-# Mở cổng 3000
 EXPOSE 3000
 
-# Lệnh chạy ứng dụng
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]
