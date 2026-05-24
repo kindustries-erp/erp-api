@@ -131,11 +131,17 @@ export class PaymentVoucherApprovalLogsService {
       );
       const userMap = new Map(
         users.map((user) => {
-          const fullName = [user.first_name, user.last_name]
+          const fullName = [user.last_name, user.first_name]
             .filter(Boolean)
             .join(' ')
             .trim();
-          return [user.id, fullName || user.email || user.id];
+          const resolvedName =
+            fullName ||
+            user.email ||
+            user.first_name ||
+            user.last_name ||
+            user.id;
+          return [user.id, resolvedName];
         }),
       );
       return items.map((item) => ({
@@ -145,7 +151,9 @@ export class PaymentVoucherApprovalLogsService {
           : null,
       }));
     } catch (error) {
-      this.logger.warn('Không thể decorate tên người duyệt cho approval logs');
+      this.logger.warn(
+        `Không thể decorate tên người duyệt cho ${userIds.length} approval log user(s) — fallback về action_by id`,
+      );
       return items.map((item) => ({
         ...item,
         action_by_name: item.action_by,
