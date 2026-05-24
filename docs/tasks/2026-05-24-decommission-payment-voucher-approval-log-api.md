@@ -45,7 +45,7 @@ Remove route/module/call-sites `payment-voucher-approval-logs` khỏi ERP API, d
   - [x] 4.2 Smoke test affected endpoints
 - [x] 5.0 Close
   - [x] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
+  - [x] 5.2 Commit + push code (web/api)
   - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
@@ -61,6 +61,6 @@ Remove route/module/call-sites `payment-voucher-approval-logs` khỏi ERP API, d
 - Note: hard-remove API only after DB/runtime decommission to avoid stale runtime querying dropped collection during rollout.
 
 ## Commit/Push Status
-- API repo: pending
+- API repo: `47f48c4` (`decommission payment voucher approval log`) pushed to `origin/staging`
 - Web repo (if affected): not affected
 - DB/directus staging: see DB task evidence
