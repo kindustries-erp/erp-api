@@ -99,6 +99,11 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.findOne(id, token);
   }
 
+  @Get(':id/timeline')
+  getTimeline(@Param('id') id: string, @UserToken() token: string) {
+    return this.paymentVouchersService.getTimeline(id, token);
+  }
+
   @Patch(':id')
   update(
     @Param('id') id: string,

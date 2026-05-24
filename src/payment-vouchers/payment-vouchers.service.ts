@@ -37,6 +37,7 @@ import {
   throwDirectusSdkError,
 } from '../common/utils/directus-error.util';
 import { normalizeCashBankAmount } from './cash-bank-settlement.util';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 // Valid status transitions
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -56,6 +57,7 @@ export class PaymentVouchersService {
     @Inject(DIRECTUS_CLIENT)
     private readonly directus: ReturnType<typeof createDirectus>,
     private readonly configService: ConfigService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   private getClient(userToken: string) {
@@ -317,6 +319,40 @@ export class PaymentVouchersService {
     }
   }
 
+  private async safeAuditLog(input: {
+    userToken: string;
+    action: string;
+    eventGroup: string;
+    entityId: string;
+    entityNo?: string | null;
+    note?: string | null;
+    reason?: string | null;
+    beforePayload?: any;
+    afterPayload?: any;
+    meta?: Record<string, any>;
+  }) {
+    try {
+      await this.auditLogsService.logEvent({
+        userToken: input.userToken,
+        module: 'finance.payment_vouchers',
+        entityType: 'payment_voucher',
+        entityId: input.entityId,
+        entityNo: input.entityNo,
+        action: input.action,
+        eventGroup: input.eventGroup,
+        note: input.note,
+        reason: input.reason,
+        beforePayload: input.beforePayload,
+        afterPayload: input.afterPayload,
+        meta: input.meta,
+      });
+    } catch (error: any) {
+      this.logger.warn(
+        `Ghi audit log thất bại cho payment voucher ${input.entityId}: ${error?.message || error}`,
+      );
+    }
+  }
+
   private async resolveCashBankTagPreset(dto: {
     cash_bank_tag_preset_id?: string;
     cash_bank_tag_code?: string;
@@ -575,7 +611,21 @@ export class PaymentVouchersService {
         (createItem as any)(this.collection, payload),
       );
       await this.syncRelatedDocuments(result.id, dto.related_documents);
-      const [withRelated] = await this.attachRelatedDocuments([result]);
+      const refreshed = await this.loadVoucher(result.id, userToken);
+      const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+      await this.safeAuditLog({
+        userToken,
+        action: 'CREATE',
+        eventGroup: 'payment_voucher.lifecycle',
+        entityId: withRelated.id,
+        entityNo: withRelated.voucher_no,
+        afterPayload: withRelated,
+        meta: {
+          voucher_channel: withRelated.voucher_channel,
+          voucher_direction: withRelated.voucher_direction,
+          status: withRelated.status,
+        },
+      });
       return { message: 'Tạo phiếu thu chi thành công', data: withRelated };
     } catch (error: any) {
       this.logger.error('Lỗi khi tạo phiếu thu chi', error);
@@ -900,6 +950,12 @@ export class PaymentVouchersService {
     };
   }
 
+  async getTimeline(id: string, userToken: string) {
+    this.guard(userToken);
+    await this.loadVoucher(id, userToken);
+    return this.auditLogsService.getPaymentVoucherTimeline(id);
+  }
+
   async update(id: string, dto: UpdatePaymentVouchersDto, userToken: string) {
     this.guard(userToken);
     const current = await this.loadVoucher(id, userToken);
@@ -933,6 +989,19 @@ export class PaymentVouchersService {
         }
         const refreshed = await this.loadVoucher(id, userToken);
         const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+        await this.safeAuditLog({
+          userToken,
+          action: 'UPDATE',
+          eventGroup: 'payment_voucher.lifecycle',
+          entityId: withRelated.id,
+          entityNo: withRelated.voucher_no,
+          beforePayload: current,
+          afterPayload: withRelated,
+          meta: {
+            status: withRelated.status,
+            approved_edit_only: true,
+          },
+        });
         return {
           message: 'Cập nhật phiếu thành công',
           data: withRelated,
@@ -988,7 +1057,20 @@ export class PaymentVouchersService {
         }),
       );
       await this.syncRelatedDocuments(id, dto.related_documents);
-      const [withRelated] = await this.attachRelatedDocuments([result]);
+      const refreshed = await this.loadVoucher(id, userToken);
+      const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+      await this.safeAuditLog({
+        userToken,
+        action: 'UPDATE',
+        eventGroup: 'payment_voucher.lifecycle',
+        entityId: withRelated.id,
+        entityNo: withRelated.voucher_no,
+        beforePayload: current,
+        afterPayload: withRelated,
+        meta: {
+          status: withRelated.status,
+        },
+      });
       return {
         message: 'Cập nhật phiếu thu chi thành công',
         data: withRelated,
@@ -1031,6 +1113,20 @@ export class PaymentVouchersService {
       await (client as any).request(
         (updateItem as any)(this.collection, id, { is_active: false }),
       );
+      await this.safeAuditLog({
+        userToken,
+        action: 'DELETE',
+        eventGroup: 'payment_voucher.lifecycle',
+        entityId: current.id,
+        entityNo: current.voucher_no,
+        beforePayload: current,
+        afterPayload: { ...current, is_active: false },
+        meta: {
+          status: current.status,
+          soft_delete: true,
+          deleted_attachment_count: attachmentIds.length,
+        },
+      });
       return {
         message: 'Xóa phiếu thu chi và các dữ liệu liên quan thành công',
       };
@@ -1083,18 +1179,33 @@ export class PaymentVouchersService {
       );
     }
 
-    const userId = await this.getCurrentUserId(userToken);
     const client = this.getClient(userToken);
 
     try {
-      const result = await (client as any).request(
+      await (client as any).request(
         (updateItem as any)(this.collection, id, {
           status: targetStatus,
           ...extraPayload,
         }),
       );
 
-      return result;
+      const refreshed = await this.loadVoucher(id, userToken);
+      await this.safeAuditLog({
+        userToken,
+        action: logAction,
+        eventGroup: 'payment_voucher.status_transition',
+        entityId: refreshed.id,
+        entityNo: refreshed.voucher_no,
+        note: logNote,
+        beforePayload: current,
+        afterPayload: refreshed,
+        meta: {
+          from_status: current.status,
+          to_status: refreshed.status,
+        },
+      });
+
+      return refreshed;
     } catch (error: any) {
       this.logger.error(
         `Lỗi chuyển trạng thái phiếu ${id} sang ${targetStatus}`,
@@ -1163,7 +1274,7 @@ export class PaymentVouchersService {
     const client = this.getClient(userToken);
 
     try {
-      const result = await (client as any).request(
+      await (client as any).request(
         (updateItem as any)(this.collection, id, {
           status: 'CANCELLED',
           cancel_reason: dto.cancel_reason,
@@ -1186,7 +1297,24 @@ export class PaymentVouchersService {
         );
       }
 
-      return { message: 'Phiếu đã được hủy', data: result };
+      const refreshed = await this.loadVoucher(id, userToken);
+      await this.safeAuditLog({
+        userToken,
+        action: 'CANCELLED',
+        eventGroup: 'payment_voucher.status_transition',
+        entityId: refreshed.id,
+        entityNo: refreshed.voucher_no,
+        reason: dto.cancel_reason,
+        beforePayload: current,
+        afterPayload: refreshed,
+        meta: {
+          from_status: current.status,
+          to_status: refreshed.status,
+          journal_entry_deleted: Boolean(current.journal_entry_id),
+        },
+      });
+
+      return { message: 'Phiếu đã được hủy', data: refreshed };
     } catch (error: any) {
       this.logger.error(`Lỗi hủy phiếu ${id}`, error);
       throwDirectusSdkError(error, 'Không thể hủy phiếu thu chi');
@@ -1324,6 +1452,21 @@ export class PaymentVouchersService {
 
     const refreshed = await this.loadVoucher(id, userToken);
     const [withRelated] = await this.attachRelatedDocuments([refreshed]);
+    await this.safeAuditLog({
+      userToken,
+      action: 'POST_TO_JOURNAL',
+      eventGroup: 'payment_voucher.accounting',
+      entityId: withRelated.id,
+      entityNo: withRelated.voucher_no,
+      beforePayload: current,
+      afterPayload: withRelated,
+      meta: {
+        journal_entry_id: journalEntryId,
+        line_count: dto.lines?.length || 0,
+        total_debit: totalDebit,
+        total_credit: totalCredit,
+      },
+    });
     return {
       message: 'Hạch toán phiếu thành công',
       data: withRelated,

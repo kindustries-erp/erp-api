@@ -30,6 +30,7 @@ import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { ViettelV2Module } from './viettel-v2/viettel-v2.module';
 import { BranchesModule } from './branches/branches.module';
 import { OperationalDocumentsModule } from './operational-documents/operational-documents.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { OperationalDocumentsModule } from './operational-documents/operational-
     SinvoiceModule,
     ViettelV2Module,
     OperationalDocumentsModule,
+    AuditLogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
