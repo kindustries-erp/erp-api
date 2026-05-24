@@ -58,14 +58,15 @@
   - [ ] 5.3 Summary with evidence
 
 ## Validation Evidence
-- DB precheck result: `DB_READY` — bug nằm ở API decoration, chưa thấy nhu cầu đổi schema.
-- Build: `npm run build` PASS
-- Smoke: DB precheck PASS với sample user `0832978b-f0f0-4017-8727-ae87b0d788d8` => `Nguyễn Thanh Nghi` / `nghi.nt@greenwayauto.vn`; runtime endpoint smoke pending after deploy
+- DB precheck result: Superseded by decommission decision on 2026-05-24. Live DB/runtime confirmed collection existed before removal, then was hard-removed from Directus staging.
+- Build: superseded — final executed path moved to decommission task `2026-05-24-decommission-payment-voucher-approval-log-db-be.md`
+- Smoke: superseded — final runtime state is route removed (`404`) and Directus runtime absent (`403 does not exist`) after decommission
 
 ## Lessons Learned
 - Link: No issue
+- Note: Task stopped being a decorate-name fix and was replaced by hard decommission scope after user changed direction.
 
 ## Commit/Push Status
-- API repo: pending
+- API repo: superseded by decommission commit
 - Web repo (if affected): not affected
-- DB/directus staging: apply+verify+document (no code push required)
+- DB/directus staging: superseded by decommission task evidence

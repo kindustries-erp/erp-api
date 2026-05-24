@@ -19,7 +19,6 @@ import { CashFundsModule } from './cash-funds/cash-funds.module';
 import { OpeningBalancesModule } from './opening-balances/opening-balances.module';
 import { PaymentVouchersModule } from './payment-vouchers/payment-vouchers.module';
 import { PaymentVoucherAttachmentsModule } from './payment-voucher-attachments/payment-voucher-attachments.module';
-import { PaymentVoucherApprovalLogsModule } from './payment-voucher-approval-logs/payment-voucher-approval-logs.module';
 import { VoucherNumberingConfigsModule } from './voucher-numbering-configs/voucher-numbering-configs.module';
 import { FilesModule } from './files/files.module';
 import { RbacModule } from './rbac/rbac.module';
@@ -55,7 +54,6 @@ import { OperationalDocumentsModule } from './operational-documents/operational-
     OpeningBalancesModule,
     PaymentVouchersModule,
     PaymentVoucherAttachmentsModule,
-    PaymentVoucherApprovalLogsModule,
     VoucherNumberingConfigsModule,
     FilesModule,
     RbacModule,

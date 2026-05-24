@@ -317,33 +317,6 @@ export class PaymentVouchersService {
     }
   }
 
-  private async writeApprovalLog(
-    voucherId: string,
-    action: string,
-    note: string | undefined,
-    userId: string,
-    fromStatus: string | undefined,
-    toStatus: string,
-    client: any,
-  ) {
-    try {
-      await client.request(
-        (createItem as any)('payment_voucher_approval_logs', {
-          payment_voucher_id: voucherId,
-          action,
-          note: note || null,
-          action_by: userId,
-          from_status: fromStatus || null,
-          to_status: toStatus,
-        }),
-      );
-    } catch (err: any) {
-      this.logger.warn(
-        `Không ghi được approval log cho ${voucherId}: ${err.message}`,
-      );
-    }
-  }
-
   private async resolveCashBankTagPreset(dto: {
     cash_bank_tag_preset_id?: string;
     cash_bank_tag_code?: string;
@@ -1046,14 +1019,6 @@ export class PaymentVouchersService {
       );
       const attachmentIds = attachments?.map((a: any) => a.id) || [];
 
-      const logs = await (client as any).request(
-        (readItems as any)('payment_voucher_approval_logs', {
-          filter: { payment_voucher_id: { _eq: id } },
-          fields: ['id'],
-        }),
-      );
-      const logIds = logs?.map((l: any) => l.id) || [];
-
       if (attachmentIds.length > 0) {
         await (client as any).request(
           (deleteItems as any)('payment_voucher_attachments', attachmentIds),
@@ -1062,15 +1027,6 @@ export class PaymentVouchersService {
           `Đã xóa ${attachmentIds.length} đính kèm của phiếu ${id}`,
         );
       }
-      if (logIds.length > 0) {
-        await (client as any).request(
-          (deleteItems as any)('payment_voucher_approval_logs', logIds),
-        );
-        this.logger.log(
-          `Đã xóa ${logIds.length} nhật ký duyệt của phiếu ${id}`,
-        );
-      }
-
       await this.syncRelatedDocuments(id, []);
       await (client as any).request(
         (updateItem as any)(this.collection, id, { is_active: false }),
@@ -1136,16 +1092,6 @@ export class PaymentVouchersService {
           status: targetStatus,
           ...extraPayload,
         }),
-      );
-
-      await this.writeApprovalLog(
-        id,
-        logAction,
-        logNote,
-        userId,
-        current.status,
-        targetStatus,
-        client,
       );
 
       return result;
@@ -1239,16 +1185,6 @@ export class PaymentVouchersService {
           ),
         );
       }
-
-      await this.writeApprovalLog(
-        id,
-        'CANCELLED',
-        dto.cancel_reason,
-        userId,
-        current.status,
-        'CANCELLED',
-        client,
-      );
 
       return { message: 'Phiếu đã được hủy', data: result };
     } catch (error: any) {
@@ -1384,15 +1320,6 @@ export class PaymentVouchersService {
       (updateItem as any)(this.collection, id, {
         journal_entry_id: journalEntryId,
       }),
-    );
-    await this.writeApprovalLog(
-      id,
-      'POSTED',
-      payload.description,
-      await this.getCurrentUserId(userToken),
-      current.status,
-      current.status,
-      client,
     );
 
     const refreshed = await this.loadVoucher(id, userToken);
