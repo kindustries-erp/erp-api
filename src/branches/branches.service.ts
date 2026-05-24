@@ -22,6 +22,7 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 import {
   rethrowHttpException,
   throwDirectusResponseError,
+  throwDirectusSdkError,
 } from '../common/utils/directus-error.util';
 
 @Injectable()
@@ -48,8 +49,7 @@ export class BranchesService {
       return { message: 'Tạo chi nhánh thành công', data: result };
     } catch (error: any) {
       this.logger.error('Lỗi khi tạo chi nhánh', error);
-      const directusError = error?.errors?.[0]?.message || error.message;
-      throw new BadRequestException(`Lỗi: ${directusError}`);
+      throwDirectusSdkError(error, 'Không thể tạo chi nhánh');
     }
   }
 
@@ -116,9 +116,7 @@ export class BranchesService {
       return { message: 'Lấy thông tin chi nhánh thành công', data: result };
     } catch (error: any) {
       this.logger.error(`Lỗi khi lấy thông tin chi nhánh ${id}`, error);
-      throw new InternalServerErrorException(
-        'Không thể lấy thông tin chi nhánh',
-      );
+      throwDirectusSdkError(error, 'Không thể lấy thông tin chi nhánh');
     }
   }
 
@@ -135,8 +133,7 @@ export class BranchesService {
       return { message: 'Cập nhật chi nhánh thành công', data: result };
     } catch (error: any) {
       this.logger.error(`Lỗi khi cập nhật chi nhánh ${id}`, error);
-      const directusError = error?.errors?.[0]?.message || error.message;
-      throw new BadRequestException(`Lỗi: ${directusError}`);
+      throwDirectusSdkError(error, 'Không thể cập nhật chi nhánh');
     }
   }
 
@@ -153,7 +150,7 @@ export class BranchesService {
       return { message: 'Xóa chi nhánh thành công' };
     } catch (error: any) {
       this.logger.error(`Lỗi khi xóa chi nhánh ${id}`, error);
-      throw new InternalServerErrorException('Không thể xóa chi nhánh');
+      throwDirectusSdkError(error, 'Không thể xóa chi nhánh');
     }
   }
 }
