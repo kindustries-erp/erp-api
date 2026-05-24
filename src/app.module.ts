@@ -31,6 +31,7 @@ import { ViettelV2Module } from './viettel-v2/viettel-v2.module';
 import { BranchesModule } from './branches/branches.module';
 import { OperationalDocumentsModule } from './operational-documents/operational-documents.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { CashflowVouchersModule } from './cashflow-vouchers/cashflow-vouchers.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     ViettelV2Module,
     OperationalDocumentsModule,
     AuditLogsModule,
+    CashflowVouchersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
