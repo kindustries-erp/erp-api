@@ -43,13 +43,29 @@ export class CashflowVouchersController {
     return this.service.findAll(query, token);
   }
 
-  @Get('lookup/parties')
+  @Get('party')
   @ApiOperation({ summary: 'Unified party lookup for INTERNAL/EXTERNAL' })
   findParties(
     @Query() query: CounterpartyLookupQueryDto,
     @UserToken() token: string,
   ) {
     return this.service.findParties(query, token);
+  }
+
+  @Get('parties/:id')
+  @ApiOperation({ summary: 'Unified party detail for INTERNAL/EXTERNAL' })
+  findPartyById(
+    @Param('id') id: string,
+    @Query() query: CounterpartyLookupQueryDto,
+    @UserToken() token: string,
+  ) {
+    return this.service.findPartyById(id, query, token);
+  }
+
+  @Get('money-sources')
+  @ApiOperation({ summary: 'Unified money source lookup for CASH/BANK' })
+  findMoneySources(@UserToken() token: string) {
+    return this.service.findMoneySources(token);
   }
 
   @Get(':id')

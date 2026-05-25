@@ -21,11 +21,7 @@ export class UpdateSoftFieldsDto {
 
   @IsUUID()
   @IsOptional()
-  cash_fund_id?: string;
-
-  @IsUUID()
-  @IsOptional()
-  bank_account_id?: string;
+  money_source_id?: string;
 }
 
 export class CancelCashflowVoucherDto {

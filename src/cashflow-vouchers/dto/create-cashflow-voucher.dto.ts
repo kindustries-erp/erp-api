@@ -105,10 +105,8 @@ export class CreateCashflowVoucherDto {
   voucher_no?: string;
 
   @IsUUID()
-  branch_id!: string;
-
-  @IsUUID()
-  company_id!: string;
+  @IsOptional()
+  branch_id?: string;
 
   @IsString()
   channel_type!: CashflowChannelType;
@@ -137,10 +135,6 @@ export class CreateCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  counterparty_tax_code_snapshot?: string;
-
-  @IsString()
-  @IsOptional()
   currency_code?: string;
 
   @IsNumber()
@@ -155,12 +149,7 @@ export class CreateCashflowVoucherDto {
   base_amount?: number;
 
   @IsUUID()
-  @IsOptional()
-  cash_fund_id?: string;
-
-  @IsUUID()
-  @IsOptional()
-  bank_account_id?: string;
+  money_source_id!: string;
 
   @IsString()
   description!: string;
@@ -192,8 +181,4 @@ export class CreateCashflowVoucherDto {
   @IsUUID()
   @IsOptional()
   source_document_id?: string;
-
-  @IsUUID()
-  @IsOptional()
-  legacy_payment_voucher_id?: string;
 }

@@ -36,7 +36,6 @@ const LOCKED_AFTER_POSTED = new Set([
   'counterparty_id',
   'counterparty_code_snapshot',
   'counterparty_name_snapshot',
-  'counterparty_tax_code_snapshot',
   'amount',
   'base_amount',
   'currency_code',
@@ -146,34 +145,46 @@ export class CashflowVouchersService {
     );
   }
 
-  private validateChannel(input: {
-    channel_type: string;
-    cash_fund_id?: string;
-    bank_account_id?: string;
-  }) {
-    if (input.channel_type === 'CASH') {
-      if (!input.cash_fund_id) {
-        throw new BadRequestException('CASH yêu cầu cash_fund_id');
-      }
-      if (input.bank_account_id) {
-        throw new BadRequestException('CASH không được có bank_account_id');
-      }
-      return;
-    }
-
-    if (input.channel_type === 'BANK') {
-      if (!input.bank_account_id) {
-        throw new BadRequestException('BANK yêu cầu bank_account_id');
-      }
-      if (input.cash_fund_id) {
-        throw new BadRequestException('BANK không được có cash_fund_id');
-      }
-      return;
-    }
-
-    throw new BadRequestException(
-      `channel_type không hợp lệ: ${input.channel_type}`,
+  private async fetchMoneySource(id: string) {
+    const source = await this.fetchItem(
+      'cash_funds',
+      id,
+      `Nguồn tiền ${id} không tồn tại`,
     );
+
+    if (!source.is_active) {
+      throw new BadRequestException(`Nguồn tiền ${id} đang ngưng hoạt động`);
+    }
+
+    if (!source.channel || !['CASH', 'BANK'].includes(source.channel)) {
+      throw new BadRequestException(
+        `Nguồn tiền ${id} chưa có channel hợp lệ CASH/BANK`,
+      );
+    }
+
+    if (!source.branch_id) {
+      throw new BadRequestException(`Nguồn tiền ${id} chưa gắn branch_id`);
+    }
+
+    return source;
+  }
+
+  private async resolveMoneySource(input: {
+    channel_type: string;
+    money_source_id?: string;
+  }) {
+    if (!input.money_source_id) {
+      throw new BadRequestException('Phiếu yêu cầu money_source_id');
+    }
+
+    const source = await this.fetchMoneySource(input.money_source_id);
+    if (source.channel !== input.channel_type) {
+      throw new BadRequestException(
+        `Nguồn tiền ${input.money_source_id} có channel ${source.channel}, không khớp với phiếu ${input.channel_type}`,
+      );
+    }
+
+    return source;
   }
 
   private async fetchEmployeeSnapshot(employeeId: string) {
@@ -206,15 +217,13 @@ export class CashflowVouchersService {
         `Đối tác ${counterpartyId} không tồn tại`,
       );
       return {
-        counterparty_code_snapshot: party.partner_code ?? null,
-        counterparty_name_snapshot: party.partner_name ?? null,
-        counterparty_tax_code_snapshot: party.tax_id ?? null,
+        counterparty_code_snapshot: party.code ?? null,
+        counterparty_name_snapshot: party.display_name ?? party.name ?? null,
       };
     } catch {
       return {
         counterparty_code_snapshot: null,
         counterparty_name_snapshot: null,
-        counterparty_tax_code_snapshot: null,
       };
     }
   }
@@ -254,7 +263,7 @@ export class CashflowVouchersService {
     const derived = this.deriveFromBusinessType(dto.business_type);
 
     this.validateParty(dto);
-    this.validateChannel(dto);
+    const moneySource = await this.resolveMoneySource(dto);
 
     const employeeSnapshot = dto.employee_id
       ? await this.fetchEmployeeSnapshot(dto.employee_id)
@@ -264,7 +273,6 @@ export class CashflowVouchersService {
       : {
           counterparty_code_snapshot: null,
           counterparty_name_snapshot: null,
-          counterparty_tax_code_snapshot: null,
         };
 
     const exchangeRate = dto.exchange_rate ?? 1;
@@ -275,8 +283,7 @@ export class CashflowVouchersService {
     const payload = {
       voucher_no: voucherNo,
       voucher_date: dto.voucher_date,
-      branch_id: dto.branch_id,
-      company_id: dto.company_id,
+      branch_id: moneySource.branch_id,
       voucher_family: derived.voucher_family,
       channel_type: dto.channel_type,
       flow_direction: derived.flow_direction,
@@ -295,15 +302,11 @@ export class CashflowVouchersService {
       counterparty_name_snapshot:
         dto.counterparty_name_snapshot ??
         counterpartySnapshot.counterparty_name_snapshot,
-      counterparty_tax_code_snapshot:
-        dto.counterparty_tax_code_snapshot ??
-        counterpartySnapshot.counterparty_tax_code_snapshot,
       currency_code: dto.currency_code ?? 'VND',
       exchange_rate: exchangeRate,
       amount: dto.amount,
       base_amount: baseAmount,
-      cash_fund_id: dto.cash_fund_id ?? null,
-      bank_account_id: dto.bank_account_id ?? null,
+      money_source_id: dto.money_source_id,
       description: dto.description,
       note: dto.note ?? null,
       reason: dto.reason ?? null,
@@ -318,7 +321,6 @@ export class CashflowVouchersService {
       related_document_count: 0,
       has_related_documents: false,
       is_active: true,
-      legacy_payment_voucher_id: dto.legacy_payment_voucher_id ?? null,
       data_version: 1,
     };
 
@@ -381,8 +383,7 @@ export class CashflowVouchersService {
       );
     if (query.branch_id)
       parts.push(`filter[branch_id][_eq]=${query.branch_id}`);
-    if (query.company_id)
-      parts.push(`filter[company_id][_eq]=${query.company_id}`);
+    parts.push('filter[is_active][_eq]=true');
     if (query.date_from)
       parts.push(`filter[voucher_date][_gte]=${query.date_from}`);
     if (query.date_to)
@@ -440,15 +441,6 @@ export class CashflowVouchersService {
       if (dto.description !== undefined) payload.description = dto.description;
       if (dto.note !== undefined) payload.note = dto.note;
       if (dto.reason !== undefined) payload.reason = dto.reason;
-      if (dto.cash_fund_id !== undefined && voucher.channel_type === 'CASH') {
-        payload.cash_fund_id = dto.cash_fund_id;
-      }
-      if (
-        dto.bank_account_id !== undefined &&
-        voucher.channel_type === 'BANK'
-      ) {
-        payload.bank_account_id = dto.bank_account_id;
-      }
     } else {
       const allowed = [
         'voucher_date',
@@ -456,7 +448,6 @@ export class CashflowVouchersService {
         'employee_name_snapshot',
         'counterparty_id',
         'counterparty_name_snapshot',
-        'counterparty_tax_code_snapshot',
         'amount',
         'base_amount',
         'currency_code',
@@ -467,8 +458,7 @@ export class CashflowVouchersService {
         'reason',
         'reference_no',
         'external_reference_no',
-        'cash_fund_id',
-        'bank_account_id',
+        'money_source_id',
       ] as const;
 
       for (const key of allowed) {
@@ -498,12 +488,13 @@ export class CashflowVouchersService {
         });
       }
 
-      this.validateChannel({
+      const resolvedMoneySource = await this.resolveMoneySource({
         channel_type: voucher.channel_type,
-        cash_fund_id: (payload.cash_fund_id as string) ?? voucher.cash_fund_id,
-        bank_account_id:
-          (payload.bank_account_id as string) ?? voucher.bank_account_id,
+        money_source_id:
+          (payload.money_source_id as string) ?? voucher.money_source_id,
       });
+      payload.money_source_id = resolvedMoneySource.id;
+      payload.branch_id = resolvedMoneySource.branch_id;
 
       if (
         typeof payload.employee_id === 'string' &&
@@ -580,29 +571,53 @@ export class CashflowVouchersService {
 
   async remove(id: string, token: string) {
     this.guard(token);
+    const me = await this.fetchMe(token);
     const voucher = await this.findVoucher(id);
 
-    if (voucher.status === 'POSTED') {
+    if (voucher.status !== 'DRAFT') {
       throw new ForbiddenException(
-        'Không thể xóa phiếu đã POSTED. Nếu sai nghiệp vụ hãy CANCELLED và tạo phiếu mới',
+        `Chỉ phiếu DRAFT mới được xóa mềm. Trạng thái hiện tại: ${voucher.status}`,
       );
     }
-    if (voucher.status === 'CANCELLED') {
-      throw new ForbiddenException('Không thể xóa phiếu đã CANCELLED');
-    }
+
+    const payload = {
+      is_active: false,
+      updated_by: me.id,
+      updated_at: new Date().toISOString(),
+    };
 
     const res = await fetch(
       `${this.directusUrl}/items/${this.collection}/${id}`,
       {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${this.adminToken}` },
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       },
     );
     if (!res.ok) {
-      await throwDirectusResponseError(res, 'Không xóa được cashflow voucher');
+      await throwDirectusResponseError(
+        res,
+        'Không xóa mềm được cashflow voucher',
+      );
     }
+    const body = await res.json();
 
-    return { message: 'Xóa phiếu thành công' };
+    await this.auditLogsService.logEvent({
+      userToken: token,
+      module: 'cashflow-vouchers',
+      entityType: this.collection,
+      entityId: id,
+      entityNo: voucher.voucher_no,
+      action: 'SOFT_DELETE',
+      eventGroup: 'VOUCHER_LIFECYCLE',
+      beforePayload: voucher,
+      afterPayload: body.data,
+    });
+
+    return { message: 'Xóa mềm phiếu thành công', data: body.data };
   }
 
   async cancel(id: string, dto: CancelCashflowVoucherDto, token: string) {
@@ -1015,26 +1030,39 @@ export class CashflowVouchersService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
     const offset = (page - 1) * pageSize;
+    const scope = (query.scope ?? '').toUpperCase();
 
-    if (query.scope === 'INTERNAL') {
+    if (scope === 'INTERNAL') {
       const res = await fetch(
-        `${this.directusUrl}/items/employees?limit=${pageSize}&offset=${offset}&fields=id,employee_code,first_name,last_name,full_name${
+        `${this.directusUrl}/items/employees?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,employee_code,first_name,last_name,full_name,branch_id${
           query.query ? `&search=${encodeURIComponent(query.query)}` : ''
         }`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        { headers: { Authorization: `Bearer ${this.adminToken}` } },
       );
       if (!res.ok) {
         await throwDirectusResponseError(res, 'Không lookup được employees');
       }
       const body = await res.json();
-      return { scope: 'INTERNAL', data: body.data ?? [] };
+      return {
+        scope: 'INTERNAL',
+        data: (body.data ?? []).map((item: any) => ({
+          id: item.id,
+          scope: 'INTERNAL',
+          code: item.employee_code ?? null,
+          display_name:
+            item.full_name ??
+            [item.first_name, item.last_name].filter(Boolean).join(' ') ??
+            null,
+          branch_id: item.branch_id ?? null,
+        })),
+      };
     }
 
     const res = await fetch(
-      `${this.directusUrl}/items/business_partners?limit=${pageSize}&offset=${offset}&fields=id,partner_code,partner_name,tax_id${
+      `${this.directusUrl}/items/business_partners?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,code,name,display_name,tax_code${
         query.query ? `&search=${encodeURIComponent(query.query)}` : ''
       }`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      { headers: { Authorization: `Bearer ${this.adminToken}` } },
     );
     if (!res.ok) {
       await throwDirectusResponseError(
@@ -1043,6 +1071,90 @@ export class CashflowVouchersService {
       );
     }
     const body = await res.json();
-    return { scope: 'EXTERNAL', data: body.data ?? [] };
+    return {
+      scope: 'EXTERNAL',
+      data: (body.data ?? []).map((item: any) => ({
+        id: item.id,
+        scope: 'EXTERNAL',
+        code: item.code ?? null,
+        display_name: item.display_name ?? item.name ?? null,
+        tax_code: item.tax_code ?? null,
+        branch_id: null,
+      })),
+    };
+  }
+
+  async findPartyById(
+    id: string,
+    query: CounterpartyLookupQueryDto,
+    token: string,
+  ) {
+    this.guard(token);
+    const scope = (query.scope ?? '').toUpperCase();
+
+    if (scope === 'INTERNAL') {
+      const item = await this.fetchItem(
+        'employees',
+        id,
+        `Nhân viên ${id} không tồn tại`,
+      );
+
+      return {
+        data: {
+          id: item.id,
+          scope: 'INTERNAL',
+          code: item.employee_code ?? null,
+          display_name:
+            item.full_name ??
+            [item.first_name, item.last_name].filter(Boolean).join(' ') ??
+            null,
+          branch_id: item.branch_id ?? null,
+          source_type: 'employees',
+          source_id: item.id,
+        },
+      };
+    }
+
+    const item = await this.fetchItem(
+      'business_partners',
+      id,
+      `Đối tác ${id} không tồn tại`,
+    );
+
+    return {
+      data: {
+        id: item.id,
+        scope: 'EXTERNAL',
+        code: item.code ?? null,
+        display_name: item.display_name ?? item.name ?? null,
+        tax_code: item.tax_code ?? null,
+        branch_id: null,
+        source_type: 'business_partners',
+        source_id: item.id,
+      },
+    };
+  }
+
+  async findMoneySources(token: string) {
+    this.guard(token);
+    const res = await fetch(
+      `${this.directusUrl}/items/cash_funds?filter[is_active][_eq]=true&limit=-1&sort=fund_code&fields=id,fund_code,fund_name,branch_id,accounting_account_id,channel`,
+      { headers: { Authorization: `Bearer ${this.adminToken}` } },
+    );
+    if (!res.ok) {
+      await throwDirectusResponseError(res, 'Không lookup được nguồn tiền');
+    }
+    const body = await res.json();
+    return {
+      data: (body.data ?? []).map((item: any) => ({
+        id: item.id,
+        code: item.fund_code ?? null,
+        name: item.fund_name ?? null,
+        label: [item.fund_code, item.fund_name].filter(Boolean).join(' - '),
+        branch_id: item.branch_id ?? null,
+        accounting_account_id: item.accounting_account_id ?? null,
+        channel: item.channel,
+      })),
+    };
   }
 }

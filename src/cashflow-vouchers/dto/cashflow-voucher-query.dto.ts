@@ -44,10 +44,6 @@ export class CashflowVoucherQueryDto {
   branch_id?: string;
 
   @IsOptional()
-  @IsUUID()
-  company_id?: string;
-
-  @IsOptional()
   @IsString()
   date_from?: string;
 
