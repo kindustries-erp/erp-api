@@ -485,7 +485,7 @@ export class WorkflowGraphService {
         '/items/departments?fields[]=id&fields[]=name&fields[]=description&limit=50',
       ),
       this.fetchDirectus<any>(
-        '/items/employees?fields[]=id&fields[]=full_name&fields[]=department_id.id&fields[]=department_id.name&fields[]=position_id.name&limit=200',
+        '/items/erp_employees?fields[]=id&fields[]=full_name&fields[]=department_id.id&fields[]=department_id.name&fields[]=position_id.name&limit=200',
       ),
       this.fetchDirectus<any>(
         '/users?fields[]=id&fields[]=first_name&fields[]=last_name&fields[]=role.name&fields[]=role.admin_access&limit=100',

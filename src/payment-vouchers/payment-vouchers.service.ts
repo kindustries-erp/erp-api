@@ -97,7 +97,7 @@ export class PaymentVouchersService {
   private async fetchEmployeeSnapshot(
     employeeId: string,
   ): Promise<Record<string, string>> {
-    const url = new URL(`/items/employees/${employeeId}`, this.directusUrl);
+    const url = new URL(`/items/erp_employees/${employeeId}`, this.directusUrl);
     url.searchParams.append('fields[]', 'id');
     url.searchParams.append('fields[]', 'full_name');
     url.searchParams.append('fields[]', 'phone');
@@ -119,7 +119,7 @@ export class PaymentVouchersService {
     counterpartyId: string,
   ): Promise<Record<string, string>> {
     const res = await fetch(
-      `${this.directusUrl}/items/business_partners/${counterpartyId}`,
+      `${this.directusUrl}/items/erp_business_partners/${counterpartyId}`,
       {
         headers: { Authorization: `Bearer ${this.adminToken}` },
       },
@@ -717,7 +717,7 @@ export class PaymentVouchersService {
   async findEmployeeOptions(query: PaymentVoucherQueryDto, userToken: string) {
     this.guard(userToken);
     try {
-      return await this.adminListItems('employees', {
+      return await this.adminListItems('erp_employees', {
         fields: ['id', 'full_name', 'phone'],
         search: query.search,
         page: query.page,
@@ -742,7 +742,7 @@ export class PaymentVouchersService {
   ) {
     this.guard(userToken);
     try {
-      return await this.adminListItems('business_partners', {
+      return await this.adminListItems('erp_business_partners', {
         fields: [
           'id',
           'code',
@@ -783,7 +783,7 @@ export class PaymentVouchersService {
         ? { business_partner_id: { _eq: query.counterparty_id } }
         : undefined;
 
-      return await this.adminListItems('business_partner_bank_accounts', {
+      return await this.adminListItems('erp_business_partner_bank_accounts', {
         fields: [
           'id',
           'business_partner_id',
@@ -1285,7 +1285,7 @@ export class PaymentVouchersService {
       // Nếu phiếu đã hạch toán, xóa bút toán liên quan
       if (current.journal_entry_id) {
         await fetch(
-          `${this.directusUrl}/items/journal_entries/${current.journal_entry_id}`,
+          `${this.directusUrl}/items/erp_journal_entries/${current.journal_entry_id}`,
           {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${this.adminToken}` },
@@ -1338,7 +1338,7 @@ export class PaymentVouchersService {
     // Nếu đã có bút toán cũ, xóa trước khi tạo mới
     if (current.journal_entry_id) {
       await fetch(
-        `${this.directusUrl}/items/journal_entries/${current.journal_entry_id}`,
+        `${this.directusUrl}/items/erp_journal_entries/${current.journal_entry_id}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${this.adminToken}` },
@@ -1379,25 +1379,28 @@ export class PaymentVouchersService {
       date: dto.date || current.posting_date || current.document_date,
     };
 
-    const createRes = await fetch(`${this.directusUrl}/items/journal_entries`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.adminToken}`,
-        'Content-Type': 'application/json',
+    const createRes = await fetch(
+      `${this.directusUrl}/items/erp_journal_entries`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          voucher_no: payload.voucher_no || null,
+          date: payload.date,
+          period_id: payload.period_id || null,
+          description: payload.description,
+          status: 'posted',
+          reference_type: payload.reference_type,
+          reference_id: payload.reference_id,
+          total_debit: totalDebit,
+          total_credit: totalCredit,
+          created_by: await this.getCurrentUserId(userToken),
+        }),
       },
-      body: JSON.stringify({
-        voucher_no: payload.voucher_no || null,
-        date: payload.date,
-        period_id: payload.period_id || null,
-        description: payload.description,
-        status: 'posted',
-        reference_type: payload.reference_type,
-        reference_id: payload.reference_id,
-        total_debit: totalDebit,
-        total_credit: totalCredit,
-        created_by: await this.getCurrentUserId(userToken),
-      }),
-    });
+    );
     if (!createRes.ok) {
       await throwDirectusResponseError(createRes, 'Không thể tạo bút toán');
     }
@@ -1410,7 +1413,7 @@ export class PaymentVouchersService {
     }
 
     const linesRes = await fetch(
-      `${this.directusUrl}/items/journal_entry_lines`,
+      `${this.directusUrl}/items/erp_journal_entry_lines`,
       {
         method: 'POST',
         headers: {
@@ -1431,7 +1434,7 @@ export class PaymentVouchersService {
     );
     if (!linesRes.ok) {
       await fetch(
-        `${this.directusUrl}/items/journal_entries/${journalEntryId}`,
+        `${this.directusUrl}/items/erp_journal_entries/${journalEntryId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${this.adminToken}` },

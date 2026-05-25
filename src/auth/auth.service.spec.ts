@@ -122,7 +122,7 @@ describe('AuthService', () => {
             full_name: 'Test User',
             department_id: { name: 'IT' },
           },
-        ]); // readItems (employees)
+        ]); // readItems (erp_employees)
 
       const result = await service.login({
         email: 'test@example.com',
@@ -473,7 +473,7 @@ describe('AuthService', () => {
             json: async () => ({
               data: [
                 {
-                  collection: 'employees',
+                  collection: 'erp_employees',
                   action: 'read',
                   fields: ['*'],
                   permissions: null,
@@ -586,7 +586,7 @@ describe('AuthService', () => {
         with: jest.fn().mockReturnThis(),
         request: jest
           .fn()
-          .mockResolvedValueOnce([{ id: 'emp-1' }]) // readItems (find employee)
+          .mockResolvedValueOnce([{ id: 'emp-1' }]) // readItems (find erp_employee)
           .mockResolvedValueOnce({ id: 'emp-1', full_name: 'New Name' }), // updateItem
       };
       createDirectus.mockReturnValue(mockAdminClient);
@@ -602,7 +602,7 @@ describe('AuthService', () => {
       const { createDirectus } = require('@directus/sdk');
       const mockAdminClient = {
         with: jest.fn().mockReturnThis(),
-        request: jest.fn().mockResolvedValue([]), // empty employees
+        request: jest.fn().mockResolvedValue([]), // empty erp_employees
       };
       createDirectus.mockReturnValue(mockAdminClient);
 
@@ -663,7 +663,7 @@ describe('AuthService', () => {
           refresh_token: 'new-refresh',
           expires: 900000,
         }),
-        request: jest.fn().mockRejectedValue(new Error('skip employee')),
+        request: jest.fn().mockRejectedValue(new Error('skip erp_employee')),
       };
       createDirectus.mockReturnValue(mockAuthClient);
 

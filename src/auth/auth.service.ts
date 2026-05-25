@@ -180,7 +180,7 @@ export class AuthService {
       const me = await userClient.request(readMe({ fields: ['id', 'email'] }));
 
       const employees = await userClient.request(
-        readItems('employees', {
+        readItems('erp_employees', {
           filter: {
             directus_user_id: {
               _eq: me.id,
@@ -360,7 +360,7 @@ export class AuthService {
 
     // Tìm employee record của chính user này
     const employees = await (adminClient as any).request(
-      (readItems as any)('employees', {
+      (readItems as any)('erp_employees', {
         filter: { directus_user_id: { _eq: directusUserId } },
         limit: 1,
         fields: ['id'],
@@ -389,7 +389,7 @@ export class AuthService {
 
     try {
       const updated = await (adminClient as any).request(
-        (updateItem as any)('employees', employeeId, payload),
+        (updateItem as any)('erp_employees', employeeId, payload),
       );
       return {
         message: 'Cập nhật thông tin thành công',
@@ -418,7 +418,7 @@ export class AuthService {
       .with(rest());
 
     const employees = await (adminClient as any).request(
-      (readItems as any)('employees', {
+      (readItems as any)('erp_employees', {
         filter: { directus_user_id: { _eq: userId } },
         limit: 1,
         fields: ['*', 'department_id.*', 'position_id.*'],

@@ -147,7 +147,7 @@ export class CashflowVouchersService {
 
   private async fetchMoneySource(id: string) {
     const source = await this.fetchItem(
-      'money_sources',
+      'erp_money_sources',
       id,
       `Nguồn tiền ${id} không tồn tại`,
     );
@@ -190,7 +190,7 @@ export class CashflowVouchersService {
   private async fetchEmployeeSnapshot(employeeId: string) {
     // Throws NotFoundException if employee does not exist — enforces FK integrity at API layer
     const employee = await this.fetchItem(
-      'employees',
+      'erp_employees',
       employeeId,
       `Nhân viên ${employeeId} không tồn tại`,
     );
@@ -206,7 +206,7 @@ export class CashflowVouchersService {
   private async fetchCounterpartySnapshot(counterpartyId: string) {
     // Throws NotFoundException if business_partner does not exist — enforces FK integrity at API layer
     const party = await this.fetchItem(
-      'business_partners',
+      'erp_business_partners',
       counterpartyId,
       `Đối tác ${counterpartyId} không tồn tại`,
     );
@@ -675,22 +675,25 @@ export class CashflowVouchersService {
     let journalEntryNo: string | null = null;
 
     if (dto.journal_entry) {
-      const jeRes = await fetch(`${this.directusUrl}/items/journal_entries`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.adminToken}`,
-          'Content-Type': 'application/json',
+      const jeRes = await fetch(
+        `${this.directusUrl}/items/erp_journal_entries`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            entry_date: voucher.voucher_date,
+            description: `${voucher.voucher_no} - ${voucher.description}`,
+            status: 'POSTED',
+            source_module: 'cashflow-vouchers',
+            source_document_type: this.collection,
+            source_document_id: id,
+            created_by: me.id,
+          }),
         },
-        body: JSON.stringify({
-          entry_date: voucher.voucher_date,
-          description: `${voucher.voucher_no} - ${voucher.description}`,
-          status: 'POSTED',
-          source_module: 'cashflow-vouchers',
-          source_document_type: this.collection,
-          source_document_id: id,
-          created_by: me.id,
-        }),
-      });
+      );
       if (!jeRes.ok) {
         await throwDirectusResponseError(jeRes, 'Không tạo được journal entry');
       }
@@ -1022,7 +1025,7 @@ export class CashflowVouchersService {
 
     if (scope === 'INTERNAL') {
       const res = await fetch(
-        `${this.directusUrl}/items/employees?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,employee_code,first_name,last_name,full_name,branch_id${
+        `${this.directusUrl}/items/erp_employees?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,employee_code,first_name,last_name,full_name,branch_id${
           query.query ? `&search=${encodeURIComponent(query.query)}` : ''
         }`,
         { headers: { Authorization: `Bearer ${this.adminToken}` } },
@@ -1047,7 +1050,7 @@ export class CashflowVouchersService {
     }
 
     const res = await fetch(
-      `${this.directusUrl}/items/business_partners?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,code,name,display_name,tax_code${
+      `${this.directusUrl}/items/erp_business_partners?filter[is_active][_eq]=true&limit=${pageSize}&offset=${offset}&fields=id,code,name,display_name,tax_code${
         query.query ? `&search=${encodeURIComponent(query.query)}` : ''
       }`,
       { headers: { Authorization: `Bearer ${this.adminToken}` } },
@@ -1082,7 +1085,7 @@ export class CashflowVouchersService {
 
     if (scope === 'INTERNAL') {
       const item = await this.fetchItem(
-        'employees',
+        'erp_employees',
         id,
         `Nhân viên ${id} không tồn tại`,
       );
@@ -1097,14 +1100,14 @@ export class CashflowVouchersService {
             [item.first_name, item.last_name].filter(Boolean).join(' ') ??
             null,
           branch_id: item.branch_id ?? null,
-          source_type: 'employees',
+          source_type: 'erp_employees',
           source_id: item.id,
         },
       };
     }
 
     const item = await this.fetchItem(
-      'business_partners',
+      'erp_business_partners',
       id,
       `Đối tác ${id} không tồn tại`,
     );
@@ -1117,7 +1120,7 @@ export class CashflowVouchersService {
         display_name: item.display_name ?? item.name ?? null,
         tax_code: item.tax_code ?? null,
         branch_id: null,
-        source_type: 'business_partners',
+        source_type: 'erp_business_partners',
         source_id: item.id,
       },
     };
@@ -1126,7 +1129,7 @@ export class CashflowVouchersService {
   async findMoneySources(token: string) {
     this.guard(token);
     const res = await fetch(
-      `${this.directusUrl}/items/money_sources?filter[is_active][_eq]=true&limit=-1&sort=code&fields=id,code,name,branch_id,accounting_account_id,channel,currency_code,legacy_cash_fund_id,legacy_bank_account_id`,
+      `${this.directusUrl}/items/erp_money_sources?filter[is_active][_eq]=true&limit=-1&sort=code&fields=id,code,name,branch_id,accounting_account_id,channel,currency_code,legacy_cash_fund_id,legacy_bank_account_id`,
       { headers: { Authorization: `Bearer ${this.adminToken}` } },
     );
     if (!res.ok) {

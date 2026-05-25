@@ -20,8 +20,8 @@ import {
 @Injectable()
 export class JournalEntriesService {
   private readonly logger = new Logger(JournalEntriesService.name);
-  private readonly collection = 'journal_entries';
-  private readonly linesCollection = 'journal_entry_lines';
+  private readonly collection = 'erp_journal_entries';
+  private readonly linesCollection = 'erp_journal_entry_lines';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

@@ -26,7 +26,7 @@ import { rethrowHttpException } from '../common/utils/directus-error.util';
 @Injectable()
 export class BusinessPartnersService {
   private readonly logger = new Logger(BusinessPartnersService.name);
-  private readonly collection = 'business_partners';
+  private readonly collection = 'erp_business_partners';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
@@ -73,7 +73,7 @@ export class BusinessPartnersService {
 
       if (query.role) {
         const roleRows = await (client as any).request(
-          (readItems as any)('business_partner_roles', {
+          (readItems as any)('erp_business_partner_roles', {
             filter: {
               role: { _eq: query.role },
               is_active: { _eq: true },
