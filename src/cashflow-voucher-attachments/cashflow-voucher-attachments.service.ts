@@ -25,7 +25,7 @@ import { GetCashflowVoucherAttachmentsDto } from './dto/get-cashflow-voucher-att
 @Injectable()
 export class CashflowVoucherAttachmentsService {
   private readonly logger = new Logger(CashflowVoucherAttachmentsService.name);
-  private readonly collection = 'cashflow_voucher_attachments';
+  private readonly collection = 'erp_cashflow_voucher_attachments';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)

@@ -51,9 +51,9 @@ const LOCKED_AFTER_POSTED = new Set([
 @Injectable()
 export class CashflowVouchersService {
   private readonly logger = new Logger(CashflowVouchersService.name);
-  private readonly collection = 'cashflow_vouchers';
-  private readonly relatedCollection = 'cashflow_voucher_related_documents';
-  private readonly allocationCollection = 'cashflow_allocations';
+  private readonly collection = 'erp_cashflow_vouchers';
+  private readonly relatedCollection = 'erp_cashflow_voucher_related_documents';
+  private readonly allocationCollection = 'erp_cashflow_allocations';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
