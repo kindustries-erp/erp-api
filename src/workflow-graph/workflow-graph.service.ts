@@ -482,7 +482,7 @@ export class WorkflowGraphService {
   async getGraph(): Promise<WorkflowGraph> {
     const [rawDepts, rawEmployees, rawUsers] = await Promise.all([
       this.fetchDirectus<any>(
-        '/items/departments?fields[]=id&fields[]=name&fields[]=description&limit=50',
+        '/items/erp_departments?fields[]=id&fields[]=department_name&fields[]=description&limit=50',
       ),
       this.fetchDirectus<any>(
         '/items/erp_employees?fields[]=id&fields[]=full_name&fields[]=department_id.id&fields[]=department_id.name&fields[]=position_id.name&limit=200',

@@ -29,7 +29,7 @@ import {
 @Injectable()
 export class DepartmentsService {
   private readonly logger = new Logger(DepartmentsService.name);
-  private readonly collection = 'departments';
+  private readonly collection = 'erp_departments';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
