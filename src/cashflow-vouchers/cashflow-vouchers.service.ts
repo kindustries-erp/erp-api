@@ -188,44 +188,32 @@ export class CashflowVouchersService {
   }
 
   private async fetchEmployeeSnapshot(employeeId: string) {
-    try {
-      const employee = await this.fetchItem(
-        'employees',
-        employeeId,
-        `Nhân viên ${employeeId} không tồn tại`,
-      );
-      return {
-        employee_code_snapshot: employee.employee_code ?? null,
-        employee_name_snapshot:
-          employee.full_name ??
-          [employee.first_name, employee.last_name].filter(Boolean).join(' ') ??
-          null,
-      };
-    } catch {
-      return {
-        employee_code_snapshot: null,
-        employee_name_snapshot: null,
-      };
-    }
+    // Throws NotFoundException if employee does not exist — enforces FK integrity at API layer
+    const employee = await this.fetchItem(
+      'employees',
+      employeeId,
+      `Nhân viên ${employeeId} không tồn tại`,
+    );
+    return {
+      employee_code_snapshot: employee.employee_code ?? null,
+      employee_name_snapshot:
+        employee.full_name ??
+        [employee.first_name, employee.last_name].filter(Boolean).join(' ') ??
+        null,
+    };
   }
 
   private async fetchCounterpartySnapshot(counterpartyId: string) {
-    try {
-      const party = await this.fetchItem(
-        'business_partners',
-        counterpartyId,
-        `Đối tác ${counterpartyId} không tồn tại`,
-      );
-      return {
-        counterparty_code_snapshot: party.code ?? null,
-        counterparty_name_snapshot: party.display_name ?? party.name ?? null,
-      };
-    } catch {
-      return {
-        counterparty_code_snapshot: null,
-        counterparty_name_snapshot: null,
-      };
-    }
+    // Throws NotFoundException if business_partner does not exist — enforces FK integrity at API layer
+    const party = await this.fetchItem(
+      'business_partners',
+      counterpartyId,
+      `Đối tác ${counterpartyId} không tồn tại`,
+    );
+    return {
+      counterparty_code_snapshot: party.code ?? null,
+      counterparty_name_snapshot: party.display_name ?? party.name ?? null,
+    };
   }
 
   private async generateVoucherNo(businessType: string) {
