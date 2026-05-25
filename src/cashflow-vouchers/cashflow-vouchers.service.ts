@@ -147,7 +147,7 @@ export class CashflowVouchersService {
 
   private async fetchMoneySource(id: string) {
     const source = await this.fetchItem(
-      'cash_funds',
+      'money_sources',
       id,
       `Nguồn tiền ${id} không tồn tại`,
     );
@@ -1138,7 +1138,7 @@ export class CashflowVouchersService {
   async findMoneySources(token: string) {
     this.guard(token);
     const res = await fetch(
-      `${this.directusUrl}/items/cash_funds?filter[is_active][_eq]=true&limit=-1&sort=fund_code&fields=id,fund_code,fund_name,branch_id,accounting_account_id,channel`,
+      `${this.directusUrl}/items/money_sources?filter[is_active][_eq]=true&limit=-1&sort=code&fields=id,code,name,branch_id,accounting_account_id,channel,currency_code,legacy_cash_fund_id,legacy_bank_account_id`,
       { headers: { Authorization: `Bearer ${this.adminToken}` } },
     );
     if (!res.ok) {
@@ -1148,12 +1148,15 @@ export class CashflowVouchersService {
     return {
       data: (body.data ?? []).map((item: any) => ({
         id: item.id,
-        code: item.fund_code ?? null,
-        name: item.fund_name ?? null,
-        label: [item.fund_code, item.fund_name].filter(Boolean).join(' - '),
+        code: item.code ?? null,
+        name: item.name ?? null,
+        label: [item.code, item.name].filter(Boolean).join(' - '),
         branch_id: item.branch_id ?? null,
         accounting_account_id: item.accounting_account_id ?? null,
         channel: item.channel,
+        currency_code: item.currency_code ?? 'VND',
+        legacy_cash_fund_id: item.legacy_cash_fund_id ?? null,
+        legacy_bank_account_id: item.legacy_bank_account_id ?? null,
       })),
     };
   }
