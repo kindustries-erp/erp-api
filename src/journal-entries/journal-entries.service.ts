@@ -286,7 +286,7 @@ export class JournalEntriesService {
     // If period_id not provided, try to find open period matching date
     let period_id = dto.period_id || null;
     if (!period_id && dto.date) {
-      const pUrl = new URL('/items/accounting_periods', this.directusUrl);
+      const pUrl = new URL('/items/erp_accounting_periods', this.directusUrl);
       pUrl.searchParams.append(
         'filter',
         JSON.stringify({
@@ -437,7 +437,7 @@ export class JournalEntriesService {
 
   async findPeriodOptions(userToken: string) {
     this.guard(userToken);
-    const url = new URL('/items/accounting_periods', this.directusUrl);
+    const url = new URL('/items/erp_accounting_periods', this.directusUrl);
     url.searchParams.append('fields[]', 'id');
     url.searchParams.append('fields[]', 'name');
     url.searchParams.append('fields[]', 'status');

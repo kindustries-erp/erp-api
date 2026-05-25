@@ -752,7 +752,7 @@ export class CashflowVouchersService {
     await this.findVoucher(id);
 
     const res = await fetch(
-      `${this.directusUrl}/items/audit_logs?filter[entity_type][_eq]=${this.collection}&filter[entity_id][_eq]=${id}&sort=-created_at&limit=200`,
+      `${this.directusUrl}/items/erp_audit_logs?filter[entity_type][_eq]=${this.collection}&filter[entity_id][_eq]=${id}&sort=-created_at&limit=200`,
       { headers: { Authorization: `Bearer ${this.adminToken}` } },
     );
     if (!res.ok) {

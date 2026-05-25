@@ -91,7 +91,7 @@ export class AuditLogsService {
       meta: input.meta ?? {},
     };
 
-    const res = await fetch(`${this.directusUrl}/items/audit_logs`, {
+    const res = await fetch(`${this.directusUrl}/items/erp_audit_logs`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.adminToken}`,
@@ -112,7 +112,7 @@ export class AuditLogsService {
   }
 
   async findAll(query: AuditLogQueryDto) {
-    const url = new URL('/items/audit_logs', this.directusUrl);
+    const url = new URL('/items/erp_audit_logs', this.directusUrl);
     const page = query.page || 1;
     const pageSize = query.pageSize || 20;
     const offset = (page - 1) * pageSize;
@@ -155,7 +155,7 @@ export class AuditLogsService {
   }
 
   async getPaymentVoucherTimeline(id: string) {
-    const url = new URL('/items/audit_logs', this.directusUrl);
+    const url = new URL('/items/erp_audit_logs', this.directusUrl);
     url.searchParams.append('sort[]', 'created_at');
     url.searchParams.append(
       'filter',
