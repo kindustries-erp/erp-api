@@ -31,10 +31,6 @@ export class UpdateEmployeeDto {
 
   @IsOptional()
   @IsString()
-  business_partner_id?: string;
-
-  @IsOptional()
-  @IsString()
   employment_status?: string;
 
   @IsOptional()
