@@ -462,7 +462,7 @@ export class JournalEntriesService {
 
   async findAccountOptions(search: string | undefined, userToken: string) {
     this.guard(userToken);
-    const url = new URL('/items/chart_of_accounts', this.directusUrl);
+    const url = new URL('/items/erp_chart_of_accounts', this.directusUrl);
     url.searchParams.append('fields[]', 'id');
     url.searchParams.append('fields[]', 'account_code');
     url.searchParams.append('fields[]', 'account_name');

@@ -28,7 +28,7 @@ import {
 @Injectable()
 export class BranchesService {
   private readonly logger = new Logger(BranchesService.name);
-  private readonly collection = 'branches';
+  private readonly collection = 'erp_branches';
 
   constructor(
     @Inject(DIRECTUS_CLIENT)
