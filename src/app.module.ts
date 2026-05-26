@@ -33,6 +33,7 @@ import { BranchesModule } from './branches/branches.module';
 import { OperationalDocumentsModule } from './operational-documents/operational-documents.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { CashflowVouchersModule } from './cashflow-vouchers/cashflow-vouchers.module';
+import { ErpManufacturingModule } from './erp-manufacturing/erp-manufacturing.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { CashflowVouchersModule } from './cashflow-vouchers/cashflow-vouchers.mo
     OperationalDocumentsModule,
     AuditLogsModule,
     CashflowVouchersModule,
+    ErpManufacturingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
