@@ -68,7 +68,8 @@ Trước khi tạo mới utility/service/helper, rà soát:
 - Không in secret từ `.env` ra log/report.
 
 ## 6) Validation gates
-- `npm run build`
+- Bun-first tooling: dùng `bun` / `bunx` mặc định cho install/build/test/lint/format; chỉ fallback `npm`/`npx` nếu đã verify Bun không hỗ trợ và phải ghi rõ trong task evidence.
+- `bun run build`
 - Nếu có test: chạy test scope liên quan.
 - Nếu có đổi contract: kiểm tra endpoint affected bằng smoke request.
 
