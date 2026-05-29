@@ -13,7 +13,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
       - name: Deploy API on Elite
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no lio@100.75.67.115 '
+          ssh -p 26266 -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no lio@100.90.103.19 '
             set -e
             cd /opt/repos/liouni-erp/liouni-erp-api
             git fetch origin
