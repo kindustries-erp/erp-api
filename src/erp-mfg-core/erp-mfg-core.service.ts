@@ -5,6 +5,8 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
+import { ErpInventoryLot } from '../inventory-core/entities/erp_inventory_lot.entity';
+import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpVehicle } from './entities/erp_vehicle.entity';
@@ -18,6 +20,10 @@ export class ErpMfgCoreService {
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
     @InjectRepository(ErpInventoryTransaction)
     private readonly txnRepository: Repository<ErpInventoryTransaction>,
+    @InjectRepository(ErpInventoryLot)
+    private readonly lotRepository: Repository<ErpInventoryLot>,
+    @InjectRepository(ErpInventorySerial)
+    private readonly serialRepository: Repository<ErpInventorySerial>,
     @InjectRepository(ErpPurchaseOrder)
     private readonly poRepository: Repository<ErpPurchaseOrder>,
     @InjectRepository(ErpPurchaseOrderLine)
@@ -71,14 +77,18 @@ export class ErpMfgCoreService {
       : [];
     const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
-    const data = items.map((item) => this.mapComponent(item, balanceMap.get(item.id)));
+    const data = items.map((item) =>
+      this.mapComponent(item, balanceMap.get(item.id)),
+    );
     return this.directusPaginated(data, total, page, pageSize);
   }
 
   async getComponent(id: string) {
     const item = await this.itemRepository.findOne({ where: { id } as any });
     if (!item) throw new NotFoundException(`Component ${id} not found`);
-    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    const bal = await this.balanceRepository.findOne({
+      where: { itemId: id } as any,
+    });
     return this.mapComponent(item, bal ?? undefined);
   }
 
@@ -99,7 +109,9 @@ export class ErpMfgCoreService {
     if (dto.is_active !== undefined)
       item.status = dto.is_active ? 'ACTIVE' : 'INACTIVE';
     await this.itemRepository.save(item);
-    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    const bal = await this.balanceRepository.findOne({
+      where: { itemId: id } as any,
+    });
     return this.mapComponent(item, bal ?? undefined);
   }
 
@@ -126,11 +138,36 @@ export class ErpMfgCoreService {
     const item = await this.itemRepository.findOne({ where: { id } as any });
     if (!item) throw new NotFoundException(`Component ${id} not found`);
 
-    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    const bal = await this.balanceRepository.findOne({
+      where: { itemId: id } as any,
+    });
     const onHand = Number(bal?.qtyOnHand ?? 0);
     const reserved = Number(bal?.qtyReserved ?? 0);
 
-    const txnCount = await this.txnRepository.count({ where: { itemId: id } as any });
+    const txnCount = await this.txnRepository.count({
+      where: { itemId: id } as any,
+    });
+
+    // lots
+    const lots = await this.lotRepository.findBy({ itemId: id } as any);
+    const lotsData = lots.map((l) => ({
+      id: l.id,
+      lot_code: l.lotCode,
+      received_qty: Number(l.receivedQty),
+      issued_qty: Number(l.issuedQty),
+      on_hand_qty: Number(l.receivedQty) - Number(l.issuedQty),
+      expiry_date: l.expiryDate ?? null,
+    }));
+
+    // serials
+    const serials = await this.serialRepository.findBy({ itemId: id } as any);
+    const serialsData = serials.map((s) => ({
+      id: s.id,
+      serial_no: s.serialNo,
+      status: s.status,
+      vin_id: s.vinId ?? null,
+      receipt_line_id: s.receiptLineId ?? null,
+    }));
 
     return {
       item: this.mapComponent(item, bal ?? undefined),
@@ -138,11 +175,11 @@ export class ErpMfgCoreService {
         on_hand_qty: onHand,
         available_qty: onHand - reserved,
         txn_count: txnCount,
-        lot_count: 0,
-        serial_count: 0,
+        lot_count: lotsData.length,
+        serial_count: serialsData.length,
       },
-      lots: [],
-      serials: [],
+      lots: lotsData,
+      serials: serialsData,
     };
   }
 
