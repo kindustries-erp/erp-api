@@ -1,0 +1,247 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
+import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
+import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
+import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
+import { PostGoodsReceiptDto } from './dto/post-goods-receipt.dto';
+import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
+import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
+import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
+import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
+
+@Injectable()
+export class GoodsReceiptsCoreService {
+  constructor(
+    private readonly dataSource: DataSource,
+    @InjectRepository(ErpGoodsReceipt)
+    private readonly repository: Repository<ErpGoodsReceipt>,
+    @InjectRepository(ErpGoodsReceiptLine)
+    private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
+  ) {}
+
+  private async getReceiptOrThrow(
+    repository: Repository<ErpGoodsReceipt>,
+    id: string,
+  ) {
+    const receipt = await repository.findOneBy({ id });
+    if (!receipt) {
+      throw new NotFoundException('Không tìm thấy phiếu nhập');
+    }
+    return receipt;
+  }
+
+  async create(dto: CreateGoodsReceiptDto) {
+    const { lines = [], ...header } = dto;
+    return this.dataSource.transaction(async (manager) => {
+      const headerRepo = manager.getRepository(ErpGoodsReceipt);
+      const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+      const headerPayload: DeepPartial<ErpGoodsReceipt> = {
+        status: header.status ?? 'DRAFT',
+        ...header,
+      };
+      const data = await headerRepo.save(headerPayload);
+      const savedLines: ErpGoodsReceiptLine[] = [];
+      let lineNo = 1;
+      for (const line of lines) {
+        const linePayload: DeepPartial<ErpGoodsReceiptLine> = {
+          goodsReceiptId: data.id,
+          lineNo: lineNo++,
+          purchaseOrderLineId: line.purchaseOrderLineId ?? null,
+          itemId: line.itemId ?? null,
+          qtyReceived: line.qtyReceived,
+          unitCost: line.unitCost ?? null,
+          amount: line.amount ?? null,
+        };
+        const saved = await lineRepo.save(linePayload);
+        savedLines.push(saved);
+      }
+      return {
+        message: 'Tạo thành công',
+        data: { ...data, lines: savedLines },
+      };
+    });
+  }
+
+  async findAll(query: PaginationDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const [items, total] = await this.repository.findAndCount({
+      where: query.search
+        ? ([{ receiptNo: ILike(`%${query.search}%`) }] as any)
+        : undefined,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { createdAt: 'DESC' },
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async findOne(id: string) {
+    const data = await this.getReceiptOrThrow(this.repository, id);
+    const lines = await this.lineRepository.find({
+      where: { goodsReceiptId: id },
+      order: { lineNo: 'ASC' },
+    });
+    return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
+  }
+
+  async update(id: string, dto: UpdateGoodsReceiptDto) {
+    const { lines, ...header } = dto as any;
+    await this.repository.update(id, header);
+    if (Array.isArray(lines)) {
+      await this.dataSource.transaction(async (manager) => {
+        const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+        await lineRepo.delete({ goodsReceiptId: id });
+        let lineNo = 1;
+        for (const line of lines) {
+          const linePayload: DeepPartial<ErpGoodsReceiptLine> = {
+            goodsReceiptId: id,
+            lineNo: lineNo++,
+            purchaseOrderLineId: line.purchaseOrderLineId ?? null,
+            itemId: line.itemId ?? null,
+            qtyReceived: line.qtyReceived,
+            unitCost: line.unitCost ?? null,
+            amount: line.amount ?? null,
+          };
+          await lineRepo.save(linePayload);
+        }
+      });
+    }
+    return this.findOne(id);
+  }
+
+  async postReceipt(id: string, dto: PostGoodsReceiptDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const receiptRepo = manager.getRepository(ErpGoodsReceipt);
+      const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+      const txnRepo = manager.getRepository(ErpInventoryTransaction);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+      const poRepo = manager.getRepository(ErpPurchaseOrder);
+      const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+
+      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+      if (receipt.status === 'POSTED') {
+        throw new BadRequestException('Phiếu nhập đã được ghi nhận trước đó');
+      }
+
+      const lines = await lineRepo.find({
+        where: { goodsReceiptId: id },
+        order: { lineNo: 'ASC' },
+      });
+      if (lines.length === 0) {
+        throw new BadRequestException('Phiếu nhập chưa có dòng hàng');
+      }
+
+      for (const line of lines) {
+        const qty = Number(line.qtyReceived || 0);
+        if (qty <= 0) {
+          throw new BadRequestException(
+            `Dòng ${line.lineNo} có số lượng nhận không hợp lệ`,
+          );
+        }
+
+        const incomingUnitCost = Number(line.unitCost || 0);
+        const balanceWhere: any = {
+          itemId: line.itemId ?? undefined,
+          warehouseCode: dto.warehouseCode ?? undefined,
+        };
+        let balance = (await balanceRepo.findOne({
+          where: balanceWhere,
+        })) as ErpInventoryBalance | null;
+        const currentQty = Number(balance?.qtyOnHand || 0);
+        const currentValue = Number(balance?.inventoryValue || 0);
+        const receiptValue = qty * incomingUnitCost;
+        const nextQty = currentQty + qty;
+        const nextValue = currentValue + receiptValue;
+        const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
+
+        await txnRepo.save(
+          txnRepo.create({
+            transactionType: 'RECEIPT',
+            documentType: 'GOODS_RECEIPT',
+            documentId: receipt.id,
+            itemId: line.itemId ?? null,
+            warehouseCode: dto.warehouseCode ?? null,
+            qtyIn: qty.toFixed(3),
+            qtyOut: '0.000',
+            unitCost: incomingUnitCost.toFixed(3),
+            transactionDate: receipt.receiptDate,
+            notes: receipt.remarks ?? null,
+            createdBy: dto.createdBy ?? receipt.createdBy ?? null,
+          } as any),
+        );
+
+        if (!balance) {
+          const balancePayload: DeepPartial<ErpInventoryBalance> = {
+            itemId: line.itemId ?? null,
+            warehouseCode: dto.warehouseCode ?? null,
+            qtyOnHand: nextQty.toFixed(3),
+            avgUnitCost: nextAvgUnitCost.toFixed(3),
+            inventoryValue: nextValue.toFixed(3),
+          };
+          balance = await balanceRepo.save(balancePayload);
+        } else {
+          balance.qtyOnHand = nextQty.toFixed(3);
+          balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
+          balance.inventoryValue = nextValue.toFixed(3);
+          balance = await balanceRepo.save(balance);
+        }
+
+        if (line.purchaseOrderLineId) {
+          const poLine = await poLineRepo.findOneBy({
+            id: line.purchaseOrderLineId,
+          });
+          if (!poLine) {
+            throw new BadRequestException(
+              `Không tìm thấy dòng PO tham chiếu cho dòng nhập ${line.lineNo}`,
+            );
+          }
+          const currentReceived = Number(poLine.qtyReceived || 0);
+          poLine.qtyReceived = (currentReceived + qty).toFixed(3);
+          await poLineRepo.save(poLine);
+        }
+      }
+
+      if (receipt.purchaseOrderId) {
+        const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
+        if (po) {
+          const refreshedLines = await poLineRepo.find({
+            where: { purchaseOrderId: po.id },
+          });
+          const allReceived =
+            refreshedLines.length > 0 &&
+            refreshedLines.every(
+              (line) =>
+                Number(line.qtyReceived || 0) >= Number(line.qtyOrdered || 0),
+            );
+          po.status = allReceived ? 'RECEIVED' : 'PARTIAL_RECEIVED';
+          await poRepo.save(po);
+        }
+      }
+
+      receipt.status = 'POSTED';
+      const savedReceipt = await receiptRepo.save(receipt);
+      const savedLines = await lineRepo.find({
+        where: { goodsReceiptId: id },
+        order: { lineNo: 'ASC' },
+      });
+      return {
+        message: 'Lấy thông tin thành công',
+        data: { ...savedReceipt, lines: savedLines },
+      };
+    });
+  }
+}

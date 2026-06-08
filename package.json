@@ -8,6 +8,7 @@
   "packageManager": "bun@1.3.5",
   "scripts": {
     "build": "nest build",
+    "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/db/data-source.cli.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

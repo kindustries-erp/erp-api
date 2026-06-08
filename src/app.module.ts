@@ -5,6 +5,16 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
+import { EmployeesCoreModule } from './employees-core/employees-core.module';
+import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
+import { InventoryCoreModule } from './inventory-core/inventory-core.module';
+import { BomCoreModule } from './bom-core/bom-core.module';
+import { PurchaseRequestsCoreModule } from './purchase-requests-core/purchase-requests-core.module';
+import { PurchaseOrdersCoreModule } from './purchase-orders-core/purchase-orders-core.module';
+import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-core.module';
+import { GoodsIssuesCoreModule } from './goods-issues-core/goods-issues-core.module';
+import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.module';
+import { ProductionCoreModule } from './production-core/production-core.module';
 
 @Module({
   imports: [
@@ -45,6 +55,16 @@ import { CoreUser } from './users/entities/core-user.entity';
       },
     }),
     AuthModule,
+    EmployeesCoreModule,
+    BusinessPartnersCoreModule,
+    InventoryCoreModule,
+    BomCoreModule,
+    PurchaseRequestsCoreModule,
+    PurchaseOrdersCoreModule,
+    GoodsReceiptsCoreModule,
+    GoodsIssuesCoreModule,
+    SalesOrdersCoreModule,
+    ProductionCoreModule,
   ],
   controllers: [AppController],
   providers: [AppService],

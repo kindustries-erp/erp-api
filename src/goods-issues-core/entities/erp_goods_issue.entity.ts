@@ -1,0 +1,45 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+@Entity({ name: 'erp_goods_issues' })
+export class ErpGoodsIssue {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 255, name: 'issue_no' })
+  issueNo: string;
+
+  @Column({ type: 'date', name: 'issue_date' })
+  issueDate: string;
+
+  @Column({ type: 'varchar', length: 255, name: 'issue_type' })
+  issueType: string;
+
+  @Column({ type: 'uuid', name: 'customer_id', nullable: true })
+  customerId: string | null;
+
+  @Column({ type: 'uuid', name: 'sales_order_id', nullable: true })
+  salesOrderId: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
+  status: string;
+
+  @Column({ type: 'text', name: 'remarks', nullable: true })
+  remarks: string | null;
+
+  @Column({ type: 'uuid', name: 'created_by', nullable: true })
+  createdBy: string | null;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}

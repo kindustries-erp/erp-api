@@ -1,0 +1,62 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsDateString,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
+import { CreateBomLineDto } from './create-bom-line.dto';
+
+export class CreateBomDto {
+  @ApiProperty()
+  @IsString()
+  bomCode: string;
+
+  @ApiProperty()
+  @IsString()
+  bomName: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  finishedGoodItemId?: string;
+
+  @ApiProperty()
+  @IsString()
+  version: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  effectiveTo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  createdBy?: string;
+
+  @ApiPropertyOptional({ type: [CreateBomLineDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateBomLineDto)
+  lines?: CreateBomLineDto[];
+}
