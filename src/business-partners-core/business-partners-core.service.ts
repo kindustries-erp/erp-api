@@ -22,10 +22,23 @@ export class BusinessPartnersCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+
+    const baseWhere = query.partnerType
+      ? ({ partnerType: query.partnerType } as any)
+      : ({} as any);
+
+    const where = query.search
+      ? ([
+          { ...baseWhere, name: ILike(`%${query.search}%`) },
+          { ...baseWhere, displayName: ILike(`%${query.search}%`) },
+          { ...baseWhere, code: ILike(`%${query.search}%`) },
+        ] as any)
+      : Object.keys(baseWhere).length > 0
+        ? baseWhere
+        : undefined;
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ name: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },

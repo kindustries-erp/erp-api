@@ -15,6 +15,9 @@ import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-co
 import { GoodsIssuesCoreModule } from './goods-issues-core/goods-issues-core.module';
 import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.module';
 import { ProductionCoreModule } from './production-core/production-core.module';
+import { BranchesCoreModule } from './branches-core/branches-core.module';
+import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
+import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 
 @Module({
   imports: [
@@ -65,6 +68,9 @@ import { ProductionCoreModule } from './production-core/production-core.module';
     GoodsIssuesCoreModule,
     SalesOrdersCoreModule,
     ProductionCoreModule,
+    BranchesCoreModule,
+    SalesServiceOrdersCoreModule,
+    InventoryStockCoreModule,
   ],
   controllers: [AppController],
   providers: [AppService],
