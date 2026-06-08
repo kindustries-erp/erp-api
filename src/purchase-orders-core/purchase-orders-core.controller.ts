@@ -12,6 +12,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
+import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
+import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 
 @ApiTags('erp_purchase_orders')
 @ApiBearerAuth()
@@ -21,7 +23,7 @@ export class PurchaseOrdersCoreController {
   constructor(private readonly service: PurchaseOrdersCoreService) {}
 
   @Post()
-  create(@Body() dto: any) {
+  create(@Body() dto: CreatePurchaseOrderDto) {
     return this.service.create(dto);
   }
 
@@ -36,7 +38,7 @@ export class PurchaseOrdersCoreController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: any) {
+  update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
   }
 }
