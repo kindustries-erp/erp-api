@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
+import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
+import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpVehicle } from './entities/erp_vehicle.entity';
 
 @Injectable()
@@ -14,13 +16,24 @@ export class ErpMfgCoreService {
     private readonly itemRepository: Repository<ErpInventoryItem>,
     @InjectRepository(ErpInventoryBalance)
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
+    @InjectRepository(ErpInventoryTransaction)
+    private readonly txnRepository: Repository<ErpInventoryTransaction>,
     @InjectRepository(ErpPurchaseOrder)
     private readonly poRepository: Repository<ErpPurchaseOrder>,
+    @InjectRepository(ErpPurchaseOrderLine)
+    private readonly poLineRepository: Repository<ErpPurchaseOrderLine>,
     @InjectRepository(ErpVehicle)
     private readonly vehicleRepository: Repository<ErpVehicle>,
   ) {}
 
-  private directusPaginated<T>(data: T[], total: number, page: number, pageSize: number) {
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  private directusPaginated<T>(
+    data: T[],
+    total: number,
+    page: number,
+    pageSize: number,
+  ) {
     return {
       data,
       meta: {
@@ -32,6 +45,8 @@ export class ErpMfgCoreService {
       },
     };
   }
+
+  // ─── Components (inventory items of type RAW) ─────────────────────────────────
 
   async listComponents(query: PaginationDto) {
     const page = query.page ?? 1;
@@ -50,32 +65,121 @@ export class ErpMfgCoreService {
 
     const itemIds = items.map((x) => x.id);
     const balances = itemIds.length
-      ? await this.balanceRepository.findBy(itemIds.map((id) => ({ itemId: id })) as any)
+      ? await this.balanceRepository.findBy(
+          itemIds.map((id) => ({ itemId: id })) as any,
+        )
       : [];
     const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
-    const data = items.map((item) => {
-      const bal = balanceMap.get(item.id);
-      const onHand = Number(bal?.qtyOnHand ?? 0);
-      const reserved = Number(bal?.qtyReserved ?? 0);
-      return {
-        id: item.id,
-        item_code: item.sku,
-        item_name: item.itemName,
-        item_type: 'COMPONENT',
-        tracking_type: 'NONE',
-        uom: item.uom,
-        is_active: item.status === 'ACTIVE',
-        notes: null,
-        created_at: item.createdAt?.toISOString?.() ?? null,
-        updated_at: item.updatedAt?.toISOString?.() ?? null,
+    const data = items.map((item) => this.mapComponent(item, balanceMap.get(item.id)));
+    return this.directusPaginated(data, total, page, pageSize);
+  }
+
+  async getComponent(id: string) {
+    const item = await this.itemRepository.findOne({ where: { id } as any });
+    if (!item) throw new NotFoundException(`Component ${id} not found`);
+    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    return this.mapComponent(item, bal ?? undefined);
+  }
+
+  async updateComponent(
+    id: string,
+    dto: {
+      item_name?: string;
+      tracking_type?: string;
+      uom?: string;
+      is_active?: boolean;
+      notes?: string;
+    },
+  ) {
+    const item = await this.itemRepository.findOne({ where: { id } as any });
+    if (!item) throw new NotFoundException(`Component ${id} not found`);
+    if (dto.item_name !== undefined) item.itemName = dto.item_name;
+    if (dto.uom !== undefined) item.uom = dto.uom;
+    if (dto.is_active !== undefined)
+      item.status = dto.is_active ? 'ACTIVE' : 'INACTIVE';
+    await this.itemRepository.save(item);
+    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    return this.mapComponent(item, bal ?? undefined);
+  }
+
+  async createComponent(dto: {
+    item_code: string;
+    item_name: string;
+    tracking_type?: string;
+    uom?: string;
+    is_active?: boolean;
+    notes?: string;
+  }) {
+    const item = this.itemRepository.create({
+      sku: dto.item_code,
+      itemName: dto.item_name,
+      itemType: 'RAW',
+      uom: dto.uom ?? 'PCS',
+      status: dto.is_active === false ? 'INACTIVE' : 'ACTIVE',
+    });
+    const saved = await this.itemRepository.save(item);
+    return this.mapComponent(saved, undefined);
+  }
+
+  async getComponentStockSummary(id: string) {
+    const item = await this.itemRepository.findOne({ where: { id } as any });
+    if (!item) throw new NotFoundException(`Component ${id} not found`);
+
+    const bal = await this.balanceRepository.findOne({ where: { itemId: id } as any });
+    const onHand = Number(bal?.qtyOnHand ?? 0);
+    const reserved = Number(bal?.qtyReserved ?? 0);
+
+    const txnCount = await this.txnRepository.count({ where: { itemId: id } as any });
+
+    return {
+      item: this.mapComponent(item, bal ?? undefined),
+      stock: {
         on_hand_qty: onHand,
         available_qty: onHand - reserved,
-      };
+        txn_count: txnCount,
+        lot_count: 0,
+        serial_count: 0,
+      },
+      lots: [],
+      serials: [],
+    };
+  }
+
+  async listComponentTxns(id: string, query: PaginationDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const [txns, total] = await this.txnRepository.findAndCount({
+      where: { itemId: id } as any,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { createdAt: 'DESC' },
     });
+
+    const data = txns.map((t) => ({
+      id: t.id,
+      txn_type: t.transactionType,
+      txn_date: t.transactionDate,
+      qty: Number(t.qtyIn ?? 0) - Number(t.qtyOut ?? 0),
+      unit_cost: Number(t.unitCost ?? 0),
+      amount: null,
+      tracking_type: 'NONE',
+      lot_code: null,
+      source_type: t.documentType ?? null,
+      source_id: t.documentId ?? null,
+      source_no: null,
+      notes: t.notes ?? null,
+      receipt: null,
+      purchase_order: null,
+      issue: null,
+      vin: null,
+    }));
 
     return this.directusPaginated(data, total, page, pageSize);
   }
+
+  // ─── Purchase Orders ──────────────────────────────────────────────────────────
 
   async listPurchaseOrders(query: PaginationDto) {
     const page = query.page ?? 1;
@@ -89,25 +193,33 @@ export class ErpMfgCoreService {
       order: { createdAt: 'DESC' },
     });
 
-    const data = rows.map((po) => ({
-      id: po.id,
-      po_no: po.poNo,
-      supplier_id: po.supplierId,
-      branch_id: null,
-      document_date: po.orderDate,
-      expected_receipt_date: po.expectedDate,
-      status:
-        po.status === 'RECEIVED'
-          ? 'FULLY_RECEIVED'
-          : po.status === 'PARTIAL_RECEIVED'
-            ? 'PARTIAL_RECEIVED'
-            : po.status,
-      notes: po.remarks,
-      created_at: po.createdAt?.toISOString?.() ?? null,
-    }));
-
+    const data = rows.map((po) => this.mapPo(po));
     return this.directusPaginated(data, total, page, pageSize);
   }
+
+  async getPurchaseOrder(id: string) {
+    const po = await this.poRepository.findOne({ where: { id } as any });
+    if (!po) throw new NotFoundException(`Purchase order ${id} not found`);
+
+    const lines = await this.poLineRepository.find({
+      where: { purchaseOrderId: id } as any,
+      order: { lineNo: 'ASC' },
+    });
+
+    return {
+      ...this.mapPo(po),
+      lines: lines.map((l) => ({
+        id: l.id,
+        inventory_item_id: l.itemId,
+        ordered_qty: Number(l.qtyOrdered),
+        received_qty: Number(l.qtyReceived),
+        unit_price: l.unitPrice !== null ? Number(l.unitPrice) : null,
+        notes: null,
+      })),
+    };
+  }
+
+  // ─── Vehicles ─────────────────────────────────────────────────────────────────
 
   async listVehicles(query: PaginationDto) {
     const page = query.page ?? 1;
@@ -125,7 +237,58 @@ export class ErpMfgCoreService {
       order: { createdAt: 'DESC' },
     });
 
-    const data = rows.map((v) => ({
+    const data = rows.map((v) => this.mapVehicle(v));
+    return this.directusPaginated(data, total, page, pageSize);
+  }
+
+  async getVehicle(id: string) {
+    const v = await this.vehicleRepository.findOne({ where: { id } as any });
+    if (!v) throw new NotFoundException(`Vehicle ${id} not found`);
+    return this.mapVehicle(v);
+  }
+
+  // ─── Internal mappers ─────────────────────────────────────────────────────────
+
+  private mapComponent(item: ErpInventoryItem, bal?: ErpInventoryBalance) {
+    const onHand = Number(bal?.qtyOnHand ?? 0);
+    const reserved = Number(bal?.qtyReserved ?? 0);
+    return {
+      id: item.id,
+      item_code: item.sku,
+      item_name: item.itemName,
+      item_type: 'COMPONENT',
+      tracking_type: 'NONE',
+      uom: item.uom,
+      is_active: item.status === 'ACTIVE',
+      notes: null,
+      created_at: item.createdAt?.toISOString?.() ?? null,
+      updated_at: item.updatedAt?.toISOString?.() ?? null,
+      on_hand_qty: onHand,
+      available_qty: onHand - reserved,
+    };
+  }
+
+  private mapPo(po: ErpPurchaseOrder) {
+    return {
+      id: po.id,
+      po_no: po.poNo,
+      supplier_id: po.supplierId,
+      branch_id: null,
+      document_date: po.orderDate,
+      expected_receipt_date: po.expectedDate,
+      status:
+        po.status === 'RECEIVED'
+          ? 'FULLY_RECEIVED'
+          : po.status === 'PARTIAL_RECEIVED'
+            ? 'PARTIAL_RECEIVED'
+            : po.status,
+      notes: po.remarks,
+      created_at: po.createdAt?.toISOString?.() ?? null,
+    };
+  }
+
+  private mapVehicle(v: ErpVehicle) {
+    return {
       id: v.id,
       vin: v.vin,
       frame_no: v.frameNo,
@@ -136,8 +299,6 @@ export class ErpMfgCoreService {
       status: v.status,
       notes: v.notes,
       created_at: v.createdAt?.toISOString?.() ?? null,
-    }));
-
-    return this.directusPaginated(data, total, page, pageSize);
+    };
   }
 }
