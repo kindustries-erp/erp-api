@@ -7,12 +7,18 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
+import { RegisterLocalUserDto } from './dto/register-local-user.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 class LoginDto {
+  @IsEmail()
   email: string;
+
+  @IsString()
+  @MinLength(8)
   password: string;
 }
 
@@ -26,6 +32,13 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.password);
+  }
+
+  @Post('register')
+  @ApiOperation({ summary: 'Tạo local ERP core user và optionally link employee' })
+  @ApiBody({ type: RegisterLocalUserDto })
+  register(@Body() body: RegisterLocalUserDto) {
+    return this.authService.registerLocalUser(body);
   }
 
   @Get('profile')

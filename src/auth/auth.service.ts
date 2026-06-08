@@ -59,6 +59,14 @@ export class AuthService implements OnModuleInit {
     };
   }
 
+  async registerLocalUser(input: {
+    email: string;
+    password: string;
+    employeeId?: string;
+  }) {
+    return this.usersService.registerLocalUser(input);
+  }
+
   async profile(userId: string) {
     const user = await this.usersService.findById(userId);
 
@@ -66,12 +74,25 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Token không hợp lệ');
     }
 
+    const employee = await this.usersService.getEmployeeSnapshot(user.employeeId);
+
     return {
       id: user.id,
       email: user.email,
       status: user.status,
       employeeId: user.employeeId,
       legacyDirectusUserId: user.legacyDirectusUserId,
+      employee: employee
+        ? {
+            id: employee.id,
+            employeeCode: employee.employeeCode,
+            fullName: employee.fullName,
+            email: employee.email,
+            phone: employee.phone,
+            status: employee.status,
+            userId: employee.userId,
+          }
+        : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

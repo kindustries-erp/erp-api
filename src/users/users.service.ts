@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { compareSync, genSaltSync, hashSync } from 'bcryptjs';
 import { Repository } from 'typeorm';
+import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { CoreUser } from './entities/core-user.entity';
 
 @Injectable()
@@ -9,6 +14,8 @@ export class UsersService {
   constructor(
     @InjectRepository(CoreUser)
     private readonly usersRepository: Repository<CoreUser>,
+    @InjectRepository(ErpEmployee)
+    private readonly employeesRepository: Repository<ErpEmployee>,
   ) {}
 
   hashPassword(password: string) {
@@ -43,5 +50,61 @@ export class UsersService {
       legacyDirectusUserId: null,
     });
     return this.usersRepository.save(user);
+  }
+
+  async registerLocalUser(input: {
+    email: string;
+    password: string;
+    employeeId?: string;
+  }) {
+    const email = input.email.toLowerCase().trim();
+    const existing = await this.findByEmail(email);
+    if (existing) {
+      throw new ConflictException('Email đã tồn tại');
+    }
+
+    let employee: ErpEmployee | null = null;
+    if (input.employeeId) {
+      employee = await this.employeesRepository.findOne({
+        where: { id: input.employeeId },
+      });
+      if (!employee) {
+        throw new NotFoundException('Không tìm thấy employee để liên kết');
+      }
+    }
+
+    const savedUser = await this.usersRepository.save(
+      this.usersRepository.create({
+        email,
+        passwordHash: this.hashPassword(input.password),
+        status: 'ACTIVE',
+        employeeId: employee?.id ?? null,
+        legacyDirectusUserId: null,
+      }),
+    );
+
+    if (employee && employee.userId !== savedUser.id) {
+      employee.userId = savedUser.id;
+      if (!employee.email) {
+        employee.email = email;
+      }
+      await this.employeesRepository.save(employee);
+    }
+
+    return {
+      message: 'Tạo user local thành công',
+      data: {
+        id: savedUser.id,
+        email: savedUser.email,
+        status: savedUser.status,
+        employeeId: savedUser.employeeId,
+        legacyDirectusUserId: savedUser.legacyDirectusUserId,
+      },
+    };
+  }
+
+  async getEmployeeSnapshot(employeeId: string | null) {
+    if (!employeeId) return null;
+    return this.employeesRepository.findOne({ where: { id: employeeId } });
   }
 }
