@@ -2,11 +2,18 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { InventoryStockCoreController } from './inventory-stock-core.controller';
 import { InventoryStockCoreService } from './inventory-stock-core.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ErpInventoryBalance, ErpInventoryItem])],
+  imports: [
+    TypeOrmModule.forFeature([
+      ErpInventoryBalance,
+      ErpInventoryItem,
+      ErpInventoryTransaction,
+    ]),
+  ],
   controllers: [InventoryStockCoreController],
   providers: [InventoryStockCoreService],
 })

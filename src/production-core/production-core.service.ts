@@ -165,8 +165,10 @@ export class ProductionCoreService {
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
         if (availableQty < material.qtyRequired) {
+          const materialName =
+            inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
           throw new BadRequestException(
-            `Tồn khả dụng không đủ cho NVL ${material.itemId}. Cần ${material.qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
+            `Tồn khả dụng không đủ cho NVL ${materialName}. Cần ${material.qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
           );
         }
 

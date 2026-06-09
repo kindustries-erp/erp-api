@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository, Like, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 
 @Injectable()
 export class InventoryStockCoreService {
@@ -12,6 +13,8 @@ export class InventoryStockCoreService {
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
     @InjectRepository(ErpInventoryItem)
     private readonly itemRepository: Repository<ErpInventoryItem>,
+    @InjectRepository(ErpInventoryTransaction)
+    private readonly transactionRepository: Repository<ErpInventoryTransaction>,
   ) {}
 
   async findAll(
@@ -66,8 +69,25 @@ export class InventoryStockCoreService {
       : [];
     const itemMap = new Map(items.map((i) => [i.id, i]));
 
+    const transactionSums = itemIds.length
+      ? await this.transactionRepository
+          .createQueryBuilder('txn')
+          .select('txn.itemId', 'itemId')
+          .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
+          .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
+          .where('txn.itemId IN (:...itemIds)', { itemIds })
+          .groupBy('txn.itemId')
+          .getRawMany<{
+            itemId: string;
+            receivedQty: string;
+            issuedQty: string;
+          }>()
+      : [];
+    const txnMap = new Map(transactionSums.map((row) => [row.itemId, row]));
+
     const rows = balances.map((b) => {
       const item = b.itemId ? itemMap.get(b.itemId) : null;
+      const txn = b.itemId ? txnMap.get(b.itemId) : null;
       return {
         inventory_item_id: b.itemId,
         branch_id: null,
@@ -75,10 +95,8 @@ export class InventoryStockCoreService {
         item_name: item?.itemName ?? '',
         item_type: item?.itemType ?? '',
         unit: item?.uom ?? '',
-        // received_qty = on_hand + reserved (gross receipts approximation from balance)
-        received_qty: Number(b.qtyOnHand || 0) + Number(b.qtyReserved || 0),
-        // issued_qty = reserved (qty allocated but not yet settled)
-        issued_qty: Number(b.qtyReserved || 0),
+        received_qty: Number(txn?.receivedQty || 0),
+        issued_qty: Number(txn?.issuedQty || 0),
         on_hand_qty: Number(b.qtyOnHand || 0),
         stock_value: Number(b.inventoryValue || 0),
         last_transaction_date: b.updatedAt?.toISOString?.() ?? null,
