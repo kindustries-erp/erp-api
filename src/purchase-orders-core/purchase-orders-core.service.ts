@@ -17,14 +17,41 @@ export class PurchaseOrdersCoreService {
     private readonly lineRepository: Repository<ErpPurchaseOrderLine>,
   ) {}
 
+  private async generateMonthlyPoNo(manager: any, orderDate?: string) {
+    const baseDate = orderDate ? new Date(orderDate) : new Date();
+    const year = baseDate.getUTCFullYear();
+    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `PO-${year}${month}`;
+    const latest = await manager
+      .getRepository(ErpPurchaseOrder)
+      .createQueryBuilder('po')
+      .where('po.poNo LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('po.poNo', 'DESC')
+      .getOne();
+    const latestSeq = latest?.poNo?.slice(prefix.length) ?? '000';
+    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
+  async getNextPoNo(date?: string): Promise<{ nextNo: string }> {
+    const nextNo = await this.dataSource.transaction((manager) =>
+      this.generateMonthlyPoNo(manager, date),
+    );
+    return { nextNo };
+  }
+
   async create(dto: CreatePurchaseOrderDto) {
     const { lines = [], ...header } = dto;
 
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpPurchaseOrder);
       const lineRepo = manager.getRepository(ErpPurchaseOrderLine);
+      const poNo =
+        header.poNo?.trim() ||
+        (await this.generateMonthlyPoNo(manager, header.orderDate));
       const headerPayload: DeepPartial<ErpPurchaseOrder> = {
         ...header,
+        poNo,
         status: header.status ?? 'DRAFT',
       };
       const data = await headerRepo.save(headerPayload);
@@ -86,6 +113,11 @@ export class PurchaseOrdersCoreService {
 
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({ id });
+    if (dto.status === 'DRAFT' && existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Phiếu mua hàng đã rời DRAFT thì không được chuyển về DRAFT',
+      );
+    }
     if (
       existing.status === 'RECEIVED' ||
       existing.status === 'FULLY_RECEIVED'
@@ -100,6 +132,9 @@ export class PurchaseOrdersCoreService {
     const { lines, ...header } = dto as UpdatePurchaseOrderDto & {
       lines?: ErpPurchaseOrderLine[];
     };
+    if ((header as any).poNo === '') {
+      delete (header as any).poNo;
+    }
     await this.repository.update(id, header as any);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {

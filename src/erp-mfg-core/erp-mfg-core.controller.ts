@@ -69,4 +69,9 @@ export class ErpMfgCoreController {
   getVehicle(@Param('id') id: string) {
     return this.service.getVehicle(id);
   }
+
+  @Post('vehicles')
+  createVehicle(@Body() body: any) {
+    return this.service.createVehicle(body);
+  }
 }

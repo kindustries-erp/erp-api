@@ -12,6 +12,16 @@ export class CreateGoodsIssueLineDto {
   @IsUUID()
   itemId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  serialId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
   @ApiProperty()
   @IsNumberString()
   qtyIssued: string;

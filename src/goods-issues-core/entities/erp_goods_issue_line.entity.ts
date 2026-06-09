@@ -23,6 +23,12 @@ export class ErpGoodsIssueLine {
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
 
+  @Column({ type: 'uuid', name: 'serial_id', nullable: true })
+  serialId: string | null;
+
+  @Column({ type: 'uuid', name: 'vehicle_id', nullable: true })
+  vehicleId: string | null;
+
   @Column({ type: 'numeric', name: 'qty_issued', precision: 18, scale: 3 })
   qtyIssued: string;
 

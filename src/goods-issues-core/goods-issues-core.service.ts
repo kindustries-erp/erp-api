@@ -15,6 +15,8 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.entity';
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
+import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -37,6 +39,51 @@ export class GoodsIssuesCoreService {
     return issue;
   }
 
+  private async enrichLines(lines: ErpGoodsIssueLine[], manager?: any) {
+    const serialRepo = manager
+      ? manager.getRepository(ErpInventorySerial)
+      : this.dataSource.getRepository(ErpInventorySerial);
+    const vehicleRepo = manager
+      ? manager.getRepository(ErpVehicle)
+      : this.dataSource.getRepository(ErpVehicle);
+
+    const serialIds = [
+      ...new Set(lines.map((line) => line.serialId).filter(Boolean)),
+    ] as string[];
+    const vehicleIds = [
+      ...new Set(lines.map((line) => line.vehicleId).filter(Boolean)),
+    ] as string[];
+
+    const [serials, vehicles]: [ErpInventorySerial[], ErpVehicle[]] =
+      await Promise.all([
+        serialIds.length
+          ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
+          : Promise.resolve([] as ErpInventorySerial[]),
+        vehicleIds.length
+          ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
+          : Promise.resolve([] as ErpVehicle[]),
+      ]);
+
+    const serialMap = new Map(
+      serials.map((row: ErpInventorySerial) => [row.id, row]),
+    );
+    const vehicleMap = new Map(
+      vehicles.map((row: ErpVehicle) => [row.id, row]),
+    );
+
+    return lines.map((line) => {
+      const serial = line.serialId ? serialMap.get(line.serialId) : null;
+      const vehicle = line.vehicleId ? vehicleMap.get(line.vehicleId) : null;
+      return {
+        ...line,
+        serialNo: serial?.serialNo ?? null,
+        vehicleVin: vehicle?.vin ?? null,
+        frameNo: vehicle?.frameNo ?? null,
+        engineNo: vehicle?.engineNo ?? null,
+      };
+    });
+  }
+
   async create(dto: CreateGoodsIssueDto) {
     const { lines = [], ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
@@ -55,6 +102,8 @@ export class GoodsIssuesCoreService {
           lineNo: lineNo++,
           salesOrderLineId: line.salesOrderLineId ?? null,
           itemId: line.itemId ?? null,
+          serialId: line.serialId ?? null,
+          vehicleId: line.vehicleId ?? null,
           qtyIssued: line.qtyIssued,
           unitCost: line.unitCost ?? null,
           amount: line.amount ?? null,
@@ -64,7 +113,7 @@ export class GoodsIssuesCoreService {
       }
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: savedLines },
+        data: { ...data, lines: await this.enrichLines(savedLines, manager) },
       };
     });
   }
@@ -95,7 +144,10 @@ export class GoodsIssuesCoreService {
       where: { goodsIssueId: id },
       order: { lineNo: 'ASC' },
     });
-    return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, lines: await this.enrichLines(lines) },
+    };
   }
 
   async update(id: string, dto: UpdateGoodsIssueDto) {
@@ -112,6 +164,8 @@ export class GoodsIssuesCoreService {
             lineNo: lineNo++,
             salesOrderLineId: line.salesOrderLineId ?? null,
             itemId: line.itemId ?? null,
+            serialId: line.serialId ?? null,
+            vehicleId: line.vehicleId ?? null,
             qtyIssued: line.qtyIssued,
             unitCost: line.unitCost ?? null,
             amount: line.amount ?? null,
@@ -131,6 +185,8 @@ export class GoodsIssuesCoreService {
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
       const soRepo = manager.getRepository(ErpSalesOrder);
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const issue = await this.getIssueOrThrow(issueRepo, id);
       if (issue.status === 'POSTED') {
@@ -151,6 +207,59 @@ export class GoodsIssuesCoreService {
           throw new BadRequestException(
             `Dòng ${line.lineNo} có số lượng xuất không hợp lệ`,
           );
+        }
+
+        let serial: ErpInventorySerial | null = null;
+        let vehicle: ErpVehicle | null = null;
+        if (line.serialId) {
+          serial = await serialRepo.findOneBy({ id: line.serialId });
+          if (!serial) {
+            throw new BadRequestException(
+              `Không tìm thấy serial cho dòng ${line.lineNo}`,
+            );
+          }
+          if (serial.itemId && line.itemId && serial.itemId !== line.itemId) {
+            throw new BadRequestException(
+              `Serial không khớp mặt hàng ở dòng ${line.lineNo}`,
+            );
+          }
+        }
+        if (line.vehicleId) {
+          vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
+          if (!vehicle) {
+            throw new BadRequestException(
+              `Không tìm thấy xe/VIN cho dòng ${line.lineNo}`,
+            );
+          }
+          if (
+            vehicle.finishedGoodItemId &&
+            line.itemId &&
+            vehicle.finishedGoodItemId !== line.itemId
+          ) {
+            throw new BadRequestException(
+              `Xe/VIN không khớp thành phẩm ở dòng ${line.lineNo}`,
+            );
+          }
+        }
+        if (serial?.vinId && vehicle?.id && serial.vinId !== vehicle.id) {
+          throw new BadRequestException(
+            `Serial và xe/VIN không cùng một chiếc ở dòng ${line.lineNo}`,
+          );
+        }
+        if (!vehicle && serial?.vinId) {
+          vehicle = await vehicleRepo.findOneBy({ id: serial.vinId });
+          line.vehicleId = vehicle?.id ?? line.vehicleId;
+        }
+        if (!serial && vehicle?.id) {
+          serial = await serialRepo.findOneBy({ vinId: vehicle.id });
+          line.serialId = serial?.id ?? line.serialId;
+        }
+        if (serial || vehicle) {
+          if (qty !== 1) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo} theo serial/xe phải có số lượng = 1`,
+            );
+          }
         }
 
         const balanceWhere: any = {
@@ -217,6 +326,24 @@ export class GoodsIssuesCoreService {
             0,
             currentReserved - reservedConsume,
           ).toFixed(3);
+
+          if (serial) {
+            serial.salesOrderLineId = soLine.id;
+          }
+        }
+
+        if (serial) {
+          serial.goodsIssueLineId = line.id;
+          serial.status = 'SOLD';
+          if (!serial.vinId && vehicle?.id) {
+            serial.vinId = vehicle.id;
+          }
+          await serialRepo.save(serial);
+        }
+
+        if (vehicle) {
+          vehicle.status = 'SOLD';
+          await vehicleRepo.save(vehicle);
         }
 
         balance!.qtyOnHand = nextQty.toFixed(3);

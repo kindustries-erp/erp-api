@@ -26,6 +26,22 @@ export class GoodsReceiptsCoreService {
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
   ) {}
 
+  private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
+    const baseDate = receiptDate ? new Date(receiptDate) : new Date();
+    const year = baseDate.getUTCFullYear();
+    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `NK-${year}${month}`;
+    const latest = await manager
+      .getRepository(ErpGoodsReceipt)
+      .createQueryBuilder('gr')
+      .where('gr.receiptNo LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('gr.receiptNo', 'DESC')
+      .getOne();
+    const latestSeq = latest?.receiptNo?.slice(prefix.length) ?? '000';
+    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
   private async getReceiptOrThrow(
     repository: Repository<ErpGoodsReceipt>,
     id: string,
@@ -37,13 +53,24 @@ export class GoodsReceiptsCoreService {
     return receipt;
   }
 
+  async getNextReceiptNo(date?: string): Promise<{ nextNo: string }> {
+    const nextNo = await this.dataSource.transaction((manager) =>
+      this.generateMonthlyReceiptNo(manager, date),
+    );
+    return { nextNo };
+  }
+
   async create(dto: CreateGoodsReceiptDto) {
     const { lines = [], ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsReceipt);
       const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+      const receiptNo =
+        header.receiptNo?.trim() ||
+        (await this.generateMonthlyReceiptNo(manager, header.receiptDate));
       const headerPayload: DeepPartial<ErpGoodsReceipt> = {
         ...header,
+        receiptNo,
         status: 'DRAFT',
       };
       const data = await headerRepo.save(headerPayload);
@@ -105,6 +132,9 @@ export class GoodsReceiptsCoreService {
     }
 
     const { lines, ...header } = dto as any;
+    if (header.receiptNo === '') {
+      delete header.receiptNo;
+    }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
     if (Array.isArray(lines)) {
@@ -216,6 +246,12 @@ export class GoodsReceiptsCoreService {
             );
           }
           const currentReceived = Number(poLine.qtyReceived || 0);
+          const maxAllowed = Number(poLine.qtyOrdered || 0) - currentReceived;
+          if (qty > maxAllowed + 0.0005) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo}: số lượng nhập (${qty}) vượt quá số lượng còn được nhận (${maxAllowed.toFixed(3)}) của PO`,
+            );
+          }
           poLine.qtyReceived = (currentReceived + qty).toFixed(3);
           await poLineRepo.save(poLine);
         }

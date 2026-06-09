@@ -11,9 +11,10 @@ import { Type } from 'class-transformer';
 import { CreateGoodsReceiptLineDto } from './create-goods-receipt-line.dto';
 
 export class CreateGoodsReceiptDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  receiptNo: string;
+  receiptNo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

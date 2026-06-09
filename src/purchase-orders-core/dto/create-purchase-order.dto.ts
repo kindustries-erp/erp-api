@@ -11,9 +11,10 @@ import { Type } from 'class-transformer';
 import { CreatePurchaseOrderLineDto } from './create-purchase-order-line.dto';
 
 export class CreatePurchaseOrderDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  poNo: string;
+  poNo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

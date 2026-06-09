@@ -34,6 +34,11 @@ export class GoodsReceiptsCoreController {
     return this.service.findAll(query);
   }
 
+  @Get('next-no')
+  getNextNo(@Query('date') date?: string) {
+    return this.service.getNextReceiptNo(date);
+  }
+
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);

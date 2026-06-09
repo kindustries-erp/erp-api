@@ -32,6 +32,11 @@ export class PurchaseOrdersCoreController {
     return this.service.findAll(query);
   }
 
+  @Get('next-no')
+  getNextNo(@Query('date') date?: string) {
+    return this.service.getNextPoNo(date);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);

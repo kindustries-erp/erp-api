@@ -284,6 +284,42 @@ export class ErpMfgCoreService {
     return this.mapVehicle(v);
   }
 
+  async createVehicle(dto: {
+    vin?: string | null;
+    frame_no: string;
+    engine_no: string;
+    finished_good_item_id?: string | null;
+    assembly_date?: string | null;
+    branch_id?: string | null;
+    notes?: string | null;
+    serial_no?: string | null;
+  }) {
+    const canonicalVin = dto.frame_no.trim();
+    const vehicle = this.vehicleRepository.create({
+      vin: dto.vin?.trim() || canonicalVin,
+      frameNo: canonicalVin,
+      engineNo: dto.engine_no,
+      finishedGoodItemId: dto.finished_good_item_id ?? null,
+      assemblyDate: dto.assembly_date ?? null,
+      branchId: dto.branch_id ?? null,
+      notes: dto.notes ?? null,
+      status: 'ASSEMBLED',
+    });
+    const savedVehicle = await this.vehicleRepository.save(vehicle);
+
+    if (dto.serial_no?.trim()) {
+      const serial = await this.serialRepository.findOne({
+        where: { serialNo: dto.serial_no.trim() } as any,
+      });
+      if (serial) {
+        serial.vinId = savedVehicle.id;
+        await this.serialRepository.save(serial);
+      }
+    }
+
+    return this.mapVehicle(savedVehicle);
+  }
+
   // ─── Internal mappers ─────────────────────────────────────────────────────────
 
   private mapComponent(item: ErpInventoryItem, bal?: ErpInventoryBalance) {

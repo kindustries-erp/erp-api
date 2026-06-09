@@ -31,6 +31,12 @@ export class ErpInventorySerial {
   @Column({ type: 'uuid', name: 'receipt_line_id', nullable: true })
   receiptLineId: string | null;
 
+  @Column({ type: 'uuid', name: 'sales_order_line_id', nullable: true })
+  salesOrderLineId: string | null;
+
+  @Column({ type: 'uuid', name: 'goods_issue_line_id', nullable: true })
+  goodsIssueLineId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
