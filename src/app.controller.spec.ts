@@ -1,8 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { DirectusAuthGuard } from './auth/guards/directus-auth.guard';
-import { ConfigService } from '@nestjs/config';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -10,25 +8,24 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [
-        AppService,
-        {
-          provide: DirectusAuthGuard,
-          useValue: { canActivate: () => true },
-        },
-        {
-          provide: ConfigService,
-          useValue: { getOrThrow: () => 'mock-value' },
-        },
-      ],
+      providers: [AppService],
     }).compile();
 
     appController = app.get<AppController>(AppController);
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return ERP Core API bootstrap message', () => {
+      const result = appController.getHello();
+      expect(result).toHaveProperty('message');
+      expect((result as { message: string }).message).toContain('ERP Core');
+    });
+  });
+
+  describe('health', () => {
+    it('should return health status', () => {
+      const result = appController.getHealth();
+      expect(result).toHaveProperty('status');
     });
   });
 });

@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 import { Request } from 'express';
@@ -35,7 +28,9 @@ export class AuthController {
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'Tạo local ERP core user và optionally link employee' })
+  @ApiOperation({
+    summary: 'Tạo local ERP core user và optionally link employee',
+  })
   @ApiBody({ type: RegisterLocalUserDto })
   register(@Body() body: RegisterLocalUserDto) {
     return this.authService.registerLocalUser(body);

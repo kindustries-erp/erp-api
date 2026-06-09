@@ -24,7 +24,9 @@ export class InventoryStockCoreService {
       order: { updatedAt: 'DESC' },
     });
 
-    const itemIds = [...new Set(balances.map((b) => b.itemId).filter(Boolean))] as string[];
+    const itemIds = [
+      ...new Set(balances.map((b) => b.itemId).filter(Boolean)),
+    ] as string[];
     const items = itemIds.length
       ? await this.itemRepository.findByIds(itemIds as any)
       : [];

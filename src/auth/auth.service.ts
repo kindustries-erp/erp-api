@@ -17,7 +17,9 @@ export class AuthService implements OnModuleInit {
 
   async onModuleInit() {
     const seedAdminEmail = this.configService.get<string>('SEED_ADMIN_EMAIL');
-    const seedAdminPassword = this.configService.get<string>('SEED_ADMIN_PASSWORD');
+    const seedAdminPassword = this.configService.get<string>(
+      'SEED_ADMIN_PASSWORD',
+    );
 
     if (!seedAdminEmail || !seedAdminPassword) {
       return;
@@ -36,7 +38,10 @@ export class AuthService implements OnModuleInit {
   async login(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
-    if (!user || !this.usersService.verifyPassword(password, user.passwordHash)) {
+    if (
+      !user ||
+      !this.usersService.verifyPassword(password, user.passwordHash)
+    ) {
       throw new UnauthorizedException('Sai email hoặc mật khẩu');
     }
 
@@ -74,7 +79,9 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Token không hợp lệ');
     }
 
-    const employee = await this.usersService.getEmployeeSnapshot(user.employeeId);
+    const employee = await this.usersService.getEmployeeSnapshot(
+      user.employeeId,
+    );
 
     return {
       id: user.id,

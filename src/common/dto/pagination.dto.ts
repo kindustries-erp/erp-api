@@ -33,7 +33,9 @@ export class PaginationDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter theo loại đối tác, ví dụ CUSTOMER/VENDOR' })
+  @ApiPropertyOptional({
+    description: 'Filter theo loại đối tác, ví dụ CUSTOMER/VENDOR',
+  })
   @IsOptional()
   @IsString()
   partnerType?: string;

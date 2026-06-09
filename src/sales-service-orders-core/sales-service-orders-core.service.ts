@@ -24,7 +24,7 @@ export class SalesServiceOrdersCoreService {
     // resolve sort: e.g. "-document_date" -> order by created_at DESC (alias)
     const rawSort = Array.isArray(query.sort)
       ? (query.sort as string[]).join(',')
-      : query.sort ?? '-created_at';
+      : (query.sort ?? '-created_at');
 
     const sortField = rawSort.startsWith('-') ? rawSort.slice(1) : rawSort;
     const sortDir = rawSort.startsWith('-') ? 'DESC' : 'ASC';
@@ -63,6 +63,12 @@ export class SalesServiceOrdersCoreService {
       notes: r.remarks,
     }));
 
-    return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 }

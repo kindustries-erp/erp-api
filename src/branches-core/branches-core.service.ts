@@ -14,7 +14,9 @@ export class BranchesCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const orderField = query.sort?.startsWith('-') ? query.sort.slice(1) : query.sort;
+    const orderField = query.sort?.startsWith('-')
+      ? query.sort.slice(1)
+      : query.sort;
     const orderDirection = query.sort?.startsWith('-') ? 'DESC' : 'ASC';
 
     const [items, total] = await this.repository.findAndCount({
