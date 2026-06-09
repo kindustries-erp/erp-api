@@ -12,7 +12,11 @@ export class InventoryStockCoreController {
   constructor(private readonly service: InventoryStockCoreService) {}
 
   @Get()
-  findAll(@Query() query: PaginationDto) {
-    return this.service.findAll(query);
+  findAll(
+    @Query() query: PaginationDto,
+    @Query('item_type') item_type?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.service.findAll({ ...query, item_type, search });
   }
 }

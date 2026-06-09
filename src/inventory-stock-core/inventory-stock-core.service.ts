@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
@@ -14,11 +14,45 @@ export class InventoryStockCoreService {
     private readonly itemRepository: Repository<ErpInventoryItem>,
   ) {}
 
-  async findAll(query: PaginationDto) {
+  async findAll(
+    query: PaginationDto & { item_type?: string; search?: string },
+  ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
+    // Build item filter to restrict balance lookup
+    let filteredItemIds: string[] | null = null;
+    if (query.item_type || query.search) {
+      const whereConditions: any[] = [];
+      if (query.item_type && query.search) {
+        whereConditions.push(
+          { itemType: query.item_type, sku: Like(`%${query.search}%`) },
+          { itemType: query.item_type, itemName: Like(`%${query.search}%`) },
+        );
+      } else if (query.item_type) {
+        whereConditions.push({ itemType: query.item_type });
+      } else if (query.search) {
+        whereConditions.push(
+          { sku: Like(`%${query.search}%`) },
+          { itemName: Like(`%${query.search}%`) },
+        );
+      }
+      const matchedItems = await this.itemRepository.find({
+        where: whereConditions,
+      });
+      filteredItemIds = matchedItems.map((i) => i.id);
+    }
+
+    // If filtered and no items match, return empty
+    if (filteredItemIds !== null && filteredItemIds.length === 0) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const whereBalance: any =
+      filteredItemIds !== null ? { itemId: filteredItemIds as any } : {};
+
     const [balances, total] = await this.balanceRepository.findAndCount({
+      where: whereBalance,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { updatedAt: 'DESC' },
@@ -39,8 +73,11 @@ export class InventoryStockCoreService {
         branch_id: null,
         item_code: item?.sku ?? '',
         item_name: item?.itemName ?? '',
+        item_type: item?.itemType ?? '',
         unit: item?.uom ?? '',
+        // received_qty = on_hand + reserved (gross receipts approximation from balance)
         received_qty: Number(b.qtyOnHand || 0) + Number(b.qtyReserved || 0),
+        // issued_qty = reserved (qty allocated but not yet settled)
         issued_qty: Number(b.qtyReserved || 0),
         on_hand_qty: Number(b.qtyOnHand || 0),
         stock_value: Number(b.inventoryValue || 0),
