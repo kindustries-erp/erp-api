@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
@@ -9,6 +9,7 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
+import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 
 @Injectable()
 export class ProductionCoreService {
@@ -40,8 +41,24 @@ export class ProductionCoreService {
       order: { createdAt: 'DESC' },
     });
 
+    const finishedGoodIds = Array.from(
+      new Set(items.map((item) => item.finishedGoodItemId).filter(Boolean)),
+    ) as string[];
+    const itemRepo = this.dataSource.getRepository(ErpInventoryItem);
+    const inventoryItems = finishedGoodIds.length
+      ? await itemRepo.find({ where: { id: In(finishedGoodIds) } })
+      : [];
+    const itemNameMap = new Map(
+      inventoryItems.map((item) => [item.id, item.itemName]),
+    );
+
     return {
-      items,
+      items: items.map((item) => ({
+        ...item,
+        finishedGoodItemName:
+          itemNameMap.get(item.finishedGoodItemId ?? '') ?? null,
+        qtyProduced: item.qtyToProduce,
+      })),
       total,
       page,
       pageSize,
