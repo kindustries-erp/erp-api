@@ -225,21 +225,53 @@ export class GoodsIssuesCoreService {
         await balanceRepo.save(balance!);
       }
 
+      const affectedSalesOrderIds = new Set<string>();
       if (issue.salesOrderId) {
-        const so = await soRepo.findOneBy({ id: issue.salesOrderId });
-        if (so) {
-          const refreshedLines = await soLineRepo.find({
-            where: { salesOrderId: so.id },
-          });
-          const allDelivered =
-            refreshedLines.length > 0 &&
-            refreshedLines.every(
-              (line) =>
-                Number(line.qtyDelivered || 0) >= Number(line.qtyOrdered || 0),
-            );
-          so.status = allDelivered ? 'DELIVERED' : 'PARTIAL_DELIVERED';
-          await soRepo.save(so);
+        affectedSalesOrderIds.add(issue.salesOrderId);
+      }
+      for (const line of lines) {
+        if (!line.salesOrderLineId) {
+          continue;
         }
+        const soLine = await soLineRepo.findOneBy({
+          id: line.salesOrderLineId,
+        });
+        if (soLine?.salesOrderId) {
+          affectedSalesOrderIds.add(soLine.salesOrderId);
+        }
+      }
+
+      for (const salesOrderId of affectedSalesOrderIds) {
+        const so = await soRepo.findOneBy({ id: salesOrderId });
+        if (!so) {
+          continue;
+        }
+        const refreshedLines = await soLineRepo.find({
+          where: { salesOrderId: so.id },
+        });
+        const allDelivered =
+          refreshedLines.length > 0 &&
+          refreshedLines.every(
+            (line) =>
+              Number(line.qtyDelivered || 0) >= Number(line.qtyOrdered || 0),
+          );
+        const anyDelivered = refreshedLines.some(
+          (line) => Number(line.qtyDelivered || 0) > 0,
+        );
+        const anyReserved = refreshedLines.some(
+          (line) => Number(line.qtyReserved || 0) > 0,
+        );
+
+        if (allDelivered) {
+          so.status = 'DELIVERED';
+        } else if (anyReserved) {
+          so.status = 'PARTIAL_RESERVED';
+        } else if (anyDelivered) {
+          so.status = 'PARTIAL_DELIVERED';
+        } else {
+          so.status = 'CONFIRMED';
+        }
+        await soRepo.save(so);
       }
 
       issue.status = 'POSTED';
