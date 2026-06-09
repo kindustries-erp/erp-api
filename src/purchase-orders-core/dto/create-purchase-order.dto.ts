@@ -41,6 +41,11 @@ export class CreatePurchaseOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
   createdBy?: string;
 

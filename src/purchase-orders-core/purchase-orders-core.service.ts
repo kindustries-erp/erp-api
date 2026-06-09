@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -58,6 +58,7 @@ export class PurchaseOrdersCoreService {
       where: query.search
         ? ([{ poNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
+      relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },
@@ -84,6 +85,18 @@ export class PurchaseOrdersCoreService {
   }
 
   async update(id: string, dto: UpdatePurchaseOrderDto) {
+    const existing = await this.repository.findOneByOrFail({ id });
+    if (
+      existing.status === 'RECEIVED' ||
+      existing.status === 'FULLY_RECEIVED'
+    ) {
+      if (dto.status && dto.status !== existing.status) {
+        throw new BadRequestException(
+          'Không thể thay đổi trạng thái của phiếu mua hàng đã nhận',
+        );
+      }
+    }
+
     const { lines, ...header } = dto as UpdatePurchaseOrderDto & {
       lines?: ErpPurchaseOrderLine[];
     };
@@ -137,6 +150,19 @@ export class PurchaseOrdersCoreService {
 
     return {
       ...data,
+      supplierName: data.supplier?.name || data.supplierName,
+      totalAmount: Array.isArray(lines)
+        ? lines.reduce(
+            (sum: number, line: any) => sum + Number(line.amount || 0),
+            0,
+          )
+        : data.totalAmount,
+      inventoryStatus:
+        data.status === 'RECEIVED' || data.status === 'FULLY_RECEIVED'
+          ? 'RECEIVED'
+          : data.status === 'PARTIAL_RECEIVED'
+            ? 'PARTIAL_RECEIVED'
+            : 'NOT_RECEIVED',
       lines,
     };
   }

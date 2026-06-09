@@ -5,7 +5,13 @@ import {
   Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
 } from 'typeorm';
+
+import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+import { ErpPurchaseOrderLine } from './erp_purchase_order_line.entity';
 
 @Entity({ name: 'erp_purchase_orders' })
 export class ErpPurchaseOrder {
@@ -19,14 +25,26 @@ export class ErpPurchaseOrder {
   @Column({ type: 'uuid', name: 'supplier_id', nullable: true })
   supplierId: string | null;
 
-  @Column({ type: 'date', name: 'order_date' })
+  @ManyToOne(() => ErpBusinessPartner)
+  @JoinColumn({ name: 'supplier_id' })
+  supplier?: ErpBusinessPartner;
+
+  @Column({ type: 'timestamptz', name: 'order_date' })
   orderDate: string;
 
-  @Column({ type: 'date', name: 'expected_date', nullable: true })
+  @Column({ type: 'timestamptz', name: 'expected_date', nullable: true })
   expectedDate: string | null;
 
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'payment_status',
+    default: 'UNPAID',
+  })
+  paymentStatus: string;
 
   @Column({ type: 'text', name: 'remarks', nullable: true })
   remarks: string | null;
@@ -39,4 +57,7 @@ export class ErpPurchaseOrder {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToMany(() => ErpPurchaseOrderLine, (line) => line.purchaseOrder)
+  lines?: ErpPurchaseOrderLine[];
 }
