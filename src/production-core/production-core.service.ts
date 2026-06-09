@@ -120,7 +120,7 @@ export class ProductionCoreService {
       };
       const productionOrder = await productionRepo.save(productionPayload);
 
-      const savedMaterials: ErpProductionOrderMaterial[] = [];
+      const savedMaterials: any[] = [];
       for (const material of materials) {
         const balance = await balanceRepo.findOne({
           where: {
@@ -147,7 +147,15 @@ export class ProductionCoreService {
           unitCost: avgUnitCost.toFixed(3),
           amount: amount.toFixed(3),
         };
-        savedMaterials.push(await materialRepo.save(materialPayload));
+        const nextQty = currentQty - material.qtyRequired;
+        const nextValue = Math.max(0, currentValue - amount);
+        const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
+
+        const savedMat = await materialRepo.save(materialPayload);
+        savedMaterials.push({
+          ...savedMat,
+          newStockQty: nextQty.toFixed(3),
+        });
 
         const issueTxnPayload: DeepPartial<ErpInventoryTransaction> = {
           transactionType: 'ISSUE',
@@ -163,10 +171,6 @@ export class ProductionCoreService {
           createdBy: dto.createdBy ?? null,
         };
         await txnRepo.save(issueTxnPayload);
-
-        const nextQty = currentQty - material.qtyRequired;
-        const nextValue = Math.max(0, currentValue - amount);
-        const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
         if (!balance) {
           throw new BadRequestException(
             `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
@@ -240,6 +244,7 @@ export class ProductionCoreService {
             qtyProduced: qtyToProduce.toFixed(3),
             warehouseCode: dto.warehouseCode ?? null,
             outputMetadata: dto.outputMetadata ?? null,
+            newStockQty: finishedNextQty.toFixed(3),
           },
         },
       };
