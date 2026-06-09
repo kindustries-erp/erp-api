@@ -79,6 +79,10 @@ describe('ProductionCoreService', () => {
         ErpInventoryTransaction: { save: jest.fn() },
         ErpProductionOrder: { save: jest.fn() },
         ErpProductionOrderMaterial: { save: jest.fn() },
+        ErpInventoryItem: {
+          find: jest.fn().mockResolvedValue([]),
+          findOne: jest.fn().mockResolvedValue(null),
+        },
       }),
     );
 
@@ -131,6 +135,10 @@ describe('ProductionCoreService', () => {
         ErpInventoryTransaction: txnRepo,
         ErpProductionOrder: productionRepo,
         ErpProductionOrderMaterial: materialRepo,
+        ErpInventoryItem: {
+          find: jest.fn().mockResolvedValue([]),
+          findOne: jest.fn().mockResolvedValue(null),
+        },
       }),
     );
 

@@ -74,6 +74,7 @@ export class ProductionCoreService {
       const txnRepo = manager.getRepository(ErpInventoryTransaction);
       const productionRepo = manager.getRepository(ErpProductionOrder);
       const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
+      const itemRepo = manager.getRepository(ErpInventoryItem);
 
       const rootBom = await bomRepo.findOne({
         where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
@@ -110,6 +111,19 @@ export class ProductionCoreService {
           'BOM không có định mức nguyên vật liệu khả dụng để xuất',
         );
       }
+
+      const materialItemIds = Array.from(
+        new Set(materials.map((material) => material.itemId).filter(Boolean)),
+      ) as string[];
+      const inventoryItems = materialItemIds.length
+        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
+        : [];
+      const inventoryItemMap = new Map(
+        inventoryItems.map((item) => [item.id, item]),
+      );
+      const finishedGoodItem = await itemRepo.findOne({
+        where: { id: dto.finishedGoodItemId },
+      });
 
       for (const material of materials) {
         const existingBalance = await balanceRepo.findOne({
@@ -169,8 +183,12 @@ export class ProductionCoreService {
         const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
 
         const savedMat = await materialRepo.save(materialPayload);
+        const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
           ...savedMat,
+          itemName: materialItem?.itemName ?? null,
+          uom: materialItem?.uom ?? null,
+          qtyIssued: material.qtyRequired.toFixed(3),
           newStockQty: nextQty.toFixed(3),
         });
 
@@ -255,7 +273,9 @@ export class ProductionCoreService {
         message: 'Thực thi sản xuất thành công',
         data: {
           ...productionOrder,
-          materials: savedMaterials,
+          finishedGoodItemName: finishedGoodItem?.itemName ?? null,
+          qtyProduced: qtyToProduce.toFixed(3),
+          materialsIssued: savedMaterials,
           finishedGoodReceipt: {
             itemId: dto.finishedGoodItemId,
             qtyProduced: qtyToProduce.toFixed(3),
