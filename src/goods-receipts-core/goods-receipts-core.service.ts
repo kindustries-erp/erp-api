@@ -43,8 +43,8 @@ export class GoodsReceiptsCoreService {
       const headerRepo = manager.getRepository(ErpGoodsReceipt);
       const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const headerPayload: DeepPartial<ErpGoodsReceipt> = {
-        status: header.status ?? 'DRAFT',
         ...header,
+        status: 'DRAFT',
       };
       const data = await headerRepo.save(headerPayload);
       const savedLines: ErpGoodsReceiptLine[] = [];
@@ -99,8 +99,14 @@ export class GoodsReceiptsCoreService {
   }
 
   async update(id: string, dto: UpdateGoodsReceiptDto) {
+    const existing = await this.getReceiptOrThrow(this.repository, id);
+    if (existing.status === 'POSTED') {
+      throw new BadRequestException('Không thể sửa phiếu đã ghi sổ');
+    }
+
     const { lines, ...header } = dto as any;
-    await this.repository.update(id, header);
+    const updatePayload = { ...header, status: 'DRAFT' };
+    await this.repository.update(id, updatePayload);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
         const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
