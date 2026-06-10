@@ -1,8 +1,9 @@
 # ERP Core Neon Business Modules Phase 1
 
 ## Context
-- Repo: `/opt/repos/liouni-erp/liouni-erp-api`
+- Repo: `/opt/repos/liouni-erp-core/liouni-erp-api`
 - Branch: `erp-core`
+- Path note: active `erp-core` API source now lives in the dedicated root `/opt/repos/liouni-erp-core`; do not treat `/opt/repos/liouni-erp` as the source tree for this lane.
 - Lane: ERP core Postgres/Neon-native rewrite
 - Scope phase 1: scaffold foundation + business modules for:
   - [x] user (existing local auth/core_users baseline kept)
