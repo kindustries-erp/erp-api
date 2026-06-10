@@ -6,6 +6,8 @@ import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_ba
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
+import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
+import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ProductionCoreController } from './production-core.controller';
 import { ProductionCoreService } from './production-core.service';
 
@@ -18,6 +20,8 @@ import { ProductionCoreService } from './production-core.service';
       ErpInventoryTransaction,
       ErpProductionOrder,
       ErpProductionOrderMaterial,
+      ErpGoodsIssue,
+      ErpGoodsIssueLine,
     ]),
   ],
   controllers: [ProductionCoreController],

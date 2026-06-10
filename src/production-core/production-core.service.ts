@@ -10,6 +10,8 @@ import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
+import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 
 @Injectable()
 export class ProductionCoreService {
@@ -75,6 +77,8 @@ export class ProductionCoreService {
       const productionRepo = manager.getRepository(ErpProductionOrder);
       const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
       const itemRepo = manager.getRepository(ErpInventoryItem);
+      const goodsIssueRepo = manager.getRepository(ErpGoodsIssue);
+      const goodsIssueLineRepo = manager.getRepository(ErpGoodsIssueLine);
 
       const rootBom = await bomRepo.findOne({
         where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
@@ -140,6 +144,26 @@ export class ProductionCoreService {
       }
 
       const referenceNo = dto.referenceNo?.trim() || `PROD-${Date.now()}`;
+      const productionDate = new Date().toISOString().slice(0, 10);
+      const issuePrefixDate = new Date();
+      const issueYear = issuePrefixDate.getUTCFullYear();
+      const issueMonth = String(issuePrefixDate.getUTCMonth() + 1).padStart(
+        2,
+        '0',
+      );
+      const issuePrefix = `XK-${issueYear}${issueMonth}`;
+      const latestIssue = await goodsIssueRepo
+        .createQueryBuilder('gi')
+        .where('gi.issueNo LIKE :prefix', { prefix: `${issuePrefix}%` })
+        .orderBy('gi.issueNo', 'DESC')
+        .getOne();
+      const latestIssueSeq =
+        latestIssue?.issueNo?.slice(issuePrefix.length) ?? '000';
+      const nextIssueSeq = String(Number(latestIssueSeq || '0') + 1).padStart(
+        3,
+        '0',
+      );
+      const issueNo = `${issuePrefix}${nextIssueSeq}`;
       const productionPayload: DeepPartial<ErpProductionOrder> = {
         referenceNo,
         finishedGoodItemId: dto.finishedGoodItemId,
@@ -150,6 +174,17 @@ export class ProductionCoreService {
         createdBy: dto.createdBy ?? null,
       };
       const productionOrder = await productionRepo.save(productionPayload);
+      const goodsIssuePayload: DeepPartial<ErpGoodsIssue> = {
+        issueNo,
+        issueDate: productionDate,
+        issueType: 'PRODUCTION',
+        customerId: null,
+        salesOrderId: null,
+        status: 'POSTED',
+        remarks: `Tự động xuất NVL cho lệnh sản xuất ${referenceNo}`,
+        createdBy: dto.createdBy ?? null,
+      };
+      const goodsIssue = await goodsIssueRepo.save(goodsIssuePayload);
 
       const savedMaterials: any[] = [];
       for (const material of materials) {
@@ -180,11 +215,23 @@ export class ProductionCoreService {
           unitCost: avgUnitCost.toFixed(3),
           amount: amount.toFixed(3),
         };
+        const goodsIssueLinePayload: DeepPartial<ErpGoodsIssueLine> = {
+          goodsIssueId: goodsIssue.id,
+          lineNo: savedMaterials.length + 1,
+          salesOrderLineId: null,
+          itemId: material.itemId,
+          serialId: null,
+          vehicleId: null,
+          qtyIssued: material.qtyRequired.toFixed(3),
+          unitCost: avgUnitCost.toFixed(3),
+          amount: amount.toFixed(3),
+        };
         const nextQty = currentQty - material.qtyRequired;
         const nextValue = Math.max(0, currentValue - amount);
         const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
 
         const savedMat = await materialRepo.save(materialPayload);
+        await goodsIssueLineRepo.save(goodsIssueLinePayload);
         const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
           ...savedMat,
@@ -278,6 +325,13 @@ export class ProductionCoreService {
           finishedGoodItemName: finishedGoodItem?.itemName ?? null,
           qtyProduced: qtyToProduce.toFixed(3),
           materialsIssued: savedMaterials,
+          goodsIssue: {
+            id: goodsIssue.id,
+            issueNo: goodsIssue.issueNo,
+            issueDate: goodsIssue.issueDate,
+            status: goodsIssue.status,
+            issueType: goodsIssue.issueType,
+          },
           finishedGoodReceipt: {
             itemId: dto.finishedGoodItemId,
             qtyProduced: qtyToProduce.toFixed(3),
