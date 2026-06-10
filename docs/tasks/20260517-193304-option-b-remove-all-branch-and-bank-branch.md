@@ -75,8 +75,8 @@ Loại bỏ hoàn toàn mọi reference `branch`, `branches`, `branch_id`, `bank
     - query `directus_fields where field ilike '%branch%' or collection ilike '%branch%'` => rỗng
   - Restart Directus staging OK.
 - Build:
-  - API: `npm run build` PASS trong repo `/opt/repos/liouni-erp/liouni-erp-api`
-  - Web: `npm run build` PASS trong repo `/opt/repos/liouni-erp/liouni-erp-web`
+  - API: `npm run build` PASS trong repo `/opt/repos/liouni-erp-core/liouni-erp-api`
+  - Web: `npm run build` PASS trong repo `/opt/repos/liouni-erp-core/liouni-erp-web`
 - Smoke:
   - `curl -I https://dev.erp.liouni.com/` => HTTP 200
   - `curl -I https://dev.api.erp.liouni.com/api/v1` => HTTP 200

@@ -16,7 +16,7 @@
 - [ ] Commit + push
 
 ## Evidence
-- Build: `npm run build` exit 0 in `/opt/repos/liouni-erp/liouni-erp-api`.
+- Build: `npm run build` exit 0 in `/opt/repos/liouni-erp-core/liouni-erp-api`.
 - Module registered: `OperationalDocumentsModule` in `src/app.module.ts`.
 - Added endpoints: `/api/v1/sales-service-orders`, `/api/v1/sales-service-orders/import/kgara`, `/api/v1/sales-service-orders/import/dms`, `/api/v1/purchase-orders`, `/api/v1/operating-expenses`, `/api/v1/operational-receivables`, `/api/v1/operational-payables`, `/api/v1/document-payment-links`.
 

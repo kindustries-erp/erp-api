@@ -51,7 +51,7 @@
   - `payment_vouchers` không còn cột `ar_advance_*`
   - Directus metadata/permission không còn field/permission advance
 - Build:
-  - `npm run build` PASS tại `/opt/repos/liouni-erp/liouni-erp-api`
+  - `npm run build` PASS tại `/opt/repos/liouni-erp-core/liouni-erp-api`
 - Smoke:
   - `curl https://dev.api.erp.liouni.com/api/v1` => `200`, body `Hello World!`
   - `GET /api/v1/ar-workbench/customer-advances` => `404`

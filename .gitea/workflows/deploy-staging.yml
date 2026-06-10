@@ -15,7 +15,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no lio@100.75.67.115 '
             set -e
-            cd /opt/repos/liouni-erp/liouni-erp-api
+            cd /opt/repos/liouni-erp-core/liouni-erp-api
             git fetch origin
             git checkout staging
             git reset --hard origin/staging

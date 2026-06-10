@@ -22,10 +22,10 @@
   - Không đổi data preset nếu API đã verify đủ.
 
 ## Relevant Files
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/finance/components/CashVoucherDrawer/index.tsx` - cash drawer đang nhận/import preset props nhưng chưa render card.
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/finance/components/TienGui/BankVoucherDrawer.tsx` - implementation chuẩn đang hiển thị đúng để mirror.
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/finance/components/CashBankTagPresetCards.tsx` - shared card component.
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/finance/hooks/useCashVoucherHandlers.ts` - loadTagPresets + handleTagPresetSelect cho cash.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/finance/components/CashVoucherDrawer/index.tsx` - cash drawer đang nhận/import preset props nhưng chưa render card.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/finance/components/TienGui/BankVoucherDrawer.tsx` - implementation chuẩn đang hiển thị đúng để mirror.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/finance/components/CashBankTagPresetCards.tsx` - shared card component.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/finance/hooks/useCashVoucherHandlers.ts` - loadTagPresets + handleTagPresetSelect cho cash.
 
 ## Gate 0 — DB Precheck (bắt buộc)
 - Collections/fields liên quan:

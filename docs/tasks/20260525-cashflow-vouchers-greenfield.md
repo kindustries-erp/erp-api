@@ -42,7 +42,7 @@
 
 ## Rollback
 - DB: restore từ backup `/opt/backups/directus-staging/<ts>/directus-staging-before-cashflow.sql`
-- API: `git -C /opt/repos/liouni-erp/liouni-erp-api revert <commit>` + `docker compose up -d --build`
+- API: `git -C /opt/repos/liouni-erp-core/liouni-erp-api revert <commit>` + `docker compose up -d --build`
 - Tables: `DROP TABLE cashflow_allocations, cashflow_voucher_related_documents, cashflow_vouchers CASCADE;`
 
 ## Lessons Learned

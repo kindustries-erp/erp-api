@@ -60,9 +60,9 @@
 ## ACT progress
 - [x] DB schema applied: `cash_bank_tag_presets`, `cash_bank_related_documents`, `payment_vouchers.cash_bank_tag_preset_id`; Directus health OK.
 - [x] API implemented: preset lookup endpoint, DTO fields, preset account resolution, related docs sync/load.
-- [x] API build pass: `npm run build` in `/opt/repos/liouni-erp/liouni-erp-api`.
+- [x] API build pass: `npm run build` in `/opt/repos/liouni-erp-core/liouni-erp-api`.
 - [x] UI implemented: Cash/Bank preset cards + related document editor.
-- [x] UI build pass: `npm run build` in `/opt/repos/liouni-erp/liouni-erp-web`.
+- [x] UI build pass: `npm run build` in `/opt/repos/liouni-erp-core/liouni-erp-web`.
 - [ ] Deploy + smoke verify after commits.
 
 ## Sẵn sàng thực thi

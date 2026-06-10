@@ -22,11 +22,11 @@ Khôi phục đúng nghiệp vụ cấn trừ một phần giữa payment vouche
   - Data reset/destructive cleanup production.
 
 ## Relevant Files
-- `/opt/repos/liouni-erp/liouni-erp-api/src/modules/payment-vouchers/**` - dịch vụ tạo/post voucher, xử lý related documents.
-- `/opt/repos/liouni-erp/liouni-erp-api/src/modules/ar-workbench/**` - recompute AR document open/settled/status và read model AR.
-- `/opt/repos/liouni-erp/liouni-erp-api/src/modules/**/controllers/*.ts` liên quan lookup/list/detail settlement.
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/cash-management/**` - form phiếu tiền mặt/tiền gửi + liên kết chứng từ.
-- `/opt/repos/liouni-erp/liouni-erp-web/src/modules/ar-workbench/**` - form tạo hóa đơn/chứng từ khác + hiển thị chứng từ đã cấn trừ.
+- `/opt/repos/liouni-erp-core/liouni-erp-api/src/modules/payment-vouchers/**` - dịch vụ tạo/post voucher, xử lý related documents.
+- `/opt/repos/liouni-erp-core/liouni-erp-api/src/modules/ar-workbench/**` - recompute AR document open/settled/status và read model AR.
+- `/opt/repos/liouni-erp-core/liouni-erp-api/src/modules/**/controllers/*.ts` liên quan lookup/list/detail settlement.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/cash-management/**` - form phiếu tiền mặt/tiền gửi + liên kết chứng từ.
+- `/opt/repos/liouni-erp-core/liouni-erp-web/src/modules/ar-workbench/**` - form tạo hóa đơn/chứng từ khác + hiển thị chứng từ đã cấn trừ.
 
 ## Gate 0 — DB Precheck (bắt buộc)
 - Collections/fields liên quan:

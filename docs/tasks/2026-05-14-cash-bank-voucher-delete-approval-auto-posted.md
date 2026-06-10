@@ -3,7 +3,7 @@
 ## Request Input (bạn chỉ cần điền phần này)
 - Type: ENHANCE
 - Mục tiêu: Trong phiếu tiền mặt/tiền gửi, chỉ cho xóa khi DRAFT; sau khi duyệt thì không được xóa nữa, chỉ được hủy. Khi người có quyền bấm duyệt, phiếu tự động POSTED, không cần bước hạch toán riêng.
-- Bối cảnh/ngữ cảnh: Execution theo plan web task `/opt/repos/liouni-erp/liouni-erp-web/docs/tasks/2026-05-14-plan-cash-bank-voucher-delete-approval-auto-posted.md`.
+- Bối cảnh/ngữ cảnh: Execution theo plan web task `/opt/repos/liouni-erp-core/liouni-erp-web/docs/tasks/2026-05-14-plan-cash-bank-voucher-delete-approval-auto-posted.md`.
 
 ## Goal
 Chuẩn hóa workflow API cho `payment_vouchers`:
