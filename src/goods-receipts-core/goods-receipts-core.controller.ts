@@ -59,4 +59,9 @@ export class GoodsReceiptsCoreController {
   ) {
     return this.service.postReceipt(id, dto);
   }
+
+  @Post(':id/cancel')
+  cancelReceipt(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.cancelReceipt(id);
+  }
 }

@@ -6,6 +6,8 @@ import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
+import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
+import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
 
 @Injectable()
 export class PurchaseOrdersCoreService {
@@ -105,12 +107,50 @@ export class PurchaseOrdersCoreService {
       where: { purchaseOrderId: id },
       order: { lineNo: 'ASC' },
     });
+    const receipts = await this.getReceiptTimeline(id);
     return {
       message: 'Lấy thông tin thành công',
-      data: this.toCoreDocument({ ...data, lines } as any),
+      data: this.toCoreDocument({ ...data, lines, receipts } as any),
     };
   }
 
+  async getReceiptTimeline(id: string) {
+    const receiptRepo = this.dataSource.getRepository(ErpGoodsReceipt);
+    const receiptLineRepo = this.dataSource.getRepository(ErpGoodsReceiptLine);
+    const receipts = await receiptRepo.find({
+      where: { purchaseOrderId: id } as any,
+      order: { receiptDate: 'ASC', createdAt: 'ASC' },
+    });
+    const visibleReceipts = receipts.filter(
+      (receipt) => receipt.status !== 'DRAFT',
+    );
+    const result = [] as any[];
+    for (const receipt of visibleReceipts) {
+      const lines = await receiptLineRepo.find({
+        where: { goodsReceiptId: receipt.id },
+        order: { lineNo: 'ASC' },
+      });
+      result.push({
+        ...receipt,
+        lines: lines.map((line) => ({
+          ...line,
+          qtyReceived:
+            line.qtyReceived !== undefined && line.qtyReceived !== null
+              ? String(line.qtyReceived)
+              : '0',
+          unitCost:
+            line.unitCost !== undefined && line.unitCost !== null
+              ? String(line.unitCost)
+              : null,
+          amount:
+            line.amount !== undefined && line.amount !== null
+              ? String(line.amount)
+              : null,
+        })),
+      });
+    }
+    return result;
+  }
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({ id });
     if (dto.status === 'DRAFT' && existing.status !== 'DRAFT') {

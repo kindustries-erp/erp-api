@@ -37,6 +37,11 @@ export class PurchaseOrdersCoreController {
     return this.service.getNextPoNo(date);
   }
 
+  @Get(':id/receipts')
+  getReceipts(@Param('id') id: string) {
+    return this.service.getReceiptTimeline(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);

@@ -286,4 +286,123 @@ export class GoodsReceiptsCoreService {
       };
     });
   }
+
+  async cancelReceipt(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const receiptRepo = manager.getRepository(ErpGoodsReceipt);
+      const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+      const txnRepo = manager.getRepository(ErpInventoryTransaction);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+      const poRepo = manager.getRepository(ErpPurchaseOrder);
+      const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+
+      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+      if (receipt.status === 'CANCELLED') {
+        throw new BadRequestException('Phiếu nhập đã bị hủy trước đó');
+      }
+      if (receipt.status !== 'POSTED') {
+        throw new BadRequestException(
+          'Chỉ có thể hủy phiếu nhập đã ghi sổ (POSTED)',
+        );
+      }
+
+      const lines = await lineRepo.find({
+        where: { goodsReceiptId: id },
+        order: { lineNo: 'ASC' },
+      });
+
+      for (const line of lines) {
+        const qty = Number(line.qtyReceived || 0);
+        if (qty <= 0) continue;
+
+        // Reversal transaction (qty_out)
+        const unitCost = Number(line.unitCost || 0);
+        await txnRepo.save(
+          txnRepo.create({
+            transactionType: 'RECEIPT_CANCEL',
+            documentType: 'GOODS_RECEIPT',
+            documentId: receipt.id,
+            itemId: line.itemId ?? null,
+            warehouseCode: null,
+            qtyIn: '0.000',
+            qtyOut: qty.toFixed(3),
+            unitCost: unitCost.toFixed(3),
+            transactionDate: receipt.receiptDate,
+            notes: `Hủy phiếu nhập ${receipt.receiptNo}`,
+            createdBy: null,
+          } as any),
+        );
+
+        // Revert inventory balance
+        const balance = await balanceRepo.findOne({
+          where: { itemId: line.itemId ?? undefined },
+        });
+        if (balance) {
+          const revertedQty = Math.max(0, Number(balance.qtyOnHand) - qty);
+          const revertedValue = Math.max(
+            0,
+            Number(balance.inventoryValue) - qty * unitCost,
+          );
+          balance.qtyOnHand = revertedQty.toFixed(3);
+          balance.inventoryValue = revertedValue.toFixed(3);
+          balance.avgUnitCost =
+            revertedQty > 0
+              ? (revertedValue / revertedQty).toFixed(3)
+              : '0.000';
+          await balanceRepo.save(balance);
+        }
+
+        // Revert PO line qty_received
+        if (line.purchaseOrderLineId) {
+          const poLine = await poLineRepo.findOneBy({
+            id: line.purchaseOrderLineId,
+          });
+          if (poLine) {
+            poLine.qtyReceived = Math.max(
+              0,
+              Number(poLine.qtyReceived) - qty,
+            ).toFixed(3);
+            await poLineRepo.save(poLine);
+          }
+        }
+      }
+
+      // Recalc PO receipt status
+      if (receipt.purchaseOrderId) {
+        const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
+        if (po) {
+          const refreshedLines = await poLineRepo.find({
+            where: { purchaseOrderId: po.id },
+          });
+          const totalOrdered = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyOrdered || 0),
+            0,
+          );
+          const totalReceived = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyReceived || 0),
+            0,
+          );
+          if (totalReceived <= 0) {
+            po.status = po.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
+          } else if (totalReceived < totalOrdered) {
+            po.status = 'PARTIAL_RECEIVED';
+          } else {
+            po.status = 'RECEIVED';
+          }
+          await poRepo.save(po);
+        }
+      }
+
+      receipt.status = 'CANCELLED';
+      const savedReceipt = await receiptRepo.save(receipt);
+      const savedLines = await lineRepo.find({
+        where: { goodsReceiptId: id },
+        order: { lineNo: 'ASC' },
+      });
+      return {
+        message: 'Hủy phiếu nhập thành công',
+        data: { ...savedReceipt, lines: savedLines },
+      };
+    });
+  }
 }
