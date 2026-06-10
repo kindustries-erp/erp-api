@@ -33,6 +33,11 @@ export class InventoryItemsController {
     return this.service.findAll(query);
   }
 
+  @Get(':id/movements')
+  getMovements(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getMovements(id);
+  }
+
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
