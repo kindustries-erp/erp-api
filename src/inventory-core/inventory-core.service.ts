@@ -39,14 +39,18 @@ export class InventoryItemsService {
   }
 
   private buildMasterWhere(query: InventoryMasterQueryDto) {
-    const where: Record<string, unknown> = {};
+    const baseWhere =
+      query.isActive !== undefined ? { isActive: query.isActive } : {};
+
     if (query.search) {
-      where.code = ILike(`%${query.search}%`);
+      return [
+        { ...baseWhere, code: ILike(`%${query.search}%`) },
+        { ...baseWhere, name: ILike(`%${query.search}%`) },
+        { ...baseWhere, description: ILike(`%${query.search}%`) },
+      ];
     }
-    if (query.isActive !== undefined) {
-      where.isActive = query.isActive;
-    }
-    return where;
+
+    return Object.keys(baseWhere).length > 0 ? baseWhere : undefined;
   }
 
   private async ensureUomActive(code: string) {

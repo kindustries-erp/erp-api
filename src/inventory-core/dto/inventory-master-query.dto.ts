@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional } from 'class-validator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
@@ -8,7 +8,13 @@ export class InventoryMasterQueryDto extends PaginationDto {
     description: 'Lọc theo active/inactive. Bỏ trống để lấy tất cả.',
   })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
   @IsBoolean()
   isActive?: boolean;
 }
