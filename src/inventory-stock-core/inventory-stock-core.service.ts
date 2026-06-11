@@ -52,7 +52,7 @@ export class InventoryStockCoreService {
     }
 
     const whereBalance: any =
-      filteredItemIds !== null ? { itemId: filteredItemIds as any } : {};
+      filteredItemIds !== null ? { itemId: In(filteredItemIds) } : {};
 
     const [balances, total] = await this.balanceRepository.findAndCount({
       where: whereBalance,
