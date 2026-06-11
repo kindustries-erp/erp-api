@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -24,8 +24,8 @@ export class BusinessPartnersCoreService {
     const pageSize = query.pageSize ?? 20;
 
     const baseWhere = query.partnerType
-      ? ({ partnerType: query.partnerType } as any)
-      : ({} as any);
+      ? ({ partnerType: query.partnerType, isDeleted: false } as any)
+      : ({ isDeleted: false } as any);
 
     const where = query.search
       ? ([
@@ -53,13 +53,29 @@ export class BusinessPartnersCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     return { message: 'Lấy thông tin thành công', data };
   }
 
   async update(id: string, dto: UpdateBusinessPartnerDto) {
     await this.repository.update(id, dto as any);
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     return { message: 'Cập nhật thành công', data };
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing) {
+      throw new NotFoundException(`Business partner ${id} not found`);
+    }
+    existing.isDeleted = true;
+    const data = await this.repository.save(existing);
+    return { message: 'Xóa thành công', data };
   }
 }

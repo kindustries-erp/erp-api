@@ -56,6 +56,9 @@ export class ErpBusinessPartner {
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
 
+  @Column({ type: 'boolean', name: 'is_deleted', default: false })
+  isDeleted: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
