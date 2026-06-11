@@ -5,6 +5,8 @@ import { ErpInventoryTransaction } from './entities/erp_inventory_transaction.en
 import { ErpInventoryBalance } from './entities/erp_inventory_balance.entity';
 import { InventoryItemsController } from './inventory-core.controller';
 import { InventoryItemsService } from './inventory-core.service';
+import { ErpUom } from './entities/erp_uom.entity';
+import { ErpItemType } from './entities/erp_item_type.entity';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { InventoryItemsService } from './inventory-core.service';
       ErpInventoryItem,
       ErpInventoryTransaction,
       ErpInventoryBalance,
+      ErpUom,
+      ErpItemType,
     ]),
   ],
   controllers: [InventoryItemsController],
