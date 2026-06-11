@@ -40,7 +40,9 @@ export class InventoryItemsService {
 
   private buildMasterWhere(query: InventoryMasterQueryDto) {
     const baseWhere =
-      query.isActive !== undefined ? { isActive: query.isActive } : {};
+      query.isActive !== undefined
+        ? { isActive: query.isActive, isDeleted: false }
+        : { isDeleted: false };
 
     if (query.search) {
       return [
@@ -56,7 +58,7 @@ export class InventoryItemsService {
   private async ensureUomActive(code: string) {
     const normalized = this.normalizeCode(code);
     const uom = await this.uomRepository.findOne({
-      where: { code: normalized },
+      where: { code: normalized, isDeleted: false },
     });
     if (!uom) {
       throw new BadRequestException(
@@ -74,7 +76,7 @@ export class InventoryItemsService {
   private async ensureItemTypeActive(code: string) {
     const normalized = this.normalizeCode(code);
     const itemType = await this.itemTypeRepository.findOne({
-      where: { code: normalized },
+      where: { code: normalized, isDeleted: false },
     });
     if (!itemType) {
       throw new BadRequestException(
@@ -87,6 +89,22 @@ export class InventoryItemsService {
       );
     }
     return itemType;
+  }
+
+  async softDeleteUom(id: string) {
+    const existing = await this.uomRepository.findOneBy({ id });
+    if (!existing) throw new NotFoundException(`UOM ${id} not found`);
+    existing.isDeleted = true;
+    await this.uomRepository.save(existing);
+    return { message: 'Đã xóa đơn vị tính thành công', data: { id } };
+  }
+
+  async softDeleteItemType(id: string) {
+    const existing = await this.itemTypeRepository.findOneBy({ id });
+    if (!existing) throw new NotFoundException(`Item type ${id} not found`);
+    existing.isDeleted = true;
+    await this.itemTypeRepository.save(existing);
+    return { message: 'Đã xóa loại item thành công', data: { id } };
   }
 
   async create(dto: CreateInventoryItemDto) {

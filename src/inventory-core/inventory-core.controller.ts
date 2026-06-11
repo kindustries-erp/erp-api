@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -56,6 +57,11 @@ export class InventoryItemsController {
     return this.service.updateUom(id, dto);
   }
 
+  @Delete('uoms/:id')
+  removeUom(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.softDeleteUom(id);
+  }
+
   @Get('item-types')
   listItemTypes(@Query() query: InventoryMasterQueryDto) {
     return this.service.listItemTypes(query);
@@ -72,6 +78,11 @@ export class InventoryItemsController {
     @Body() dto: UpdateItemTypeDto,
   ) {
     return this.service.updateItemType(id, dto);
+  }
+
+  @Delete('item-types/:id')
+  removeItemType(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.softDeleteItemType(id);
   }
 
   @Get('items/:id/movements')
