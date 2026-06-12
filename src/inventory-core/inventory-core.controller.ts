@@ -14,7 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { InventoryItemQueryDto } from './dto/inventory-item-query.dto';
 import { InventoryItemsService } from './inventory-core.service';
 import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
@@ -39,7 +39,7 @@ export class InventoryItemsController {
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items')
-  findAll(@Query() query: PaginationDto) {
+  findAll(@Query() query: InventoryItemQueryDto) {
     return this.service.findAll(query);
   }
 

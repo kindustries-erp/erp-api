@@ -128,15 +128,23 @@ export class InventoryItemsService {
     return { message: 'Tạo thành công', data };
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: any) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    let whereCondition: any = { isDeleted: false };
+    let baseWhere: any = { isDeleted: false };
+    if (query.status) {
+      baseWhere.status = query.status;
+    }
+    if (query.itemType) {
+      baseWhere.itemType = query.itemType;
+    }
+
+    let whereCondition: any = baseWhere;
     if (query.search) {
       whereCondition = [
-        { isDeleted: false, itemName: ILike(`%${query.search}%`) },
-        { isDeleted: false, sku: ILike(`%${query.search}%`) },
+        { ...baseWhere, itemName: ILike(`%${query.search}%`) },
+        { ...baseWhere, sku: ILike(`%${query.search}%`) },
       ];
     }
 
