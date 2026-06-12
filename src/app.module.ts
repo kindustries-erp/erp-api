@@ -21,6 +21,8 @@ import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
 import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
 
 @Module({
   imports: [
@@ -79,6 +81,12 @@ import { UsersAdminModule } from './users-admin/users-admin.module';
     UsersAdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: GlobalAuditInterceptor,
+    },
+  ],
 })
 export class AppModule {}
