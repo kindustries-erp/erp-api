@@ -64,7 +64,23 @@ export class GlobalAuditInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: () => {
+        next: (resData) => {
+          let afterSnapshot = req.afterSnapshot || null;
+          if (!afterSnapshot && ['POST', 'PUT', 'PATCH'].includes(method)) {
+            afterSnapshot = { ...req.body };
+            if (afterSnapshot.password) delete afterSnapshot.password;
+          }
+          if (
+            !afterSnapshot &&
+            typeof resData === 'object' &&
+            resData !== null
+          ) {
+            afterSnapshot = resData.data || resData;
+            if (afterSnapshot?.password) delete afterSnapshot.password;
+          }
+
+          const beforeSnapshot = req.beforeSnapshot || null;
+
           this.logAction(
             req,
             'SUCCESS',
@@ -73,9 +89,14 @@ export class GlobalAuditInterceptor implements NestInterceptor {
             moduleName,
             entityType,
             entityId,
+            beforeSnapshot,
+            afterSnapshot,
           );
         },
         error: (err) => {
+          let afterSnapshot = req.body ? { ...req.body } : null;
+          if (afterSnapshot?.password) delete afterSnapshot.password;
+
           this.logAction(
             req,
             'FAIL',
@@ -84,6 +105,8 @@ export class GlobalAuditInterceptor implements NestInterceptor {
             moduleName,
             entityType,
             entityId,
+            req.beforeSnapshot || null,
+            afterSnapshot,
           );
         },
       }),
@@ -98,6 +121,8 @@ export class GlobalAuditInterceptor implements NestInterceptor {
     moduleName: string,
     entityType: string | null,
     entityId: string | null,
+    beforeSnapshot?: any,
+    afterSnapshot?: any,
   ) {
     try {
       const user = req.user;
@@ -113,6 +138,9 @@ export class GlobalAuditInterceptor implements NestInterceptor {
         httpMethod: req.method,
         status,
         message: err ? err.message : null,
+        beforeSnapshot,
+        afterSnapshot,
+        errorSnapshot: err ? { message: err.message, stack: err.stack } : null,
         ipAddress: req.ip || null,
         userAgent: req.headers['user-agent'] || null,
       });
