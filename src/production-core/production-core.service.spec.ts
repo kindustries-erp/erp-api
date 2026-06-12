@@ -44,11 +44,11 @@ describe('ProductionCoreService', () => {
     };
 
     const bomRepo = {
-      findOne: jest
+      findOne: jest.fn().mockResolvedValueOnce(rootBom),
+      find: jest
         .fn()
-        .mockResolvedValueOnce(rootBom)
-        .mockResolvedValueOnce(childBom)
-        .mockResolvedValueOnce(rootBom),
+        .mockResolvedValueOnce([childBom])
+        .mockResolvedValueOnce([rootBom]),
     };
     const bomLineRepo = {
       find: jest
@@ -103,10 +103,8 @@ describe('ProductionCoreService', () => {
       createdAt: new Date(),
     };
     const bomRepo = {
-      findOne: jest
-        .fn()
-        .mockResolvedValueOnce(rootBom)
-        .mockResolvedValueOnce(null),
+      findOne: jest.fn().mockResolvedValueOnce(rootBom),
+      find: jest.fn().mockResolvedValueOnce([]),
     };
     const bomLineRepo = {
       find: jest.fn().mockResolvedValueOnce([
@@ -120,6 +118,7 @@ describe('ProductionCoreService', () => {
     };
     const balanceRepo = {
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
     };
     const productionRepo = {
       save: jest.fn().mockResolvedValue({ id: 'prod-1' }),

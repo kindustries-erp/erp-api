@@ -39,6 +39,7 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
         if (databaseUrl) {
           return {
             type: 'postgres' as const,
+            schema: 'public',
             url: databaseUrl,
             entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
             synchronize: false,
@@ -50,6 +51,7 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 
         return {
           type: 'postgres' as const,
+          schema: 'public',
           host: configService.get<string>('DB_HOST', '127.0.0.1'),
           port: Number(configService.get<number>('DB_PORT', 5432)),
           username: configService.get<string>('DB_USER', 'postgres'),
