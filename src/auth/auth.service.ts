@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
+import { RbacCoreService } from '../rbac-core/rbac-core.service';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -16,6 +17,7 @@ export class AuthService implements OnModuleInit {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditCoreService: AuditCoreService,
+    private readonly rbacCoreService: RbacCoreService,
   ) {}
 
   async onModuleInit() {
@@ -183,6 +185,8 @@ export class AuthService implements OnModuleInit {
       user.employeeId,
     );
 
+    const permissions = await this.rbacCoreService.getUserPermissions(user.id);
+
     return {
       id: user.id,
       email: user.email,
@@ -200,6 +204,11 @@ export class AuthService implements OnModuleInit {
             userId: employee.userId,
           }
         : null,
+      permissions: permissions.map((p) => ({
+        resource: p.resource,
+        action: p.action,
+        conditions: p.conditions,
+      })),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

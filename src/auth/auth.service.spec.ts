@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { AuditCoreService } from '../audit-core/audit-core.service';
+import { RbacCoreService } from '../rbac-core/rbac-core.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -49,6 +50,10 @@ describe('AuthService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
         { provide: AuditCoreService, useValue: auditCoreService },
+        {
+          provide: RbacCoreService,
+          useValue: { getUserPermissions: jest.fn().mockResolvedValue([]) },
+        },
         {
           provide: ConfigService,
           useValue: {
