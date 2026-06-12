@@ -31,6 +31,15 @@ export class ErpEmployee {
   @Column({ type: 'uuid', name: 'user_id', nullable: true })
   userId: string | null;
 
+  @Column({ type: 'text', name: 'address', nullable: true })
+  address: string | null;
+
+  @Column({ type: 'date', name: 'start_date', nullable: true })
+  startDate: string | null;
+
+  @Column({ type: 'date', name: 'leave_date', nullable: true })
+  leaveDate: string | null;
+
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
 
