@@ -52,7 +52,7 @@ export default new DataSource(
         type: 'postgres',
         url: databaseUrl,
         entities,
-        migrations: [__dirname + '/../migrations/**/*.js'],
+        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,
         ssl: { rejectUnauthorized: false },
       }
@@ -64,7 +64,7 @@ export default new DataSource(
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_DATABASE || 'erp_core',
         entities,
-        migrations: [__dirname + '/../migrations/**/*.js'],
+        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,
         ssl:
           process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
