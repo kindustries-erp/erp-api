@@ -44,7 +44,7 @@ sql += `\n`;
 // 3. Inventory Items
 const fgItemId = uuidv4();
 sql += `-- Finished Good Item\n`;
-sql += `INSERT INTO public.erp_inventory_items (id, sku, item_name, uom, item_type, status, note) VALUES ('${fgItemId}', 'FG-KLOTUS-PACEO', 'Xe điện K LOTUS/ PACEO', 'Cái', 'Thành phẩm', 'ACTIVE', 'Auto-seeded finished good');\n`;
+sql += `INSERT INTO public.erp_inventory_items (id, sku, item_name, uom, item_type, status, note) VALUES ('${fgItemId}', 'FG-KLOTUS-PACEO', 'Xe điện K LOTUS/ PACEO', 'Cái', 'GOODS', 'ACTIVE', 'Auto-seeded finished good');\n`;
 sql += `\n`;
 
 let noCodeIndex = 1;
@@ -58,7 +58,7 @@ bomData.forEach(item => {
     let uom = item.don_vi ? item.don_vi.trim() : 'Cái';
     if (uom.toUpperCase() === 'CÁI') uom = 'Cái';
     
-    sql += `INSERT INTO public.erp_inventory_items (id, sku, item_name, uom, item_type, status, note) VALUES ('${id}', ${escapeSql(sku)}, ${escapeSql(item.ten_linh_kien_moi)}, ${escapeSql(uom)}, 'Linh kiện', 'ACTIVE', ${escapeSql(item.ghi_chu)});\n`;
+    sql += `INSERT INTO public.erp_inventory_items (id, sku, item_name, uom, item_type, status, note) VALUES ('${id}', ${escapeSql(sku)}, ${escapeSql(item.ten_linh_kien_moi)}, ${escapeSql(uom)}, 'RAW', 'ACTIVE', ${escapeSql(item.ghi_chu)});\n`;
   }
 });
 sql += `\n`;
