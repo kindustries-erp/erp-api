@@ -107,6 +107,15 @@ export class InventoryItemsService {
     return { message: 'Đã xóa loại item thành công', data: { id } };
   }
 
+  async softDeleteItem(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing)
+      throw new NotFoundException(`Inventory item ${id} not found`);
+    existing.isDeleted = true;
+    await this.repository.save(existing);
+    return { message: 'Đã xóa danh mục vật tư/kho thành công', data: { id } };
+  }
+
   async create(dto: CreateInventoryItemDto) {
     const uom = await this.ensureUomActive(dto.uom);
     const itemType = await this.ensureItemTypeActive(dto.itemType);
@@ -122,13 +131,17 @@ export class InventoryItemsService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+
+    let whereCondition: any = { isDeleted: false };
+    if (query.search) {
+      whereCondition = [
+        { isDeleted: false, itemName: ILike(`%${query.search}%`) },
+        { isDeleted: false, sku: ILike(`%${query.search}%`) },
+      ];
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([
-            { itemName: ILike(`%${query.search}%`) },
-            { sku: ILike(`%${query.search}%`) },
-          ] as unknown as never)
-        : undefined,
+      where: whereCondition,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },

@@ -102,4 +102,9 @@ export class InventoryItemsController {
   ) {
     return this.service.update(id, dto);
   }
+
+  @Delete('items/:id')
+  removeItem(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.softDeleteItem(id);
+  }
 }

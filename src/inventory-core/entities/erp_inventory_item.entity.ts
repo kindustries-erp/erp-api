@@ -25,8 +25,14 @@ export class ErpInventoryItem {
   @Column({ type: 'varchar', length: 255, name: 'item_type' })
   itemType: string;
 
+  @Column({ type: 'text', name: 'note', nullable: true })
+  note?: string;
+
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
+
+  @Column({ type: 'boolean', name: 'is_deleted', default: false })
+  isDeleted: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
