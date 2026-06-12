@@ -5,6 +5,7 @@ import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterLocalUserDto } from './dto/register-local-user.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 
 class LoginDto {
   @IsEmail()
@@ -34,6 +35,21 @@ export class AuthController {
   @ApiBody({ type: RegisterLocalUserDto })
   register(@Body() body: RegisterLocalUserDto) {
     return this.authService.registerLocalUser(body);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Đổi mật khẩu cho user đang đăng nhập' })
+  changePassword(
+    @Body() body: ChangePasswordSelfDto,
+    @Req() request: Request & { user: { sub: string; email: string } },
+  ) {
+    return this.authService.changePassword(
+      request.user.sub,
+      body,
+      request as any,
+    );
   }
 
   @Get('profile')

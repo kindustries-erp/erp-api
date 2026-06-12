@@ -4,6 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { AuditCoreService } from '../audit-core/audit-core.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -12,10 +13,14 @@ describe('AuthService', () => {
     findById: jest.Mock;
     createSeedUserIfMissing: jest.Mock;
     verifyPassword: jest.Mock;
+    hashPassword: jest.Mock;
     registerLocalUser: jest.Mock;
     getEmployeeSnapshot: jest.Mock;
+    updateLastLogin: jest.Mock;
+    save: jest.Mock;
   };
   let jwtService: { signAsync: jest.Mock };
+  let auditCoreService: { recordAction: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -23,12 +28,19 @@ describe('AuthService', () => {
       findById: jest.fn(),
       createSeedUserIfMissing: jest.fn().mockResolvedValue(undefined),
       verifyPassword: jest.fn(),
+      hashPassword: jest.fn().mockReturnValue('new-hashed'),
       registerLocalUser: jest.fn(),
       getEmployeeSnapshot: jest.fn().mockResolvedValue(null),
+      updateLastLogin: jest.fn().mockResolvedValue(undefined),
+      save: jest.fn().mockImplementation((u) => Promise.resolve(u)),
     };
 
     jwtService = {
       signAsync: jest.fn().mockResolvedValue('mocked-access-token'),
+    };
+
+    auditCoreService = {
+      recordAction: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,6 +48,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
+        { provide: AuditCoreService, useValue: auditCoreService },
         {
           provide: ConfigService,
           useValue: {

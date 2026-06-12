@@ -107,4 +107,14 @@ export class UsersService {
     if (!employeeId) return null;
     return this.employeesRepository.findOne({ where: { id: employeeId } });
   }
+
+  async updateLastLogin(userId: string): Promise<void> {
+    await this.usersRepository.update(userId, {
+      lastLoginAt: new Date(),
+    } as any);
+  }
+
+  async save(user: CoreUser): Promise<CoreUser> {
+    return this.usersRepository.save(user);
+  }
 }

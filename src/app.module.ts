@@ -19,6 +19,8 @@ import { BranchesCoreModule } from './branches-core/branches-core.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
+import { AuditCoreModule } from './audit-core/audit-core.module';
+import { UsersAdminModule } from './users-admin/users-admin.module';
 
 @Module({
   imports: [
@@ -73,6 +75,8 @@ import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,
+    AuditCoreModule,
+    UsersAdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

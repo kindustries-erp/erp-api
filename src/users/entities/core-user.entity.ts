@@ -28,6 +28,15 @@ export class CoreUser {
   @Column({ type: 'uuid', name: 'legacy_directus_user_id', nullable: true })
   legacyDirectusUserId: string | null;
 
+  @Column({ type: 'timestamptz', name: 'last_login_at', nullable: true })
+  lastLoginAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'created_by', nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: 'timestamptz', name: 'password_changed_at', nullable: true })
+  passwordChangedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
