@@ -184,6 +184,11 @@ export class RbacCoreService {
       { resource: 'purchase_orders', label: 'Purchase Orders' },
       { resource: 'sales_orders', label: 'Sales Orders' },
       { resource: 'inventory_items', label: 'Inventory Items' },
+      { resource: 'goods_receipts', label: 'Goods Receipts' },
+      { resource: 'goods_issues', label: 'Goods Issues' },
+      { resource: 'bom', label: 'BOM' },
+      { resource: 'production', label: 'Production' },
+      { resource: 'activity_logs', label: 'Activity Logs' },
     ];
   }
 }
