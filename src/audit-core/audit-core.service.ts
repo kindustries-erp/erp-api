@@ -69,10 +69,12 @@ export class AuditCoreService {
 
     if (query.module)
       qb.andWhere('log.module = :module', { module: query.module });
-    if (query.actionType)
-      qb.andWhere('log.actionType = :actionType', {
-        actionType: query.actionType,
+    if (query.actionType) {
+      const types = query.actionType.split(',').map((t) => t.trim());
+      qb.andWhere('log.actionType IN (:...actionTypes)', {
+        actionTypes: types,
       });
+    }
     if (query.entityType)
       qb.andWhere('log.entityType = :entityType', {
         entityType: query.entityType,
