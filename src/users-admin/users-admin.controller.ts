@@ -12,6 +12,8 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import {
   CreateUserAdminDto,
   LinkEmployeeDto,
@@ -23,7 +25,8 @@ import { UsersAdminService } from './users-admin.service';
 
 @ApiTags('admin-users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@RequirePermissions({ resource: 'admin_users', action: 'manage' })
 @Controller('admin/users')
 export class UsersAdminController {
   constructor(private readonly usersAdminService: UsersAdminService) {}

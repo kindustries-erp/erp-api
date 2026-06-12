@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreRole } from '../rbac-core/entities/core-role.entity';
+import { CorePermission } from '../rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
@@ -23,6 +26,9 @@ import { ErpProductionOrderMaterial } from '../production-core/entities/erp_prod
 
 const entities = [
   CoreUser,
+  CoreRole,
+  CorePermission,
+  CoreUserRole,
   ErpEmployee,
   ErpBusinessPartner,
   ErpInventoryItem,

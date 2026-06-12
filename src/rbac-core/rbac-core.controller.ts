@@ -1,0 +1,95 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RbacCoreService } from './rbac-core.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import {
+  CreateCoreRoleDto,
+  UpdateCoreRoleDto,
+  UpdateCoreRolePermissionsDto,
+  UpdateCoreRoleUsersDto,
+} from './dto/rbac-core.dto';
+
+@ApiTags('RBAC Core (Neon)')
+@ApiBearerAuth()
+@Controller('rbac-core')
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+export class RbacCoreController {
+  constructor(private readonly rbacCoreService: RbacCoreService) {}
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Get('roles')
+  async getRoles(
+    @Query() query: { page?: string; pageSize?: string; search?: string },
+  ) {
+    return this.rbacCoreService.getRolesPaginated(query);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Post('roles')
+  async createRole(@Body() dto: CreateCoreRoleDto) {
+    return this.rbacCoreService.createRole(dto);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Patch('roles/:id')
+  async updateRole(@Param('id') id: string, @Body() dto: UpdateCoreRoleDto) {
+    return this.rbacCoreService.updateRole(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Delete('roles/:id')
+  async deleteRole(@Param('id') id: string) {
+    return this.rbacCoreService.deleteRole(id);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Get('roles/:roleId/permissions')
+  async getRolePermissions(@Param('roleId') roleId: string) {
+    const permissions = await this.rbacCoreService.getRolePermissions(roleId);
+    return { permissions };
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Patch('roles/:roleId/permissions')
+  async updateRolePermissions(
+    @Param('roleId') roleId: string,
+    @Body() dto: UpdateCoreRolePermissionsDto,
+  ) {
+    return this.rbacCoreService.updateRolePermissions(roleId, dto);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Get('roles/:roleId/users')
+  async getRoleUsers(@Param('roleId') roleId: string) {
+    const users = await this.rbacCoreService.getRoleUsers(roleId);
+    return { users };
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Patch('roles/:roleId/users')
+  async updateRoleUsers(
+    @Param('roleId') roleId: string,
+    @Body() dto: UpdateCoreRoleUsersDto,
+  ) {
+    return this.rbacCoreService.updateRoleUsers(roleId, dto);
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Get('collections')
+  async getAvailableResources() {
+    const resources = await this.rbacCoreService.getAvailableResources();
+    return { resources };
+  }
+}

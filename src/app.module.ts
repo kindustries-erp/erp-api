@@ -5,6 +5,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
+import { CoreRole } from './rbac-core/entities/core-role.entity';
+import { CorePermission } from './rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
@@ -23,6 +26,7 @@ import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
+import { RbacCoreModule } from './rbac-core/rbac-core.module';
 
 @Module({
   imports: [
@@ -36,7 +40,7 @@ import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.i
           return {
             type: 'postgres' as const,
             url: databaseUrl,
-            entities: [CoreUser],
+            entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
             synchronize: false,
             ssl: { rejectUnauthorized: false },
             autoLoadEntities: true,
@@ -51,7 +55,7 @@ import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.i
           username: configService.get<string>('DB_USER', 'postgres'),
           password: configService.get<string>('DB_PASSWORD', ''),
           database: configService.get<string>('DB_DATABASE', 'erp_core'),
-          entities: [CoreUser],
+          entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
           synchronize: false,
           ssl:
             configService.get<string>('DB_SSL') === 'true'
@@ -79,6 +83,7 @@ import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.i
     ErpMfgCoreModule,
     AuditCoreModule,
     UsersAdminModule,
+    RbacCoreModule,
   ],
   controllers: [AppController],
   providers: [
