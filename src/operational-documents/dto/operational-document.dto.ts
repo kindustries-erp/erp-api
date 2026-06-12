@@ -44,6 +44,16 @@ export class OperationalQueryDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   inventory_item_id?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc từ ngày (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  date_from?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc đến ngày (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  date_to?: string;
 }
 
 export class OperationalLineDto {
