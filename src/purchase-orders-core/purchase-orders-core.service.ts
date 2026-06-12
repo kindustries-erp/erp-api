@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { DataSource, DeepPartial, ILike, Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -80,13 +80,33 @@ export class PurchaseOrdersCoreService {
     });
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: OperationalQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+
+    const where: any = {};
+    if (query.search) {
+      where.poNo = ILike(`%${query.search}%`);
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.payment_status) {
+      where.paymentStatus = query.payment_status;
+    }
+    if (query.date_from && query.date_to) {
+      where.orderDate = Between(
+        new Date(`${query.date_from}T00:00:00.000+07:00`),
+        new Date(`${query.date_to}T23:59:59.999+07:00`),
+      );
+    } else if (query.date_from) {
+      where.orderDate = MoreThanOrEqual(new Date(`${query.date_from}T00:00:00.000+07:00`));
+    } else if (query.date_to) {
+      where.orderDate = LessThanOrEqual(new Date(`${query.date_to}T23:59:59.999+07:00`));
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ poNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
