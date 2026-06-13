@@ -34,7 +34,7 @@ export class GoodsIssuesCoreService {
     repository: Repository<ErpGoodsIssue>,
     id: string,
   ) {
-    const issue = await repository.findOneBy({ id });
+    const issue = await repository.findOneBy({ id, isDeleted: false });
     if (!issue) {
       throw new NotFoundException('Không tìm thấy phiếu xuất');
     }
@@ -128,10 +128,11 @@ export class GoodsIssuesCoreService {
       columnMap: { created_at: 'createdAt', issue_date: 'issueDate' },
       defaultOrder: { createdAt: 'DESC' },
     });
+    const where = query.search
+      ? ([{ issueNo: ILike(`%${query.search}%`), isDeleted: false }] as any)
+      : ({ isDeleted: false } as any);
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ issueNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -181,6 +182,12 @@ export class GoodsIssuesCoreService {
   }
 
   async update(id: string, dto: UpdateGoodsIssueDto) {
+    const existing = await this.getIssueOrThrow(this.repository, id);
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được sửa phiếu xuất ở trạng thái nháp',
+      );
+    }
     const { lines, ...header } = dto as any;
     await this.repository.update(id, header);
     if (Array.isArray(lines)) {
@@ -435,5 +442,23 @@ export class GoodsIssuesCoreService {
       await issueRepo.save(issue);
       return this.findOne(id);
     });
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing || existing.isDeleted) {
+      throw new NotFoundException('Không tìm thấy phiếu xuất');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được xóa phiếu xuất ở trạng thái nháp',
+      );
+    }
+    existing.isDeleted = true;
+    const data = await this.repository.save(existing);
+    return {
+      message: 'Xóa phiếu xuất thành công',
+      data,
+    };
   }
 }

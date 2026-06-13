@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -60,5 +61,11 @@ export class GoodsIssuesCoreController {
     @Body() dto: PostGoodsIssueDto,
   ) {
     return this.service.postIssue(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'goods_issues', action: 'delete' })
+  @Delete(':id')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.remove(id);
   }
 }

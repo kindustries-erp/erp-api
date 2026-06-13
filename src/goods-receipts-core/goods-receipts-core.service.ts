@@ -48,7 +48,7 @@ export class GoodsReceiptsCoreService {
     repository: Repository<ErpGoodsReceipt>,
     id: string,
   ) {
-    const receipt = await repository.findOneBy({ id });
+    const receipt = await repository.findOneBy({ id, isDeleted: false });
     if (!receipt) {
       throw new NotFoundException('Không tìm thấy phiếu nhập');
     }
@@ -106,10 +106,11 @@ export class GoodsReceiptsCoreService {
       columnMap: { created_at: 'createdAt', receipt_date: 'receiptDate' },
       defaultOrder: { createdAt: 'DESC' },
     });
+    const where = query.search
+      ? ([{ receiptNo: ILike(`%${query.search}%`), isDeleted: false }] as any)
+      : ({ isDeleted: false } as any);
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ receiptNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -160,8 +161,10 @@ export class GoodsReceiptsCoreService {
 
   async update(id: string, dto: UpdateGoodsReceiptDto) {
     const existing = await this.getReceiptOrThrow(this.repository, id);
-    if (existing.status === 'POSTED') {
-      throw new BadRequestException('Không thể sửa phiếu đã ghi sổ');
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được sửa phiếu nhập ở trạng thái nháp',
+      );
     }
 
     const { lines, ...header } = dto as any;
@@ -437,5 +440,23 @@ export class GoodsReceiptsCoreService {
         data: { ...savedReceipt, lines: savedLines },
       };
     });
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing || existing.isDeleted) {
+      throw new NotFoundException('Không tìm thấy phiếu nhập');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được xóa phiếu nhập ở trạng thái nháp',
+      );
+    }
+    existing.isDeleted = true;
+    const data = await this.repository.save(existing);
+    return {
+      message: 'Xóa phiếu nhập thành công',
+      data,
+    };
   }
 }
