@@ -58,26 +58,26 @@ export class BasicMastersCoreService {
     const supplierWhere = search
       ? [
           {
-            partnerType: 'SUPPLIER',
+            partnerType: 'VENDOR',
             isDeleted: false,
             status: 'ACTIVE',
             name: ILike(`%${search}%`),
           },
           {
-            partnerType: 'SUPPLIER',
+            partnerType: 'VENDOR',
             isDeleted: false,
             status: 'ACTIVE',
             displayName: ILike(`%${search}%`),
           },
           {
-            partnerType: 'SUPPLIER',
+            partnerType: 'VENDOR',
             isDeleted: false,
             status: 'ACTIVE',
             code: ILike(`%${search}%`),
           },
         ]
       : {
-          partnerType: 'SUPPLIER',
+          partnerType: 'VENDOR',
           isDeleted: false,
           status: 'ACTIVE',
         };
