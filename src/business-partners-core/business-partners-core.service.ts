@@ -39,6 +39,18 @@ export class BusinessPartnersCoreService {
         : undefined;
 
     const order = resolveSortOrder(query.sort, {
+      allowedFields: [
+        'createdAt',
+        'code',
+        'name',
+        'displayName',
+        'partnerType',
+      ],
+      columnMap: {
+        created_at: 'createdAt',
+        display_name: 'displayName',
+        partner_type: 'partnerType',
+      },
       defaultOrder: { createdAt: 'DESC' },
     });
 
