@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpInventoryItem } from './entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from './entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from './entities/erp_inventory_balance.entity';
@@ -156,11 +157,21 @@ export class InventoryItemsService {
       ];
     }
 
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemType'],
+      columnMap: {
+        created_at: 'createdAt',
+        item_name: 'itemName',
+        item_type: 'itemType',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,

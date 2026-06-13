@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
@@ -55,13 +56,17 @@ export class BomCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where: query.search
         ? ([{ bomName: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,

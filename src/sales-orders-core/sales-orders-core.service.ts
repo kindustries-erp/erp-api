@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpSalesOrder } from './entities/erp_sales_order.entity';
 import { ErpSalesOrderLine } from './entities/erp_sales_order_line.entity';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
@@ -71,13 +72,17 @@ export class SalesOrdersCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where: query.search
         ? ([{ soNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,

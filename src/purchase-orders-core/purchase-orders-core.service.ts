@@ -20,6 +20,7 @@ import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
+import { resolveSortOrder } from '../common/utils/sort.util';
 
 @Injectable()
 export class PurchaseOrdersCoreService {
@@ -121,12 +122,29 @@ export class PurchaseOrdersCoreService {
       );
     }
 
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: [
+        'createdAt',
+        'orderDate',
+        'poNo',
+        'status',
+        'paymentStatus',
+      ],
+      columnMap: {
+        created_at: 'createdAt',
+        order_date: 'orderDate',
+        po_no: 'poNo',
+        payment_status: 'paymentStatus',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where,
       relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items: items.map((x) => this.toCoreDocument(x as any)),

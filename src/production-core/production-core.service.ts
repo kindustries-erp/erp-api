@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
@@ -34,13 +35,22 @@ export class ProductionCoreService {
   async findOrders(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'referenceNo', 'status', 'plannedStartDate'],
+      columnMap: {
+        created_at: 'createdAt',
+        reference_no: 'referenceNo',
+        planned_start_date: 'plannedStartDate',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
     const [items, total] = await this.productionOrderRepository.findAndCount({
       where: query.search
         ? ([{ referenceNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
 
     const finishedGoodIds = Array.from(

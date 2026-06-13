@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
@@ -100,13 +101,18 @@ export class GoodsReceiptsCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'receiptDate', 'receiptNo', 'status'],
+      columnMap: { created_at: 'createdAt', receipt_date: 'receiptDate' },
+      defaultOrder: { createdAt: 'DESC' },
+    });
     const [items, total] = await this.repository.findAndCount({
       where: query.search
         ? ([{ receiptNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     const supplierIds = [
       ...new Set(items.map((i) => i.supplierId).filter(Boolean)),

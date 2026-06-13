@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
@@ -122,13 +123,18 @@ export class GoodsIssuesCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'issueDate', 'issueNo', 'status'],
+      columnMap: { created_at: 'createdAt', issue_date: 'issueDate' },
+      defaultOrder: { createdAt: 'DESC' },
+    });
     const [items, total] = await this.repository.findAndCount({
       where: query.search
         ? ([{ issueNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     const customerIds = [
       ...new Set(items.map((i) => i.customerId).filter(Boolean)),

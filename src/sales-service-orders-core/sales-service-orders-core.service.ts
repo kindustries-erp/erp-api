@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.entity';
 
 /**
@@ -21,21 +22,16 @@ export class SalesServiceOrdersCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    // resolve sort: e.g. "-document_date" -> order by created_at DESC (alias)
-    const rawSort = Array.isArray(query.sort)
-      ? (query.sort as string[]).join(',')
-      : (query.sort ?? '-created_at');
-
-    const sortField = rawSort.startsWith('-') ? rawSort.slice(1) : rawSort;
-    const sortDir = rawSort.startsWith('-') ? 'DESC' : 'ASC';
-
-    // map document_date alias -> orderDate
-    const colMap: Record<string, string> = {
-      document_date: 'orderDate',
-      created_at: 'createdAt',
-      order_date: 'orderDate',
-    };
-    const resolvedField = colMap[sortField] ?? 'createdAt';
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'orderDate', 'soNo', 'status'],
+      columnMap: {
+        document_date: 'orderDate',
+        created_at: 'createdAt',
+        order_date: 'orderDate',
+        order_no: 'soNo',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
 
     const [rows, total] = await this.repository.findAndCount({
       where: query.search
@@ -43,7 +39,7 @@ export class SalesServiceOrdersCoreService {
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { [resolvedField]: sortDir } as any,
+      order: order as any,
     });
 
     // Shape to OperationalDocument-compatible response
