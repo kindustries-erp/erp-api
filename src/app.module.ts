@@ -27,6 +27,7 @@ import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
 import { RbacCoreModule } from './rbac-core/rbac-core.module';
+import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
     AuditCoreModule,
     UsersAdminModule,
     RbacCoreModule,
+    BasicMastersCoreModule,
   ],
   controllers: [AppController],
   providers: [
