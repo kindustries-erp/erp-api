@@ -12,4 +12,9 @@ export class InventoryItemQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  ids?: string;
 }

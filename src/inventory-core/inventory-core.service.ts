@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryItem } from './entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from './entities/erp_inventory_transaction.entity';
@@ -138,6 +138,14 @@ export class InventoryItemsService {
     }
     if (query.itemType) {
       baseWhere.itemType = query.itemType;
+    }
+    if (query.ids) {
+      baseWhere.id = In(
+        query.ids
+          .split(',')
+          .map((id: string) => id.trim())
+          .filter(Boolean),
+      );
     }
 
     let whereCondition: any = baseWhere;

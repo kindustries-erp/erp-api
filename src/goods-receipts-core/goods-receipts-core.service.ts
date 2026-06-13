@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
@@ -15,6 +15,7 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
+import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
@@ -107,8 +108,25 @@ export class GoodsReceiptsCoreService {
       take: pageSize,
       order: { createdAt: 'DESC' },
     });
+    const supplierIds = [
+      ...new Set(items.map((i) => i.supplierId).filter(Boolean)),
+    ] as string[];
+    let supplierMap = new Map<string, string>();
+    if (supplierIds.length > 0) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const suppliers = await bpRepo.findBy({ id: In(supplierIds) });
+      supplierMap = new Map(suppliers.map((s) => [s.id, s.name]));
+    }
+
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      supplierName: item.supplierId
+        ? supplierMap.get(item.supplierId) || null
+        : null,
+    }));
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       pageSize,
@@ -118,11 +136,20 @@ export class GoodsReceiptsCoreService {
 
   async findOne(id: string) {
     const data = await this.getReceiptOrThrow(this.repository, id);
+    let supplierName: string | null = null;
+    if (data.supplierId) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const supplier = await bpRepo.findOneBy({ id: data.supplierId });
+      supplierName = supplier?.name || null;
+    }
     const lines = await this.lineRepository.find({
       where: { goodsReceiptId: id },
       order: { lineNo: 'ASC' },
     });
-    return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, supplierName, lines },
+    };
   }
 
   async update(id: string, dto: UpdateGoodsReceiptDto) {

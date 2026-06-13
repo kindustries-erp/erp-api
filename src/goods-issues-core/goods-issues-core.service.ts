@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
@@ -17,6 +17,7 @@ import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.ent
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
 import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
+import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -129,8 +130,25 @@ export class GoodsIssuesCoreService {
       take: pageSize,
       order: { createdAt: 'DESC' },
     });
+    const customerIds = [
+      ...new Set(items.map((i) => i.customerId).filter(Boolean)),
+    ] as string[];
+    let customerMap = new Map<string, string>();
+    if (customerIds.length > 0) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const customers = await bpRepo.findBy({ id: In(customerIds) });
+      customerMap = new Map(customers.map((c) => [c.id, c.name]));
+    }
+
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      customerName: item.customerId
+        ? customerMap.get(item.customerId) || null
+        : null,
+    }));
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       pageSize,
@@ -140,13 +158,19 @@ export class GoodsIssuesCoreService {
 
   async findOne(id: string) {
     const data = await this.getIssueOrThrow(this.repository, id);
+    let customerName: string | null = null;
+    if (data.customerId) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const customer = await bpRepo.findOneBy({ id: data.customerId });
+      customerName = customer?.name || null;
+    }
     const lines = await this.lineRepository.find({
       where: { goodsIssueId: id },
       order: { lineNo: 'ASC' },
     });
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, lines: await this.enrichLines(lines) },
+      data: { ...data, customerName, lines: await this.enrichLines(lines) },
     };
   }
 

@@ -1,6 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  DeepPartial,
+  ILike,
+  Repository,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
@@ -100,9 +108,13 @@ export class PurchaseOrdersCoreService {
         new Date(`${query.date_to}T23:59:59.999+07:00`),
       );
     } else if (query.date_from) {
-      where.orderDate = MoreThanOrEqual(new Date(`${query.date_from}T00:00:00.000+07:00`));
+      where.orderDate = MoreThanOrEqual(
+        new Date(`${query.date_from}T00:00:00.000+07:00`),
+      );
     } else if (query.date_to) {
-      where.orderDate = LessThanOrEqual(new Date(`${query.date_to}T23:59:59.999+07:00`));
+      where.orderDate = LessThanOrEqual(
+        new Date(`${query.date_to}T23:59:59.999+07:00`),
+      );
     }
 
     const [items, total] = await this.repository.findAndCount({
