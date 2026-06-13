@@ -39,7 +39,20 @@ jobs:
           git reset --hard origin/erp-core
 
           cd /opt/stacks/liouni-erp-core-api
-          docker compose up -d --build --force-recreate
+          docker compose build
+          docker compose stop liouni-erp-core-api || true
+          docker compose rm -f liouni-erp-core-api || true
+
+          for i in $(seq 1 15); do
+            if docker inspect liouni-erp-core-api >/dev/null 2>&1; then
+              sleep 2
+            else
+              break
+            fi
+          done
+
+          docker compose create liouni-erp-core-api
+          docker compose start liouni-erp-core-api
 
           for i in $(seq 1 30); do
             if curl -fsS -o /dev/null http://127.0.0.1:10010/api/v1/auth/profile 2>/dev/null; then
