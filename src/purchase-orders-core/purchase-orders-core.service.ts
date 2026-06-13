@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
@@ -185,6 +189,15 @@ export class PurchaseOrdersCoreService {
   }
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({ id });
+    const nextPoNo = dto.poNo?.trim();
+    if (nextPoNo && nextPoNo !== existing.poNo) {
+      const duplicate = await this.repository.findOne({
+        where: { poNo: nextPoNo },
+      });
+      if (duplicate && duplicate.id !== id) {
+        throw new ConflictException('Số chứng từ đã tồn tại');
+      }
+    }
     if (dto.status === 'DRAFT' && existing.status !== 'DRAFT') {
       throw new BadRequestException(
         'Phiếu mua hàng đã rời DRAFT thì không được chuyển về DRAFT',
@@ -206,6 +219,8 @@ export class PurchaseOrdersCoreService {
     };
     if ((header as any).poNo === '') {
       delete (header as any).poNo;
+    } else if ((header as any).poNo) {
+      (header as any).poNo = String((header as any).poNo).trim();
     }
     await this.repository.update(id, header as any);
     if (Array.isArray(lines)) {
