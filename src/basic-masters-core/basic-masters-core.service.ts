@@ -5,10 +5,13 @@ import { ErpBusinessPartner } from '../business-partners-core/entities/erp_busin
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
+import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 
 export interface BasicMastersQueryDto {
   search?: string;
   limit?: number;
+  page?: number;
+  entities?: string;
 }
 
 @Injectable()
@@ -22,11 +25,26 @@ export class BasicMastersCoreService {
     private readonly uomRepository: Repository<ErpUom>,
     @InjectRepository(ErpItemType)
     private readonly itemTypeRepository: Repository<ErpItemType>,
+    @InjectRepository(ErpEmployee)
+    private readonly employeeRepository: Repository<ErpEmployee>,
   ) {}
 
   async findBasicLists(query: BasicMastersQueryDto) {
     const search = query.search?.trim();
     const limit = Math.min(Math.max(Number(query.limit ?? 50), 1), 200);
+    const page = Math.max(Number(query.page ?? 1), 1);
+    const skip = (page - 1) * limit;
+
+    const requestedEntities = query.entities
+      ? query.entities.split(',').map((e) => e.trim())
+      : ['customers', 'suppliers', 'inventoryItems', 'uoms', 'itemTypes'];
+
+    const includeCustomers = requestedEntities.includes('customers');
+    const includeSuppliers = requestedEntities.includes('suppliers');
+    const includeItems = requestedEntities.includes('inventoryItems');
+    const includeUoms = requestedEntities.includes('uoms');
+    const includeItemTypes = requestedEntities.includes('itemTypes');
+    const includeEmployees = requestedEntities.includes('employees');
 
     const customerWhere = search
       ? [
@@ -49,11 +67,7 @@ export class BasicMastersCoreService {
             code: ILike(`%${search}%`),
           },
         ]
-      : {
-          partnerType: 'CUSTOMER',
-          isDeleted: false,
-          status: 'ACTIVE',
-        };
+      : { partnerType: 'CUSTOMER', isDeleted: false, status: 'ACTIVE' };
 
     const supplierWhere = search
       ? [
@@ -76,11 +90,7 @@ export class BasicMastersCoreService {
             code: ILike(`%${search}%`),
           },
         ]
-      : {
-          partnerType: 'VENDOR',
-          isDeleted: false,
-          status: 'ACTIVE',
-        };
+      : { partnerType: 'VENDOR', isDeleted: false, status: 'ACTIVE' };
 
     const itemWhere = search
       ? [
@@ -107,38 +117,70 @@ export class BasicMastersCoreService {
         ]
       : { isDeleted: false, isActive: true };
 
-    const [customers, suppliers, items, uoms, itemTypes] = await Promise.all([
-      this.businessPartnerRepository.find({
-        where: customerWhere,
-        take: limit,
-        order: { name: 'ASC' },
-        select: ['id', 'code', 'name', 'displayName', 'partnerType'],
-      }),
-      this.businessPartnerRepository.find({
-        where: supplierWhere,
-        take: limit,
-        order: { name: 'ASC' },
-        select: ['id', 'code', 'name', 'displayName', 'partnerType'],
-      }),
-      this.inventoryItemRepository.find({
-        where: itemWhere,
-        take: limit,
-        order: { itemName: 'ASC' },
-        select: ['id', 'sku', 'itemName', 'uom', 'itemType', 'status'],
-      }),
-      this.uomRepository.find({
-        where: uomWhere,
-        take: limit,
-        order: { code: 'ASC' },
-        select: ['id', 'code', 'name'],
-      }),
-      this.itemTypeRepository.find({
-        where: itemTypeWhere,
-        take: limit,
-        order: { code: 'ASC' },
-        select: ['id', 'code', 'name'],
-      }),
-    ]);
+    const employeeWhere = search
+      ? [
+          { status: 'ACTIVE', fullName: ILike(`%${search}%`) },
+          { status: 'ACTIVE', employeeCode: ILike(`%${search}%`) },
+        ]
+      : { status: 'ACTIVE' };
+
+    const [customers, suppliers, items, uoms, itemTypes, employees] =
+      await Promise.all([
+        includeCustomers
+          ? this.businessPartnerRepository.find({
+              where: customerWhere,
+              take: limit,
+              skip,
+              order: { name: 'ASC' },
+              select: ['id', 'code', 'name', 'displayName', 'partnerType'],
+            })
+          : Promise.resolve([]),
+        includeSuppliers
+          ? this.businessPartnerRepository.find({
+              where: supplierWhere,
+              take: limit,
+              skip,
+              order: { name: 'ASC' },
+              select: ['id', 'code', 'name', 'displayName', 'partnerType'],
+            })
+          : Promise.resolve([]),
+        includeItems
+          ? this.inventoryItemRepository.find({
+              where: itemWhere,
+              take: limit,
+              skip,
+              order: { itemName: 'ASC' },
+              select: ['id', 'sku', 'itemName', 'uom', 'itemType', 'status'],
+            })
+          : Promise.resolve([]),
+        includeUoms
+          ? this.uomRepository.find({
+              where: uomWhere,
+              take: limit,
+              skip,
+              order: { code: 'ASC' },
+              select: ['id', 'code', 'name'],
+            })
+          : Promise.resolve([]),
+        includeItemTypes
+          ? this.itemTypeRepository.find({
+              where: itemTypeWhere,
+              take: limit,
+              skip,
+              order: { code: 'ASC' },
+              select: ['id', 'code', 'name'],
+            })
+          : Promise.resolve([]),
+        includeEmployees
+          ? this.employeeRepository.find({
+              where: employeeWhere,
+              take: limit,
+              skip,
+              order: { fullName: 'ASC' },
+              select: ['id', 'employeeCode', 'fullName', 'status'],
+            })
+          : Promise.resolve([]),
+      ]);
 
     return {
       items: {
@@ -147,10 +189,13 @@ export class BasicMastersCoreService {
         inventoryItems: items,
         uoms,
         itemTypes,
+        employees,
       },
       meta: {
         search: search ?? null,
         limit,
+        page,
+        entities: requestedEntities,
       },
     };
   }
