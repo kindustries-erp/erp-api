@@ -27,6 +27,12 @@ export class ErpPurchaseOrderLine {
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
 
+  @Column({ type: 'varchar', length: 128, name: 'item_code', nullable: true })
+  itemCode: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'item_name', nullable: true })
+  itemName: string | null;
+
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
