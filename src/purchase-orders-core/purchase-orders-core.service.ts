@@ -107,6 +107,9 @@ export class PurchaseOrdersCoreService {
     if (query.payment_status) {
       where.paymentStatus = query.payment_status;
     }
+    if (query.supplier_id) {
+      where.supplierId = query.supplier_id;
+    }
     if (query.date_from && query.date_to) {
       where.orderDate = Between(
         new Date(`${query.date_from}T00:00:00.000+07:00`),
@@ -126,15 +129,20 @@ export class PurchaseOrdersCoreService {
       allowedFields: [
         'createdAt',
         'orderDate',
+        'expectedDate',
         'poNo',
         'status',
         'paymentStatus',
+        'supplierId',
       ],
       columnMap: {
         created_at: 'createdAt',
         order_date: 'orderDate',
+        expected_date: 'expectedDate',
+        due_date: 'expectedDate',
         po_no: 'poNo',
         payment_status: 'paymentStatus',
+        supplier_id: 'supplierId',
       },
       defaultOrder: { createdAt: 'DESC' },
     });

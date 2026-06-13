@@ -54,6 +54,11 @@ export class OperationalQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   date_to?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp (UUID)' })
+  @IsOptional()
+  @IsUUID()
+  supplier_id?: string;
 }
 
 export class OperationalLineDto {
