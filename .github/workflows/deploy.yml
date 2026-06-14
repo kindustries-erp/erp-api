@@ -78,13 +78,17 @@ jobs:
             "mkdir -p /opt/erp-klotus-staging && cat > /opt/erp-klotus-staging/.env" \
             <<< "${{ secrets.KLOTUS_STAGING_API_ENV }}"
 
+      - name: Guard deploy secrets
+        run: |
+          test -n "${{ secrets.GHCR_PAT }}" || (echo "GHCR_PAT missing" && exit 1)
+
       - name: Run deploy script
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -p ${{ secrets.ELITE_PORT }} \
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
-            "IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} bash /opt/erp-klotus-staging/deploy-api.sh"
+            "GHCR_PAT='${{ secrets.GHCR_PAT }}' IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} bash /opt/erp-klotus-staging/deploy-api.sh"
 
       - name: Health check
         run: |
