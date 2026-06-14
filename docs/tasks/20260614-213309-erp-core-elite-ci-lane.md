@@ -13,9 +13,9 @@
 - Result: DB_READY
 
 ## Checklist
-- [ ] Inspect current branch/workflow/runtime state
-- [ ] Checkout repo to `erp-core`
-- [ ] Patch GitHub Actions workflow for Elite deploy on `erp-core`
-- [ ] Align stack/runtime port to `10020`
-- [ ] Build/deploy/verify API returns `401` on protected route
-- [ ] Record lessons learned if blockers occur
+- [x] Inspect current branch/workflow/runtime state
+- [x] Checkout repo to `erp-core`
+- [x] Patch GitHub Actions workflow for Elite deploy on `erp-core`
+- [x] Align stack/runtime port to `10020`
+- [x] Build/deploy/verify API returns `401` on protected route
+- [x] Record lessons learned if blockers occur
