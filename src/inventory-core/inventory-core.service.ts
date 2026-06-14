@@ -430,7 +430,7 @@ export class InventoryItemsService {
       } else {
         sortDirection = 'ASC';
       }
-      if (sortField === 'date') sortColumn = 'date';
+      if (sortField === 'date') sortColumn = '"date"';
       else if (sortField === 'voucherNo') sortColumn = '"voucherNo"';
       else if (sortField === 'status') sortColumn = 'status';
     }
