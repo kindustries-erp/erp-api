@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { UsersService } from '../users/users.service';
