@@ -75,7 +75,7 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ secrets.ELITE_PORT }} \
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
-            "mkdir -p /opt/erp-klotus-staging && cat > /opt/erp-klotus-staging/.env" \
+            "mkdir -p /opt/stacks/erp-klotus-staging && cat > /opt/stacks/erp-klotus-staging/.env" \
             <<< "${{ secrets.KLOTUS_STAGING_API_ENV }}"
 
       - name: Guard deploy secrets
@@ -88,7 +88,7 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ secrets.ELITE_PORT }} \
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
-            "GHCR_PAT='${{ secrets.GHCR_PAT }}' IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} bash /opt/erp-klotus-staging/deploy-api.sh"
+            "GHCR_PAT='${{ secrets.GHCR_PAT }}' IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} bash /opt/stacks/erp-klotus-staging/deploy-api.sh"
 
       - name: Health check
         run: |
