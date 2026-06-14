@@ -1,100 +1,99 @@
-     1|# ERP Backend (NestJS + Directus)
-     2|
-     3|Dự án Backend cho hệ thống ERP, được xây dựng bằng NestJS và kết nối với Directus làm hệ quản trị nội dung (CMS) và cơ sở dữ liệu.
-     4|
-     5|## 🚀 Tính năng chính
-     6|
-     7|- **Authentication**: Luồng Proxy đăng ký/đăng nhập trực tiếp qua Directus SDK.
-     8|- **Directus Integration**: Kết nối SDK toàn cục, hỗ trợ gọi API Directus từ NestJS.
-     9|- **Dockerized**: Sẵn sàng chạy trong container Docker.
-    10|- **Validation**: Kiểm tra dữ liệu đầu vào chặt chẽ với Class Validator.
-    11|
-    12|## 📖 Tài liệu API
-    13|
-    14|- [Full API Documentation](file:///C:/Users/home/.gemini/antigravity/brain/eb9c5b42-fdb6-482b-b2a1-5f5410361ea3/full_api_documentation.md)
-    15|- [Directus Pagination Standard](file:///C:/Users/home/.gemini/antigravity/brain/eb9c5b42-fdb6-482b-b2a1-5f5410361ea3/directus_pagination_standard.md) (Quy định về phân trang giữa Backend & Frontend)
-    16|- [RBAC API](docs/api-rbac.md)
-    17|
-    18|---
-    19|
-    20|## 🛠 Hướng dẫn khởi chạy khi Pull từ Repo về
-    21|
-    22|### 1. Yêu cầu hệ thống
-    23|
-    24|- **Bun / Node.js** (Phiên bản 24 trở lên khuyến nghị)
-    25|- **Docker & Docker Compose** (Nếu muốn chạy qua Docker)
-    26|- **Instance Directus** đã sẵn sàng.
-    27|
-    28|### 2. Thiết lập môi trường (.env)
-    29|
-    30|Dự án không lưu file `.env` lên Git vì lý do bảo mật. Bạn cần tạo file này dựa trên mẫu:
-    31|
-    32|1. Copy file ví dụ:
-    33|   ```bash
-    34|   cp .env.example .env
-    35|   ```
-    36|2. Mở file `.env` và điền các thông tin sau:
-    37|   - `PORT`: Cổng chạy ứng dụng (Mặc định: 10000).
-    38|   - `DIRECTUS_URL`: URL của Directus (ví dụ: `https://db-production.liouni.com`).
-    39|   - `DIRECTUS_ADMIN_TOKEN`: Static Admin Token lấy từ Directus Admin UI.
-    40|
-    41|### 3. Chạy ứng dụng
-    42|
-    43|#### Cách 1: Chạy trực tiếp trên máy (Development)
-    44|
-    45|```bash
-    46|# 1. Cài đặt thư viện
-    47|bun install
-    48|
-    49|# 2. Chạy chế độ watch (tự động reload khi đổi code)
-    50|bun run start:dev
-    51|```
-    52|
-    53|#### Cách 2: Chạy bằng Docker (Khuyên dùng)
-    54|
-    55|```bash
-    56|# Build và khởi chạy container dưới nền
-    57|docker-compose up -d --build
-    58|```
-    59|
-    60|Ứng dụng sẽ chạy tại: `http://localhost:10000/api/v1`
-    61|
-    62|---
-    63|
-    64|## 🔌 API Endpoints (Cơ bản)
-    65|
-    66|| Method             | Endpoint                         | Mô tả                                                       |
-    67|| :----------------- | :------------------------------- | :---------------------------------------------------------- |
-    68|| `POST`             | `/api/v1/auth/register`          | Đăng ký tài khoản mới (Proxy qua Directus)                  |
-    69|| `POST`             | `/api/v1/auth/login`             | Đăng nhập lấy access_token của Directus                     |
-    70|| `POST`             | `/api/v1/auth/refresh`           | Làm mới access_token bằng refresh_token                     |
-    71|| `POST`             | `/api/v1/auth/logout`            | Đăng xuất (Vô hiệu hóa refresh_token)                       |
-    72|| `POST`             | `/api/v1/auth/change-password`   | Đổi mật khẩu cho user đang đăng nhập (Yêu cầu Bearer Token) |
-    73|| `GET`              | `/api/v1/me`                     | Lấy profile cá nhân (Yêu cầu Bearer Token)                  |
-    74|| `GET`              | `/api/v1/employees/:id`          | Lấy thông tin chi tiết nhân viên (Yêu cầu Bearer Token)     |
-    75|| `PATCH`            | `/api/v1/employees/:id`          | Cập nhật thông tin nhân viên (Yêu cầu Bearer Token)         |
-    76|| `---`              | `---`                            | `---`                                                       |
-    77|| `GET/POST`         | `/api/v1/departments`            | Quản lý danh mục phòng ban (`gw_departments`)               |
-    78|| `GET/PATCH/DELETE` | `/api/v1/departments/:id`        | Thao tác chi tiết phòng ban                                 |
-    79|| `GET/POST`         | `/api/v1/positions`              | Quản lý danh mục chức danh (`gw_positions`)                 |
-    80|| `GET/PATCH/DELETE` | `/api/v1/positions/:id`          | Thao tác chi tiết chức danh                                 |
-    81|| `GET/POST`         | `/api/v1/company-bank-accounts`  | Quản lý tài khoản ngân hàng công ty                         |
-    82|| `GET/POST`         | `/api/v1/business-partner-roles` | Quản lý vai trò đối tác kinh doanh                          |
-    83|| `GET/POST`         | `/api/v1/chart-of-accounts`      | Quản lý hệ thống tài khoản kế toán                          |
-    84|| `GET`              | `/api/v1/activity-logs`          | Lấy danh sách log hoạt động (từ `directus_activity`)        |
-    85|
-    86|---
-    87|
-    88|## 📁 Cấu trúc thư mục
-    89|
-    90|- `src/directus`: Cấu hình kết nối Directus SDK.
-    91|- `src/auth`: Module xử lý xác thực và phân quyền.
-    92|- `src/auth/guards`: Chứa `DirectusAuthGuard` để bảo vệ các API.
-    93|- `Dockerfile` & `docker-compose.yml`: Cấu hình đóng gói ứng dụng.
-    94|
-    95|---
-    96|
-    97|## 📝 Giấy phép
-    98|
-    99|Dự án thuộc bản quyền của **Liouni Production**.
-   100|
+# Liouni ERP Core API (NestJS + Neon Postgres)
+
+Backend cho lane `erp-core` — thuần **Postgres/Neon**, không phụ thuộc Directus runtime.
+
+## Runtime hiện tại (2026-06-14)
+
+| Item | Giá trị |
+|---|---|
+| Branch | `erp-core` |
+| Stack | `/opt/stacks/liouni-erp-core-api` |
+| Port | `10020` |
+| DB | Neon PostgreSQL (`DATABASE_URL` trong stack `.env`) |
+| Auth | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`) |
+| Image | `ghcr.io/kindustries-erp/erp-api:<sha>` |
+| CI/CD | GitHub Actions (trigger: `push.branches: [erp-core]`) |
+| Public domain | `api.erp-core.liouni.com` → `http://100.75.67.115:10020` |
+
+## 🚀 API Endpoints (core)
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `POST` | `/api/v1/auth/login` | Đăng nhập → JWT |
+| `POST` | `/api/v1/auth/refresh` | Refresh token |
+| `GET` | `/api/v1/auth/profile` | Profile (yêu cầu Bearer) |
+| `GET` | `/api/v1/basic-masters` | Lookup masters (JWT only, no RBAC) |
+| `GET/POST` | `/api/v1/purchase-orders` | Đơn mua hàng |
+| `GET/POST` | `/api/v1/goods-receipts` | Nhập kho |
+| `GET/POST` | `/api/v1/sales-orders` | Đơn bán hàng |
+| `GET/POST` | `/api/v1/goods-issues` | Xuất kho |
+| `GET/POST` | `/api/v1/bom` | Định mức vật tư (BOM) |
+| `POST` | `/api/v1/production/execute` | Thực hiện sản xuất |
+| `GET/POST` | `/api/v1/inventory/items` | Danh mục hàng hóa |
+| `GET` | `/api/v1/inventory/stock` | Tồn kho tổng hợp |
+| `GET` | `/api/v1/inventory/movements` | Lịch sử nhập xuất |
+| `GET/POST` | `/api/v1/business-partners` | Đối tác (khách hàng/nhà cung cấp) |
+| `GET/POST` | `/api/v1/admin/users` | Quản lý người dùng (RBAC) |
+| `GET` | `/api/v1/audit-logs` | Audit logs |
+
+## 📁 Cấu trúc thư mục
+
+```
+src/
+├── auth/                     # JWT local auth (không dùng Directus)
+├── users-admin/              # User management với RBAC
+├── rbac-core/                # Role-Based Access Control (core lane)
+├── audit-core/               # Audit logging
+├── basic-masters-core/       # Lookup endpoint (JWT only)
+├── business-partners-core/   # Đối tác (VENDOR/CUSTOMER)
+├── purchase-orders-core/     # Mua hàng
+├── goods-receipts-core/      # Nhập kho
+├── sales-orders-core/        # Bán hàng
+├── goods-issues-core/        # Xuất kho
+├── bom-core/                 # BOM / Định mức
+├── production-core/          # Sản xuất
+├── inventory-core/           # Danh mục hàng hóa + stock summary
+├── inventory-stock-core/     # Stock balance queries
+├── employees-core/           # Nhân sự core
+├── branches-core/            # Chi nhánh core
+├── common/                   # Utils: sort, resolveSortOrder, etc.
+├── db/                       # TypeORM DataSource + migration CLI
+└── migrations/               # TypeORM migration files
+```
+
+## 🛠 Khởi chạy dev
+
+```bash
+# Yêu cầu: Bun >= 1.x, Node >= 18, và Neon DATABASE_URL
+cp .env.example .env
+# Điền DATABASE_URL, JWT_SECRET, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD
+
+bun install
+bun run start:dev
+```
+
+API sẽ chạy tại: `http://localhost:10020/api/v1`
+
+## 🔨 Build & Deploy
+
+```bash
+bun run build                 # Compile NestJS
+bun run migration:run         # Chạy TypeORM migrations (cần DATABASE_URL)
+
+# Deploy production (trên Elite host)
+cd /opt/stacks/liouni-erp-core-api
+docker compose up -d --build --force-recreate
+```
+
+## ✅ Validation gates
+
+```bash
+bun run build                 # Type-check + compile
+bun run lint:check            # ESLint (max-warnings=0)
+bun run type:check            # tsc --noEmit
+bun test                      # Jest unit tests
+```
+
+## 📝 Giấy phép
+
+Dự án thuộc bản quyền của **Liouni Production**.
