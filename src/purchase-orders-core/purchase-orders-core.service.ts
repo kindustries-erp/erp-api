@@ -21,6 +21,7 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
 import { resolveSortOrder } from '../common/utils/sort.util';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class PurchaseOrdersCoreService {
@@ -30,6 +31,7 @@ export class PurchaseOrdersCoreService {
     private readonly repository: Repository<ErpPurchaseOrder>,
     @InjectRepository(ErpPurchaseOrderLine)
     private readonly lineRepository: Repository<ErpPurchaseOrderLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async generateMonthlyPoNo(manager: any, orderDate?: string) {
@@ -218,6 +220,10 @@ export class PurchaseOrdersCoreService {
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({ id });
     const nextPoNo = dto.poNo?.trim();
+
+    if (dto.status === 'CANCELLED' && existing.status !== 'CANCELLED') {
+      await this.dependencyService.checkDependencies('purchase_orders', id);
+    }
     if (nextPoNo && nextPoNo !== existing.poNo) {
       const duplicate = await this.repository.findOne({
         where: { poNo: nextPoNo },

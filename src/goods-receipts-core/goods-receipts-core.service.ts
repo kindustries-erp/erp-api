@@ -17,6 +17,7 @@ import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_ba
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
@@ -26,6 +27,7 @@ export class GoodsReceiptsCoreService {
     private readonly repository: Repository<ErpGoodsReceipt>,
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
@@ -341,6 +343,8 @@ export class GoodsReceiptsCoreService {
           'Chỉ có thể hủy phiếu nhập đã ghi sổ (POSTED)',
         );
       }
+
+      await this.dependencyService.checkDependencies('goods_receipts', id);
 
       const lines = await lineRepo.find({
         where: { goodsReceiptId: id },

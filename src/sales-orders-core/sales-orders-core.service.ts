@@ -14,6 +14,7 @@ import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { ReserveSalesOrderDto } from './dto/reserve-sales-order.dto';
 import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class SalesOrdersCoreService {
@@ -23,6 +24,7 @@ export class SalesOrdersCoreService {
     private readonly repository: Repository<ErpSalesOrder>,
     @InjectRepository(ErpSalesOrderLine)
     private readonly lineRepository: Repository<ErpSalesOrderLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async getSalesOrderOrThrow(
@@ -104,6 +106,17 @@ export class SalesOrdersCoreService {
 
   async update(id: string, dto: UpdateSalesOrderDto) {
     const { lines, ...header } = dto as any;
+
+    if (header.status === 'CANCELLED') {
+      const existing = await this.repository.findOneBy({ id });
+      if (existing && existing.status !== 'CANCELLED') {
+        await this.dependencyService.checkDependencies(
+          'sales_service_orders',
+          id,
+        );
+      }
+    }
+
     await this.repository.update(id, header);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
