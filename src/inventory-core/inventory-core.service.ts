@@ -347,31 +347,38 @@ export class InventoryItemsService {
     let params: any[] = [];
     let pIndex = 1;
 
-    let receiptWhere = `is_deleted = false`;
-    let issueWhere = `is_deleted = false`;
+    let receiptWhere = `g.is_deleted = false`;
+    let issueWhere = `g.is_deleted = false`;
 
     if (query.dateFrom) {
-      receiptWhere += ` AND receipt_date >= $${pIndex}`;
-      issueWhere += ` AND issue_date >= $${pIndex}`;
+      receiptWhere += ` AND g.receipt_date >= $${pIndex}`;
+      issueWhere += ` AND g.issue_date >= $${pIndex}`;
       params.push(query.dateFrom);
       pIndex++;
     }
     if (query.dateTo) {
-      receiptWhere += ` AND receipt_date <= $${pIndex}`;
-      issueWhere += ` AND issue_date <= $${pIndex}`;
+      receiptWhere += ` AND g.receipt_date <= $${pIndex}`;
+      issueWhere += ` AND g.issue_date <= $${pIndex}`;
       params.push(query.dateTo);
       pIndex++;
     }
     if (query.status) {
-      receiptWhere += ` AND status = $${pIndex}`;
-      issueWhere += ` AND status = $${pIndex}`;
+      receiptWhere += ` AND g.status = $${pIndex}`;
+      issueWhere += ` AND g.status = $${pIndex}`;
       params.push(query.status);
       pIndex++;
     }
     if (query.partnerId) {
-      receiptWhere += ` AND supplier_id = $${pIndex}`;
-      issueWhere += ` AND customer_id = $${pIndex}`;
+      receiptWhere += ` AND g.supplier_id = $${pIndex}`;
+      issueWhere += ` AND g.customer_id = $${pIndex}`;
       params.push(query.partnerId);
+      pIndex++;
+    }
+    if (query.search) {
+      const s = `%${query.search}%`;
+      receiptWhere += ` AND (g.receipt_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
+      issueWhere += ` AND (g.issue_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
+      params.push(s);
       pIndex++;
     }
 
@@ -385,20 +392,22 @@ export class InventoryItemsService {
 
     if (includeReceipts) {
       queries.push(`
-        SELECT id, receipt_no as "voucherNo", receipt_date as "date", 'receipt' as "type",
-               status, remarks, supplier_id as "partnerId", supplier_name as "partnerName",
-               created_at as "createdAt"
-        FROM erp_goods_receipts
+        SELECT g.id, g.receipt_no as "voucherNo", g.receipt_date as "date", 'receipt' as "type",
+               g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
+               g.created_at as "createdAt"
+        FROM erp_goods_receipts g
+        LEFT JOIN erp_business_partners bp ON g.supplier_id = bp.id
         WHERE ${receiptWhere}
       `);
     }
 
     if (includeIssues) {
       queries.push(`
-        SELECT id, issue_no as "voucherNo", issue_date as "date", 'issue' as "type",
-               status, remarks, customer_id as "partnerId", customer_name as "partnerName",
-               created_at as "createdAt"
-        FROM erp_goods_issues
+        SELECT g.id, g.issue_no as "voucherNo", g.issue_date as "date", 'issue' as "type",
+               g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
+               g.created_at as "createdAt"
+        FROM erp_goods_issues g
+        LEFT JOIN erp_business_partners bp ON g.customer_id = bp.id
         WHERE ${issueWhere}
       `);
     }
