@@ -3,7 +3,7 @@ name: Build & Deploy API
 on:
   push:
     branches:
-      - erp-klotus-staging
+      - erp-core
 
 env:
   REGISTRY: ghcr.io
@@ -75,8 +75,8 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ secrets.ELITE_PORT }} \
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
-            "mkdir -p /opt/stacks/erp-klotus-staging && cat > /opt/stacks/erp-klotus-staging/.env" \
-            <<< "${{ secrets.KLOTUS_STAGING_API_ENV }}"
+            "mkdir -p /opt/stacks/liouni-erp-core-api && cat > /opt/stacks/liouni-erp-core-api/.env" \
+            <<< "${{ secrets.ERP_CORE_API_ENV }}"
 
       - name: Guard deploy secrets
         run: |
@@ -88,7 +88,7 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ secrets.ELITE_PORT }} \
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
-            "GHCR_PAT='${{ secrets.GHCR_PAT }}' IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} bash /opt/stacks/erp-klotus-staging/deploy-api.sh"
+            "cd /opt/stacks/liouni-erp-core-api && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose up -d --force-recreate"
 
       - name: Health check
         run: |
@@ -98,7 +98,7 @@ jobs:
             ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
             '
               for i in $(seq 1 20); do
-                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10010/api/v1/auth/profile || true)
+                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10020/api/v1/auth/profile || true)
                 if [ "$code" = "401" ]; then
                   echo "✅ API health OK"
                   exit 0
