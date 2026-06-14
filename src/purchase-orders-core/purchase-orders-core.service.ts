@@ -1,13 +1,27 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import {
+  DataSource,
+  DeepPartial,
+  ILike,
+  Repository,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
+import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
+import { resolveSortOrder } from '../common/utils/sort.util';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class PurchaseOrdersCoreService {
@@ -17,6 +31,7 @@ export class PurchaseOrdersCoreService {
     private readonly repository: Repository<ErpPurchaseOrder>,
     @InjectRepository(ErpPurchaseOrderLine)
     private readonly lineRepository: Repository<ErpPurchaseOrderLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async generateMonthlyPoNo(manager: any, orderDate?: string) {
@@ -64,6 +79,8 @@ export class PurchaseOrdersCoreService {
           purchaseOrderId: data.id,
           lineNo: lineNo++,
           itemId: line.itemId ?? null,
+          itemCode: line.itemCode ?? null,
+          itemName: line.itemName ?? null,
           description: line.description ?? null,
           qtyOrdered: line.qtyOrdered,
           qtyReceived: '0',
@@ -80,17 +97,66 @@ export class PurchaseOrdersCoreService {
     });
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: OperationalQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+
+    const where: any = {};
+    if (query.search) {
+      where.poNo = ILike(`%${query.search}%`);
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.payment_status) {
+      where.paymentStatus = query.payment_status;
+    }
+    if (query.supplier_id) {
+      where.supplierId = query.supplier_id;
+    }
+    if (query.date_from && query.date_to) {
+      where.orderDate = Between(
+        new Date(`${query.date_from}T00:00:00.000+07:00`),
+        new Date(`${query.date_to}T23:59:59.999+07:00`),
+      );
+    } else if (query.date_from) {
+      where.orderDate = MoreThanOrEqual(
+        new Date(`${query.date_from}T00:00:00.000+07:00`),
+      );
+    } else if (query.date_to) {
+      where.orderDate = LessThanOrEqual(
+        new Date(`${query.date_to}T23:59:59.999+07:00`),
+      );
+    }
+
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: [
+        'createdAt',
+        'orderDate',
+        'expectedDate',
+        'poNo',
+        'status',
+        'paymentStatus',
+        'supplierId',
+      ],
+      columnMap: {
+        created_at: 'createdAt',
+        order_date: 'orderDate',
+        expected_date: 'expectedDate',
+        due_date: 'expectedDate',
+        po_no: 'poNo',
+        payment_status: 'paymentStatus',
+        supplier_id: 'supplierId',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ poNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items: items.map((x) => this.toCoreDocument(x as any)),
@@ -153,6 +219,19 @@ export class PurchaseOrdersCoreService {
   }
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({ id });
+    const nextPoNo = dto.poNo?.trim();
+
+    if (dto.status === 'CANCELLED' && existing.status !== 'CANCELLED') {
+      await this.dependencyService.checkDependencies('purchase_orders', id);
+    }
+    if (nextPoNo && nextPoNo !== existing.poNo) {
+      const duplicate = await this.repository.findOne({
+        where: { poNo: nextPoNo },
+      });
+      if (duplicate && duplicate.id !== id) {
+        throw new ConflictException('Số chứng từ đã tồn tại');
+      }
+    }
     if (dto.status === 'DRAFT' && existing.status !== 'DRAFT') {
       throw new BadRequestException(
         'Phiếu mua hàng đã rời DRAFT thì không được chuyển về DRAFT',
@@ -174,6 +253,8 @@ export class PurchaseOrdersCoreService {
     };
     if ((header as any).poNo === '') {
       delete (header as any).poNo;
+    } else if ((header as any).poNo) {
+      (header as any).poNo = String((header as any).poNo).trim();
     }
     await this.repository.update(id, header as any);
     if (Array.isArray(lines)) {
@@ -187,6 +268,8 @@ export class PurchaseOrdersCoreService {
               purchaseOrderId: id,
               lineNo: lineNo++,
               itemId: line.itemId ?? null,
+              itemCode: line.itemCode ?? null,
+              itemName: line.itemName ?? null,
               description: line.description ?? null,
               qtyOrdered: line.qtyOrdered,
               qtyReceived: line.qtyReceived ?? '0',

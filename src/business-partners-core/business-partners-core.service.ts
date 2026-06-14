@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBusinessPartner } from './entities/erp_business_partner.entity';
 import { CreateBusinessPartnerDto } from './dto/create-business-partner.dto';
 import { UpdateBusinessPartnerDto } from './dto/update-business-partner.dto';
@@ -37,11 +38,27 @@ export class BusinessPartnersCoreService {
         ? baseWhere
         : undefined;
 
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: [
+        'createdAt',
+        'code',
+        'name',
+        'displayName',
+        'partnerType',
+      ],
+      columnMap: {
+        created_at: 'createdAt',
+        display_name: 'displayName',
+        partner_type: 'partnerType',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,

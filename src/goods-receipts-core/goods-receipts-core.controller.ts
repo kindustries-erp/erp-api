@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -69,5 +70,11 @@ export class GoodsReceiptsCoreController {
   @Post(':id/cancel')
   cancelReceipt(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancelReceipt(id);
+  }
+
+  @RequirePermissions({ resource: 'goods_receipts', action: 'delete' })
+  @Delete(':id')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.remove(id);
   }
 }

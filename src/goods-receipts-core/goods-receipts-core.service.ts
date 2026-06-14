@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
@@ -15,6 +16,8 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
+import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
@@ -24,6 +27,7 @@ export class GoodsReceiptsCoreService {
     private readonly repository: Repository<ErpGoodsReceipt>,
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
@@ -46,7 +50,7 @@ export class GoodsReceiptsCoreService {
     repository: Repository<ErpGoodsReceipt>,
     id: string,
   ) {
-    const receipt = await repository.findOneBy({ id });
+    const receipt = await repository.findOneBy({ id, isDeleted: false });
     if (!receipt) {
       throw new NotFoundException('Không tìm thấy phiếu nhập');
     }
@@ -99,16 +103,39 @@ export class GoodsReceiptsCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'receiptDate', 'receiptNo', 'status'],
+      columnMap: { created_at: 'createdAt', receipt_date: 'receiptDate' },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+    const where = query.search
+      ? ([{ receiptNo: ILike(`%${query.search}%`), isDeleted: false }] as any)
+      : ({ isDeleted: false } as any);
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ receiptNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
+    const supplierIds = [
+      ...new Set(items.map((i) => i.supplierId).filter(Boolean)),
+    ] as string[];
+    let supplierMap = new Map<string, string>();
+    if (supplierIds.length > 0) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const suppliers = await bpRepo.findBy({ id: In(supplierIds) });
+      supplierMap = new Map(suppliers.map((s) => [s.id, s.name]));
+    }
+
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      supplierName: item.supplierId
+        ? supplierMap.get(item.supplierId) || null
+        : null,
+    }));
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       pageSize,
@@ -118,17 +145,28 @@ export class GoodsReceiptsCoreService {
 
   async findOne(id: string) {
     const data = await this.getReceiptOrThrow(this.repository, id);
+    let supplierName: string | null = null;
+    if (data.supplierId) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const supplier = await bpRepo.findOneBy({ id: data.supplierId });
+      supplierName = supplier?.name || null;
+    }
     const lines = await this.lineRepository.find({
       where: { goodsReceiptId: id },
       order: { lineNo: 'ASC' },
     });
-    return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, supplierName, lines },
+    };
   }
 
   async update(id: string, dto: UpdateGoodsReceiptDto) {
     const existing = await this.getReceiptOrThrow(this.repository, id);
-    if (existing.status === 'POSTED') {
-      throw new BadRequestException('Không thể sửa phiếu đã ghi sổ');
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được sửa phiếu nhập ở trạng thái nháp',
+      );
     }
 
     const { lines, ...header } = dto as any;
@@ -306,6 +344,8 @@ export class GoodsReceiptsCoreService {
         );
       }
 
+      await this.dependencyService.checkDependencies('goods_receipts', id);
+
       const lines = await lineRepo.find({
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
@@ -404,5 +444,23 @@ export class GoodsReceiptsCoreService {
         data: { ...savedReceipt, lines: savedLines },
       };
     });
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing || existing.isDeleted) {
+      throw new NotFoundException('Không tìm thấy phiếu nhập');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được xóa phiếu nhập ở trạng thái nháp',
+      );
+    }
+    existing.isDeleted = true;
+    const data = await this.repository.save(existing);
+    return {
+      message: 'Xóa phiếu nhập thành công',
+      data,
+    };
   }
 }

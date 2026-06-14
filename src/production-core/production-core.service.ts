@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
@@ -34,13 +35,22 @@ export class ProductionCoreService {
   async findOrders(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'referenceNo', 'status', 'plannedStartDate'],
+      columnMap: {
+        created_at: 'createdAt',
+        reference_no: 'referenceNo',
+        planned_start_date: 'plannedStartDate',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
     const [items, total] = await this.productionOrderRepository.findAndCount({
       where: query.search
         ? ([{ referenceNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
 
     const finishedGoodIds = Array.from(
@@ -129,13 +139,16 @@ export class ProductionCoreService {
         where: { id: dto.finishedGoodItemId },
       });
 
+      const balances = await balanceRepo.find({
+        where: {
+          itemId: In(materialItemIds),
+          ...(dto.warehouseCode ? { warehouseCode: dto.warehouseCode } : {}),
+        },
+      });
+      const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
+
       for (const material of materials) {
-        const existingBalance = await balanceRepo.findOne({
-          where: {
-            itemId: material.itemId,
-            warehouseCode: dto.warehouseCode ?? undefined,
-          },
-        });
+        const existingBalance = balanceMap.get(material.itemId);
         if (!existingBalance) {
           throw new BadRequestException(
             `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
@@ -187,13 +200,13 @@ export class ProductionCoreService {
       const goodsIssue = await goodsIssueRepo.save(goodsIssuePayload);
 
       const savedMaterials: any[] = [];
+      const materialsToSave: DeepPartial<ErpProductionOrderMaterial>[] = [];
+      const goodsIssueLinesToSave: DeepPartial<ErpGoodsIssueLine>[] = [];
+      const txnsToSave: DeepPartial<ErpInventoryTransaction>[] = [];
+      const balancesToSave: ErpInventoryBalance[] = [];
+
       for (const material of materials) {
-        const balance = await balanceRepo.findOne({
-          where: {
-            itemId: material.itemId,
-            warehouseCode: dto.warehouseCode ?? undefined,
-          },
-        });
+        const balance = balanceMap.get(material.itemId);
         const currentQty = Number(balance?.qtyOnHand || 0);
         const currentReserved = Number(balance?.qtyReserved || 0);
         const currentValue = Number(balance?.inventoryValue || 0);
@@ -230,11 +243,12 @@ export class ProductionCoreService {
         const nextValue = Math.max(0, currentValue - amount);
         const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
 
-        const savedMat = await materialRepo.save(materialPayload);
-        await goodsIssueLineRepo.save(goodsIssueLinePayload);
+        materialsToSave.push(materialPayload);
+        goodsIssueLinesToSave.push(goodsIssueLinePayload);
+
         const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
-          ...savedMat,
+          ...materialPayload,
           itemName: materialItem?.itemName ?? null,
           uom: materialItem?.uom ?? null,
           qtyIssued: material.qtyRequired.toFixed(3),
@@ -254,7 +268,7 @@ export class ProductionCoreService {
           notes: `Xuất NVL cho lệnh sản xuất ${referenceNo}`,
           createdBy: dto.createdBy ?? null,
         };
-        await txnRepo.save(issueTxnPayload);
+        txnsToSave.push(issueTxnPayload);
         if (!balance) {
           throw new BadRequestException(
             `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
@@ -263,8 +277,16 @@ export class ProductionCoreService {
         balance.qtyOnHand = nextQty.toFixed(3);
         balance.inventoryValue = nextValue.toFixed(3);
         balance.avgUnitCost = nextAvg.toFixed(3);
-        await balanceRepo.save(balance);
+        balancesToSave.push(balance);
       }
+
+      const savedMaterialEntities = await materialRepo.save(materialsToSave);
+      for (let i = 0; i < savedMaterialEntities.length; i++) {
+        savedMaterials[i].id = savedMaterialEntities[i].id;
+      }
+      await goodsIssueLineRepo.save(goodsIssueLinesToSave);
+      await txnRepo.save(txnsToSave);
+      await balanceRepo.save(balancesToSave);
 
       let finishedBalance = await balanceRepo.findOne({
         where: {
@@ -370,6 +392,20 @@ export class ProductionCoreService {
       where: { bomId },
       order: { lineNo: 'ASC' },
     });
+
+    const componentItemIds = lines
+      .map((l) => l.componentItemId)
+      .filter(Boolean) as string[];
+
+    const childBoms = componentItemIds.length
+      ? await bomRepo.find({
+          where: { finishedGoodItemId: In(componentItemIds), status: 'ACTIVE' },
+        })
+      : [];
+    const childBomMap = new Map(
+      childBoms.map((b) => [b.finishedGoodItemId, b]),
+    );
+
     for (const line of lines) {
       if (!line.componentItemId) continue;
       const baseQty = Number(line.qtyRequired || 0);
@@ -377,10 +413,7 @@ export class ProductionCoreService {
       const grossQty = baseQty * factor * (1 + scrapRate / 100);
       if (grossQty <= 0) continue;
 
-      const childBom = await bomRepo.findOne({
-        where: { finishedGoodItemId: line.componentItemId, status: 'ACTIVE' },
-        order: { createdAt: 'DESC' },
-      });
+      const childBom = childBomMap.get(line.componentItemId);
 
       if (childBom) {
         if (childBom.finishedGoodItemId === rootFinishedGoodId) {

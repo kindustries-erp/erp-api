@@ -15,15 +15,15 @@ Khi bắt đầu task:
 
 ### Gate 0 — DB Precheck bắt buộc
 Trước khi sửa workflow/API, phải ghi rõ DB precheck trong task:
-- Collections/fields liên quan
+- Tables/fields liên quan (trên Neon Postgres, không còn Directus staging)
 - Data nền cần có
 - Constraint/index/default cần có
 - Kết quả: `DB_READY` hoặc `DB_GAP_FOUND`
 
-Nếu `DB_GAP_FOUND`: tạo/hoàn tất DB task trước, sau đó mới xử lý API.
+Nếu `DB_GAP_FOUND`: tạo/hoàn tất TypeORM migration trước, sau đó mới xử lý API.
 
 ### Gate order bắt buộc
-1. DB / Directus staging
+1. DB / Neon Postgres (TypeORM migration)
 2. Backend workflow/API
 3. UI
 
@@ -48,9 +48,11 @@ Nếu `DB_GAP_FOUND`: tạo/hoàn tất DB task trước, sau đó mới xử l�
 - Tổ chức theo Nest module/domain dưới `src/`.
 - Không trộn controller/service/dto của domain khác nếu không cần thiết.
 
-### 4.2 Directus integration discipline
-- Mọi thay đổi schema/collection naming phải kiểm tra tương thích với Directus staging.
-- Khi đổi contract liên quan Directus, phải đồng bộ với ERP Web nếu có ảnh hưởng response DTO.
+### 4.2 Neon/Postgres integration discipline (lane erp-core)
+- Lane `erp-core` **không dùng Directus SDK**. DB là Neon Postgres qua TypeORM/DataSource.
+- Thay đổi schema phải đi qua TypeORM migration (`src/migrations/`), chạy bằng `bun run migration:run`.
+- Khi đổi entity/DTO/response, phải đồng bộ với ERP Web nếu có ảnh hưởng response shape.
+- Migration class name phải kết thúc bằng Unix timestamp integer (ví dụ: `AddField1749772800001`), không dùng YYYYMMDDNN alone.
 
 ### 4.3 Validation & DTO
 - Input/params/query phải đi qua DTO + validator.

@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpSalesOrder } from './entities/erp_sales_order.entity';
 import { ErpSalesOrderLine } from './entities/erp_sales_order_line.entity';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
@@ -13,6 +14,7 @@ import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { ReserveSalesOrderDto } from './dto/reserve-sales-order.dto';
 import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
+import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
 export class SalesOrdersCoreService {
@@ -22,6 +24,7 @@ export class SalesOrdersCoreService {
     private readonly repository: Repository<ErpSalesOrder>,
     @InjectRepository(ErpSalesOrderLine)
     private readonly lineRepository: Repository<ErpSalesOrderLine>,
+    private readonly dependencyService: DocumentDependenciesCoreService,
   ) {}
 
   private async getSalesOrderOrThrow(
@@ -71,13 +74,17 @@ export class SalesOrdersCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      defaultOrder: { createdAt: 'DESC' },
+    });
+
     const [items, total] = await this.repository.findAndCount({
       where: query.search
         ? ([{ soNo: ILike(`%${query.search}%`) }] as any)
         : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,
@@ -99,6 +106,17 @@ export class SalesOrdersCoreService {
 
   async update(id: string, dto: UpdateSalesOrderDto) {
     const { lines, ...header } = dto as any;
+
+    if (header.status === 'CANCELLED') {
+      const existing = await this.repository.findOneBy({ id });
+      if (existing && existing.status !== 'CANCELLED') {
+        await this.dependencyService.checkDependencies(
+          'sales_service_orders',
+          id,
+        );
+      }
+    }
+
     await this.repository.update(id, header);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {

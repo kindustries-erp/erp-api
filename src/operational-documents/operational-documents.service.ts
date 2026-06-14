@@ -135,6 +135,18 @@ export class OperationalDocumentsService {
         'filter[invoice_status][_eq]',
         query.invoice_status,
       );
+    const dateField =
+      collection === 'purchase_orders' ? 'order_date' : 'document_date';
+    if ((query as any).date_from)
+      url.searchParams.append(
+        `filter[${dateField}][_gte]`,
+        (query as any).date_from,
+      );
+    if ((query as any).date_to)
+      url.searchParams.append(
+        `filter[${dateField}][_lte]`,
+        (query as any).date_to,
+      );
     if (query.source_system && collection === 'sales_service_orders') {
       url.searchParams.append(
         'filter[source_system][_eq]',

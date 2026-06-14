@@ -1,0 +1,504 @@
+psql:seed-bom-klotus.sql:4: ERROR:  duplicate key value violates unique constraint "erp_uoms_pkey"
+DETAIL:  Key (id)=(166f2abc-c526-43e2-8180-4caa29b72ba6) already exists.
+psql:seed-bom-klotus.sql:5: ERROR:  duplicate key value violates unique constraint "erp_uoms_pkey"
+DETAIL:  Key (id)=(ff52bb9b-e759-404c-be48-e44ddd6193de) already exists.
+psql:seed-bom-klotus.sql:6: ERROR:  duplicate key value violates unique constraint "erp_uoms_pkey"
+DETAIL:  Key (id)=(69ec2708-101c-4566-bf23-703f20ff3e9c) already exists.
+psql:seed-bom-klotus.sql:7: ERROR:  duplicate key value violates unique constraint "erp_uoms_pkey"
+DETAIL:  Key (id)=(2ce1b79d-b6c3-4fa5-9de0-42badad9cc84) already exists.
+psql:seed-bom-klotus.sql:8: ERROR:  duplicate key value violates unique constraint "erp_uoms_pkey"
+DETAIL:  Key (id)=(09686dd0-c269-4033-8b65-50a468bbb11b) already exists.
+psql:seed-bom-klotus.sql:11: ERROR:  duplicate key value violates unique constraint "erp_item_types_pkey"
+DETAIL:  Key (id)=(2829b847-bd30-49a3-b59e-668372a0aaac) already exists.
+psql:seed-bom-klotus.sql:12: ERROR:  duplicate key value violates unique constraint "erp_item_types_pkey"
+DETAIL:  Key (id)=(16b49fe8-2368-4131-a89e-c0ef1df9e5bc) already exists.
+psql:seed-bom-klotus.sql:15: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e9ce6b20-297c-45b1-8f24-8929bdde2deb) already exists.
+psql:seed-bom-klotus.sql:18: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7c644fec-4afc-42b6-9bdf-c69a80400a19) already exists.
+psql:seed-bom-klotus.sql:19: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5f82070a-3c2d-4773-823f-07081709db3c) already exists.
+psql:seed-bom-klotus.sql:20: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6cba55ae-fcff-4d31-82c9-97a874a3041e) already exists.
+psql:seed-bom-klotus.sql:21: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(2fcc8a28-efa9-442c-af5c-b5230db4382e) already exists.
+psql:seed-bom-klotus.sql:22: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(32f744c7-6bbe-47de-944f-cd75ba759457) already exists.
+psql:seed-bom-klotus.sql:23: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3572f705-ab4e-41c2-976a-1964b224b521) already exists.
+psql:seed-bom-klotus.sql:24: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e8211736-e564-4b8c-9c8f-4593d11a7756) already exists.
+psql:seed-bom-klotus.sql:25: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5752a0a4-678f-438c-b84d-b92b17f271c1) already exists.
+psql:seed-bom-klotus.sql:26: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(508000fc-e0f6-4e99-8d69-e1e547444675) already exists.
+psql:seed-bom-klotus.sql:27: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(80f7192c-9bb7-40ae-9956-57730171a146) already exists.
+psql:seed-bom-klotus.sql:28: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0216e41f-f3dd-4c08-9787-8a589075fc21) already exists.
+psql:seed-bom-klotus.sql:29: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(58ae09e8-c812-49e2-9403-d32d9104dc9e) already exists.
+psql:seed-bom-klotus.sql:30: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(9a9e70a8-ab10-4661-841c-a4287748db8a) already exists.
+psql:seed-bom-klotus.sql:31: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0c3a6fc6-d3ae-4183-b7bc-1861fbc9d919) already exists.
+psql:seed-bom-klotus.sql:32: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(bc0c4bf5-ec48-4e9a-83f0-02dcb939756b) already exists.
+psql:seed-bom-klotus.sql:33: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a46937d7-44a1-45d4-bff2-6639bfb5dffb) already exists.
+psql:seed-bom-klotus.sql:34: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(89e5eb79-7789-4571-bfaa-53cb1b850024) already exists.
+psql:seed-bom-klotus.sql:35: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a3a100c0-dbc0-4245-b4f8-05244f11542d) already exists.
+psql:seed-bom-klotus.sql:36: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3f1a0d84-a498-4ccd-a2ee-6f23d03f4152) already exists.
+psql:seed-bom-klotus.sql:37: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(9f2008dd-fddd-4bcb-8e7b-08a7fb7a858c) already exists.
+psql:seed-bom-klotus.sql:38: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a296cf09-95bc-49e3-8b54-a57ec6d34f73) already exists.
+psql:seed-bom-klotus.sql:39: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(17790aae-7d9d-4963-8a56-ee88f6f23473) already exists.
+psql:seed-bom-klotus.sql:40: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(40338787-66c7-4e00-83ec-07d69d2dcb33) already exists.
+psql:seed-bom-klotus.sql:41: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c1b10ce6-a842-4333-bd83-f53a29abb978) already exists.
+psql:seed-bom-klotus.sql:42: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(067774f1-46ab-477d-a660-3d14181af459) already exists.
+psql:seed-bom-klotus.sql:43: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(dbb08111-0e9a-4996-ab61-2ba4ebb60f2b) already exists.
+psql:seed-bom-klotus.sql:44: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e726385b-dcfd-49e1-898a-88f8e422f749) already exists.
+psql:seed-bom-klotus.sql:45: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(05cb8ded-e588-4b63-a4a1-ecb2af8a019e) already exists.
+psql:seed-bom-klotus.sql:46: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d9718c55-d2fa-4302-b044-736859d23874) already exists.
+psql:seed-bom-klotus.sql:47: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e04f71d8-dead-415a-b9db-a766000d4881) already exists.
+psql:seed-bom-klotus.sql:48: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4efcfa74-2322-41de-b0d7-04e4873f0633) already exists.
+psql:seed-bom-klotus.sql:49: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5ba7781e-5086-4e3f-a853-d36ac60fe371) already exists.
+psql:seed-bom-klotus.sql:50: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e2358fcf-a4e8-49bb-aef3-c896ef101bd4) already exists.
+psql:seed-bom-klotus.sql:51: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(852129a5-83bb-4bfc-857e-22c08649fce1) already exists.
+psql:seed-bom-klotus.sql:52: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(bf86742e-1ac0-4727-9fce-cd63354e9557) already exists.
+psql:seed-bom-klotus.sql:53: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ec887679-811c-4537-9898-7aea516d0877) already exists.
+psql:seed-bom-klotus.sql:54: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d3f6e595-3246-455a-8011-7f11ca572eb4) already exists.
+psql:seed-bom-klotus.sql:55: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(84e9f334-f082-4746-8d9f-1c0c52221c76) already exists.
+psql:seed-bom-klotus.sql:56: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(52f0cf6f-c358-42f3-ad27-149976628cd5) already exists.
+psql:seed-bom-klotus.sql:57: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4ab2df1e-1557-4579-8318-2a23cba112fb) already exists.
+psql:seed-bom-klotus.sql:58: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f4cbecde-d139-4da5-8319-8d6b32d3cc4a) already exists.
+psql:seed-bom-klotus.sql:59: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0027d58b-b439-42cf-a76f-bbbb57985d54) already exists.
+psql:seed-bom-klotus.sql:60: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(61049696-893f-41ef-8bda-d8aa895142e0) already exists.
+psql:seed-bom-klotus.sql:61: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8191a62c-a028-4940-baaf-5642d9b230f8) already exists.
+psql:seed-bom-klotus.sql:62: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5d4f3155-7d4c-4ef9-8ed2-cc047e00d22d) already exists.
+psql:seed-bom-klotus.sql:63: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5816da37-b492-4982-aff4-c02bdc8311a8) already exists.
+psql:seed-bom-klotus.sql:64: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e1610211-36f2-4297-8f77-105aa48ee3cc) already exists.
+psql:seed-bom-klotus.sql:65: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(da9cd8b8-3280-447c-8df6-ef44987c54a6) already exists.
+psql:seed-bom-klotus.sql:66: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6e745305-9972-47c9-bb2f-428e54fe8163) already exists.
+psql:seed-bom-klotus.sql:67: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(517bae53-c9f3-4715-a6a6-971b66ac828c) already exists.
+psql:seed-bom-klotus.sql:68: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e8478cc1-c632-447c-be14-7bebfa601427) already exists.
+psql:seed-bom-klotus.sql:69: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(b72418bc-2984-424d-a771-04ea5776f9d8) already exists.
+psql:seed-bom-klotus.sql:70: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8e94ea6a-956f-4439-afb5-50ce9e5f732e) already exists.
+psql:seed-bom-klotus.sql:71: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5dd439e0-af71-4df0-bc27-b5af6690d47a) already exists.
+psql:seed-bom-klotus.sql:72: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6bd85aa8-f0a0-4b76-a29d-0bd5324690f6) already exists.
+psql:seed-bom-klotus.sql:73: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a5f1d971-05c5-4c53-94c3-46fcb6f39350) already exists.
+psql:seed-bom-klotus.sql:74: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(62491277-e8f9-4cd0-a261-2cd1ae662e06) already exists.
+psql:seed-bom-klotus.sql:75: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8593ee5a-18b2-412f-b6e3-6f46844cd4de) already exists.
+psql:seed-bom-klotus.sql:76: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(87cf5163-8132-4ee6-a73f-d9ba6b34c20f) already exists.
+psql:seed-bom-klotus.sql:77: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4de7f880-b741-43e6-bf2d-51388b612745) already exists.
+psql:seed-bom-klotus.sql:78: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(74f4b76d-7ed5-45e1-8e8b-0dcde2e47499) already exists.
+psql:seed-bom-klotus.sql:79: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4faf2c09-14e6-4957-aaf9-25fa7a558ec9) already exists.
+psql:seed-bom-klotus.sql:80: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(33c644ba-522e-43ae-add2-ea67401f0547) already exists.
+psql:seed-bom-klotus.sql:81: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(1b46ec92-8157-451e-9125-898135627a0b) already exists.
+psql:seed-bom-klotus.sql:82: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(fa2c10f3-7876-41f9-a667-2bbc02b2bb8b) already exists.
+psql:seed-bom-klotus.sql:83: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(65613617-ff9d-4897-9a51-c6c85fd840e4) already exists.
+psql:seed-bom-klotus.sql:84: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6425663d-7531-4c83-b796-9eba0c7efe6f) already exists.
+psql:seed-bom-klotus.sql:85: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(84d8ce9a-5a55-49bc-a302-60e3a719b157) already exists.
+psql:seed-bom-klotus.sql:86: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ea491df4-3c66-464a-87c6-5e6595678fac) already exists.
+psql:seed-bom-klotus.sql:87: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7ee24ae1-ed4b-431b-8262-330a2ea1e28c) already exists.
+psql:seed-bom-klotus.sql:88: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f0df3a00-a339-40d3-823b-73d422178577) already exists.
+psql:seed-bom-klotus.sql:89: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(1aa0d2e6-ed74-4473-8d7c-74d24d439c3d) already exists.
+psql:seed-bom-klotus.sql:90: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(eae5d95a-2cff-40f8-81df-ee7d8f82e283) already exists.
+psql:seed-bom-klotus.sql:91: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(302a2641-0ced-4751-95da-506ec24f51ff) already exists.
+psql:seed-bom-klotus.sql:92: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f14f4479-7537-44c7-8384-ab7caad7ee93) already exists.
+psql:seed-bom-klotus.sql:93: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(74259642-b7a9-4ce0-ae63-98b13cafe3d4) already exists.
+psql:seed-bom-klotus.sql:94: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d8550a63-e64e-4f91-ae6c-57ab30c4d973) already exists.
+psql:seed-bom-klotus.sql:95: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(99f1e5c9-5420-4d8d-bbfa-c3899ec72d82) already exists.
+psql:seed-bom-klotus.sql:96: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(13c9f590-f04d-4531-b5d9-9b74eb702ee0) already exists.
+psql:seed-bom-klotus.sql:97: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7db63737-d5f9-482d-8df4-08d69dddf27a) already exists.
+psql:seed-bom-klotus.sql:98: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8fbcb5e0-ad02-4a60-8622-e26fc7df0a50) already exists.
+psql:seed-bom-klotus.sql:99: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(fa43a220-aeb7-453f-a951-4058fc045261) already exists.
+psql:seed-bom-klotus.sql:100: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c7809e14-fab5-4aa0-8833-8a6fda844eb8) already exists.
+psql:seed-bom-klotus.sql:101: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(57eb138a-2dd9-4364-9492-0990ea0a2dc3) already exists.
+psql:seed-bom-klotus.sql:102: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(03c3669b-54c8-4711-8411-6701919c95fa) already exists.
+psql:seed-bom-klotus.sql:103: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3513c097-f67e-4707-8df0-370e9edb3ee6) already exists.
+psql:seed-bom-klotus.sql:104: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d2eeb4b1-f605-49ad-8272-ceadd0b0af6b) already exists.
+psql:seed-bom-klotus.sql:105: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(b626fab5-8a0d-468f-b803-9ba949b1fe36) already exists.
+psql:seed-bom-klotus.sql:106: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d8a2369d-553c-4a6d-a743-13f519379c22) already exists.
+psql:seed-bom-klotus.sql:107: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4094ca2a-4e03-4804-ad11-eeb2e4320c2d) already exists.
+psql:seed-bom-klotus.sql:108: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3a230a3a-e297-4061-ab2d-c3b094496529) already exists.
+psql:seed-bom-klotus.sql:109: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6c4f66d3-8b5b-4da2-a0fc-23760ac66e47) already exists.
+psql:seed-bom-klotus.sql:110: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(fe8206dd-9a35-4d1d-8282-37845e964349) already exists.
+psql:seed-bom-klotus.sql:111: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(44cedcf8-ea41-4b0f-b871-c1de1c6ff9d1) already exists.
+psql:seed-bom-klotus.sql:112: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7c1f918f-a0bf-4b2e-ae5f-e0e3e22bac0f) already exists.
+psql:seed-bom-klotus.sql:113: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0c94ca23-6d81-4d1a-b0aa-40dcdcd431db) already exists.
+psql:seed-bom-klotus.sql:114: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a75f4cc0-3d6c-421c-8645-95443f018d3a) already exists.
+psql:seed-bom-klotus.sql:115: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(aa935d83-9cff-4e3d-8dc3-66e2e1dfa2a7) already exists.
+psql:seed-bom-klotus.sql:116: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(062dd3dd-6778-43b7-b244-0e4ff8dc670b) already exists.
+psql:seed-bom-klotus.sql:117: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f59b9457-6819-479f-9abf-6b2cf454b057) already exists.
+psql:seed-bom-klotus.sql:118: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f4c92569-3566-4d92-ab05-57f3717a296a) already exists.
+psql:seed-bom-klotus.sql:119: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4a9d3e56-4662-45b2-a96f-a224ce11639b) already exists.
+psql:seed-bom-klotus.sql:120: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3c60a537-df34-43f0-9d71-3492e722cabf) already exists.
+psql:seed-bom-klotus.sql:121: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(aa3e42ba-c007-4023-8122-f0e578b9507f) already exists.
+psql:seed-bom-klotus.sql:122: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(54a65bc6-6c20-4c20-bb77-1247d018424d) already exists.
+psql:seed-bom-klotus.sql:123: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(87180069-8b71-4cdd-b9f3-e201780e3d7c) already exists.
+psql:seed-bom-klotus.sql:124: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(869e01b3-3d72-4f59-8135-4d0649964ac2) already exists.
+psql:seed-bom-klotus.sql:125: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(61d01a91-d3e1-48bf-bfab-602113f2b125) already exists.
+psql:seed-bom-klotus.sql:126: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3fab11c7-845b-491c-927e-633042dbd246) already exists.
+psql:seed-bom-klotus.sql:127: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d700d630-da1b-46ae-bcd5-ead1b7f7e843) already exists.
+psql:seed-bom-klotus.sql:128: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5b1b7b84-2ffb-44ed-8b3d-00bbca177b88) already exists.
+psql:seed-bom-klotus.sql:129: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(72ceadd5-a0aa-4849-b918-2e27974002f8) already exists.
+psql:seed-bom-klotus.sql:130: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0ecb9990-b76d-44ab-abfb-62f96223dfb6) already exists.
+psql:seed-bom-klotus.sql:131: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(458f11fa-c933-4017-b84c-0defb86e0677) already exists.
+psql:seed-bom-klotus.sql:132: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(32d5c35f-7749-475d-8070-8b6071ce0a7e) already exists.
+psql:seed-bom-klotus.sql:133: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0cf6792b-f87a-4524-b76f-0f4b1bda6d96) already exists.
+psql:seed-bom-klotus.sql:134: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(62f6111c-11c4-4a16-a7a8-31a86741ca15) already exists.
+psql:seed-bom-klotus.sql:135: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(131607d4-b28a-4526-85c5-1bb89910b8f9) already exists.
+psql:seed-bom-klotus.sql:136: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5c798604-c875-4355-a21e-15d37647d02e) already exists.
+psql:seed-bom-klotus.sql:137: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4960d6ae-e14f-46f4-89ce-255b3d84d68c) already exists.
+psql:seed-bom-klotus.sql:138: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5d79d11c-4aab-4fcd-85e9-653ba6a74702) already exists.
+psql:seed-bom-klotus.sql:139: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(83f2a464-efbc-45b7-af94-d1a7cf89c083) already exists.
+psql:seed-bom-klotus.sql:140: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(939b602f-a375-4f55-b233-383f9c178592) already exists.
+psql:seed-bom-klotus.sql:141: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(57f1ecab-534c-4d3e-a9cc-ce7e847a119f) already exists.
+psql:seed-bom-klotus.sql:142: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(14265d32-0f9e-45bd-86d8-c456414cc042) already exists.
+psql:seed-bom-klotus.sql:143: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c67a8924-038f-4663-bad5-7f0eac440734) already exists.
+psql:seed-bom-klotus.sql:144: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(de8f0673-e52b-4fd1-97f6-4a23dc386e76) already exists.
+psql:seed-bom-klotus.sql:145: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7d4dd81c-a9bb-433f-8bc3-89e2ab00afc6) already exists.
+psql:seed-bom-klotus.sql:146: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e3e18f98-7c17-48e8-8db8-62a802e66dec) already exists.
+psql:seed-bom-klotus.sql:147: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5c228cde-7989-4ccf-8d27-733513a82cd2) already exists.
+psql:seed-bom-klotus.sql:148: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8998fd41-f2d6-45c4-9316-0e3ee2ed7676) already exists.
+psql:seed-bom-klotus.sql:149: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8bf516da-ca8f-4857-a46b-2442404fa2fb) already exists.
+psql:seed-bom-klotus.sql:150: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e040eca1-3354-41b5-9815-3d5b2cf75a50) already exists.
+psql:seed-bom-klotus.sql:151: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(923065f5-e67c-4ca5-8260-1f4ee5ca22a7) already exists.
+psql:seed-bom-klotus.sql:152: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f8fb8048-c9b6-454b-8486-d49599fdd954) already exists.
+psql:seed-bom-klotus.sql:153: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(30d3c247-6c96-491b-ac09-233edd09de00) already exists.
+psql:seed-bom-klotus.sql:154: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(8167fe1c-5a3f-471b-aba4-4c7473aa260f) already exists.
+psql:seed-bom-klotus.sql:155: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(e51d5518-6061-4761-8bd9-74e54e88f1f6) already exists.
+psql:seed-bom-klotus.sql:156: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(01abe7bd-9572-41b3-9a3e-f4804b6c35b1) already exists.
+psql:seed-bom-klotus.sql:157: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(83be0733-da65-4912-a123-8555db3a71ae) already exists.
+psql:seed-bom-klotus.sql:158: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c248a733-b05d-48c6-a00c-ecda4b0626dc) already exists.
+psql:seed-bom-klotus.sql:159: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(25670eb9-74b1-4bd0-8f6e-7f96620aa727) already exists.
+psql:seed-bom-klotus.sql:160: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(11ac6f31-d084-4e94-b02a-039003b08599) already exists.
+psql:seed-bom-klotus.sql:161: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(056cb4b0-609c-4eaa-874f-a911db8099a7) already exists.
+psql:seed-bom-klotus.sql:162: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(db116b7e-b8b9-4826-93ad-55b32b8ddf4e) already exists.
+psql:seed-bom-klotus.sql:163: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(685123df-688f-4fe1-851a-65b9b6caacf8) already exists.
+psql:seed-bom-klotus.sql:164: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(4adc007d-542c-4d7b-a761-f52a3d861d70) already exists.
+psql:seed-bom-klotus.sql:165: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ef2579d5-57f5-407a-8e2b-55da1ff30eb9) already exists.
+psql:seed-bom-klotus.sql:166: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(11ca8b08-045d-4654-ac58-953b98408aa6) already exists.
+psql:seed-bom-klotus.sql:167: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6182b8c1-fa31-4256-b6fd-95c17369a06f) already exists.
+psql:seed-bom-klotus.sql:168: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(71e64874-c1b9-465e-8fe4-ee378c8359ec) already exists.
+psql:seed-bom-klotus.sql:169: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(6d99150f-927c-4d2c-974c-28a5bcd3a4a3) already exists.
+psql:seed-bom-klotus.sql:170: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(746f1d66-0cfd-494c-a76f-e284c3434036) already exists.
+psql:seed-bom-klotus.sql:171: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d615e201-0e53-469c-98e3-f77be67ddb1b) already exists.
+psql:seed-bom-klotus.sql:172: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ec90fbde-a900-41f3-9ec4-f79f8d104392) already exists.
+psql:seed-bom-klotus.sql:173: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(32acfdb7-fcb7-472a-8b74-a42519a0086c) already exists.
+psql:seed-bom-klotus.sql:174: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(d4448d48-efe2-493a-b6c2-9827acebc364) already exists.
+psql:seed-bom-klotus.sql:175: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(446f2a4d-355b-4399-9b6a-e20c6601a306) already exists.
+psql:seed-bom-klotus.sql:176: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(5503b9aa-d9a5-4c7b-a6f5-62ff1d0d201c) already exists.
+psql:seed-bom-klotus.sql:177: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ab25e9ee-59f0-47b6-803e-7951163b3ac1) already exists.
+psql:seed-bom-klotus.sql:178: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(efd23bde-2d98-42dd-8d98-becb243f338c) already exists.
+psql:seed-bom-klotus.sql:179: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(87dc9ea0-dd94-4501-8c03-11bc2e67d684) already exists.
+psql:seed-bom-klotus.sql:180: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c4863812-a2b4-4175-99a9-79334ef73558) already exists.
+psql:seed-bom-klotus.sql:181: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(eb4c2f31-9631-4528-a611-230f89f6027c) already exists.
+psql:seed-bom-klotus.sql:182: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(706861ba-9b19-44c3-b39a-6a784dea661f) already exists.
+psql:seed-bom-klotus.sql:183: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c60b68de-c3e5-4de2-988d-81cf54eebed6) already exists.
+psql:seed-bom-klotus.sql:184: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(c2ea38ba-14dc-4ee5-a537-05f2c7114871) already exists.
+psql:seed-bom-klotus.sql:185: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(3585605d-5eef-4e65-b4d7-de79dd716b01) already exists.
+psql:seed-bom-klotus.sql:186: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(63340c2b-89be-44fb-b362-aba78296f8b0) already exists.
+psql:seed-bom-klotus.sql:187: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(36c6e426-6906-4587-855c-f3bca1edd708) already exists.
+psql:seed-bom-klotus.sql:188: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a603aa8f-a144-4e6e-b21a-05471550b83a) already exists.
+psql:seed-bom-klotus.sql:189: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(324074aa-c604-43a8-8bbd-2c5cff726ee0) already exists.
+psql:seed-bom-klotus.sql:190: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(ff3e0b1a-7f57-46cf-ad64-881d461e9eab) already exists.
+psql:seed-bom-klotus.sql:191: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(09f33a6e-a830-43ac-bd3d-5911943eeabc) already exists.
+psql:seed-bom-klotus.sql:192: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(519f8f6b-c9e5-482b-92fb-b74270b0250a) already exists.
+psql:seed-bom-klotus.sql:193: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(0a962e14-6575-4811-b543-9d3b5c8d22f3) already exists.
+psql:seed-bom-klotus.sql:194: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(7ed2c048-2543-42db-9f3f-3c0c11e7b0f9) already exists.
+psql:seed-bom-klotus.sql:195: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(51ff92f2-55fa-47eb-96cc-6af6db41b910) already exists.
+psql:seed-bom-klotus.sql:196: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(85b4c99e-051e-40f1-91d5-a25a9a48dd13) already exists.
+psql:seed-bom-klotus.sql:197: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(294970cc-bec4-4600-b120-3ad295be5434) already exists.
+psql:seed-bom-klotus.sql:198: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(f1fd2d62-bc48-4770-8dd4-ed4f6106d654) already exists.
+psql:seed-bom-klotus.sql:199: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(96d4176d-781b-42f2-b5f0-436365f4b35a) already exists.
+psql:seed-bom-klotus.sql:200: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(b513c1d0-b0dc-4e87-952f-ab91ebfa1649) already exists.
+psql:seed-bom-klotus.sql:201: ERROR:  duplicate key value violates unique constraint "erp_inventory_items_pkey"
+DETAIL:  Key (id)=(a29afa17-267f-48e3-a5e2-d0bdfb72302f) already exists.
+psql:seed-bom-klotus.sql:204: ERROR:  duplicate key value violates unique constraint "erp_boms_pkey"
+DETAIL:  Key (id)=(08d446db-e8f0-431f-9c81-4fd13826f813) already exists.
+psql:seed-bom-klotus.sql:207: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(4e24f9d0-c336-4f4c-8e87-5a6b7ad7bffc) already exists.
+psql:seed-bom-klotus.sql:208: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(2d6ee6cc-63ef-4d97-aaea-bc12da1cf9e7) already exists.
+psql:seed-bom-klotus.sql:209: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(336f1418-e4ee-4a50-b7ff-7cd737c67205) already exists.
+psql:seed-bom-klotus.sql:210: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(d26fcfff-2eb3-46b9-8f1b-b2fdff976ac6) already exists.
+psql:seed-bom-klotus.sql:211: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(be43573f-99b3-445f-9acc-f040b773852f) already exists.
+psql:seed-bom-klotus.sql:212: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(b9ed7f77-f44f-4e97-b259-9e3b52ed24a0) already exists.
+psql:seed-bom-klotus.sql:213: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(76ba56a3-c379-4125-b7e0-9b00587ff01b) already exists.
+psql:seed-bom-klotus.sql:214: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(c482c614-4dca-4c30-9584-3ffadaca4805) already exists.
+psql:seed-bom-klotus.sql:215: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(5b887120-6207-4788-98dd-7441f2bb3370) already exists.
+psql:seed-bom-klotus.sql:216: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(208d1a4d-0cf1-4b1a-b9e3-b8c6ff5c7774) already exists.
+psql:seed-bom-klotus.sql:217: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(a83049c2-f044-4a55-bb24-f1000458a516) already exists.
+psql:seed-bom-klotus.sql:218: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(1169eae0-2a3b-4c22-a252-50dfc44fbc73) already exists.
+psql:seed-bom-klotus.sql:219: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(69fe197f-aa25-4143-ad14-5aac57eec70f) already exists.
+psql:seed-bom-klotus.sql:220: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(5675c530-5543-418c-8d37-d00486d24a36) already exists.
+psql:seed-bom-klotus.sql:221: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(53c2002d-0150-4a60-a68c-cac652ecf2b9) already exists.
+psql:seed-bom-klotus.sql:222: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(3e3bdba6-d317-4015-9c54-f41929a544f4) already exists.
+psql:seed-bom-klotus.sql:223: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(0e8403d9-debd-43c4-92ed-bb9813aa777e) already exists.
+psql:seed-bom-klotus.sql:224: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(6000e2a2-3fcd-407c-97a6-d2e98ff1064d) already exists.
+psql:seed-bom-klotus.sql:225: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(1b1d16a2-1c99-4acb-a2b4-f65fae289d2b) already exists.
+psql:seed-bom-klotus.sql:226: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(d22a41be-9f09-4a7f-90b5-0911a4236573) already exists.
+psql:seed-bom-klotus.sql:227: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(021a0d07-3296-486e-95a3-35aa74697faf) already exists.
+psql:seed-bom-klotus.sql:228: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(7ce74383-37e3-4c6a-ba00-849180a0454e) already exists.
+psql:seed-bom-klotus.sql:229: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(460d48fc-fbf5-4db8-b32a-d9f5c64f8f3e) already exists.
+psql:seed-bom-klotus.sql:230: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(777eadfd-99ce-4414-89e1-2b71b226d2da) already exists.
+psql:seed-bom-klotus.sql:231: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(2eec5b56-3f67-434d-877d-7d56df932d87) already exists.
+psql:seed-bom-klotus.sql:232: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(53311514-3044-4d1f-817e-6d314614c895) already exists.
+psql:seed-bom-klotus.sql:233: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(f4c19add-5259-4e0f-989e-d9388d6901e7) already exists.
+psql:seed-bom-klotus.sql:234: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(1e3255ee-98dd-48ea-b97d-a3bfe7f54b24) already exists.
+psql:seed-bom-klotus.sql:235: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(4e29132b-b3a3-4183-9c01-2e4e1d67783e) already exists.
+psql:seed-bom-klotus.sql:236: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(cdc025ac-78b6-4e33-b4c9-3c5be51822c9) already exists.
+psql:seed-bom-klotus.sql:237: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(edde1a72-bc03-4150-8a1a-544e05d786f0) already exists.
+psql:seed-bom-klotus.sql:238: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(4f6db28a-a641-44fd-905d-4a85f858cae4) already exists.
+psql:seed-bom-klotus.sql:239: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(95cb7cae-fd37-48e5-9c15-2be035c15f1a) already exists.
+psql:seed-bom-klotus.sql:240: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(1c22036c-61e1-446b-a47e-df69d39430b4) already exists.
+psql:seed-bom-klotus.sql:241: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(b6557665-d0d2-4e27-9a6d-68180d3fb773) already exists.
+psql:seed-bom-klotus.sql:242: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(e980c18e-50f2-4d02-b9af-2edc2ba93df5) already exists.
+psql:seed-bom-klotus.sql:243: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(7cc0ea39-727c-4726-9ff5-a04b5345fa2f) already exists.
+psql:seed-bom-klotus.sql:244: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(0b78cf03-fc21-4dfa-94a2-158b65f57fcd) already exists.
+psql:seed-bom-klotus.sql:245: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(a0b79362-5636-4d43-a3d4-daa0c508c222) already exists.
+psql:seed-bom-klotus.sql:246: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(088e7118-603e-435a-9c52-0ec16401aa9c) already exists.
+psql:seed-bom-klotus.sql:247: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(5c0798c3-b0cc-4881-8f14-84397b730abd) already exists.
+psql:seed-bom-klotus.sql:248: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(981632b8-945d-44c0-8da2-e7876e61f898) already exists.
+psql:seed-bom-klotus.sql:249: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(5b54493f-9965-4252-a4d0-47851ade6f75) already exists.
+psql:seed-bom-klotus.sql:250: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(d0946b8a-6223-4747-8e41-20b52731b33c) already exists.
+psql:seed-bom-klotus.sql:251: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(9e55ab2c-9fde-4fe8-bcc9-d90837314dfc) already exists.
+psql:seed-bom-klotus.sql:252: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(fb4da9bf-a00e-4071-90af-237b801e3023) already exists.
+psql:seed-bom-klotus.sql:253: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(5bfcba92-2bbf-48bd-a51a-c53e2b3e415a) already exists.
+psql:seed-bom-klotus.sql:254: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(a738527b-335a-4866-a96a-7b189e43d0ef) already exists.
+psql:seed-bom-klotus.sql:255: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(06509985-8603-48bd-9155-5313035c1bc2) already exists.
+psql:seed-bom-klotus.sql:256: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(7b498560-ddae-49db-bff6-e169d742c716) already exists.
+psql:seed-bom-klotus.sql:257: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(75c72d3e-9162-4d4b-bcb2-a516909b2179) already exists.
+psql:seed-bom-klotus.sql:258: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(e06a4f90-bed0-4399-8465-799ca6d00ea0) already exists.
+psql:seed-bom-klotus.sql:259: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(1ae44dfa-325d-4dee-b345-23390652a39c) already exists.
+psql:seed-bom-klotus.sql:260: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(f0001dfc-daf7-4271-9152-a1b9c0a1c507) already exists.
+psql:seed-bom-klotus.sql:261: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(2ed500dd-2bf4-4439-97c7-2825fb86cb3a) already exists.
+psql:seed-bom-klotus.sql:262: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(77567f48-3cab-4def-871d-5951ec129a7b) already exists.
+psql:seed-bom-klotus.sql:263: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(09d3da1d-ddfc-40ae-a791-09343ce6e7c7) already exists.
+psql:seed-bom-klotus.sql:264: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(81b8ebf0-031d-462f-a72e-204e2aad4a2f) already exists.
+psql:seed-bom-klotus.sql:265: ERROR:  duplicate key value violates unique constraint "erp_bom_lines_pkey"
+DETAIL:  Key (id)=(3bd62a85-d7c6-4858-98d9-ea2d400053b4) already exists.

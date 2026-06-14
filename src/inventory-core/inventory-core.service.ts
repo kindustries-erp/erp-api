@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { DataSource, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpInventoryItem } from './entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from './entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from './entities/erp_inventory_balance.entity';
@@ -18,6 +19,7 @@ import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
+import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 
 @Injectable()
 export class InventoryItemsService {
@@ -32,6 +34,7 @@ export class InventoryItemsService {
     private readonly uomRepository: Repository<ErpUom>,
     @InjectRepository(ErpItemType)
     private readonly itemTypeRepository: Repository<ErpItemType>,
+    private readonly dataSource: DataSource,
   ) {}
 
   private normalizeCode(value: string) {
@@ -128,23 +131,49 @@ export class InventoryItemsService {
     return { message: 'Tạo thành công', data };
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: any) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    let whereCondition: any = { isDeleted: false };
+    let baseWhere: any = { isDeleted: false };
+    if (query.status) {
+      baseWhere.status = query.status;
+    }
+    if (query.itemType) {
+      baseWhere.itemType = query.itemType;
+    }
+    if (query.ids) {
+      baseWhere.id = In(
+        query.ids
+          .split(',')
+          .map((id: string) => id.trim())
+          .filter(Boolean),
+      );
+    }
+
+    let whereCondition: any = baseWhere;
     if (query.search) {
       whereCondition = [
-        { isDeleted: false, itemName: ILike(`%${query.search}%`) },
-        { isDeleted: false, sku: ILike(`%${query.search}%`) },
+        { ...baseWhere, itemName: ILike(`%${query.search}%`) },
+        { ...baseWhere, sku: ILike(`%${query.search}%`) },
       ];
     }
+
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemType'],
+      columnMap: {
+        created_at: 'createdAt',
+        item_name: 'itemName',
+        item_type: 'itemType',
+      },
+      defaultOrder: { createdAt: 'DESC' },
+    });
 
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
     return {
       items,
@@ -308,6 +337,123 @@ export class InventoryItemsService {
         currentOnHand,
         movements,
       },
+    };
+  }
+
+  async listWarehouseVouchers(query: WarehouseVoucherQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    let params: any[] = [];
+    let pIndex = 1;
+
+    let receiptWhere = `g.is_deleted = false`;
+    let issueWhere = `g.is_deleted = false`;
+
+    if (query.dateFrom) {
+      receiptWhere += ` AND g.receipt_date >= $${pIndex}`;
+      issueWhere += ` AND g.issue_date >= $${pIndex}`;
+      params.push(query.dateFrom);
+      pIndex++;
+    }
+    if (query.dateTo) {
+      receiptWhere += ` AND g.receipt_date <= $${pIndex}`;
+      issueWhere += ` AND g.issue_date <= $${pIndex}`;
+      params.push(query.dateTo);
+      pIndex++;
+    }
+    if (query.status) {
+      receiptWhere += ` AND g.status = $${pIndex}`;
+      issueWhere += ` AND g.status = $${pIndex}`;
+      params.push(query.status);
+      pIndex++;
+    }
+    if (query.partnerId) {
+      receiptWhere += ` AND g.supplier_id = $${pIndex}`;
+      issueWhere += ` AND g.customer_id = $${pIndex}`;
+      params.push(query.partnerId);
+      pIndex++;
+    }
+    if (query.search) {
+      const s = `%${query.search}%`;
+      receiptWhere += ` AND (g.receipt_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
+      issueWhere += ` AND (g.issue_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
+      params.push(s);
+      pIndex++;
+    }
+
+    const typeFilter = query.type;
+    const includeReceipts =
+      !typeFilter || typeFilter === 'all' || typeFilter === 'receipt';
+    const includeIssues =
+      !typeFilter || typeFilter === 'all' || typeFilter === 'issue';
+
+    const queries: string[] = [];
+
+    if (includeReceipts) {
+      queries.push(`
+        SELECT g.id, g.receipt_no as "voucherNo", g.receipt_date as "date", 'receipt' as "type",
+               g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
+               g.created_at as "createdAt"
+        FROM erp_goods_receipts g
+        LEFT JOIN erp_business_partners bp ON g.supplier_id = bp.id
+        WHERE ${receiptWhere}
+      `);
+    }
+
+    if (includeIssues) {
+      queries.push(`
+        SELECT g.id, g.issue_no as "voucherNo", g.issue_date as "date", 'issue' as "type",
+               g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
+               g.created_at as "createdAt"
+        FROM erp_goods_issues g
+        LEFT JOIN erp_business_partners bp ON g.customer_id = bp.id
+        WHERE ${issueWhere}
+      `);
+    }
+
+    if (queries.length === 0) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const unionQuery = queries.join(' UNION ALL ');
+
+    // Sorting
+    let sortColumn = 'date';
+    let sortDirection = 'DESC';
+
+    if (query.sort) {
+      let sortField = query.sort;
+      if (sortField.startsWith('-')) {
+        sortDirection = 'DESC';
+        sortField = sortField.substring(1);
+      } else {
+        sortDirection = 'ASC';
+      }
+      if (sortField === 'date') sortColumn = '"date"';
+      else if (sortField === 'voucherNo') sortColumn = '"voucherNo"';
+      else if (sortField === 'status') sortColumn = 'status';
+    }
+
+    const countQuery = `SELECT COUNT(*) as total FROM (${unionQuery}) as combined`;
+    const dataQuery = `
+      SELECT * FROM (${unionQuery}) as combined
+      ORDER BY ${sortColumn} ${sortDirection}, id ${sortDirection}
+      LIMIT $${pIndex} OFFSET $${pIndex + 1}
+    `;
+
+    const countResult = await this.dataSource.query(countQuery, params);
+    const total = parseInt(countResult[0]?.total ?? '0', 10);
+
+    const dataParams = [...params, pageSize, (page - 1) * pageSize];
+    const items = await this.dataSource.query(dataQuery, dataParams);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     };
   }
 }

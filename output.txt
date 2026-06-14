@@ -1,0 +1,9 @@
+Deleted 0 rows from erp_inventory_transactions
+Deleted 0 rows from erp_inventory_balances
+Table erp_purchase_order_materials error: relation "public.erp_purchase_order_materials" does not exist
+Deleted 0 rows from erp_purchase_order_lines
+Deleted 0 rows from erp_purchase_orders
+Deleted 0 rows from erp_goods_receipt_lines
+Deleted 0 rows from erp_goods_receipts
+Table erp_operational_lines error: relation "public.erp_operational_lines" does not exist
+Table erp_operational_documents error: relation "public.erp_operational_documents" does not exist

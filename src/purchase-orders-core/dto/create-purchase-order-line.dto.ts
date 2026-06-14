@@ -17,6 +17,16 @@ export class CreatePurchaseOrderLineDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  itemCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @ApiProperty()

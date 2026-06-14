@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
@@ -28,7 +28,7 @@ export class PurchaseOrdersCoreController {
   }
 
   @Get()
-  findAll(@Query() query: PaginationDto) {
+  findAll(@Query() query: OperationalQueryDto) {
     return this.service.findAll(query);
   }
 

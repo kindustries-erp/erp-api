@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
@@ -17,6 +18,7 @@ import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.ent
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
 import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
+import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -32,7 +34,7 @@ export class GoodsIssuesCoreService {
     repository: Repository<ErpGoodsIssue>,
     id: string,
   ) {
-    const issue = await repository.findOneBy({ id });
+    const issue = await repository.findOneBy({ id, isDeleted: false });
     if (!issue) {
       throw new NotFoundException('Không tìm thấy phiếu xuất');
     }
@@ -121,16 +123,39 @@ export class GoodsIssuesCoreService {
   async findAll(query: PaginationDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const order = resolveSortOrder(query.sort, {
+      allowedFields: ['createdAt', 'issueDate', 'issueNo', 'status'],
+      columnMap: { created_at: 'createdAt', issue_date: 'issueDate' },
+      defaultOrder: { createdAt: 'DESC' },
+    });
+    const where = query.search
+      ? ([{ issueNo: ILike(`%${query.search}%`), isDeleted: false }] as any)
+      : ({ isDeleted: false } as any);
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ issueNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      order: { createdAt: 'DESC' },
+      order,
     });
+    const customerIds = [
+      ...new Set(items.map((i) => i.customerId).filter(Boolean)),
+    ] as string[];
+    let customerMap = new Map<string, string>();
+    if (customerIds.length > 0) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const customers = await bpRepo.findBy({ id: In(customerIds) });
+      customerMap = new Map(customers.map((c) => [c.id, c.name]));
+    }
+
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      customerName: item.customerId
+        ? customerMap.get(item.customerId) || null
+        : null,
+    }));
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       pageSize,
@@ -140,17 +165,29 @@ export class GoodsIssuesCoreService {
 
   async findOne(id: string) {
     const data = await this.getIssueOrThrow(this.repository, id);
+    let customerName: string | null = null;
+    if (data.customerId) {
+      const bpRepo = this.dataSource.getRepository(ErpBusinessPartner);
+      const customer = await bpRepo.findOneBy({ id: data.customerId });
+      customerName = customer?.name || null;
+    }
     const lines = await this.lineRepository.find({
       where: { goodsIssueId: id },
       order: { lineNo: 'ASC' },
     });
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, lines: await this.enrichLines(lines) },
+      data: { ...data, customerName, lines: await this.enrichLines(lines) },
     };
   }
 
   async update(id: string, dto: UpdateGoodsIssueDto) {
+    const existing = await this.getIssueOrThrow(this.repository, id);
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được sửa phiếu xuất ở trạng thái nháp',
+      );
+    }
     const { lines, ...header } = dto as any;
     await this.repository.update(id, header);
     if (Array.isArray(lines)) {
@@ -405,5 +442,23 @@ export class GoodsIssuesCoreService {
       await issueRepo.save(issue);
       return this.findOne(id);
     });
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneBy({ id });
+    if (!existing || existing.isDeleted) {
+      throw new NotFoundException('Không tìm thấy phiếu xuất');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được xóa phiếu xuất ở trạng thái nháp',
+      );
+    }
+    existing.isDeleted = true;
+    const data = await this.repository.save(existing);
+    return {
+      message: 'Xóa phiếu xuất thành công',
+      data,
+    };
   }
 }

@@ -14,11 +14,12 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { InventoryItemQueryDto } from './dto/inventory-item-query.dto';
 import { InventoryItemsService } from './inventory-core.service';
 import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
+import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
@@ -39,7 +40,7 @@ export class InventoryItemsController {
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items')
-  findAll(@Query() query: PaginationDto) {
+  findAll(@Query() query: InventoryItemQueryDto) {
     return this.service.findAll(query);
   }
 
@@ -122,5 +123,11 @@ export class InventoryItemsController {
   @Delete('items/:id')
   removeItem(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.softDeleteItem(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('warehouse-vouchers')
+  listWarehouseVouchers(@Query() query: WarehouseVoucherQueryDto) {
+    return this.service.listWarehouseVouchers(query);
   }
 }
