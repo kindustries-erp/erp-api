@@ -19,6 +19,7 @@ import { InventoryItemsService } from './inventory-core.service';
 import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
+import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
@@ -122,5 +123,11 @@ export class InventoryItemsController {
   @Delete('items/:id')
   removeItem(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.softDeleteItem(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('warehouse-vouchers')
+  listWarehouseVouchers(@Query() query: WarehouseVoucherQueryDto) {
+    return this.service.listWarehouseVouchers(query);
   }
 }
