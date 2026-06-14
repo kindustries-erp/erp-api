@@ -73,8 +73,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
-            -p ${{ secrets.ELITE_PORT }} \
-            ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
+            -p ${{ vars.ELITE_PORT }} \
+            ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
             "mkdir -p /opt/stacks/liouni-erp-core-api && cat > /opt/stacks/liouni-erp-core-api/.env" \
             <<< "${{ secrets.ERP_CORE_API_ENV }}"
 
@@ -86,16 +86,16 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
-            -p ${{ secrets.ELITE_PORT }} \
-            ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
+            -p ${{ vars.ELITE_PORT }} \
+            ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
             "cd /opt/stacks/liouni-erp-core-api && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose up -d --force-recreate"
 
       - name: Health check
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
-            -p ${{ secrets.ELITE_PORT }} \
-            ${{ secrets.ELITE_USER }}@${{ secrets.ELITE_HOST }} \
+            -p ${{ vars.ELITE_PORT }} \
+            ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
             '
               for i in $(seq 1 20); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10020/api/v1/auth/profile || true)
