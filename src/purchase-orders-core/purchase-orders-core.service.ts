@@ -12,6 +12,7 @@ import {
   Between,
   MoreThanOrEqual,
   LessThanOrEqual,
+  In,
 } from 'typeorm';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
@@ -127,6 +128,18 @@ export class PurchaseOrdersCoreService {
       where.orderDate = LessThanOrEqual(
         new Date(`${query.date_to}T23:59:59.999+07:00`),
       );
+    }
+
+    if (query.inventory_item_id) {
+      const poLinesWithItem = await this.lineRepository.find({
+        select: ['purchaseOrderId'],
+        where: { itemId: query.inventory_item_id },
+      });
+      const poIds = poLinesWithItem.map((l) => l.purchaseOrderId);
+      if (poIds.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      where.id = In(poIds);
     }
 
     const order = resolveSortOrder(query.sort, {

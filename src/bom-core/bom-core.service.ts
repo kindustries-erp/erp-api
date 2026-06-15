@@ -68,6 +68,25 @@ export class BomCoreService {
       take: pageSize,
       order,
     });
+
+    if (items.length > 0) {
+      const fgIds = items.map((i) => i.finishedGoodItemId).filter(Boolean);
+      if (fgIds.length > 0) {
+        const fgItems = await this.dataSource.query(
+          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          [fgIds],
+        );
+        const fgMap = new Map(fgItems.map((i: any) => [i.id, i]));
+        for (const item of items) {
+          if (item.finishedGoodItemId && fgMap.has(item.finishedGoodItemId)) {
+            const fg = fgMap.get(item.finishedGoodItemId) as any;
+            (item as any).finishedGoodItemCode = fg.sku;
+            (item as any).finishedGoodItemName = `${fg.sku} — ${fg.item_name}`;
+          }
+        }
+      }
+    }
+
     return {
       items,
       total,
@@ -83,6 +102,25 @@ export class BomCoreService {
       where: { bomId: id },
       order: { lineNo: 'ASC' },
     });
+
+    if (lines.length > 0) {
+      const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
+      if (itemIds.length > 0) {
+        const items = await this.dataSource.query(
+          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          [itemIds],
+        );
+        const itemMap = new Map(items.map((i: any) => [i.id, i]));
+        for (const line of lines) {
+          if (line.componentItemId && itemMap.has(line.componentItemId)) {
+            const item = itemMap.get(line.componentItemId) as any;
+            (line as any).componentItemCode = item.sku;
+            (line as any).componentItemName = `${item.sku} — ${item.item_name}`;
+          }
+        }
+      }
+    }
+
     return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
   }
 
