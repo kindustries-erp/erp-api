@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-klotus-api
 
 jobs:
   build-and-push:
@@ -88,7 +88,7 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "cd /opt/stacks/erp-klotus-api && docker compose up -d --build --force-recreate"
+            "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u kindustries-erp --password-stdin && cd /opt/stacks/erp-klotus-api && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose pull && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose up -d --no-build --force-recreate"
 
       - name: Health check
         run: |
