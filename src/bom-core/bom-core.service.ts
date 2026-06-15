@@ -103,6 +103,18 @@ export class BomCoreService {
       order: { lineNo: 'ASC' },
     });
 
+    if (data.finishedGoodItemId) {
+      const fgItems = await this.dataSource.query(
+        `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = $1::uuid`,
+        [data.finishedGoodItemId],
+      );
+      if (fgItems.length > 0) {
+        const fg = fgItems[0];
+        (data as any).finishedGoodItemCode = fg.sku;
+        (data as any).finishedGoodItemName = `${fg.sku} — ${fg.item_name}`;
+      }
+    }
+
     if (lines.length > 0) {
       const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
       if (itemIds.length > 0) {
