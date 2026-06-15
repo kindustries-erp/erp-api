@@ -91,7 +91,7 @@ jobs:
             "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin && \
              docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} && \
              docker rm -f liouni-erp-core-api || true && \
-             docker run -d --name liouni-erp-core-api --restart always --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -p 10010:10000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+             docker run -d --name liouni-erp-core-api --restart always --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -e PORT=3000 -p 10010:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         env:
