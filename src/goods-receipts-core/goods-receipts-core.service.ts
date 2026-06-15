@@ -49,8 +49,12 @@ export class GoodsReceiptsCoreService {
   private async getReceiptOrThrow(
     repository: Repository<ErpGoodsReceipt>,
     id: string,
+    options?: any,
   ) {
-    const receipt = await repository.findOneBy({ id, isDeleted: false });
+    const receipt = await repository.findOne({
+      where: { id, isDeleted: false },
+      ...options,
+    });
     if (!receipt) {
       throw new NotFoundException('Không tìm thấy phiếu nhập');
     }
@@ -206,7 +210,9 @@ export class GoodsReceiptsCoreService {
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
 
-      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+      const receipt = await this.getReceiptOrThrow(receiptRepo, id, {
+        lock: { mode: 'pessimistic_write' },
+      });
       if (receipt.status === 'POSTED') {
         throw new BadRequestException('Phiếu nhập đã được ghi nhận trước đó');
       }
@@ -339,7 +345,9 @@ export class GoodsReceiptsCoreService {
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
 
-      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+      const receipt = await this.getReceiptOrThrow(receiptRepo, id, {
+        lock: { mode: 'pessimistic_write' },
+      });
       if (receipt.status === 'CANCELLED') {
         throw new BadRequestException('Phiếu nhập đã bị hủy trước đó');
       }
