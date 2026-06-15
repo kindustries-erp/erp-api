@@ -394,9 +394,11 @@ export class InventoryItemsService {
       queries.push(`
         SELECT g.id, g.receipt_no as "voucherNo", g.receipt_date as "date", 'receipt' as "type",
                g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
-               g.created_at as "createdAt"
+               g.created_at as "createdAt",
+               po.po_no as "poNo"
         FROM erp_goods_receipts g
         LEFT JOIN erp_business_partners bp ON g.supplier_id = bp.id
+        LEFT JOIN erp_purchase_orders po ON g.purchase_order_id = po.id
         WHERE ${receiptWhere}
       `);
     }
@@ -405,7 +407,8 @@ export class InventoryItemsService {
       queries.push(`
         SELECT g.id, g.issue_no as "voucherNo", g.issue_date as "date", 'issue' as "type",
                g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
-               g.created_at as "createdAt"
+               g.created_at as "createdAt",
+               NULL as "poNo"
         FROM erp_goods_issues g
         LEFT JOIN erp_business_partners bp ON g.customer_id = bp.id
         WHERE ${issueWhere}
