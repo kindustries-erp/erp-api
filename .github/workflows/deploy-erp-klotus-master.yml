@@ -1,4 +1,4 @@
-name: Build & Deploy API
+name: Build & Deploy API (K-Lotus)
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/kindustries-erp/erp-klotus-api
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-master
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-and-push:
@@ -63,44 +64,49 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.HEAD_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-
-      - name: Write .env to Head
-        run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "mkdir -p /opt/stacks/erp-klotus-api && cat > /opt/stacks/erp-klotus-api/.env" \
-            <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}"
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
       - name: Guard deploy secrets
         run: |
           test -n "${{ secrets.GHCR_PAT }}" || (echo "GHCR_PAT missing" && exit 1)
+          test -n "${{ secrets.HEAD_PASSWORD }}" || (echo "HEAD_PASSWORD missing" && exit 1)
 
-      - name: Run deploy script
+      - name: Write .env to Head
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u kindustries-erp --password-stdin && cd /opt/stacks/erp-klotus-api && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose pull && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose up -d --no-build --force-recreate"
+            "mkdir -p /home/dev/opt/stacks/erp/erp-api-klotus-master && cat > /home/dev/opt/stacks/erp/erp-api-klotus-master/.env" \
+            <<< "${{ secrets.MASTER_API_ENV }}"
+
+      - name: Run deploy script
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            -p ${{ vars.HEAD_PORT }} \
+            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
+            "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
+             docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
+             docker rm -f erp-api-klotus-master || true ; \
+             docker run -d --name erp-api-klotus-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-klotus-master/.env -e PORT=3000 -p 10012:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             '
               for i in $(seq 1 20); do
-                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10022/api/v1/auth/profile || true)
-                if [ "$code" = "401" ]; then
+                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10012/api/v1/auth/profile || true)
+                if [ "$code" = "401" ] || [ "$code" = "200" ]; then
                   echo "✅ API health OK"
+                  docker image prune -af
                   exit 0
                 fi
                 echo "Attempt $i: got $code, retrying..."
