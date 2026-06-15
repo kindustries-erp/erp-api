@@ -80,7 +80,7 @@ jobs:
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             "mkdir -p /home/dev/opt/stacks/erp/erp-api-klotus-master && cat > /home/dev/opt/stacks/erp/erp-api-klotus-master/.env" \
-            <<< "${{ secrets.MASTER_API_ENV }}"
+            <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}"
 
       - name: Run deploy script
         env:
