@@ -1,12 +1,12 @@
-name: CI API
+name: CI ERP K-Lotus Master API
 
 on:
   push:
     branches:
-      - erp-master
+      - erp-klotus-master
   pull_request:
     branches:
-      - erp-master
+      - erp-klotus-master
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
