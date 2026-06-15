@@ -219,13 +219,18 @@ export class GoodsReceiptsCoreService {
         throw new BadRequestException('Phiếu nhập chưa có dòng hàng');
       }
 
+      const hasValidLines = lines.some(
+        (line) => Number(line.qtyReceived || 0) > 0,
+      );
+      if (!hasValidLines) {
+        throw new BadRequestException(
+          'Phiếu nhập không có dòng hàng nào có số lượng nhận hợp lệ (> 0)',
+        );
+      }
+
       for (const line of lines) {
         const qty = Number(line.qtyReceived || 0);
-        if (qty <= 0) {
-          throw new BadRequestException(
-            `Dòng ${line.lineNo} có số lượng nhận không hợp lệ`,
-          );
-        }
+        if (qty <= 0) continue;
 
         const incomingUnitCost = Number(line.unitCost || 0);
         const balanceWhere: any = {
