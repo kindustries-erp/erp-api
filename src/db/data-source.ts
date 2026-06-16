@@ -23,6 +23,12 @@ import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.ent
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
+import { ErpChartOfAccount } from '../journal-entries/entities/erp_chart_of_account.entity';
+import { ErpAccountingPeriod } from '../journal-entries/entities/erp_accounting_period.entity';
+import { ErpJournalEntry } from '../journal-entries/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../journal-entries/entities/erp_journal_entry_line.entity';
+import { ErpJournalEntryAttachment } from '../journal-entries/entities/erp_journal_entry_attachment.entity';
+import { ErpModuleAccountingConfig } from '../accounting-configs-core/entities/erp_module_accounting_config.entity';
 
 const entities = [
   CoreUser,
@@ -48,6 +54,12 @@ const entities = [
   ErpSalesOrderLine,
   ErpProductionOrder,
   ErpProductionOrderMaterial,
+  ErpChartOfAccount,
+  ErpAccountingPeriod,
+  ErpJournalEntry,
+  ErpJournalEntryLine,
+  ErpJournalEntryAttachment,
+  ErpModuleAccountingConfig,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -18,9 +18,14 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
+import { JournalEntriesService } from '../journal-entries/journal-entries.service';
+import { AccountingConfigsCoreService } from '../accounting-configs-core/accounting-configs-core.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
+  private readonly logger = new Logger(GoodsReceiptsCoreService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpGoodsReceipt)
@@ -28,6 +33,8 @@ export class GoodsReceiptsCoreService {
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
     private readonly dependencyService: DocumentDependenciesCoreService,
+    private readonly journalEntriesService: JournalEntriesService,
+    private readonly accountingConfigService: AccountingConfigsCoreService,
   ) {}
 
   private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
@@ -318,6 +325,63 @@ export class GoodsReceiptsCoreService {
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
       });
+
+      // --- Auto Generate Journal Entry (Chạy ngầm) ---
+      try {
+        const config = await this.accountingConfigService.findByModuleAction(
+          'goods_receipts',
+          'post',
+        );
+        if (
+          config &&
+          config.isActive &&
+          config.debitAccountId &&
+          config.creditAccountId
+        ) {
+          const totalAmount = savedLines.reduce(
+            (sum, l) =>
+              sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
+            0,
+          );
+          if (totalAmount > 0) {
+            await this.journalEntriesService.create(
+              {
+                date: savedReceipt.receiptDate,
+                description: `Hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
+                referenceType: 'erp_goods_receipts',
+                referenceId: savedReceipt.id,
+                lines: [
+                  {
+                    account_id: config.debitAccountId,
+                    debit: totalAmount,
+                    credit: 0,
+                    description: `Nhập kho ${savedReceipt.receiptNo}`,
+                    sort: 1,
+                  },
+                  {
+                    account_id: config.creditAccountId,
+                    debit: 0,
+                    credit: totalAmount,
+                    description: `Phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
+                    sort: 2,
+                  },
+                ],
+              } as any,
+              (dto.createdBy ?? receipt.createdBy) as string,
+            );
+            this.logger.log(
+              `Created auto journal entry for goods receipt ${savedReceipt.receiptNo}`,
+            );
+          }
+        }
+      } catch (err) {
+        this.logger.error(
+          `Lỗi tự động sinh bút toán cho phiếu nhập ${savedReceipt.receiptNo}`,
+          err,
+        );
+      }
+      // ----------------------------------------------
+
       return {
         message: 'Lấy thông tin thành công',
         data: { ...savedReceipt, lines: savedLines },
