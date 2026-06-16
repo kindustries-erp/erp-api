@@ -11,37 +11,37 @@ import {
 import { AccountingConfigsCoreService } from './accounting-configs-core.service';
 import { CreateAccountingConfigsCoreDto } from './dto/create-accounting-configs-core.dto';
 import { UpdateAccountingConfigsCoreDto } from './dto/update-accounting-configs-core.dto';
-import { PermissionsGuard } from '../rbac-core/guards/permissions.guard';
-import { Permissions } from '../rbac-core/decorators/permissions.decorator';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('accounting-configs')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 export class AccountingConfigsCoreController {
   constructor(
     private readonly accountingConfigsCoreService: AccountingConfigsCoreService,
   ) {}
 
   @Post()
-  @Permissions('manage:accounting_configs')
+  @RequirePermissions({ resource: 'accounting_configs', action: 'manage' })
   create(@Body() createDto: CreateAccountingConfigsCoreDto) {
     return this.accountingConfigsCoreService.create(createDto);
   }
 
   @Get()
-  @Permissions('manage:accounting_configs', 'read:journal_entries')
+  @RequirePermissions({ resource: 'accounting_configs', action: 'read' })
   findAll() {
     return this.accountingConfigsCoreService.findAll();
   }
 
   @Get(':id')
-  @Permissions('manage:accounting_configs')
+  @RequirePermissions({ resource: 'accounting_configs', action: 'manage' })
   findOne(@Param('id') id: string) {
     return this.accountingConfigsCoreService.findOne(id);
   }
 
   @Patch(':id')
-  @Permissions('manage:accounting_configs')
+  @RequirePermissions({ resource: 'accounting_configs', action: 'manage' })
   update(
     @Param('id') id: string,
     @Body() updateDto: UpdateAccountingConfigsCoreDto,
@@ -50,7 +50,7 @@ export class AccountingConfigsCoreController {
   }
 
   @Delete(':id')
-  @Permissions('manage:accounting_configs')
+  @RequirePermissions({ resource: 'accounting_configs', action: 'manage' })
   remove(@Param('id') id: string) {
     return this.accountingConfigsCoreService.remove(id);
   }
