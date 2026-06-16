@@ -174,6 +174,56 @@ export class AuthService implements OnModuleInit {
     return { message: 'Đổi mật khẩu thành công' };
   }
 
+  async impersonate(adminUserId: string, targetUserId: string) {
+    const adminUser = await this.usersService.findById(adminUserId);
+    if (adminUser?.email !== 'admin@liouni.com') {
+      throw new UnauthorizedException(
+        'Chỉ admin@liouni.com mới có quyền login as user',
+      );
+    }
+
+    const targetUser = await this.usersService.findById(targetUserId);
+    if (!targetUser) {
+      throw new UnauthorizedException('Không tìm thấy user đích');
+    }
+
+    if (targetUser.status !== 'ACTIVE') {
+      throw new UnauthorizedException(
+        'Tài khoản đích đang bị khóa hoặc ngưng hoạt động',
+      );
+    }
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: targetUser.id,
+      email: targetUser.email,
+      status: targetUser.status,
+      impersonatorId: adminUser.id,
+    });
+
+    await this.auditCoreService.recordAction({
+      actorUserId: adminUser.id,
+      actorEmail: adminUser.email,
+      actorEmployeeId: adminUser.employeeId,
+      actionType: 'IMPERSONATE',
+      module: 'auth',
+      entityType: 'core_user',
+      entityId: targetUser.id,
+      message: `Login as user ${targetUser.email}`,
+    });
+
+    return {
+      accessToken,
+      tokenType: 'Bearer',
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        status: targetUser.status,
+        employeeId: targetUser.employeeId,
+        legacyDirectusUserId: targetUser.legacyDirectusUserId,
+      },
+    };
+  }
+
   async profile(userId: string) {
     const user = await this.usersService.findById(userId);
 
