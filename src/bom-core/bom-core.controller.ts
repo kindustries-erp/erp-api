@@ -18,6 +18,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { BomCoreService } from './bom-core.service';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
+import { ListBomDto } from './dto/list-bom.dto';
 
 @ApiTags('erp_bom')
 @ApiBearerAuth()
@@ -34,7 +35,7 @@ export class BomCoreController {
 
   @RequirePermissions({ resource: 'bom', action: 'read' })
   @Get()
-  findAll(@Query() query: PaginationDto) {
+  findAll(@Query() query: ListBomDto) {
     return this.service.findAll(query);
   }
 

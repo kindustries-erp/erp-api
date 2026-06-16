@@ -7,6 +7,7 @@ import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
+import { ListBomDto } from './dto/list-bom.dto';
 
 @Injectable()
 export class BomCoreService {
@@ -53,17 +54,23 @@ export class BomCoreService {
     });
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: ListBomDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const order = resolveSortOrder(query.sort, {
       defaultOrder: { createdAt: 'DESC' },
     });
 
+    const where: any = {};
+    if (query.search) {
+      where.bomName = ILike(`%${query.search}%`);
+    }
+    if (query.finishedGoodItemId) {
+      where.finishedGoodItemId = query.finishedGoodItemId;
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ bomName: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where: Object.keys(where).length > 0 ? where : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
