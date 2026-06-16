@@ -76,7 +76,11 @@ jobs:
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             "mkdir -p /opt/stacks/erp-klotus-api && cat > /opt/stacks/erp-klotus-api/.env" \
-            <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}"
+            <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}
+          R2_ACCOUNT_ID=${{ secrets.KLOTUS_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID=${{ secrets.KLOTUS_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY=${{ secrets.KLOTUS_R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME=${{ secrets.KLOTUS_R2_BUCKET_NAME }}"
 
       - name: Guard deploy secrets
         run: |

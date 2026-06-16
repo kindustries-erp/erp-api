@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import { R2Service } from './r2/r2.service';
+import {
+  parseVietnamInvoiceXml,
+  XmlParseError,
+} from './xml-parser/vietnam-invoice-xml.parser';
 
 export interface ErpInvoiceQuery {
   direction?: string;
@@ -17,9 +27,12 @@ export interface ErpInvoiceQuery {
 
 @Injectable()
 export class ErpInvoicesCoreService {
+  private readonly logger = new Logger(ErpInvoicesCoreService.name);
+
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    private readonly r2: R2Service,
   ) {}
 
   async findAll(query: ErpInvoiceQuery) {
@@ -152,4 +165,196 @@ export class ErpInvoicesCoreService {
         invoice.totalAmount != null ? String(invoice.totalAmount) : '0',
     };
   }
+
+  // ---------------------------------------------------------------------------
+  // Bulk XML import
+  // ---------------------------------------------------------------------------
+
+  async bulkImportBuyerXml(
+    files: Array<{ filename: string; buffer: Buffer }>,
+  ): Promise<BulkImportResult> {
+    return this._doBulkImport(files, 'IN');
+  }
+
+  async bulkImportSellerXml(
+    files: Array<{ filename: string; buffer: Buffer }>,
+  ): Promise<BulkImportResult> {
+    return this._doBulkImport(files, 'OUT');
+  }
+
+  private async _doBulkImport(
+    files: Array<{ filename: string; buffer: Buffer }>,
+    direction: 'IN' | 'OUT',
+  ): Promise<BulkImportResult> {
+    const importId = crypto.randomUUID();
+    const skipped: BulkImportSkippedItem[] = [];
+    const errors: BulkImportErrorItem[] = [];
+    let created = 0;
+
+    for (const file of files) {
+      try {
+        // 1. Parse XML
+        const parsed = parseVietnamInvoiceXml(file.buffer.toString('utf-8'));
+
+        // 2. Kiểm tra duplicate: invoice_no + seller_tax_code
+        const existing = await this.repository.findOne({
+          where: {
+            invoiceNo: parsed.invoiceNo,
+            sellerTaxCode: parsed.sellerTaxCode ?? undefined,
+          },
+        });
+
+        if (existing) {
+          skipped.push({
+            filename: file.filename,
+            invoiceNo: parsed.invoiceNo,
+            sellerName: parsed.sellerName,
+            sellerTaxCode: parsed.sellerTaxCode,
+            reason: 'DUPLICATE',
+          });
+          continue;
+        }
+
+        // 3. Upload XML lên R2
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const safeTax = (parsed.sellerTaxCode ?? 'unknown').replace(
+          /[^\w]/g,
+          '',
+        );
+        const safeNo = parsed.invoiceNo.replace(/[^\w-]/g, '_');
+        const xmlKey = `invoices/${direction}/${yyyy}/${mm}/${safeNo}_${safeTax}.xml`;
+
+        try {
+          await this.r2.uploadBuffer(xmlKey, file.buffer, 'application/xml');
+        } catch (r2Err) {
+          this.logger.warn(
+            `R2 upload failed for ${file.filename}: ${(r2Err as Error).message}`,
+          );
+          // R2 lỗi không block tạo invoice — xmlFileKey sẽ null
+        }
+
+        // 4. Tạo record erp_invoice
+        const invoice = this.repository.create({
+          invoiceNo: parsed.invoiceNo,
+          serialNo: parsed.serialNo,
+          invoiceDate: parsed.invoiceDate,
+          direction,
+          status: 'DRAFT',
+          sellerName: parsed.sellerName,
+          sellerTaxCode: parsed.sellerTaxCode,
+          sellerAddress: parsed.sellerAddress,
+          sellerBank: parsed.sellerBank,
+          buyerName: parsed.buyerName,
+          buyerTaxCode: parsed.buyerTaxCode,
+          buyerAddress: parsed.buyerAddress,
+          description: parsed.description,
+          preVatAmount: String(parsed.preVatAmount),
+          vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
+          vatAmount: String(parsed.vatAmount),
+          discountAmount: String(parsed.discountAmount),
+          totalAmount: String(parsed.totalAmount),
+          xmlFileKey: xmlKey,
+          xmlImportId: importId,
+        } as any);
+
+        await this.repository.save(invoice);
+        created++;
+      } catch (err) {
+        const reason =
+          err instanceof XmlParseError
+            ? err.message
+            : `Lỗi hệ thống: ${(err as Error).message}`;
+        errors.push({ filename: file.filename, reason });
+      }
+    }
+
+    return {
+      importId,
+      direction,
+      total: files.length,
+      created,
+      skipped,
+      errors,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pre-signed URLs
+  // ---------------------------------------------------------------------------
+
+  async getFileDownloadUrl(
+    invoiceId: string,
+    fileType: 'pdf' | 'xml',
+  ): Promise<{ url: string; expiresAt: string }> {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    const key = fileType === 'pdf' ? invoice.pdfFileKey : invoice.xmlFileKey;
+    if (!key)
+      throw new BadRequestException(
+        `Invoice chưa có file ${fileType.toUpperCase()} trên R2`,
+      );
+
+    const url = await this.r2.getPresignedDownloadUrl(key, 3600);
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    return { url, expiresAt };
+  }
+
+  async getFileUploadUrl(
+    invoiceId: string,
+    fileType: 'pdf' | 'xml',
+  ): Promise<{ url: string; key: string; expiresAt: string }> {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const safeNo = invoice.invoiceNo.replace(/[^\w-]/g, '_');
+    const key = `invoices/${invoice.direction}/${yyyy}/${mm}/${safeNo}.${fileType}`;
+    const contentType =
+      fileType === 'pdf' ? 'application/pdf' : 'application/xml';
+
+    const url = await this.r2.getPresignedUploadUrl(key, contentType, 900);
+    const expiresAt = new Date(Date.now() + 900 * 1000).toISOString();
+
+    // Ghi key vào DB
+    if (fileType === 'pdf') {
+      await this.repository.update(invoiceId, { pdfFileKey: key } as any);
+    } else {
+      await this.repository.update(invoiceId, { xmlFileKey: key } as any);
+    }
+
+    return { url, key, expiresAt };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Result interfaces
+// ---------------------------------------------------------------------------
+
+export interface BulkImportSkippedItem {
+  filename: string;
+  invoiceNo: string;
+  sellerName: string | null;
+  sellerTaxCode: string | null;
+  reason: 'DUPLICATE';
+}
+
+export interface BulkImportErrorItem {
+  filename: string;
+  reason: string;
+}
+
+export interface BulkImportResult {
+  importId: string;
+  direction: 'IN' | 'OUT';
+  total: number;
+  created: number;
+  skipped: BulkImportSkippedItem[];
+  errors: BulkImportErrorItem[];
 }

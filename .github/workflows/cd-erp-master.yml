@@ -80,7 +80,11 @@ jobs:
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             "mkdir -p /home/dev/opt/stacks/erp/erp-api-master && cat > /home/dev/opt/stacks/erp/erp-api-master/.env" \
-            <<< "${{ secrets.MASTER_API_ENV }}"
+            <<< "${{ secrets.MASTER_API_ENV }}
+          R2_ACCOUNT_ID=${{ secrets.MASTER_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID=${{ secrets.MASTER_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
 
       - name: Run deploy script
         env:

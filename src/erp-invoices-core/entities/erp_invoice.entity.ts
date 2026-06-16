@@ -129,6 +129,26 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy: string | null;
 
+  // --- R2 Storage ---
+  @Column({
+    type: 'varchar',
+    length: 512,
+    name: 'pdf_file_key',
+    nullable: true,
+  })
+  pdfFileKey: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 512,
+    name: 'xml_file_key',
+    nullable: true,
+  })
+  xmlFileKey: string | null;
+
+  @Column({ type: 'uuid', name: 'xml_import_id', nullable: true })
+  xmlImportId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

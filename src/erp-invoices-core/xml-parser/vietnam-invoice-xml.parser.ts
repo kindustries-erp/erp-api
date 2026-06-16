@@ -1,0 +1,472 @@
+/**
+ * vietnam-invoice-xml.parser.ts
+ *
+ * Multi-strategy parser cho hóa đơn điện tử Việt Nam.
+ * Hỗ trợ nhiều nguồn: VNPT (TT78), Viettel SInvoice, Vinfast/Latin format, Generic fallback.
+ * Không dùng thư viện ngoài — sử dụng Node.js built-in DOMParser.
+ */
+
+export interface ParsedVietnamInvoice {
+  invoiceNo: string;
+  serialNo: string | null;
+  invoiceDate: string; // YYYY-MM-DD
+  sellerName: string | null;
+  sellerTaxCode: string | null;
+  sellerAddress: string | null;
+  sellerBank: string | null;
+  buyerName: string | null;
+  buyerTaxCode: string | null;
+  buyerAddress: string | null;
+  description: string | null;
+  preVatAmount: number;
+  vatRate: number | null;
+  vatAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  rawSource: string; // 'TT78' | 'SINVOICE_V2' | 'VINFAST' | 'GENERIC'
+}
+
+export class XmlParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'XmlParseError';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getText(doc: Document, ...tags: string[]): string | null {
+  for (const tag of tags) {
+    // Thử theo tên tag thuần (không namespace)
+    const els = doc.getElementsByTagName(tag);
+    if (els.length > 0 && els[0].textContent?.trim()) {
+      return els[0].textContent.trim();
+    }
+  }
+  return null;
+}
+
+function getTextIn(parent: Element | null, ...tags: string[]): string | null {
+  if (!parent) return null;
+  for (const tag of tags) {
+    const els = parent.getElementsByTagName(tag);
+    if (els.length > 0 && els[0].textContent?.trim()) {
+      return els[0].textContent.trim();
+    }
+  }
+  return null;
+}
+
+function toNum(val: string | null | undefined): number {
+  if (!val) return 0;
+  const cleaned = val.replace(/[,\s]/g, '');
+  const n = Number(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Chuẩn hóa ngày về YYYY-MM-DD
+ * Hỗ trợ: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, YYYYMMDD, ISO timestamp
+ */
+function normalizeDate(raw: string | null): string {
+  if (!raw) return new Date().toISOString().slice(0, 10);
+  const s = raw.trim();
+
+  // ISO: YYYY-MM-DD... hoặc YYYY-MM-DDTHH:...
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+
+  // DD/MM/YYYY hoặc D/M/YYYY
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // YYYYMMDD
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
+// Strategy 1: TT78 — Thông tư 78/2021 (VNPT, hầu hết NCC Việt Nam)
+// Tag: <HDon> / <TTChung> / <NDHDon>
+// ---------------------------------------------------------------------------
+function parseTT78(doc: Document): ParsedVietnamInvoice | null {
+  const ttchung =
+    doc.getElementsByTagName('TTChung')[0] ??
+    doc.getElementsByTagName('ttchung')[0];
+  const ndhdon =
+    doc.getElementsByTagName('NDHDon')[0] ??
+    doc.getElementsByTagName('ndhdon')[0];
+
+  if (!ttchung && !ndhdon) return null;
+
+  const invoiceNo =
+    getTextIn(ttchung, 'SHDon', 'shdon') ?? getTextIn(doc as any, 'SHDon');
+  if (!invoiceNo) return null;
+
+  const serialNo = getTextIn(ttchung, 'KHHDon', 'khhdon') ?? null;
+  const dateRaw =
+    getTextIn(ttchung, 'NLap', 'nlap') ?? getTextIn(ttchung, 'NHDon', 'nhdon');
+
+  // Bên bán
+  const nban =
+    ndhdon?.getElementsByTagName('NBan')[0] ??
+    ndhdon?.getElementsByTagName('nban')[0] ??
+    doc.getElementsByTagName('NBan')[0];
+  const sellerName = getTextIn(nban ?? null, 'Ten', 'ten') ?? null;
+  const sellerTaxCode = getTextIn(nban ?? null, 'MST', 'mst') ?? null;
+  const sellerAddress = getTextIn(nban ?? null, 'DChi', 'dchi') ?? null;
+  const sellerBank =
+    getTextIn(nban ?? null, 'STKNHang', 'stknhang') ??
+    getTextIn(nban ?? null, 'TKNHang', 'tknhang') ??
+    null;
+
+  // Bên mua
+  const nmua =
+    ndhdon?.getElementsByTagName('NMua')[0] ??
+    ndhdon?.getElementsByTagName('nmua')[0] ??
+    doc.getElementsByTagName('NMua')[0];
+  const buyerName = getTextIn(nmua ?? null, 'Ten', 'ten') ?? null;
+  const buyerTaxCode = getTextIn(nmua ?? null, 'MST', 'mst') ?? null;
+  const buyerAddress = getTextIn(nmua ?? null, 'DChi', 'dchi') ?? null;
+
+  // Tài chính
+  const ttoan =
+    ndhdon?.getElementsByTagName('TToan')[0] ??
+    doc.getElementsByTagName('TToan')[0];
+  const preVatRaw =
+    getTextIn(ttoan ?? null, 'THTTHDTTLTruocThue', 'thtthddtttltruocthue') ??
+    getTextIn(ttoan ?? null, 'TgTCThue', 'tgtcthue') ??
+    getTextIn(ttoan ?? null, 'TongTienHangTruocThue') ??
+    null;
+  const vatRateRaw = getTextIn(ttoan ?? null, 'TSuat', 'tsuat') ?? null;
+  const vatAmtRaw =
+    getTextIn(ttoan ?? null, 'TThue', 'tthue') ??
+    getTextIn(ttoan ?? null, 'TgTThue', 'tgtthue') ??
+    null;
+  const totalRaw =
+    getTextIn(ttoan ?? null, 'THTTHDTTLTSauThue', 'thtthddtttltsauthue') ??
+    getTextIn(ttoan ?? null, 'TgTTTBSo', 'tgtttbso') ??
+    getTextIn(ttoan ?? null, 'TongTienThanhToan') ??
+    null;
+  const discountRaw =
+    getTextIn(ttoan ?? null, 'TgTChietKhau', 'tgtchietkhau') ?? null;
+
+  // Description từ hàng hóa — lấy tên hàng đầu tiên
+  const firstItem =
+    ndhdon?.getElementsByTagName('HHDVu')[0] ??
+    doc.getElementsByTagName('HHDVu')[0];
+  const description =
+    getTextIn(firstItem ?? null, 'THHDVu', 'thhhdvu') ??
+    getTextIn(firstItem ?? null, 'Ten', 'ten') ??
+    null;
+
+  // vatRate: chuẩn TT78 lưu dạng % (8, 10, ...) hoặc decimal (0.1)
+  let vatRate: number | null = null;
+  if (vatRateRaw) {
+    const n = toNum(vatRateRaw);
+    vatRate = n > 1 ? n / 100 : n; // normalize về dạng decimal
+  }
+
+  return {
+    invoiceNo,
+    serialNo,
+    invoiceDate: normalizeDate(dateRaw),
+    sellerName,
+    sellerTaxCode,
+    sellerAddress,
+    sellerBank,
+    buyerName,
+    buyerTaxCode,
+    buyerAddress,
+    description,
+    preVatAmount: toNum(preVatRaw),
+    vatRate,
+    vatAmount: toNum(vatAmtRaw),
+    discountAmount: toNum(discountRaw),
+    totalAmount: toNum(totalRaw),
+    rawSource: 'TT78',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Strategy 2: SINVOICE_V2 — Viettel với namespace prefix (inv:HDon)
+// ---------------------------------------------------------------------------
+function parseSInvoiceV2(doc: Document): ParsedVietnamInvoice | null {
+  // Namespace prefix stripped khi parse — getElementsByTagName hoạt động với local name
+  // Detect bằng cách tìm namespace attribute hoặc prefix trong outerHTML
+  const root = doc.documentElement;
+  const hasNs =
+    root.namespaceURI?.includes('einvoice') ||
+    root.tagName.includes(':') ||
+    !!doc.getElementsByTagName('inv:HDon')[0];
+
+  if (!hasNs) {
+    // Vẫn thử — một số SInvoice không có namespace rõ ràng
+    const ttchung = doc.getElementsByTagName('TTChung')[0];
+    if (!ttchung) return null;
+  }
+
+  // Logic tương tự TT78 — các tag giống nhau
+  const result = parseTT78(doc);
+  if (result) return { ...result, rawSource: 'SINVOICE_V2' };
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Strategy 3: VINFAST / Latin format
+// Tag: <Invoice> / <InvoiceNumber> / <SellerName>
+// ---------------------------------------------------------------------------
+function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
+  const invoiceEl =
+    doc.getElementsByTagName('Invoice')[0] ??
+    doc.getElementsByTagName('INVOICE')[0] ??
+    doc.getElementsByTagName('invoice')[0];
+
+  const root = invoiceEl ?? doc.documentElement;
+
+  const invoiceNo =
+    getTextIn(
+      root,
+      'InvoiceNumber',
+      'invoiceNumber',
+      'invoice_number',
+      'InvoiceNo',
+    ) ??
+    getText(doc, 'InvoiceNumber', 'InvoiceNo') ??
+    null;
+
+  if (!invoiceNo) return null;
+
+  const dateRaw =
+    getTextIn(
+      root,
+      'InvoiceDate',
+      'invoiceDate',
+      'invoice_date',
+      'IssueDate',
+    ) ??
+    getText(doc, 'InvoiceDate', 'IssueDate') ??
+    null;
+
+  const sellerName =
+    getTextIn(
+      root,
+      'SellerName',
+      'sellerName',
+      'seller_name',
+      'ProviderName',
+    ) ?? null;
+  const sellerTaxCode =
+    getTextIn(
+      root,
+      'SellerTaxCode',
+      'sellerTaxCode',
+      'seller_tax_code',
+      'SellerTIN',
+    ) ?? null;
+  const sellerAddress =
+    getTextIn(root, 'SellerAddress', 'sellerAddress', 'seller_address') ?? null;
+  const sellerBank =
+    getTextIn(root, 'SellerBankAccount', 'sellerBank', 'SellerBankNo') ?? null;
+
+  const buyerName =
+    getTextIn(root, 'BuyerName', 'buyerName', 'buyer_name', 'CustomerName') ??
+    null;
+  const buyerTaxCode =
+    getTextIn(
+      root,
+      'BuyerTaxCode',
+      'buyerTaxCode',
+      'buyer_tax_code',
+      'BuyerTIN',
+    ) ?? null;
+  const buyerAddress =
+    getTextIn(root, 'BuyerAddress', 'buyerAddress', 'buyer_address') ?? null;
+
+  const preVatRaw =
+    getTextIn(
+      root,
+      'AmountBeforeTax',
+      'SubTotal',
+      'PreTaxAmount',
+      'TotalBeforeVAT',
+    ) ?? null;
+  const vatRateRaw = getTextIn(root, 'VATRate', 'TaxRate', 'vatRate') ?? null;
+  const vatAmtRaw =
+    getTextIn(root, 'VATAmount', 'TaxAmount', 'vatAmount') ?? null;
+  const totalRaw =
+    getTextIn(
+      root,
+      'TotalAmount',
+      'GrandTotal',
+      'AmountAfterTax',
+      'TotalPayment',
+    ) ?? null;
+  const discountRaw = getTextIn(root, 'DiscountAmount', 'Discount') ?? null;
+  const description =
+    getTextIn(root, 'Description', 'ItemDescription', 'GoodName') ?? null;
+
+  let vatRate: number | null = null;
+  if (vatRateRaw) {
+    const n = toNum(vatRateRaw);
+    vatRate = n > 1 ? n / 100 : n;
+  }
+
+  return {
+    invoiceNo,
+    serialNo: getTextIn(root, 'SerialNo', 'serialNo', 'Series') ?? null,
+    invoiceDate: normalizeDate(dateRaw),
+    sellerName,
+    sellerTaxCode,
+    sellerAddress,
+    sellerBank,
+    buyerName,
+    buyerTaxCode,
+    buyerAddress,
+    description,
+    preVatAmount: toNum(preVatRaw),
+    vatRate,
+    vatAmount: toNum(vatAmtRaw),
+    discountAmount: toNum(discountRaw),
+    totalAmount: toNum(totalRaw),
+    rawSource: 'VINFAST',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Strategy 4: GENERIC fallback — heuristic scan
+// ---------------------------------------------------------------------------
+const SELLER_NAME_TAGS = [
+  'seller_name',
+  'SellerName',
+  'NBanTen',
+  'NguoiBan',
+  'supplier',
+  'Supplier',
+];
+const BUYER_NAME_TAGS = [
+  'buyer_name',
+  'BuyerName',
+  'NMuaTen',
+  'NguoiMua',
+  'customer',
+  'Customer',
+];
+const INVOICE_NO_TAGS = [
+  'invoice_no',
+  'InvoiceNo',
+  'SoHoaDon',
+  'SHDon',
+  'documentNo',
+  'document_no',
+];
+const TOTAL_TAGS = [
+  'total_amount',
+  'TotalAmount',
+  'TongTien',
+  'ThanhToan',
+  'tong_tien',
+];
+const DATE_TAGS = [
+  'invoice_date',
+  'InvoiceDate',
+  'NgayHoaDon',
+  'NLap',
+  'issue_date',
+];
+
+function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
+  const invoiceNo = getText(doc, ...INVOICE_NO_TAGS);
+  if (!invoiceNo) return null;
+
+  return {
+    invoiceNo,
+    serialNo: getText(doc, 'serial_no', 'SerialNo', 'KyHieu') ?? null,
+    invoiceDate: normalizeDate(getText(doc, ...DATE_TAGS)),
+    sellerName: getText(doc, ...SELLER_NAME_TAGS) ?? null,
+    sellerTaxCode:
+      getText(doc, 'seller_tax_code', 'SellerTaxCode', 'MaSoThueNBan') ?? null,
+    sellerAddress: getText(doc, 'seller_address', 'SellerAddress') ?? null,
+    sellerBank: getText(doc, 'seller_bank', 'SellerBank') ?? null,
+    buyerName: getText(doc, ...BUYER_NAME_TAGS) ?? null,
+    buyerTaxCode:
+      getText(doc, 'buyer_tax_code', 'BuyerTaxCode', 'MaSoThueNMua') ?? null,
+    buyerAddress: getText(doc, 'buyer_address', 'BuyerAddress') ?? null,
+    description: getText(doc, 'description', 'Description', 'DienGiai') ?? null,
+    preVatAmount: toNum(
+      getText(doc, 'pre_vat_amount', 'PreVatAmount', 'TruocVat'),
+    ),
+    vatRate: null,
+    vatAmount: toNum(getText(doc, 'vat_amount', 'VatAmount', 'TienThue')),
+    discountAmount: toNum(getText(doc, 'discount_amount', 'DiscountAmount')),
+    totalAmount: toNum(getText(doc, ...TOTAL_TAGS)),
+    rawSource: 'GENERIC',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse XML hóa đơn điện tử — thử lần lượt các strategy.
+ * Throw XmlParseError nếu không strategy nào thành công.
+ */
+export function parseVietnamInvoiceXml(
+  xmlString: string,
+): ParsedVietnamInvoice {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { DOMParser } = require('@xmldom/xmldom') as {
+    DOMParser: new () => {
+      parseFromString(xml: string, mimeType: string): Document;
+    };
+  };
+
+  let doc: Document;
+  try {
+    const parser = new DOMParser();
+
+    doc = parser.parseFromString(xmlString, 'text/xml') as any as Document;
+
+    // Kiểm tra lỗi parse cơ bản
+    const parseError = doc.getElementsByTagName('parsererror')[0];
+    if (parseError) {
+      throw new XmlParseError(
+        `XML không hợp lệ: ${parseError.textContent?.slice(0, 200)}`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof XmlParseError) throw e;
+    throw new XmlParseError(`Không thể đọc file XML: ${(e as Error).message}`);
+  }
+
+  // Thử từng strategy
+  const strategies: Array<
+    [string, (d: Document) => ParsedVietnamInvoice | null]
+  > = [
+    ['TT78', parseTT78],
+    ['SINVOICE_V2', parseSInvoiceV2],
+    ['VINFAST', parseVinfast],
+    ['GENERIC', parseGeneric],
+  ];
+
+  for (const [name, fn] of strategies) {
+    try {
+      const result = fn(doc);
+      if (result) return result;
+    } catch {
+      // Strategy lỗi → thử tiếp
+    }
+  }
+
+  throw new XmlParseError(
+    `Không nhận dạng được định dạng XML hóa đơn. Đã thử: ${strategies.map(([n]) => n).join(', ')}`,
+  );
+}
