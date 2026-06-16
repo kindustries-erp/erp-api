@@ -23,6 +23,8 @@ export interface ErpInvoiceQuery {
   status?: string;
   page?: number;
   pageSize?: number;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
 }
 
 @Injectable()
@@ -38,6 +40,32 @@ export class ErpInvoicesCoreService {
   async findAll(query: ErpInvoiceQuery) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 40;
+
+    let orderColumn = 'inv.invoice_date';
+    let orderProperty = 'invoiceDate';
+    let orderDirection: 'ASC' | 'DESC' = 'DESC';
+
+    if (query.sort_by) {
+      if (query.sort_by === 'invoiceNo') {
+        orderColumn = 'inv.invoice_no';
+        orderProperty = 'invoiceNo';
+      } else if (query.sort_by === 'totalAmount') {
+        orderColumn = 'inv.total_amount';
+        orderProperty = 'totalAmount';
+      } else if (query.sort_by === 'sellerName') {
+        orderColumn = 'inv.seller_name';
+        orderProperty = 'sellerName';
+      } else if (query.sort_by === 'buyerName') {
+        orderColumn = 'inv.buyer_name';
+        orderProperty = 'buyerName';
+      } else if (query.sort_by === 'status') {
+        orderColumn = 'inv.status';
+        orderProperty = 'status';
+      }
+    }
+    if (query.sort_order) {
+      orderDirection = query.sort_order.toUpperCase() as 'ASC' | 'DESC';
+    }
 
     const where: any = {};
 
@@ -60,7 +88,7 @@ export class ErpInvoicesCoreService {
       const searchResults = await this.repository
         .createQueryBuilder('inv')
         .where(
-          `inv.invoice_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q`,
+          `inv.invoice_no ILIKE :q OR inv.serial_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q`,
           { q: `%${query.search}%` },
         )
         .andWhere(query.direction ? 'inv.direction = :dir' : '1=1', {
@@ -75,7 +103,7 @@ export class ErpInvoicesCoreService {
         .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
           dateTo: query.date_to,
         })
-        .orderBy('inv.invoice_date', 'DESC')
+        .orderBy(orderColumn, orderDirection)
         .addOrderBy('inv.created_at', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
@@ -92,7 +120,7 @@ export class ErpInvoicesCoreService {
 
     const [items, total] = await this.repository.findAndCount({
       where,
-      order: { invoiceDate: 'DESC', createdAt: 'DESC' },
+      order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
