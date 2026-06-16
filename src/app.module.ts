@@ -29,6 +29,7 @@ import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.i
 import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
+import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { DocumentDependenciesCoreModule } from './document-dependencies-core/doc
     RbacCoreModule,
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
+    ErpInvoicesCoreModule,
   ],
   controllers: [AppController],
   providers: [

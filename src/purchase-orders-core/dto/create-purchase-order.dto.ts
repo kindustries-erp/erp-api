@@ -50,6 +50,11 @@ export class CreatePurchaseOrderDto {
   @IsUUID()
   createdBy?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  supplierInvoiceNo?: string;
+
   @ApiPropertyOptional({ type: [CreatePurchaseOrderLineDto] })
   @IsOptional()
   @IsArray()
