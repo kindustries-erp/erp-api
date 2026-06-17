@@ -8,8 +8,6 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { GoodsReceiptsCoreController } from './goods-receipts-core.controller';
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
-import { JournalEntriesModule } from '../journal-entries/journal-entries.module';
-import { AccountingConfigsCoreModule } from '../accounting-configs-core/accounting-configs-core.module';
 import { DocumentDependenciesCoreModule } from '../document-dependencies-core/document-dependencies-core.module';
 
 @Module({
@@ -22,8 +20,6 @@ import { DocumentDependenciesCoreModule } from '../document-dependencies-core/do
       ErpPurchaseOrder,
       ErpPurchaseOrderLine,
     ]),
-    JournalEntriesModule,
-    AccountingConfigsCoreModule,
     DocumentDependenciesCoreModule,
   ],
   controllers: [GoodsReceiptsCoreController],

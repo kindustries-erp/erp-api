@@ -18,8 +18,6 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
-import { JournalEntriesService } from '../journal-entries/journal-entries.service';
-import { AccountingConfigsCoreService } from '../accounting-configs-core/accounting-configs-core.service';
 import { Logger } from '@nestjs/common';
 
 @Injectable()
@@ -33,8 +31,6 @@ export class GoodsReceiptsCoreService {
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
     private readonly dependencyService: DocumentDependenciesCoreService,
-    private readonly journalEntriesService: JournalEntriesService,
-    private readonly accountingConfigService: AccountingConfigsCoreService,
   ) {}
 
   private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
@@ -326,63 +322,11 @@ export class GoodsReceiptsCoreService {
         order: { lineNo: 'ASC' },
       });
 
-      // --- Auto Generate Journal Entry (Chạy ngầm) ---
-      const config =
-        await this.accountingConfigService.findByModule('goods_receipts');
-      if (
-        config &&
-        config.isActive &&
-        config.debitAccountId &&
-        config.creditAccountId
-      ) {
-        const totalAmount = savedLines.reduce(
-          (sum, l) =>
-            sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
-          0,
-        );
-
-        try {
-          await this.journalEntriesService.create(
-            {
-              voucher_no: savedReceipt.receiptNo,
-              date: savedReceipt.receiptDate,
-              description: `Hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
-              referenceType: 'erp_goods_receipts',
-              referenceId: savedReceipt.id,
-              lines: [
-                {
-                  account_id: config.debitAccountId,
-                  debit: totalAmount,
-                  credit: 0,
-                  description: `Nhập kho ${savedReceipt.receiptNo}`,
-                  sort: 1,
-                },
-                {
-                  account_id: config.creditAccountId,
-                  debit: 0,
-                  credit: totalAmount,
-                  description: `Phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
-                  sort: 2,
-                },
-              ],
-            } as any,
-            (dto.createdBy ?? receipt.createdBy) as string,
-          );
-          this.logger.log(
-            `Created auto journal entry for goods receipt ${savedReceipt.receiptNo}`,
-          );
-        } catch (err) {
-          this.logger.error(
-            `Lỗi tự động sinh bút toán cho phiếu nhập ${savedReceipt.receiptNo}`,
-            err,
-          );
-          // Ném lỗi lên để rollback transaction và báo lỗi ra UI
-          throw new BadRequestException(
-            `Không thể sinh bút toán tự động: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`,
-          );
-        }
-      }
-      // ----------------------------------------------
+      // --- Journal entry generation removed (accounting module decoupled) ---
+      this.logger.log(
+        `Goods receipt ${savedReceipt.receiptNo} posted; journal entry generation skipped.`,
+      );
+      // -----------------------------------------------------------------------
 
       return {
         message: 'Lấy thông tin thành công',
@@ -506,62 +450,11 @@ export class GoodsReceiptsCoreService {
         order: { lineNo: 'ASC' },
       });
 
-      // --- Auto Generate REVERSE Journal Entry (Chạy ngầm) ---
-      const config =
-        await this.accountingConfigService.findByModule('goods_receipts');
-      if (
-        config &&
-        config.isActive &&
-        config.debitAccountId &&
-        config.creditAccountId
-      ) {
-        const totalAmount = savedLines.reduce(
-          (sum, l) =>
-            sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
-          0,
-        );
-
-        try {
-          await this.journalEntriesService.create(
-            {
-              voucher_no: savedReceipt.receiptNo + '-REV',
-              date: savedReceipt.receiptDate,
-              description: `Hủy hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
-              referenceType: 'erp_goods_receipts',
-              referenceId: savedReceipt.id,
-              lines: [
-                {
-                  account_id: config.debitAccountId,
-                  debit: 0,
-                  credit: totalAmount,
-                  description: `Hủy nhập kho ${savedReceipt.receiptNo}`,
-                  sort: 1,
-                },
-                {
-                  account_id: config.creditAccountId,
-                  debit: totalAmount,
-                  credit: 0,
-                  description: `Hủy phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
-                  sort: 2,
-                },
-              ],
-            } as any,
-            receipt.createdBy as string,
-          );
-          this.logger.log(
-            `Created auto reverse journal entry for goods receipt ${savedReceipt.receiptNo}`,
-          );
-        } catch (err) {
-          this.logger.error(
-            `Lỗi tự động sinh bút toán đảo cho phiếu nhập ${savedReceipt.receiptNo}`,
-            err,
-          );
-          throw new BadRequestException(
-            `Không thể sinh bút toán đảo tự động: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`,
-          );
-        }
-      }
-      // ------------------------------------------------------
+      // --- Reverse journal entry generation removed (accounting module decoupled) ---
+      this.logger.log(
+        `Goods receipt ${savedReceipt.receiptNo} cancelled; reverse journal entry generation skipped.`,
+      );
+      // ------------------------------------------------------------------------------
 
       return {
         message: 'Hủy phiếu nhập thành công',

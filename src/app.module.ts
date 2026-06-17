@@ -30,9 +30,6 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
-import { AccountingConfigsCoreModule } from './accounting-configs-core/accounting-configs-core.module';
-import { JournalEntriesModule } from './journal-entries/journal-entries.module';
-import { ChartOfAccountsModule } from './chart-of-accounts/chart-of-accounts.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -94,9 +91,6 @@ import { ChartOfAccountsModule } from './chart-of-accounts/chart-of-accounts.mod
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,
-    AccountingConfigsCoreModule,
-    JournalEntriesModule,
-    ChartOfAccountsModule,
   ],
   controllers: [AppController],
   providers: [
