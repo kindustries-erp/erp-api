@@ -9,7 +9,7 @@ import {
 export class CreateAccountingConfigsCoreDto {
   @IsString()
   @IsNotEmpty()
-  moduleName: string;
+  module: string;
 
   @IsString()
   @IsNotEmpty()
@@ -17,13 +17,17 @@ export class CreateAccountingConfigsCoreDto {
 
   @IsUUID()
   @IsOptional()
-  debitAccountId?: string;
+  debit_account_id?: string;
 
   @IsUUID()
   @IsOptional()
-  creditAccountId?: string;
+  credit_account_id?: string;
 
   @IsBoolean()
   @IsOptional()
-  isActive?: boolean;
+  is_active?: boolean;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
 }

@@ -303,7 +303,9 @@ export class JournalEntriesService {
       order: { startDate: 'DESC' },
       take: 50,
     });
-    return { items: periods };
+    return {
+      items: periods.map((p) => ({ id: p.id, period_code: p.name })),
+    };
   }
 
   async findAccountOptions(search?: string) {
@@ -313,7 +315,13 @@ export class JournalEntriesService {
       order: { accountCode: 'ASC' },
       take: 200,
     });
-    return { items: accounts };
+    return {
+      items: accounts.map((a) => ({
+        id: a.id,
+        account_code: a.accountCode,
+        account_name: a.accountName,
+      })),
+    };
   }
 
   async addAttachment(id: string, file: Express.Multer.File, userId: string) {
