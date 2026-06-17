@@ -36,3 +36,5 @@ Use this skill only inside this repository.
 - Use Bun/Bunx first
 - Be evidence-first
 - Do not let historical Directus/Gitea-era docs drive new implementation by default
+- **New Module Registration**: Always verify that newly created NestJS modules (e.g. `feature.module.ts`) are explicitly imported in `src/app.module.ts` to prevent 404 Not Found endpoint errors.
+- **TypeScript Build Configuration**: If adding `.ts` files outside of `src/` (e.g. in `scripts/`), ensure the directory is added to the `exclude` array in `tsconfig.build.json`. Otherwise, TypeScript alters the root directory structure in `dist/`, causing the Docker container entrypoint (`dist/main.js`) to fail and return `000` status on health check.
