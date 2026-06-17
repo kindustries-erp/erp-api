@@ -38,8 +38,8 @@ export class ErpInvoicesCoreService {
   ) {}
 
   async findAll(query: ErpInvoiceQuery) {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 40;
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 40;
 
     let orderColumn = 'inv.invoice_date';
     let orderProperty = 'invoiceDate';
