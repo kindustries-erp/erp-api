@@ -138,6 +138,7 @@ export class ErpInvoicesCoreService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id, isDeleted: false },
+      relations: ['items'],
     });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: this.toDto(data) };
@@ -151,6 +152,14 @@ export class ErpInvoicesCoreService {
       vatAmount: String(dto.vatAmount ?? 0),
       discountAmount: String(dto.discountAmount ?? 0),
       totalAmount: String(dto.totalAmount ?? 0),
+      items: dto.items?.map((i) => ({
+        description: i.description,
+        preVatAmount: String(i.preVatAmount ?? 0),
+        vatRate: i.vatRate != null ? String(i.vatRate) : null,
+        vatAmount: String(i.vatAmount ?? 0),
+        discountAmount: String(i.discountAmount ?? 0),
+        totalAmount: String(i.totalAmount ?? 0),
+      })),
     } as any);
     const saved = (await this.repository.save(
       invoice,
@@ -161,6 +170,7 @@ export class ErpInvoicesCoreService {
   async update(id: string, dto: UpdateErpInvoiceDto) {
     const existing = await this.repository.findOne({
       where: { id, isDeleted: false },
+      relations: ['items'],
     });
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
@@ -174,7 +184,23 @@ export class ErpInvoicesCoreService {
     if (dto.totalAmount != null)
       updatePayload.totalAmount = String(dto.totalAmount);
 
-    await this.repository.update(id, updatePayload);
+    // Merge entity first so that cascade update works
+    this.repository.merge(existing, updatePayload);
+
+    if (dto.items) {
+      existing.items = dto.items.map((i) =>
+        this.repository.manager.create('ErpInvoiceItem', {
+          description: i.description,
+          preVatAmount: String(i.preVatAmount ?? 0),
+          vatRate: i.vatRate != null ? String(i.vatRate) : null,
+          vatAmount: String(i.vatAmount ?? 0),
+          discountAmount: String(i.discountAmount ?? 0),
+          totalAmount: String(i.totalAmount ?? 0),
+        }),
+      );
+    }
+
+    await this.repository.save(existing);
     return this.findOne(id);
   }
 
@@ -209,6 +235,17 @@ export class ErpInvoicesCoreService {
         invoice.discountAmount != null ? String(invoice.discountAmount) : '0',
       totalAmount:
         invoice.totalAmount != null ? String(invoice.totalAmount) : '0',
+      items: invoice.items
+        ? invoice.items.map((i) => ({
+            ...i,
+            preVatAmount: i.preVatAmount != null ? String(i.preVatAmount) : '0',
+            vatRate: i.vatRate != null ? String(i.vatRate) : null,
+            vatAmount: i.vatAmount != null ? String(i.vatAmount) : '0',
+            discountAmount:
+              i.discountAmount != null ? String(i.discountAmount) : '0',
+            totalAmount: i.totalAmount != null ? String(i.totalAmount) : '0',
+          }))
+        : undefined,
     };
   }
 

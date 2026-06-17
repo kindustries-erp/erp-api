@@ -8,7 +8,46 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreateErpInvoiceItemDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  preVatAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  vatRate?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  vatAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discountAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  totalAmount?: number;
+}
 
 export class CreateErpInvoiceDto {
   @ApiProperty()
@@ -133,4 +172,10 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+
+  @ApiPropertyOptional({ type: [CreateErpInvoiceItemDto] })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateErpInvoiceItemDto)
+  items?: CreateErpInvoiceItemDto[];
 }

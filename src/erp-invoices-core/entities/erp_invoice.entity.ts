@@ -5,7 +5,9 @@ import {
   Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { ErpInvoiceItem } from './erp_invoice_item.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -157,4 +159,10 @@ export class ErpInvoice {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToMany(() => ErpInvoiceItem, (item) => item.invoice, {
+    cascade: true,
+    orphanedRowAction: 'delete',
+  })
+  items: ErpInvoiceItem[];
 }

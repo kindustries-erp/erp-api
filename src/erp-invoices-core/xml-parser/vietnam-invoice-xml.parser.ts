@@ -6,6 +6,15 @@
  * Không dùng thư viện ngoài — sử dụng Node.js built-in DOMParser.
  */
 
+export interface ParsedVietnamInvoiceItem {
+  description: string;
+  preVatAmount: number;
+  vatRate: number | null;
+  vatAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+}
+
 export interface ParsedVietnamInvoice {
   invoiceNo: string;
   serialNo: string | null;
@@ -24,6 +33,7 @@ export interface ParsedVietnamInvoice {
   discountAmount: number;
   totalAmount: number;
   rawSource: string; // 'TT78' | 'SINVOICE_V2' | 'VINFAST' | 'GENERIC'
+  items: ParsedVietnamInvoiceItem[];
 }
 
 export class XmlParseError extends Error {
@@ -158,14 +168,33 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   const discountRaw =
     getTextIn(ttoan ?? null, 'TgTChietKhau', 'tgtchietkhau') ?? null;
 
-  // Description từ hàng hóa — lấy tên hàng đầu tiên
-  const firstItem =
-    ndhdon?.getElementsByTagName('HHDVu')[0] ??
-    doc.getElementsByTagName('HHDVu')[0];
-  const description =
-    getTextIn(firstItem ?? null, 'THHDVu', 'thhhdvu') ??
-    getTextIn(firstItem ?? null, 'Ten', 'ten') ??
-    null;
+  // Items array
+  const items: ParsedVietnamInvoiceItem[] = [];
+  const hhdvus =
+    ndhdon?.getElementsByTagName('HHDVu') ?? doc.getElementsByTagName('HHDVu');
+  for (let i = 0; i < hhdvus.length; i++) {
+    const el = hhdvus[i];
+    const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
+    const preVat = toNum(getTextIn(el, 'ThTien', 'thtien'));
+    const vatRateRawEl = getTextIn(el, 'TSuat', 'tsuat');
+    let itemVatRate: number | null = null;
+    if (vatRateRawEl) {
+      const n = toNum(vatRateRawEl);
+      itemVatRate = n > 1 ? n / 100 : n;
+    }
+    const vatAmt = toNum(getTextIn(el, 'TThue', 'tthue'));
+    const discount = toNum(getTextIn(el, 'STCKhau', 'stckhau'));
+    const total = preVat + vatAmt - discount;
+    items.push({
+      description: desc,
+      preVatAmount: preVat,
+      vatRate: itemVatRate,
+      vatAmount: vatAmt,
+      discountAmount: discount,
+      totalAmount: total,
+    });
+  }
+  const description = items[0]?.description ?? null;
 
   // vatRate: chuẩn TT78 lưu dạng % (8, 10, ...) hoặc decimal (0.1)
   let vatRate: number | null = null;
@@ -192,6 +221,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     discountAmount: toNum(discountRaw),
     totalAmount: toNum(totalRaw),
     rawSource: 'TT78',
+    items,
   };
 }
 
@@ -313,6 +343,30 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
   const description =
     getTextIn(root, 'Description', 'ItemDescription', 'GoodName') ?? null;
 
+  const items: ParsedVietnamInvoiceItem[] = [];
+  const lines = root.getElementsByTagName('InvoiceLine');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const desc = getTextIn(line, 'ItemName', 'Description') ?? '';
+    const preVat = toNum(getTextIn(line, 'AmountBeforeTax', 'TotalBeforeTax'));
+    const vRateRaw = getTextIn(line, 'VATRate', 'TaxRate');
+    let vRate: number | null = null;
+    if (vRateRaw) {
+      const n = toNum(vRateRaw);
+      vRate = n > 1 ? n / 100 : n;
+    }
+    const vAmt = toNum(getTextIn(line, 'VATAmount', 'TaxAmount'));
+    const disc = toNum(getTextIn(line, 'DiscountAmount'));
+    items.push({
+      description: desc,
+      preVatAmount: preVat,
+      vatRate: vRate,
+      vatAmount: vAmt,
+      discountAmount: disc,
+      totalAmount: preVat + vAmt - disc,
+    });
+  }
+
   let vatRate: number | null = null;
   if (vatRateRaw) {
     const n = toNum(vatRateRaw);
@@ -337,6 +391,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     discountAmount: toNum(discountRaw),
     totalAmount: toNum(totalRaw),
     rawSource: 'VINFAST',
+    items,
   };
 }
 
@@ -408,6 +463,7 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     discountAmount: toNum(getText(doc, 'discount_amount', 'DiscountAmount')),
     totalAmount: toNum(getText(doc, ...TOTAL_TAGS)),
     rawSource: 'GENERIC',
+    items: [],
   };
 }
 
