@@ -1,5 +1,9 @@
 # Task: Tích hợp lấy hóa đơn đầu vào/đầu ra từ SInvoice (Viettel)
 
+> **HISTORICAL REFERENCE ONLY**
+> Task này thuộc SInvoice / tax-portal / Directus-era finance flow cũ. Không dùng làm default implementation guidance cho lane `erp-master` hiện tại nếu user không mở lại scope finance legacy.
+
+
 ## Request Input
 - Type: FEATURE
 - Mục tiêu: Tích hợp API lấy hóa đơn mua vào (đầu vào) và bán ra (đầu ra) từ hệ thống Tổng cục Thuế (thông qua dịch vụ tích hợp của Viettel).
