@@ -17,9 +17,6 @@ export class ErpModuleAccountingConfig {
   @Column({ name: 'module_name', type: 'varchar', length: 64 })
   moduleName: string;
 
-  @Column({ type: 'varchar', length: 64 })
-  action: string;
-
   @Column({ name: 'debit_account_id', type: 'uuid', nullable: true })
   debitAccountId: string | null;
 

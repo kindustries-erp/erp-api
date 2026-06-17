@@ -11,10 +11,6 @@ export class CreateAccountingConfigsCoreDto {
   @IsNotEmpty()
   module: string;
 
-  @IsString()
-  @IsNotEmpty()
-  action: string;
-
   @IsUUID()
   @IsOptional()
   debit_account_id?: string;

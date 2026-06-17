@@ -12,6 +12,8 @@ import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
 import { UpdateGoodsIssueDto } from './dto/update-goods-issue.dto';
 import { PostGoodsIssueDto } from './dto/post-goods-issue.dto';
+import { JournalEntriesService } from '../journal-entries/journal-entries.service';
+import { AccountingConfigsCoreService } from '../accounting-configs-core/accounting-configs-core.service';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.entity';
@@ -28,6 +30,8 @@ export class GoodsIssuesCoreService {
     private readonly repository: Repository<ErpGoodsIssue>,
     @InjectRepository(ErpGoodsIssueLine)
     private readonly lineRepository: Repository<ErpGoodsIssueLine>,
+    private readonly journalEntriesService: JournalEntriesService,
+    private readonly accountingConfigService: AccountingConfigsCoreService,
   ) {}
 
   private async getIssueOrThrow(
@@ -440,6 +444,56 @@ export class GoodsIssuesCoreService {
 
       issue.status = 'POSTED';
       await issueRepo.save(issue);
+
+      // --- Auto Generate Journal Entry (Chạy ngầm) ---
+      const config =
+        await this.accountingConfigService.findByModule('goods_issues');
+      if (
+        config &&
+        config.isActive &&
+        config.debitAccountId &&
+        config.creditAccountId
+      ) {
+        const totalAmount = lines.reduce(
+          (sum, l) => sum + Number(l.qtyIssued || 0) * Number(l.unitCost || 0),
+          0,
+        );
+
+        try {
+          await this.journalEntriesService.create(
+            {
+              voucher_no: issue.issueNo,
+              date: issue.issueDate,
+              description: `Hạch toán tự động từ phiếu xuất ${issue.issueNo}`,
+              referenceType: 'erp_goods_issues',
+              referenceId: issue.id,
+              lines: [
+                {
+                  account_id: config.debitAccountId,
+                  debit: totalAmount,
+                  credit: 0,
+                  description: `Giá vốn từ phiếu xuất ${issue.issueNo}`,
+                  sort: 1,
+                },
+                {
+                  account_id: config.creditAccountId,
+                  debit: 0,
+                  credit: totalAmount,
+                  description: `Xuất kho ${issue.issueNo}`,
+                  sort: 2,
+                },
+              ],
+            } as any,
+            dto.createdBy as string,
+          );
+        } catch (err) {
+          throw new BadRequestException(
+            `Không thể sinh bút toán tự động: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`,
+          );
+        }
+      }
+      // ------------------------------------------------------
+
       return this.findOne(id);
     });
   }

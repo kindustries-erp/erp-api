@@ -23,7 +23,6 @@ export class AccountingConfigsCoreService {
     return {
       id: item.id,
       module: item.moduleName,
-      action: item.action,
       debit_account_id: item.debitAccountId,
       credit_account_id: item.creditAccountId,
       is_active: item.isActive,
@@ -47,12 +46,10 @@ export class AccountingConfigsCoreService {
 
   async create(createDto: CreateAccountingConfigsCoreDto) {
     const existing = await this.configRepository.findOne({
-      where: { moduleName: createDto.module, action: createDto.action },
+      where: { moduleName: createDto.module },
     });
     if (existing) {
-      throw new BadRequestException(
-        'Config for this module and action already exists',
-      );
+      throw new BadRequestException('Config for this module already exists');
     }
 
     if (createDto.debit_account_id) {
@@ -70,7 +67,6 @@ export class AccountingConfigsCoreService {
 
     const config = this.configRepository.create({
       moduleName: createDto.module,
-      action: createDto.action,
       debitAccountId: createDto.debit_account_id || null,
       creditAccountId: createDto.credit_account_id || null,
       isActive: createDto.is_active ?? true,
@@ -82,7 +78,7 @@ export class AccountingConfigsCoreService {
   async findAll() {
     const items = await this.configRepository.find({
       relations: ['debitAccount', 'creditAccount'],
-      order: { moduleName: 'ASC', action: 'ASC' },
+      order: { moduleName: 'ASC' },
     });
     const mapped = items.map((item) => this.mapResponse(item));
     return {
@@ -103,9 +99,9 @@ export class AccountingConfigsCoreService {
     return { data: this.mapResponse(item) };
   }
 
-  async findByModuleAction(moduleName: string, action: string) {
+  async findByModule(moduleName: string) {
     return this.configRepository.findOne({
-      where: { moduleName, action, isActive: true },
+      where: { moduleName, isActive: true },
     });
   }
 
@@ -129,7 +125,6 @@ export class AccountingConfigsCoreService {
     }
 
     if (updateDto.module !== undefined) config.moduleName = updateDto.module;
-    if (updateDto.action !== undefined) config.action = updateDto.action;
     if (updateDto.debit_account_id !== undefined)
       config.debitAccountId = updateDto.debit_account_id;
     if (updateDto.credit_account_id !== undefined)

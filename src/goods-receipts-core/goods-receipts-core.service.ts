@@ -327,10 +327,8 @@ export class GoodsReceiptsCoreService {
       });
 
       // --- Auto Generate Journal Entry (Chạy ngầm) ---
-      const config = await this.accountingConfigService.findByModuleAction(
-        'goods_receipts',
-        'post',
-      );
+      const config =
+        await this.accountingConfigService.findByModule('goods_receipts');
       if (
         config &&
         config.isActive &&
@@ -507,6 +505,64 @@ export class GoodsReceiptsCoreService {
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
       });
+
+      // --- Auto Generate REVERSE Journal Entry (Chạy ngầm) ---
+      const config =
+        await this.accountingConfigService.findByModule('goods_receipts');
+      if (
+        config &&
+        config.isActive &&
+        config.debitAccountId &&
+        config.creditAccountId
+      ) {
+        const totalAmount = savedLines.reduce(
+          (sum, l) =>
+            sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
+          0,
+        );
+
+        try {
+          await this.journalEntriesService.create(
+            {
+              voucher_no: savedReceipt.receiptNo + '-REV',
+              date: savedReceipt.receiptDate,
+              description: `Hủy hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
+              referenceType: 'erp_goods_receipts',
+              referenceId: savedReceipt.id,
+              lines: [
+                {
+                  account_id: config.debitAccountId,
+                  debit: 0,
+                  credit: totalAmount,
+                  description: `Hủy nhập kho ${savedReceipt.receiptNo}`,
+                  sort: 1,
+                },
+                {
+                  account_id: config.creditAccountId,
+                  debit: totalAmount,
+                  credit: 0,
+                  description: `Hủy phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
+                  sort: 2,
+                },
+              ],
+            } as any,
+            receipt.createdBy as string,
+          );
+          this.logger.log(
+            `Created auto reverse journal entry for goods receipt ${savedReceipt.receiptNo}`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Lỗi tự động sinh bút toán đảo cho phiếu nhập ${savedReceipt.receiptNo}`,
+            err,
+          );
+          throw new BadRequestException(
+            `Không thể sinh bút toán đảo tự động: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`,
+          );
+        }
+      }
+      // ------------------------------------------------------
+
       return {
         message: 'Hủy phiếu nhập thành công',
         data: { ...savedReceipt, lines: savedLines },

@@ -10,6 +10,8 @@ import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_ser
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { GoodsIssuesCoreController } from './goods-issues-core.controller';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
+import { JournalEntriesModule } from '../journal-entries/journal-entries.module';
+import { AccountingConfigsCoreModule } from '../accounting-configs-core/accounting-configs-core.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { GoodsIssuesCoreService } from './goods-issues-core.service';
       ErpInventorySerial,
       ErpVehicle,
     ]),
+    JournalEntriesModule,
+    AccountingConfigsCoreModule,
   ],
   controllers: [GoodsIssuesCoreController],
   providers: [GoodsIssuesCoreService],
