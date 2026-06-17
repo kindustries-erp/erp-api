@@ -327,58 +327,61 @@ export class GoodsReceiptsCoreService {
       });
 
       // --- Auto Generate Journal Entry (Chạy ngầm) ---
-      try {
-        const config = await this.accountingConfigService.findByModuleAction(
-          'goods_receipts',
-          'post',
+      const config = await this.accountingConfigService.findByModuleAction(
+        'goods_receipts',
+        'post',
+      );
+      if (
+        config &&
+        config.isActive &&
+        config.debitAccountId &&
+        config.creditAccountId
+      ) {
+        const totalAmount = savedLines.reduce(
+          (sum, l) =>
+            sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
+          0,
         );
-        if (
-          config &&
-          config.isActive &&
-          config.debitAccountId &&
-          config.creditAccountId
-        ) {
-          const totalAmount = savedLines.reduce(
-            (sum, l) =>
-              sum + Number(l.qtyReceived || 0) * Number(l.unitCost || 0),
-            0,
+
+        try {
+          await this.journalEntriesService.create(
+            {
+              date: savedReceipt.receiptDate,
+              description: `Hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
+              referenceType: 'erp_goods_receipts',
+              referenceId: savedReceipt.id,
+              lines: [
+                {
+                  account_id: config.debitAccountId,
+                  debit: totalAmount,
+                  credit: 0,
+                  description: `Nhập kho ${savedReceipt.receiptNo}`,
+                  sort: 1,
+                },
+                {
+                  account_id: config.creditAccountId,
+                  debit: 0,
+                  credit: totalAmount,
+                  description: `Phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
+                  sort: 2,
+                },
+              ],
+            } as any,
+            (dto.createdBy ?? receipt.createdBy) as string,
           );
-          if (totalAmount > 0) {
-            await this.journalEntriesService.create(
-              {
-                date: savedReceipt.receiptDate,
-                description: `Hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
-                referenceType: 'erp_goods_receipts',
-                referenceId: savedReceipt.id,
-                lines: [
-                  {
-                    account_id: config.debitAccountId,
-                    debit: totalAmount,
-                    credit: 0,
-                    description: `Nhập kho ${savedReceipt.receiptNo}`,
-                    sort: 1,
-                  },
-                  {
-                    account_id: config.creditAccountId,
-                    debit: 0,
-                    credit: totalAmount,
-                    description: `Phải trả từ phiếu nhập ${savedReceipt.receiptNo}`,
-                    sort: 2,
-                  },
-                ],
-              } as any,
-              (dto.createdBy ?? receipt.createdBy) as string,
-            );
-            this.logger.log(
-              `Created auto journal entry for goods receipt ${savedReceipt.receiptNo}`,
-            );
-          }
+          this.logger.log(
+            `Created auto journal entry for goods receipt ${savedReceipt.receiptNo}`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Lỗi tự động sinh bút toán cho phiếu nhập ${savedReceipt.receiptNo}`,
+            err,
+          );
+          // Ném lỗi lên để rollback transaction và báo lỗi ra UI
+          throw new BadRequestException(
+            `Không thể sinh bút toán tự động: ${err instanceof Error ? err.message : 'Lỗi không xác định'}`,
+          );
         }
-      } catch (err) {
-        this.logger.error(
-          `Lỗi tự động sinh bút toán cho phiếu nhập ${savedReceipt.receiptNo}`,
-          err,
-        );
       }
       // ----------------------------------------------
 
