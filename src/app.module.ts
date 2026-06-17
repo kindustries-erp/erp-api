@@ -32,7 +32,7 @@ import { DocumentDependenciesCoreModule } from './document-dependencies-core/doc
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
 import { AccountingConfigsCoreModule } from './accounting-configs-core/accounting-configs-core.module';
 import { JournalEntriesModule } from './journal-entries/journal-entries.module';
-
+import { ChartOfAccountsModule } from './chart-of-accounts/chart-of-accounts.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -96,6 +96,7 @@ import { JournalEntriesModule } from './journal-entries/journal-entries.module';
     ErpInvoicesCoreModule,
     AccountingConfigsCoreModule,
     JournalEntriesModule,
+    ChartOfAccountsModule,
   ],
   controllers: [AppController],
   providers: [
