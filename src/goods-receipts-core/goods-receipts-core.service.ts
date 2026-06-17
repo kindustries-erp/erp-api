@@ -346,6 +346,7 @@ export class GoodsReceiptsCoreService {
         try {
           await this.journalEntriesService.create(
             {
+              voucher_no: savedReceipt.receiptNo,
               date: savedReceipt.receiptDate,
               description: `Hạch toán tự động từ phiếu nhập ${savedReceipt.receiptNo}`,
               referenceType: 'erp_goods_receipts',
