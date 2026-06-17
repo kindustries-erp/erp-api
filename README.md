@@ -1,19 +1,19 @@
-# Liouni ERP Core API (NestJS + Neon Postgres)
+# Liouni ERP API (NestJS + Neon Postgres)
 
-Backend cho lane `erp-core` — thuần **Postgres/Neon**, không phụ thuộc Directus runtime.
+Backend cho lane ERP active hiện tại (`erp-master`) — thuần **Postgres/Neon**, không phụ thuộc Directus runtime.
 
 ## Runtime hiện tại (2026-06-14)
 
 | Item | Giá trị |
 |---|---|
-| Branch | `erp-core` |
-| Stack | `/opt/stacks/liouni-erp-core-api` |
-| Port | `10020` |
+| Branch | `erp-master` |
+| Stack | _xem runtime/deploy contract hiện hành trong docs canonical; README này không còn là source of truth cho stack path_ |
+| Port | _xem runtime/deploy contract hiện hành_ |
 | DB | Neon PostgreSQL (`DATABASE_URL` trong stack `.env`) |
 | Auth | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`) |
 | Image | `ghcr.io/kindustries-erp/erp-api:<sha>` |
-| CI/CD | GitHub Actions (trigger: `push.branches: [erp-core]`) |
-| Public domain | `api.erp-core.liouni.com` → `http://100.75.67.115:10020` |
+| CI/CD | GitHub Actions (trigger branch active: `erp-master`) |
+| Public domain | _xem docs canonical / runtime hiện hành_ |
 
 ## 🚀 API Endpoints (core)
 
@@ -72,7 +72,7 @@ bun install
 bun run start:dev
 ```
 
-API sẽ chạy tại: `http://localhost:10020/api/v1`
+API local dev chạy theo `PORT` trong `.env`/runtime; dùng giá trị hiện tại của repo/stack thay vì tin cứng README này.
 
 ## 🔨 Build & Deploy
 
@@ -80,9 +80,8 @@ API sẽ chạy tại: `http://localhost:10020/api/v1`
 bun run build                 # Compile NestJS
 bun run migration:run         # Chạy TypeORM migrations (cần DATABASE_URL)
 
-# Deploy production (trên Elite host)
-cd /opt/stacks/liouni-erp-core-api
-docker compose up -d --build --force-recreate
+# Deploy runtime
+Theo contract canonical hiện hành trong `/opt/docs/ai/liouni-erp/` và repo-local `AGENTS.md`; không dùng README này làm deploy runbook cứng.
 ```
 
 ## ✅ Validation gates
