@@ -265,10 +265,26 @@ export class JournalEntriesService {
     if (!entry) throw new NotFoundException('Không tìm thấy bút toán');
     if (!entry.referenceType || !entry.referenceId) return { data: null };
 
+    // Whitelist allowed table names to prevent SQL injection
+    const ALLOWED_REFERENCE_TYPES = new Set([
+      'erp_goods_receipts',
+      'erp_goods_issues',
+      'erp_purchase_orders',
+      'erp_sales_orders',
+      'erp_production_orders',
+      'erp_cashflow_vouchers',
+      'payment_vouchers',
+    ]);
+
+    if (!ALLOWED_REFERENCE_TYPES.has(entry.referenceType)) {
+      this.logger.warn(
+        `Blocked getSourceDocument for unknown referenceType: ${entry.referenceType}`,
+      );
+      return { data: null };
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     try {
-      // Basic approach: query the reference_type table directly since it's in the same DB.
-      // We assume referenceType is a valid table name (e.g. erp_goods_receipts).
       const [doc] = await queryRunner.query(
         `SELECT * FROM ${entry.referenceType} WHERE id = $1 LIMIT 1`,
         [entry.referenceId],

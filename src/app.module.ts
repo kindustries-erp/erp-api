@@ -31,6 +31,7 @@ import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
 import { AccountingConfigsCoreModule } from './accounting-configs-core/accounting-configs-core.module';
+import { JournalEntriesModule } from './journal-entries/journal-entries.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { AccountingConfigsCoreModule } from './accounting-configs-core/accountin
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,
     AccountingConfigsCoreModule,
+    JournalEntriesModule,
   ],
   controllers: [AppController],
   providers: [
