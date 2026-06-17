@@ -67,7 +67,7 @@ export class ErpInvoicesCoreService {
       orderDirection = query.sort_order.toUpperCase() as 'ASC' | 'DESC';
     }
 
-    const where: any = {};
+    const where: any = { isDeleted: false };
 
     if (query.direction) {
       where.direction = query.direction;
@@ -87,8 +87,9 @@ export class ErpInvoicesCoreService {
     if (query.search) {
       const searchResults = await this.repository
         .createQueryBuilder('inv')
-        .where(
-          `inv.invoice_no ILIKE :q OR inv.serial_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q`,
+        .where('inv.is_deleted = false')
+        .andWhere(
+          `(inv.invoice_no ILIKE :q OR inv.serial_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q)`,
           { q: `%${query.search}%` },
         )
         .andWhere(query.direction ? 'inv.direction = :dir' : '1=1', {
@@ -135,7 +136,9 @@ export class ErpInvoicesCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOne({ where: { id } });
+    const data = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: this.toDto(data) };
   }
@@ -156,7 +159,9 @@ export class ErpInvoicesCoreService {
   }
 
   async update(id: string, dto: UpdateErpInvoiceDto) {
-    const existing = await this.repository.findOne({ where: { id } });
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
     const updatePayload: any = { ...dto };
@@ -174,9 +179,22 @@ export class ErpInvoicesCoreService {
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOne({ where: { id } });
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
-    await this.repository.delete(id);
+    await this.repository.update(id, { isDeleted: true } as any);
+
+    if (existing.xmlFileKey) {
+      try {
+        await this.r2.deleteObject(existing.xmlFileKey);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to delete XML file from R2 for invoice ${id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
     return { message: 'Xóa thành công' };
   }
 
@@ -269,7 +287,7 @@ export class ErpInvoicesCoreService {
           serialNo: parsed.serialNo,
           invoiceDate: parsed.invoiceDate,
           direction,
-          status: 'DRAFT',
+          status: 'CONFIRMED',
           sellerName: parsed.sellerName,
           sellerTaxCode: parsed.sellerTaxCode,
           sellerAddress: parsed.sellerAddress,
