@@ -77,6 +77,7 @@ export class AccountingConfigsCoreService {
 
   async findAll() {
     const items = await this.configRepository.find({
+      where: { isDeleted: false },
       relations: ['debitAccount', 'creditAccount'],
       order: { moduleName: 'ASC' },
     });
@@ -92,7 +93,7 @@ export class AccountingConfigsCoreService {
 
   async findOne(id: string) {
     const item = await this.configRepository.findOne({
-      where: { id },
+      where: { id, isDeleted: false },
       relations: ['debitAccount', 'creditAccount'],
     });
     if (!item) throw new NotFoundException('Config not found');
@@ -101,13 +102,13 @@ export class AccountingConfigsCoreService {
 
   async findByModule(moduleName: string) {
     return this.configRepository.findOne({
-      where: { moduleName, isActive: true },
+      where: { moduleName, isActive: true, isDeleted: false },
     });
   }
 
   async update(id: string, updateDto: UpdateAccountingConfigsCoreDto) {
     const config = await this.configRepository.findOne({
-      where: { id },
+      where: { id, isDeleted: false },
     });
     if (!config) throw new NotFoundException('Config not found');
 
@@ -142,10 +143,11 @@ export class AccountingConfigsCoreService {
 
   async remove(id: string) {
     const config = await this.configRepository.findOne({
-      where: { id },
+      where: { id, isDeleted: false },
     });
     if (!config) throw new NotFoundException('Config not found');
-    await this.configRepository.remove(config);
+    config.isDeleted = true;
+    await this.configRepository.save(config);
     return { message: 'Deleted' };
   }
 }
