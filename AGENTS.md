@@ -3,9 +3,13 @@
 File này là entrypoint cho mọi AI agent/model làm việc trong repo `liouni-erp-api`.
 
 ## Required reading order
-1. `docs/ai/technical-instructions.md`
-2. `README.md`
-3. Task file liên quan trong `docs/tasks/`
+1. `.agents/README.md`
+2. `.agents/context/current-truth.md`
+3. `.agents/context/working-contract.md`
+4. `.agents/tasks/current-lane.md`
+5. `docs/ai/technical-instructions.md`
+6. `README.md`
+7. Task file liên quan trong `docs/tasks/`
 
 ## Mandatory execution contract
 - No code without task file trong `docs/tasks/`.
