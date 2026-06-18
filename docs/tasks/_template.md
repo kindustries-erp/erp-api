@@ -32,8 +32,10 @@ Mục tiêu task.
 - [ ] 2.0 Backend workflow/API gate done
 - [ ] 3.0 UI handoff gate done
 - [ ] 4.0 Validate
-  - [ ] 4.1 `npm run build`
-  - [ ] 4.2 Smoke test affected endpoints
+  - [ ] 4.1 `bun run lint:check`
+  - [ ] 4.2 `bun run build`
+  - [ ] 4.3 Test scope liên quan (`bunx jest --forceExit` hoặc scope hẹp hơn, ghi rõ evidence)
+  - [ ] 4.4 Smoke test affected endpoints (nếu đổi contract/runtime flow)
 - [ ] 5.0 Close
   - [ ] 5.1 Lessons learned entry (if issue)
   - [ ] 5.2 Commit + push code (web/api)
@@ -41,7 +43,9 @@ Mục tiêu task.
 
 ## Validation Evidence
 - DB precheck result:
+- `bun run lint:check`:
 - Build:
+- Test:
 - Smoke:
 
 ## Lessons Learned

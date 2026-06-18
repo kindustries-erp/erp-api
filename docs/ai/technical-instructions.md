@@ -5,10 +5,14 @@ Scope: Áp dụng cho mọi AI agent/model làm việc trong repo backend API.
 
 ## 1) Source of truth và thứ tự đọc
 Khi bắt đầu task:
-1. `AGENTS.md`
-2. `docs/ai/technical-instructions.md` (file này)
-3. `README.md`
-4. Task file trong `docs/tasks/`
+1. `.agents/context/current-truth.md`
+2. `.agents/context/working-contract.md`
+3. `AGENTS.md`
+4. `docs/ai/technical-instructions.md` (file này)
+5. `README.md`
+6. Task file trong `docs/tasks/`
+
+Nếu có mâu thuẫn, ưu tiên theo thứ tự trên. Không tham chiếu file bootstrap không tồn tại.
 
 ## 2) Universal DB-first policy (FEATURE / ENHANCE / FIX)
 Áp dụng cho mọi thay đổi API, kể cả enhancement và bugfix.
@@ -42,6 +46,7 @@ Nếu `DB_GAP_FOUND`: tạo/hoàn tất TypeORM migration trước, sau đó m�
 ### 3.4 Task closing rule
 - Hoàn tất task phải commit + push code web/api liên quan.
 - Riêng DB/directus staging không bắt buộc commit/push code DB repo; bắt buộc có evidence apply + verify + documentation.
+- Nếu task artifact bị stale so với code thật, phải verify bằng code state + build/test + git state trước khi chỉnh status/checklist.
 
 ## 4) API architecture rules
 ### 4.1 Module boundaries
@@ -64,6 +69,12 @@ Trước khi tạo mới utility/service/helper, rà soát:
 - `src/directus/**`
 - module hiện có theo domain
 
+### 4.5 Team-scale backend structure
+- Controller chỉ nên xử lý route contract, guards, params/query/body parsing, và gọi service/use-case.
+- Service không nên phình thành "god service". Khi logic tăng mạnh, tách mapper/helper/use-case nội bộ theo domain.
+- DTO là boundary contract; không để entity shape vô tình trở thành public response shape nếu có thể cần đổi độc lập.
+- Nếu tạo primitive mới thay vì reuse, ghi lý do ngắn trong task artifact hoặc PR note.
+
 ## 5) Data-safety rules (Directus staging aware)
 - Không viết migration phá huỷ dữ liệu khi chưa có backup.
 - Không đổi schema staging mà không ghi rõ migration note + verification.
@@ -71,9 +82,18 @@ Trước khi tạo mới utility/service/helper, rà soát:
 
 ## 6) Validation gates
 - Bun-first tooling: dùng `bun` / `bunx` mặc định cho install/build/test/lint/format; chỉ fallback `npm`/`npx` nếu đã verify Bun không hỗ trợ và phải ghi rõ trong task evidence.
+- `bun run lint:check`
 - `bun run build`
 - Nếu có test: chạy test scope liên quan.
 - Nếu có đổi contract: kiểm tra endpoint affected bằng smoke request.
+
+Definition of done tối thiểu cho backend task:
+1. Task file tồn tại và checklist được tick realtime
+2. DB precheck đã ghi rõ `DB_READY` hoặc `DB_GAP_FOUND`
+3. Validation evidence đã ghi
+4. Nếu source đổi: lint/build/test đã chạy
+5. Nếu contract đổi: có handoff hoặc smoke evidence cho Web/QC
+6. Commit/push status stated rõ theo đúng repo
 
 ## 7) Output contract khi báo hoàn tất
 Phải kèm:
