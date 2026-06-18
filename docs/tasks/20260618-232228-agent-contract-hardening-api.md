@@ -46,10 +46,10 @@ Làm sạch và nâng chuẩn agent contract của repo API theo hướng curren
   - [x] 4.1 `bun run lint:check`
   - [x] 4.2 `bun run build`
   - [x] 4.3 `bunx jest --forceExit`
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: `DB_READY`
@@ -62,6 +62,6 @@ Làm sạch và nâng chuẩn agent contract của repo API theo hướng curren
 - Link: No issue
 
 ## Commit/Push Status
-- API repo: pending
-- Web repo (if affected): coordinated separately
+- API repo: committed `09f0332`, pushed `github-industries/erp-master`
+- Web repo (if affected): coordinated separately in sibling repo task
 - DB/directus staging: N/A
