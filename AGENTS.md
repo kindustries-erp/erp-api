@@ -1,30 +1,34 @@
 # Liouni ERP API Agent Bootstrap
 
-File này là entrypoint cho mọi AI agent/model làm việc trong repo `liouni-erp-api`.
+Entry point for `liouni-erp-api`.
 
-## Required reading order
+## Read order
 1. `.agents/README.md`
 2. `.agents/context/current-truth.md`
 3. `.agents/context/working-contract.md`
 4. `.agents/tasks/current-lane.md`
 5. `docs/ai/technical-instructions.md`
 6. `README.md`
-7. Task file liên quan trong `docs/tasks/`
+7. Relevant `docs/tasks/*`
 
-## Mandatory execution contract
-- No code without task file trong `docs/tasks/`.
-- Tick checklist realtime (`[ ]` -> `[x]`) khi hoàn tất từng sub-task.
-- Nếu gặp issue/blocker/sai hướng: ghi lessons learned trước khi đóng task.
-- Bun-first: mọi install/build/test/lint/format trong repo này phải dùng `bun` / `bunx`, không dùng `npm`, `npx`, `pnpm`, `yarn` trừ khi task chứng minh được Bun không hỗ trợ.
+## Execution contract
+- no code without a task file
+- update checklists in real time
+- record lessons learned for blockers/wrong turns
+- use `bun` / `bunx` unless Bun incompatibility is proven
+- before commit/push, `cd /opt/repos/liouni-erp-core/liouni-erp-api`
+- push with `github-industries`
+- reuse existing components/modules/services/DTOs/helpers/utils/functions first
+- extend/adapt before duplicating
 
-## Canonical references
-- Technical instructions: `docs/ai/technical-instructions.md`
-- Task template: `docs/tasks/_template.md`
-- Lessons learned template: `docs/lessons-learned/_template.md`
+## References
+- `docs/ai/technical-instructions.md`
+- `docs/tasks/_template.md`
+- `docs/lessons-learned/_template.md`
 
-## Testing rules (NON-NEGOTIABLE)
-- Pre-commit hook runs ALL tests (`bunx jest --forceExit`). If tests fail, commit is blocked.
-- **If a test fails, fix the SOURCE CODE — NOT the test.** Tests are the source of truth for expected behavior.
-- Unit tests live in `*.spec.ts` files co-located with source.
-- Run tests: `bunx jest --forceExit` (all) or `bunx jest --testPathPatterns=<module>` (specific module).
-- ESLint relaxed for test files: `unbound-method` and `no-require-imports` are off in `*.spec.ts`.
+## Tests
+- pre-commit runs `bunx jest --forceExit`
+- fix source, not tests
+- tests live in `*.spec.ts`
+- run all: `bunx jest --forceExit`
+- run one area: `bunx jest --testPathPatterns=<module>`
