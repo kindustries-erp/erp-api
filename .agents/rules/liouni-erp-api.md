@@ -13,6 +13,7 @@ Apply to all work in this repo.
 - inspect current state before edits
 - use evidence-first wording
 - before push/commit, `cd /opt/repos/liouni-erp-core/liouni-erp-api`
+- before push/commit, always run `bun run lint` and `bun run build` to verify code quality
 - push with `github-industries`
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
