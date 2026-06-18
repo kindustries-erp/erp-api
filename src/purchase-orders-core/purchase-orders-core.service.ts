@@ -102,7 +102,7 @@ export class PurchaseOrdersCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const where: any = {};
+    const where: any = { isDeleted: false };
     if (query.search) {
       where.poNo = ILike(`%${query.search}%`);
     }
@@ -181,7 +181,10 @@ export class PurchaseOrdersCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     const lines = await this.lineRepository.find({
       where: { purchaseOrderId: id },
       order: { lineNo: 'ASC' },
@@ -231,7 +234,10 @@ export class PurchaseOrdersCoreService {
     return result;
   }
   async update(id: string, dto: UpdatePurchaseOrderDto) {
-    const existing = await this.repository.findOneByOrFail({ id });
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     const nextPoNo = dto.poNo?.trim();
 
     if (dto.status === 'CANCELLED' && existing.status !== 'CANCELLED') {
@@ -294,6 +300,22 @@ export class PurchaseOrdersCoreService {
       });
     }
     return this.findOne(id);
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneByOrFail({ id });
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Chỉ có thể xóa phiếu nháp');
+    }
+
+    // Perform soft delete
+    existing.isDeleted = true;
+    await this.repository.save(existing);
+
+    return {
+      message: 'Xóa thành công',
+      data: { id },
+    };
   }
 
   private toCoreDocument(data: any) {
