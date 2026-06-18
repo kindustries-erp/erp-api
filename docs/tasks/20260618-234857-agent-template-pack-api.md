@@ -46,10 +46,10 @@ Bổ sung bộ tài liệu mẫu ngắn, thực dụng, link được từ techn
   - [x] 4.2 `bun run build`
   - [x] 4.3 Test scope liên quan (`bunx jest --forceExit` hoặc scope hẹp hơn, ghi rõ evidence)
   - [x] 4.4 Smoke test affected endpoints (nếu đổi contract/runtime flow)
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned entry (if issue)
+  - [x] 5.2 Commit + push code (web/api)
+  - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: `DB_READY`
@@ -62,6 +62,6 @@ Bổ sung bộ tài liệu mẫu ngắn, thực dụng, link được từ techn
 - Link: No issue
 
 ## Commit/Push Status
-- API repo: pending
-- Web repo (if affected): coordinated separately
+- API repo: committed `743a73c`, pushed `github-industries/erp-master`
+- Web repo (if affected): coordinated separately in sibling repo task
 - DB/directus staging: N/A
