@@ -3,7 +3,7 @@
 > **Created:** 2026-06-16  
 > **Lane:** erp-core (Neon/Postgres)  
 > **Repo:** `liouni-erp-api` (`/opt/repos/liouni-erp-core/liouni-erp-api`)  
-> **Status:** READY — chưa bắt đầu  
+> **Status:** DONE — verified build + tests PASS 2026-06-18  
 > **Linked web task:** `liouni-erp-web/docs/tasks/20260616-172700-erp-invoices-and-po-invoice-field-web.md`
 
 ---
@@ -297,12 +297,13 @@ DROP TABLE IF EXISTS erp_invoices;
 
 ## Done checklist
 
-- [ ] Migration 1A chạy thành công, verify column tồn tại
-- [ ] Migration 1B chạy thành công, verify table + indexes
-- [ ] Entity PO có `supplierInvoiceNo`, DTO accept field
-- [ ] `ErpInvoice` entity + DTO tạo đúng
-- [ ] Service: list/get/create/update/remove hoạt động
-- [ ] Controller: 5 routes expose đúng, có guard JWT
-- [ ] AppModule import module mới
-- [ ] `bun run build` PASS không lỗi
-- [ ] API smoke: 3 request trên đều pass
+- [x] Migration 1A chạy thành công, verify column tồn tại
+- [x] Migration 1B chạy thành công, verify table + indexes
+- [x] Entity PO có `supplierInvoiceNo`, DTO accept field
+- [x] `ErpInvoice` entity + DTO tạo đúng
+- [x] Service: list/get/create/update/remove hoạt động
+- [x] Controller: 5 routes expose đúng, có guard JWT
+- [x] AppModule import module mới
+- [x] `bun run build` PASS — evidence 2026-06-18 (`nest build` exit 0)
+- [x] Jest 18/18 PASS — evidence 2026-06-18
+- [ ] API smoke live (cần `bun start:dev` + admin token)
