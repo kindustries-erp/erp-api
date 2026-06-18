@@ -107,3 +107,9 @@ Phải kèm:
 ## 8) Templates liên quan
 - Task template: `docs/tasks/_template.md`
 - Lessons template: `docs/lessons-learned/_template.md`
+- API module template: `docs/ai/templates/api-module-template.md`
+- API contract-change template: `docs/ai/templates/api-contract-change-template.md`
+- ADR-lite template: `docs/ai/templates/adr-lite-template.md`
+- API naming conventions: `docs/ai/conventions/api-naming-conventions.md`
+- DoD matrix: `docs/ai/conventions/definition-of-done-matrix.md`
+- Anti-pattern cookbook: `docs/ai/conventions/anti-pattern-cookbook.md`
