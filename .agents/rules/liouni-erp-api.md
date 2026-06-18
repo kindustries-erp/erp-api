@@ -17,6 +17,12 @@ Apply to all work in this repo.
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
 
+## Architecture & Development Standards
+
+- **TDD**: Enforce Test-Driven Development (TDD) as a core practice. Write tests before implementing new features.
+- **Modularity**: Apply atomic design and a modular mindset to backend code. Break down modules, controllers, services, and functions into the smallest possible, reusable units.
+- **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
+
 ## Historical warning
 If a file mentions Directus-first flows, Gitea deploys, old dev domains, or `erp-core`, classify it first.
 Only repo-local current-truth docs should drive new implementation by default.
