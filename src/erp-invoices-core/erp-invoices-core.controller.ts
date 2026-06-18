@@ -63,6 +63,11 @@ export class ErpInvoicesCoreController {
     return this.service.remove(id);
   }
 
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.service.cancel(id);
+  }
+
   // ---------------------------------------------------------------------------
   // Bulk XML import
   // ---------------------------------------------------------------------------

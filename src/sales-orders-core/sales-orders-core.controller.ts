@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -70,5 +71,17 @@ export class SalesOrdersCoreController {
     @Body() dto: UnreserveSalesOrderDto,
   ) {
     return this.service.unreserve(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'delete' })
+  @Delete(':id')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.remove(id);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @Post(':id/cancel')
+  cancel(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.cancel(id);
   }
 }

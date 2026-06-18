@@ -57,4 +57,9 @@ export class PurchaseOrdersCoreController {
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
+
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.service.cancel(id);
+  }
 }

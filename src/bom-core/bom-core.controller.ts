@@ -50,4 +50,10 @@ export class BomCoreController {
   update(@Param('id') id: string, @Body() dto: UpdateBomDto) {
     return this.service.update(id, dto);
   }
+
+  @RequirePermissions({ resource: 'bom', action: 'delete' })
+  @Delete(':id')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.remove(id);
+  }
 }

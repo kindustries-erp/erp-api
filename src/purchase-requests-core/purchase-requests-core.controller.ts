@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -40,5 +41,15 @@ export class PurchaseRequestsCoreController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdatePurchaseRequestDto) {
     return this.service.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
+  }
+
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.service.cancel(id);
   }
 }

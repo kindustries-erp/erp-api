@@ -68,4 +68,10 @@ export class GoodsIssuesCoreController {
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);
   }
+
+  @RequirePermissions({ resource: 'goods_issues', action: 'update' })
+  @Post(':id/cancel')
+  cancelIssue(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.cancelIssue(id);
+  }
 }

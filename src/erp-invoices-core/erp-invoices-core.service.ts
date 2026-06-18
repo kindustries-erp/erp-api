@@ -209,6 +209,10 @@ export class ErpInvoicesCoreService {
       where: { id, isDeleted: false },
     });
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Chỉ có thể xóa hóa đơn nháp');
+    }
+    
     await this.repository.update(id, { isDeleted: true } as any);
 
     if (existing.xmlFileKey) {
@@ -222,6 +226,27 @@ export class ErpInvoicesCoreService {
     }
 
     return { message: 'Xóa thành công' };
+  }
+
+  async cancel(id: string) {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('Hóa đơn đã bị hủy');
+    }
+    if (existing.status === 'DRAFT') {
+      throw new BadRequestException('Không thể hủy hóa đơn nháp, vui lòng xóa');
+    }
+
+    existing.status = 'CANCELLED';
+    await this.repository.save(existing);
+
+    return {
+      message: 'Hủy thành công',
+      data: { id },
+    };
   }
 
   private toDto(invoice: ErpInvoice) {

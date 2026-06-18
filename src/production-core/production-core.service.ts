@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
@@ -45,9 +45,12 @@ export class ProductionCoreService {
       defaultOrder: { createdAt: 'DESC' },
     });
     const [items, total] = await this.productionOrderRepository.findAndCount({
-      where: query.search
-        ? ([{ referenceNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where: [
+        {
+          ...(query.search ? { referenceNo: ILike(`%${query.search}%`) } : {}),
+          isDeleted: false,
+        },
+      ] as any,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -440,5 +443,22 @@ export class ProductionCoreService {
         qtyRequired: (current?.qtyRequired || 0) + grossQty,
       });
     }
+  }
+
+  async cancel(id: string) {
+    const existing = await this.productionOrderRepository.findOne({ where: { id, isDeleted: false } });
+    if (!existing) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('Lệnh sản xuất đã bị hủy');
+    }
+
+    // Basic cancellation: just update status. Reversing inventory requires complex transaction reversals.
+    existing.status = 'CANCELLED';
+    await this.productionOrderRepository.save(existing);
+
+    return {
+      message: 'Hủy thành công (chỉ cập nhật trạng thái)',
+      data: { id },
+    };
   }
 }
