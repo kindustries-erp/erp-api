@@ -303,7 +303,10 @@ export class PurchaseOrdersCoreService {
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOneByOrFail({ id, isDeleted: false });
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Chỉ có thể xóa phiếu nháp');
     }
@@ -319,19 +322,25 @@ export class PurchaseOrdersCoreService {
   }
 
   async cancel(id: string) {
-    const existing = await this.repository.findOneByOrFail({ id, isDeleted: false });
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('Chứng từ đã bị hủy');
     }
     if (existing.status === 'DRAFT') {
       throw new BadRequestException('Không thể hủy phiếu nháp, vui lòng xóa');
     }
-    if (existing.status === 'RECEIVED' || existing.status === 'FULLY_RECEIVED') {
+    if (
+      existing.status === 'RECEIVED' ||
+      existing.status === 'FULLY_RECEIVED'
+    ) {
       throw new BadRequestException('Không thể hủy phiếu mua hàng đã nhận');
     }
 
     await this.dependencyService.checkDependencies('purchase_orders', id);
-    
+
     existing.status = 'CANCELLED';
     await this.repository.save(existing);
 

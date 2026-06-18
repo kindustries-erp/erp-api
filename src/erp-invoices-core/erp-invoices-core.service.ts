@@ -212,7 +212,7 @@ export class ErpInvoicesCoreService {
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Chỉ có thể xóa hóa đơn nháp');
     }
-    
+
     await this.repository.update(id, { isDeleted: true } as any);
 
     if (existing.xmlFileKey) {

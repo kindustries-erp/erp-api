@@ -296,11 +296,12 @@ export class SalesOrdersCoreService {
     const existing = await this.repository.findOne({
       where: { id, isDeleted: false },
     });
-    if (!existing) throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+    if (!existing)
+      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Chỉ có thể xóa đơn bán hàng nháp');
     }
-    
+
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };
   }
@@ -309,7 +310,8 @@ export class SalesOrdersCoreService {
     const existing = await this.repository.findOne({
       where: { id, isDeleted: false },
     });
-    if (!existing) throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+    if (!existing)
+      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('Đơn bán hàng đã bị hủy');
     }

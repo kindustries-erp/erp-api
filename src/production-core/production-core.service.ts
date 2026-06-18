@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
@@ -446,7 +450,9 @@ export class ProductionCoreService {
   }
 
   async cancel(id: string) {
-    const existing = await this.productionOrderRepository.findOne({ where: { id, isDeleted: false } });
+    const existing = await this.productionOrderRepository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('Lệnh sản xuất đã bị hủy');

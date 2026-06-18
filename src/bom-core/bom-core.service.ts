@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -104,7 +108,9 @@ export class BomCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneOrFail({ where: { id, isDeleted: false } });
+    const data = await this.repository.findOneOrFail({
+      where: { id, isDeleted: false },
+    });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
       order: { lineNo: 'ASC' },
@@ -170,7 +176,9 @@ export class BomCoreService {
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOne({ where: { id, isDeleted: false } });
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };

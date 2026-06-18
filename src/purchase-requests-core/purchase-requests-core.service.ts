@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -48,29 +52,39 @@ export class PurchaseRequestsCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id, isDeleted: false });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     return { message: 'Lấy thông tin thành công', data };
   }
 
   async update(id: string, dto: UpdatePurchaseRequestDto) {
     await this.repository.update(id, dto as any);
-    const data = await this.repository.findOneByOrFail({ id, isDeleted: false });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     return { message: 'Cập nhật thành công', data };
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOne({ where: { id, isDeleted: false } });
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException('Không tìm thấy phiếu yêu cầu');
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Chỉ có thể xóa phiếu yêu cầu nháp');
     }
-    
+
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };
   }
 
   async cancel(id: string) {
-    const existing = await this.repository.findOne({ where: { id, isDeleted: false } });
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!existing) throw new NotFoundException('Không tìm thấy phiếu yêu cầu');
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('Phiếu yêu cầu đã bị hủy');

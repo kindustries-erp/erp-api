@@ -470,7 +470,9 @@ export class GoodsIssuesCoreService {
         throw new BadRequestException('Phiếu xuất đã bị hủy trước đó');
       }
       if (issue.status !== 'POSTED') {
-        throw new BadRequestException('Chỉ có thể hủy phiếu xuất đã ghi sổ (POSTED)');
+        throw new BadRequestException(
+          'Chỉ có thể hủy phiếu xuất đã ghi sổ (POSTED)',
+        );
       }
 
       const lines = await lineRepo.find({
@@ -508,14 +510,20 @@ export class GoodsIssuesCoreService {
           const newValue = Number(balance.inventoryValue) + qty * unitCost;
           balance.qtyOnHand = newQty.toFixed(3);
           balance.inventoryValue = newValue.toFixed(3);
-          balance.avgUnitCost = newQty > 0 ? (newValue / newQty).toFixed(3) : '0.000';
+          balance.avgUnitCost =
+            newQty > 0 ? (newValue / newQty).toFixed(3) : '0.000';
           await balanceRepo.save(balance);
         }
 
         if (line.salesOrderLineId) {
-          const soLine = await soLineRepo.findOneBy({ id: line.salesOrderLineId });
+          const soLine = await soLineRepo.findOneBy({
+            id: line.salesOrderLineId,
+          });
           if (soLine) {
-            soLine.qtyDelivered = Math.max(0, Number(soLine.qtyDelivered) - qty).toFixed(3);
+            soLine.qtyDelivered = Math.max(
+              0,
+              Number(soLine.qtyDelivered) - qty,
+            ).toFixed(3);
             await soLineRepo.save(soLine);
           }
         }
@@ -542,10 +550,18 @@ export class GoodsIssuesCoreService {
       if (issue.salesOrderId) {
         const so = await soRepo.findOneBy({ id: issue.salesOrderId });
         if (so) {
-          const refreshedLines = await soLineRepo.find({ where: { salesOrderId: so.id } });
-          const totalOrdered = refreshedLines.reduce((sum, l) => sum + Number(l.qtyOrdered || 0), 0);
-          const totalDelivered = refreshedLines.reduce((sum, l) => sum + Number(l.qtyDelivered || 0), 0);
-          
+          const refreshedLines = await soLineRepo.find({
+            where: { salesOrderId: so.id },
+          });
+          const totalOrdered = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyOrdered || 0),
+            0,
+          );
+          const totalDelivered = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyDelivered || 0),
+            0,
+          );
+
           if (totalDelivered <= 0) {
             so.status = so.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
           } else if (totalDelivered < totalOrdered) {
