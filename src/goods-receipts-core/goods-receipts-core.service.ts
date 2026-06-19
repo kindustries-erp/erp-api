@@ -219,7 +219,7 @@ export class GoodsReceiptsCoreService {
         order: { lineNo: 'ASC' },
       });
       if (lines.length === 0) {
-        throw new BadRequestException('Phiếu nhập chưa có dòng hàng');
+        throw new BadRequestException('Chưa nhập hàng nhập kho');
       }
 
       for (const line of lines) {
