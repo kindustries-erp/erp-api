@@ -9,7 +9,7 @@ Apply to all work in this repo.
 - treat Directus as legacy/reference unless the task explicitly says legacy scope
 - treat Gitea as historical only
 - MUST use bun/bunx exclusively (do NOT use npm)
-- when debugging and testing API locally, always start dev on port 10020
+- when debugging and testing API locally, always start dev on port 10010
 - by default, always work on ERP_MASTER_DATABASE_URL unless ERP_KLTOUS_STAGING_DATABASE_URL or ERP_KLTOUS_MASTER_DATABASE_URL is explicitly indicated
 - follow DB -> API -> UI -> QC
 - inspect current state before edits
