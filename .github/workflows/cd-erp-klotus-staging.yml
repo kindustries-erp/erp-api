@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/kindustries-erp/erp-klotus-api
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-staging
 
 jobs:
   build-and-push:
@@ -45,8 +45,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:staging
-            ${{ env.IMAGE_NAME }}:staging-${{ steps.meta.outputs.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -93,11 +93,11 @@ jobs:
             -p ${{ vars.ELITE_PORT }} \
             ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
             "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
-             docker pull ${{ env.IMAGE_NAME }}:staging-${{ needs.build-and-push.outputs.sha }} || true ; \
+             docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
              docker rm -f erp-api-klotus-staging || true ; \
              docker rm -f liouni-erp-core-api-klotus-staging || true ; \
              docker ps -q --filter publish=10021 | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-klotus-staging --restart always --env-file /opt/stacks/erp-klotus-staging-api/.env -e PORT=3000 -p 10021:3000 ${{ env.IMAGE_NAME }}:staging-${{ needs.build-and-push.outputs.sha }}"
+             docker run -d --name erp-api-klotus-staging --restart always --env-file /opt/stacks/erp-klotus-staging-api/.env -e PORT=3000 -p 10021:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         run: |
