@@ -18,9 +18,12 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
+  private readonly logger = new Logger(GoodsReceiptsCoreService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpGoodsReceipt)
@@ -216,7 +219,7 @@ export class GoodsReceiptsCoreService {
         order: { lineNo: 'ASC' },
       });
       if (lines.length === 0) {
-        throw new BadRequestException('Phiếu nhập chưa có dòng hàng');
+        throw new BadRequestException('Chưa nhập hàng nhập kho');
       }
 
       for (const line of lines) {
@@ -318,6 +321,13 @@ export class GoodsReceiptsCoreService {
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
       });
+
+      // --- Journal entry generation removed (accounting module decoupled) ---
+      this.logger.log(
+        `Goods receipt ${savedReceipt.receiptNo} posted; journal entry generation skipped.`,
+      );
+      // -----------------------------------------------------------------------
+
       return {
         message: 'Lấy thông tin thành công',
         data: { ...savedReceipt, lines: savedLines },
@@ -439,6 +449,13 @@ export class GoodsReceiptsCoreService {
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
       });
+
+      // --- Reverse journal entry generation removed (accounting module decoupled) ---
+      this.logger.log(
+        `Goods receipt ${savedReceipt.receiptNo} cancelled; reverse journal entry generation skipped.`,
+      );
+      // ------------------------------------------------------------------------------
+
       return {
         message: 'Hủy phiếu nhập thành công',
         data: { ...savedReceipt, lines: savedLines },

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import { ErpBusinessPartner } from '../business-partners-core/entities/erp_busin
 
 @Injectable()
 export class GoodsIssuesCoreService {
+  private readonly logger = new Logger(GoodsIssuesCoreService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpGoodsIssue)
@@ -440,7 +443,147 @@ export class GoodsIssuesCoreService {
 
       issue.status = 'POSTED';
       await issueRepo.save(issue);
+
+      // --- Journal entry generation removed (accounting module decoupled) ---
+      this.logger.log(
+        `Goods issue ${issue.issueNo} posted; journal entry generation skipped.`,
+      );
+      // -----------------------------------------------------------------------
+
       return this.findOne(id);
+    });
+  }
+
+  async cancelIssue(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const issueRepo = manager.getRepository(ErpGoodsIssue);
+      const lineRepo = manager.getRepository(ErpGoodsIssueLine);
+      const txnRepo = manager.getRepository(ErpInventoryTransaction);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+      const soRepo = manager.getRepository(ErpSalesOrder);
+      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const vehicleRepo = manager.getRepository(ErpVehicle);
+
+      const issue = await this.getIssueOrThrow(issueRepo, id);
+      if (issue.status === 'CANCELLED') {
+        throw new BadRequestException('Phiếu xuất đã bị hủy trước đó');
+      }
+      if (issue.status !== 'POSTED') {
+        throw new BadRequestException(
+          'Chỉ có thể hủy phiếu xuất đã ghi sổ (POSTED)',
+        );
+      }
+
+      const lines = await lineRepo.find({
+        where: { goodsIssueId: id },
+        order: { lineNo: 'ASC' },
+      });
+
+      for (const line of lines) {
+        const qty = Number(line.qtyIssued || 0);
+        if (qty <= 0) continue;
+
+        const unitCost = Number(line.unitCost || 0);
+
+        await txnRepo.save(
+          txnRepo.create({
+            transactionType: 'ISSUE_CANCEL',
+            documentType: 'GOODS_ISSUE',
+            documentId: issue.id,
+            itemId: line.itemId ?? null,
+            warehouseCode: null,
+            qtyIn: qty.toFixed(3),
+            qtyOut: '0.000',
+            unitCost: unitCost.toFixed(3),
+            transactionDate: issue.issueDate,
+            notes: `Hủy phiếu xuất ${issue.issueNo}`,
+            createdBy: null,
+          } as any),
+        );
+
+        const balance = await balanceRepo.findOne({
+          where: { itemId: line.itemId ?? undefined },
+        });
+        if (balance) {
+          const newQty = Number(balance.qtyOnHand) + qty;
+          const newValue = Number(balance.inventoryValue) + qty * unitCost;
+          balance.qtyOnHand = newQty.toFixed(3);
+          balance.inventoryValue = newValue.toFixed(3);
+          balance.avgUnitCost =
+            newQty > 0 ? (newValue / newQty).toFixed(3) : '0.000';
+          await balanceRepo.save(balance);
+        }
+
+        if (line.salesOrderLineId) {
+          const soLine = await soLineRepo.findOneBy({
+            id: line.salesOrderLineId,
+          });
+          if (soLine) {
+            soLine.qtyDelivered = Math.max(
+              0,
+              Number(soLine.qtyDelivered) - qty,
+            ).toFixed(3);
+            await soLineRepo.save(soLine);
+          }
+        }
+
+        if (line.serialId) {
+          const serial = await serialRepo.findOneBy({ id: line.serialId });
+          if (serial) {
+            serial.status = 'AVAILABLE';
+            serial.goodsIssueLineId = null;
+            await serialRepo.save(serial);
+          }
+        }
+
+        if (line.vehicleId) {
+          const vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
+          if (vehicle) {
+            vehicle.status = 'AVAILABLE';
+            await vehicleRepo.save(vehicle);
+          }
+        }
+      }
+
+      // Recalc SO status
+      if (issue.salesOrderId) {
+        const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+        if (so) {
+          const refreshedLines = await soLineRepo.find({
+            where: { salesOrderId: so.id },
+          });
+          const totalOrdered = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyOrdered || 0),
+            0,
+          );
+          const totalDelivered = refreshedLines.reduce(
+            (sum, l) => sum + Number(l.qtyDelivered || 0),
+            0,
+          );
+
+          if (totalDelivered <= 0) {
+            so.status = so.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
+          } else if (totalDelivered < totalOrdered) {
+            so.status = 'PARTIAL_DELIVERED';
+          } else {
+            so.status = 'DELIVERED';
+          }
+          await soRepo.save(so);
+        }
+      }
+
+      issue.status = 'CANCELLED';
+      const savedIssue = await issueRepo.save(issue);
+      const savedLines = await lineRepo.find({
+        where: { goodsIssueId: id },
+        order: { lineNo: 'ASC' },
+      });
+
+      return {
+        message: 'Hủy phiếu xuất thành công',
+        data: { ...savedIssue, lines: savedLines },
+      };
     });
   }
 

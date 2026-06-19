@@ -1,5 +1,9 @@
 # Task Template — ERP API
 
+> **HISTORICAL REFERENCE ONLY**
+> Task này thuộc payment-voucher / customer-advance / Directus-era finance flow cũ. Không dùng làm default implementation guidance cho lane `erp-master` hiện tại nếu user không mở lại scope finance legacy.
+
+
 ## Request Input (bạn chỉ cần điền phần này)
 - Type: FIX
 - Mục tiêu: Gỡ toàn bộ flow Đặt cọc/Customer Advance và mọi contract/backend dependency với `CUSTOMER_ADVANCE_RECEIPT`, `customer-advances`, `advance-applications`, `ar_advance_*` khỏi ERP API.

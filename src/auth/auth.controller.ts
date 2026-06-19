@@ -52,6 +52,17 @@ export class AuthController {
     );
   }
 
+  @Post('impersonate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Login as user (chỉ dành cho admin)' })
+  impersonate(
+    @Body() body: { targetUserId: string },
+    @Req() request: Request & { user: { sub: string } },
+  ) {
+    return this.authService.impersonate(request.user.sub, body.targetUserId);
+  }
+
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

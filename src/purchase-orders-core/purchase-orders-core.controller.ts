@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Delete,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -50,5 +51,15 @@ export class PurchaseOrdersCoreController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
+  }
+
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string) {
+    return this.service.cancel(id);
   }
 }

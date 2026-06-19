@@ -31,7 +31,9 @@ export class SalesOrdersCoreService {
     repository: Repository<ErpSalesOrder>,
     id: string,
   ) {
-    const salesOrder = await repository.findOneBy({ id });
+    const salesOrder = await repository.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!salesOrder) {
       throw new NotFoundException('Không tìm thấy đơn bán hàng');
     }
@@ -79,9 +81,12 @@ export class SalesOrdersCoreService {
     });
 
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ soNo: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where: [
+        {
+          ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
+          isDeleted: false,
+        },
+      ] as any,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -285,5 +290,44 @@ export class SalesOrdersCoreService {
 
       return this.findOne(id);
     });
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing)
+      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Chỉ có thể xóa đơn bán hàng nháp');
+    }
+
+    await this.repository.update(id, { isDeleted: true } as any);
+    return { message: 'Xóa thành công' };
+  }
+
+  async cancel(id: string) {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing)
+      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('Đơn bán hàng đã bị hủy');
+    }
+    if (existing.status === 'DRAFT') {
+      throw new BadRequestException('Không thể hủy đơn nháp, vui lòng xóa');
+    }
+
+    // Call dependencies check just in case
+    await this.dependencyService.checkDependencies('sales_service_orders', id);
+
+    existing.status = 'CANCELLED';
+    await this.repository.save(existing);
+
+    return {
+      message: 'Hủy thành công',
+      data: { id },
+    };
   }
 }

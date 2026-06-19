@@ -1,5 +1,9 @@
 # Operational ERP Rebuild — Sales / Purchase / Inventory
 
+> **HISTORICAL REFERENCE ONLY**
+> Task này thuộc legacy operational rebuild / Directus-era lane cũ. Không dùng làm default implementation guidance cho lane `erp-master` hiện tại nếu user không mở lại scope legacy operational.
+
+
 - Source contract: `/opt/docs/ai/liouni-erp/tasks/20260521-operational-erp-rebuild-sales-purchase-inventory.md`
 - Status: IN_PROGRESS
 

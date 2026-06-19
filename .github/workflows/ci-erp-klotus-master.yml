@@ -32,7 +32,7 @@ jobs:
         run: bun run lint:check
 
       - name: Test
-        run: bun test
+        run: bunx jest --forceExit
 
       - name: Build
         run: bun run build

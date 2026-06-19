@@ -13,6 +13,7 @@ import {
   MoreThanOrEqual,
   LessThanOrEqual,
   In,
+  Not,
 } from 'typeorm';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
@@ -102,12 +103,12 @@ export class PurchaseOrdersCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const where: any = {};
-    if (query.search) {
-      where.poNo = ILike(`%${query.search}%`);
-    }
+    const where: any = { isDeleted: false };
     if (query.status) {
       where.status = query.status;
+    }
+    if ((query as any).exclude_status) {
+      where.status = Not((query as any).exclude_status);
     }
     if (query.payment_status) {
       where.paymentStatus = query.payment_status;
@@ -164,8 +165,16 @@ export class PurchaseOrdersCoreService {
       defaultOrder: { createdAt: 'DESC' },
     });
 
+    let finalWhere: any = where;
+    if (query.search) {
+      finalWhere = [
+        { ...where, poNo: ILike(`%${query.search}%`) },
+        { ...where, supplierInvoiceNo: ILike(`%${query.search}%`) },
+      ];
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where,
+      where: finalWhere,
       relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -181,7 +190,10 @@ export class PurchaseOrdersCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     const lines = await this.lineRepository.find({
       where: { purchaseOrderId: id },
       order: { lineNo: 'ASC' },
@@ -197,11 +209,11 @@ export class PurchaseOrdersCoreService {
     const receiptRepo = this.dataSource.getRepository(ErpGoodsReceipt);
     const receiptLineRepo = this.dataSource.getRepository(ErpGoodsReceiptLine);
     const receipts = await receiptRepo.find({
-      where: { purchaseOrderId: id } as any,
+      where: { purchaseOrderId: id, isDeleted: false } as any,
       order: { receiptDate: 'ASC', createdAt: 'ASC' },
     });
     const visibleReceipts = receipts.filter(
-      (receipt) => receipt.status !== 'DRAFT',
+      (receipt) => receipt.status !== 'DRAFT' && receipt.status !== 'CANCELLED',
     );
     const result = [] as any[];
     for (const receipt of visibleReceipts) {
@@ -231,7 +243,10 @@ export class PurchaseOrdersCoreService {
     return result;
   }
   async update(id: string, dto: UpdatePurchaseOrderDto) {
-    const existing = await this.repository.findOneByOrFail({ id });
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
     const nextPoNo = dto.poNo?.trim();
 
     if (dto.status === 'CANCELLED' && existing.status !== 'CANCELLED') {
@@ -294,6 +309,54 @@ export class PurchaseOrdersCoreService {
       });
     }
     return this.findOne(id);
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Chỉ có thể xóa phiếu nháp');
+    }
+
+    // Perform soft delete
+    existing.isDeleted = true;
+    await this.repository.save(existing);
+
+    return {
+      message: 'Xóa thành công',
+      data: { id },
+    };
+  }
+
+  async cancel(id: string) {
+    const existing = await this.repository.findOneByOrFail({
+      id,
+      isDeleted: false,
+    });
+    if (existing.status === 'CANCELLED') {
+      throw new BadRequestException('Chứng từ đã bị hủy');
+    }
+    if (existing.status === 'DRAFT') {
+      throw new BadRequestException('Không thể hủy phiếu nháp, vui lòng xóa');
+    }
+    if (
+      existing.status === 'RECEIVED' ||
+      existing.status === 'FULLY_RECEIVED'
+    ) {
+      throw new BadRequestException('Không thể hủy phiếu mua hàng đã nhận');
+    }
+
+    await this.dependencyService.checkDependencies('purchase_orders', id);
+
+    existing.status = 'CANCELLED';
+    await this.repository.save(existing);
+
+    return {
+      message: 'Hủy thành công',
+      data: { id },
+    };
   }
 
   private toCoreDocument(data: any) {

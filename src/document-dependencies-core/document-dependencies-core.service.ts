@@ -21,9 +21,9 @@ export class DocumentDependenciesCoreService {
       // Check Goods Receipts
       const grs = await this.dataSource.query(
         `SELECT DISTINCT gr.receipt_no 
-         FROM erp_goods_receipt_lines grl
-         JOIN erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
-         JOIN purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
+         FROM public.erp_goods_receipt_lines grl
+         JOIN public.erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
+         JOIN public.purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
          WHERE pol.purchase_order_id = $1`,
         [documentId],
       );
@@ -34,8 +34,8 @@ export class DocumentDependenciesCoreService {
       // Check Payment Vouchers (through document_payment_links)
       const payments = await this.dataSource.query(
         `SELECT DISTINCT pv.voucher_no 
-         FROM document_payment_links dpl
-         JOIN payment_vouchers pv ON dpl.payment_voucher_id = pv.id
+         FROM public.document_payment_links dpl
+         JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
          WHERE dpl.document_type = 'purchase_orders' AND dpl.document_id = $1`,
         [documentId],
       );
@@ -48,8 +48,8 @@ export class DocumentDependenciesCoreService {
       // Check Payment Vouchers
       const payments = await this.dataSource.query(
         `SELECT DISTINCT pv.voucher_no 
-         FROM document_payment_links dpl
-         JOIN payment_vouchers pv ON dpl.payment_voucher_id = pv.id
+         FROM public.document_payment_links dpl
+         JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
          WHERE dpl.document_type = 'sales_service_orders' AND dpl.document_id = $1`,
         [documentId],
       );
@@ -62,9 +62,9 @@ export class DocumentDependenciesCoreService {
       // Check Inventory Transactions (Goods Issues)
       const issues = await this.dataSource.query(
         `SELECT DISTINCT gi.issue_no 
-         FROM erp_goods_issue_lines gil
-         JOIN erp_goods_issues gi ON gil.goods_issue_id = gi.id
-         JOIN sales_service_order_lines sol ON gil.sales_order_line_id = sol.id
+         FROM public.erp_goods_issue_lines gil
+         JOIN public.erp_goods_issues gi ON gil.goods_issue_id = gi.id
+         JOIN public.sales_service_order_lines sol ON gil.sales_order_line_id = sol.id
          WHERE sol.order_id = $1`,
         [documentId],
       );

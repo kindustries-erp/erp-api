@@ -1,5 +1,9 @@
 # Task — Audit Log Phase 1 cho Payment Vouchers
 
+> **HISTORICAL REFERENCE ONLY**
+> Task này thuộc payment-voucher / Directus-era finance flow cũ. Không dùng làm default implementation guidance cho lane `erp-master` hiện tại nếu user không mở lại scope finance legacy.
+
+
 ## Request Input (bạn chỉ cần điền phần này)
 - Type: FEATURE
 - Mục tiêu: Triển khai phase 1 audit log theo backbone mới, ưu tiên payment_vouchers.

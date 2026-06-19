@@ -1,5 +1,9 @@
 # Directus Production Schema Inventory
 
+> **HISTORICAL REFERENCE ONLY**
+> Tài liệu này mô tả Directus-era schema/reference cũ. Không dùng làm source of truth mặc định cho lane `erp-master` hiện tại.
+
+
 Generated from live database at `2026-05-05T11:21:02.650Z`.
 
 Source context:

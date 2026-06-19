@@ -23,6 +23,8 @@ import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.ent
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
+import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
+import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
 
 const entities = [
   CoreUser,
@@ -48,9 +50,11 @@ const entities = [
   ErpSalesOrderLine,
   ErpProductionOrder,
   ErpProductionOrderMaterial,
+  ErpInvoice,
+  ErpInvoiceItem,
 ];
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.ERP_MASTER_DATABASE_URL;
 
 export default new DataSource(
   databaseUrl

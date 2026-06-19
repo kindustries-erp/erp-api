@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -7,6 +11,7 @@ import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
+import { ListBomDto } from './dto/list-bom.dto';
 
 @Injectable()
 export class BomCoreService {
@@ -53,17 +58,23 @@ export class BomCoreService {
     });
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: ListBomDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const order = resolveSortOrder(query.sort, {
       defaultOrder: { createdAt: 'DESC' },
     });
 
+    const where: any = { isDeleted: false };
+    if (query.search) {
+      where.bomName = ILike(`%${query.search}%`);
+    }
+    if (query.finishedGoodItemId) {
+      where.finishedGoodItemId = query.finishedGoodItemId;
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where: query.search
-        ? ([{ bomName: ILike(`%${query.search}%`) }] as any)
-        : undefined,
+      where: Object.keys(where).length > 0 ? where : undefined,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -73,7 +84,7 @@ export class BomCoreService {
       const fgIds = items.map((i) => i.finishedGoodItemId).filter(Boolean);
       if (fgIds.length > 0) {
         const fgItems = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
           [fgIds],
         );
         const fgMap = new Map(fgItems.map((i: any) => [i.id, i]));
@@ -97,7 +108,9 @@ export class BomCoreService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOneOrFail({
+      where: { id, isDeleted: false },
+    });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
       order: { lineNo: 'ASC' },
@@ -105,7 +118,7 @@ export class BomCoreService {
 
     if (data.finishedGoodItemId) {
       const fgItems = await this.dataSource.query(
-        `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = $1::uuid`,
+        `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = $1::uuid`,
         [data.finishedGoodItemId],
       );
       if (fgItems.length > 0) {
@@ -119,7 +132,7 @@ export class BomCoreService {
       const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
           [itemIds],
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
@@ -160,5 +173,14 @@ export class BomCoreService {
       });
     }
     return this.findOne(id);
+  }
+
+  async remove(id: string) {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+    await this.repository.update(id, { isDeleted: true } as any);
+    return { message: 'Xóa thành công' };
   }
 }

@@ -1,5 +1,11 @@
 # ERP CORE Docs Index — API
 
+> **HISTORICAL REFERENCE ONLY**
+> File này được giữ để bảo toàn lineage cũ của lane `erp-core`.
+> Không dùng file này làm source of truth mặc định cho agent hoặc implementation mới.
+> Source of truth agent-facing hiện tại nằm trong `.agents/` của repo.
+
+
 File này là entrypoint nhanh cho agent/developer khi vào repo `liouni-erp-api` thuộc lane `erp-core`.
 
 ## Purpose

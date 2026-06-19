@@ -22,7 +22,19 @@ import {
   VoucherRejectDto,
   VoucherCancelDto,
 } from './dto/voucher-action.dto';
-import { CreateJournalEntryDto } from '../journal-entries/dto/create-journal-entry.dto';
+type CreateJournalEntryDto = {
+  voucher_no?: string | null;
+  date?: string | null;
+  period_id?: string | null;
+  description?: string | null;
+  lines: Array<{
+    account_id: string;
+    debit?: number;
+    credit?: number;
+    description?: string | null;
+    sort?: number | null;
+  }>;
+};
 
 @ApiTags('PaymentVouchers')
 @ApiBearerAuth()

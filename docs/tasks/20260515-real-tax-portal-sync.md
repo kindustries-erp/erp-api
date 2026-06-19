@@ -1,5 +1,9 @@
 # Task: Tích hợp dữ liệu thật từ Cổng Thuế (Smart Invoice API)
 
+> **HISTORICAL REFERENCE ONLY**
+> Task này thuộc tax-portal / Directus-era finance flow cũ. Không dùng làm default implementation guidance cho lane `erp-master` hiện tại nếu user không mở lại scope finance legacy.
+
+
 ## Request Input
 - Type: FEATURE
 - Mục tiêu: Chuyển đổi tính năng Đồng bộ Hóa đơn (mua vào/bán ra) từ dữ liệu giả lập (stub) sang gọi API thật của cổng thuế thông qua dịch vụ trung gian Smart Invoice (Viettel).

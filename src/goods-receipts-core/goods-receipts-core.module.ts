@@ -8,6 +8,7 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { GoodsReceiptsCoreController } from './goods-receipts-core.controller';
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
+import { DocumentDependenciesCoreModule } from '../document-dependencies-core/document-dependencies-core.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
       ErpPurchaseOrder,
       ErpPurchaseOrderLine,
     ]),
+    DocumentDependenciesCoreModule,
   ],
   controllers: [GoodsReceiptsCoreController],
   providers: [GoodsReceiptsCoreService],

@@ -189,6 +189,11 @@ export class RbacCoreService {
       { resource: 'bom', label: 'BOM' },
       { resource: 'production', label: 'Production' },
       { resource: 'activity_logs', label: 'Activity Logs' },
+      { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
+      {
+        resource: 'accounting_configs',
+        label: 'Accounting Configs (Cấu hình kế toán)',
+      },
     ];
   }
 }

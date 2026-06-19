@@ -34,4 +34,10 @@ export class ProductionCoreController {
   execute(@Body() dto: ExecuteProductionDto) {
     return this.service.execute(dto);
   }
+
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Post(':id/cancel')
+  cancel(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.cancel(id);
+  }
 }
