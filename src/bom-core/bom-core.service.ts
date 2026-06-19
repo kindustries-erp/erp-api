@@ -84,7 +84,7 @@ export class BomCoreService {
       const fgIds = items.map((i) => i.finishedGoodItemId).filter(Boolean);
       if (fgIds.length > 0) {
         const fgItems = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
           [fgIds],
         );
         const fgMap = new Map(fgItems.map((i: any) => [i.id, i]));
@@ -118,7 +118,7 @@ export class BomCoreService {
 
     if (data.finishedGoodItemId) {
       const fgItems = await this.dataSource.query(
-        `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = $1::uuid`,
+        `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = $1::uuid`,
         [data.finishedGoodItemId],
       );
       if (fgItems.length > 0) {
@@ -132,7 +132,7 @@ export class BomCoreService {
       const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
           [itemIds],
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
