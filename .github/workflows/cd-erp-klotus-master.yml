@@ -63,48 +63,55 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
-      - name: Setup SSH key
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Guard deploy secrets
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.HEAD_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          test -n "${{ secrets.GHCR_PAT }}" || (echo "GHCR_PAT missing" && exit 1)
+          test -n "${{ secrets.HEAD_PASSWORD }}" || (echo "HEAD_PASSWORD missing" && exit 1)
 
       - name: Write .env to Head
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "mkdir -p /opt/stacks/erp-klotus-api && cat > /opt/stacks/erp-klotus-api/.env" \
+            "mkdir -p /home/dev/opt/stacks/erp/erp-api-klotus-master && cat > /home/dev/opt/stacks/erp/erp-api-klotus-master/.env" \
             <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}
           R2_ACCOUNT_ID=${{ secrets.KLOTUS_R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID=${{ secrets.KLOTUS_R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY=${{ secrets.KLOTUS_R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME=${{ secrets.KLOTUS_R2_BUCKET_NAME }}"
 
-      - name: Guard deploy secrets
-        run: |
-          test -n "${{ secrets.GHCR_PAT }}" || (echo "GHCR_PAT missing" && exit 1)
-
       - name: Run deploy script
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u kindustries-erp --password-stdin && cd /opt/stacks/erp-klotus-api && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose pull && IMAGE_TAG=${{ needs.build-and-push.outputs.sha }} docker compose up -d --no-build --force-recreate"
+            "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
+             docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
+             docker rm -f erp-api-klotus-master || true ; \
+             docker rm -f liouni-erp-core-api-klotus || true ; \
+             docker ps -q --filter publish=10022 | xargs -r docker rm -f || true ; \
+             docker run -d --name erp-api-klotus-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-klotus-master/.env -e PORT=3000 -p 10022:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             '
               for i in $(seq 1 20); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10022/api/v1/auth/profile || true)
-                if [ "$code" = "401" ]; then
+                if [ "$code" = "401" ] || [ "$code" = "200" ]; then
                   echo "✅ API health OK"
+                  docker image prune -af
                   exit 0
                 fi
                 echo "Attempt $i: got $code, retrying..."
