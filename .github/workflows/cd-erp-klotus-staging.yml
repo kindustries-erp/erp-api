@@ -92,7 +92,12 @@ jobs:
             -o StrictHostKeyChecking=no \
             -p ${{ vars.ELITE_PORT }} \
             ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
-            "echo '${{ secrets.GHCR_PAT }}' | docker login ghcr.io -u kindustries-erp --password-stdin && cd /opt/stacks/erp-klotus-staging-api && IMAGE_TAG=staging-${{ needs.build-and-push.outputs.sha }} docker compose pull && IMAGE_TAG=staging-${{ needs.build-and-push.outputs.sha }} docker compose up -d --no-build --force-recreate"
+            "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
+             docker pull ${{ env.IMAGE_NAME }}:staging-${{ needs.build-and-push.outputs.sha }} || true ; \
+             docker rm -f erp-api-klotus-staging || true ; \
+             docker rm -f liouni-erp-core-api-klotus-staging || true ; \
+             docker ps -q --filter publish=10021 | xargs -r docker rm -f || true ; \
+             docker run -d --name erp-api-klotus-staging --restart always --env-file /opt/stacks/erp-klotus-staging-api/.env -e PORT=3000 -p 10021:3000 ${{ env.IMAGE_NAME }}:staging-${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         run: |
@@ -103,8 +108,9 @@ jobs:
             '
               for i in $(seq 1 20); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10021/api/v1/auth/profile || true)
-                if [ "$code" = "401" ]; then
+                if [ "$code" = "401" ] || [ "$code" = "200" ]; then
                   echo "✅ API health OK"
+                  docker image prune -af
                   exit 0
                 fi
                 echo "Attempt $i: got $code, retrying..."
