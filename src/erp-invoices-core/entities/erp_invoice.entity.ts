@@ -124,6 +124,14 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'sales_order_id', nullable: true })
   salesOrderId: string | null;
 
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'payment_document_nos',
+    nullable: true,
+  })
+  paymentDocumentNos: string | null;
+
   // --- Metadata ---
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;

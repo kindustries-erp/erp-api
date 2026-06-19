@@ -6,6 +6,7 @@ import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
+import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 
 export interface BasicMastersQueryDto {
   search?: string;
@@ -27,6 +28,8 @@ export class BasicMastersCoreService {
     private readonly itemTypeRepository: Repository<ErpItemType>,
     @InjectRepository(ErpEmployee)
     private readonly employeeRepository: Repository<ErpEmployee>,
+    @InjectRepository(ErpInvoice)
+    private readonly invoiceRepository: Repository<ErpInvoice>,
   ) {}
 
   async findBasicLists(query: BasicMastersQueryDto) {
@@ -45,6 +48,7 @@ export class BasicMastersCoreService {
     const includeUoms = requestedEntities.includes('uoms');
     const includeItemTypes = requestedEntities.includes('itemTypes');
     const includeEmployees = requestedEntities.includes('employees');
+    const includeErpInvoices = requestedEntities.includes('erpInvoices');
 
     const customerWhere = search
       ? [
@@ -124,63 +128,94 @@ export class BasicMastersCoreService {
         ]
       : { status: 'ACTIVE' };
 
-    const [customers, suppliers, items, uoms, itemTypes, employees] =
-      await Promise.all([
-        includeCustomers
-          ? this.businessPartnerRepository.find({
-              where: customerWhere,
-              take: limit,
-              skip,
-              order: { name: 'ASC' },
-              select: ['id', 'code', 'name', 'displayName', 'partnerType'],
-            })
-          : Promise.resolve([]),
-        includeSuppliers
-          ? this.businessPartnerRepository.find({
-              where: supplierWhere,
-              take: limit,
-              skip,
-              order: { name: 'ASC' },
-              select: ['id', 'code', 'name', 'displayName', 'partnerType'],
-            })
-          : Promise.resolve([]),
-        includeItems
-          ? this.inventoryItemRepository.find({
-              where: itemWhere,
-              take: limit,
-              skip,
-              order: { itemName: 'ASC' },
-              select: ['id', 'sku', 'itemName', 'uom', 'itemType', 'status'],
-            })
-          : Promise.resolve([]),
-        includeUoms
-          ? this.uomRepository.find({
-              where: uomWhere,
-              take: limit,
-              skip,
-              order: { code: 'ASC' },
-              select: ['id', 'code', 'name'],
-            })
-          : Promise.resolve([]),
-        includeItemTypes
-          ? this.itemTypeRepository.find({
-              where: itemTypeWhere,
-              take: limit,
-              skip,
-              order: { code: 'ASC' },
-              select: ['id', 'code', 'name'],
-            })
-          : Promise.resolve([]),
-        includeEmployees
-          ? this.employeeRepository.find({
-              where: employeeWhere,
-              take: limit,
-              skip,
-              order: { fullName: 'ASC' },
-              select: ['id', 'employeeCode', 'fullName', 'status'],
-            })
-          : Promise.resolve([]),
-      ]);
+    const invoiceWhere = search
+      ? [
+          { isDeleted: false, invoiceNo: ILike(`%${search}%`) },
+          { isDeleted: false, sellerName: ILike(`%${search}%`) },
+          { isDeleted: false, buyerName: ILike(`%${search}%`) },
+        ]
+      : { isDeleted: false };
+
+    const [
+      customers,
+      suppliers,
+      items,
+      uoms,
+      itemTypes,
+      employees,
+      erpInvoices,
+    ] = await Promise.all([
+      includeCustomers
+        ? this.businessPartnerRepository.find({
+            where: customerWhere,
+            take: limit,
+            skip,
+            order: { name: 'ASC' },
+            select: ['id', 'code', 'name', 'displayName', 'partnerType'],
+          })
+        : Promise.resolve([]),
+      includeSuppliers
+        ? this.businessPartnerRepository.find({
+            where: supplierWhere,
+            take: limit,
+            skip,
+            order: { name: 'ASC' },
+            select: ['id', 'code', 'name', 'displayName', 'partnerType'],
+          })
+        : Promise.resolve([]),
+      includeItems
+        ? this.inventoryItemRepository.find({
+            where: itemWhere,
+            take: limit,
+            skip,
+            order: { itemName: 'ASC' },
+            select: ['id', 'sku', 'itemName', 'uom', 'itemType', 'status'],
+          })
+        : Promise.resolve([]),
+      includeUoms
+        ? this.uomRepository.find({
+            where: uomWhere,
+            take: limit,
+            skip,
+            order: { code: 'ASC' },
+            select: ['id', 'code', 'name'],
+          })
+        : Promise.resolve([]),
+      includeItemTypes
+        ? this.itemTypeRepository.find({
+            where: itemTypeWhere,
+            take: limit,
+            skip,
+            order: { code: 'ASC' },
+            select: ['id', 'code', 'name'],
+          })
+        : Promise.resolve([]),
+      includeEmployees
+        ? this.employeeRepository.find({
+            where: employeeWhere,
+            take: limit,
+            skip,
+            order: { fullName: 'ASC' },
+            select: ['id', 'employeeCode', 'fullName', 'status'],
+          })
+        : Promise.resolve([]),
+      includeErpInvoices
+        ? this.invoiceRepository.find({
+            where: invoiceWhere,
+            take: limit,
+            skip,
+            order: { invoiceDate: 'DESC' },
+            select: [
+              'id',
+              'invoiceNo',
+              'invoiceDate',
+              'sellerName',
+              'direction',
+              'status',
+            ],
+          })
+        : Promise.resolve([]),
+    ]);
 
     return {
       items: {
@@ -190,6 +225,7 @@ export class BasicMastersCoreService {
         uoms,
         itemTypes,
         employees,
+        erpInvoices,
       },
       meta: {
         search: search ?? null,

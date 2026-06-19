@@ -103,9 +103,6 @@ export class PurchaseOrdersCoreService {
     const pageSize = query.pageSize ?? 20;
 
     const where: any = { isDeleted: false };
-    if (query.search) {
-      where.poNo = ILike(`%${query.search}%`);
-    }
     if (query.status) {
       where.status = query.status;
     }
@@ -164,8 +161,16 @@ export class PurchaseOrdersCoreService {
       defaultOrder: { createdAt: 'DESC' },
     });
 
+    let finalWhere: any = where;
+    if (query.search) {
+      finalWhere = [
+        { ...where, poNo: ILike(`%${query.search}%`) },
+        { ...where, supplierInvoiceNo: ILike(`%${query.search}%`) },
+      ];
+    }
+
     const [items, total] = await this.repository.findAndCount({
-      where,
+      where: finalWhere,
       relations: ['supplier', 'lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,

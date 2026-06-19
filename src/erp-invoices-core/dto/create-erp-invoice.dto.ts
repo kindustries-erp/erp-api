@@ -170,6 +170,11 @@ export class CreateErpInvoiceDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  paymentDocumentNos?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
   createdBy?: string;
 
