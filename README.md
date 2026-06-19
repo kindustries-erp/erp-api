@@ -9,7 +9,7 @@ Backend cho lane ERP active hiện tại (`erp-master`) — thuần **Postgres/N
 | Branch | `erp-master` |
 | Stack | _xem runtime/deploy contract hiện hành trong docs canonical; README này không còn là source of truth cho stack path_ |
 | Port | _xem runtime/deploy contract hiện hành_ |
-| DB | Neon PostgreSQL (`DATABASE_URL` trong stack `.env`) |
+| DB | Neon PostgreSQL (`ERP_MASTER_DATABASE_URL` trong stack `.env`) |
 | Auth | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`) |
 | Image | `ghcr.io/kindustries-erp/erp-api:<sha>` |
 | CI/CD | GitHub Actions (trigger branch active: `erp-master`) |
@@ -64,9 +64,9 @@ src/
 ## 🛠 Khởi chạy dev
 
 ```bash
-# Yêu cầu: Bun >= 1.x, Node >= 18, và Neon DATABASE_URL
+# Yêu cầu: Bun >= 1.x, Node >= 18, và Neon ERP_MASTER_DATABASE_URL
 cp .env.example .env
-# Điền DATABASE_URL, JWT_SECRET, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD
+# Điền ERP_MASTER_DATABASE_URL, JWT_SECRET, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD
 
 bun install
 bun run start:dev
@@ -78,7 +78,7 @@ API local dev chạy theo `PORT` trong `.env`/runtime; dùng giá trị hiện t
 
 ```bash
 bun run build                 # Compile NestJS
-bun run migration:run         # Chạy TypeORM migrations (cần DATABASE_URL)
+bun run migration:run         # Chạy TypeORM migrations (cần ERP_MASTER_DATABASE_URL)
 
 # Deploy runtime
 Theo contract canonical hiện hành trong `/opt/docs/ai/liouni-erp/` và repo-local `AGENTS.md`; không dùng README này làm deploy runbook cứng.

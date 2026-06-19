@@ -5,16 +5,16 @@ export class AddSoftDeleteToNeonModules1781764897235 implements MigrationInterfa
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "erp_boms" ADD "is_deleted" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "erp_boms" ADD COLUMN IF NOT EXISTS "is_deleted" boolean NOT NULL DEFAULT false`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_purchase_requests" ADD "is_deleted" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "erp_purchase_requests" ADD COLUMN IF NOT EXISTS "is_deleted" boolean NOT NULL DEFAULT false`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_sales_orders" ADD "is_deleted" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "erp_sales_orders" ADD COLUMN IF NOT EXISTS "is_deleted" boolean NOT NULL DEFAULT false`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_production_orders" ADD "is_deleted" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "erp_production_orders" ADD COLUMN IF NOT EXISTS "is_deleted" boolean NOT NULL DEFAULT false`,
     );
   }
 

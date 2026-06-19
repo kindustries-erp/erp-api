@@ -54,7 +54,7 @@ const entities = [
   ErpInvoiceItem,
 ];
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.ERP_MASTER_DATABASE_URL;
 
 export default new DataSource(
   databaseUrl
