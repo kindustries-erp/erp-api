@@ -16,6 +16,7 @@ Apply to all work in this repo.
 - before push/commit, always run `bun run lint:check` and `bun run build`
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
+- always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
 - no code without a task file under `docs/tasks/`
