@@ -43,6 +43,22 @@ export class ProductionCoreService {
     return fallbackId ?? 'N/A';
   }
 
+  private async generateProductionReferenceNo() {
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const monthlyCount = await this.productionOrderRepository.count({
+      where: {
+        isDeleted: false,
+        createdAt: Between(start, end),
+      } as any,
+    });
+
+    return `MO-${yearMonth}${String(monthlyCount + 1).padStart(4, '0')}`;
+  }
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpBom)
@@ -251,14 +267,18 @@ export class ProductionCoreService {
           }
         }
       }
-      const referenceNo = dto.referenceNo?.trim() || `PROD-${Date.now()}`;
+      const referenceNo =
+        dto.referenceNo?.trim() || (await this.generateProductionReferenceNo());
       const productionPayload: DeepPartial<ErpProductionOrder> = {
         referenceNo,
         finishedGoodItemId: dto.finishedGoodItemId,
         qtyToProduce: qtyToProduce.toFixed(3),
         warehouseCode: dto.warehouseCode ?? null,
         status: targetStatus,
-        outputMetadata: dto.outputMetadata ?? null,
+        outputMetadata: {
+          ...(dto.outputMetadata ?? {}),
+          materialOverrides: dto.materialOverrides ?? [],
+        },
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
         createdBy: dto.createdBy ?? null,
@@ -358,7 +378,38 @@ export class ProductionCoreService {
     }
 
     if (materials.length > 0) {
-      const itemIds = materials.map((m) => m.itemId).filter(Boolean);
+      const savedOverrides = Array.isArray(
+        data.outputMetadata?.materialOverrides,
+      )
+        ? data.outputMetadata?.materialOverrides
+        : [];
+      const overrideMap = new Map<
+        string,
+        { alternativeItemId: string; notes?: string }
+      >(
+        savedOverrides
+          .filter((ov: any) => ov?.originalItemId && ov?.alternativeItemId)
+          .map((ov: any) => [
+            ov.originalItemId,
+            {
+              alternativeItemId: ov.alternativeItemId,
+              notes: ov.notes,
+            },
+          ]),
+      );
+      const reverseOverrideMap = new Map<string, string>(
+        savedOverrides
+          .filter((ov: any) => ov?.originalItemId && ov?.alternativeItemId)
+          .map((ov: any) => [ov.alternativeItemId, ov.originalItemId]),
+      );
+
+      const itemIds = Array.from(
+        new Set(
+          materials
+            .flatMap((m) => [m.itemId, (m as any).originalItemId])
+            .filter(Boolean),
+        ),
+      );
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
           `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
@@ -366,10 +417,27 @@ export class ProductionCoreService {
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
         for (const mat of materials) {
+          const originalItemId = reverseOverrideMap.get(mat.itemId) ?? null;
+          const matchedOverride = originalItemId
+            ? overrideMap.get(originalItemId)
+            : null;
+          const alternativeItemId = matchedOverride?.alternativeItemId ?? null;
+
+          (mat as any).originalItemId = originalItemId;
+          (mat as any).alternativeItemId = alternativeItemId;
+          (mat as any).alternativeNotes = matchedOverride?.notes ?? null;
+
           if (mat.itemId && itemMap.has(mat.itemId)) {
             const item = itemMap.get(mat.itemId) as any;
             (mat as any).itemCode = item.sku;
             (mat as any).itemName = `${item.sku} — ${item.item_name}`;
+          }
+
+          if (originalItemId && itemMap.has(originalItemId)) {
+            const originalItem = itemMap.get(originalItemId) as any;
+            (mat as any).originalItemCode = originalItem.sku;
+            (mat as any).originalItemName =
+              `${originalItem.sku} — ${originalItem.item_name}`;
           }
         }
       }
@@ -507,6 +575,138 @@ export class ProductionCoreService {
       message: 'Xóa lệnh sản xuất nháp thành công',
       data: { id },
     };
+  }
+
+  async updateDraft(id: string, dto: ExecuteProductionDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const productionRepo = manager.getRepository(ErpProductionOrder);
+      const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
+      const bomRepo = manager.getRepository(ErpBom);
+      const bomLineRepo = manager.getRepository(ErpBomLine);
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+
+      const existing = await productionRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+
+      if (!existing) {
+        throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+      }
+
+      if (existing.status !== 'DRAFT') {
+        throw new BadRequestException(
+          'Chỉ được cập nhật MO ở trạng thái DRAFT',
+        );
+      }
+
+      const qtyToProduce = Number(dto.qtyToProduce || 0);
+      if (!Number.isFinite(qtyToProduce) || qtyToProduce <= 0) {
+        throw new BadRequestException('Số lượng sản xuất phải lớn hơn 0');
+      }
+
+      const bom = await bomRepo.findOne({
+        where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
+        order: { createdAt: 'DESC' },
+      });
+      if (!bom) {
+        throw new NotFoundException('Không tìm thấy BOM cho thành phẩm');
+      }
+
+      const exploded = new Map<
+        string,
+        { itemId: string; qtyRequired: number }
+      >();
+      await this.explodeBom(
+        bom.id,
+        qtyToProduce,
+        bomRepo,
+        bomLineRepo,
+        exploded,
+        new Set<string>(),
+        dto.finishedGoodItemId,
+      );
+
+      const overrideMap = new Map(
+        (dto.materialOverrides ?? [])
+          .filter((ov) => ov?.originalItemId && ov?.alternativeItemId)
+          .map((ov) => [ov.originalItemId, ov]),
+      );
+
+      const finalMaterials = Array.from(exploded.values()).map((material) => {
+        const override = overrideMap.get(material.itemId);
+        return {
+          itemId: override?.alternativeItemId ?? material.itemId,
+          originalItemId: override?.originalItemId ?? material.itemId,
+          qtyRequired: material.qtyRequired,
+          alternativeNotes: override?.notes ?? null,
+        };
+      });
+
+      const materialItemIds = Array.from(
+        new Set(finalMaterials.map((m) => m.itemId).filter(Boolean)),
+      );
+      const inventoryItems = materialItemIds.length
+        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
+        : [];
+      const inventoryItemMap = new Map(
+        inventoryItems.map((item) => [item.id, item]),
+      );
+      const finishedGoodItem = await itemRepo.findOne({
+        where: { id: dto.finishedGoodItemId },
+      });
+
+      await materialRepo.delete({ productionOrderId: id });
+
+      const materialPayloads: DeepPartial<ErpProductionOrderMaterial>[] =
+        finalMaterials.map((material) => ({
+          productionOrderId: id,
+          itemId: material.itemId,
+          qtyRequired: material.qtyRequired.toFixed(3),
+          unitCost: '0.000',
+          amount: '0.000',
+        }));
+
+      const savedMaterialEntities = await materialRepo.save(materialPayloads);
+
+      existing.referenceNo = dto.referenceNo?.trim() || existing.referenceNo;
+      existing.finishedGoodItemId = dto.finishedGoodItemId;
+      existing.qtyToProduce = qtyToProduce.toFixed(3) as any;
+      existing.warehouseCode = dto.warehouseCode ?? null;
+      existing.plannedStartDate = dto.plannedStartDate ?? null;
+      existing.plannedEndDate = dto.plannedEndDate ?? null;
+      existing.outputMetadata = {
+        ...(dto.outputMetadata ?? {}),
+        materialOverrides: dto.materialOverrides ?? [],
+      } as any;
+      existing.status = 'DRAFT';
+
+      const savedOrder = await productionRepo.save(existing);
+
+      const savedMaterials = savedMaterialEntities.map((entity, idx) => {
+        const src = finalMaterials[idx];
+        const materialItem = inventoryItemMap.get(src.itemId);
+        return {
+          ...entity,
+          itemName: materialItem?.itemName ?? null,
+          uom: materialItem?.uom ?? null,
+          originalItemId: src.originalItemId ?? null,
+          alternativeItemId:
+            src.originalItemId && src.originalItemId !== src.itemId
+              ? src.itemId
+              : null,
+          alternativeNotes: src.alternativeNotes ?? null,
+        };
+      });
+
+      return {
+        message: 'Cập nhật MO nháp thành công',
+        data: {
+          ...savedOrder,
+          finishedGoodItemName: finishedGoodItem?.itemName ?? null,
+          materials: savedMaterials,
+        },
+      };
+    });
   }
 
   async confirmOrder(id: string) {

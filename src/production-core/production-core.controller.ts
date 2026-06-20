@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -47,6 +48,15 @@ export class ProductionCoreController {
   @Post(':id/cancel')
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Patch('orders/:id')
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ExecuteProductionDto,
+  ) {
+    return this.service.updateDraft(id, dto);
   }
 
   @RequirePermissions({ resource: 'production', action: 'delete' })
