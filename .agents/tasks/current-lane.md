@@ -6,8 +6,6 @@
 - `docs/README.md`
 
 ## High-value current-lane tasks
-- `docs/tasks/20260617-105325-hotfix-rbac-accounting-resources.md`
-- `docs/tasks/20260616-172700-erp-invoices-and-po-invoice-field-api.md`
 - `docs/tasks/20260614-213309-erp-core-elite-ci-lane.md`
 - `docs/tasks/20260611-093800-inventory-uom-item-type-masters.md`
 - `docs/tasks/20260609-0150-so-rollup-after-gi-post.md`
@@ -15,6 +13,11 @@
 - `docs/tasks/20260608-233500-purchase-order-core-compatibility-fix.md`
 - `docs/tasks/20260607-165837-erp-core-neon-business-modules-phase1.md`
 - `docs/tasks/20260607-erp-core-api-neon-bootstrap.md`
+
+## Current checkpoint gap
+- Recent API commits after 2026-06-18 include manufacturing-order draft support, MO filter/progress work, goods-receipt quantity fix, purchase-order draft voucher + warehouse-history fix.
+- These changes are newer than the current task artifacts listed above.
+- Treat this as **task-artifact drift**: before further feature work, create/close the corresponding repo task artifact(s) under `docs/tasks/`.
 
 ## Current lane lessons
 
