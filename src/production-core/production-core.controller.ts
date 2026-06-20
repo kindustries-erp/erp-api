@@ -17,6 +17,8 @@ import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ListProductionDto } from './dto/list-production.dto';
+import { StartProductionDto } from './dto/start-production.dto';
+import { CompleteProductionDto } from './dto/complete-production.dto';
 import { ProductionCoreService } from './production-core.service';
 
 @ApiTags('erp_production')
@@ -69,5 +71,23 @@ export class ProductionCoreController {
   @Post(':id/confirm')
   confirm(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.confirmOrder(id);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Post('orders/:id/start')
+  startProduction(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: StartProductionDto,
+  ) {
+    return this.service.startProduction(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Post('orders/:id/complete')
+  completeProduction(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: CompleteProductionDto,
+  ) {
+    return this.service.completeProduction(id, dto);
   }
 }

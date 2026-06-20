@@ -26,6 +26,10 @@ describe('ProductionCoreService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
   };
 
