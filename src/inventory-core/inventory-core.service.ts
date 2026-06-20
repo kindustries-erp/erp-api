@@ -184,6 +184,34 @@ export class InventoryItemsService {
     };
   }
 
+  async getBalances(idsString?: string) {
+    if (!idsString) return { data: {} };
+    const ids = idsString
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (!ids.length) return { data: {} };
+
+    const balances = await this.balanceRepository.find({
+      where: { itemId: In(ids) } as any,
+    });
+
+    const data: Record<string, any> = {};
+    for (const b of balances) {
+      if (b.itemId) {
+        const currentQty = Number(b.qtyOnHand || 0);
+        const currentReserved = Number(b.qtyReserved || 0);
+        data[b.itemId] = {
+          qtyOnHand: currentQty,
+          qtyReserved: currentReserved,
+          availableQty: currentQty - currentReserved,
+        };
+      }
+    }
+
+    return { data };
+  }
+
   async findOne(id: string) {
     const data = await this.repository.findOneByOrFail({ id });
     return { message: 'Lấy thông tin thành công', data };

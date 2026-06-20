@@ -47,4 +47,9 @@ export class ExecuteProductionDto {
   @IsOptional()
   @IsString()
   plannedEndDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

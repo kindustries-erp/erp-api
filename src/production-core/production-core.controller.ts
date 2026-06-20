@@ -47,4 +47,10 @@ export class ProductionCoreController {
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
   }
+
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Post(':id/confirm')
+  confirm(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.confirmOrder(id);
+  }
 }

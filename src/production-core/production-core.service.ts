@@ -187,13 +187,14 @@ export class ProductionCoreService {
         }
       }
 
+      const targetStatus = dto.status === 'DRAFT' ? 'DRAFT' : 'CONFIRMED';
       const referenceNo = dto.referenceNo?.trim() || `PROD-${Date.now()}`;
       const productionPayload: DeepPartial<ErpProductionOrder> = {
         referenceNo,
         finishedGoodItemId: dto.finishedGoodItemId,
         qtyToProduce: qtyToProduce.toFixed(3),
         warehouseCode: dto.warehouseCode ?? null,
-        status: 'CONFIRMED',
+        status: targetStatus,
         outputMetadata: dto.outputMetadata ?? null,
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
@@ -212,7 +213,10 @@ export class ProductionCoreService {
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
 
-        if (availableQty < material.qtyRequired) {
+        if (
+          targetStatus === 'CONFIRMED' &&
+          availableQty < material.qtyRequired
+        ) {
           const materialName =
             inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
           throw new BadRequestException(
@@ -237,10 +241,12 @@ export class ProductionCoreService {
           uom: materialItem?.uom ?? null,
         });
 
-        balance!.qtyReserved = (currentReserved + material.qtyRequired).toFixed(
-          3,
-        );
-        balancesToSave.push(balance!);
+        if (targetStatus === 'CONFIRMED') {
+          balance!.qtyReserved = (
+            currentReserved + material.qtyRequired
+          ).toFixed(3);
+          balancesToSave.push(balance!);
+        }
       }
 
       const savedMaterialEntities = await materialRepo.save(materialsToSave);
@@ -406,5 +412,94 @@ export class ProductionCoreService {
       message: 'Hủy thành công (chỉ cập nhật trạng thái)',
       data: { id },
     };
+  }
+
+  async confirmOrder(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const productionRepo = manager.getRepository(ErpProductionOrder);
+      const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+
+      const order = await productionRepo.findOne({
+        where: { id },
+      });
+
+      if (!order) {
+        throw new NotFoundException(`Production order ${id} not found`);
+      }
+
+      if (order.status !== 'DRAFT') {
+        throw new BadRequestException(
+          `Chỉ có thể xác nhận lệnh ở trạng thái DRAFT`,
+        );
+      }
+
+      const materials = await materialRepo.find({
+        where: { productionOrderId: id },
+      });
+
+      if (!materials.length) {
+        throw new BadRequestException('Lệnh sản xuất không có nguyên vật liệu');
+      }
+
+      const materialItemIds = Array.from(
+        new Set(materials.map((m) => m.itemId)),
+      );
+
+      const inventoryItems = await itemRepo.find({
+        where: { id: In(materialItemIds) },
+      });
+      const inventoryItemMap = new Map(
+        inventoryItems.map((item) => [item.id, item]),
+      );
+
+      const balances = await balanceRepo.find({
+        where: {
+          itemId: In(materialItemIds),
+          ...(order.warehouseCode
+            ? { warehouseCode: order.warehouseCode }
+            : {}),
+        },
+      });
+      const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
+
+      const balancesToSave: ErpInventoryBalance[] = [];
+
+      for (const material of materials) {
+        const balance = balanceMap.get(material.itemId);
+        if (!balance) {
+          throw new BadRequestException(
+            `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
+          );
+        }
+
+        const currentQty = Number(balance.qtyOnHand || 0);
+        const currentReserved = Number(balance.qtyReserved || 0);
+        const availableQty = currentQty - currentReserved;
+        const qtyRequired = Number(material.qtyRequired || 0);
+
+        if (availableQty < qtyRequired) {
+          const materialName =
+            inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
+          throw new BadRequestException(
+            `Tồn khả dụng không đủ cho NVL ${materialName}. Cần ${qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
+          );
+        }
+
+        balance.qtyReserved = (currentReserved + qtyRequired).toFixed(3);
+        balancesToSave.push(balance);
+      }
+
+      await balanceRepo.save(balancesToSave);
+
+      order.status = 'CONFIRMED';
+      const updatedOrder = await productionRepo.save(order);
+
+      return {
+        message: 'Xác nhận lệnh sản xuất thành công',
+        data: updatedOrder,
+      };
+    });
   }
 }
