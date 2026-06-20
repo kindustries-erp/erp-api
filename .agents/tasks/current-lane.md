@@ -15,9 +15,9 @@
 - `docs/tasks/20260607-erp-core-api-neon-bootstrap.md`
 
 ## Current checkpoint gap
-- Recent API commits after 2026-06-18 include manufacturing-order draft support, MO filter/progress work, goods-receipt quantity fix, purchase-order draft voucher + warehouse-history fix.
-- These changes are newer than the current task artifacts listed above.
-- Treat this as **task-artifact drift**: before further feature work, create/close the corresponding repo task artifact(s) under `docs/tasks/`.
+- Recent API commits after 2026-06-18 now include production start/complete auto GI/GR closure (`docs/tasks/20260620-erp-production-start-complete-auto-warehouse.md`) plus earlier manufacturing-order draft support, MO filter/progress work, goods-receipt quantity fix, and purchase-order draft voucher + warehouse-history fix.
+- `current-lane.md` vẫn chưa phản ánh các artifacts/closure mới hơn này.
+- Treat this as **task-artifact drift**: before further feature work, create/close the remaining corresponding repo task artifact(s) under `docs/tasks/` and keep `current-lane.md` aligned with recent commits.
 
 ## Current lane lessons
 
