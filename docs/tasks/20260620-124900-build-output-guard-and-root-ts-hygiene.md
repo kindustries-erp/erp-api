@@ -3,7 +3,7 @@
 > **Created:** 2026-06-20
 > **Lane:** erp-master
 > **Repo:** `liouni-erp-api`
-> **Status:** IN_PROGRESS
+> **Status:** DONE
 
 ## Scope
 - Verify and harden API build config so stray root `.ts` files do not change Nest build output path unexpectedly
