@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -46,6 +47,12 @@ export class ProductionCoreController {
   @Post(':id/cancel')
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'delete' })
+  @Delete('orders/:id')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.remove(id);
   }
 
   @RequirePermissions({ resource: 'production', action: 'update' })

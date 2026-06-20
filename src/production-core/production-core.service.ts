@@ -470,6 +470,11 @@ export class ProductionCoreService {
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('Lệnh sản xuất đã bị hủy');
     }
+    if (existing.status === 'DRAFT') {
+      throw new BadRequestException(
+        'Lệnh sản xuất DRAFT phải dùng thao tác xóa, không dùng hủy',
+      );
+    }
 
     // Basic cancellation: just update status. Reversing inventory requires complex transaction reversals.
     existing.status = 'CANCELLED';
@@ -477,6 +482,29 @@ export class ProductionCoreService {
 
     return {
       message: 'Hủy thành công (chỉ cập nhật trạng thái)',
+      data: { id },
+    };
+  }
+
+  async remove(id: string) {
+    const existing = await this.productionOrderRepository.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+    }
+
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Chỉ được xóa lệnh sản xuất ở trạng thái DRAFT',
+      );
+    }
+
+    await this.productionOrderRepository.update(id, { isDeleted: true } as any);
+
+    return {
+      message: 'Xóa lệnh sản xuất nháp thành công',
       data: { id },
     };
   }
