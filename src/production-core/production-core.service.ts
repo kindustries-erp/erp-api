@@ -31,6 +31,18 @@ import { ListProductionDto } from './dto/list-production.dto';
 
 @Injectable()
 export class ProductionCoreService {
+  private formatInventoryItemLabel(
+    item?: Partial<ErpInventoryItem> | null,
+    fallbackId?: string | null,
+  ) {
+    const sku = item?.sku?.trim();
+    const itemName = item?.itemName?.trim();
+    if (sku && itemName) return `${sku} — ${itemName}`;
+    if (sku) return sku;
+    if (itemName) return itemName;
+    return fallbackId ?? 'N/A';
+  }
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpBom)
@@ -150,15 +162,58 @@ export class ProductionCoreService {
         visited,
         rootBom.finishedGoodItemId,
       );
+      // Apply materialOverrides: remap any originalItemId -> alternativeItemId
+      const overrideMap = new Map<
+        string,
+        { alternativeItemId: string; notes?: string }
+      >();
       const materials = Array.from(exploded.values());
       if (materials.length === 0) {
         throw new BadRequestException(
           'BOM không có định mức nguyên vật liệu khả dụng để xuất',
         );
       }
+      if (dto.materialOverrides?.length) {
+        for (const ov of dto.materialOverrides) {
+          if (ov.originalItemId && ov.alternativeItemId) {
+            overrideMap.set(ov.originalItemId, {
+              alternativeItemId: ov.alternativeItemId,
+              notes: ov.notes,
+            });
+          }
+        }
+      }
+
+      // Replace itemId with alternativeItemId where override exists, merging qty
+      const effectiveMaterials = new Map<
+        string,
+        {
+          itemId: string;
+          qtyRequired: number;
+          originalItemId?: string;
+          alternativeNotes?: string;
+        }
+      >();
+      for (const mat of materials) {
+        const override = overrideMap.get(mat.itemId);
+        const effectiveItemId = override
+          ? override.alternativeItemId
+          : mat.itemId;
+        const existing = effectiveMaterials.get(effectiveItemId);
+        effectiveMaterials.set(effectiveItemId, {
+          itemId: effectiveItemId,
+          qtyRequired: (existing?.qtyRequired ?? 0) + mat.qtyRequired,
+          originalItemId: override ? mat.itemId : undefined,
+          alternativeNotes: override?.notes,
+        });
+      }
+
+      const finalMaterials = Array.from(effectiveMaterials.values());
 
       const materialItemIds = Array.from(
-        new Set(materials.map((material) => material.itemId).filter(Boolean)),
+        new Set(
+          finalMaterials.map((material) => material.itemId).filter(Boolean),
+        ),
       ) as string[];
       const inventoryItems = materialItemIds.length
         ? await itemRepo.find({ where: { id: In(materialItemIds) } })
@@ -178,16 +233,24 @@ export class ProductionCoreService {
       });
       const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
-      for (const material of materials) {
-        const existingBalance = balanceMap.get(material.itemId);
-        if (!existingBalance) {
-          throw new BadRequestException(
-            `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
-          );
+      const targetStatus = dto.status === 'DRAFT' ? 'DRAFT' : 'CONFIRMED';
+
+      // For CONFIRMED orders, validate inventory balances exist and have sufficient qty.
+      // For DRAFT, we allow creation even if NVL has no balance yet (planning mode).
+      if (targetStatus === 'CONFIRMED') {
+        for (const material of finalMaterials) {
+          const existingBalance = balanceMap.get(material.itemId);
+          if (!existingBalance) {
+            const materialLabel = this.formatInventoryItemLabel(
+              inventoryItemMap.get(material.itemId),
+              material.itemId,
+            );
+            throw new BadRequestException(
+              `Không tìm thấy tồn kho cho NVL ${materialLabel}. Vui lòng nhập kho trước hoặc lưu ở trạng thái DRAFT.`,
+            );
+          }
         }
       }
-
-      const targetStatus = dto.status === 'DRAFT' ? 'DRAFT' : 'CONFIRMED';
       const referenceNo = dto.referenceNo?.trim() || `PROD-${Date.now()}`;
       const productionPayload: DeepPartial<ErpProductionOrder> = {
         referenceNo,
@@ -206,7 +269,7 @@ export class ProductionCoreService {
       const materialsToSave: DeepPartial<ErpProductionOrderMaterial>[] = [];
       const balancesToSave: ErpInventoryBalance[] = [];
 
-      for (const material of materials) {
+      for (const material of finalMaterials) {
         const balance = balanceMap.get(material.itemId);
         const currentQty = Number(balance?.qtyOnHand || 0);
         const currentReserved = Number(balance?.qtyReserved || 0);
@@ -217,10 +280,12 @@ export class ProductionCoreService {
           targetStatus === 'CONFIRMED' &&
           availableQty < material.qtyRequired
         ) {
-          const materialName =
-            inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
+          const materialLabel = this.formatInventoryItemLabel(
+            inventoryItemMap.get(material.itemId),
+            material.itemId,
+          );
           throw new BadRequestException(
-            `Tồn khả dụng không đủ cho NVL ${materialName}. Cần ${material.qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
+            `Tồn khả dụng không đủ cho NVL ${materialLabel}. Cần ${material.qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
           );
         }
 
@@ -239,6 +304,8 @@ export class ProductionCoreService {
           ...materialPayload,
           itemName: materialItem?.itemName ?? null,
           uom: materialItem?.uom ?? null,
+          originalItemId: material.originalItemId ?? null,
+          alternativeNotes: material.alternativeNotes ?? null,
         });
 
         if (targetStatus === 'CONFIRMED') {
@@ -469,8 +536,12 @@ export class ProductionCoreService {
       for (const material of materials) {
         const balance = balanceMap.get(material.itemId);
         if (!balance) {
+          const materialLabel = this.formatInventoryItemLabel(
+            inventoryItemMap.get(material.itemId),
+            material.itemId,
+          );
           throw new BadRequestException(
-            `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
+            `Không tìm thấy tồn kho cho NVL ${materialLabel}`,
           );
         }
 
@@ -480,10 +551,12 @@ export class ProductionCoreService {
         const qtyRequired = Number(material.qtyRequired || 0);
 
         if (availableQty < qtyRequired) {
-          const materialName =
-            inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
+          const materialLabel = this.formatInventoryItemLabel(
+            inventoryItemMap.get(material.itemId),
+            material.itemId,
+          );
           throw new BadRequestException(
-            `Tồn khả dụng không đủ cho NVL ${materialName}. Cần ${qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
+            `Tồn khả dụng không đủ cho NVL ${materialLabel}. Cần ${qtyRequired.toFixed(3)}, có ${availableQty.toFixed(3)}`,
           );
         }
 
