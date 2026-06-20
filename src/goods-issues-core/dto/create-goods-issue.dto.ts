@@ -30,6 +30,16 @@ export class CreateGoodsIssueDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsUUID()
+  salesOrderId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  productionOrderId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   status?: string;
 

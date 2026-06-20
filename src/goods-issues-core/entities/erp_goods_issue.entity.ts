@@ -28,6 +28,9 @@ export class ErpGoodsIssue {
   @Column({ type: 'uuid', name: 'sales_order_id', nullable: true })
   salesOrderId: string | null;
 
+  @Column({ type: 'uuid', name: 'production_order_id', nullable: true })
+  productionOrderId: string | null;
+
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
 

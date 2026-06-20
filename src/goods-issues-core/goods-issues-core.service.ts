@@ -20,6 +20,8 @@ import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order
 import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
+import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -106,6 +108,7 @@ export class GoodsIssuesCoreService {
           goodsIssueId: data.id,
           lineNo: lineNo++,
           salesOrderLineId: line.salesOrderLineId ?? null,
+          productionOrderMaterialId: line.productionOrderMaterialId ?? null,
           itemId: line.itemId ?? null,
           serialId: line.serialId ?? null,
           vehicleId: line.vehicleId ?? null,
@@ -203,6 +206,7 @@ export class GoodsIssuesCoreService {
             goodsIssueId: id,
             lineNo: lineNo++,
             salesOrderLineId: line.salesOrderLineId ?? null,
+            productionOrderMaterialId: line.productionOrderMaterialId ?? null,
             itemId: line.itemId ?? null,
             serialId: line.serialId ?? null,
             vehicleId: line.vehicleId ?? null,
@@ -225,6 +229,8 @@ export class GoodsIssuesCoreService {
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
       const soRepo = manager.getRepository(ErpSalesOrder);
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const moRepo = manager.getRepository(ErpProductionOrder);
+      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
       const serialRepo = manager.getRepository(ErpInventorySerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
@@ -318,6 +324,12 @@ export class GoodsIssuesCoreService {
               `Tồn kho không đủ cho dòng ${line.lineNo}`,
             );
           }
+        } else if (line.productionOrderMaterialId) {
+          if (currentQty < qty) {
+            throw new BadRequestException(
+              `Tồn kho không đủ cho dòng sản xuất ${line.lineNo}`,
+            );
+          }
         } else if (availableQty < qty) {
           throw new BadRequestException(
             `Tồn khả dụng không đủ cho dòng ${line.lineNo}`,
@@ -370,6 +382,26 @@ export class GoodsIssuesCoreService {
           if (serial) {
             serial.salesOrderLineId = soLine.id;
           }
+        }
+
+        if (line.productionOrderMaterialId) {
+          const moMat = await moMatRepo.findOneBy({
+            id: line.productionOrderMaterialId,
+          });
+          if (!moMat) {
+            throw new BadRequestException(
+              `Không tìm thấy dòng MO tham chiếu cho dòng xuất ${line.lineNo}`,
+            );
+          }
+          const reservedConsume = Math.min(currentReserved, qty);
+          const currentIssued = Number(moMat.qtyIssued || 0);
+          moMat.qtyIssued = (currentIssued + qty).toFixed(3);
+          await moMatRepo.save(moMat);
+
+          balance!.qtyReserved = Math.max(
+            0,
+            currentReserved - reservedConsume,
+          ).toFixed(3);
         }
 
         if (serial) {
@@ -441,6 +473,35 @@ export class GoodsIssuesCoreService {
         await soRepo.save(so);
       }
 
+      const affectedMoIds = new Set<string>();
+      if (issue.productionOrderId) {
+        affectedMoIds.add(issue.productionOrderId);
+      }
+      for (const line of lines) {
+        if (!line.productionOrderMaterialId) continue;
+        const moMat = await moMatRepo.findOneBy({
+          id: line.productionOrderMaterialId,
+        });
+        if (moMat?.productionOrderId) {
+          affectedMoIds.add(moMat.productionOrderId);
+        }
+      }
+
+      for (const moId of affectedMoIds) {
+        const mo = await moRepo.findOneBy({ id: moId });
+        if (!mo) continue;
+        const refreshedMats = await moMatRepo.find({
+          where: { productionOrderId: mo.id },
+        });
+        const anyIssued = refreshedMats.some(
+          (m) => Number(m.qtyIssued || 0) > 0,
+        );
+        if (mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
+          if (anyIssued) mo.status = 'IN_PROGRESS';
+          await moRepo.save(mo);
+        }
+      }
+
       issue.status = 'POSTED';
       await issueRepo.save(issue);
 
@@ -462,6 +523,8 @@ export class GoodsIssuesCoreService {
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
       const soRepo = manager.getRepository(ErpSalesOrder);
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const moRepo = manager.getRepository(ErpProductionOrder);
+      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
       const serialRepo = manager.getRepository(ErpInventorySerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
@@ -526,6 +589,31 @@ export class GoodsIssuesCoreService {
             ).toFixed(3);
             await soLineRepo.save(soLine);
           }
+          if (balance) {
+            balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
+              3,
+            );
+            await balanceRepo.save(balance);
+          }
+        }
+
+        if (line.productionOrderMaterialId) {
+          const moMat = await moMatRepo.findOneBy({
+            id: line.productionOrderMaterialId,
+          });
+          if (moMat) {
+            moMat.qtyIssued = Math.max(
+              0,
+              Number(moMat.qtyIssued) - qty,
+            ).toFixed(3);
+            await moMatRepo.save(moMat);
+          }
+          if (balance) {
+            balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
+              3,
+            );
+            await balanceRepo.save(balance);
+          }
         }
 
         if (line.serialId) {
@@ -547,8 +635,18 @@ export class GoodsIssuesCoreService {
       }
 
       // Recalc SO status
-      if (issue.salesOrderId) {
-        const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+      const affectedSoIds = new Set<string>();
+      if (issue.salesOrderId) affectedSoIds.add(issue.salesOrderId);
+      for (const line of lines) {
+        if (!line.salesOrderLineId) continue;
+        const soLine = await soLineRepo.findOneBy({
+          id: line.salesOrderLineId,
+        });
+        if (soLine?.salesOrderId) affectedSoIds.add(soLine.salesOrderId);
+      }
+
+      for (const salesOrderId of affectedSoIds) {
+        const so = await soRepo.findOneBy({ id: salesOrderId });
         if (so) {
           const refreshedLines = await soLineRepo.find({
             where: { salesOrderId: so.id },
@@ -570,6 +668,32 @@ export class GoodsIssuesCoreService {
             so.status = 'DELIVERED';
           }
           await soRepo.save(so);
+        }
+      }
+
+      // Recalc MO status
+      const affectedMoIds = new Set<string>();
+      if (issue.productionOrderId) affectedMoIds.add(issue.productionOrderId);
+      for (const line of lines) {
+        if (!line.productionOrderMaterialId) continue;
+        const moMat = await moMatRepo.findOneBy({
+          id: line.productionOrderMaterialId,
+        });
+        if (moMat?.productionOrderId)
+          affectedMoIds.add(moMat.productionOrderId);
+      }
+
+      for (const moId of affectedMoIds) {
+        const mo = await moRepo.findOneBy({ id: moId });
+        if (mo && mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
+          const refreshedMats = await moMatRepo.find({
+            where: { productionOrderId: mo.id },
+          });
+          const anyIssued = refreshedMats.some(
+            (m) => Number(m.qtyIssued || 0) > 0,
+          );
+          mo.status = anyIssued ? 'IN_PROGRESS' : 'CONFIRMED';
+          await moRepo.save(mo);
         }
       }
 

@@ -23,6 +23,15 @@ export class ErpProductionOrderMaterial {
     type: 'numeric',
     precision: 18,
     scale: 3,
+    name: 'qty_issued',
+    default: 0,
+  })
+  qtyIssued: string;
+
+  @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
     name: 'unit_cost',
     nullable: true,
   })

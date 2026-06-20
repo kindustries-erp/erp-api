@@ -17,6 +17,7 @@ import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_ba
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 import { Logger } from '@nestjs/common';
 
@@ -208,6 +209,7 @@ export class GoodsReceiptsCoreService {
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+      const moRepo = manager.getRepository(ErpProductionOrder);
 
       const receipt = await this.getReceiptOrThrow(receiptRepo, id);
       if (receipt.status === 'POSTED') {
@@ -315,6 +317,26 @@ export class GoodsReceiptsCoreService {
         }
       }
 
+      if (receipt.productionOrderId) {
+        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+        if (mo) {
+          // Calculate total received qty across all receipt lines for this MO
+          const totalReceived = lines.reduce(
+            (sum, l) => sum + Number(l.qtyReceived || 0),
+            0,
+          );
+          mo.qtyProduced = (
+            Number(mo.qtyProduced || 0) + totalReceived
+          ).toFixed(3);
+          if (Number(mo.qtyProduced) >= Number(mo.qtyToProduce || 0)) {
+            mo.status = 'COMPLETED';
+          } else if (Number(mo.qtyProduced) > 0) {
+            mo.status = 'IN_PROGRESS';
+          }
+          await moRepo.save(mo);
+        }
+      }
+
       receipt.status = 'POSTED';
       const savedReceipt = await receiptRepo.save(receipt);
       const savedLines = await lineRepo.find({
@@ -343,6 +365,7 @@ export class GoodsReceiptsCoreService {
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+      const moRepo = manager.getRepository(ErpProductionOrder);
 
       const receipt = await this.getReceiptOrThrow(receiptRepo, id);
       if (receipt.status === 'CANCELLED') {
@@ -440,6 +463,30 @@ export class GoodsReceiptsCoreService {
             po.status = 'RECEIVED';
           }
           await poRepo.save(po);
+        }
+      }
+
+      if (receipt.productionOrderId) {
+        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+        if (mo) {
+          const totalCancelled = lines.reduce(
+            (sum, l) => sum + Number(l.qtyReceived || 0),
+            0,
+          );
+          mo.qtyProduced = Math.max(
+            0,
+            Number(mo.qtyProduced || 0) - totalCancelled,
+          ).toFixed(3);
+
+          if (Number(mo.qtyProduced) <= 0) {
+            mo.status =
+              mo.status === 'IN_PROGRESS' || mo.status === 'COMPLETED'
+                ? 'CONFIRMED'
+                : mo.status;
+          } else if (Number(mo.qtyProduced) < Number(mo.qtyToProduce || 0)) {
+            mo.status = 'IN_PROGRESS';
+          }
+          await moRepo.save(mo);
         }
       }
 

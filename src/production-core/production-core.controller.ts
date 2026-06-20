@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
+import { ListProductionDto } from './dto/list-production.dto';
 import { ProductionCoreService } from './production-core.service';
 
 @ApiTags('erp_production')
@@ -25,7 +26,7 @@ export class ProductionCoreController {
 
   @RequirePermissions({ resource: 'production', action: 'read' })
   @Get('orders')
-  findOrders(@Query() query: PaginationDto) {
+  findOrders(@Query() query: ListProductionDto) {
     return this.service.findOrders(query);
   }
 
@@ -33,6 +34,12 @@ export class ProductionCoreController {
   @Post('execute')
   execute(@Body() dto: ExecuteProductionDto) {
     return this.service.execute(dto);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'read' })
+  @Get('orders/:id')
+  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.findOne(id);
   }
 
   @RequirePermissions({ resource: 'production', action: 'update' })

@@ -37,4 +37,14 @@ export class ExecuteProductionDto {
   @IsOptional()
   @IsObject()
   outputMetadata?: Record<string, any>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  plannedStartDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  plannedEndDate?: string;
 }

@@ -26,6 +26,11 @@ export class CreateGoodsReceiptDto {
   @IsUUID()
   supplierId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  productionOrderId?: string;
+
   @ApiProperty()
   @IsDateString()
   receiptDate: string;

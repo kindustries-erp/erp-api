@@ -4,7 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  DeepPartial,
+  ILike,
+  In,
+  Repository,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
@@ -17,6 +26,8 @@ import { ErpProductionOrderMaterial } from './entities/erp_production_order_mate
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
+
+import { ListProductionDto } from './dto/list-production.dto';
 
 @Injectable()
 export class ProductionCoreService {
@@ -36,7 +47,7 @@ export class ProductionCoreService {
     private readonly productionMaterialRepository: Repository<ErpProductionOrderMaterial>,
   ) {}
 
-  async findOrders(query: PaginationDto) {
+  async findOrders(query: ListProductionDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const order = resolveSortOrder(query.sort, {
@@ -48,13 +59,29 @@ export class ProductionCoreService {
       },
       defaultOrder: { createdAt: 'DESC' },
     });
+
+    const whereCondition: any = { isDeleted: false };
+    if (query.search) {
+      whereCondition.referenceNo = ILike(`%${query.search}%`);
+    }
+    if (query.status) {
+      whereCondition.status = query.status;
+    }
+    if (query.finishedGoodItemId) {
+      whereCondition.finishedGoodItemId = query.finishedGoodItemId;
+    }
+    if (query.dateFrom || query.dateTo) {
+      if (query.dateFrom && query.dateTo) {
+        whereCondition.plannedStartDate = Between(query.dateFrom, query.dateTo);
+      } else if (query.dateFrom) {
+        whereCondition.plannedStartDate = MoreThanOrEqual(query.dateFrom);
+      } else {
+        whereCondition.plannedStartDate = LessThanOrEqual(query.dateTo);
+      }
+    }
+
     const [items, total] = await this.productionOrderRepository.findAndCount({
-      where: [
-        {
-          ...(query.search ? { referenceNo: ILike(`%${query.search}%`) } : {}),
-          isDeleted: false,
-        },
-      ] as any,
+      where: whereCondition,
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -76,7 +103,7 @@ export class ProductionCoreService {
         ...item,
         finishedGoodItemName:
           itemNameMap.get(item.finishedGoodItemId ?? '') ?? null,
-        qtyProduced: item.qtyToProduce,
+        qtyProduced: item.qtyProduced,
       })),
       total,
       page,
@@ -90,12 +117,9 @@ export class ProductionCoreService {
       const bomRepo = manager.getRepository(ErpBom);
       const bomLineRepo = manager.getRepository(ErpBomLine);
       const balanceRepo = manager.getRepository(ErpInventoryBalance);
-      const txnRepo = manager.getRepository(ErpInventoryTransaction);
       const productionRepo = manager.getRepository(ErpProductionOrder);
       const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
       const itemRepo = manager.getRepository(ErpInventoryItem);
-      const goodsIssueRepo = manager.getRepository(ErpGoodsIssue);
-      const goodsIssueLineRepo = manager.getRepository(ErpGoodsIssueLine);
 
       const rootBom = await bomRepo.findOne({
         where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
@@ -164,61 +188,30 @@ export class ProductionCoreService {
       }
 
       const referenceNo = dto.referenceNo?.trim() || `PROD-${Date.now()}`;
-      const productionDate = new Date().toISOString().slice(0, 10);
-      const issuePrefixDate = new Date();
-      const issueYear = issuePrefixDate.getUTCFullYear();
-      const issueMonth = String(issuePrefixDate.getUTCMonth() + 1).padStart(
-        2,
-        '0',
-      );
-      const issuePrefix = `XK-${issueYear}${issueMonth}`;
-      const latestIssue = await goodsIssueRepo
-        .createQueryBuilder('gi')
-        .where('gi.issueNo LIKE :prefix', { prefix: `${issuePrefix}%` })
-        .orderBy('gi.issueNo', 'DESC')
-        .getOne();
-      const latestIssueSeq =
-        latestIssue?.issueNo?.slice(issuePrefix.length) ?? '000';
-      const nextIssueSeq = String(Number(latestIssueSeq || '0') + 1).padStart(
-        3,
-        '0',
-      );
-      const issueNo = `${issuePrefix}${nextIssueSeq}`;
       const productionPayload: DeepPartial<ErpProductionOrder> = {
         referenceNo,
         finishedGoodItemId: dto.finishedGoodItemId,
         qtyToProduce: qtyToProduce.toFixed(3),
         warehouseCode: dto.warehouseCode ?? null,
-        status: 'POSTED',
+        status: 'CONFIRMED',
         outputMetadata: dto.outputMetadata ?? null,
+        plannedStartDate: dto.plannedStartDate ?? null,
+        plannedEndDate: dto.plannedEndDate ?? null,
         createdBy: dto.createdBy ?? null,
       };
       const productionOrder = await productionRepo.save(productionPayload);
-      const goodsIssuePayload: DeepPartial<ErpGoodsIssue> = {
-        issueNo,
-        issueDate: productionDate,
-        issueType: 'PRODUCTION',
-        customerId: null,
-        salesOrderId: null,
-        status: 'POSTED',
-        remarks: `Tự động xuất NVL cho lệnh sản xuất ${referenceNo}`,
-        createdBy: dto.createdBy ?? null,
-      };
-      const goodsIssue = await goodsIssueRepo.save(goodsIssuePayload);
 
       const savedMaterials: any[] = [];
       const materialsToSave: DeepPartial<ErpProductionOrderMaterial>[] = [];
-      const goodsIssueLinesToSave: DeepPartial<ErpGoodsIssueLine>[] = [];
-      const txnsToSave: DeepPartial<ErpInventoryTransaction>[] = [];
       const balancesToSave: ErpInventoryBalance[] = [];
 
       for (const material of materials) {
         const balance = balanceMap.get(material.itemId);
         const currentQty = Number(balance?.qtyOnHand || 0);
         const currentReserved = Number(balance?.qtyReserved || 0);
-        const currentValue = Number(balance?.inventoryValue || 0);
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
+
         if (availableQty < material.qtyRequired) {
           const materialName =
             inventoryItemMap.get(material.itemId)?.itemName ?? material.itemId;
@@ -235,142 +228,89 @@ export class ProductionCoreService {
           unitCost: avgUnitCost.toFixed(3),
           amount: amount.toFixed(3),
         };
-        const goodsIssueLinePayload: DeepPartial<ErpGoodsIssueLine> = {
-          goodsIssueId: goodsIssue.id,
-          lineNo: savedMaterials.length + 1,
-          salesOrderLineId: null,
-          itemId: material.itemId,
-          serialId: null,
-          vehicleId: null,
-          qtyIssued: material.qtyRequired.toFixed(3),
-          unitCost: avgUnitCost.toFixed(3),
-          amount: amount.toFixed(3),
-        };
-        const nextQty = currentQty - material.qtyRequired;
-        const nextValue = Math.max(0, currentValue - amount);
-        const nextAvg = nextQty > 0 ? nextValue / nextQty : 0;
-
         materialsToSave.push(materialPayload);
-        goodsIssueLinesToSave.push(goodsIssueLinePayload);
 
         const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
           ...materialPayload,
           itemName: materialItem?.itemName ?? null,
           uom: materialItem?.uom ?? null,
-          qtyIssued: material.qtyRequired.toFixed(3),
-          newStockQty: nextQty.toFixed(3),
         });
 
-        const issueTxnPayload: DeepPartial<ErpInventoryTransaction> = {
-          transactionType: 'ISSUE',
-          documentType: 'PRODUCTION_ORDER',
-          documentId: productionOrder.id,
-          itemId: material.itemId,
-          warehouseCode: dto.warehouseCode ?? null,
-          qtyIn: '0.000',
-          qtyOut: material.qtyRequired.toFixed(3),
-          unitCost: avgUnitCost.toFixed(3),
-          transactionDate: new Date().toISOString().slice(0, 10),
-          notes: `Xuất NVL cho lệnh sản xuất ${referenceNo}`,
-          createdBy: dto.createdBy ?? null,
-        };
-        txnsToSave.push(issueTxnPayload);
-        if (!balance) {
-          throw new BadRequestException(
-            `Không tìm thấy tồn kho cho NVL ${material.itemId}`,
-          );
-        }
-        balance.qtyOnHand = nextQty.toFixed(3);
-        balance.inventoryValue = nextValue.toFixed(3);
-        balance.avgUnitCost = nextAvg.toFixed(3);
-        balancesToSave.push(balance);
+        balance!.qtyReserved = (currentReserved + material.qtyRequired).toFixed(
+          3,
+        );
+        balancesToSave.push(balance!);
       }
 
       const savedMaterialEntities = await materialRepo.save(materialsToSave);
       for (let i = 0; i < savedMaterialEntities.length; i++) {
         savedMaterials[i].id = savedMaterialEntities[i].id;
       }
-      await goodsIssueLineRepo.save(goodsIssueLinesToSave);
-      await txnRepo.save(txnsToSave);
       await balanceRepo.save(balancesToSave);
 
-      let finishedBalance = await balanceRepo.findOne({
-        where: {
-          itemId: dto.finishedGoodItemId,
-          warehouseCode: dto.warehouseCode ?? undefined,
-        },
-      });
-      const finishedCurrentQty = Number(finishedBalance?.qtyOnHand || 0);
-      const finishedCurrentValue = Number(finishedBalance?.inventoryValue || 0);
-      const finishedProducedValue = savedMaterials.reduce(
-        (sum, line) => sum + Number(line.amount || 0),
-        0,
-      );
-      const finishedNextQty = finishedCurrentQty + qtyToProduce;
-      const finishedNextValue = finishedCurrentValue + finishedProducedValue;
-      const finishedNextAvg =
-        finishedNextQty > 0 ? finishedNextValue / finishedNextQty : 0;
-
-      const receiptTxnPayload: DeepPartial<ErpInventoryTransaction> = {
-        transactionType: 'RECEIPT',
-        documentType: 'PRODUCTION_ORDER',
-        documentId: productionOrder.id,
-        itemId: dto.finishedGoodItemId,
-        warehouseCode: dto.warehouseCode ?? null,
-        qtyIn: qtyToProduce.toFixed(3),
-        qtyOut: '0.000',
-        unitCost:
-          qtyToProduce > 0
-            ? (finishedProducedValue / qtyToProduce).toFixed(3)
-            : '0.000',
-        transactionDate: new Date().toISOString().slice(0, 10),
-        notes: `Nhập thành phẩm từ lệnh sản xuất ${referenceNo}`,
-        createdBy: dto.createdBy ?? null,
-      };
-      await txnRepo.save(receiptTxnPayload);
-
-      if (!finishedBalance) {
-        const finishedBalancePayload: DeepPartial<ErpInventoryBalance> = {
-          itemId: dto.finishedGoodItemId,
-          warehouseCode: dto.warehouseCode ?? null,
-          qtyOnHand: finishedNextQty.toFixed(3),
-          qtyReserved: '0.000',
-          avgUnitCost: finishedNextAvg.toFixed(3),
-          inventoryValue: finishedNextValue.toFixed(3),
-        };
-        finishedBalance = await balanceRepo.save(finishedBalancePayload);
-      } else {
-        finishedBalance.qtyOnHand = finishedNextQty.toFixed(3);
-        finishedBalance.avgUnitCost = finishedNextAvg.toFixed(3);
-        finishedBalance.inventoryValue = finishedNextValue.toFixed(3);
-        finishedBalance = await balanceRepo.save(finishedBalance);
-      }
-
       return {
-        message: 'Thực thi sản xuất thành công',
+        message: 'Tạo lệnh sản xuất thành công',
         data: {
           ...productionOrder,
           finishedGoodItemName: finishedGoodItem?.itemName ?? null,
-          qtyProduced: qtyToProduce.toFixed(3),
-          materialsIssued: savedMaterials,
-          goodsIssue: {
-            id: goodsIssue.id,
-            issueNo: goodsIssue.issueNo,
-            issueDate: goodsIssue.issueDate,
-            status: goodsIssue.status,
-            issueType: goodsIssue.issueType,
-          },
-          finishedGoodReceipt: {
-            itemId: dto.finishedGoodItemId,
-            qtyProduced: qtyToProduce.toFixed(3),
-            warehouseCode: dto.warehouseCode ?? null,
-            outputMetadata: dto.outputMetadata ?? null,
-            newStockQty: finishedNextQty.toFixed(3),
-          },
+          materials: savedMaterials,
         },
       };
     });
+  }
+
+  async findOne(id: string) {
+    const data = await this.productionOrderRepository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!data) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+
+    const materials = await this.productionMaterialRepository.find({
+      where: { productionOrderId: id },
+      order: { createdAt: 'ASC' },
+    });
+
+    let finishedGoodItemName: string | null = null;
+    let finishedGoodItemCode: string | null = null;
+    if (data.finishedGoodItemId) {
+      const item = await this.dataSource.query(
+        `SELECT sku, item_name FROM public.erp_inventory_items WHERE id = $1::uuid`,
+        [data.finishedGoodItemId],
+      );
+      if (item.length > 0) {
+        finishedGoodItemCode = item[0].sku;
+        finishedGoodItemName = `${item[0].sku} — ${item[0].item_name}`;
+      }
+    }
+
+    if (materials.length > 0) {
+      const itemIds = materials.map((m) => m.itemId).filter(Boolean);
+      if (itemIds.length > 0) {
+        const items = await this.dataSource.query(
+          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          [itemIds],
+        );
+        const itemMap = new Map(items.map((i: any) => [i.id, i]));
+        for (const mat of materials) {
+          if (mat.itemId && itemMap.has(mat.itemId)) {
+            const item = itemMap.get(mat.itemId) as any;
+            (mat as any).itemCode = item.sku;
+            (mat as any).itemName = `${item.sku} — ${item.item_name}`;
+          }
+        }
+      }
+    }
+
+    return {
+      message: 'Lấy thông tin thành công',
+      data: {
+        ...data,
+        finishedGoodItemCode,
+        finishedGoodItemName,
+        materials,
+      },
+    };
   }
 
   private async explodeBom(

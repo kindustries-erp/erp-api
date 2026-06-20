@@ -21,6 +21,21 @@ export class ErpProductionOrder {
   qtyToProduce: string;
 
   @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
+    name: 'qty_produced',
+    default: 0,
+  })
+  qtyProduced: string;
+
+  @Column({ type: 'date', name: 'planned_start_date', nullable: true })
+  plannedStartDate: string | null;
+
+  @Column({ type: 'date', name: 'planned_end_date', nullable: true })
+  plannedEndDate: string | null;
+
+  @Column({
     type: 'varchar',
     length: 100,
     name: 'warehouse_code',
