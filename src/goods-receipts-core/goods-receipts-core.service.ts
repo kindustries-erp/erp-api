@@ -18,6 +18,7 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
+import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 import { Logger } from '@nestjs/common';
 
@@ -210,6 +211,7 @@ export class GoodsReceiptsCoreService {
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
+      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
 
       const receipt = await this.getReceiptOrThrow(receiptRepo, id);
       if (receipt.status === 'POSTED') {
@@ -222,6 +224,28 @@ export class GoodsReceiptsCoreService {
       });
       if (lines.length === 0) {
         throw new BadRequestException('Chưa nhập hàng nhập kho');
+      }
+
+      if (receipt.productionOrderId) {
+        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+        if (!mo || mo.isDeleted) {
+          throw new BadRequestException(
+            'Không tìm thấy lệnh sản xuất liên kết',
+          );
+        }
+        const moMaterials = await moMatRepo.find({
+          where: { productionOrderId: receipt.productionOrderId },
+        });
+        const incompleteMaterial = moMaterials.find((material) => {
+          const qtyRequired = Number(material.qtyRequired || 0);
+          const qtyIssued = Number(material.qtyIssued || 0);
+          return qtyRequired > 0 && qtyIssued + 0.0005 < qtyRequired;
+        });
+        if (incompleteMaterial) {
+          throw new BadRequestException(
+            'Chưa xuất đủ nguyên vật liệu cho lệnh sản xuất, không thể nhập thành phẩm',
+          );
+        }
       }
 
       for (const line of lines) {

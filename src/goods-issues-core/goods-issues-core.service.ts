@@ -27,6 +27,22 @@ import { ErpProductionOrderMaterial } from '../production-core/entities/erp_prod
 export class GoodsIssuesCoreService {
   private readonly logger = new Logger(GoodsIssuesCoreService.name);
 
+  private async generateMonthlyIssueNo(manager: any, issueDate?: string) {
+    const baseDate = issueDate ? new Date(issueDate) : new Date();
+    const year = baseDate.getUTCFullYear();
+    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `XK-${year}${month}`;
+    const latest = await manager
+      .getRepository(ErpGoodsIssue)
+      .createQueryBuilder('gi')
+      .where('gi.issueNo LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('gi.issueNo', 'DESC')
+      .getOne();
+    const latestSeq = latest?.issueNo?.slice(prefix.length) ?? '000';
+    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpGoodsIssue)
@@ -96,9 +112,13 @@ export class GoodsIssuesCoreService {
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsIssue);
       const lineRepo = manager.getRepository(ErpGoodsIssueLine);
+      const issueNo =
+        header.issueNo?.trim() ||
+        (await this.generateMonthlyIssueNo(manager, header.issueDate));
       const headerPayload: DeepPartial<ErpGoodsIssue> = {
-        status: header.status ?? 'DRAFT',
         ...header,
+        issueNo,
+        status: 'DRAFT',
       };
       const data = await headerRepo.save(headerPayload);
       const savedLines: ErpGoodsIssueLine[] = [];
@@ -194,8 +214,17 @@ export class GoodsIssuesCoreService {
         'Chỉ được sửa phiếu xuất ở trạng thái nháp',
       );
     }
+    if (existing.productionOrderId) {
+      throw new BadRequestException(
+        'Phiếu xuất kho đã gắn với lệnh sản xuất, không được phép sửa',
+      );
+    }
     const { lines, ...header } = dto as any;
-    await this.repository.update(id, header);
+    if (header.issueNo === '') {
+      delete header.issueNo;
+    }
+    const updatePayload = { ...header, status: 'DRAFT' };
+    await this.repository.update(id, updatePayload);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
         const lineRepo = manager.getRepository(ErpGoodsIssueLine);
