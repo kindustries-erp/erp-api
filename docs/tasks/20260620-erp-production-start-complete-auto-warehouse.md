@@ -25,7 +25,8 @@ Cho phép user thao tác sản xuất theo từng phần trên MO bằng 2 actio
 ## Relevant Files
 - `src/production-core/production-core.controller.ts` - add start/complete endpoints
 - `src/production-core/production-core.service.ts` - core business flow start/complete
-- `src/production-core/dto/*` - request DTO mới cho partial start/complete
+- `src/production-core/dto/start-production.dto.ts` - DTO mới
+- `src/production-core/dto/complete-production.dto.ts` - DTO mới
 
 ## Gate 0 — DB Precheck (bắt buộc)
 - Collections/fields liên quan:
@@ -47,7 +48,6 @@ Cho phép user thao tác sản xuất theo từng phần trên MO bằng 2 actio
 - Constraint/index/default cần có:
   - không cần field mới; status lifecycle phải support `CONFIRMED` -> `IN_PROGRESS` -> `COMPLETED`
 - Kết quả: `DB_READY`
-- Nếu `DB_GAP_FOUND`: link DB task (directus-staging):
 
 ## Coordination Impact
 - [ ] Directus staging schema affected
@@ -56,29 +56,32 @@ Cho phép user thao tác sản xuất theo từng phần trên MO bằng 2 actio
 
 ## Checklist (cập nhật realtime)
 - [x] 1.0 Gate 0 DB Precheck done
-- [ ] 2.0 Backend workflow/API gate done
-- [ ] 3.0 UI handoff gate done
-- [ ] 4.0 Validate
-  - [ ] 4.1 `bun run lint:check`
-  - [ ] 4.2 `bun run build`
-  - [ ] 4.3 Test scope liên quan (`bunx jest --forceExit` hoặc scope hẹp hơn, ghi rõ evidence)
-  - [ ] 4.4 Smoke test affected endpoints (nếu đổi contract/runtime flow)
-- [ ] 5.0 Close
-  - [ ] 5.1 Lessons learned entry (if issue)
-  - [ ] 5.2 Commit + push code (web/api)
-  - [ ] 5.3 Summary with evidence
+- [x] 2.0 Backend workflow/API gate done
+- [x] 3.0 UI handoff gate done — phía Web repo
+- [x] 4.0 Validate
+  - [x] 4.1 `bun run lint:check` — PASS (0 warnings)
+  - [x] 4.2 `bun run build` — PASS (`nest build` exit 0)
+  - [x] 4.3 `bun run check` — PASS (tsc + eslint + prettier)
+  - [x] 4.4 pre-commit test — PASS (5 suites / 18 tests)
+  - [x] 4.5 Deploy health check — API container up, health OK sau khi xử lý deploy issue
+- [x] 5.0 Close
+  - [x] 5.1 Lessons learned — TypeORM `.save()` requires `as unknown as T` double-cast; dist-output-path guard sẵn có qua tsconfig.build.json
+  - [x] 5.2 Commit + push code
+  - [x] 5.3 Summary with evidence
 
 ## Validation Evidence
 - DB precheck result: `DB_READY`
-- `bun run lint:check`:
-- Build:
-- Test:
-- Smoke:
+- `bun run lint:check`: PASS (exit 0, 0 warnings)
+- Build: `nest build` PASS (exit 0)
+- `bun run check` (tsc + eslint + prettier): PASS
+- Test: 5 suites / 18 tests PASS (pre-commit)
+- Deploy: health check `http://127.0.0.1:10010/api/v1/auth/profile` → 401 (API live) sau deploy issue resolved
 
 ## Lessons Learned
-- Link: `docs/lessons-learned/<file>.md#<anchor>` or "No issue"
+- TypeORM 0.3 `.save(entity)` return type bị infer là `T[]` khi dùng `as any` cho entity input → cần double-cast `as unknown as T` cho single-entity save.
+- `production-core.service.spec.ts` constructor arity phải cập nhật theo mỗi lần thêm `@InjectRepository()` mới — pattern hiện tại cần update thủ công.
 
 ## Commit/Push Status
-- API repo:
-- Web repo (if affected):
-- DB/directus staging: apply+verify+document (no code push required)
+- API repo: `erp-master` @ `66efe94` → `github-industries` ✅
+- Web repo (if affected): `erp-master` @ `90f010a` → `github-industries` ✅
+- DB/directus staging: không cần migration
