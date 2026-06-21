@@ -106,8 +106,8 @@ jobs:
             -p ${{ vars.ELITE_PORT }} \
             ${{ vars.ELITE_USER }}@${{ vars.ELITE_HOST }} \
             '
-              for i in $(seq 1 20); do
-                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10021/api/v1/auth/profile || true)
+              for i in $(seq 1 60); do
+                code=$(curl -m 5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10021/api/v1/auth/profile || true)
                 if [ "$code" = "401" ] || [ "$code" = "200" ]; then
                   echo "✅ API health OK"
                   docker image prune -af
@@ -116,6 +116,7 @@ jobs:
                 echo "Attempt $i: got $code, retrying..."
                 sleep 3
               done
-              echo "❌ Health check failed"
+              echo "❌ Health check failed. Fetching container logs:"
+              docker logs erp-api-klotus-staging --tail 200 || true
               exit 1
             '
