@@ -48,6 +48,15 @@ export class ProductionCoreController {
   }
 
   @RequirePermissions({ resource: 'production', action: 'read' })
+  @Get('explode-preview')
+  explodePreview(
+    @Query('bomId', new ParseUUIDPipe()) bomId: string,
+    @Query('qtyToProduce') qtyToProduce: number,
+  ) {
+    return this.service.explodePreview(bomId, qtyToProduce || 1);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'read' })
   @Get('orders/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);

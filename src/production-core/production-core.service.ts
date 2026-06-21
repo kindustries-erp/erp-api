@@ -152,6 +152,75 @@ export class ProductionCoreService {
     };
   }
 
+  async explodePreview(bomId: string, qtyToProduce: number) {
+    const bomRepo = this.dataSource.getRepository(ErpBom);
+    const bomLineRepo = this.dataSource.getRepository(ErpBomLine);
+    const itemRepo = this.dataSource.getRepository(ErpInventoryItem);
+
+    const bom = await bomRepo.findOne({ where: { id: bomId } });
+    if (!bom) {
+      throw new NotFoundException('Không tìm thấy BOM');
+    }
+
+    const exploded = new Map<string, { itemId: string; qtyRequired: number }>();
+    const explosionTree: any[] = [];
+    await this.explodeBom(
+      bom.id,
+      qtyToProduce,
+      bomRepo,
+      bomLineRepo,
+      exploded,
+      explosionTree,
+      bom.finishedGoodItemId,
+    );
+
+    const finalMaterials = Array.from(exploded.values());
+
+    const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+      for (const node of nodes) {
+        set.add(node.itemId);
+        if (node.children) collectTreeItemIds(node.children, set);
+      }
+    };
+    const allItemIds = new Set<string>(finalMaterials.map((m) => m.itemId));
+    collectTreeItemIds(explosionTree, allItemIds);
+
+    const inventoryItems = allItemIds.size
+      ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
+      : [];
+    const inventoryItemMap = new Map(
+      inventoryItems.map((item) => [item.id, item]),
+    );
+
+    const populateTreeItems = (nodes: any[]) => {
+      for (const node of nodes) {
+        const item = inventoryItemMap.get(node.itemId);
+        if (item) {
+          node.itemName = item.itemName;
+          node.itemCode = item.sku;
+          node.uom = item.uom;
+        }
+        if (node.children) populateTreeItems(node.children);
+      }
+    };
+    populateTreeItems(explosionTree);
+
+    const materialsWithDetails = finalMaterials.map((m) => {
+      const item = inventoryItemMap.get(m.itemId);
+      return {
+        ...m,
+        itemName: item?.itemName,
+        itemCode: item?.sku,
+        uom: item?.uom,
+      };
+    });
+
+    return {
+      flatMaterials: materialsWithDetails,
+      explosionTree,
+    };
+  }
+
   async execute(dto: ExecuteProductionDto) {
     return this.dataSource.transaction(async (manager) => {
       const bomRepo = manager.getRepository(ErpBom);
@@ -193,13 +262,14 @@ export class ProductionCoreService {
         { itemId: string; qtyRequired: number }
       >();
       const visited = new Set<string>();
+      const explosionTree: any[] = [];
       await this.explodeBom(
         rootBom.id,
         qtyToProduce,
         bomRepo,
         bomLineRepo,
         exploded,
-        visited,
+        explosionTree,
         rootBom.finishedGoodItemId,
       );
       // Apply materialOverrides: remap any originalItemId -> alternativeItemId
@@ -255,12 +325,35 @@ export class ProductionCoreService {
           finalMaterials.map((material) => material.itemId).filter(Boolean),
         ),
       ) as string[];
-      const inventoryItems = materialItemIds.length
-        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
+      const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+        for (const node of nodes) {
+          set.add(node.itemId);
+          if (node.children) collectTreeItemIds(node.children, set);
+        }
+      };
+      const allItemIds = new Set<string>(materialItemIds);
+      collectTreeItemIds(explosionTree, allItemIds);
+
+      const inventoryItems = allItemIds.size
+        ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
         : [];
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
       );
+
+      const populateTreeItems = (nodes: any[]) => {
+        for (const node of nodes) {
+          const item = inventoryItemMap.get(node.itemId);
+          if (item) {
+            node.itemName = item.itemName;
+            node.itemCode = item.sku;
+            node.uom = item.uom;
+          }
+          if (node.children) populateTreeItems(node.children);
+        }
+      };
+      populateTreeItems(explosionTree);
+
       const finishedGoodItem = await itemRepo.findOne({
         where: { id: dto.finishedGoodItemId },
       });
@@ -302,8 +395,9 @@ export class ProductionCoreService {
         outputMetadata: {
           ...(dto.outputMetadata ?? {}),
           materialOverrides: dto.materialOverrides ?? [],
+          explosionTree,
           bomId: rootBom.id,
-        },
+        } as any,
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
         createdBy: dto.createdBy ?? null,
@@ -484,7 +578,7 @@ export class ProductionCoreService {
     bomRepo: Repository<ErpBom>,
     bomLineRepo: Repository<ErpBomLine>,
     exploded: Map<string, { itemId: string; qtyRequired: number }>,
-    visited: Set<string>,
+    treeNodes: any[],
     rootFinishedGoodId?: string | null,
     stack: string[] = [],
   ) {
@@ -494,11 +588,6 @@ export class ProductionCoreService {
       );
     }
     const nextStack = [...stack, bomId];
-    const visitKey = `${bomId}:${factor}`;
-    if (visited.has(visitKey)) {
-      return;
-    }
-    visited.add(visitKey);
 
     const lines = await bomLineRepo.find({
       where: { bomId },
@@ -533,16 +622,23 @@ export class ProductionCoreService {
             `BOM nhiều cấp tự quay về thành phẩm gốc ${rootFinishedGoodId}`,
           );
         }
+        const childTreeNodes: any[] = [];
         await this.explodeBom(
           childBom.id,
           grossQty,
           bomRepo,
           bomLineRepo,
           exploded,
-          visited,
+          childTreeNodes,
           rootFinishedGoodId,
           nextStack,
         );
+        treeNodes.push({
+          itemId: line.componentItemId,
+          qtyRequired: grossQty,
+          isLeaf: false,
+          children: childTreeNodes,
+        });
         continue;
       }
 
@@ -550,6 +646,11 @@ export class ProductionCoreService {
       exploded.set(line.componentItemId, {
         itemId: line.componentItemId,
         qtyRequired: (current?.qtyRequired || 0) + grossQty,
+      });
+      treeNodes.push({
+        itemId: line.componentItemId,
+        qtyRequired: grossQty,
+        isLeaf: true,
       });
     }
   }
@@ -668,13 +769,14 @@ export class ProductionCoreService {
         string,
         { itemId: string; qtyRequired: number }
       >();
+      const explosionTree: any[] = [];
       await this.explodeBom(
         bom.id,
         qtyToProduce,
         bomRepo,
         bomLineRepo,
         exploded,
-        new Set<string>(),
+        explosionTree,
         dto.finishedGoodItemId,
       );
 
@@ -694,18 +796,38 @@ export class ProductionCoreService {
         };
       });
 
-      const materialItemIds = Array.from(
-        new Set(finalMaterials.map((m) => m.itemId).filter(Boolean)),
-      );
-      const inventoryItems = materialItemIds.length
-        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
-        : [];
+      const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+        for (const node of nodes) {
+          set.add(node.itemId);
+          if (node.children) collectTreeItemIds(node.children, set);
+        }
+      };
+
+      const allItemIds = new Set<string>(finalMaterials.map((m) => m.itemId));
+      collectTreeItemIds(explosionTree, allItemIds);
+      allItemIds.add(dto.finishedGoodItemId);
+
+      const inventoryItems = await itemRepo.find({
+        where: { id: In(Array.from(allItemIds)) },
+      });
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
       );
-      const finishedGoodItem = await itemRepo.findOne({
-        where: { id: dto.finishedGoodItemId },
-      });
+
+      const populateTreeItems = (nodes: any[]) => {
+        for (const node of nodes) {
+          const item = inventoryItemMap.get(node.itemId);
+          if (item) {
+            node.itemName = item.itemName;
+            node.itemCode = item.sku;
+            node.uom = item.uom;
+          }
+          if (node.children) populateTreeItems(node.children);
+        }
+      };
+      populateTreeItems(explosionTree);
+
+      const finishedGoodItem = inventoryItemMap.get(dto.finishedGoodItemId);
 
       await materialRepo.delete({ productionOrderId: id });
 
@@ -729,6 +851,7 @@ export class ProductionCoreService {
       existing.outputMetadata = {
         ...(dto.outputMetadata ?? {}),
         materialOverrides: dto.materialOverrides ?? [],
+        explosionTree,
         bomId: bom.id,
       } as any;
       existing.status = 'DRAFT';
