@@ -7,6 +7,7 @@ import { InventoryItemsController } from './inventory-core.controller';
 import { InventoryItemsService } from './inventory-core.service';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
+import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ErpItemType } from './entities/erp_item_type.entity';
       ErpInventoryBalance,
       ErpUom,
       ErpItemType,
+      ErpTrackingCategory,
     ]),
   ],
   controllers: [InventoryItemsController],

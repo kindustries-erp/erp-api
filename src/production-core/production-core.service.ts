@@ -28,6 +28,8 @@ import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.ent
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
+import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
 
@@ -152,6 +154,75 @@ export class ProductionCoreService {
     };
   }
 
+  async explodePreview(bomId: string, qtyToProduce: number) {
+    const bomRepo = this.dataSource.getRepository(ErpBom);
+    const bomLineRepo = this.dataSource.getRepository(ErpBomLine);
+    const itemRepo = this.dataSource.getRepository(ErpInventoryItem);
+
+    const bom = await bomRepo.findOne({ where: { id: bomId } });
+    if (!bom) {
+      throw new NotFoundException('Không tìm thấy BOM');
+    }
+
+    const exploded = new Map<string, { itemId: string; qtyRequired: number }>();
+    const explosionTree: any[] = [];
+    await this.explodeBom(
+      bom.id,
+      qtyToProduce,
+      bomRepo,
+      bomLineRepo,
+      exploded,
+      explosionTree,
+      bom.finishedGoodItemId,
+    );
+
+    const finalMaterials = Array.from(exploded.values());
+
+    const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+      for (const node of nodes) {
+        set.add(node.itemId);
+        if (node.children) collectTreeItemIds(node.children, set);
+      }
+    };
+    const allItemIds = new Set<string>(finalMaterials.map((m) => m.itemId));
+    collectTreeItemIds(explosionTree, allItemIds);
+
+    const inventoryItems = allItemIds.size
+      ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
+      : [];
+    const inventoryItemMap = new Map(
+      inventoryItems.map((item) => [item.id, item]),
+    );
+
+    const populateTreeItems = (nodes: any[]) => {
+      for (const node of nodes) {
+        const item = inventoryItemMap.get(node.itemId);
+        if (item) {
+          node.itemName = item.itemName;
+          node.itemCode = item.sku;
+          node.uom = item.uom;
+        }
+        if (node.children) populateTreeItems(node.children);
+      }
+    };
+    populateTreeItems(explosionTree);
+
+    const materialsWithDetails = finalMaterials.map((m) => {
+      const item = inventoryItemMap.get(m.itemId);
+      return {
+        ...m,
+        itemName: item?.itemName,
+        itemCode: item?.sku,
+        uom: item?.uom,
+      };
+    });
+
+    return {
+      flatMaterials: materialsWithDetails,
+      explosionTree,
+    };
+  }
+
   async execute(dto: ExecuteProductionDto) {
     return this.dataSource.transaction(async (manager) => {
       const bomRepo = manager.getRepository(ErpBom);
@@ -193,13 +264,14 @@ export class ProductionCoreService {
         { itemId: string; qtyRequired: number }
       >();
       const visited = new Set<string>();
+      const explosionTree: any[] = [];
       await this.explodeBom(
         rootBom.id,
         qtyToProduce,
         bomRepo,
         bomLineRepo,
         exploded,
-        visited,
+        explosionTree,
         rootBom.finishedGoodItemId,
       );
       // Apply materialOverrides: remap any originalItemId -> alternativeItemId
@@ -255,12 +327,35 @@ export class ProductionCoreService {
           finalMaterials.map((material) => material.itemId).filter(Boolean),
         ),
       ) as string[];
-      const inventoryItems = materialItemIds.length
-        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
+      const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+        for (const node of nodes) {
+          set.add(node.itemId);
+          if (node.children) collectTreeItemIds(node.children, set);
+        }
+      };
+      const allItemIds = new Set<string>(materialItemIds);
+      collectTreeItemIds(explosionTree, allItemIds);
+
+      const inventoryItems = allItemIds.size
+        ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
         : [];
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
       );
+
+      const populateTreeItems = (nodes: any[]) => {
+        for (const node of nodes) {
+          const item = inventoryItemMap.get(node.itemId);
+          if (item) {
+            node.itemName = item.itemName;
+            node.itemCode = item.sku;
+            node.uom = item.uom;
+          }
+          if (node.children) populateTreeItems(node.children);
+        }
+      };
+      populateTreeItems(explosionTree);
+
       const finishedGoodItem = await itemRepo.findOne({
         where: { id: dto.finishedGoodItemId },
       });
@@ -302,8 +397,9 @@ export class ProductionCoreService {
         outputMetadata: {
           ...(dto.outputMetadata ?? {}),
           materialOverrides: dto.materialOverrides ?? [],
+          explosionTree,
           bomId: rootBom.id,
-        },
+        } as any,
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
         createdBy: dto.createdBy ?? null,
@@ -391,16 +487,34 @@ export class ProductionCoreService {
 
     let finishedGoodItemName: string | null = null;
     let finishedGoodItemCode: string | null = null;
+    let finishedGoodItemTrackingPolicy: string | null = null;
     if (data.finishedGoodItemId) {
       const item = await this.dataSource.query(
-        `SELECT sku, item_name FROM public.erp_inventory_items WHERE id = $1::uuid`,
+        `SELECT sku, item_name, tracking_policy FROM public.erp_inventory_items WHERE id = $1::uuid`,
         [data.finishedGoodItemId],
       );
       if (item.length > 0) {
         finishedGoodItemCode = item[0].sku;
         finishedGoodItemName = item[0].item_name;
+        finishedGoodItemTrackingPolicy = item[0].tracking_policy ?? null;
       }
     }
+
+    // Load produced identifiers (vehicles / serials) linked to this production order
+    const producedVehicles = await this.dataSource.query(
+      `SELECT id, vin, frame_no AS "frameNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
+       FROM public.erp_vehicles
+       WHERE production_order_id = $1::uuid
+       ORDER BY created_at ASC`,
+      [id],
+    );
+    const producedSerials = await this.dataSource.query(
+      `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt"
+       FROM public.erp_inventory_serials
+       WHERE production_order_id = $1::uuid
+       ORDER BY created_at ASC`,
+      [id],
+    );
 
     if (materials.length > 0) {
       const savedOverrides = Array.isArray(
@@ -473,6 +587,16 @@ export class ProductionCoreService {
         ...data,
         finishedGoodItemCode,
         finishedGoodItemName,
+        finishedGoodItem: data.finishedGoodItemId
+          ? {
+              id: data.finishedGoodItemId,
+              itemCode: finishedGoodItemCode,
+              itemName: finishedGoodItemName,
+              trackingPolicy: finishedGoodItemTrackingPolicy,
+            }
+          : null,
+        producedVehicles,
+        producedSerials,
         materials,
       },
     };
@@ -484,7 +608,7 @@ export class ProductionCoreService {
     bomRepo: Repository<ErpBom>,
     bomLineRepo: Repository<ErpBomLine>,
     exploded: Map<string, { itemId: string; qtyRequired: number }>,
-    visited: Set<string>,
+    treeNodes: any[],
     rootFinishedGoodId?: string | null,
     stack: string[] = [],
   ) {
@@ -494,11 +618,6 @@ export class ProductionCoreService {
       );
     }
     const nextStack = [...stack, bomId];
-    const visitKey = `${bomId}:${factor}`;
-    if (visited.has(visitKey)) {
-      return;
-    }
-    visited.add(visitKey);
 
     const lines = await bomLineRepo.find({
       where: { bomId },
@@ -533,16 +652,23 @@ export class ProductionCoreService {
             `BOM nhiều cấp tự quay về thành phẩm gốc ${rootFinishedGoodId}`,
           );
         }
+        const childTreeNodes: any[] = [];
         await this.explodeBom(
           childBom.id,
           grossQty,
           bomRepo,
           bomLineRepo,
           exploded,
-          visited,
+          childTreeNodes,
           rootFinishedGoodId,
           nextStack,
         );
+        treeNodes.push({
+          itemId: line.componentItemId,
+          qtyRequired: grossQty,
+          isLeaf: false,
+          children: childTreeNodes,
+        });
         continue;
       }
 
@@ -550,6 +676,11 @@ export class ProductionCoreService {
       exploded.set(line.componentItemId, {
         itemId: line.componentItemId,
         qtyRequired: (current?.qtyRequired || 0) + grossQty,
+      });
+      treeNodes.push({
+        itemId: line.componentItemId,
+        qtyRequired: grossQty,
+        isLeaf: true,
       });
     }
   }
@@ -625,6 +756,7 @@ export class ProductionCoreService {
         existing.outputMetadata = {
           ...(existing.outputMetadata ?? {}),
           ...(dto.outputMetadata ?? {}),
+          bomId: dto.bomId ?? existing.outputMetadata?.bomId,
         } as any;
 
         const savedOrder = await productionRepo.save(existing);
@@ -641,25 +773,40 @@ export class ProductionCoreService {
         throw new BadRequestException('Số lượng sản xuất phải lớn hơn 0');
       }
 
-      const bom = await bomRepo.findOne({
-        where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
-        order: { createdAt: 'DESC' },
-      });
+      const bom = dto.bomId
+        ? await bomRepo.findOne({
+            where: {
+              id: dto.bomId,
+              finishedGoodItemId: dto.finishedGoodItemId,
+            },
+          })
+        : await bomRepo.findOne({
+            where: {
+              finishedGoodItemId: dto.finishedGoodItemId,
+              status: 'ACTIVE',
+            },
+            order: { createdAt: 'DESC' },
+          });
       if (!bom) {
-        throw new NotFoundException('Không tìm thấy BOM cho thành phẩm');
+        throw new NotFoundException(
+          dto.bomId
+            ? 'Không tìm thấy BOM theo id đã chọn cho thành phẩm này'
+            : 'Không tìm thấy BOM ACTIVE cho thành phẩm cần sản xuất',
+        );
       }
 
       const exploded = new Map<
         string,
         { itemId: string; qtyRequired: number }
       >();
+      const explosionTree: any[] = [];
       await this.explodeBom(
         bom.id,
         qtyToProduce,
         bomRepo,
         bomLineRepo,
         exploded,
-        new Set<string>(),
+        explosionTree,
         dto.finishedGoodItemId,
       );
 
@@ -679,18 +826,38 @@ export class ProductionCoreService {
         };
       });
 
-      const materialItemIds = Array.from(
-        new Set(finalMaterials.map((m) => m.itemId).filter(Boolean)),
-      );
-      const inventoryItems = materialItemIds.length
-        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
-        : [];
+      const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
+        for (const node of nodes) {
+          set.add(node.itemId);
+          if (node.children) collectTreeItemIds(node.children, set);
+        }
+      };
+
+      const allItemIds = new Set<string>(finalMaterials.map((m) => m.itemId));
+      collectTreeItemIds(explosionTree, allItemIds);
+      allItemIds.add(dto.finishedGoodItemId);
+
+      const inventoryItems = await itemRepo.find({
+        where: { id: In(Array.from(allItemIds)) },
+      });
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
       );
-      const finishedGoodItem = await itemRepo.findOne({
-        where: { id: dto.finishedGoodItemId },
-      });
+
+      const populateTreeItems = (nodes: any[]) => {
+        for (const node of nodes) {
+          const item = inventoryItemMap.get(node.itemId);
+          if (item) {
+            node.itemName = item.itemName;
+            node.itemCode = item.sku;
+            node.uom = item.uom;
+          }
+          if (node.children) populateTreeItems(node.children);
+        }
+      };
+      populateTreeItems(explosionTree);
+
+      const finishedGoodItem = inventoryItemMap.get(dto.finishedGoodItemId);
 
       await materialRepo.delete({ productionOrderId: id });
 
@@ -714,6 +881,8 @@ export class ProductionCoreService {
       existing.outputMetadata = {
         ...(dto.outputMetadata ?? {}),
         materialOverrides: dto.materialOverrides ?? [],
+        explosionTree,
+        bomId: bom.id,
       } as any;
       existing.status = 'DRAFT';
 
@@ -1047,6 +1216,8 @@ export class ProductionCoreService {
       const grRepo = manager.getRepository(ErpGoodsReceipt);
       const grLineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const itemRepo = manager.getRepository(ErpInventoryItem);
+      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const order = await productionRepo.findOne({
         where: { id, isDeleted: false },
@@ -1089,7 +1260,105 @@ export class ProductionCoreService {
         dto.warehouseCode ?? order.warehouseCode ?? undefined;
       const receiptDate = new Date().toISOString().slice(0, 10);
 
-      // Generate GR number
+      // Load finished good item to check tracking policy
+      const finishedGoodItem = await itemRepo.findOne({
+        where: { id: order.finishedGoodItemId },
+      });
+      const trackingPolicy = (finishedGoodItem?.trackingPolicy ?? 'NONE') as
+        | 'NONE'
+        | 'SERIAL'
+        | 'LOT'
+        | 'VEHICLE'
+        | 'CUSTOM';
+      const identifiers = dto.identifiers ?? [];
+
+      if (!['NONE', 'CUSTOM'].includes(trackingPolicy)) {
+        if (!Number.isInteger(qtyFinished)) {
+          throw new BadRequestException(
+            'Mặt hàng có tracking policy bắt buộc số lượng hoàn thành là số nguyên',
+          );
+        }
+        if (identifiers.length !== qtyFinished) {
+          throw new BadRequestException(
+            `Số lượng mã định danh phải bằng số lượng hoàn thành (cần ${qtyFinished}, nhận được ${identifiers.length})`,
+          );
+        }
+      }
+      if (trackingPolicy === 'VEHICLE') {
+        const seenVins = new Set<string>();
+        const seenEngineNos = new Set<string>();
+        identifiers.forEach((identifier, index) => {
+          const vin = identifier.vin?.trim();
+          const engineNo = identifier.engineNo?.trim();
+          if (!vin || !engineNo) {
+            throw new BadRequestException(
+              `Thiếu VIN hoặc số máy tại mã định danh ${index + 1}`,
+            );
+          }
+          const vinKey = vin.toUpperCase();
+          const engineKey = engineNo.toUpperCase();
+          if (seenVins.has(vinKey)) {
+            throw new BadRequestException(
+              `Số VIN bị trùng trong danh sách: ${vin}`,
+            );
+          }
+          if (seenEngineNos.has(engineKey)) {
+            throw new BadRequestException(
+              `Số máy bị trùng trong danh sách: ${engineNo}`,
+            );
+          }
+          seenVins.add(vinKey);
+          seenEngineNos.add(engineKey);
+          identifier.vin = vin;
+          identifier.engineNo = engineNo;
+        });
+
+        const existingVehicles = await vehicleRepo
+          .createQueryBuilder('vehicle')
+          .select(['vehicle.vin AS vin', 'vehicle.engineNo AS "engineNo"'])
+          .where('UPPER(vehicle.vin) IN (:...vinKeys)', {
+            vinKeys: Array.from(seenVins),
+          })
+          .orWhere('UPPER(vehicle.engineNo) IN (:...engineKeys)', {
+            engineKeys: Array.from(seenEngineNos),
+          })
+          .getRawMany<{ vin: string | null; engineNo: string | null }>();
+
+        const duplicatedVin = existingVehicles.find(
+          (row) => row.vin && seenVins.has(row.vin.toUpperCase()),
+        )?.vin;
+        if (duplicatedVin) {
+          throw new BadRequestException(`Số VIN đã tồn tại: ${duplicatedVin}`);
+        }
+
+        const duplicatedEngineNo = existingVehicles.find(
+          (row) =>
+            row.engineNo && seenEngineNos.has(row.engineNo.toUpperCase()),
+        )?.engineNo;
+        if (duplicatedEngineNo) {
+          throw new BadRequestException(
+            `Số máy đã tồn tại: ${duplicatedEngineNo}`,
+          );
+        }
+      }
+      if (trackingPolicy === 'SERIAL') {
+        identifiers.forEach((identifier, index) => {
+          if (!identifier.serialNo) {
+            throw new BadRequestException(
+              `Thiếu serial number tại mã định danh ${index + 1}`,
+            );
+          }
+        });
+      }
+      if (trackingPolicy === 'LOT') {
+        identifiers.forEach((identifier, index) => {
+          if (!identifier.lotNo) {
+            throw new BadRequestException(
+              `Thiếu lot number tại mã định danh ${index + 1}`,
+            );
+          }
+        });
+      }
       const today = new Date();
       const ym = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
       const grPrefix = `NK-${ym}`;
@@ -1114,7 +1383,7 @@ export class ProductionCoreService {
       )) as unknown as ErpGoodsReceipt;
 
       const unitCost = Number(dto.unitCost ?? 0);
-      await grLineRepo.save(
+      const savedGrLine = (await grLineRepo.save(
         grLineRepo.create({
           goodsReceiptId: gr.id,
           lineNo: 1,
@@ -1124,12 +1393,56 @@ export class ProductionCoreService {
           amount: (qtyFinished * unitCost).toFixed(3),
           purchaseOrderLineId: null,
         } as any),
-      );
+      )) as unknown as ErpGoodsReceiptLine;
+
+      if (trackingPolicy === 'VEHICLE') {
+        for (const identifier of identifiers) {
+          const vehicle = (await vehicleRepo.save(
+            vehicleRepo.create({
+              vin: identifier.vin,
+              frameNo: identifier.vin,
+              engineNo: identifier.engineNo,
+              finishedGoodItemId: order.finishedGoodItemId,
+              productionOrderId: order.id,
+              assemblyDate: receiptDate,
+              status: 'ASSEMBLED',
+              notes: identifier.notes ?? null,
+            } as any),
+          )) as unknown as ErpVehicle;
+
+          await serialRepo.save(
+            serialRepo.create({
+              itemId: order.finishedGoodItemId,
+              serialNo: identifier.engineNo,
+              status: 'IN_STOCK',
+              vinId: vehicle.id,
+              receiptLineId: savedGrLine.id,
+              productionOrderId: order.id,
+              salesOrderLineId: null,
+              goodsIssueLineId: null,
+            } as any),
+          );
+        }
+      }
+
+      if (trackingPolicy === 'SERIAL') {
+        for (const identifier of identifiers) {
+          await serialRepo.save(
+            serialRepo.create({
+              itemId: order.finishedGoodItemId,
+              serialNo: identifier.serialNo,
+              status: 'IN_STOCK',
+              vinId: null,
+              receiptLineId: savedGrLine.id,
+              productionOrderId: order.id,
+              salesOrderLineId: null,
+              goodsIssueLineId: null,
+            } as any),
+          );
+        }
+      }
 
       // Inventory balance update for finished good
-      const finishedGoodItem = await itemRepo.findOne({
-        where: { id: order.finishedGoodItemId },
-      });
       const balanceWhere: any = {
         itemId: order.finishedGoodItemId,
         ...(warehouseCode ? { warehouseCode } : {}),

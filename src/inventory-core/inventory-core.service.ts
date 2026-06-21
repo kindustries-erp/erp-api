@@ -14,10 +14,13 @@ import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
+import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
 import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
+import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
+import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 
@@ -34,6 +37,8 @@ export class InventoryItemsService {
     private readonly uomRepository: Repository<ErpUom>,
     @InjectRepository(ErpItemType)
     private readonly itemTypeRepository: Repository<ErpItemType>,
+    @InjectRepository(ErpTrackingCategory)
+    private readonly trackingCategoryRepository: Repository<ErpTrackingCategory>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -94,6 +99,25 @@ export class InventoryItemsService {
     return itemType;
   }
 
+  private async ensureTrackingCategoryActive(code?: string | null) {
+    if (!code?.trim()) return null;
+    const normalized = this.normalizeCode(code);
+    const category = await this.trackingCategoryRepository.findOne({
+      where: { code: normalized, isDeleted: false },
+    });
+    if (!category) {
+      throw new BadRequestException(
+        `Nhóm tracking ${normalized} chưa được cấu hình`,
+      );
+    }
+    if (!category.isActive) {
+      throw new BadRequestException(
+        `Nhóm tracking ${normalized} đang ngưng sử dụng`,
+      );
+    }
+    return category;
+  }
+
   async softDeleteUom(id: string) {
     const existing = await this.uomRepository.findOneBy({ id });
     if (!existing) throw new NotFoundException(`UOM ${id} not found`);
@@ -122,10 +146,15 @@ export class InventoryItemsService {
   async create(dto: CreateInventoryItemDto) {
     const uom = await this.ensureUomActive(dto.uom);
     const itemType = await this.ensureItemTypeActive(dto.itemType);
+    const trackingCategory = await this.ensureTrackingCategoryActive(
+      dto.trackingCategoryKey,
+    );
     const entity = this.repository.create({
       ...dto,
       uom: uom.code,
       itemType: itemType.code,
+      trackingPolicy: dto.trackingPolicy ?? 'NONE',
+      trackingCategoryKey: trackingCategory?.code ?? null,
     } as Partial<ErpInventoryItem>);
     const data = await this.repository.save(entity);
     return { message: 'Tạo thành công', data };
@@ -229,6 +258,15 @@ export class InventoryItemsService {
       const itemType = await this.ensureItemTypeActive(dto.itemType);
       patch.itemType = itemType.code;
     }
+    if (dto.trackingCategoryKey !== undefined) {
+      const trackingCategory = await this.ensureTrackingCategoryActive(
+        dto.trackingCategoryKey,
+      );
+      patch.trackingCategoryKey = trackingCategory?.code ?? null;
+    }
+    if (dto.trackingPolicy !== undefined) {
+      patch.trackingPolicy = dto.trackingPolicy;
+    }
     await this.repository.update(id, patch);
     const data = await this.repository.findOneByOrFail({ id });
     return { message: 'Cập nhật thành công', data };
@@ -314,6 +352,57 @@ export class InventoryItemsService {
     if (dto.isActive !== undefined) existing.isActive = dto.isActive;
     const data = await this.itemTypeRepository.save(existing);
     return { message: 'Cập nhật loại item thành công', data };
+  }
+
+  async listTrackingCategories(query: InventoryMasterQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 100;
+    const [items, total] = await this.trackingCategoryRepository.findAndCount({
+      where: this.buildMasterWhere(query),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { code: 'ASC' },
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async createTrackingCategory(dto: CreateTrackingCategoryDto) {
+    const entity = this.trackingCategoryRepository.create({
+      code: this.normalizeCode(dto.code),
+      name: dto.name.trim(),
+      description: dto.description?.trim() || null,
+      isActive: dto.isActive ?? true,
+    });
+    const data = await this.trackingCategoryRepository.save(entity);
+    return { message: 'Tạo nhóm tracking thành công', data };
+  }
+
+  async updateTrackingCategory(id: string, dto: UpdateTrackingCategoryDto) {
+    const existing = await this.trackingCategoryRepository.findOneBy({ id });
+    if (!existing)
+      throw new NotFoundException(`Tracking category ${id} not found`);
+    if (dto.code !== undefined) existing.code = this.normalizeCode(dto.code);
+    if (dto.name !== undefined) existing.name = dto.name.trim();
+    if (dto.description !== undefined)
+      existing.description = dto.description?.trim() || null;
+    if (dto.isActive !== undefined) existing.isActive = dto.isActive;
+    const data = await this.trackingCategoryRepository.save(existing);
+    return { message: 'Cập nhật nhóm tracking thành công', data };
+  }
+
+  async softDeleteTrackingCategory(id: string) {
+    const existing = await this.trackingCategoryRepository.findOneBy({ id });
+    if (!existing)
+      throw new NotFoundException(`Tracking category ${id} not found`);
+    existing.isDeleted = true;
+    await this.trackingCategoryRepository.save(existing);
+    return { message: 'Đã xóa nhóm tracking thành công', data: { id } };
   }
 
   /**

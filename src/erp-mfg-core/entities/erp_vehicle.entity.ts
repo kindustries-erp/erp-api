@@ -35,6 +35,9 @@ export class ErpVehicle {
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
 
+  @Column({ type: 'uuid', name: 'production_order_id', nullable: true })
+  productionOrderId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

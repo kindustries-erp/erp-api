@@ -31,6 +31,22 @@ export class ErpInventoryItem {
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'tracking_policy',
+    default: 'NONE',
+  })
+  trackingPolicy: 'NONE' | 'SERIAL' | 'LOT' | 'VEHICLE' | 'CUSTOM';
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'tracking_category_key',
+    nullable: true,
+  })
+  trackingCategoryKey: string | null;
+
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 
