@@ -625,6 +625,7 @@ export class ProductionCoreService {
         existing.outputMetadata = {
           ...(existing.outputMetadata ?? {}),
           ...(dto.outputMetadata ?? {}),
+          bomId: dto.bomId ?? existing.outputMetadata?.bomId,
         } as any;
 
         const savedOrder = await productionRepo.save(existing);
@@ -641,12 +642,26 @@ export class ProductionCoreService {
         throw new BadRequestException('Số lượng sản xuất phải lớn hơn 0');
       }
 
-      const bom = await bomRepo.findOne({
-        where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
-        order: { createdAt: 'DESC' },
-      });
+      const bom = dto.bomId
+        ? await bomRepo.findOne({
+            where: {
+              id: dto.bomId,
+              finishedGoodItemId: dto.finishedGoodItemId,
+            },
+          })
+        : await bomRepo.findOne({
+            where: {
+              finishedGoodItemId: dto.finishedGoodItemId,
+              status: 'ACTIVE',
+            },
+            order: { createdAt: 'DESC' },
+          });
       if (!bom) {
-        throw new NotFoundException('Không tìm thấy BOM cho thành phẩm');
+        throw new NotFoundException(
+          dto.bomId
+            ? 'Không tìm thấy BOM theo id đã chọn cho thành phẩm này'
+            : 'Không tìm thấy BOM ACTIVE cho thành phẩm cần sản xuất',
+        );
       }
 
       const exploded = new Map<
@@ -714,6 +729,7 @@ export class ProductionCoreService {
       existing.outputMetadata = {
         ...(dto.outputMetadata ?? {}),
         materialOverrides: dto.materialOverrides ?? [],
+        bomId: bom.id,
       } as any;
       existing.status = 'DRAFT';
 
