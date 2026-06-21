@@ -8,7 +8,9 @@ Apply to all work in this repo.
 - use repo-local context as default guidance
 - treat Directus as legacy/reference unless the task explicitly says legacy scope
 - treat Gitea as historical only
-- use Bun/Bunx first
+- MUST use bun/bunx exclusively (do NOT use npm)
+- when debugging and testing API locally, always start dev on port 10010
+- by default, always work on ERP_MASTER_DATABASE_URL unless ERP_KLTOUS_STAGING_DATABASE_URL or ERP_KLTOUS_MASTER_DATABASE_URL is explicitly indicated
 - follow DB -> API -> UI -> QC
 - inspect current state before edits
 - use evidence-first wording
@@ -16,6 +18,7 @@ Apply to all work in this repo.
 - before push/commit, always run `bun run lint:check` and `bun run build`
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
+- always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
 - no code without a task file under `docs/tasks/`

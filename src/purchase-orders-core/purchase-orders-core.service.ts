@@ -13,6 +13,7 @@ import {
   MoreThanOrEqual,
   LessThanOrEqual,
   In,
+  Not,
 } from 'typeorm';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
@@ -105,6 +106,9 @@ export class PurchaseOrdersCoreService {
     const where: any = { isDeleted: false };
     if (query.status) {
       where.status = query.status;
+    }
+    if ((query as any).exclude_status) {
+      where.status = Not((query as any).exclude_status);
     }
     if (query.payment_status) {
       where.paymentStatus = query.payment_status;
@@ -205,11 +209,11 @@ export class PurchaseOrdersCoreService {
     const receiptRepo = this.dataSource.getRepository(ErpGoodsReceipt);
     const receiptLineRepo = this.dataSource.getRepository(ErpGoodsReceiptLine);
     const receipts = await receiptRepo.find({
-      where: { purchaseOrderId: id } as any,
+      where: { purchaseOrderId: id, isDeleted: false } as any,
       order: { receiptDate: 'ASC', createdAt: 'ASC' },
     });
     const visibleReceipts = receipts.filter(
-      (receipt) => receipt.status !== 'DRAFT',
+      (receipt) => receipt.status !== 'DRAFT' && receipt.status !== 'CANCELLED',
     );
     const result = [] as any[];
     for (const receipt of visibleReceipts) {

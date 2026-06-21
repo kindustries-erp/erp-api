@@ -184,6 +184,34 @@ export class InventoryItemsService {
     };
   }
 
+  async getBalances(idsString?: string) {
+    if (!idsString) return { data: {} };
+    const ids = idsString
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (!ids.length) return { data: {} };
+
+    const balances = await this.balanceRepository.find({
+      where: { itemId: In(ids) } as any,
+    });
+
+    const data: Record<string, any> = {};
+    for (const b of balances) {
+      if (b.itemId) {
+        const currentQty = Number(b.qtyOnHand || 0);
+        const currentReserved = Number(b.qtyReserved || 0);
+        data[b.itemId] = {
+          qtyOnHand: currentQty,
+          qtyReserved: currentReserved,
+          availableQty: currentQty - currentReserved,
+        };
+      }
+    }
+
+    return { data };
+  }
+
   async findOne(id: string) {
     const data = await this.repository.findOneByOrFail({ id });
     return { message: 'Lấy thông tin thành công', data };
@@ -396,9 +424,9 @@ export class InventoryItemsService {
                g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
                po.po_no as "poNo"
-        FROM erp_goods_receipts g
-        LEFT JOIN erp_business_partners bp ON g.supplier_id = bp.id
-        LEFT JOIN erp_purchase_orders po ON g.purchase_order_id = po.id
+        FROM public.erp_goods_receipts g
+        LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
+        LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id
         WHERE ${receiptWhere}
       `);
     }
@@ -409,8 +437,8 @@ export class InventoryItemsService {
                g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
                NULL as "poNo"
-        FROM erp_goods_issues g
-        LEFT JOIN erp_business_partners bp ON g.customer_id = bp.id
+        FROM public.erp_goods_issues g
+        LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         WHERE ${issueWhere}
       `);
     }

@@ -20,6 +20,13 @@ export class ErpGoodsIssueLine {
   @Column({ type: 'uuid', name: 'sales_order_line_id', nullable: true })
   salesOrderLineId: string | null;
 
+  @Column({
+    type: 'uuid',
+    name: 'production_order_material_id',
+    nullable: true,
+  })
+  productionOrderMaterialId: string | null;
+
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
 

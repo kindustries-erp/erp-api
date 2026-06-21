@@ -45,6 +45,12 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('items/balances')
+  getBalances(@Query('ids') ids: string) {
+    return this.service.getBalances(ids);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('uoms')
   listUoms(@Query() query: InventoryMasterQueryDto) {
     return this.service.listUoms(query);
