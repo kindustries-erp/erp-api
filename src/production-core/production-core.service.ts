@@ -28,6 +28,8 @@ import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.ent
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
+import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
 
@@ -485,16 +487,34 @@ export class ProductionCoreService {
 
     let finishedGoodItemName: string | null = null;
     let finishedGoodItemCode: string | null = null;
+    let finishedGoodItemTrackingPolicy: string | null = null;
     if (data.finishedGoodItemId) {
       const item = await this.dataSource.query(
-        `SELECT sku, item_name FROM public.erp_inventory_items WHERE id = $1::uuid`,
+        `SELECT sku, item_name, tracking_policy FROM public.erp_inventory_items WHERE id = $1::uuid`,
         [data.finishedGoodItemId],
       );
       if (item.length > 0) {
         finishedGoodItemCode = item[0].sku;
         finishedGoodItemName = item[0].item_name;
+        finishedGoodItemTrackingPolicy = item[0].tracking_policy ?? null;
       }
     }
+
+    // Load produced identifiers (vehicles / serials) linked to this production order
+    const producedVehicles = await this.dataSource.query(
+      `SELECT id, vin, frame_no AS "frameNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
+       FROM public.erp_vehicles
+       WHERE production_order_id = $1::uuid
+       ORDER BY created_at ASC`,
+      [id],
+    );
+    const producedSerials = await this.dataSource.query(
+      `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt"
+       FROM public.erp_inventory_serials
+       WHERE production_order_id = $1::uuid
+       ORDER BY created_at ASC`,
+      [id],
+    );
 
     if (materials.length > 0) {
       const savedOverrides = Array.isArray(
@@ -567,6 +587,16 @@ export class ProductionCoreService {
         ...data,
         finishedGoodItemCode,
         finishedGoodItemName,
+        finishedGoodItem: data.finishedGoodItemId
+          ? {
+              id: data.finishedGoodItemId,
+              itemCode: finishedGoodItemCode,
+              itemName: finishedGoodItemName,
+              trackingPolicy: finishedGoodItemTrackingPolicy,
+            }
+          : null,
+        producedVehicles,
+        producedSerials,
         materials,
       },
     };
@@ -1186,6 +1216,8 @@ export class ProductionCoreService {
       const grRepo = manager.getRepository(ErpGoodsReceipt);
       const grLineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const itemRepo = manager.getRepository(ErpInventoryItem);
+      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const order = await productionRepo.findOne({
         where: { id, isDeleted: false },
@@ -1228,7 +1260,105 @@ export class ProductionCoreService {
         dto.warehouseCode ?? order.warehouseCode ?? undefined;
       const receiptDate = new Date().toISOString().slice(0, 10);
 
-      // Generate GR number
+      // Load finished good item to check tracking policy
+      const finishedGoodItem = await itemRepo.findOne({
+        where: { id: order.finishedGoodItemId },
+      });
+      const trackingPolicy = (finishedGoodItem?.trackingPolicy ?? 'NONE') as
+        | 'NONE'
+        | 'SERIAL'
+        | 'LOT'
+        | 'VEHICLE'
+        | 'CUSTOM';
+      const identifiers = dto.identifiers ?? [];
+
+      if (!['NONE', 'CUSTOM'].includes(trackingPolicy)) {
+        if (!Number.isInteger(qtyFinished)) {
+          throw new BadRequestException(
+            'Mặt hàng có tracking policy bắt buộc số lượng hoàn thành là số nguyên',
+          );
+        }
+        if (identifiers.length !== qtyFinished) {
+          throw new BadRequestException(
+            `Số lượng mã định danh phải bằng số lượng hoàn thành (cần ${qtyFinished}, nhận được ${identifiers.length})`,
+          );
+        }
+      }
+      if (trackingPolicy === 'VEHICLE') {
+        const seenVins = new Set<string>();
+        const seenEngineNos = new Set<string>();
+        identifiers.forEach((identifier, index) => {
+          const vin = identifier.vin?.trim();
+          const engineNo = identifier.engineNo?.trim();
+          if (!vin || !engineNo) {
+            throw new BadRequestException(
+              `Thiếu VIN hoặc số máy tại mã định danh ${index + 1}`,
+            );
+          }
+          const vinKey = vin.toUpperCase();
+          const engineKey = engineNo.toUpperCase();
+          if (seenVins.has(vinKey)) {
+            throw new BadRequestException(
+              `Số VIN bị trùng trong danh sách: ${vin}`,
+            );
+          }
+          if (seenEngineNos.has(engineKey)) {
+            throw new BadRequestException(
+              `Số máy bị trùng trong danh sách: ${engineNo}`,
+            );
+          }
+          seenVins.add(vinKey);
+          seenEngineNos.add(engineKey);
+          identifier.vin = vin;
+          identifier.engineNo = engineNo;
+        });
+
+        const existingVehicles = await vehicleRepo
+          .createQueryBuilder('vehicle')
+          .select(['vehicle.vin AS vin', 'vehicle.engineNo AS "engineNo"'])
+          .where('UPPER(vehicle.vin) IN (:...vinKeys)', {
+            vinKeys: Array.from(seenVins),
+          })
+          .orWhere('UPPER(vehicle.engineNo) IN (:...engineKeys)', {
+            engineKeys: Array.from(seenEngineNos),
+          })
+          .getRawMany<{ vin: string | null; engineNo: string | null }>();
+
+        const duplicatedVin = existingVehicles.find(
+          (row) => row.vin && seenVins.has(row.vin.toUpperCase()),
+        )?.vin;
+        if (duplicatedVin) {
+          throw new BadRequestException(`Số VIN đã tồn tại: ${duplicatedVin}`);
+        }
+
+        const duplicatedEngineNo = existingVehicles.find(
+          (row) =>
+            row.engineNo && seenEngineNos.has(row.engineNo.toUpperCase()),
+        )?.engineNo;
+        if (duplicatedEngineNo) {
+          throw new BadRequestException(
+            `Số máy đã tồn tại: ${duplicatedEngineNo}`,
+          );
+        }
+      }
+      if (trackingPolicy === 'SERIAL') {
+        identifiers.forEach((identifier, index) => {
+          if (!identifier.serialNo) {
+            throw new BadRequestException(
+              `Thiếu serial number tại mã định danh ${index + 1}`,
+            );
+          }
+        });
+      }
+      if (trackingPolicy === 'LOT') {
+        identifiers.forEach((identifier, index) => {
+          if (!identifier.lotNo) {
+            throw new BadRequestException(
+              `Thiếu lot number tại mã định danh ${index + 1}`,
+            );
+          }
+        });
+      }
       const today = new Date();
       const ym = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
       const grPrefix = `NK-${ym}`;
@@ -1253,7 +1383,7 @@ export class ProductionCoreService {
       )) as unknown as ErpGoodsReceipt;
 
       const unitCost = Number(dto.unitCost ?? 0);
-      await grLineRepo.save(
+      const savedGrLine = (await grLineRepo.save(
         grLineRepo.create({
           goodsReceiptId: gr.id,
           lineNo: 1,
@@ -1263,12 +1393,56 @@ export class ProductionCoreService {
           amount: (qtyFinished * unitCost).toFixed(3),
           purchaseOrderLineId: null,
         } as any),
-      );
+      )) as unknown as ErpGoodsReceiptLine;
+
+      if (trackingPolicy === 'VEHICLE') {
+        for (const identifier of identifiers) {
+          const vehicle = (await vehicleRepo.save(
+            vehicleRepo.create({
+              vin: identifier.vin,
+              frameNo: identifier.vin,
+              engineNo: identifier.engineNo,
+              finishedGoodItemId: order.finishedGoodItemId,
+              productionOrderId: order.id,
+              assemblyDate: receiptDate,
+              status: 'ASSEMBLED',
+              notes: identifier.notes ?? null,
+            } as any),
+          )) as unknown as ErpVehicle;
+
+          await serialRepo.save(
+            serialRepo.create({
+              itemId: order.finishedGoodItemId,
+              serialNo: identifier.engineNo,
+              status: 'IN_STOCK',
+              vinId: vehicle.id,
+              receiptLineId: savedGrLine.id,
+              productionOrderId: order.id,
+              salesOrderLineId: null,
+              goodsIssueLineId: null,
+            } as any),
+          );
+        }
+      }
+
+      if (trackingPolicy === 'SERIAL') {
+        for (const identifier of identifiers) {
+          await serialRepo.save(
+            serialRepo.create({
+              itemId: order.finishedGoodItemId,
+              serialNo: identifier.serialNo,
+              status: 'IN_STOCK',
+              vinId: null,
+              receiptLineId: savedGrLine.id,
+              productionOrderId: order.id,
+              salesOrderLineId: null,
+              goodsIssueLineId: null,
+            } as any),
+          );
+        }
+      }
 
       // Inventory balance update for finished good
-      const finishedGoodItem = await itemRepo.findOne({
-        where: { id: order.finishedGoodItemId },
-      });
       const balanceWhere: any = {
         itemId: order.finishedGoodItemId,
         ...(warehouseCode ? { warehouseCode } : {}),

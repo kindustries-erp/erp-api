@@ -24,6 +24,8 @@ import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
+import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
+import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -83,10 +85,22 @@ export class InventoryItemsController {
     return this.service.listItemTypes(query);
   }
 
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('tracking-categories')
+  listTrackingCategories(@Query() query: InventoryMasterQueryDto) {
+    return this.service.listTrackingCategories(query);
+  }
+
   @RequirePermissions({ resource: 'inventory_items', action: 'create' })
   @Post('item-types')
   createItemType(@Body() dto: CreateItemTypeDto) {
     return this.service.createItemType(dto);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'create' })
+  @Post('tracking-categories')
+  createTrackingCategory(@Body() dto: CreateTrackingCategoryDto) {
+    return this.service.createTrackingCategory(dto);
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'update' })
@@ -98,10 +112,25 @@ export class InventoryItemsController {
     return this.service.updateItemType(id, dto);
   }
 
+  @RequirePermissions({ resource: 'inventory_items', action: 'update' })
+  @Patch('tracking-categories/:id')
+  updateTrackingCategory(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateTrackingCategoryDto,
+  ) {
+    return this.service.updateTrackingCategory(id, dto);
+  }
+
   @RequirePermissions({ resource: 'inventory_items', action: 'delete' })
   @Delete('item-types/:id')
   removeItemType(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.softDeleteItemType(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'delete' })
+  @Delete('tracking-categories/:id')
+  removeTrackingCategory(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.softDeleteTrackingCategory(id);
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
