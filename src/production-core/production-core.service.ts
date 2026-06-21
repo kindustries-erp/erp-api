@@ -385,7 +385,7 @@ export class ProductionCoreService {
       );
       if (item.length > 0) {
         finishedGoodItemCode = item[0].sku;
-        finishedGoodItemName = `${item[0].sku} — ${item[0].item_name}`;
+        finishedGoodItemName = item[0].item_name;
       }
     }
 
@@ -442,14 +442,13 @@ export class ProductionCoreService {
           if (mat.itemId && itemMap.has(mat.itemId)) {
             const item = itemMap.get(mat.itemId) as any;
             (mat as any).itemCode = item.sku;
-            (mat as any).itemName = `${item.sku} — ${item.item_name}`;
+            (mat as any).itemName = item.item_name;
           }
 
           if (originalItemId && itemMap.has(originalItemId)) {
             const originalItem = itemMap.get(originalItemId) as any;
             (mat as any).originalItemCode = originalItem.sku;
-            (mat as any).originalItemName =
-              `${originalItem.sku} — ${originalItem.item_name}`;
+            (mat as any).originalItemName = originalItem.item_name;
           }
         }
       }
@@ -606,9 +605,22 @@ export class ProductionCoreService {
       }
 
       if (existing.status !== 'DRAFT') {
-        throw new BadRequestException(
-          'Chỉ được cập nhật MO ở trạng thái DRAFT',
-        );
+        // ALLOW updating outputMetadata and planned dates for non-draft orders
+        existing.plannedStartDate =
+          dto.plannedStartDate ?? existing.plannedStartDate;
+        existing.plannedEndDate = dto.plannedEndDate ?? existing.plannedEndDate;
+        existing.outputMetadata = {
+          ...(existing.outputMetadata ?? {}),
+          ...(dto.outputMetadata ?? {}),
+        } as any;
+
+        const savedOrder = await productionRepo.save(existing);
+
+        // return early without modifying materials
+        return {
+          message: 'Cập nhật lệnh sản xuất thành công',
+          data: savedOrder,
+        };
       }
 
       const qtyToProduce = Number(dto.qtyToProduce || 0);
