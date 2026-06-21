@@ -55,6 +55,14 @@ export class ExecuteProductionDto {
 
   @ApiPropertyOptional({
     description:
+      'Optional BOM id to use. If omitted, defaults to the latest ACTIVE BOM for the finished good.',
+  })
+  @IsOptional()
+  @IsUUID()
+  bomId?: string;
+
+  @ApiPropertyOptional({
+    description:
       'Per-line material overrides: replace originalItemId with alternativeItemId. Used when user selects an alternative NVL during MO creation.',
     type: 'array',
     items: {

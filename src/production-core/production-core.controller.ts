@@ -40,6 +40,13 @@ export class ProductionCoreController {
     return this.service.execute(dto);
   }
 
+  /** Must be declared before orders/:id to avoid NestJS routing ambiguity */
+  @RequirePermissions({ resource: 'production', action: 'read' })
+  @Get('orders/next-reference-no')
+  getNextReferenceNo() {
+    return this.service.generateProductionReferenceNo();
+  }
+
   @RequirePermissions({ resource: 'production', action: 'read' })
   @Get('orders/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {

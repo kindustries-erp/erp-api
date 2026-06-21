@@ -47,7 +47,7 @@ export class ProductionCoreService {
     return fallbackId ?? 'N/A';
   }
 
-  private async generateProductionReferenceNo() {
+  async generateProductionReferenceNo() {
     const now = new Date();
     const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -161,13 +161,25 @@ export class ProductionCoreService {
       const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
       const itemRepo = manager.getRepository(ErpInventoryItem);
 
-      const rootBom = await bomRepo.findOne({
-        where: { finishedGoodItemId: dto.finishedGoodItemId, status: 'ACTIVE' },
-        order: { createdAt: 'DESC' },
-      });
+      const rootBom = dto.bomId
+        ? await bomRepo.findOne({
+            where: {
+              id: dto.bomId,
+              finishedGoodItemId: dto.finishedGoodItemId,
+            },
+          })
+        : await bomRepo.findOne({
+            where: {
+              finishedGoodItemId: dto.finishedGoodItemId,
+              status: 'ACTIVE',
+            },
+            order: { createdAt: 'DESC' },
+          });
       if (!rootBom) {
         throw new BadRequestException(
-          'Không tìm thấy BOM ACTIVE cho thành phẩm cần sản xuất',
+          dto.bomId
+            ? 'Không tìm thấy BOM theo id đã chọn cho thành phẩm này'
+            : 'Không tìm thấy BOM ACTIVE cho thành phẩm cần sản xuất',
         );
       }
 
@@ -290,6 +302,7 @@ export class ProductionCoreService {
         outputMetadata: {
           ...(dto.outputMetadata ?? {}),
           materialOverrides: dto.materialOverrides ?? [],
+          bomId: rootBom.id,
         },
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
