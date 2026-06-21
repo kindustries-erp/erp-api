@@ -92,12 +92,14 @@ jobs:
           sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
+            "HOST_PORT=\$(grep -E '^HOST_PORT=' /home/dev/opt/stacks/erp/erp-api-klotus-master/.env | cut -d '=' -f2 | tr -d '\r' | tr -d ' ' || true) ; \
+             if [ -z \"\$HOST_PORT\" ]; then HOST_PORT=10012; fi ; \
+             echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
              docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
              docker rm -f erp-api-klotus-master || true ; \
              docker rm -f liouni-erp-core-api-klotus || true ; \
-             docker ps -q --filter publish=10022 | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-klotus-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-klotus-master/.env -e PORT=3000 -p 10022:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+             docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
+             docker run -d --name erp-api-klotus-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-klotus-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         env:
@@ -107,8 +109,10 @@ jobs:
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             '
+              HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-klotus-master/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
+              if [ -z "$HOST_PORT" ]; then HOST_PORT=10012; fi
               for i in $(seq 1 20); do
-                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10022/api/v1/auth/profile || true)
+                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$HOST_PORT/api/v1/auth/profile || true)
                 if [ "$code" = "401" ] || [ "$code" = "200" ]; then
                   echo "✅ API health OK"
                   docker image prune -af

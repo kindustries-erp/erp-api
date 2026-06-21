@@ -37,9 +37,7 @@ import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.mod
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const databaseUrl = configService.get<string>(
-          'ERP_MASTER_DATABASE_URL',
-        );
+        const databaseUrl = configService.get<string>('DATABASE_URL');
         if (databaseUrl) {
           return {
             type: 'postgres' as const,
