@@ -68,6 +68,7 @@ export class ExecuteProductionDto {
     items: {
       type: 'object',
       properties: {
+        path: { type: 'string' },
         originalItemId: { type: 'string', format: 'uuid' },
         alternativeItemId: { type: 'string', format: 'uuid' },
         notes: { type: 'string' },
@@ -76,6 +77,7 @@ export class ExecuteProductionDto {
   })
   @IsOptional()
   materialOverrides?: Array<{
+    path?: string;
     originalItemId: string;
     alternativeItemId: string;
     notes?: string;
