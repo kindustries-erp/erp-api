@@ -37,6 +37,15 @@ export class ErpInventorySerial {
   @Column({ type: 'uuid', name: 'goods_issue_line_id', nullable: true })
   goodsIssueLineId: string | null;
 
+  @Column({ type: 'uuid', name: 'production_order_id', nullable: true })
+  productionOrderId: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'lot_no', nullable: true })
+  lotNo: string | null;
+
+  @Column({ type: 'text', name: 'notes', nullable: true })
+  notes: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

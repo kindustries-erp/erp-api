@@ -19,6 +19,9 @@ export class ErpGoodsReceipt {
   @Column({ type: 'uuid', name: 'purchase_order_id', nullable: true })
   purchaseOrderId: string | null;
 
+  @Column({ type: 'uuid', name: 'production_order_id', nullable: true })
+  productionOrderId: string | null;
+
   @Column({ type: 'uuid', name: 'supplier_id', nullable: true })
   supplierId: string | null;
 

@@ -10,6 +10,11 @@ export class CreateGoodsIssueLineDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
+  productionOrderMaterialId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
   itemId?: string;
 
   @ApiPropertyOptional()

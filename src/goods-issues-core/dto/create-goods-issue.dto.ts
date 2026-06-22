@@ -11,9 +11,10 @@ import {
 import { CreateGoodsIssueLineDto } from './create-goods-issue-line.dto';
 
 export class CreateGoodsIssueDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  issueNo: string;
+  issueNo?: string;
 
   @ApiProperty()
   @IsDateString()
@@ -27,6 +28,16 @@ export class CreateGoodsIssueDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  salesOrderId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  productionOrderId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

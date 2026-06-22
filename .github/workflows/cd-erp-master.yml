@@ -1,13 +1,13 @@
-name: Build & Deploy API (K-Lotus)
+name: Build & Deploy API
 
 on:
   push:
     branches:
-      - erp-klotus-master
+      - erp-master
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-master
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-master
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
@@ -79,12 +79,12 @@ jobs:
           sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "mkdir -p /home/dev/opt/stacks/erp/erp-api-klotus-master && cat > /home/dev/opt/stacks/erp/erp-api-klotus-master/.env" \
-            <<< "${{ secrets.KLOTUS_MASTER_API_ENV }}
-          R2_ACCOUNT_ID=${{ secrets.KLOTUS_R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID=${{ secrets.KLOTUS_R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY=${{ secrets.KLOTUS_R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME=${{ secrets.KLOTUS_R2_BUCKET_NAME }}"
+            "mkdir -p /home/dev/opt/stacks/erp/erp-api-master && cat > /home/dev/opt/stacks/erp/erp-api-master/.env" \
+            <<< "${{ secrets.MASTER_API_ENV }}
+          R2_ACCOUNT_ID=${{ secrets.MASTER_R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID=${{ secrets.MASTER_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
 
       - name: Run deploy script
         env:
@@ -93,14 +93,14 @@ jobs:
           sshpass -e ssh -o StrictHostKeyChecking=no \
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "HOST_PORT=\$(grep -E '^HOST_PORT=' /home/dev/opt/stacks/erp/erp-api-klotus-master/.env | cut -d '=' -f2 | tr -d '\r' | tr -d ' ' || true) ; \
-             if [ -z \"\$HOST_PORT\" ]; then HOST_PORT=10012; fi ; \
+            "HOST_PORT=\$(grep -E '^HOST_PORT=' /home/dev/opt/stacks/erp/erp-api-master/.env | cut -d '=' -f2 | tr -d '\r' | tr -d ' ' || true) ; \
+             if [ -z \"\$HOST_PORT\" ]; then HOST_PORT=10010; fi ; \
              echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
              docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
-             docker rm -f erp-api-klotus-master || true ; \
-             docker rm -f liouni-erp-core-api-klotus || true ; \
+             docker rm -f erp-api-master || true ; \
+             docker rm -f liouni-erp-core-api || true ; \
              docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-klotus-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-klotus-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+             docker run -d --name erp-api-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         env:
@@ -110,8 +110,8 @@ jobs:
             -p ${{ vars.HEAD_PORT }} \
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             '
-              HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-klotus-master/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
-              if [ -z "$HOST_PORT" ]; then HOST_PORT=10012; fi
+              HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-master/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
+              if [ -z "$HOST_PORT" ]; then HOST_PORT=10010; fi
               for i in $(seq 1 20); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$HOST_PORT/api/v1/auth/profile || true)
                 if [ "$code" = "401" ] || [ "$code" = "200" ]; then

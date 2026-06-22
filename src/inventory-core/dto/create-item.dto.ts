@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @ApiProperty()
@@ -27,4 +27,15 @@ export class CreateInventoryItemDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ enum: ['NONE', 'SERIAL', 'LOT', 'VEHICLE', 'CUSTOM'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['NONE', 'SERIAL', 'LOT', 'VEHICLE', 'CUSTOM'])
+  trackingPolicy?: 'NONE' | 'SERIAL' | 'LOT' | 'VEHICLE' | 'CUSTOM';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  trackingCategoryKey?: string;
 }

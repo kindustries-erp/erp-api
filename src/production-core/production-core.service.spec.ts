@@ -26,6 +26,10 @@ describe('ProductionCoreService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
   };
 
@@ -135,7 +139,11 @@ describe('ProductionCoreService', () => {
         ErpProductionOrder: productionRepo,
         ErpProductionOrderMaterial: materialRepo,
         ErpInventoryItem: {
-          find: jest.fn().mockResolvedValue([]),
+          find: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 'rm-a', sku: 'RM-A', itemName: 'Thép tấm A' },
+            ]),
           findOne: jest.fn().mockResolvedValue(null),
         },
       }),
@@ -147,6 +155,6 @@ describe('ProductionCoreService', () => {
         qtyToProduce: '3.000',
         warehouseCode: 'WH-1',
       }),
-    ).rejects.toThrow('Không tìm thấy tồn kho cho NVL rm-a');
+    ).rejects.toThrow('Không tìm thấy tồn kho cho NVL RM-A — Thép tấm A');
   });
 });
