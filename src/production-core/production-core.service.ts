@@ -93,41 +93,66 @@ export class ProductionCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const order = resolveSortOrder(query.sort, {
-      allowedFields: ['createdAt', 'referenceNo', 'status', 'plannedStartDate'],
+      allowedFields: [
+        'createdAt',
+        'referenceNo',
+        'status',
+        'plannedStartDate',
+        'plannedEndDate',
+        'finishedGoodItemName',
+        'qtyProduced',
+      ],
       columnMap: {
         created_at: 'createdAt',
         reference_no: 'referenceNo',
         planned_start_date: 'plannedStartDate',
+        planned_end_date: 'plannedEndDate',
+        finished_good_item_name: 'finishedGoodItemName',
+        qty_produced: 'qtyProduced',
       },
       defaultOrder: { createdAt: 'DESC' },
     });
 
-    const whereCondition: any = { isDeleted: false };
+    const qb = this.productionOrderRepository
+      .createQueryBuilder('po')
+      .leftJoin(ErpInventoryItem, 'item', 'item.id = po.finishedGoodItemId')
+      .where('po.isDeleted = :isDeleted', { isDeleted: false });
+
     if (query.search) {
-      whereCondition.referenceNo = ILike(`%${query.search}%`);
+      qb.andWhere('po.referenceNo ILIKE :search', {
+        search: `%${query.search}%`,
+      });
     }
     if (query.status) {
-      whereCondition.status = query.status;
+      qb.andWhere('po.status = :status', { status: query.status });
     }
     if (query.finishedGoodItemId) {
-      whereCondition.finishedGoodItemId = query.finishedGoodItemId;
+      qb.andWhere('po.finishedGoodItemId = :fgId', {
+        fgId: query.finishedGoodItemId,
+      });
     }
-    if (query.dateFrom || query.dateTo) {
-      if (query.dateFrom && query.dateTo) {
-        whereCondition.plannedStartDate = Between(query.dateFrom, query.dateTo);
-      } else if (query.dateFrom) {
-        whereCondition.plannedStartDate = MoreThanOrEqual(query.dateFrom);
+    if (query.dateFrom && query.dateTo) {
+      qb.andWhere('po.plannedStartDate BETWEEN :from AND :to', {
+        from: query.dateFrom,
+        to: query.dateTo,
+      });
+    } else if (query.dateFrom) {
+      qb.andWhere('po.plannedStartDate >= :from', { from: query.dateFrom });
+    } else if (query.dateTo) {
+      qb.andWhere('po.plannedStartDate <= :to', { to: query.dateTo });
+    }
+
+    for (const [key, dir] of Object.entries(order)) {
+      if (key === 'finishedGoodItemName') {
+        qb.addOrderBy('item.itemName', dir);
       } else {
-        whereCondition.plannedStartDate = LessThanOrEqual(query.dateTo);
+        qb.addOrderBy(`po.${key}`, dir);
       }
     }
 
-    const [items, total] = await this.productionOrderRepository.findAndCount({
-      where: whereCondition,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order,
-    });
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [items, total] = await qb.getManyAndCount();
 
     const finishedGoodIds = Array.from(
       new Set(items.map((item) => item.finishedGoodItemId).filter(Boolean)),

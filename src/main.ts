@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -9,6 +10,9 @@ async function bootstrap() {
 
   // Global prefix: tất cả route sẽ có dạng /api/v1/...
   app.setGlobalPrefix('api/v1');
+
+  // Cấu hình Global Exception Filter để bắt chi tiết lỗi 500 (VD: TypeORM crashes)
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Kích hoạt CORS (điều chỉnh origin cho production)
   app.enableCors();
