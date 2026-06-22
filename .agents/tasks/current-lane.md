@@ -21,18 +21,14 @@
 - `docs/tasks/update-production-api-notes-names.md` ← DONE (per source)
 - `docs/tasks/20260620-erp-production-start-complete-auto-warehouse.md` ← DONE (a9e4707)
 
-## Recent commits after last reconcile (2026-06-22, post 40dcf62)
-- `1806a1d` — feat: production server-side sorting for all fields + joined item name + progress
-- `a702977` — fix: simplify progress sorting to fix TypeORM parsing error
-- `0e9aae8` — chore: global exception filter to expose 500 error details
-- `e06188e` — refactor: migrate file storage from directus to r2 and neon db (company profile, r2, sys-file, migrations)
-- Related closure task: `docs/tasks/20260622-143500-production-sorting-debug-artifact-cleanup.md`
+## Recent closed artifacts (2026-06-22 afternoon)
+- `docs/tasks/20260622-r2-company-profile-sys-file-migration.md` ← DONE (`e06188e`)
+- `docs/tasks/20260622-143500-production-sorting-debug-artifact-cleanup.md` ← DONE (`52711c9`; lineage includes `1806a1d`, `a702977`, `0e9aae8`)
 
-## Current checkpoint gap (2026-06-22 afternoon)
-- Production sorting fix landed + company profile / R2 storage migration landed (e06188e).
-- Tracked debug artifacts `error.txt` + `test-sort.ts` (from a702977) have been removed via `git rm` — pending commit in this lane.
-- No task artifact yet for: company-profile + R2 + sys-file feature (e06188e). This is the next closure gap.
+## Current checkpoint gap (2026-06-22 evening)
+- API lane closure artifacts are now reconciled with recent pushed commits through `52711c9`.
 - Pending staging QC: full-flow MO → tracking-policy → complete + GR must be verified on staging after CI deploy.
+- No open API code hygiene blocker visible from current worktree.
 
 ## Current lane lessons
 
