@@ -14,7 +14,7 @@ import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
-import { DirectusAuthGuard } from '../auth/guards/directus-auth.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserToken } from '../common/decorators/user-token.decorator';
 
 @ApiTags('Files')
@@ -29,7 +29,7 @@ export class FilesController {
   }
 
   @Post('upload')
-  @UseGuards(DirectusAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -50,6 +50,12 @@ export class FilesController {
     return this.filesService.upload(file, token);
   }
 
+  @Get(':id/metadata')
+  async getFileMetadata(@Param('id') id: string) {
+    const meta = await this.filesService.getFileMeta(id);
+    return { data: meta };
+  }
+
   @Get(':id')
   async getFile(
     @Param('id') id: string,
@@ -62,11 +68,6 @@ export class FilesController {
     if (contentType) res.setHeader('Content-Type', contentType);
     if (contentLength) res.setHeader('Content-Length', contentLength);
 
-    // Convert Web ReadableStream to Node Readable if necessary
-    if (stream && (stream as any).getReader) {
-      Readable.fromWeb(stream as any).pipe(res);
-    } else {
-      (stream as any).pipe(res);
-    }
+    (stream as any).pipe(res);
   }
 }

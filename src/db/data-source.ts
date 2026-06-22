@@ -25,6 +25,8 @@ import { ErpProductionOrder } from '../production-core/entities/erp_production_o
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
+import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
+import { SysFile } from '../files/entities/sys-file.entity';
 
 const entities = [
   CoreUser,
@@ -52,6 +54,8 @@ const entities = [
   ErpProductionOrderMaterial,
   ErpInvoice,
   ErpInvoiceItem,
+  CompanyProfile,
+  SysFile,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

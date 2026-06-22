@@ -34,17 +34,19 @@ export class DirectusAuthGuard implements CanActivate {
     }
 
     // Thử verify như impersonation token trước
-    const impersonationSecret = this.config.getOrThrow<string>(
+    const impersonationSecret = this.config.get<string>(
       'JWT_IMPERSONATION_SECRET',
     );
     let impersonationPayload: any = null;
-    try {
-      const payload = jwt.verify(token, impersonationSecret) as any;
-      if (payload?.type === 'impersonation') {
-        impersonationPayload = payload;
+    if (impersonationSecret) {
+      try {
+        const payload = jwt.verify(token, impersonationSecret) as any;
+        if (payload?.type === 'impersonation') {
+          impersonationPayload = payload;
+        }
+      } catch {
+        // Không phải impersonation token → tiếp tục flow Directus bình thường
       }
-    } catch {
-      // Không phải impersonation token → tiếp tục flow Directus bình thường
     }
 
     if (impersonationPayload) {
