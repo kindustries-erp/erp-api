@@ -100,7 +100,7 @@ export class ProductionCoreService {
         'plannedStartDate',
         'plannedEndDate',
         'finishedGoodItemName',
-        'progress',
+        'qtyProduced',
       ],
       columnMap: {
         created_at: 'createdAt',
@@ -108,7 +108,7 @@ export class ProductionCoreService {
         planned_start_date: 'plannedStartDate',
         planned_end_date: 'plannedEndDate',
         finished_good_item_name: 'finishedGoodItemName',
-        qty_produced: 'progress',
+        qty_produced: 'qtyProduced',
       },
       defaultOrder: { createdAt: 'DESC' },
     });
@@ -145,8 +145,6 @@ export class ProductionCoreService {
     for (const [key, dir] of Object.entries(order)) {
       if (key === 'finishedGoodItemName') {
         qb.addOrderBy('item.itemName', dir);
-      } else if (key === 'progress') {
-        qb.addOrderBy('(po.qtyProduced / NULLIF(po.qtyToProduce, 0))', dir);
       } else {
         qb.addOrderBy(`po.${key}`, dir);
       }
