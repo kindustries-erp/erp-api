@@ -304,16 +304,11 @@ export class ProductionCoreService {
         string,
         { alternativeItemId: string; notes?: string }
       >();
-      const materials = Array.from(exploded.values());
-      if (materials.length === 0) {
-        throw new BadRequestException(
-          'BOM không có định mức nguyên vật liệu khả dụng để xuất',
-        );
-      }
       if (dto.materialOverrides?.length) {
         for (const ov of dto.materialOverrides) {
-          if (ov.originalItemId && ov.alternativeItemId) {
-            overrideMap.set(ov.originalItemId, {
+          const key = ov.path || ov.originalItemId;
+          if (key && ov.alternativeItemId) {
+            overrideMap.set(key, {
               alternativeItemId: ov.alternativeItemId,
               notes: ov.notes,
             });
@@ -331,21 +326,36 @@ export class ProductionCoreService {
           alternativeNotes?: string;
         }
       >();
-      for (const mat of materials) {
-        const override = overrideMap.get(mat.itemId);
-        const effectiveItemId = override
-          ? override.alternativeItemId
-          : mat.itemId;
-        const existing = effectiveMaterials.get(effectiveItemId);
-        effectiveMaterials.set(effectiveItemId, {
-          itemId: effectiveItemId,
-          qtyRequired: (existing?.qtyRequired ?? 0) + mat.qtyRequired,
-          originalItemId: override ? mat.itemId : undefined,
-          alternativeNotes: override?.notes,
-        });
-      }
+
+      const traverseTreeAndApplyOverrides = (nodes: any[]) => {
+        for (const node of nodes) {
+          if (node.isLeaf) {
+            const override =
+              overrideMap.get(node.path) || overrideMap.get(node.itemId);
+            const effectiveItemId = override
+              ? override.alternativeItemId
+              : node.itemId;
+            const existing = effectiveMaterials.get(effectiveItemId);
+            effectiveMaterials.set(effectiveItemId, {
+              itemId: effectiveItemId,
+              qtyRequired: (existing?.qtyRequired ?? 0) + node.qtyRequired,
+              originalItemId: override ? node.itemId : undefined,
+              alternativeNotes: override?.notes,
+            });
+          }
+          if (node.children) {
+            traverseTreeAndApplyOverrides(node.children);
+          }
+        }
+      };
+      traverseTreeAndApplyOverrides(explosionTree);
 
       const finalMaterials = Array.from(effectiveMaterials.values());
+      if (finalMaterials.length === 0) {
+        throw new BadRequestException(
+          'BOM không có định mức nguyên vật liệu khả dụng để xuất',
+        );
+      }
 
       const materialItemIds = Array.from(
         new Set(
@@ -636,6 +646,7 @@ export class ProductionCoreService {
     treeNodes: any[],
     rootFinishedGoodId?: string | null,
     stack: string[] = [],
+    pathPrefix: string = 'root',
   ) {
     if (stack.includes(bomId)) {
       throw new BadRequestException(
@@ -669,6 +680,7 @@ export class ProductionCoreService {
       const grossQty = baseQty * factor * (1 + scrapRate / 100);
       if (grossQty <= 0) continue;
 
+      const currentPath = `${pathPrefix}/${line.id}`;
       const childBom = childBomMap.get(line.componentItemId);
 
       if (childBom) {
@@ -687,8 +699,10 @@ export class ProductionCoreService {
           childTreeNodes,
           rootFinishedGoodId,
           nextStack,
+          currentPath,
         );
         treeNodes.push({
+          path: currentPath,
           itemId: line.componentItemId,
           qtyRequired: grossQty,
           isLeaf: false,
@@ -703,6 +717,7 @@ export class ProductionCoreService {
         qtyRequired: (current?.qtyRequired || 0) + grossQty,
       });
       treeNodes.push({
+        path: currentPath,
         itemId: line.componentItemId,
         qtyRequired: grossQty,
         isLeaf: true,
