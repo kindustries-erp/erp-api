@@ -9,7 +9,7 @@ import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
-import { R2Service } from './r2/r2.service';
+import { R2Service } from '../r2/r2.service';
 import {
   parseVietnamInvoiceXml,
   XmlParseError,

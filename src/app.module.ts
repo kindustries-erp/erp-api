@@ -30,6 +30,8 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
+import { CompanyProfileModule } from './company-profile/company-profile.module';
+import { FilesModule } from './files/files.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -91,6 +93,8 @@ import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.mod
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,
+    CompanyProfileModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [
