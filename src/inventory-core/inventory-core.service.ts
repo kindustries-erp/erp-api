@@ -461,6 +461,88 @@ export class InventoryItemsService {
     };
   }
 
+  async getItemConnections(id: string) {
+    const item = await this.repository.findOneByOrFail({ id });
+
+    // Goods Receipts (limit 10)
+    const grs = await this.dataSource.query(
+      `
+      SELECT g.id, g.receipt_no as "receiptNo", g.receipt_date as "receiptDate", g.status, SUM(l.qty_received) as qty
+      FROM public.erp_goods_receipts g
+      JOIN public.erp_goods_receipt_lines l ON g.id = l.goods_receipt_id
+      WHERE l.item_id = $1 AND g.is_deleted = false
+      GROUP BY g.id, g.receipt_no, g.receipt_date, g.status
+      ORDER BY g.receipt_date DESC, g.id DESC
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // Goods Issues (limit 10)
+    const gis = await this.dataSource.query(
+      `
+      SELECT g.id, g.issue_no as "issueNo", g.issue_date as "issueDate", g.status, SUM(l.qty_issued) as qty
+      FROM public.erp_goods_issues g
+      JOIN public.erp_goods_issue_lines l ON g.id = l.goods_issue_id
+      WHERE l.item_id = $1 AND g.is_deleted = false
+      GROUP BY g.id, g.issue_no, g.issue_date, g.status
+      ORDER BY g.issue_date DESC, g.id DESC
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // Production Orders (limit 10)
+    const pos = await this.dataSource.query(
+      `
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty
+      FROM public.erp_production_orders p
+      WHERE p.finished_good_item_id = $1 AND p.is_deleted = false
+      UNION
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty
+      FROM public.erp_production_orders p
+      JOIN public.erp_production_order_materials m ON p.id = m.production_order_id
+      WHERE m.item_id = $1 AND p.is_deleted = false
+      GROUP BY p.id, p.reference_no, p.planned_start_date, p.status
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // BOMs (limit 10)
+    const boms = await this.dataSource.query(
+      `
+      SELECT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'FG' as role
+      FROM public.erp_boms b
+      WHERE b.finished_good_item_id = $1 AND b.is_deleted = false
+      UNION
+      SELECT DISTINCT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'COMPONENT' as role
+      FROM public.erp_boms b
+      JOIN public.erp_bom_lines l ON b.id = l.bom_id
+      WHERE l.component_item_id = $1 AND b.is_deleted = false
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    return {
+      message: 'Liên kết kho',
+      data: {
+        item: {
+          id: item.id,
+          sku: item.sku,
+          itemName: item.itemName,
+          uom: item.uom,
+          itemType: item.itemType,
+        },
+        goodsReceipts: grs,
+        goodsIssues: gis,
+        productionOrders: pos,
+        boms: boms,
+      },
+    };
+  }
+
   async listWarehouseVouchers(query: WarehouseVoucherQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;

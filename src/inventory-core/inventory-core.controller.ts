@@ -141,6 +141,12 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('items/:id/connections')
+  getConnections(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getItemConnections(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
