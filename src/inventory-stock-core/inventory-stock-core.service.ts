@@ -23,83 +23,91 @@ export class InventoryStockCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    // Build item filter to restrict balance lookup
-    let filteredItemIds: string[] | null = null;
-    if (query.item_type || query.search) {
-      const whereConditions: any[] = [];
-      if (query.item_type && query.search) {
-        whereConditions.push(
-          { itemType: query.item_type, sku: Like(`%${query.search}%`) },
-          { itemType: query.item_type, itemName: Like(`%${query.search}%`) },
-        );
-      } else if (query.item_type) {
-        whereConditions.push({ itemType: query.item_type });
-      } else if (query.search) {
-        whereConditions.push(
-          { sku: Like(`%${query.search}%`) },
-          { itemName: Like(`%${query.search}%`) },
-        );
-      }
-      const matchedItems = await this.itemRepository.find({
-        where: whereConditions,
-      });
-      filteredItemIds = matchedItems.map((i) => i.id);
+    // Query itemRepository directly to include items with no stock
+    const whereConditions: any[] = [];
+    if (query.item_type && query.search) {
+      whereConditions.push(
+        { itemType: query.item_type, sku: Like(`%${query.search}%`) },
+        { itemType: query.item_type, itemName: Like(`%${query.search}%`) },
+      );
+    } else if (query.item_type) {
+      whereConditions.push({ itemType: query.item_type });
+    } else if (query.search) {
+      whereConditions.push(
+        { sku: Like(`%${query.search}%`) },
+        { itemName: Like(`%${query.search}%`) },
+      );
     }
 
-    // If filtered and no items match, return empty
-    if (filteredItemIds !== null && filteredItemIds.length === 0) {
+    const findOptions: any = {
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { createdAt: 'DESC' },
+    };
+
+    if (query.sort) {
+      const isDesc = query.sort.startsWith('-');
+      const field = isDesc ? query.sort.substring(1) : query.sort;
+      const order = isDesc ? 'DESC' : 'ASC';
+
+      let sortField = '';
+      if (field === 'item_code') sortField = 'sku';
+      else if (field === 'item_type') sortField = 'itemType';
+      else if (field === 'status') sortField = 'status';
+      else if (field === 'unit') sortField = 'uom';
+      else if (field === 'item') sortField = 'itemName';
+
+      if (sortField) {
+        findOptions.order = { [sortField]: order };
+      }
+    }
+    if (whereConditions.length > 0) {
+      findOptions.where = whereConditions;
+    }
+
+    const [items, total] = await this.itemRepository.findAndCount(findOptions);
+
+    if (items.length === 0) {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };
     }
 
-    const whereBalance: any =
-      filteredItemIds !== null ? { itemId: In(filteredItemIds) } : {};
+    const itemIds = items.map((i) => i.id);
 
-    const [balances, total] = await this.balanceRepository.findAndCount({
-      where: whereBalance,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { updatedAt: 'DESC' },
+    const balances = await this.balanceRepository.find({
+      where: { itemId: In(itemIds) },
     });
+    const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
-    const itemIds = [
-      ...new Set(balances.map((b) => b.itemId).filter(Boolean)),
-    ] as string[];
-    const items = itemIds.length
-      ? await this.itemRepository.findByIds(itemIds as any)
-      : [];
-    const itemMap = new Map(items.map((i) => [i.id, i]));
-
-    const transactionSums = itemIds.length
-      ? await this.transactionRepository
-          .createQueryBuilder('txn')
-          .select('txn.itemId', 'itemId')
-          .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
-          .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
-          .where('txn.itemId IN (:...itemIds)', { itemIds })
-          .groupBy('txn.itemId')
-          .getRawMany<{
-            itemId: string;
-            receivedQty: string;
-            issuedQty: string;
-          }>()
-      : [];
+    const transactionSums = await this.transactionRepository
+      .createQueryBuilder('txn')
+      .select('txn.itemId', 'itemId')
+      .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
+      .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
+      .where('txn.itemId IN (:...itemIds)', { itemIds })
+      .groupBy('txn.itemId')
+      .getRawMany<{
+        itemId: string;
+        receivedQty: string;
+        issuedQty: string;
+      }>();
     const txnMap = new Map(transactionSums.map((row) => [row.itemId, row]));
 
-    const rows = balances.map((b) => {
-      const item = b.itemId ? itemMap.get(b.itemId) : null;
-      const txn = b.itemId ? txnMap.get(b.itemId) : null;
+    const rows = items.map((item) => {
+      const b = balanceMap.get(item.id);
+      const txn = txnMap.get(item.id);
       return {
-        inventory_item_id: b.itemId,
+        inventory_item_id: item.id,
         branch_id: null,
-        item_code: item?.sku ?? '',
-        item_name: item?.itemName ?? '',
-        item_type: item?.itemType ?? '',
-        unit: item?.uom ?? '',
+        item_code: item.sku ?? '',
+        item_name: item.itemName ?? '',
+        item_type: item.itemType ?? '',
+        unit: item.uom ?? '',
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
-        on_hand_qty: Number(b.qtyOnHand || 0),
-        stock_value: Number(b.inventoryValue || 0),
-        last_transaction_date: b.updatedAt?.toISOString?.() ?? null,
+        on_hand_qty: Number(b?.qtyOnHand || 0),
+        stock_value: Number(b?.inventoryValue || 0),
+        last_transaction_date: b?.updatedAt?.toISOString?.() ?? null,
+        status: item.status,
       };
     });
 
