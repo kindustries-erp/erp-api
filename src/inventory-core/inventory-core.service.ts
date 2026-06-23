@@ -23,6 +23,8 @@ import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
+import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
+import { ErpInventorySerial } from './entities/erp_inventory_serial.entity';
 
 @Injectable()
 export class InventoryItemsService {
@@ -39,6 +41,8 @@ export class InventoryItemsService {
     private readonly itemTypeRepository: Repository<ErpItemType>,
     @InjectRepository(ErpTrackingCategory)
     private readonly trackingCategoryRepository: Repository<ErpTrackingCategory>,
+    @InjectRepository(ErpInventorySerial)
+    private readonly serialRepository: Repository<ErpInventorySerial>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -567,6 +571,93 @@ export class InventoryItemsService {
 
     const dataParams = [...params, pageSize, (page - 1) * pageSize];
     const items = await this.dataSource.query(dataQuery, dataParams);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async listSerials(query: InventorySerialQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const qb = this.serialRepository
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('erp_inventory_items', 'i', 's.item_id = i.id')
+      .leftJoinAndSelect('erp_vehicles', 'v', 's.vin_id = v.id');
+
+    if (query.itemId) {
+      qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
+    }
+
+    if (query.itemType) {
+      qb.andWhere('i.item_type = :itemType', { itemType: query.itemType });
+    } else {
+      // If no itemType is provided, we can either default to FG or return all.
+      // Based on user request, track ANY item that allows tracking, so no default filter needed here.
+    }
+
+    if (query.trackingPolicy) {
+      qb.andWhere('i.tracking_policy = :trackingPolicy', {
+        trackingPolicy: query.trackingPolicy,
+      });
+    } else {
+      // By default, we only want tracked instances, i.e., trackingPolicy is not 'NONE'
+      qb.andWhere('i.tracking_policy != :none', { none: 'NONE' });
+    }
+
+    if (query.search) {
+      qb.andWhere(
+        '(s.serial_no ILIKE :search OR i.item_name ILIKE :search OR i.sku ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
+    }
+
+    // sort
+    const validSortFields = ['created_at', 'serial_no'];
+    let sortColumn = 's.created_at';
+    let sortDirection: 'ASC' | 'DESC' = 'DESC';
+    if (query.sort && query.sort.length > 0) {
+      let sortField = query.sort[0];
+      if (sortField.startsWith('-')) {
+        sortDirection = 'DESC';
+        sortField = sortField.substring(1);
+      } else {
+        sortDirection = 'ASC';
+      }
+      if (sortField === 'serial_no') sortColumn = 's.serial_no';
+      if (sortField === 'created_at') sortColumn = 's.created_at';
+    }
+
+    qb.orderBy(sortColumn, sortDirection);
+    const [itemsRaw, total] = await Promise.all([
+      qb.getRawMany(),
+      qb.getCount(),
+    ]);
+    // Map raw results to standard format
+    const items = itemsRaw.map((raw) => ({
+      id: raw.s_id,
+      serialNo: raw.s_serial_no,
+      itemId: raw.s_item_id,
+      vinId: raw.s_vin_id,
+      vin: raw.v_vin,
+      engineNo: raw.v_engine_no,
+      lotId: raw.s_lot_id,
+      createdAt: raw.s_created_at,
+      updatedAt: raw.s_updated_at,
+      item: {
+        id: raw.i_id,
+        sku: raw.i_sku,
+        itemName: raw.i_item_name,
+        itemType: raw.i_item_type,
+        trackingPolicy: raw.i_tracking_policy,
+        trackingCategoryKey: raw.i_tracking_category_key,
+      },
+    }));
 
     return {
       items,
