@@ -22,6 +22,7 @@ import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
+import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
@@ -242,6 +243,98 @@ export class PurchaseOrdersCoreService {
     }
     return result;
   }
+  /**
+   * Return all documents connected to this Purchase Order:
+   * - Goods Receipts (erp_goods_receipts.purchase_order_id)
+   * - Payment Vouchers (document_payment_links)
+   * - Invoices (erp_invoices.purchase_order_id)
+   */
+  async getConnections(id: string) {
+    const po = await this.repository.findOneByOrFail({ id, isDeleted: false });
+
+    // Lấy tên nhà cung cấp (erp_purchase_orders không eager-load supplier)
+    let supplierName: string | null = null;
+    let supplierCode: string | null = null;
+    if (po.supplierId) {
+      const [row]: [{ name: string; code: string }?] =
+        await this.dataSource.query(
+          `SELECT name, code FROM public.erp_business_partners WHERE id = $1 LIMIT 1`,
+          [po.supplierId],
+        );
+      supplierName = row?.name ?? null;
+      supplierCode = row?.code ?? null;
+    }
+
+    // ─ GRs ─────────────────────────────────────────────────────
+    const grRepo = this.dataSource.getRepository(ErpGoodsReceipt);
+    const goodsReceipts = await grRepo.find({
+      where: { purchaseOrderId: id, isDeleted: false } as any,
+      order: { receiptDate: 'ASC' },
+      select: ['id', 'receiptNo', 'receiptDate', 'status'],
+    });
+
+    // ─ Payment links ───────────────────────────────────────
+    // TODO: Restore when document_payment_links table is confirmed to exist in
+    //       all environments. The query below joins document_payment_links with
+    //       payment_vouchers to get settled vouchers linked to this PO.
+    //
+    // const paymentLinks = await this.dataSource.query(
+    //   `SELECT
+    //      dpl.id               AS "linkId",
+    //      pv.id                AS "voucherId",
+    //      pv.voucher_no        AS "voucherNo",
+    //      dpl.applied_amount   AS "appliedAmount",
+    //      dpl.applied_date     AS "appliedDate",
+    //      pv.status            AS "voucherStatus"
+    //    FROM public.document_payment_links dpl
+    //    JOIN public.payment_vouchers pv ON pv.id = dpl.payment_voucher_id
+    //    WHERE dpl.document_type = 'purchase_orders'
+    //      AND dpl.document_id  = $1`,
+    //   [id],
+    // );
+    const paymentLinks: {
+      linkId: string;
+      voucherId: string;
+      voucherNo: string;
+      appliedAmount: number;
+      appliedDate: string | null;
+      voucherStatus: string;
+    }[] = [];
+
+    // ─ Invoices ───────────────────────────────────────────
+    const invoiceRepo = this.dataSource.getRepository(ErpInvoice);
+    const invoices = await invoiceRepo.find({
+      where: { purchaseOrderId: id, isDeleted: false } as any,
+      select: [
+        'id',
+        'invoiceNo',
+        'invoiceDate',
+        'totalAmount',
+        'status',
+        'direction',
+      ] as any,
+    });
+
+    return {
+      message: 'Lấy dữ liệu kết nối thành công',
+      data: {
+        purchaseOrder: {
+          id: po.id,
+          poNo: po.poNo,
+          orderDate: po.orderDate,
+          status: po.status,
+          paymentStatus: po.paymentStatus,
+          supplierId: po.supplierId,
+          supplierName: supplierName,
+          supplierCode: supplierCode,
+        },
+        goodsReceipts,
+        paymentLinks,
+        invoices,
+      },
+    };
+  }
+
   async update(id: string, dto: UpdatePurchaseOrderDto) {
     const existing = await this.repository.findOneByOrFail({
       id,

@@ -43,6 +43,11 @@ export class PurchaseOrdersCoreController {
     return this.service.getReceiptTimeline(id);
   }
 
+  @Get(':id/connections')
+  getConnections(@Param('id') id: string) {
+    return this.service.getConnections(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
