@@ -25,7 +25,7 @@ import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { ErpInventorySerial } from './entities/erp_inventory_serial.entity';
-
+import { GraphLayoutService } from '../common/services/graph-layout.service';
 @Injectable()
 export class InventoryItemsService {
   constructor(
@@ -44,6 +44,7 @@ export class InventoryItemsService {
     @InjectRepository(ErpInventorySerial)
     private readonly serialRepository: Repository<ErpInventorySerial>,
     private readonly dataSource: DataSource,
+    private readonly graphLayoutService: GraphLayoutService,
   ) {}
 
   private normalizeCode(value: string) {
@@ -467,11 +468,12 @@ export class InventoryItemsService {
     // Goods Receipts (limit 10)
     const grs = await this.dataSource.query(
       `
-      SELECT g.id, g.receipt_no as "receiptNo", g.receipt_date as "receiptDate", g.status, SUM(l.qty_received) as qty
+      SELECT g.id, g.receipt_no as "receiptNo", g.receipt_date as "receiptDate", g.status, SUM(l.qty_received) as qty,
+             g.production_order_id as "productionOrderId", g.purchase_order_id as "purchaseOrderId"
       FROM public.erp_goods_receipts g
       JOIN public.erp_goods_receipt_lines l ON g.id = l.goods_receipt_id
       WHERE l.item_id = $1 AND g.is_deleted = false
-      GROUP BY g.id, g.receipt_no, g.receipt_date, g.status
+      GROUP BY g.id, g.receipt_no, g.receipt_date, g.status, g.production_order_id, g.purchase_order_id
       ORDER BY g.receipt_date DESC, g.id DESC
       LIMIT 10
     `,
@@ -481,11 +483,12 @@ export class InventoryItemsService {
     // Goods Issues (limit 10)
     const gis = await this.dataSource.query(
       `
-      SELECT g.id, g.issue_no as "issueNo", g.issue_date as "issueDate", g.status, SUM(l.qty_issued) as qty
+      SELECT g.id, g.issue_no as "issueNo", g.issue_date as "issueDate", g.status, SUM(l.qty_issued) as qty,
+             g.production_order_id as "productionOrderId", g.sales_order_id as "salesOrderId"
       FROM public.erp_goods_issues g
       JOIN public.erp_goods_issue_lines l ON g.id = l.goods_issue_id
       WHERE l.item_id = $1 AND g.is_deleted = false
-      GROUP BY g.id, g.issue_no, g.issue_date, g.status
+      GROUP BY g.id, g.issue_no, g.issue_date, g.status, g.production_order_id, g.sales_order_id
       ORDER BY g.issue_date DESC, g.id DESC
       LIMIT 10
     `,
@@ -495,15 +498,15 @@ export class InventoryItemsService {
     // Production Orders (limit 10)
     const pos = await this.dataSource.query(
       `
-      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty, p.output_metadata->>'bomId' as "bomId"
       FROM public.erp_production_orders p
       WHERE p.finished_good_item_id = $1 AND p.is_deleted = false
       UNION
-      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty, p.output_metadata->>'bomId' as "bomId"
       FROM public.erp_production_orders p
       JOIN public.erp_production_order_materials m ON p.id = m.production_order_id
       WHERE m.item_id = $1 AND p.is_deleted = false
-      GROUP BY p.id, p.reference_no, p.planned_start_date, p.status
+      GROUP BY p.id, p.reference_no, p.planned_start_date, p.status, p.output_metadata
       LIMIT 10
     `,
       [id],
@@ -525,6 +528,168 @@ export class InventoryItemsService {
       [id],
     );
 
+    // Build Graph Nodes and Edges
+    const nodes: any[] = [];
+    const edges: any[] = [];
+
+    // 1. Map lookups
+    const grByPo = new Map<string, any[]>();
+    grs.forEach((gr: any) => {
+      if (gr.productionOrderId) {
+        if (!grByPo.has(gr.productionOrderId))
+          grByPo.set(gr.productionOrderId, []);
+        grByPo.get(gr.productionOrderId)!.push(gr);
+      }
+    });
+
+    const giByPo = new Map<string, any[]>();
+    gis.forEach((gi: any) => {
+      if (gi.productionOrderId) {
+        if (!giByPo.has(gi.productionOrderId))
+          giByPo.set(gi.productionOrderId, []);
+        giByPo.get(gi.productionOrderId)!.push(gi);
+      }
+    });
+
+    const poByBom = new Map<string, any[]>();
+    pos.forEach((po: any) => {
+      if (po.bomId) {
+        if (!poByBom.has(po.bomId)) poByBom.set(po.bomId, []);
+        poByBom.get(po.bomId)!.push(po);
+      }
+    });
+
+    // 2. The Root Item Node
+    nodes.push({
+      id: `item-${item.id}`,
+      // No module so it sits at root
+      data: {
+        nodeType: 'inventory_item',
+        label: item.itemName,
+        sublabel: item.sku,
+        docId: item.id,
+      },
+    });
+
+    // 3. Goods Receipts
+    grs.forEach((gr: any) => {
+      nodes.push({
+        id: `gr-${gr.id}`,
+        module: 'inventory',
+        date: gr.receiptDate
+          ? new Date(gr.receiptDate).toISOString()
+          : undefined,
+        data: {
+          nodeType: 'goods_receipt',
+          label: gr.receiptNo,
+          status: gr.status,
+          amount: Number(gr.qty || 0),
+          docId: gr.id,
+        },
+      });
+      // Removed edge to central item
+    });
+
+    // 4. Goods Issues
+    gis.forEach((gi: any) => {
+      nodes.push({
+        id: `gi-${gi.id}`,
+        module: 'inventory',
+        date: gi.issueDate ? new Date(gi.issueDate).toISOString() : undefined,
+        data: {
+          nodeType: 'goods_issue',
+          label: gi.issueNo,
+          status: gi.status,
+          amount: Number(gi.qty || 0),
+          docId: gi.id,
+        },
+      });
+      // Removed edge from central item
+    });
+
+    // 5. Production Orders
+    pos.forEach((po: any) => {
+      nodes.push({
+        id: `po-${po.id}`,
+        module: 'production',
+        date: po.orderDate ? new Date(po.orderDate).toISOString() : undefined,
+        data: {
+          nodeType: 'production_order',
+          label: po.orderNo,
+          status: po.status,
+          amount: Number(po.qty || 0),
+          docId: po.id,
+        },
+      });
+
+      if (po.role === 'FG') {
+        const relatedGrs = grByPo.get(po.id);
+        if (relatedGrs && relatedGrs.length > 0) {
+          relatedGrs.forEach((gr) => {
+            edges.push({
+              id: `e-po-${po.id}-gr-${gr.id}`,
+              source: `po-${po.id}`,
+              target: `gr-${gr.id}`,
+            });
+          });
+        }
+      } else {
+        const relatedGis = giByPo.get(po.id);
+        if (relatedGis && relatedGis.length > 0) {
+          relatedGis.forEach((gi) => {
+            edges.push({
+              id: `e-gi-${gi.id}-po-${po.id}`,
+              source: `gi-${gi.id}`,
+              target: `po-${po.id}`,
+            });
+          });
+        }
+      }
+    });
+
+    // 6. BOMs
+    boms.forEach((bom: any) => {
+      nodes.push({
+        id: `bom-${bom.id}`,
+        module: 'bom',
+        data: {
+          nodeType: 'bom',
+          label: bom.bomCode,
+          sublabel: bom.bomName,
+          status: bom.status,
+          docId: bom.id,
+        },
+      });
+
+      const relatedPos = poByBom.get(bom.id);
+      if (relatedPos && relatedPos.length > 0) {
+        relatedPos.forEach((po) => {
+          edges.push({
+            id: `e-bom-${bom.id}-po-${po.id}`,
+            source: `bom-${bom.id}`,
+            target: `po-${po.id}`,
+          });
+        });
+      }
+    });
+
+    // 7. Connect Root Item to Groups
+    const populatedModules = new Set(
+      nodes.filter((n) => n.module).map((n) => n.module),
+    );
+    populatedModules.forEach((mod) => {
+      edges.push({
+        id: `e-item-to-group-${mod}`,
+        source: `item-${item.id}`,
+        target: `group-${mod}`,
+      });
+    });
+
+    const graph = await this.graphLayoutService.calculateSwimlaneLayout(
+      nodes,
+      edges,
+    );
+
     return {
       message: 'Liên kết kho',
       data: {
@@ -539,6 +704,7 @@ export class InventoryItemsService {
         goodsIssues: gis,
         productionOrders: pos,
         boms: boms,
+        graph,
       },
     };
   }

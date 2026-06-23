@@ -32,8 +32,11 @@ import { DocumentDependenciesCoreModule } from './document-dependencies-core/doc
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { CommonModule } from './common/common.module';
 @Module({
   imports: [
+    CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
