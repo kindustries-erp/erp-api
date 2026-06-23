@@ -5,10 +5,10 @@ export class AutoSync17821099111782109911729 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `DROP INDEX "public"."idx_erp_inventory_items_production_order_id"`,
+      `DROP INDEX IF EXISTS "public"."idx_erp_inventory_items_production_order_id"`,
     );
     await queryRunner.query(
-      `CREATE TABLE "company_profile" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "company_name" character varying(255) NOT NULL, "tax_code" character varying(50), "address" text, "mobi_phone" character varying(50), "email" character varying(255), "note" text, "logo" text, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_058d1cfee40e5e53412ed7484b3" PRIMARY KEY ("id"))`,
+      `CREATE TABLE IF NOT EXISTS "company_profile" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "company_name" character varying(255) NOT NULL, "tax_code" character varying(50), "address" text, "mobi_phone" character varying(50), "email" character varying(255), "note" text, "logo" text, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_058d1cfee40e5e53412ed7484b3" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `ALTER TABLE "erp_inventory_items" DROP COLUMN "production_order_id"`,

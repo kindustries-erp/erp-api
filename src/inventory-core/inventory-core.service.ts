@@ -562,7 +562,7 @@ export class InventoryItemsService {
     const countQuery = `SELECT COUNT(*) as total FROM (${unionQuery}) as combined`;
     const dataQuery = `
       SELECT * FROM (${unionQuery}) as combined
-      ORDER BY ${sortColumn} ${sortDirection}, id ${sortDirection}
+      ORDER BY ${sortColumn} ${sortDirection}, "createdAt" DESC
       LIMIT $${pIndex} OFFSET $${pIndex + 1}
     `;
 

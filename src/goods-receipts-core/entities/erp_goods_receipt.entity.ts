@@ -25,8 +25,8 @@ export class ErpGoodsReceipt {
   @Column({ type: 'uuid', name: 'supplier_id', nullable: true })
   supplierId: string | null;
 
-  @Column({ type: 'date', name: 'receipt_date' })
-  receiptDate: string;
+  @Column({ type: 'timestamptz', name: 'receipt_date' })
+  receiptDate: Date;
 
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
@@ -40,9 +40,9 @@ export class ErpGoodsReceipt {
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updatedAt: Date;
 }

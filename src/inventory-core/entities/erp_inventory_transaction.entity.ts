@@ -62,8 +62,8 @@ export class ErpInventoryTransaction {
   })
   unitCost: string | null;
 
-  @Column({ type: 'date', name: 'transaction_date' })
-  transactionDate: string;
+  @Column({ type: 'timestamptz', name: 'transaction_date' })
+  transactionDate: Date | string;
 
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
