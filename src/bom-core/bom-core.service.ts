@@ -12,6 +12,7 @@ import { ErpBomLine } from './entities/erp_bom_line.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
 import { ListBomDto } from './dto/list-bom.dto';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class BomCoreService {
@@ -182,5 +183,242 @@ export class BomCoreService {
     if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };
+  }
+
+  async exportMultiLevelBom(id: string, format: 'xlsx' | 'csv' = 'xlsx') {
+    const rootBom = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!rootBom) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+
+    interface FlatNode {
+      level: number;
+      indexStr: string;
+      line: ErpBomLine;
+    }
+
+    const results: FlatNode[] = [];
+    const visited = new Set<string>();
+
+    const resolveSubBom = async (
+      bomId: string,
+      level: number,
+      parentIndex: string,
+    ) => {
+      if (visited.has(bomId)) return;
+      visited.add(bomId);
+
+      const lines = await this.lineRepository.find({
+        where: { bomId },
+        order: { lineNo: 'ASC' },
+      });
+
+      let i = 1;
+      for (const line of lines) {
+        const currentIndex = parentIndex ? `${parentIndex}.${i}` : `${i}`;
+        results.push({
+          level,
+          indexStr: currentIndex,
+          line,
+        });
+
+        if (line.componentItemId) {
+          const subBom = await this.repository.findOne({
+            where: {
+              finishedGoodItemId: line.componentItemId,
+              status: 'ACTIVE',
+              isDeleted: false,
+            },
+            order: { createdAt: 'DESC' },
+          });
+          if (subBom) {
+            await resolveSubBom(subBom.id, level + 1, currentIndex);
+          }
+        }
+        i++;
+      }
+    };
+
+    await resolveSubBom(id, 1, '');
+
+    // Fetch items context
+    const itemIds = new Set<string>();
+    if (rootBom.finishedGoodItemId) itemIds.add(rootBom.finishedGoodItemId);
+    results.forEach((r) => {
+      if (r.line.componentItemId) itemIds.add(r.line.componentItemId);
+    });
+
+    const itemMap = new Map<string, any>();
+    if (itemIds.size > 0) {
+      const items = await this.dataSource.query(
+        `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
+        [Array.from(itemIds)],
+      );
+      items.forEach((i: any) => itemMap.set(i.id, i));
+    }
+
+    const rowsData = results.map((r) => {
+      const item = r.line.componentItemId
+        ? itemMap.get(r.line.componentItemId)
+        : null;
+      return {
+        stt: r.indexStr,
+        tenLinhKien: item ? item.item_name : '',
+        maLinhKien: item ? item.sku : '',
+        dvt: r.line.uom || '',
+        soLuong: Number(r.line.qtyRequired) || 0,
+        haoHut: r.line.scrapRate ? Number(r.line.scrapRate) : 0,
+        ghiChu: r.line.notes || '',
+      };
+    });
+
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const safeBomCode = (rootBom.bomCode || 'BOM').replace(
+      /[^a-zA-Z0-9_-]/g,
+      '_',
+    );
+
+    let buffer: Buffer;
+    let contentType: string;
+    let filename: string;
+
+    if (format === 'csv') {
+      const csvHeader = [
+        'STT',
+        'Tên linh kiện',
+        'Mã LINH KIỆN',
+        'Đơn vị tính',
+        'Số lượng',
+        'Hao hụt (%)',
+        'Ghi chú',
+      ];
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('BOM');
+      ws.addRow(csvHeader);
+      rowsData.forEach((row) => {
+        ws.addRow([
+          row.stt,
+          row.tenLinhKien,
+          row.maLinhKien,
+          row.dvt,
+          row.soLuong,
+          row.haoHut,
+          row.ghiChu,
+        ]);
+      });
+      const csvBuffer = await wb.csv.writeBuffer();
+      // Add BOM to CSV for UTF-8 compatibility
+      buffer = Buffer.concat([
+        Buffer.from('\uFEFF', 'utf-8'),
+        Buffer.from(csvBuffer),
+      ]);
+      contentType = 'text/csv; charset=utf-8';
+      filename = `${safeBomCode}_${timestamp}.csv`;
+    } else {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('BOM Details');
+
+      ws.getColumn('A').width = 8;
+      ws.getColumn('B').width = 70;
+      ws.getColumn('C').width = 40;
+      ws.getColumn('D').width = 15;
+      ws.getColumn('E').width = 15;
+      ws.getColumn('F').width = 15;
+      ws.getColumn('G').width = 30;
+
+      ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 5 }];
+
+      ws.mergeCells('A1:C3');
+      const logoCell = ws.getCell('A1');
+      logoCell.value = 'K LOTUS';
+      logoCell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+      logoCell.font = { bold: true, size: 24 };
+
+      ws.mergeCells('D1:E3');
+      const titleCell = ws.getCell('D1');
+      titleCell.value = 'ĐỊNH MỨC VẬT TƯ';
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleCell.font = { bold: true, size: 16 };
+
+      ws.mergeCells('F1:G1');
+      ws.getCell('F1').value = 'Mã số: K LOTUS-SX-BM-01-04';
+      ws.mergeCells('F2:G2');
+      const dateStr = rootBom.effectiveFrom
+        ? new Date(rootBom.effectiveFrom).toLocaleDateString('vi-VN')
+        : new Date().toLocaleDateString('vi-VN');
+      ws.getCell('F2').value = `Ngày ban hành: ${dateStr}`;
+      ws.mergeCells('F3:G3');
+      ws.getCell('F3').value = `Lần ban hành: ${rootBom.version || '01'}`;
+
+      ws.mergeCells('A4:C4');
+      const parts = new Date().toLocaleDateString('vi-VN').split('/');
+      ws.getCell('A4').value =
+        `Ngày ${parts[0]} tháng ${parts[1]} năm ${parts[2]}`;
+      ws.getCell('A4').alignment = { horizontal: 'center' };
+      ws.getCell('A4').font = { italic: true };
+
+      ws.mergeCells('D4:E4');
+      ws.getCell('D4').value =
+        `Nhãn hiệu/ số loại: K LOTUS/ ${rootBom.bomName}`;
+      ws.getCell('D4').alignment = { horizontal: 'center' };
+      ws.getCell('D4').font = { italic: true };
+
+      ws.mergeCells('F4:G4');
+      ws.getCell('F4').value = `Số: ${rootBom.bomCode}`;
+      ws.getCell('F4').alignment = { horizontal: 'center' };
+      ws.getCell('F4').font = { italic: true };
+
+      ws.getCell('A5').value = 'STT';
+      ws.getCell('B5').value = 'Tên linh kiện';
+      ws.getCell('C5').value = 'Mã LINH KIỆN';
+      ws.getCell('D5').value = 'Đơn vị tính';
+      ws.getCell('E5').value = 'Số lượng';
+      ws.getCell('F5').value = 'Hao hụt (%)';
+      ws.getCell('G5').value = 'Ghi chú';
+
+      const headerRow = ws.getRow(5);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      ws.autoFilter = 'A5:G5';
+
+      rowsData.forEach((row, index) => {
+        const rowIndex = 6 + index;
+        ws.getCell(`A${rowIndex}`).value = row.stt;
+        ws.getCell(`A${rowIndex}`).alignment = { horizontal: 'center' };
+        ws.getCell(`B${rowIndex}`).value = row.tenLinhKien;
+        ws.getCell(`C${rowIndex}`).value = row.maLinhKien;
+        ws.getCell(`D${rowIndex}`).value = row.dvt;
+        ws.getCell(`D${rowIndex}`).alignment = { horizontal: 'center' };
+        ws.getCell(`E${rowIndex}`).value = row.soLuong;
+        ws.getCell(`E${rowIndex}`).alignment = { horizontal: 'center' };
+        ws.getCell(`F${rowIndex}`).value = row.haoHut;
+        ws.getCell(`F${rowIndex}`).alignment = { horizontal: 'center' };
+        ws.getCell(`G${rowIndex}`).value = row.ghiChu;
+      });
+
+      for (let i = 1; i <= 5 + rowsData.length; i++) {
+        for (let j = 1; j <= 7; j++) {
+          const cell = ws.getCell(i, j);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        }
+      }
+
+      buffer = Buffer.from(await wb.xlsx.writeBuffer());
+      contentType =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      filename = `${safeBomCode}_${timestamp}.xlsx`;
+    }
+
+    return { buffer, contentType, filename };
   }
 }
