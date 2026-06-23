@@ -26,6 +26,7 @@ import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
 import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
+import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -164,5 +165,11 @@ export class InventoryItemsController {
   @Get('warehouse-vouchers')
   listWarehouseVouchers(@Query() query: WarehouseVoucherQueryDto) {
     return this.service.listWarehouseVouchers(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials')
+  listSerials(@Query() query: InventorySerialQueryDto) {
+    return this.service.listSerials(query);
   }
 }
