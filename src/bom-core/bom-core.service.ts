@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { PassThrough } from 'stream';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -420,5 +421,142 @@ export class BomCoreService {
     }
 
     return { buffer, contentType, filename };
+  }
+
+  async generateImportTemplate() {
+    const wb = new ExcelJS.Workbook();
+
+    // Sheet 1: Template
+    const ws = wb.addWorksheet('Template');
+    ws.columns = [
+      { header: 'Mã linh kiện (*)', key: 'sku', width: 20 },
+      { header: 'Số lượng (*)', key: 'qty', width: 15 },
+      { header: 'Hao hụt %', key: 'scrapRate', width: 15 },
+      { header: 'Ghi chú', key: 'notes', width: 30 },
+    ];
+
+    // Make header bold
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Some instructions
+    ws.addRow(['Vật tư A', 10, 0, 'Ví dụ nhập dòng này']);
+    ws.addRow(['Vật tư B', 5, 2, 'Ghi chú thêm ở đây']);
+
+    // Sheet 2: Inventory Items
+    const itemsWs = wb.addWorksheet('Danh sách linh kiện');
+    itemsWs.columns = [
+      { header: 'Mã (SKU)', key: 'sku', width: 20 },
+      { header: 'Tên sản phẩm', key: 'name', width: 50 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
+    ];
+    itemsWs.getRow(1).font = { bold: true };
+    itemsWs.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+    itemsWs.autoFilter = 'A1:C1';
+
+    const items = await this.dataSource.query(
+      `SELECT sku, item_name, uom FROM public.erp_inventory_items WHERE status = 'ACTIVE' ORDER BY sku ASC`,
+    );
+
+    for (const item of items) {
+      itemsWs.addRow([item.sku, item.item_name, item.uom]);
+    }
+
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    return {
+      buffer,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: 'BOM_Import_Template.xlsx',
+    };
+  }
+
+  async parseBomLines(file: any) {
+    if (!file) throw new BadRequestException('Vui lòng chọn file');
+
+    const lines: any[] = [];
+    const skuSet = new Set<string>();
+
+    try {
+      if (file.originalname.endsWith('.csv') || file.mimetype.includes('csv')) {
+        // Simple CSV parsing using exceljs CSV reader
+        const wb = new ExcelJS.Workbook();
+        const bufferStream = new PassThrough();
+        bufferStream.end(file.buffer);
+
+        const ws = await wb.csv.read(bufferStream);
+        ws.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // Skip header
+          const sku = row.getCell(1).text?.trim();
+          if (!sku) return;
+          skuSet.add(sku);
+          lines.push({
+            sku,
+            qtyRequired: Number(row.getCell(2).value) || 0,
+            scrapRate: Number(row.getCell(3).value) || 0,
+            notes: row.getCell(4).text?.trim() || '',
+          });
+        });
+      } else {
+        // XLSX
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(file.buffer);
+        const ws = wb.worksheets[0]; // First sheet
+        if (!ws) throw new BadRequestException('File không hợp lệ');
+
+        ws.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // Skip header
+          const sku = row.getCell(1).text?.trim();
+          if (!sku) return;
+          skuSet.add(sku);
+          lines.push({
+            sku,
+            qtyRequired: Number(row.getCell(2).value) || 0,
+            scrapRate: Number(row.getCell(3).value) || 0,
+            notes: row.getCell(4).text?.trim() || '',
+          });
+        });
+      }
+    } catch (error) {
+      throw new BadRequestException('Lỗi đọc file: ' + error.message);
+    }
+
+    if (lines.length === 0) {
+      throw new BadRequestException('Không tìm thấy dữ liệu dòng nào');
+    }
+
+    // Validate items
+    const items = await this.dataSource.query(
+      `SELECT id, sku, item_name, uom FROM public.erp_inventory_items WHERE sku = ANY($1)`,
+      [Array.from(skuSet)],
+    );
+
+    const itemMap = new Map<string, any>();
+    items.forEach((i: any) => itemMap.set(i.sku, i));
+
+    const validatedLines = lines.map((line) => {
+      const item = itemMap.get(line.sku);
+      if (!item) {
+        throw new BadRequestException(
+          `Linh kiện có mã ${line.sku} không tồn tại hoặc ngưng hoạt động`,
+        );
+      }
+      if (line.qtyRequired <= 0) {
+        throw new BadRequestException(
+          `Số lượng của linh kiện ${line.sku} phải lớn hơn 0`,
+        );
+      }
+      return {
+        componentItemId: item.id,
+        componentItemCode: item.sku,
+        componentItemName: `${item.sku} — ${item.item_name}`,
+        qtyRequired: line.qtyRequired,
+        uom: item.uom || 'PCS',
+        scrapRate: line.scrapRate,
+        notes: line.notes,
+      };
+    });
+
+    return { message: 'Parse thành công', data: validatedLines };
   }
 }
