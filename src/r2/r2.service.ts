@@ -51,13 +51,33 @@ export class R2Service {
   }
 
   /**
+   * Download buffer từ R2
+   */
+  async downloadBuffer(key: string): Promise<Buffer> {
+    const s3Obj = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+    if (!s3Obj.Body) throw new Error('Empty body');
+    const arrayBuffer = await s3Obj.Body.transformToByteArray();
+    return Buffer.from(arrayBuffer);
+  }
+
+  /**
    * Tạo pre-signed URL để download (GET) — mặc định 1 giờ
    */
   async getPresignedDownloadUrl(
     key: string,
     expiresInSeconds = 3600,
+    filename?: string,
   ): Promise<string> {
-    const cmd = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    const input: any = { Bucket: this.bucket, Key: key };
+    if (filename) {
+      input.ResponseContentDisposition = `attachment; filename="${filename}"`;
+    }
+    const cmd = new GetObjectCommand(input);
     return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
   }
 

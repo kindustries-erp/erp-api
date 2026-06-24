@@ -19,7 +19,7 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
-import { PortalFetchDto, PortalImportDto } from './dto/portal-invoice.dto';
+import { PortalFetchDto } from './dto/portal-invoice.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -35,6 +35,8 @@ export class ErpInvoicesCoreController {
   @Get()
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'seller_name', required: false })
+  @ApiQuery({ name: 'buyer_name', required: false })
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'status', required: false })
@@ -69,14 +71,23 @@ export class ErpInvoicesCoreController {
     return this.service.cancel(id);
   }
 
-  @Post('portal/fetch')
-  fetchPortal(@Body() dto: PortalFetchDto) {
-    return this.service.fetchFromPortal(dto);
+  @Post(':id/reparse-xml')
+  reparseXml(@Param('id') id: string, @Body('token') token?: string) {
+    return this.service.reparseXml(id, token);
   }
 
-  @Post('portal/import')
-  importPortal(@Body() dto: PortalImportDto) {
-    return this.service.importFromPortal(dto);
+  @Post(':id/sync-detail')
+  syncDetail(@Param('id') id: string, @Body('token') token: string) {
+    return this.service.syncDetailFromPortal(id, token);
+  }
+
+  /**
+   * POST /api/v1/erp-invoices/portal/sync
+   * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
+   */
+  @Post('portal/sync')
+  syncPortal(@Body() dto: PortalFetchDto) {
+    return this.service.syncFromPortal(dto);
   }
 
   // ---------------------------------------------------------------------------

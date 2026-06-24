@@ -79,6 +79,14 @@ export class ErpInvoice {
   description: string | null;
 
   @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'invoice_type',
+    nullable: true,
+  })
+  invoiceType: string | null;
+
+  @Column({
     type: 'numeric',
     precision: 18,
     scale: 2,
