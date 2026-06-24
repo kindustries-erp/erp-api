@@ -19,6 +19,7 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import { PortalFetchDto, PortalImportDto } from './dto/portal-invoice.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -66,6 +67,16 @@ export class ErpInvoicesCoreController {
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
+  }
+
+  @Post('portal/fetch')
+  fetchPortal(@Body() dto: PortalFetchDto) {
+    return this.service.fetchFromPortal(dto);
+  }
+
+  @Post('portal/import')
+  importPortal(@Body() dto: PortalImportDto) {
+    return this.service.importFromPortal(dto);
   }
 
   // ---------------------------------------------------------------------------

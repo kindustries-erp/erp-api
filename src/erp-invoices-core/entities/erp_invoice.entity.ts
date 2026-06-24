@@ -30,6 +30,12 @@ export class ErpInvoice {
   @Column({ type: 'varchar', length: 32, name: 'status', default: 'DRAFT' })
   status: string;
 
+  @Column({ type: 'varchar', length: 64, name: 'source', nullable: true })
+  source: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'external_id', nullable: true })
+  externalId: string | null;
+
   // --- Bên bán ---
   @Column({ type: 'varchar', length: 255, name: 'seller_name', nullable: true })
   sellerName: string | null;

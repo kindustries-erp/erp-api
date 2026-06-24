@@ -9,6 +9,11 @@ import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import {
+  PortalFetchDto,
+  PortalImportDto,
+  PortalInvoiceDto,
+} from './dto/portal-invoice.dto';
 import { R2Service } from '../r2/r2.service';
 import {
   parseVietnamInvoiceXml,
@@ -272,6 +277,111 @@ export class ErpInvoicesCoreService {
           }))
         : undefined,
     };
+  }
+
+  async fetchFromPortal(dto: PortalFetchDto) {
+    if (!dto.token) throw new BadRequestException('token is required');
+    if (!dto.dateFrom || !dto.dateTo) {
+      throw new BadRequestException('dateFrom and dateTo are required');
+    }
+
+    const type = dto.type ?? 'purchase';
+    const url = new URL(
+      `https://hoadondientu.gdt.gov.vn/api/query/invoices/${type}`,
+    );
+    url.searchParams.set('sort', 'tdlap:desc');
+    url.searchParams.set('size', '50');
+    url.searchParams.set(
+      'search',
+      `tdlap=ge=${dto.dateFrom}T00:00:00;tdlap=le=${dto.dateTo}T23:59:59`,
+    );
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${dto.token}` },
+    });
+    if (!response.ok)
+      throw new BadRequestException(
+        `Portal request failed with status ${response.status}`,
+      );
+    const payload = (await response.json()) as { datas?: any[] };
+    const items = (payload.datas ?? []).map((item) =>
+      this.mapPortalInvoice(item),
+    );
+    return { total: items.length, items };
+  }
+
+  async importFromPortal(dto: PortalImportDto) {
+    const errors: string[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    for (const item of dto.items ?? []) {
+      try {
+        const existing = await this.repository.findOne({
+          where: {
+            invoiceNo: item.shdon,
+            serialNo: item.khhdon,
+            direction: dto.direction,
+            isDeleted: false,
+          },
+        });
+        if (existing) {
+          skipped++;
+          continue;
+        }
+        const invoice = this.repository.create({
+          invoiceNo: item.shdon,
+          serialNo: item.khhdon,
+          invoiceDate: this.parsePortalDate(item.tdlap),
+          direction: dto.direction,
+          status: item.tthai === 2 ? 'CANCELLED' : 'CONFIRMED',
+          sellerTaxCode: item.nbmst ?? null,
+          sellerName: item.nbten ?? null,
+          buyerTaxCode: item.mst ?? null,
+          preVatAmount: String(item.tgtcthue ?? 0),
+          vatRate: this.normalizePortalVatRate(item.tsuattue),
+          vatAmount: String(item.tgtthue ?? 0),
+          discountAmount: String(item.ttcktmai ?? 0),
+          totalAmount: String(item.tgtttbso ?? 0),
+          source: 'PORTAL',
+          externalId: `${item.khhdon}_${item.shdon}`,
+        } as any);
+        await this.repository.save(invoice);
+        created++;
+      } catch (err) {
+        errors.push((err as Error).message);
+      }
+    }
+
+    return { imported: created, skipped, direction: dto.direction, errors };
+  }
+
+  private mapPortalInvoice(item: any): PortalInvoiceDto {
+    return {
+      nbmst: item.nbmst,
+      nbten: item.nbten,
+      mst: item.mst ?? item.nmmst,
+      shdon: item.shdon,
+      khhdon: item.khhdon,
+      khmshdon: item.khmshdon,
+      tdlap: item.tdlap,
+      ttcktmai: Number(item.ttcktmai ?? 0),
+      tgtcthue: Number(item.tgtcthue ?? 0),
+      tsuattue: item.tsuattue,
+      tgtthue: Number(item.tgtthue ?? 0),
+      tgtttbso: Number(item.tgtttbso ?? 0),
+      tthai: Number(item.tthai ?? 0),
+    };
+  }
+
+  private normalizePortalVatRate(rate: number | string) {
+    const n = Number(rate);
+    return Number.isFinite(n) ? String(n / 100) : null;
+  }
+
+  private parsePortalDate(date: string) {
+    const [dd, mm, yyyy] = date.split('/');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   // ---------------------------------------------------------------------------
