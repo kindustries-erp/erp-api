@@ -35,7 +35,8 @@ import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 import { ErpInventoryLot } from '../inventory-core/entities/erp_inventory_lot.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
-
+import { SysTag } from '../tags-core/entities/sys_tag.entity';
+import { SysEntityTag } from '../tags-core/entities/sys_entity_tag.entity';
 const entities = [
   CoreUser,
   CoreRole,
@@ -72,6 +73,8 @@ const entities = [
   ErpInventoryLot,
   ErpUom,
   ErpVehicle,
+  SysTag,
+  SysEntityTag,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

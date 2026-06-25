@@ -34,6 +34,7 @@ import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CommonModule } from './common/common.module';
+import { TagsCoreModule } from './tags-core/tags-core.module';
 @Module({
   imports: [
     CommonModule,
@@ -98,6 +99,7 @@ import { CommonModule } from './common/common.module';
     ErpInvoicesCoreModule,
     CompanyProfileModule,
     FilesModule,
+    TagsCoreModule,
   ],
   controllers: [AppController],
   providers: [
