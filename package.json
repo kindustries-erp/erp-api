@@ -24,9 +24,6 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "docker:build": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml build",
-    "docker:up": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml up -d",
-    "docker:deploy": "bun run docker:build; bun run docker:up",
     "prepare": "command -v husky >/dev/null 2>&1 && husky || true"
   },
   "dependencies": {
