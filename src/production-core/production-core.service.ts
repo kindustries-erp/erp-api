@@ -22,6 +22,7 @@ import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_ba
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
+import { getGMT7YearMonthString } from '../common/utils/date.util';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
@@ -1132,7 +1133,7 @@ export class ProductionCoreService {
 
       // Generate GI number
       const today = new Date();
-      const ym = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const ym = getGMT7YearMonthString(today);
       const giPrefix = `XK-${ym}`;
       const latestGi = await giRepo
         .createQueryBuilder('gi')
@@ -1142,7 +1143,7 @@ export class ProductionCoreService {
       const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
       const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
 
-      const issueDate = today.toISOString().slice(0, 10);
+      const issueDate = today.toISOString();
       const gi = (await giRepo.save(
         giRepo.create({
           issueNo: giNo,
@@ -1298,7 +1299,7 @@ export class ProductionCoreService {
 
       const warehouseCode =
         dto.warehouseCode ?? order.warehouseCode ?? undefined;
-      const receiptDate = new Date().toISOString().slice(0, 10);
+      const receiptDate = new Date().toISOString();
 
       // Load finished good item to check tracking policy
       const finishedGoodItem = await itemRepo.findOne({
@@ -1400,7 +1401,7 @@ export class ProductionCoreService {
         });
       }
       const today = new Date();
-      const ym = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const ym = getGMT7YearMonthString(today);
       const grPrefix = `NK-${ym}`;
       const latestGr = await grRepo
         .createQueryBuilder('gr')

@@ -11,6 +11,7 @@ import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
+import { getGMT7YearMonthString } from '../common/utils/date.util';
 import { UpdateGoodsIssueDto } from './dto/update-goods-issue.dto';
 import { PostGoodsIssueDto } from './dto/post-goods-issue.dto';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
@@ -28,10 +29,8 @@ export class GoodsIssuesCoreService {
   private readonly logger = new Logger(GoodsIssuesCoreService.name);
 
   private async generateMonthlyIssueNo(manager: any, issueDate?: string) {
-    const baseDate = issueDate ? new Date(issueDate) : new Date();
-    const year = baseDate.getUTCFullYear();
-    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `XK-${year}${month}`;
+    const ym = getGMT7YearMonthString(issueDate);
+    const prefix = `XK-${ym}`;
     const latest = await manager
       .getRepository(ErpGoodsIssue)
       .createQueryBuilder('gi')

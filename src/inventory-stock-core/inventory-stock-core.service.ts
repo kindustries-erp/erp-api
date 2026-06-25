@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, Like, In, Brackets } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
@@ -23,27 +23,36 @@ export class InventoryStockCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    // Query itemRepository directly to include items with no stock
-    const whereConditions: any[] = [];
+    const qb = this.itemRepository.createQueryBuilder('item');
+    qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+
     if (query.item_type && query.search) {
-      whereConditions.push(
-        { itemType: query.item_type, sku: Like(`%${query.search}%`) },
-        { itemType: query.item_type, itemName: Like(`%${query.search}%`) },
+      qb.where(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('item.itemType = :type AND item.sku LIKE :search', {
+              type: query.item_type,
+              search: `%${query.search}%`,
+            })
+            .orWhere('item.itemType = :type AND item.itemName LIKE :search', {
+              type: query.item_type,
+              search: `%${query.search}%`,
+            });
+        }),
       );
     } else if (query.item_type) {
-      whereConditions.push({ itemType: query.item_type });
+      qb.where('item.itemType = :type', { type: query.item_type });
     } else if (query.search) {
-      whereConditions.push(
-        { sku: Like(`%${query.search}%`) },
-        { itemName: Like(`%${query.search}%`) },
+      qb.where(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('item.sku LIKE :search', { search: `%${query.search}%` })
+            .orWhere('item.itemName LIKE :search', {
+              search: `%${query.search}%`,
+            });
+        }),
       );
     }
-
-    const findOptions: any = {
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { createdAt: 'DESC' },
-    };
 
     if (query.sort) {
       const isDesc = query.sort.startsWith('-');
@@ -51,21 +60,32 @@ export class InventoryStockCoreService {
       const order = isDesc ? 'DESC' : 'ASC';
 
       let sortField = '';
-      if (field === 'item_code') sortField = 'sku';
-      else if (field === 'item_type') sortField = 'itemType';
-      else if (field === 'status') sortField = 'status';
-      else if (field === 'unit') sortField = 'uom';
-      else if (field === 'item') sortField = 'itemName';
+      if (field === 'item_code') sortField = 'item.sku';
+      else if (field === 'item_type') sortField = 'item.itemType';
+      else if (field === 'status') sortField = 'item.status';
+      else if (field === 'unit') sortField = 'item.uom';
+      else if (field === 'item') sortField = 'item.itemName';
 
       if (sortField) {
-        findOptions.order = { [sortField]: order };
+        qb.orderBy(sortField, order);
+      } else {
+        qb.addSelect('b.updatedAt').orderBy(
+          'b.updatedAt',
+          'DESC',
+          'NULLS LAST',
+        );
       }
-    }
-    if (whereConditions.length > 0) {
-      findOptions.where = whereConditions;
+    } else {
+      qb.addSelect('b.updatedAt').orderBy('b.updatedAt', 'DESC', 'NULLS LAST');
     }
 
-    const [items, total] = await this.itemRepository.findAndCount(findOptions);
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getMany();
+
+    const countQb = qb.clone();
+    countQb.orderBy(); // clear order by for count query to avoid distinctAlias error
+    const total = await countQb.getCount();
 
     if (items.length === 0) {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };

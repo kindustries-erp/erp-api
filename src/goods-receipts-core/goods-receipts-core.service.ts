@@ -9,6 +9,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
+import { getGMT7YearMonthString } from '../common/utils/date.util';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
 import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
 import { PostGoodsReceiptDto } from './dto/post-goods-receipt.dto';
@@ -36,10 +37,8 @@ export class GoodsReceiptsCoreService {
   ) {}
 
   private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
-    const baseDate = receiptDate ? new Date(receiptDate) : new Date();
-    const year = baseDate.getUTCFullYear();
-    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `NK-${year}${month}`;
+    const ym = getGMT7YearMonthString(receiptDate);
+    const prefix = `NK-${ym}`;
     const latest = await manager
       .getRepository(ErpGoodsReceipt)
       .createQueryBuilder('gr')

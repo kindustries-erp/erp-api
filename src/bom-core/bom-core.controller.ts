@@ -8,8 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
@@ -37,6 +42,38 @@ export class BomCoreController {
   @Get()
   findAll(@Query() query: ListBomDto) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @Get('import/template')
+  async downloadImportTemplate(@Res() res: Response) {
+    const { buffer, contentType, filename } =
+      await this.service.generateImportTemplate();
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  }
+
+  @RequirePermissions({ resource: 'bom', action: 'create' })
+  @Post('import/parse')
+  @UseInterceptors(FileInterceptor('file'))
+  async parseBomLines(@UploadedFile() file: any) {
+    return this.service.parseBomLines(file);
+  }
+
+  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @Get(':id/export')
+  async exportBom(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('format') format: 'xlsx' | 'csv',
+    @Res() res: Response,
+  ) {
+    const fileFormat = format === 'csv' ? 'csv' : 'xlsx';
+    const { buffer, contentType, filename } =
+      await this.service.exportMultiLevelBom(id, fileFormat);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   }
 
   @RequirePermissions({ resource: 'bom', action: 'read' })
