@@ -27,6 +27,14 @@ import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { SysFile } from '../files/entities/sys-file.entity';
+import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpTrackingCategory } from '../inventory-core/entities/erp_tracking_category.entity';
+import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
+import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
+import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
+import { ErpInventoryLot } from '../inventory-core/entities/erp_inventory_lot.entity';
+import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 
 const entities = [
   CoreUser,
@@ -56,6 +64,14 @@ const entities = [
   ErpInvoiceItem,
   CompanyProfile,
   SysFile,
+  ErpInventorySerial,
+  ErpTrackingCategory,
+  ErpBranch,
+  ErpAuditLog,
+  ErpItemType,
+  ErpInventoryLot,
+  ErpUom,
+  ErpVehicle,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
