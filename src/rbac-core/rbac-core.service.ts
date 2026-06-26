@@ -194,6 +194,8 @@ export class RbacCoreService {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
       },
+      { resource: 'invoices', label: 'Hóa đơn' },
+      { resource: 'sys_tags', label: 'Tags' },
     ];
   }
 }
