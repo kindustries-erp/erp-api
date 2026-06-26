@@ -23,7 +23,7 @@ export class DocumentDependenciesCoreService {
         `SELECT DISTINCT gr.receipt_no 
          FROM public.erp_goods_receipt_lines grl
          JOIN public.erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
-         JOIN public.purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
+         JOIN public.erp_purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
          WHERE pol.purchase_order_id = $1`,
         [documentId],
       );
@@ -64,8 +64,8 @@ export class DocumentDependenciesCoreService {
         `SELECT DISTINCT gi.issue_no 
          FROM public.erp_goods_issue_lines gil
          JOIN public.erp_goods_issues gi ON gil.goods_issue_id = gi.id
-         JOIN public.sales_service_order_lines sol ON gil.sales_order_line_id = sol.id
-         WHERE sol.order_id = $1`,
+         JOIN public.erp_sales_order_lines sol ON gil.sales_order_line_id = sol.id
+         WHERE sol.sales_order_id = $1`,
         [documentId],
       );
       if (issues.length > 0) {

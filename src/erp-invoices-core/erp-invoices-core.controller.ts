@@ -15,6 +15,8 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
@@ -23,7 +25,7 @@ import { PortalFetchDto } from './dto/portal-invoice.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('erp-invoices')
 export class ErpInvoicesCoreController {
   constructor(private readonly service: ErpInvoicesCoreService) {}
@@ -32,6 +34,7 @@ export class ErpInvoicesCoreController {
   // CRUD cơ bản
   // ---------------------------------------------------------------------------
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get()
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
@@ -46,26 +49,31 @@ export class ErpInvoicesCoreController {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
     return this.service.create(dto);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'delete' })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);

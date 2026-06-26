@@ -214,7 +214,10 @@ export class ProductionCoreService {
     collectTreeItemIds(explosionTree, allItemIds);
 
     const inventoryItems = allItemIds.size
-      ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
+      ? await itemRepo.find({
+          where: { id: In(Array.from(allItemIds)) },
+          relations: ['itemType'],
+        })
       : [];
     const inventoryItemMap = new Map(
       inventoryItems.map((item) => [item.id, item]),
@@ -227,6 +230,7 @@ export class ProductionCoreService {
           node.itemName = item.itemName;
           node.itemCode = item.sku;
           node.uom = item.uom;
+          node.itemTypeCode = item.itemType?.code;
         }
         if (node.children) populateTreeItems(node.children);
       }
@@ -240,6 +244,7 @@ export class ProductionCoreService {
         itemName: item?.itemName,
         itemCode: item?.sku,
         uom: item?.uom,
+        itemTypeCode: item?.itemType?.code,
       };
     });
 
@@ -603,7 +608,10 @@ export class ProductionCoreService {
       );
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT i.id, i.sku, i.item_name, t.code as item_type_code 
+           FROM public.erp_inventory_items i 
+           LEFT JOIN public.erp_item_types t ON i.item_type_id = t.id 
+           WHERE i.id = ANY($1::uuid[])`,
           [itemIds],
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
@@ -622,6 +630,7 @@ export class ProductionCoreService {
             const item = itemMap.get(mat.itemId) as any;
             (mat as any).itemCode = item.sku;
             (mat as any).itemName = item.item_name;
+            (mat as any).itemTypeCode = item.item_type_code;
           }
 
           if (originalItemId && itemMap.has(originalItemId)) {
@@ -743,27 +752,70 @@ export class ProductionCoreService {
   }
 
   async cancel(id: string) {
-    const existing = await this.productionOrderRepository.findOne({
-      where: { id, isDeleted: false },
+    return this.dataSource.transaction(async (manager) => {
+      const productionRepo = manager.getRepository(ErpProductionOrder);
+      const existing = await productionRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+      if (!existing)
+        throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+      if (existing.status === 'CANCELLED') {
+        throw new BadRequestException('Lệnh sản xuất đã bị hủy');
+      }
+      if (existing.status === 'DRAFT') {
+        throw new BadRequestException(
+          'Lệnh sản xuất DRAFT phải dùng thao tác xóa, không dùng hủy',
+        );
+      }
+
+      if (existing.status === 'CONFIRMED') {
+        const materialRepo = manager.getRepository(ErpProductionOrderMaterial);
+        const balanceRepo = manager.getRepository(ErpInventoryBalance);
+
+        const materials = await materialRepo.find({
+          where: { productionOrderId: id },
+        });
+
+        const materialItemIds = Array.from(
+          new Set(materials.map((m) => m.itemId)),
+        );
+
+        if (materialItemIds.length > 0) {
+          const balances = await balanceRepo.find({
+            where: {
+              itemId: In(materialItemIds),
+              ...(existing.warehouseCode
+                ? { warehouseCode: existing.warehouseCode }
+                : {}),
+            },
+          });
+          const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
+
+          const balancesToSave: ErpInventoryBalance[] = [];
+          for (const material of materials) {
+            const balance = balanceMap.get(material.itemId);
+            if (balance) {
+              const currentReserved = Number(balance.qtyReserved || 0);
+              const qtyRequired = Number(material.qtyRequired || 0);
+              const newReserved = Math.max(0, currentReserved - qtyRequired);
+              balance.qtyReserved = newReserved.toFixed(3);
+              balancesToSave.push(balance);
+            }
+          }
+          if (balancesToSave.length > 0) {
+            await balanceRepo.save(balancesToSave);
+          }
+        }
+      }
+
+      existing.status = 'CANCELLED';
+      await productionRepo.save(existing);
+
+      return {
+        message: 'Hủy thành công',
+        data: { id },
+      };
     });
-    if (!existing) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
-    if (existing.status === 'CANCELLED') {
-      throw new BadRequestException('Lệnh sản xuất đã bị hủy');
-    }
-    if (existing.status === 'DRAFT') {
-      throw new BadRequestException(
-        'Lệnh sản xuất DRAFT phải dùng thao tác xóa, không dùng hủy',
-      );
-    }
-
-    // Basic cancellation: just update status. Reversing inventory requires complex transaction reversals.
-    existing.status = 'CANCELLED';
-    await this.productionOrderRepository.save(existing);
-
-    return {
-      message: 'Hủy thành công (chỉ cập nhật trạng thái)',
-      data: { id },
-    };
   }
 
   async remove(id: string) {
@@ -873,15 +925,29 @@ export class ProductionCoreService {
           .map((ov) => [ov.originalItemId, ov]),
       );
 
-      const finalMaterials = Array.from(exploded.values()).map((material) => {
+      const effectiveMaterials = new Map<
+        string,
+        {
+          itemId: string;
+          qtyRequired: number;
+          originalItemId?: string;
+          alternativeNotes?: string | null;
+        }
+      >();
+
+      for (const material of Array.from(exploded.values())) {
         const override = overrideMap.get(material.itemId);
-        return {
-          itemId: override?.alternativeItemId ?? material.itemId,
-          originalItemId: override?.originalItemId ?? material.itemId,
-          qtyRequired: material.qtyRequired,
+        const effectiveItemId = override?.alternativeItemId ?? material.itemId;
+        const existing = effectiveMaterials.get(effectiveItemId);
+        effectiveMaterials.set(effectiveItemId, {
+          itemId: effectiveItemId,
+          qtyRequired: (existing?.qtyRequired ?? 0) + material.qtyRequired,
+          originalItemId: override ? material.itemId : undefined,
           alternativeNotes: override?.notes ?? null,
-        };
-      });
+        });
+      }
+
+      const finalMaterials = Array.from(effectiveMaterials.values());
 
       const collectTreeItemIds = (nodes: any[], set: Set<string>) => {
         for (const node of nodes) {
@@ -1007,6 +1073,7 @@ export class ProductionCoreService {
 
       const inventoryItems = await itemRepo.find({
         where: { id: In(materialItemIds) },
+        relations: ['itemType'],
       });
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
@@ -1025,10 +1092,14 @@ export class ProductionCoreService {
       const balancesToSave: ErpInventoryBalance[] = [];
 
       for (const material of materials) {
+        const item = inventoryItemMap.get(material.itemId);
+        // Skip SERVICE items since they don't have inventory balances
+        if (item?.itemType?.code === 'SERVICE') continue;
+
         const balance = balanceMap.get(material.itemId);
         if (!balance) {
           const materialLabel = this.formatInventoryItemLabel(
-            inventoryItemMap.get(material.itemId),
+            item,
             material.itemId,
           );
           throw new BadRequestException(
@@ -1128,30 +1199,38 @@ export class ProductionCoreService {
 
       // Validate stock availability for proportional qty
       const proportion = qtyToManufacture / qtyToProduce;
+      const aggregatedToIssue = new Map<string, number>();
+
       for (const mat of materials) {
         const qtyRequired = Number(mat.qtyRequired || 0);
         const qtyIssued = Number(mat.qtyIssued || 0);
         const qtyNeeded = parseFloat((qtyRequired * proportion).toFixed(3));
         const remaining = parseFloat((qtyRequired - qtyIssued).toFixed(3));
-        const toIssue = Math.min(qtyNeeded, remaining);
+        const toIssue = parseFloat(Math.min(qtyNeeded, remaining).toFixed(3));
         if (toIssue <= 0) continue;
 
         const item = itemMap.get(mat.itemId);
         if (item?.itemType?.code === 'SERVICE') {
           continue;
         }
+        aggregatedToIssue.set(
+          mat.itemId,
+          (aggregatedToIssue.get(mat.itemId) || 0) + toIssue,
+        );
+      }
 
-        const balance = balanceMap.get(mat.itemId);
-        const availableQty = balance
-          ? Number(balance.qtyOnHand || 0) - Number(balance.qtyReserved || 0)
-          : 0;
-        if (availableQty < toIssue - 0.0005) {
+      for (const [itemId, totalIssue] of aggregatedToIssue.entries()) {
+        const balance = balanceMap.get(itemId);
+        // physicalQty used to ensure we have actual physical stock to deduct from
+        const physicalQty = balance ? Number(balance.qtyOnHand || 0) : 0;
+
+        if (physicalQty < totalIssue - 0.0005) {
           const itemLabel = this.formatInventoryItemLabel(
-            itemMap.get(mat.itemId),
-            mat.itemId,
+            itemMap.get(itemId),
+            itemId,
           );
           throw new BadRequestException(
-            `Tồn khả dụng không đủ cho NVL ${itemLabel}. Cần ${toIssue.toFixed(3)}, có ${availableQty.toFixed(3)}`,
+            `Tồn kho thực tế không đủ cho NVL ${itemLabel}. Cần xuất ${totalIssue.toFixed(3)}, có ${physicalQty.toFixed(3)}`,
           );
         }
       }
