@@ -10,13 +10,15 @@ export class CreateInventoryItemDto {
   @IsString()
   itemName: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  uom: string;
+  uomId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  itemType: string;
+  itemTypeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -373,7 +373,10 @@ export class ProductionCoreService {
       collectTreeItemIds(explosionTree, allItemIds);
 
       const inventoryItems = allItemIds.size
-        ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
+        ? await itemRepo.find({
+            where: { id: In(Array.from(allItemIds)) },
+            relations: ['itemType'],
+          })
         : [];
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
@@ -410,10 +413,14 @@ export class ProductionCoreService {
       // For DRAFT, we allow creation even if NVL has no balance yet (planning mode).
       if (targetStatus === 'CONFIRMED') {
         for (const material of finalMaterials) {
+          const item = inventoryItemMap.get(material.itemId);
+          if (item?.itemType?.code === 'SERVICE') {
+            continue; // Bypass inventory check for non-physical service items
+          }
           const existingBalance = balanceMap.get(material.itemId);
           if (!existingBalance) {
             const materialLabel = this.formatInventoryItemLabel(
-              inventoryItemMap.get(material.itemId),
+              item,
               material.itemId,
             );
             throw new BadRequestException(
@@ -453,12 +460,16 @@ export class ProductionCoreService {
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
 
+        const materialItem = inventoryItemMap.get(material.itemId);
+        const isService = materialItem?.itemType?.code === 'SERVICE';
+
         if (
           targetStatus === 'CONFIRMED' &&
+          !isService &&
           availableQty < material.qtyRequired
         ) {
           const materialLabel = this.formatInventoryItemLabel(
-            inventoryItemMap.get(material.itemId),
+            materialItem,
             material.itemId,
           );
           throw new BadRequestException(
@@ -476,7 +487,6 @@ export class ProductionCoreService {
         };
         materialsToSave.push(materialPayload);
 
-        const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
           ...materialPayload,
           itemName: materialItem?.itemName ?? null,
@@ -485,7 +495,7 @@ export class ProductionCoreService {
           alternativeNotes: material.alternativeNotes ?? null,
         });
 
-        if (targetStatus === 'CONFIRMED') {
+        if (targetStatus === 'CONFIRMED' && !isService) {
           balance!.qtyReserved = (
             currentReserved + material.qtyRequired
           ).toFixed(3);

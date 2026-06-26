@@ -149,15 +149,27 @@ export class InventoryItemsService {
   }
 
   async create(dto: CreateInventoryItemDto) {
-    const uom = await this.ensureUomActive(dto.uom);
-    const itemType = await this.ensureItemTypeActive(dto.itemType);
+    let uomId = dto.uomId;
+    if (!uomId) {
+      const uom = await this.uomRepository.findOne({ where: { code: 'PCS' } });
+      if (uom) uomId = uom.id;
+    }
+
+    let itemTypeId = dto.itemTypeId;
+    if (!itemTypeId) {
+      const itemType = await this.itemTypeRepository.findOne({
+        where: { code: 'RAW' },
+      });
+      if (itemType) itemTypeId = itemType.id;
+    }
+
     const trackingCategory = await this.ensureTrackingCategoryActive(
       dto.trackingCategoryKey,
     );
     const entity = this.repository.create({
       ...dto,
-      uom: uom.code,
-      itemType: itemType.code,
+      uomId: uomId,
+      itemTypeId: itemTypeId,
       trackingPolicy: dto.trackingPolicy ?? 'NONE',
       trackingCategoryKey: trackingCategory?.code ?? null,
     } as Partial<ErpInventoryItem>);
@@ -173,8 +185,8 @@ export class InventoryItemsService {
     if (query.status) {
       baseWhere.status = query.status;
     }
-    if (query.itemType) {
-      baseWhere.itemType = query.itemType;
+    if (query.itemTypeId) {
+      baseWhere.itemTypeId = query.itemTypeId;
     }
     if (query.ids) {
       baseWhere.id = In(
@@ -194,17 +206,18 @@ export class InventoryItemsService {
     }
 
     const order = resolveSortOrder(query.sort, {
-      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemType'],
+      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemTypeId'],
       columnMap: {
         created_at: 'createdAt',
         item_name: 'itemName',
-        item_type: 'itemType',
+        item_type_id: 'itemTypeId',
       },
       defaultOrder: { createdAt: 'DESC' },
     });
 
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
+      relations: ['uom', 'itemType'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -247,7 +260,11 @@ export class InventoryItemsService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType'],
+    });
+    if (!data) throw new NotFoundException('Không tìm thấy item');
     return { message: 'Lấy thông tin thành công', data };
   }
 
@@ -255,13 +272,11 @@ export class InventoryItemsService {
     const patch: Partial<ErpInventoryItem> = {
       ...dto,
     } as Partial<ErpInventoryItem>;
-    if (dto.uom !== undefined) {
-      const uom = await this.ensureUomActive(dto.uom);
-      patch.uom = uom.code;
+    if (dto.uomId !== undefined) {
+      patch.uomId = dto.uomId;
     }
-    if (dto.itemType !== undefined) {
-      const itemType = await this.ensureItemTypeActive(dto.itemType);
-      patch.itemType = itemType.code;
+    if (dto.itemTypeId !== undefined) {
+      patch.itemTypeId = dto.itemTypeId;
     }
     if (dto.trackingCategoryKey !== undefined) {
       const trackingCategory = await this.ensureTrackingCategoryActive(
@@ -273,7 +288,10 @@ export class InventoryItemsService {
       patch.trackingPolicy = dto.trackingPolicy;
     }
     await this.repository.update(id, patch);
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType'],
+    });
     return { message: 'Cập nhật thành công', data };
   }
 
@@ -842,8 +860,8 @@ export class InventoryItemsService {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
     }
 
-    if (query.itemType) {
-      qb.andWhere('i.item_type = :itemType', { itemType: query.itemType });
+    if (query.itemTypeId) {
+      qb.andWhere('i.item_type_id = :itemType', { itemType: query.itemTypeId });
     } else {
       // If no itemType is provided, we can either default to FG or return all.
       // Based on user request, track ANY item that allows tracking, so no default filter needed here.

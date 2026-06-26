@@ -13,7 +13,7 @@ export class CreateBomLineDto {
 
   @ApiProperty()
   @IsString()
-  uom: string;
+  uomId: string;
 
   @ApiPropertyOptional()
   @IsOptional()

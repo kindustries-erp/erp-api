@@ -5,7 +5,11 @@ import {
   Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { ErpUom } from './erp_uom.entity';
+import { ErpItemType } from './erp_item_type.entity';
 
 @Entity({ name: 'erp_inventory_items' })
 export class ErpInventoryItem {
@@ -19,11 +23,19 @@ export class ErpInventoryItem {
   @Column({ type: 'varchar', length: 255, name: 'item_name' })
   itemName: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'uom' })
-  uom: string;
+  @Column({ type: 'uuid', name: 'uom_id' })
+  uomId: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'item_type' })
-  itemType: string;
+  @ManyToOne(() => ErpUom)
+  @JoinColumn({ name: 'uom_id' })
+  uom: ErpUom;
+
+  @Column({ type: 'uuid', name: 'item_type_id' })
+  itemTypeId: string;
+
+  @ManyToOne(() => ErpItemType)
+  @JoinColumn({ name: 'item_type_id' })
+  itemType: ErpItemType;
 
   @Column({ type: 'text', name: 'note', nullable: true })
   note?: string;

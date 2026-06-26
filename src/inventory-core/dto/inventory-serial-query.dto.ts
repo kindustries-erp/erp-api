@@ -6,7 +6,7 @@ export class InventorySerialQueryDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  itemType?: string;
+  itemTypeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
