@@ -32,11 +32,11 @@ export class InventoryStockCoreService {
       qb.where(
         new Brackets((qbInner) => {
           qbInner
-            .where('itemType.code = :type AND item.sku LIKE :search', {
+            .where('itemType.code = :type AND item.sku ILIKE :search', {
               type: query.item_type,
               search: `%${query.search}%`,
             })
-            .orWhere('itemType.code = :type AND item.itemName LIKE :search', {
+            .orWhere('itemType.code = :type AND item.itemName ILIKE :search', {
               type: query.item_type,
               search: `%${query.search}%`,
             });
@@ -48,8 +48,8 @@ export class InventoryStockCoreService {
       qb.where(
         new Brackets((qbInner) => {
           qbInner
-            .where('item.sku LIKE :search', { search: `%${query.search}%` })
-            .orWhere('item.itemName LIKE :search', {
+            .where('item.sku ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('item.itemName ILIKE :search', {
               search: `%${query.search}%`,
             });
         }),
