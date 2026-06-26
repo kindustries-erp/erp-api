@@ -184,6 +184,7 @@ export class RbacCoreService {
       { resource: 'purchase_orders', label: 'Purchase Orders' },
       { resource: 'sales_orders', label: 'Sales Orders' },
       { resource: 'inventory_items', label: 'Inventory Items' },
+      { resource: 'inventory_vouchers', label: 'Chứng từ kho' },
       { resource: 'goods_receipts', label: 'Goods Receipts' },
       { resource: 'goods_issues', label: 'Goods Issues' },
       { resource: 'bom', label: 'BOM' },
