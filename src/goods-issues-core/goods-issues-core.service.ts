@@ -18,7 +18,7 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.entity';
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
@@ -64,8 +64,8 @@ export class GoodsIssuesCoreService {
 
   private async enrichLines(lines: ErpGoodsIssueLine[], manager?: any) {
     const serialRepo = manager
-      ? manager.getRepository(ErpInventorySerial)
-      : this.dataSource.getRepository(ErpInventorySerial);
+      ? manager.getRepository(ErpInventoryTrackingSerial)
+      : this.dataSource.getRepository(ErpInventoryTrackingSerial);
     const vehicleRepo = manager
       ? manager.getRepository(ErpVehicle)
       : this.dataSource.getRepository(ErpVehicle);
@@ -77,18 +77,18 @@ export class GoodsIssuesCoreService {
       ...new Set(lines.map((line) => line.vehicleId).filter(Boolean)),
     ] as string[];
 
-    const [serials, vehicles]: [ErpInventorySerial[], ErpVehicle[]] =
+    const [serials, vehicles]: [ErpInventoryTrackingSerial[], ErpVehicle[]] =
       await Promise.all([
         serialIds.length
           ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpInventorySerial[]),
+          : Promise.resolve([] as ErpInventoryTrackingSerial[]),
         vehicleIds.length
           ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
           : Promise.resolve([] as ErpVehicle[]),
       ]);
 
     const serialMap = new Map(
-      serials.map((row: ErpInventorySerial) => [row.id, row]),
+      serials.map((row: ErpInventoryTrackingSerial) => [row.id, row]),
     );
     const vehicleMap = new Map(
       vehicles.map((row: ErpVehicle) => [row.id, row]),
@@ -100,8 +100,7 @@ export class GoodsIssuesCoreService {
       return {
         ...line,
         serialNo: serial?.serialNo ?? null,
-        vehicleVin: vehicle?.vin ?? null,
-        frameNo: vehicle?.frameNo ?? null,
+        vehicleVinNo: vehicle?.vinNo ?? null,
         engineNo: vehicle?.engineNo ?? null,
       };
     });
@@ -260,7 +259,7 @@ export class GoodsIssuesCoreService {
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
       const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const issue = await this.getIssueOrThrow(issueRepo, id);
@@ -286,7 +285,7 @@ export class GoodsIssuesCoreService {
           );
         }
 
-        let serial: ErpInventorySerial | null = null;
+        let serial: ErpInventoryTrackingSerial | null = null;
         let vehicle: ErpVehicle | null = null;
         if (line.serialId) {
           serial = await serialRepo.findOneBy({ id: line.serialId });
@@ -575,7 +574,7 @@ export class GoodsIssuesCoreService {
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
       const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const issue = await this.getIssueOrThrow(issueRepo, id);

@@ -29,7 +29,7 @@ import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.ent
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
@@ -1267,7 +1267,7 @@ export class ProductionCoreService {
       const grRepo = manager.getRepository(ErpGoodsReceipt);
       const grLineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const itemRepo = manager.getRepository(ErpInventoryItem);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const order = await productionRepo.findOne({
@@ -1339,18 +1339,18 @@ export class ProductionCoreService {
         const seenVins = new Set<string>();
         const seenEngineNos = new Set<string>();
         identifiers.forEach((identifier, index) => {
-          const vin = identifier.vin?.trim();
+          const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
-          if (!vin || !engineNo) {
+          if (!vinNo || !engineNo) {
             throw new BadRequestException(
               `Thiếu VIN hoặc số máy tại mã định danh ${index + 1}`,
             );
           }
-          const vinKey = vin.toUpperCase();
+          const vinKey = vinNo.toUpperCase();
           const engineKey = engineNo.toUpperCase();
           if (seenVins.has(vinKey)) {
             throw new BadRequestException(
-              `Số VIN bị trùng trong danh sách: ${vin}`,
+              `Số VIN bị trùng trong danh sách: ${vinNo}`,
             );
           }
           if (seenEngineNos.has(engineKey)) {
@@ -1360,24 +1360,27 @@ export class ProductionCoreService {
           }
           seenVins.add(vinKey);
           seenEngineNos.add(engineKey);
-          identifier.vin = vin;
+          identifier.vinNo = vinNo;
           identifier.engineNo = engineNo;
         });
 
         const existingVehicles = await vehicleRepo
           .createQueryBuilder('vehicle')
-          .select(['vehicle.vin AS vin', 'vehicle.engineNo AS "engineNo"'])
-          .where('UPPER(vehicle.vin) IN (:...vinKeys)', {
+          .select([
+            'vehicle.vinNo AS "vinNo"',
+            'vehicle.engineNo AS "engineNo"',
+          ])
+          .where('UPPER(vehicle.vinNo) IN (:...vinKeys)', {
             vinKeys: Array.from(seenVins),
           })
           .orWhere('UPPER(vehicle.engineNo) IN (:...engineKeys)', {
             engineKeys: Array.from(seenEngineNos),
           })
-          .getRawMany<{ vin: string | null; engineNo: string | null }>();
+          .getRawMany<{ vinNo: string | null; engineNo: string | null }>();
 
         const duplicatedVin = existingVehicles.find(
-          (row) => row.vin && seenVins.has(row.vin.toUpperCase()),
-        )?.vin;
+          (row) => row.vinNo && seenVins.has(row.vinNo.toUpperCase()),
+        )?.vinNo;
         if (duplicatedVin) {
           throw new BadRequestException(`Số VIN đã tồn tại: ${duplicatedVin}`);
         }
@@ -1450,8 +1453,7 @@ export class ProductionCoreService {
         for (const identifier of identifiers) {
           const vehicle = (await vehicleRepo.save(
             vehicleRepo.create({
-              vin: identifier.vin,
-              frameNo: identifier.vin,
+              vinNo: identifier.vinNo,
               engineNo: identifier.engineNo,
               finishedGoodItemId: order.finishedGoodItemId,
               productionOrderId: order.id,

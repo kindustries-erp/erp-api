@@ -5,8 +5,8 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
-import { ErpInventoryLot } from '../inventory-core/entities/erp_inventory_lot.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpVehicle } from './entities/erp_vehicle.entity';
@@ -23,10 +23,10 @@ export class ErpMfgCoreService {
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
     @InjectRepository(ErpInventoryTransaction)
     private readonly txnRepository: Repository<ErpInventoryTransaction>,
-    @InjectRepository(ErpInventoryLot)
-    private readonly lotRepository: Repository<ErpInventoryLot>,
-    @InjectRepository(ErpInventorySerial)
-    private readonly serialRepository: Repository<ErpInventorySerial>,
+    @InjectRepository(ErpInventoryTrackingLot)
+    private readonly lotRepository: Repository<ErpInventoryTrackingLot>,
+    @InjectRepository(ErpInventoryTrackingSerial)
+    private readonly serialRepository: Repository<ErpInventoryTrackingSerial>,
     @InjectRepository(ErpPurchaseOrder)
     private readonly poRepository: Repository<ErpPurchaseOrder>,
     @InjectRepository(ErpPurchaseOrderLine)
@@ -320,8 +320,7 @@ export class ErpMfgCoreService {
   }
 
   async createVehicle(dto: {
-    vin?: string | null;
-    frame_no: string;
+    vin_no: string;
     engine_no: string;
     finished_good_item_id?: string | null;
     assembly_date?: string | null;
@@ -329,11 +328,9 @@ export class ErpMfgCoreService {
     notes?: string | null;
     serial_no?: string | null;
   }) {
-    const canonicalVin = dto.frame_no.trim();
     const vehicle = this.vehicleRepository.create({
-      vin: dto.vin?.trim() || canonicalVin,
-      frameNo: canonicalVin,
-      engineNo: dto.engine_no,
+      vinNo: dto.vin_no.trim(),
+      engineNo: dto.engine_no.trim(),
       finishedGoodItemId: dto.finished_good_item_id ?? null,
       assemblyDate: dto.assembly_date ?? null,
       branchId: dto.branch_id ?? null,
@@ -398,8 +395,7 @@ export class ErpMfgCoreService {
   private mapVehicle(v: ErpVehicle) {
     return {
       id: v.id,
-      vin: v.vin,
-      frame_no: v.frameNo,
+      vin_no: v.vinNo,
       engine_no: v.engineNo,
       branch_id: v.branchId,
       finished_good_item_id: v.finishedGoodItemId,
