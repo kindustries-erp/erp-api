@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpSalesOrder } from './entities/erp_sales_order.entity';
@@ -79,6 +79,38 @@ export class SalesOrdersCoreService {
     const order = resolveSortOrder(query.sort, {
       defaultOrder: { createdAt: 'DESC' },
     });
+
+    const tagId = (query as any).tag_id as string | undefined;
+
+    if (tagId) {
+      const taggedRows = await this.dataSource.query(
+        `SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_sales_order' AND tag_id = $1`,
+        [tagId],
+      );
+      const taggedIds = taggedRows.map((r: any) => r.entity_id) as string[];
+      if (taggedIds.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      const [items, total] = await this.repository.findAndCount({
+        where: [
+          {
+            id: In(taggedIds),
+            ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
+            isDeleted: false,
+          },
+        ] as any,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        order,
+      });
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    }
 
     const [items, total] = await this.repository.findAndCount({
       where: [

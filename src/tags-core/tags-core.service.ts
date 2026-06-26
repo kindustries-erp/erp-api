@@ -111,12 +111,82 @@ export class TagsCoreService {
   }
 
   // Get all entities tagged with a specific tag
-  async getTagConnections(tagId: string): Promise<SysEntityTag[]> {
+  async getTagConnections(tagId: string): Promise<any[]> {
     // Validate tag exists
     await this.findOne(tagId);
 
-    return this.entityTagRepository.find({
+    const connections = await this.entityTagRepository.find({
       where: { tagId },
     });
+
+    const result: any[] = [];
+    for (const conn of connections) {
+      let displayCode = conn.entityId;
+      let entityStatus = 'UNKNOWN';
+      let entityDate = conn.createdAt;
+      let meta: any = {};
+
+      try {
+        if (conn.entityType === 'erp_purchase_order') {
+          const rows = await this.entityTagRepository.manager.query(
+            `SELECT po.po_no as document_no, po.status, po.created_at, po.order_date, po.expected_date, bp.name as partner_name FROM erp_purchase_orders po LEFT JOIN erp_business_partners bp ON po.supplier_id = bp.id WHERE po.id = $1`,
+            [conn.entityId],
+          );
+          if (rows.length > 0) {
+            displayCode = rows[0].document_no;
+            entityStatus = rows[0].status;
+            entityDate = rows[0].created_at;
+            meta = {
+              orderDate: rows[0].order_date,
+              expectedDate: rows[0].expected_date,
+              partnerName: rows[0].partner_name,
+            };
+          }
+        } else if (conn.entityType === 'erp_sales_order') {
+          const rows = await this.entityTagRepository.manager.query(
+            `SELECT so.so_no as document_no, so.status, so.created_at, so.order_date, bp.name as partner_name FROM erp_sales_orders so LEFT JOIN erp_business_partners bp ON so.customer_id = bp.id WHERE so.id = $1`,
+            [conn.entityId],
+          );
+          if (rows.length > 0) {
+            displayCode = rows[0].document_no;
+            entityStatus = rows[0].status;
+            entityDate = rows[0].created_at;
+            meta = {
+              orderDate: rows[0].order_date,
+              partnerName: rows[0].partner_name,
+            };
+          }
+        } else if (conn.entityType === 'erp_invoice') {
+          const rows = await this.entityTagRepository.manager.query(
+            `SELECT invoice_no, status, created_at, invoice_date, total_amount, seller_name, buyer_name FROM erp_invoices WHERE id = $1`,
+            [conn.entityId],
+          );
+          if (rows.length > 0) {
+            displayCode = rows[0].invoice_no || conn.entityId;
+            entityStatus = rows[0].status;
+            entityDate = rows[0].created_at;
+            meta = {
+              invoiceDate: rows[0].invoice_date,
+              totalAmount: rows[0].total_amount,
+              partnerName: rows[0].seller_name || rows[0].buyer_name, // fallback
+            };
+          }
+        }
+      } catch (err) {
+        // Fallback to defaults if table doesn't exist yet
+      }
+
+      result.push({
+        tagId: conn.tagId,
+        entityType: conn.entityType,
+        entityId: conn.entityId,
+        displayCode,
+        entityStatus,
+        entityDate,
+        meta,
+      });
+    }
+
+    return result;
   }
 }

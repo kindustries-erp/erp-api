@@ -29,6 +29,7 @@ export interface ErpInvoiceQuery {
   date_from?: string;
   date_to?: string;
   status?: string;
+  tag_id?: string;
   page?: number;
   pageSize?: number;
   sort_by?: string;
@@ -92,7 +93,12 @@ export class ErpInvoicesCoreService {
     }
 
     // Search / explicit seller/buyer name filters via QueryBuilder
-    const needsQb = !!(query.search || query.seller_name || query.buyer_name);
+    const needsQb = !!(
+      query.search ||
+      query.seller_name ||
+      query.buyer_name ||
+      query.tag_id
+    );
     if (needsQb) {
       const qb = this.repository
         .createQueryBuilder('inv')
@@ -125,6 +131,12 @@ export class ErpInvoicesCoreService {
         qb.andWhere('inv.buyer_name ILIKE :bn', {
           bn: `%${query.buyer_name}%`,
         });
+      }
+      if (query.tag_id) {
+        qb.andWhere(
+          `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
+          { tagId: query.tag_id },
+        );
       }
 
       const searchResults = await qb

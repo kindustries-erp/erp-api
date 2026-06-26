@@ -43,6 +43,7 @@ export class ErpInvoicesCoreController {
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'tag_id', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
   findAll(@Query() query: ErpInvoiceQuery) {
