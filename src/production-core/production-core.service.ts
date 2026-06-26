@@ -548,7 +548,7 @@ export class ProductionCoreService {
 
     // Load produced identifiers (vehicles / serials) linked to this production order
     const producedVehicles = await this.dataSource.query(
-      `SELECT id, vin, frame_no AS "frameNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
+      `SELECT id, vin_no AS "vinNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
        FROM public.erp_vehicles
        WHERE production_order_id = $1::uuid
        ORDER BY created_at ASC`,
@@ -556,7 +556,7 @@ export class ProductionCoreService {
     );
     const producedSerials = await this.dataSource.query(
       `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt"
-       FROM public.erp_inventory_serials
+       FROM public.erp_inventory_tracking_serials
        WHERE production_order_id = $1::uuid
        ORDER BY created_at ASC`,
       [id],
