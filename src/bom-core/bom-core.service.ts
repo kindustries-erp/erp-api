@@ -124,7 +124,12 @@ export class BomCoreService {
     });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
+      relations: ['uom'],
       order: { lineNo: 'ASC' },
+    });
+
+    lines.forEach((line: any) => {
+      line.uom = line.uom?.name || '';
     });
 
     if (data.finishedGoodItemId) {
@@ -285,7 +290,7 @@ export class BomCoreService {
         stt: r.indexStr,
         tenLinhKien: item ? item.item_name : '',
         maLinhKien: item ? item.sku : '',
-        dvt: (r.line.uom as any)?.code || '',
+        dvt: (r.line.uom as any)?.name || '',
         soLuong: Number(r.line.qtyRequired) || 0,
         haoHut: r.line.scrapRate ? Number(r.line.scrapRate) : 0,
         ghiChu: r.line.notes || '',
@@ -474,7 +479,7 @@ export class BomCoreService {
     itemsWs.autoFilter = 'A1:C1';
 
     const items = await this.dataSource.query(
-      `SELECT i.sku, i.item_name, u.code as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.status = 'ACTIVE' ORDER BY i.sku ASC`,
+      `SELECT i.sku, i.item_name, u.name as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.status = 'ACTIVE' ORDER BY i.sku ASC`,
     );
 
     for (const item of items) {
@@ -546,7 +551,7 @@ export class BomCoreService {
 
     // Validate items
     const items = await this.dataSource.query(
-      `SELECT i.id, i.sku, i.item_name, i.uom_id, u.code as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.sku = ANY($1)`,
+      `SELECT i.id, i.sku, i.item_name, i.uom_id, u.name as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.sku = ANY($1)`,
       [Array.from(skuSet)],
     );
 
