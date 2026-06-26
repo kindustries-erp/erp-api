@@ -29,7 +29,7 @@ import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.ent
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
@@ -373,7 +373,10 @@ export class ProductionCoreService {
       collectTreeItemIds(explosionTree, allItemIds);
 
       const inventoryItems = allItemIds.size
-        ? await itemRepo.find({ where: { id: In(Array.from(allItemIds)) } })
+        ? await itemRepo.find({
+            where: { id: In(Array.from(allItemIds)) },
+            relations: ['itemType'],
+          })
         : [];
       const inventoryItemMap = new Map(
         inventoryItems.map((item) => [item.id, item]),
@@ -410,10 +413,14 @@ export class ProductionCoreService {
       // For DRAFT, we allow creation even if NVL has no balance yet (planning mode).
       if (targetStatus === 'CONFIRMED') {
         for (const material of finalMaterials) {
+          const item = inventoryItemMap.get(material.itemId);
+          if (item?.itemType?.code === 'SERVICE') {
+            continue; // Bypass inventory check for non-physical service items
+          }
           const existingBalance = balanceMap.get(material.itemId);
           if (!existingBalance) {
             const materialLabel = this.formatInventoryItemLabel(
-              inventoryItemMap.get(material.itemId),
+              item,
               material.itemId,
             );
             throw new BadRequestException(
@@ -453,12 +460,16 @@ export class ProductionCoreService {
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
 
+        const materialItem = inventoryItemMap.get(material.itemId);
+        const isService = materialItem?.itemType?.code === 'SERVICE';
+
         if (
           targetStatus === 'CONFIRMED' &&
+          !isService &&
           availableQty < material.qtyRequired
         ) {
           const materialLabel = this.formatInventoryItemLabel(
-            inventoryItemMap.get(material.itemId),
+            materialItem,
             material.itemId,
           );
           throw new BadRequestException(
@@ -476,7 +487,6 @@ export class ProductionCoreService {
         };
         materialsToSave.push(materialPayload);
 
-        const materialItem = inventoryItemMap.get(material.itemId);
         savedMaterials.push({
           ...materialPayload,
           itemName: materialItem?.itemName ?? null,
@@ -485,7 +495,7 @@ export class ProductionCoreService {
           alternativeNotes: material.alternativeNotes ?? null,
         });
 
-        if (targetStatus === 'CONFIRMED') {
+        if (targetStatus === 'CONFIRMED' && !isService) {
           balance!.qtyReserved = (
             currentReserved + material.qtyRequired
           ).toFixed(3);
@@ -538,7 +548,7 @@ export class ProductionCoreService {
 
     // Load produced identifiers (vehicles / serials) linked to this production order
     const producedVehicles = await this.dataSource.query(
-      `SELECT id, vin, frame_no AS "frameNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
+      `SELECT id, vin_no AS "vinNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
        FROM public.erp_vehicles
        WHERE production_order_id = $1::uuid
        ORDER BY created_at ASC`,
@@ -546,7 +556,7 @@ export class ProductionCoreService {
     );
     const producedSerials = await this.dataSource.query(
       `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt"
-       FROM public.erp_inventory_serials
+       FROM public.erp_inventory_tracking_serials
        WHERE production_order_id = $1::uuid
        ORDER BY created_at ASC`,
       [id],
@@ -1257,7 +1267,7 @@ export class ProductionCoreService {
       const grRepo = manager.getRepository(ErpGoodsReceipt);
       const grLineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const itemRepo = manager.getRepository(ErpInventoryItem);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const order = await productionRepo.findOne({
@@ -1329,18 +1339,18 @@ export class ProductionCoreService {
         const seenVins = new Set<string>();
         const seenEngineNos = new Set<string>();
         identifiers.forEach((identifier, index) => {
-          const vin = identifier.vin?.trim();
+          const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
-          if (!vin || !engineNo) {
+          if (!vinNo || !engineNo) {
             throw new BadRequestException(
               `Thiếu VIN hoặc số máy tại mã định danh ${index + 1}`,
             );
           }
-          const vinKey = vin.toUpperCase();
+          const vinKey = vinNo.toUpperCase();
           const engineKey = engineNo.toUpperCase();
           if (seenVins.has(vinKey)) {
             throw new BadRequestException(
-              `Số VIN bị trùng trong danh sách: ${vin}`,
+              `Số VIN bị trùng trong danh sách: ${vinNo}`,
             );
           }
           if (seenEngineNos.has(engineKey)) {
@@ -1350,24 +1360,27 @@ export class ProductionCoreService {
           }
           seenVins.add(vinKey);
           seenEngineNos.add(engineKey);
-          identifier.vin = vin;
+          identifier.vinNo = vinNo;
           identifier.engineNo = engineNo;
         });
 
         const existingVehicles = await vehicleRepo
           .createQueryBuilder('vehicle')
-          .select(['vehicle.vin AS vin', 'vehicle.engineNo AS "engineNo"'])
-          .where('UPPER(vehicle.vin) IN (:...vinKeys)', {
+          .select([
+            'vehicle.vinNo AS "vinNo"',
+            'vehicle.engineNo AS "engineNo"',
+          ])
+          .where('UPPER(vehicle.vinNo) IN (:...vinKeys)', {
             vinKeys: Array.from(seenVins),
           })
           .orWhere('UPPER(vehicle.engineNo) IN (:...engineKeys)', {
             engineKeys: Array.from(seenEngineNos),
           })
-          .getRawMany<{ vin: string | null; engineNo: string | null }>();
+          .getRawMany<{ vinNo: string | null; engineNo: string | null }>();
 
         const duplicatedVin = existingVehicles.find(
-          (row) => row.vin && seenVins.has(row.vin.toUpperCase()),
-        )?.vin;
+          (row) => row.vinNo && seenVins.has(row.vinNo.toUpperCase()),
+        )?.vinNo;
         if (duplicatedVin) {
           throw new BadRequestException(`Số VIN đã tồn tại: ${duplicatedVin}`);
         }
@@ -1440,8 +1453,7 @@ export class ProductionCoreService {
         for (const identifier of identifiers) {
           const vehicle = (await vehicleRepo.save(
             vehicleRepo.create({
-              vin: identifier.vin,
-              frameNo: identifier.vin,
+              vinNo: identifier.vinNo,
               engineNo: identifier.engineNo,
               finishedGoodItemId: order.finishedGoodItemId,
               productionOrderId: order.id,

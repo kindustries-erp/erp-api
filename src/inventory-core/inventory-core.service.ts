@@ -14,7 +14,9 @@ import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
+import { ErpTrackingPolicy } from './entities/erp_tracking_policy.entity';
 import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
+import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
 import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
@@ -24,7 +26,6 @@ import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
-import { ErpInventorySerial } from './entities/erp_inventory_serial.entity';
 import { GraphLayoutService } from '../common/services/graph-layout.service';
 @Injectable()
 export class InventoryItemsService {
@@ -41,8 +42,10 @@ export class InventoryItemsService {
     private readonly itemTypeRepository: Repository<ErpItemType>,
     @InjectRepository(ErpTrackingCategory)
     private readonly trackingCategoryRepository: Repository<ErpTrackingCategory>,
-    @InjectRepository(ErpInventorySerial)
-    private readonly serialRepository: Repository<ErpInventorySerial>,
+    @InjectRepository(ErpTrackingPolicy)
+    private readonly trackingPolicyRepository: Repository<ErpTrackingPolicy>,
+    @InjectRepository(ErpInventoryTrackingSerial)
+    private readonly serialRepository: Repository<ErpInventoryTrackingSerial>,
     private readonly dataSource: DataSource,
     private readonly graphLayoutService: GraphLayoutService,
   ) {}
@@ -149,17 +152,26 @@ export class InventoryItemsService {
   }
 
   async create(dto: CreateInventoryItemDto) {
-    const uom = await this.ensureUomActive(dto.uom);
-    const itemType = await this.ensureItemTypeActive(dto.itemType);
-    const trackingCategory = await this.ensureTrackingCategoryActive(
-      dto.trackingCategoryKey,
-    );
+    let uomId = dto.uomId;
+    if (!uomId) {
+      const uom = await this.uomRepository.findOne({ where: { code: 'PCS' } });
+      if (uom) uomId = uom.id;
+    }
+
+    let itemTypeId = dto.itemTypeId;
+    if (!itemTypeId) {
+      const itemType = await this.itemTypeRepository.findOne({
+        where: { code: 'RAW' },
+      });
+      if (itemType) itemTypeId = itemType.id;
+    }
+
     const entity = this.repository.create({
       ...dto,
-      uom: uom.code,
-      itemType: itemType.code,
-      trackingPolicy: dto.trackingPolicy ?? 'NONE',
-      trackingCategoryKey: trackingCategory?.code ?? null,
+      uomId: uomId,
+      itemTypeId: itemTypeId,
+      trackingPolicyId: dto.trackingPolicyId ?? null,
+      trackingCategoryId: dto.trackingCategoryId ?? null,
     } as Partial<ErpInventoryItem>);
     const data = await this.repository.save(entity);
     return { message: 'Tạo thành công', data };
@@ -173,8 +185,8 @@ export class InventoryItemsService {
     if (query.status) {
       baseWhere.status = query.status;
     }
-    if (query.itemType) {
-      baseWhere.itemType = query.itemType;
+    if (query.itemTypeId) {
+      baseWhere.itemTypeId = query.itemTypeId;
     }
     if (query.ids) {
       baseWhere.id = In(
@@ -194,17 +206,18 @@ export class InventoryItemsService {
     }
 
     const order = resolveSortOrder(query.sort, {
-      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemType'],
+      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemTypeId'],
       columnMap: {
         created_at: 'createdAt',
         item_name: 'itemName',
-        item_type: 'itemType',
+        item_type_id: 'itemTypeId',
       },
       defaultOrder: { createdAt: 'DESC' },
     });
 
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
+      relations: ['uom', 'itemType'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -247,7 +260,11 @@ export class InventoryItemsService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType'],
+    });
+    if (!data) throw new NotFoundException('Không tìm thấy item');
     return { message: 'Lấy thông tin thành công', data };
   }
 
@@ -255,25 +272,23 @@ export class InventoryItemsService {
     const patch: Partial<ErpInventoryItem> = {
       ...dto,
     } as Partial<ErpInventoryItem>;
-    if (dto.uom !== undefined) {
-      const uom = await this.ensureUomActive(dto.uom);
-      patch.uom = uom.code;
+    if (dto.uomId !== undefined) {
+      patch.uomId = dto.uomId;
     }
-    if (dto.itemType !== undefined) {
-      const itemType = await this.ensureItemTypeActive(dto.itemType);
-      patch.itemType = itemType.code;
+    if (dto.itemTypeId !== undefined) {
+      patch.itemTypeId = dto.itemTypeId;
     }
-    if (dto.trackingCategoryKey !== undefined) {
-      const trackingCategory = await this.ensureTrackingCategoryActive(
-        dto.trackingCategoryKey,
-      );
-      patch.trackingCategoryKey = trackingCategory?.code ?? null;
+    if (dto.trackingPolicyId !== undefined) {
+      patch.trackingPolicyId = dto.trackingPolicyId;
     }
-    if (dto.trackingPolicy !== undefined) {
-      patch.trackingPolicy = dto.trackingPolicy;
+    if (dto.trackingCategoryId !== undefined) {
+      patch.trackingCategoryId = dto.trackingCategoryId;
     }
     await this.repository.update(id, patch);
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
+    });
     return { message: 'Cập nhật thành công', data };
   }
 
@@ -357,6 +372,24 @@ export class InventoryItemsService {
     if (dto.isActive !== undefined) existing.isActive = dto.isActive;
     const data = await this.itemTypeRepository.save(existing);
     return { message: 'Cập nhật loại item thành công', data };
+  }
+
+  async listTrackingPolicies(query: InventoryMasterQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 100;
+    const [items, total] = await this.trackingPolicyRepository.findAndCount({
+      where: this.buildMasterWhere(query),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { code: 'ASC' },
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async listTrackingCategories(query: InventoryMasterQueryDto) {
@@ -842,20 +875,31 @@ export class InventoryItemsService {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
     }
 
-    if (query.itemType) {
-      qb.andWhere('i.item_type = :itemType', { itemType: query.itemType });
+    if (query.itemTypeId) {
+      qb.andWhere('i.item_type_id = :itemType', { itemType: query.itemTypeId });
     } else {
       // If no itemType is provided, we can either default to FG or return all.
       // Based on user request, track ANY item that allows tracking, so no default filter needed here.
     }
 
     if (query.trackingPolicy) {
-      qb.andWhere('i.tracking_policy = :trackingPolicy', {
-        trackingPolicy: query.trackingPolicy,
-      });
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM erp_tracking_policies tp
+          WHERE tp.id = i.tracking_policy_id
+          AND tp.code = :trackingPolicy
+        )`,
+        { trackingPolicy: query.trackingPolicy },
+      );
     } else {
-      // By default, we only want tracked instances, i.e., trackingPolicy is not 'NONE'
-      qb.andWhere('i.tracking_policy != :none', { none: 'NONE' });
+      // By default, only return items with a tracking policy assigned (not NONE/null)
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM erp_tracking_policies tp
+          WHERE tp.id = i.tracking_policy_id
+          AND tp.code != 'NONE'
+        )`,
+      );
     }
 
     if (query.search) {
@@ -892,9 +936,9 @@ export class InventoryItemsService {
       serialNo: raw.s_serial_no,
       itemId: raw.s_item_id,
       vinId: raw.s_vin_id,
-      vin: raw.v_vin,
+      vinNo: raw.v_vin_no,
       engineNo: raw.v_engine_no,
-      lotId: raw.s_lot_id,
+      customId: raw.s_custom_id,
       createdAt: raw.s_created_at,
       updatedAt: raw.s_updated_at,
       item: {
@@ -902,8 +946,8 @@ export class InventoryItemsService {
         sku: raw.i_sku,
         itemName: raw.i_item_name,
         itemType: raw.i_item_type,
-        trackingPolicy: raw.i_tracking_policy,
-        trackingCategoryKey: raw.i_tracking_category_key,
+        trackingPolicyId: raw.i_tracking_policy_id,
+        trackingCategoryId: raw.i_tracking_category_id,
       },
     }));
 

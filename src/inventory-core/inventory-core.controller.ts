@@ -87,6 +87,12 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('tracking-policies')
+  listTrackingPolicies(@Query() query: InventoryMasterQueryDto) {
+    return this.service.listTrackingPolicies(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('tracking-categories')
   listTrackingCategories(@Query() query: InventoryMasterQueryDto) {
     return this.service.listTrackingCategories(query);

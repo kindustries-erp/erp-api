@@ -39,6 +39,15 @@ export class BomCoreService {
       const savedLines: ErpBomLine[] = [];
       let lineNo = 1;
       for (const line of lines) {
+        let uomId = line.uomId;
+        if (!uomId && line.componentItemId) {
+          const items = await manager.query(
+            'SELECT uom_id FROM erp_inventory_items WHERE id = $1',
+            [line.componentItemId],
+          );
+          if (items.length > 0) uomId = items[0].uom_id;
+        }
+
         savedLines.push(
           await lineRepo.save(
             lineRepo.create({
@@ -46,7 +55,7 @@ export class BomCoreService {
               lineNo: lineNo++,
               componentItemId: line.componentItemId ?? null,
               qtyRequired: line.qtyRequired,
-              uom: line.uom,
+              uomId: uomId ?? null,
               scrapRate: line.scrapRate ?? null,
               notes: line.notes ?? null,
             } as DeepPartial<ErpBomLine>),
@@ -115,7 +124,12 @@ export class BomCoreService {
     });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
+      relations: ['uom'],
       order: { lineNo: 'ASC' },
+    });
+
+    lines.forEach((line: any) => {
+      line.uom = line.uom?.name || '';
     });
 
     if (data.finishedGoodItemId) {
@@ -160,13 +174,22 @@ export class BomCoreService {
         await lineRepo.delete({ bomId: id });
         let lineNo = 1;
         for (const line of lines) {
+          let uomId = line.uomId;
+          if (!uomId && line.componentItemId) {
+            const items = await manager.query(
+              'SELECT uom_id FROM erp_inventory_items WHERE id = $1',
+              [line.componentItemId],
+            );
+            if (items.length > 0) uomId = items[0].uom_id;
+          }
+
           await lineRepo.save(
             lineRepo.create({
               bomId: id,
               lineNo: lineNo++,
               componentItemId: line.componentItemId ?? null,
               qtyRequired: line.qtyRequired,
-              uom: line.uom,
+              uomId: uomId ?? null,
               scrapRate: line.scrapRate ?? null,
               notes: line.notes ?? null,
             } as DeepPartial<ErpBomLine>),
@@ -211,6 +234,7 @@ export class BomCoreService {
 
       const lines = await this.lineRepository.find({
         where: { bomId },
+        relations: ['uom'],
         order: { lineNo: 'ASC' },
       });
 
@@ -266,7 +290,7 @@ export class BomCoreService {
         stt: r.indexStr,
         tenLinhKien: item ? item.item_name : '',
         maLinhKien: item ? item.sku : '',
-        dvt: r.line.uom || '',
+        dvt: (r.line.uom as any)?.name || '',
         soLuong: Number(r.line.qtyRequired) || 0,
         haoHut: r.line.scrapRate ? Number(r.line.scrapRate) : 0,
         ghiChu: r.line.notes || '',
@@ -455,7 +479,7 @@ export class BomCoreService {
     itemsWs.autoFilter = 'A1:C1';
 
     const items = await this.dataSource.query(
-      `SELECT sku, item_name, uom FROM public.erp_inventory_items WHERE status = 'ACTIVE' ORDER BY sku ASC`,
+      `SELECT i.sku, i.item_name, u.name as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.status = 'ACTIVE' ORDER BY i.sku ASC`,
     );
 
     for (const item of items) {
@@ -527,7 +551,7 @@ export class BomCoreService {
 
     // Validate items
     const items = await this.dataSource.query(
-      `SELECT id, sku, item_name, uom FROM public.erp_inventory_items WHERE sku = ANY($1)`,
+      `SELECT i.id, i.sku, i.item_name, i.uom_id, u.name as uom FROM public.erp_inventory_items i LEFT JOIN public.erp_uoms u ON i.uom_id = u.id WHERE i.sku = ANY($1)`,
       [Array.from(skuSet)],
     );
 
@@ -551,6 +575,7 @@ export class BomCoreService {
         componentItemCode: item.sku,
         componentItemName: `${item.sku} — ${item.item_name}`,
         qtyRequired: line.qtyRequired,
+        uomId: item.uom_id,
         uom: item.uom || 'PCS',
         scrapRate: line.scrapRate,
         notes: line.notes,

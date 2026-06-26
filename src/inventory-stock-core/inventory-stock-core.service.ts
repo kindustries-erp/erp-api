@@ -25,23 +25,25 @@ export class InventoryStockCoreService {
 
     const qb = this.itemRepository.createQueryBuilder('item');
     qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+    qb.leftJoinAndSelect('item.uom', 'uom');
+    qb.leftJoinAndSelect('item.itemType', 'itemType');
 
     if (query.item_type && query.search) {
       qb.where(
         new Brackets((qbInner) => {
           qbInner
-            .where('item.itemType = :type AND item.sku LIKE :search', {
+            .where('itemType.code = :type AND item.sku LIKE :search', {
               type: query.item_type,
               search: `%${query.search}%`,
             })
-            .orWhere('item.itemType = :type AND item.itemName LIKE :search', {
+            .orWhere('itemType.code = :type AND item.itemName LIKE :search', {
               type: query.item_type,
               search: `%${query.search}%`,
             });
         }),
       );
     } else if (query.item_type) {
-      qb.where('item.itemType = :type', { type: query.item_type });
+      qb.where('itemType.code = :type', { type: query.item_type });
     } else if (query.search) {
       qb.where(
         new Brackets((qbInner) => {
@@ -61,9 +63,9 @@ export class InventoryStockCoreService {
 
       let sortField = '';
       if (field === 'item_code') sortField = 'item.sku';
-      else if (field === 'item_type') sortField = 'item.itemType';
+      else if (field === 'item_type') sortField = 'itemType.code';
       else if (field === 'status') sortField = 'item.status';
-      else if (field === 'unit') sortField = 'item.uom';
+      else if (field === 'unit') sortField = 'uom.name';
       else if (field === 'item') sortField = 'item.itemName';
 
       if (sortField) {
@@ -120,8 +122,8 @@ export class InventoryStockCoreService {
         branch_id: null,
         item_code: item.sku ?? '',
         item_name: item.itemName ?? '',
-        item_type: item.itemType ?? '',
-        unit: item.uom ?? '',
+        item_type: item.itemType?.code ?? '',
+        unit: item.uom?.name ?? '',
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
         on_hand_qty: Number(b?.qtyOnHand || 0),

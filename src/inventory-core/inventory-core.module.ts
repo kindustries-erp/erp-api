@@ -7,8 +7,10 @@ import { InventoryItemsController } from './inventory-core.controller';
 import { InventoryItemsService } from './inventory-core.service';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
+import { ErpTrackingPolicy } from './entities/erp_tracking_policy.entity';
 import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
-import { ErpInventorySerial } from './entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
+import { ErpInventoryTrackingCustom } from './entities/erp_inventory_tracking_custom.entity';
 
 @Module({
   imports: [
@@ -18,8 +20,10 @@ import { ErpInventorySerial } from './entities/erp_inventory_serial.entity';
       ErpInventoryBalance,
       ErpUom,
       ErpItemType,
+      ErpTrackingPolicy,
       ErpTrackingCategory,
-      ErpInventorySerial,
+      ErpInventoryTrackingSerial,
+      ErpInventoryTrackingCustom,
     ]),
   ],
   controllers: [InventoryItemsController],

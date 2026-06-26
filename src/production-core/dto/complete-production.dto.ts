@@ -10,17 +10,12 @@ import {
 } from 'class-validator';
 
 export class ProductionIdentifierDto {
-  @ApiPropertyOptional({ description: 'VIN nếu tracking policy = VEHICLE' })
-  @IsOptional()
-  @IsString()
-  vin?: string;
-
   @ApiPropertyOptional({
-    description: 'Số khung nếu tracking policy = VEHICLE',
+    description: 'VIN (vin_no) nếu tracking policy = VEHICLE',
   })
   @IsOptional()
   @IsString()
-  frameNo?: string;
+  vinNo?: string;
 
   @ApiPropertyOptional({ description: 'Số máy nếu tracking policy = VEHICLE' })
   @IsOptional()

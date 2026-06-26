@@ -4,7 +4,10 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { ErpUom } from '../../inventory-core/entities/erp_uom.entity';
 
 @Entity({ name: 'erp_bom_lines' })
 export class ErpBomLine {
@@ -23,8 +26,12 @@ export class ErpBomLine {
   @Column({ type: 'numeric', name: 'qty_required', precision: 18, scale: 3 })
   qtyRequired: string;
 
-  @Column({ type: 'varchar', length: 100, name: 'uom' })
-  uom: string;
+  @Column({ type: 'uuid', name: 'uom_id' })
+  uomId: string;
+
+  @ManyToOne(() => ErpUom)
+  @JoinColumn({ name: 'uom_id' })
+  uom: ErpUom;
 
   @Column({
     type: 'numeric',

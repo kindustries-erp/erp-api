@@ -1,15 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
-import { ErpInventoryLot } from '../inventory-core/entities/erp_inventory_lot.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpVehicle } from './entities/erp_vehicle.entity';
+
+import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
+import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 
 @Injectable()
 export class ErpMfgCoreService {
@@ -20,16 +23,20 @@ export class ErpMfgCoreService {
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
     @InjectRepository(ErpInventoryTransaction)
     private readonly txnRepository: Repository<ErpInventoryTransaction>,
-    @InjectRepository(ErpInventoryLot)
-    private readonly lotRepository: Repository<ErpInventoryLot>,
-    @InjectRepository(ErpInventorySerial)
-    private readonly serialRepository: Repository<ErpInventorySerial>,
+    @InjectRepository(ErpInventoryTrackingLot)
+    private readonly lotRepository: Repository<ErpInventoryTrackingLot>,
+    @InjectRepository(ErpInventoryTrackingSerial)
+    private readonly serialRepository: Repository<ErpInventoryTrackingSerial>,
     @InjectRepository(ErpPurchaseOrder)
     private readonly poRepository: Repository<ErpPurchaseOrder>,
     @InjectRepository(ErpPurchaseOrderLine)
     private readonly poLineRepository: Repository<ErpPurchaseOrderLine>,
     @InjectRepository(ErpVehicle)
     private readonly vehicleRepository: Repository<ErpVehicle>,
+    @InjectRepository(ErpUom)
+    private readonly uomRepository: Repository<ErpUom>,
+    @InjectRepository(ErpItemType)
+    private readonly itemTypeRepository: Repository<ErpItemType>,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,10 +67,17 @@ export class ErpMfgCoreService {
     const [items, total] = await this.itemRepository.findAndCount({
       where: query.search
         ? ([
-            { itemType: 'RAW', itemName: ILike(`%${query.search}%`) },
-            { itemType: 'RAW', sku: ILike(`%${query.search}%`) },
+            {
+              itemType: { code: In(['RAW', 'SERVICE', 'PACKAGING']) },
+              itemName: ILike(`%${query.search}%`),
+            },
+            {
+              itemType: { code: In(['RAW', 'SERVICE', 'PACKAGING']) },
+              sku: ILike(`%${query.search}%`),
+            },
           ] as any)
-        : ({ itemType: 'RAW' } as any),
+        : ({ itemType: { code: In(['RAW', 'SERVICE', 'PACKAGING']) } } as any),
+      relations: ['itemType', 'uom'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },
@@ -102,10 +116,18 @@ export class ErpMfgCoreService {
       notes?: string;
     },
   ) {
-    const item = await this.itemRepository.findOne({ where: { id } as any });
+    const item = await this.itemRepository.findOne({
+      where: { id } as any,
+      relations: ['itemType', 'uom'],
+    });
     if (!item) throw new NotFoundException(`Component ${id} not found`);
     if (dto.item_name !== undefined) item.itemName = dto.item_name;
-    if (dto.uom !== undefined) item.uom = dto.uom;
+    if (dto.uom !== undefined) {
+      const uom = await this.uomRepository.findOne({
+        where: { code: dto.uom },
+      });
+      if (uom) item.uomId = uom.id;
+    }
     if (dto.is_active !== undefined)
       item.status = dto.is_active ? 'ACTIVE' : 'INACTIVE';
     await this.itemRepository.save(item);
@@ -118,18 +140,31 @@ export class ErpMfgCoreService {
   async createComponent(dto: {
     item_code: string;
     item_name: string;
+    item_type?: string;
     tracking_type?: string;
     uom?: string;
     is_active?: boolean;
     notes?: string;
   }) {
+    let uomId: string | undefined;
+    const uomCode = dto.uom ?? 'PCS';
+    const uom = await this.uomRepository.findOne({ where: { code: uomCode } });
+    if (uom) uomId = uom.id;
+
+    let itemTypeId: string | undefined;
+    const itemTypeCode = dto.item_type ?? 'RAW';
+    const itemType = await this.itemTypeRepository.findOne({
+      where: { code: itemTypeCode },
+    });
+    if (itemType) itemTypeId = itemType.id;
+
     const item = this.itemRepository.create({
       sku: dto.item_code,
       itemName: dto.item_name,
-      itemType: 'RAW',
-      uom: dto.uom ?? 'PCS',
+      itemTypeId: itemTypeId,
+      uomId: uomId,
       status: dto.is_active === false ? 'INACTIVE' : 'ACTIVE',
-    });
+    } as Partial<ErpInventoryItem>);
     const saved = await this.itemRepository.save(item);
     return this.mapComponent(saved, undefined);
   }
@@ -285,8 +320,7 @@ export class ErpMfgCoreService {
   }
 
   async createVehicle(dto: {
-    vin?: string | null;
-    frame_no: string;
+    vin_no: string;
     engine_no: string;
     finished_good_item_id?: string | null;
     assembly_date?: string | null;
@@ -294,11 +328,9 @@ export class ErpMfgCoreService {
     notes?: string | null;
     serial_no?: string | null;
   }) {
-    const canonicalVin = dto.frame_no.trim();
     const vehicle = this.vehicleRepository.create({
-      vin: dto.vin?.trim() || canonicalVin,
-      frameNo: canonicalVin,
-      engineNo: dto.engine_no,
+      vinNo: dto.vin_no.trim(),
+      engineNo: dto.engine_no.trim(),
       finishedGoodItemId: dto.finished_good_item_id ?? null,
       assemblyDate: dto.assembly_date ?? null,
       branchId: dto.branch_id ?? null,
@@ -329,9 +361,9 @@ export class ErpMfgCoreService {
       id: item.id,
       item_code: item.sku,
       item_name: item.itemName,
-      item_type: 'COMPONENT',
+      item_type: item.itemType?.name ?? 'COMPONENT',
       tracking_type: 'NONE',
-      uom: item.uom,
+      uom: item.uom?.code ?? item.uomId,
       is_active: item.status === 'ACTIVE',
       notes: null,
       created_at: item.createdAt?.toISOString?.() ?? null,
@@ -363,8 +395,7 @@ export class ErpMfgCoreService {
   private mapVehicle(v: ErpVehicle) {
     return {
       id: v.id,
-      vin: v.vin,
-      frame_no: v.frameNo,
+      vin_no: v.vinNo,
       engine_no: v.engineNo,
       branch_id: v.branchId,
       finished_good_item_id: v.finishedGoodItemId,
