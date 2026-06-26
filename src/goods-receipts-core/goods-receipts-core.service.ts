@@ -43,7 +43,8 @@ export class GoodsReceiptsCoreService {
       .getRepository(ErpGoodsReceipt)
       .createQueryBuilder('gr')
       .where('gr.receiptNo LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('gr.receiptNo', 'DESC')
+      .orderBy('LENGTH(gr.receiptNo)', 'DESC')
+      .addOrderBy('gr.receiptNo', 'DESC')
       .getOne();
     const latestSeq = latest?.receiptNo?.slice(prefix.length) ?? '000';
     const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');

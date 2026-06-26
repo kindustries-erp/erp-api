@@ -1082,6 +1082,7 @@ export class ProductionCoreService {
 
       const order = await productionRepo.findOne({
         where: { id, isDeleted: false },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!order) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
       if (!['CONFIRMED', 'IN_PROGRESS'].includes(order.status)) {
@@ -1118,7 +1119,10 @@ export class ProductionCoreService {
       const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
       const inventoryItems = materialItemIds.length
-        ? await itemRepo.find({ where: { id: In(materialItemIds) } })
+        ? await itemRepo.find({
+            where: { id: In(materialItemIds) },
+            relations: ['itemType'],
+          })
         : [];
       const itemMap = new Map(inventoryItems.map((i) => [i.id, i]));
 
@@ -1131,6 +1135,11 @@ export class ProductionCoreService {
         const remaining = parseFloat((qtyRequired - qtyIssued).toFixed(3));
         const toIssue = Math.min(qtyNeeded, remaining);
         if (toIssue <= 0) continue;
+
+        const item = itemMap.get(mat.itemId);
+        if (item?.itemType?.code === 'SERVICE') {
+          continue;
+        }
 
         const balance = balanceMap.get(mat.itemId);
         const availableQty = balance
@@ -1154,7 +1163,8 @@ export class ProductionCoreService {
       const latestGi = await giRepo
         .createQueryBuilder('gi')
         .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
-        .orderBy('gi.issueNo', 'DESC')
+        .orderBy('LENGTH(gi.issueNo)', 'DESC')
+        .addOrderBy('gi.issueNo', 'DESC')
         .getOne();
       const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
       const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
@@ -1173,6 +1183,9 @@ export class ProductionCoreService {
 
       let lineNo = 1;
       const updatedMaterials: ErpProductionOrderMaterial[] = [];
+      const giLinesToSave: any[] = [];
+      const balancesToSave: any[] = [];
+      const txnsToSave: any[] = [];
 
       for (const mat of materials) {
         const qtyRequired = Number(mat.qtyRequired || 0);
@@ -1186,7 +1199,7 @@ export class ProductionCoreService {
         }
 
         // GI line
-        await giLineRepo.save(
+        giLinesToSave.push(
           giLineRepo.create({
             goodsIssueId: gi.id,
             lineNo: lineNo++,
@@ -1199,47 +1212,57 @@ export class ProductionCoreService {
           } as any),
         );
 
-        // Inventory: deduct on-hand + reserved
+        const item = itemMap.get(mat.itemId);
+        const isService = item?.itemType?.code === 'SERVICE';
+
         const balance = balanceMap.get(mat.itemId);
         const unitCost = Number(balance?.avgUnitCost || 0);
-        if (balance) {
-          const newOnHand = Math.max(
-            0,
-            Number(balance.qtyOnHand || 0) - toIssue,
-          );
-          const newReserved = Math.max(
-            0,
-            Number(balance.qtyReserved || 0) - toIssue,
-          );
-          balance.qtyOnHand = newOnHand.toFixed(3);
-          balance.qtyReserved = newReserved.toFixed(3);
-          const newValue = newOnHand * Number(balance.avgUnitCost || 0);
-          balance.inventoryValue = newValue.toFixed(3);
-          await balanceRepo.save(balance);
-        }
 
-        await txnRepo.save(
-          txnRepo.create({
-            transactionType: 'ISSUE',
-            documentType: 'GOODS_ISSUE',
-            documentId: gi.id,
-            itemId: mat.itemId,
-            warehouseCode: warehouseCode ?? null,
-            qtyIn: '0.000',
-            qtyOut: toIssue.toFixed(3),
-            unitCost: unitCost.toFixed(3),
-            transactionDate: issueDate,
-            notes: `Auto GI cho LSX ${order.referenceNo}`,
-            createdBy: null,
-          } as any),
-        );
+        if (!isService) {
+          // Inventory: deduct on-hand + reserved
+          if (balance) {
+            const newOnHand = Math.max(
+              0,
+              Number(balance.qtyOnHand || 0) - toIssue,
+            );
+            const newReserved = Math.max(
+              0,
+              Number(balance.qtyReserved || 0) - toIssue,
+            );
+            balance.qtyOnHand = newOnHand.toFixed(3);
+            balance.qtyReserved = newReserved.toFixed(3);
+            const newValue = newOnHand * Number(balance.avgUnitCost || 0);
+            balance.inventoryValue = newValue.toFixed(3);
+            balancesToSave.push(balance);
+          }
+
+          txnsToSave.push(
+            txnRepo.create({
+              transactionType: 'ISSUE',
+              documentType: 'GOODS_ISSUE',
+              documentId: gi.id,
+              itemId: mat.itemId,
+              warehouseCode: warehouseCode ?? null,
+              qtyIn: '0.000',
+              qtyOut: toIssue.toFixed(3),
+              unitCost: unitCost.toFixed(3),
+              transactionDate: issueDate,
+              notes: `Auto GI cho LSX ${order.referenceNo}`,
+              createdBy: null,
+            } as any),
+          );
+        }
 
         // Update material qty_issued
         mat.qtyIssued = (qtyIssued + toIssue).toFixed(3) as any;
         updatedMaterials.push(mat);
       }
 
-      await materialRepo.save(updatedMaterials);
+      if (giLinesToSave.length > 0) await giLineRepo.save(giLinesToSave);
+      if (balancesToSave.length > 0) await balanceRepo.save(balancesToSave);
+      if (txnsToSave.length > 0) await txnRepo.save(txnsToSave);
+      if (updatedMaterials.length > 0)
+        await materialRepo.save(updatedMaterials);
 
       // Transition status
       if (order.status === 'CONFIRMED') {
