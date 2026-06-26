@@ -869,7 +869,12 @@ export class InventoryItemsService {
     const qb = this.serialRepository
       .createQueryBuilder('s')
       .leftJoinAndSelect('erp_inventory_items', 'i', 's.item_id = i.id')
-      .leftJoinAndSelect('erp_vehicles', 'v', 's.vin_id = v.id');
+      .leftJoinAndSelect('erp_vehicles', 'v', 's.vin_id = v.id')
+      .leftJoinAndSelect(
+        'erp_tracking_policies',
+        'tp',
+        'i.tracking_policy_id = tp.id',
+      );
 
     if (query.itemId) {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
@@ -930,6 +935,29 @@ export class InventoryItemsService {
       qb.getRawMany(),
       qb.getCount(),
     ]);
+    const fixTimezone = (dateOrString: any): string | null => {
+      if (!dateOrString) return null;
+      if (typeof dateOrString === 'string') {
+        let s = dateOrString;
+        if (!s.endsWith('Z') && !s.match(/[+-]\d{2}:\d{2}$/)) {
+          if (s.includes(' ')) s = s.replace(' ', 'T');
+          return s + 'Z';
+        }
+        return s;
+      }
+      if (dateOrString instanceof Date) {
+        const y = dateOrString.getFullYear();
+        const m = String(dateOrString.getMonth() + 1).padStart(2, '0');
+        const d = String(dateOrString.getDate()).padStart(2, '0');
+        const h = String(dateOrString.getHours()).padStart(2, '0');
+        const min = String(dateOrString.getMinutes()).padStart(2, '0');
+        const sec = String(dateOrString.getSeconds()).padStart(2, '0');
+        const ms = String(dateOrString.getMilliseconds()).padStart(3, '0');
+        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}Z`;
+      }
+      return null;
+    };
+
     // Map raw results to standard format
     const items = itemsRaw.map((raw) => ({
       id: raw.s_id,
@@ -939,8 +967,8 @@ export class InventoryItemsService {
       vinNo: raw.v_vin_no,
       engineNo: raw.v_engine_no,
       customId: raw.s_custom_id,
-      createdAt: raw.s_created_at,
-      updatedAt: raw.s_updated_at,
+      createdAt: fixTimezone(raw.s_created_at),
+      updatedAt: fixTimezone(raw.s_updated_at),
       item: {
         id: raw.i_id,
         sku: raw.i_sku,
@@ -948,6 +976,7 @@ export class InventoryItemsService {
         itemType: raw.i_item_type,
         trackingPolicyId: raw.i_tracking_policy_id,
         trackingCategoryId: raw.i_tracking_category_id,
+        trackingPolicyName: raw.tp_name,
       },
     }));
 
