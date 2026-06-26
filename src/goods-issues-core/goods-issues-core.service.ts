@@ -36,7 +36,8 @@ export class GoodsIssuesCoreService {
       .getRepository(ErpGoodsIssue)
       .createQueryBuilder('gi')
       .where('gi.issueNo LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('gi.issueNo', 'DESC')
+      .orderBy('LENGTH(gi.issueNo)', 'DESC')
+      .addOrderBy('gi.issueNo', 'DESC')
       .getOne();
     const latestSeq = latest?.issueNo?.slice(prefix.length) ?? '000';
     const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');

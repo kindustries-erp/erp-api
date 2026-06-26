@@ -1,26 +1,36 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './src/app.module';
-import { ErpInvoicesCoreService } from './src/erp-invoices-core/erp-invoices-core.service';
+import 'reflect-metadata';
+import { DataSource } from 'typeorm';
+import * as dotenv from 'dotenv';
+import { ErpInventoryItem } from './src/inventory-core/entities/erp_inventory_item.entity';
+import { ErpUom } from './src/inventory-core/entities/erp_uom.entity';
+import { ErpItemType } from './src/inventory-core/entities/erp_item_type.entity';
+import { ErpTrackingPolicy } from './src/inventory-core/entities/erp_tracking_policy.entity';
+import { ErpTrackingCategory } from './src/inventory-core/entities/erp_tracking_category.entity';
+import { ErpGoodsIssue } from './src/goods-issues-core/entities/erp_goods_issue.entity';
+import { CompanyProfile } from './src/company-profile/entities/company-profile.entity';
+
+dotenv.config({ path: '.env.klotus-production' });
+
+const AppDataSource = new DataSource({
+  type: 'postgres',
+  url: process.env.DATABASE_URL,
+  entities: [ErpInventoryItem, ErpUom, ErpItemType, ErpTrackingPolicy, ErpTrackingCategory, ErpGoodsIssue, CompanyProfile],
+  synchronize: false,
+  ssl: { rejectUnauthorized: false },
+});
 
 async function run() {
-  const app = await NestFactory.createApplicationContext(AppModule);
-  const service = app.get(ErpInvoicesCoreService);
-  
-  const invoice = await service['repository'].findOne({ 
-    where: { direction: 'IN' }, 
-    order: { createdAt: 'DESC' },
-    relations: ['items']
-  });
-  
-  if (invoice) {
-    console.log('Latest invoice:', invoice.invoiceNo);
-    console.log('Seller:', invoice.sellerName);
-    console.log('Items count:', invoice.items?.length);
-    console.log('XML Key:', invoice.xmlFileKey);
-  } else {
-    console.log('No invoice found');
+  try {
+    await AppDataSource.initialize();
+    
+    const repo = AppDataSource.getRepository(ErpInventoryItem);
+    await repo.find({ take: 2, relations: ['uom', 'itemType'] });
+    console.log('Query 1 success');
+    
+  } catch (err) {
+    console.error('Test DB Error:', err);
+  } finally {
+    await AppDataSource.destroy();
   }
-  
-  await app.close();
 }
 run();
