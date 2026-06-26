@@ -536,7 +536,13 @@ export class ProductionCoreService {
     let finishedGoodItemTrackingPolicy: string | null = null;
     if (data.finishedGoodItemId) {
       const item = await this.dataSource.query(
-        `SELECT sku, item_name, tracking_policy FROM public.erp_inventory_items WHERE id = $1::uuid`,
+        `SELECT 
+           i.sku, 
+           i.item_name, 
+           p.code as tracking_policy 
+         FROM public.erp_inventory_items i
+         LEFT JOIN public.erp_tracking_policies p ON i.tracking_policy_id = p.id
+         WHERE i.id = $1::uuid`,
         [data.finishedGoodItemId],
       );
       if (item.length > 0) {
@@ -1314,13 +1320,10 @@ export class ProductionCoreService {
       // Load finished good item to check tracking policy
       const finishedGoodItem = await itemRepo.findOne({
         where: { id: order.finishedGoodItemId },
+        relations: ['trackingPolicy'],
       });
-      const trackingPolicy = (finishedGoodItem?.trackingPolicy ?? 'NONE') as
-        | 'NONE'
-        | 'SERIAL'
-        | 'LOT'
-        | 'VEHICLE'
-        | 'CUSTOM';
+      const trackingPolicy = (finishedGoodItem?.trackingPolicy?.code ??
+        'NONE') as 'NONE' | 'SERIAL' | 'LOT' | 'VEHICLE' | 'CUSTOM';
       const identifiers = dto.identifiers ?? [];
 
       if (!['NONE', 'CUSTOM'].includes(trackingPolicy)) {
