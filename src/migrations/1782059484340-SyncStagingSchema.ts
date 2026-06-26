@@ -5,10 +5,10 @@ export class SyncStagingSchema1782059484340 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "erp_inventory_items" ADD "tracking_policy" character varying(20) NOT NULL DEFAULT 'NONE'`,
+      `ALTER TABLE "erp_inventory_items" ADD COLUMN IF NOT EXISTS "tracking_policy" character varying(20) NOT NULL DEFAULT 'NONE'`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_inventory_items" ADD "tracking_category_key" character varying(100)`,
+      `ALTER TABLE "erp_inventory_items" ADD COLUMN IF NOT EXISTS "tracking_category_key" character varying(50)`,
     );
   }
 

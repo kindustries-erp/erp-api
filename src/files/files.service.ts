@@ -1,77 +1,100 @@
 import {
   Injectable,
-  Inject,
   Logger,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { SysFile } from './entities/sys-file.entity';
+import { R2Service } from '../r2/r2.service';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
-import { createDirectus } from '@directus/sdk';
-import { DIRECTUS_CLIENT } from '../directus/directus.provider';
 
 @Injectable()
 export class FilesService {
   private readonly logger = new Logger(FilesService.name);
+  private readonly s3Client: S3Client;
+  private readonly bucket: string;
 
   constructor(
-    @Inject(DIRECTUS_CLIENT)
-    private readonly directus: ReturnType<typeof createDirectus>,
+    @InjectRepository(SysFile)
+    private readonly fileRepo: Repository<SysFile>,
+    private readonly r2Service: R2Service,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    const accountId = this.configService.getOrThrow<string>('R2_ACCOUNT_ID');
+    this.bucket = this.configService.getOrThrow<string>('R2_BUCKET_NAME');
 
-  async upload(file: any, userToken: string) {
-    const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
+    this.s3Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: this.configService.getOrThrow<string>('R2_ACCESS_KEY_ID'),
+        secretAccessKey: this.configService.getOrThrow<string>(
+          'R2_SECRET_ACCESS_KEY',
+        ),
+      },
+    });
+  }
 
+  async upload(file: Express.Multer.File, userToken: string) {
     try {
-      // Sử dụng FormData chuẩn của Node.js (có sẵn từ Node 18+)
-      const formData = new FormData();
-      const blob = new Blob([file.buffer], { type: file.mimetype });
-      formData.append('file', blob, file.originalname);
+      const fileId = randomUUID();
+      const filenameDisk = `${fileId}-${file.originalname}`;
 
-      const response = await fetch(`${directusUrl}/files`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-        },
-        body: formData,
+      // Upload to R2
+      await this.r2Service.uploadBuffer(
+        filenameDisk,
+        file.buffer,
+        file.mimetype,
+      );
+
+      // Save metadata to Neon DB
+      const sysFile = this.fileRepo.create({
+        id: fileId,
+        filename_download: file.originalname,
+        filename_disk: filenameDisk,
+        type: file.mimetype,
+        filesize: file.size,
       });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        this.logger.error(`Directus upload error: ${errorData}`);
-        throw new Error(`Directus error: ${response.statusText}`);
-      }
+      await this.fileRepo.save(sysFile);
 
-      const result = await response.json();
-      return result.data;
+      return { id: sysFile.id };
     } catch (error) {
-      this.logger.error('Lỗi khi upload file lên Directus', error);
+      this.logger.error('Lỗi khi upload file lên R2', error);
       throw new InternalServerErrorException('Không thể upload file');
     }
   }
 
-  async getFileStream(id: string, userToken?: string) {
-    const directusUrl = this.configService.getOrThrow<string>('DIRECTUS_URL');
-    const adminToken = this.configService.get<string>('DIRECTUS_ADMIN_TOKEN');
+  async getFileMeta(id: string): Promise<SysFile> {
+    const file = await this.fileRepo.findOneBy({ id });
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+    return file;
+  }
 
-    // Ưu tiên dùng token của user, nếu không có thì dùng admin token để fetch file
-    const token = userToken || adminToken;
+  async getFileStream(id: string, userToken?: string) {
+    const file = await this.getFileMeta(id);
 
     try {
-      const response = await fetch(`${directusUrl}/assets/${id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: file.filename_disk,
       });
 
-      if (!response.ok) {
-        throw new Error(`Directus error: ${response.statusText}`);
-      }
+      const response = await this.s3Client.send(command);
 
       return {
-        stream: response.body,
-        contentType: response.headers.get('content-type'),
-        contentLength: response.headers.get('content-length'),
+        stream: response.Body,
+        contentType: file.type,
+        contentLength: file.filesize,
       };
     } catch (error) {
-      this.logger.error(`Lỗi khi lấy file ${id} từ Directus`, error);
+      this.logger.error(`Lỗi khi lấy file ${id} từ R2`, error);
       throw new InternalServerErrorException('Không thể tải file');
     }
   }

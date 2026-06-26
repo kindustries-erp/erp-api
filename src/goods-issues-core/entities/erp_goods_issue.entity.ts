@@ -16,8 +16,8 @@ export class ErpGoodsIssue {
   @Column({ type: 'varchar', length: 255, name: 'issue_no' })
   issueNo: string;
 
-  @Column({ type: 'date', name: 'issue_date' })
-  issueDate: string;
+  @Column({ type: 'timestamptz', name: 'issue_date' })
+  issueDate: Date;
 
   @Column({ type: 'varchar', length: 255, name: 'issue_type' })
   issueType: string;
@@ -43,9 +43,9 @@ export class ErpGoodsIssue {
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updatedAt: Date;
 }

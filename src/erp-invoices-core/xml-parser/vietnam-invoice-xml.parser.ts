@@ -8,6 +8,9 @@
 
 export interface ParsedVietnamInvoiceItem {
   description: string;
+  unit: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
   preVatAmount: number;
   vatRate: number | null;
   vatAmount: number;
@@ -175,6 +178,13 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
+    const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
+    const quantity = getTextIn(el, 'SLuong', 'sluong')
+      ? toNum(getTextIn(el, 'SLuong', 'sluong'))
+      : null;
+    const unitPrice = getTextIn(el, 'DGia', 'dgia')
+      ? toNum(getTextIn(el, 'DGia', 'dgia'))
+      : null;
     const preVat = toNum(getTextIn(el, 'ThTien', 'thtien'));
     const vatRateRawEl = getTextIn(el, 'TSuat', 'tsuat');
     let itemVatRate: number | null = null;
@@ -187,6 +197,9 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     const total = preVat + vatAmt - discount;
     items.push({
       description: desc,
+      unit,
+      quantity,
+      unitPrice,
       preVatAmount: preVat,
       vatRate: itemVatRate,
       vatAmount: vatAmt,
@@ -348,6 +361,13 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const desc = getTextIn(line, 'ItemName', 'Description') ?? '';
+    const unit = getTextIn(line, 'UnitName', 'Unit') ?? null;
+    const quantity = getTextIn(line, 'Quantity')
+      ? toNum(getTextIn(line, 'Quantity'))
+      : null;
+    const unitPrice = getTextIn(line, 'UnitPrice')
+      ? toNum(getTextIn(line, 'UnitPrice'))
+      : null;
     const preVat = toNum(getTextIn(line, 'AmountBeforeTax', 'TotalBeforeTax'));
     const vRateRaw = getTextIn(line, 'VATRate', 'TaxRate');
     let vRate: number | null = null;
@@ -359,6 +379,9 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     const disc = toNum(getTextIn(line, 'DiscountAmount'));
     items.push({
       description: desc,
+      unit,
+      quantity,
+      unitPrice,
       preVatAmount: preVat,
       vatRate: vRate,
       vatAmount: vAmt,

@@ -26,6 +26,7 @@ import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
 import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
+import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -86,6 +87,12 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('tracking-policies')
+  listTrackingPolicies(@Query() query: InventoryMasterQueryDto) {
+    return this.service.listTrackingPolicies(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('tracking-categories')
   listTrackingCategories(@Query() query: InventoryMasterQueryDto) {
     return this.service.listTrackingCategories(query);
@@ -140,6 +147,12 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('items/:id/connections')
+  getConnections(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getItemConnections(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
@@ -164,5 +177,11 @@ export class InventoryItemsController {
   @Get('warehouse-vouchers')
   listWarehouseVouchers(@Query() query: WarehouseVoucherQueryDto) {
     return this.service.listWarehouseVouchers(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials')
+  listSerials(@Query() query: InventorySerialQueryDto) {
+    return this.service.listSerials(query);
   }
 }

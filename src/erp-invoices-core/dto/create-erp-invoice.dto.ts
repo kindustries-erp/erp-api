@@ -20,6 +20,21 @@ export class CreateErpInvoiceItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  unit?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  quantity?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  unitPrice?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @Min(0)
   preVatAmount?: number;

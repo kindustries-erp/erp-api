@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @ApiProperty()
@@ -10,13 +10,15 @@ export class CreateInventoryItemDto {
   @IsString()
   itemName: string;
 
-  @ApiProperty()
-  @IsString()
-  uom: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  uomId?: string;
 
-  @ApiProperty()
-  @IsString()
-  itemType: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  itemTypeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -28,14 +30,17 @@ export class CreateInventoryItemDto {
   @IsString()
   note?: string;
 
-  @ApiPropertyOptional({ enum: ['NONE', 'SERIAL', 'LOT', 'VEHICLE', 'CUSTOM'] })
+  @ApiPropertyOptional({
+    description: 'UUID của tracking policy (erp_tracking_policies.id)',
+  })
   @IsOptional()
-  @IsString()
-  @IsIn(['NONE', 'SERIAL', 'LOT', 'VEHICLE', 'CUSTOM'])
-  trackingPolicy?: 'NONE' | 'SERIAL' | 'LOT' | 'VEHICLE' | 'CUSTOM';
+  @IsUUID()
+  trackingPolicyId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'UUID của tracking category (erp_tracking_categories.id)',
+  })
   @IsOptional()
-  @IsString()
-  trackingCategoryKey?: string;
+  @IsUUID()
+  trackingCategoryId?: string;
 }

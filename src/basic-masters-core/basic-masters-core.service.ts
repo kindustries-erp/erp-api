@@ -169,7 +169,8 @@ export class BasicMastersCoreService {
             take: limit,
             skip,
             order: { itemName: 'ASC' },
-            select: ['id', 'sku', 'itemName', 'uom', 'itemType', 'status'],
+            select: ['id', 'sku', 'itemName', 'uomId', 'itemTypeId', 'status'],
+            relations: ['uom', 'itemType'],
           })
         : Promise.resolve([]),
       includeUoms

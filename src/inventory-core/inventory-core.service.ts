@@ -14,7 +14,9 @@ import { CreateInventoryItemDto } from './dto/create-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-item.dto';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
+import { ErpTrackingPolicy } from './entities/erp_tracking_policy.entity';
 import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
+import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
 import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
@@ -23,7 +25,8 @@ import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
-
+import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
+import { GraphLayoutService } from '../common/services/graph-layout.service';
 @Injectable()
 export class InventoryItemsService {
   constructor(
@@ -39,7 +42,12 @@ export class InventoryItemsService {
     private readonly itemTypeRepository: Repository<ErpItemType>,
     @InjectRepository(ErpTrackingCategory)
     private readonly trackingCategoryRepository: Repository<ErpTrackingCategory>,
+    @InjectRepository(ErpTrackingPolicy)
+    private readonly trackingPolicyRepository: Repository<ErpTrackingPolicy>,
+    @InjectRepository(ErpInventoryTrackingSerial)
+    private readonly serialRepository: Repository<ErpInventoryTrackingSerial>,
     private readonly dataSource: DataSource,
+    private readonly graphLayoutService: GraphLayoutService,
   ) {}
 
   private normalizeCode(value: string) {
@@ -144,17 +152,26 @@ export class InventoryItemsService {
   }
 
   async create(dto: CreateInventoryItemDto) {
-    const uom = await this.ensureUomActive(dto.uom);
-    const itemType = await this.ensureItemTypeActive(dto.itemType);
-    const trackingCategory = await this.ensureTrackingCategoryActive(
-      dto.trackingCategoryKey,
-    );
+    let uomId = dto.uomId;
+    if (!uomId) {
+      const uom = await this.uomRepository.findOne({ where: { code: 'PCS' } });
+      if (uom) uomId = uom.id;
+    }
+
+    let itemTypeId = dto.itemTypeId;
+    if (!itemTypeId) {
+      const itemType = await this.itemTypeRepository.findOne({
+        where: { code: 'RAW' },
+      });
+      if (itemType) itemTypeId = itemType.id;
+    }
+
     const entity = this.repository.create({
       ...dto,
-      uom: uom.code,
-      itemType: itemType.code,
-      trackingPolicy: dto.trackingPolicy ?? 'NONE',
-      trackingCategoryKey: trackingCategory?.code ?? null,
+      uomId: uomId,
+      itemTypeId: itemTypeId,
+      trackingPolicyId: dto.trackingPolicyId ?? null,
+      trackingCategoryId: dto.trackingCategoryId ?? null,
     } as Partial<ErpInventoryItem>);
     const data = await this.repository.save(entity);
     return { message: 'Tạo thành công', data };
@@ -168,8 +185,8 @@ export class InventoryItemsService {
     if (query.status) {
       baseWhere.status = query.status;
     }
-    if (query.itemType) {
-      baseWhere.itemType = query.itemType;
+    if (query.itemTypeId) {
+      baseWhere.itemTypeId = query.itemTypeId;
     }
     if (query.ids) {
       baseWhere.id = In(
@@ -189,17 +206,18 @@ export class InventoryItemsService {
     }
 
     const order = resolveSortOrder(query.sort, {
-      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemType'],
+      allowedFields: ['createdAt', 'itemName', 'sku', 'status', 'itemTypeId'],
       columnMap: {
         created_at: 'createdAt',
         item_name: 'itemName',
-        item_type: 'itemType',
+        item_type_id: 'itemTypeId',
       },
       defaultOrder: { createdAt: 'DESC' },
     });
 
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
+      relations: ['uom', 'itemType'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -242,7 +260,11 @@ export class InventoryItemsService {
   }
 
   async findOne(id: string) {
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType'],
+    });
+    if (!data) throw new NotFoundException('Không tìm thấy item');
     return { message: 'Lấy thông tin thành công', data };
   }
 
@@ -250,25 +272,23 @@ export class InventoryItemsService {
     const patch: Partial<ErpInventoryItem> = {
       ...dto,
     } as Partial<ErpInventoryItem>;
-    if (dto.uom !== undefined) {
-      const uom = await this.ensureUomActive(dto.uom);
-      patch.uom = uom.code;
+    if (dto.uomId !== undefined) {
+      patch.uomId = dto.uomId;
     }
-    if (dto.itemType !== undefined) {
-      const itemType = await this.ensureItemTypeActive(dto.itemType);
-      patch.itemType = itemType.code;
+    if (dto.itemTypeId !== undefined) {
+      patch.itemTypeId = dto.itemTypeId;
     }
-    if (dto.trackingCategoryKey !== undefined) {
-      const trackingCategory = await this.ensureTrackingCategoryActive(
-        dto.trackingCategoryKey,
-      );
-      patch.trackingCategoryKey = trackingCategory?.code ?? null;
+    if (dto.trackingPolicyId !== undefined) {
+      patch.trackingPolicyId = dto.trackingPolicyId;
     }
-    if (dto.trackingPolicy !== undefined) {
-      patch.trackingPolicy = dto.trackingPolicy;
+    if (dto.trackingCategoryId !== undefined) {
+      patch.trackingCategoryId = dto.trackingCategoryId;
     }
     await this.repository.update(id, patch);
-    const data = await this.repository.findOneByOrFail({ id });
+    const data = await this.repository.findOne({
+      where: { id },
+      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
+    });
     return { message: 'Cập nhật thành công', data };
   }
 
@@ -352,6 +372,24 @@ export class InventoryItemsService {
     if (dto.isActive !== undefined) existing.isActive = dto.isActive;
     const data = await this.itemTypeRepository.save(existing);
     return { message: 'Cập nhật loại item thành công', data };
+  }
+
+  async listTrackingPolicies(query: InventoryMasterQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 100;
+    const [items, total] = await this.trackingPolicyRepository.findAndCount({
+      where: this.buildMasterWhere(query),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { code: 'ASC' },
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async listTrackingCategories(query: InventoryMasterQueryDto) {
@@ -457,6 +495,253 @@ export class InventoryItemsService {
     };
   }
 
+  async getItemConnections(id: string) {
+    const item = await this.repository.findOneByOrFail({ id });
+
+    // Goods Receipts (limit 10)
+    const grs = await this.dataSource.query(
+      `
+      SELECT g.id, g.receipt_no as "receiptNo", g.receipt_date as "receiptDate", g.status, SUM(l.qty_received) as qty,
+             g.production_order_id as "productionOrderId", g.purchase_order_id as "purchaseOrderId"
+      FROM public.erp_goods_receipts g
+      JOIN public.erp_goods_receipt_lines l ON g.id = l.goods_receipt_id
+      WHERE l.item_id = $1 AND g.is_deleted = false
+      GROUP BY g.id, g.receipt_no, g.receipt_date, g.status, g.production_order_id, g.purchase_order_id
+      ORDER BY g.receipt_date DESC, g.id DESC
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // Goods Issues (limit 10)
+    const gis = await this.dataSource.query(
+      `
+      SELECT g.id, g.issue_no as "issueNo", g.issue_date as "issueDate", g.status, SUM(l.qty_issued) as qty,
+             g.production_order_id as "productionOrderId", g.sales_order_id as "salesOrderId"
+      FROM public.erp_goods_issues g
+      JOIN public.erp_goods_issue_lines l ON g.id = l.goods_issue_id
+      WHERE l.item_id = $1 AND g.is_deleted = false
+      GROUP BY g.id, g.issue_no, g.issue_date, g.status, g.production_order_id, g.sales_order_id
+      ORDER BY g.issue_date DESC, g.id DESC
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // Production Orders (limit 10)
+    const pos = await this.dataSource.query(
+      `
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty, p.output_metadata->>'bomId' as "bomId"
+      FROM public.erp_production_orders p
+      WHERE p.finished_good_item_id = $1 AND p.is_deleted = false
+      UNION
+      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty, p.output_metadata->>'bomId' as "bomId"
+      FROM public.erp_production_orders p
+      JOIN public.erp_production_order_materials m ON p.id = m.production_order_id
+      WHERE m.item_id = $1 AND p.is_deleted = false
+      GROUP BY p.id, p.reference_no, p.planned_start_date, p.status, p.output_metadata
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // BOMs (limit 10)
+    const boms = await this.dataSource.query(
+      `
+      SELECT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'FG' as role
+      FROM public.erp_boms b
+      WHERE b.finished_good_item_id = $1 AND b.is_deleted = false
+      UNION
+      SELECT DISTINCT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'COMPONENT' as role
+      FROM public.erp_boms b
+      JOIN public.erp_bom_lines l ON b.id = l.bom_id
+      WHERE l.component_item_id = $1 AND b.is_deleted = false
+      LIMIT 10
+    `,
+      [id],
+    );
+
+    // Build Graph Nodes and Edges
+    const nodes: any[] = [];
+    const edges: any[] = [];
+
+    // 1. Map lookups
+    const grByPo = new Map<string, any[]>();
+    grs.forEach((gr: any) => {
+      if (gr.productionOrderId) {
+        if (!grByPo.has(gr.productionOrderId))
+          grByPo.set(gr.productionOrderId, []);
+        grByPo.get(gr.productionOrderId)!.push(gr);
+      }
+    });
+
+    const giByPo = new Map<string, any[]>();
+    gis.forEach((gi: any) => {
+      if (gi.productionOrderId) {
+        if (!giByPo.has(gi.productionOrderId))
+          giByPo.set(gi.productionOrderId, []);
+        giByPo.get(gi.productionOrderId)!.push(gi);
+      }
+    });
+
+    const poByBom = new Map<string, any[]>();
+    pos.forEach((po: any) => {
+      if (po.bomId) {
+        if (!poByBom.has(po.bomId)) poByBom.set(po.bomId, []);
+        poByBom.get(po.bomId)!.push(po);
+      }
+    });
+
+    // 2. The Root Item Node
+    nodes.push({
+      id: `item-${item.id}`,
+      // No module so it sits at root
+      data: {
+        nodeType: 'inventory_item',
+        label: item.itemName,
+        sublabel: item.sku,
+        docId: item.id,
+      },
+    });
+
+    // 3. Goods Receipts
+    grs.forEach((gr: any) => {
+      nodes.push({
+        id: `gr-${gr.id}`,
+        module: 'inventory',
+        date: gr.receiptDate
+          ? new Date(gr.receiptDate).toISOString()
+          : undefined,
+        data: {
+          nodeType: 'goods_receipt',
+          label: gr.receiptNo,
+          status: gr.status,
+          amount: Number(gr.qty || 0),
+          docId: gr.id,
+        },
+      });
+      // Removed edge to central item
+    });
+
+    // 4. Goods Issues
+    gis.forEach((gi: any) => {
+      nodes.push({
+        id: `gi-${gi.id}`,
+        module: 'inventory',
+        date: gi.issueDate ? new Date(gi.issueDate).toISOString() : undefined,
+        data: {
+          nodeType: 'goods_issue',
+          label: gi.issueNo,
+          status: gi.status,
+          amount: Number(gi.qty || 0),
+          docId: gi.id,
+        },
+      });
+      // Removed edge from central item
+    });
+
+    // 5. Production Orders
+    pos.forEach((po: any) => {
+      nodes.push({
+        id: `po-${po.id}`,
+        module: 'production',
+        date: po.orderDate ? new Date(po.orderDate).toISOString() : undefined,
+        data: {
+          nodeType: 'production_order',
+          label: po.orderNo,
+          status: po.status,
+          amount: Number(po.qty || 0),
+          docId: po.id,
+        },
+      });
+
+      if (po.role === 'FG') {
+        const relatedGrs = grByPo.get(po.id);
+        if (relatedGrs && relatedGrs.length > 0) {
+          relatedGrs.forEach((gr) => {
+            edges.push({
+              id: `e-po-${po.id}-gr-${gr.id}`,
+              source: `po-${po.id}`,
+              target: `gr-${gr.id}`,
+            });
+          });
+        }
+      } else {
+        const relatedGis = giByPo.get(po.id);
+        if (relatedGis && relatedGis.length > 0) {
+          relatedGis.forEach((gi) => {
+            edges.push({
+              id: `e-gi-${gi.id}-po-${po.id}`,
+              source: `gi-${gi.id}`,
+              target: `po-${po.id}`,
+            });
+          });
+        }
+      }
+    });
+
+    // 6. BOMs
+    boms.forEach((bom: any) => {
+      nodes.push({
+        id: `bom-${bom.id}`,
+        module: 'bom',
+        data: {
+          nodeType: 'bom',
+          label: bom.bomCode,
+          sublabel: bom.bomName,
+          status: bom.status,
+          docId: bom.id,
+        },
+      });
+
+      const relatedPos = poByBom.get(bom.id);
+      if (relatedPos && relatedPos.length > 0) {
+        relatedPos.forEach((po) => {
+          edges.push({
+            id: `e-bom-${bom.id}-po-${po.id}`,
+            source: `bom-${bom.id}`,
+            target: `po-${po.id}`,
+          });
+        });
+      }
+    });
+
+    // 7. Connect Root Item to Groups
+    const populatedModules = new Set(
+      nodes.filter((n) => n.module).map((n) => n.module),
+    );
+    populatedModules.forEach((mod) => {
+      edges.push({
+        id: `e-item-to-group-${mod}`,
+        source: `item-${item.id}`,
+        target: `group-${mod}`,
+      });
+    });
+
+    const graph = await this.graphLayoutService.calculateSwimlaneLayout(
+      nodes,
+      edges,
+    );
+
+    return {
+      message: 'Liên kết kho',
+      data: {
+        item: {
+          id: item.id,
+          sku: item.sku,
+          itemName: item.itemName,
+          uom: item.uom,
+          itemType: item.itemType,
+        },
+        goodsReceipts: grs,
+        goodsIssues: gis,
+        productionOrders: pos,
+        boms: boms,
+        graph,
+      },
+    };
+  }
+
   async listWarehouseVouchers(query: WarehouseVoucherQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -558,7 +843,7 @@ export class InventoryItemsService {
     const countQuery = `SELECT COUNT(*) as total FROM (${unionQuery}) as combined`;
     const dataQuery = `
       SELECT * FROM (${unionQuery}) as combined
-      ORDER BY ${sortColumn} ${sortDirection}, id ${sortDirection}
+      ORDER BY ${sortColumn} ${sortDirection}, "createdAt" DESC
       LIMIT $${pIndex} OFFSET $${pIndex + 1}
     `;
 
@@ -567,6 +852,133 @@ export class InventoryItemsService {
 
     const dataParams = [...params, pageSize, (page - 1) * pageSize];
     const items = await this.dataSource.query(dataQuery, dataParams);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async listSerials(query: InventorySerialQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+
+    const qb = this.serialRepository
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('erp_inventory_items', 'i', 's.item_id = i.id')
+      .leftJoinAndSelect('erp_vehicles', 'v', 's.vin_id = v.id')
+      .leftJoinAndSelect(
+        'erp_tracking_policies',
+        'tp',
+        'i.tracking_policy_id = tp.id',
+      );
+
+    if (query.itemId) {
+      qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
+    }
+
+    if (query.itemTypeId) {
+      qb.andWhere('i.item_type_id = :itemType', { itemType: query.itemTypeId });
+    } else {
+      // If no itemType is provided, we can either default to FG or return all.
+      // Based on user request, track ANY item that allows tracking, so no default filter needed here.
+    }
+
+    if (query.trackingPolicy) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM erp_tracking_policies tp
+          WHERE tp.id = i.tracking_policy_id
+          AND tp.code = :trackingPolicy
+        )`,
+        { trackingPolicy: query.trackingPolicy },
+      );
+    } else {
+      // By default, only return items with a tracking policy assigned (not NONE/null)
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1 FROM erp_tracking_policies tp
+          WHERE tp.id = i.tracking_policy_id
+          AND tp.code != 'NONE'
+        )`,
+      );
+    }
+
+    if (query.search) {
+      qb.andWhere(
+        '(s.serial_no ILIKE :search OR i.item_name ILIKE :search OR i.sku ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
+    }
+
+    // sort
+    const validSortFields = ['created_at', 'serial_no'];
+    let sortColumn = 's.created_at';
+    let sortDirection: 'ASC' | 'DESC' = 'DESC';
+    if (query.sort && query.sort.length > 0) {
+      let sortField = query.sort[0];
+      if (sortField.startsWith('-')) {
+        sortDirection = 'DESC';
+        sortField = sortField.substring(1);
+      } else {
+        sortDirection = 'ASC';
+      }
+      if (sortField === 'serial_no') sortColumn = 's.serial_no';
+      if (sortField === 'created_at') sortColumn = 's.created_at';
+    }
+
+    qb.orderBy(sortColumn, sortDirection);
+    const [itemsRaw, total] = await Promise.all([
+      qb.getRawMany(),
+      qb.getCount(),
+    ]);
+    const fixTimezone = (dateOrString: any): string | null => {
+      if (!dateOrString) return null;
+      if (typeof dateOrString === 'string') {
+        let s = dateOrString;
+        if (!s.endsWith('Z') && !s.match(/[+-]\d{2}:\d{2}$/)) {
+          if (s.includes(' ')) s = s.replace(' ', 'T');
+          return s + 'Z';
+        }
+        return s;
+      }
+      if (dateOrString instanceof Date) {
+        const y = dateOrString.getFullYear();
+        const m = String(dateOrString.getMonth() + 1).padStart(2, '0');
+        const d = String(dateOrString.getDate()).padStart(2, '0');
+        const h = String(dateOrString.getHours()).padStart(2, '0');
+        const min = String(dateOrString.getMinutes()).padStart(2, '0');
+        const sec = String(dateOrString.getSeconds()).padStart(2, '0');
+        const ms = String(dateOrString.getMilliseconds()).padStart(3, '0');
+        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}Z`;
+      }
+      return null;
+    };
+
+    // Map raw results to standard format
+    const items = itemsRaw.map((raw) => ({
+      id: raw.s_id,
+      serialNo: raw.s_serial_no,
+      itemId: raw.s_item_id,
+      vinId: raw.s_vin_id,
+      vinNo: raw.v_vin_no,
+      engineNo: raw.v_engine_no,
+      customId: raw.s_custom_id,
+      createdAt: fixTimezone(raw.s_created_at),
+      updatedAt: fixTimezone(raw.s_updated_at),
+      item: {
+        id: raw.i_id,
+        sku: raw.i_sku,
+        itemName: raw.i_item_name,
+        itemType: raw.i_item_type,
+        trackingPolicyId: raw.i_tracking_policy_id,
+        trackingCategoryId: raw.i_tracking_category_id,
+        trackingPolicyName: raw.tp_name,
+      },
+    }));
 
     return {
       items,

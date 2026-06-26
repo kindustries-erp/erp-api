@@ -11,13 +11,10 @@ export class ErpVehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'vin' })
-  vin: string;
+  @Column({ type: 'varchar', length: 255, name: 'vin_no', unique: true })
+  vinNo: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'frame_no' })
-  frameNo: string;
-
-  @Column({ type: 'varchar', length: 255, name: 'engine_no' })
+  @Column({ type: 'varchar', length: 255, name: 'engine_no', unique: true })
   engineNo: string;
 
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })

@@ -11,13 +11,15 @@ import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
+import { getGMT7YearMonthString } from '../common/utils/date.util';
 import { UpdateGoodsIssueDto } from './dto/update-goods-issue.dto';
 import { PostGoodsIssueDto } from './dto/post-goods-issue.dto';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpSalesOrder } from '../sales-orders-core/entities/erp_sales_order.entity';
 import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order_line.entity';
-import { ErpInventorySerial } from '../inventory-core/entities/erp_inventory_serial.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
+import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
@@ -28,10 +30,8 @@ export class GoodsIssuesCoreService {
   private readonly logger = new Logger(GoodsIssuesCoreService.name);
 
   private async generateMonthlyIssueNo(manager: any, issueDate?: string) {
-    const baseDate = issueDate ? new Date(issueDate) : new Date();
-    const year = baseDate.getUTCFullYear();
-    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `XK-${year}${month}`;
+    const ym = getGMT7YearMonthString(issueDate);
+    const prefix = `XK-${ym}`;
     const latest = await manager
       .getRepository(ErpGoodsIssue)
       .createQueryBuilder('gi')
@@ -64,8 +64,8 @@ export class GoodsIssuesCoreService {
 
   private async enrichLines(lines: ErpGoodsIssueLine[], manager?: any) {
     const serialRepo = manager
-      ? manager.getRepository(ErpInventorySerial)
-      : this.dataSource.getRepository(ErpInventorySerial);
+      ? manager.getRepository(ErpInventoryTrackingSerial)
+      : this.dataSource.getRepository(ErpInventoryTrackingSerial);
     const vehicleRepo = manager
       ? manager.getRepository(ErpVehicle)
       : this.dataSource.getRepository(ErpVehicle);
@@ -77,18 +77,18 @@ export class GoodsIssuesCoreService {
       ...new Set(lines.map((line) => line.vehicleId).filter(Boolean)),
     ] as string[];
 
-    const [serials, vehicles]: [ErpInventorySerial[], ErpVehicle[]] =
+    const [serials, vehicles]: [ErpInventoryTrackingSerial[], ErpVehicle[]] =
       await Promise.all([
         serialIds.length
           ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpInventorySerial[]),
+          : Promise.resolve([] as ErpInventoryTrackingSerial[]),
         vehicleIds.length
           ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
           : Promise.resolve([] as ErpVehicle[]),
       ]);
 
     const serialMap = new Map(
-      serials.map((row: ErpInventorySerial) => [row.id, row]),
+      serials.map((row: ErpInventoryTrackingSerial) => [row.id, row]),
     );
     const vehicleMap = new Map(
       vehicles.map((row: ErpVehicle) => [row.id, row]),
@@ -100,8 +100,7 @@ export class GoodsIssuesCoreService {
       return {
         ...line,
         serialNo: serial?.serialNo ?? null,
-        vehicleVin: vehicle?.vin ?? null,
-        frameNo: vehicle?.frameNo ?? null,
+        vehicleVinNo: vehicle?.vinNo ?? null,
         engineNo: vehicle?.engineNo ?? null,
       };
     });
@@ -260,7 +259,7 @@ export class GoodsIssuesCoreService {
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
       const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const issue = await this.getIssueOrThrow(issueRepo, id);
@@ -276,6 +275,8 @@ export class GoodsIssuesCoreService {
         throw new BadRequestException('Phiếu xuất chưa có dòng hàng');
       }
 
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+
       for (const line of lines) {
         const qty = Number(line.qtyIssued || 0);
         if (qty <= 0) {
@@ -284,7 +285,7 @@ export class GoodsIssuesCoreService {
           );
         }
 
-        let serial: ErpInventorySerial | null = null;
+        let serial: ErpInventoryTrackingSerial | null = null;
         let vehicle: ErpVehicle | null = null;
         if (line.serialId) {
           serial = await serialRepo.findOneBy({ id: line.serialId });
@@ -337,6 +338,14 @@ export class GoodsIssuesCoreService {
           }
         }
 
+        const item = line.itemId
+          ? await itemRepo.findOne({
+              where: { id: line.itemId },
+              relations: ['itemType'],
+            })
+          : null;
+        const isService = item?.itemType?.code === 'SERVICE';
+
         const balanceWhere: any = {
           itemId: line.itemId ?? undefined,
           warehouseCode: dto.warehouseCode ?? undefined,
@@ -347,22 +356,25 @@ export class GoodsIssuesCoreService {
         const currentValue = Number(balance?.inventoryValue || 0);
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
-        if (line.salesOrderLineId) {
-          if (currentQty < qty) {
+
+        if (!isService) {
+          if (line.salesOrderLineId) {
+            if (currentQty < qty) {
+              throw new BadRequestException(
+                `Tồn kho không đủ cho dòng ${line.lineNo}`,
+              );
+            }
+          } else if (line.productionOrderMaterialId) {
+            if (currentQty < qty) {
+              throw new BadRequestException(
+                `Tồn kho không đủ cho dòng sản xuất ${line.lineNo}`,
+              );
+            }
+          } else if (availableQty < qty) {
             throw new BadRequestException(
-              `Tồn kho không đủ cho dòng ${line.lineNo}`,
+              `Tồn khả dụng không đủ cho dòng ${line.lineNo}`,
             );
           }
-        } else if (line.productionOrderMaterialId) {
-          if (currentQty < qty) {
-            throw new BadRequestException(
-              `Tồn kho không đủ cho dòng sản xuất ${line.lineNo}`,
-            );
-          }
-        } else if (availableQty < qty) {
-          throw new BadRequestException(
-            `Tồn khả dụng không đủ cho dòng ${line.lineNo}`,
-          );
         }
 
         const issueUnitCost = Number(line.unitCost || avgUnitCost || 0);
@@ -371,21 +383,23 @@ export class GoodsIssuesCoreService {
         const nextValue = Math.max(0, currentValue - issueValue);
         const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
 
-        await txnRepo.save(
-          txnRepo.create({
-            transactionType: 'ISSUE',
-            documentType: 'GOODS_ISSUE',
-            documentId: issue.id,
-            itemId: line.itemId ?? null,
-            warehouseCode: dto.warehouseCode ?? null,
-            qtyIn: '0.000',
-            qtyOut: qty.toFixed(3),
-            unitCost: issueUnitCost.toFixed(3),
-            transactionDate: issue.issueDate,
-            notes: issue.remarks ?? null,
-            createdBy: dto.createdBy ?? issue.createdBy ?? null,
-          } as any),
-        );
+        if (!isService) {
+          await txnRepo.save(
+            txnRepo.create({
+              transactionType: 'ISSUE',
+              documentType: 'GOODS_ISSUE',
+              documentId: issue.id,
+              itemId: line.itemId ?? null,
+              warehouseCode: dto.warehouseCode ?? null,
+              qtyIn: '0.000',
+              qtyOut: qty.toFixed(3),
+              unitCost: issueUnitCost.toFixed(3),
+              transactionDate: issue.issueDate,
+              notes: issue.remarks ?? null,
+              createdBy: dto.createdBy ?? issue.createdBy ?? null,
+            } as any),
+          );
+        }
 
         if (line.salesOrderLineId) {
           const soLine = await soLineRepo.findOneBy({
@@ -403,10 +417,12 @@ export class GoodsIssuesCoreService {
           soLine.qtyDelivered = (currentDelivered + qty).toFixed(3);
           await soLineRepo.save(soLine);
 
-          balance!.qtyReserved = Math.max(
-            0,
-            currentReserved - reservedConsume,
-          ).toFixed(3);
+          if (!isService && balance) {
+            balance.qtyReserved = Math.max(
+              0,
+              currentReserved - reservedConsume,
+            ).toFixed(3);
+          }
 
           if (serial) {
             serial.salesOrderLineId = soLine.id;
@@ -427,10 +443,12 @@ export class GoodsIssuesCoreService {
           moMat.qtyIssued = (currentIssued + qty).toFixed(3);
           await moMatRepo.save(moMat);
 
-          balance!.qtyReserved = Math.max(
-            0,
-            currentReserved - reservedConsume,
-          ).toFixed(3);
+          if (!isService && balance) {
+            balance.qtyReserved = Math.max(
+              0,
+              currentReserved - reservedConsume,
+            ).toFixed(3);
+          }
         }
 
         if (serial) {
@@ -447,10 +465,12 @@ export class GoodsIssuesCoreService {
           await vehicleRepo.save(vehicle);
         }
 
-        balance!.qtyOnHand = nextQty.toFixed(3);
-        balance!.inventoryValue = nextValue.toFixed(3);
-        balance!.avgUnitCost = nextAvgUnitCost.toFixed(3);
-        await balanceRepo.save(balance!);
+        if (!isService && balance) {
+          balance.qtyOnHand = nextQty.toFixed(3);
+          balance.inventoryValue = nextValue.toFixed(3);
+          balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
+          await balanceRepo.save(balance);
+        }
       }
 
       const affectedSalesOrderIds = new Set<string>();
@@ -554,7 +574,7 @@ export class GoodsIssuesCoreService {
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
       const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventorySerial);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
 
       const issue = await this.getIssueOrThrow(issueRepo, id);
@@ -572,32 +592,43 @@ export class GoodsIssuesCoreService {
         order: { lineNo: 'ASC' },
       });
 
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+
       for (const line of lines) {
         const qty = Number(line.qtyIssued || 0);
         if (qty <= 0) continue;
 
         const unitCost = Number(line.unitCost || 0);
+        const item = line.itemId
+          ? await itemRepo.findOne({
+              where: { id: line.itemId },
+              relations: ['itemType'],
+            })
+          : null;
+        const isService = item?.itemType?.code === 'SERVICE';
 
-        await txnRepo.save(
-          txnRepo.create({
-            transactionType: 'ISSUE_CANCEL',
-            documentType: 'GOODS_ISSUE',
-            documentId: issue.id,
-            itemId: line.itemId ?? null,
-            warehouseCode: null,
-            qtyIn: qty.toFixed(3),
-            qtyOut: '0.000',
-            unitCost: unitCost.toFixed(3),
-            transactionDate: issue.issueDate,
-            notes: `Hủy phiếu xuất ${issue.issueNo}`,
-            createdBy: null,
-          } as any),
-        );
+        if (!isService) {
+          await txnRepo.save(
+            txnRepo.create({
+              transactionType: 'ISSUE_CANCEL',
+              documentType: 'GOODS_ISSUE',
+              documentId: issue.id,
+              itemId: line.itemId ?? null,
+              warehouseCode: null,
+              qtyIn: qty.toFixed(3),
+              qtyOut: '0.000',
+              unitCost: unitCost.toFixed(3),
+              transactionDate: issue.issueDate,
+              notes: `Hủy phiếu xuất ${issue.issueNo}`,
+              createdBy: null,
+            } as any),
+          );
+        }
 
         const balance = await balanceRepo.findOne({
           where: { itemId: line.itemId ?? undefined },
         });
-        if (balance) {
+        if (balance && !isService) {
           const newQty = Number(balance.qtyOnHand) + qty;
           const newValue = Number(balance.inventoryValue) + qty * unitCost;
           balance.qtyOnHand = newQty.toFixed(3);
@@ -618,7 +649,7 @@ export class GoodsIssuesCoreService {
             ).toFixed(3);
             await soLineRepo.save(soLine);
           }
-          if (balance) {
+          if (balance && !isService) {
             balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
               3,
             );
@@ -637,7 +668,7 @@ export class GoodsIssuesCoreService {
             ).toFixed(3);
             await moMatRepo.save(moMat);
           }
-          if (balance) {
+          if (balance && !isService) {
             balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
               3,
             );

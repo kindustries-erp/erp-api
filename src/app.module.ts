@@ -30,8 +30,14 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
+import { CompanyProfileModule } from './company-profile/company-profile.module';
+import { FilesModule } from './files/files.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { CommonModule } from './common/common.module';
+import { TagsCoreModule } from './tags-core/tags-core.module';
 @Module({
   imports: [
+    CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -91,6 +97,9 @@ import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.mod
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,
+    CompanyProfileModule,
+    FilesModule,
+    TagsCoreModule,
   ],
   controllers: [AppController],
   providers: [

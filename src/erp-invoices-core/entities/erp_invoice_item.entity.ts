@@ -26,6 +26,27 @@ export class ErpInvoiceItem {
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
+  @Column({ type: 'varchar', length: 64, name: 'unit', nullable: true })
+  unit: string | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 4,
+    name: 'quantity',
+    nullable: true,
+  })
+  quantity: string | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 4,
+    name: 'unit_price',
+    nullable: true,
+  })
+  unitPrice: string | null;
+
   @Column({
     type: 'numeric',
     precision: 18,

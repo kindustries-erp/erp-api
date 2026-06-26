@@ -14,10 +14,21 @@
 - `docs/tasks/20260607-165837-erp-core-neon-business-modules-phase1.md`
 - `docs/tasks/20260607-erp-core-api-neon-bootstrap.md`
 
-## Current checkpoint gap
-- Recent API commits after 2026-06-18 now include production start/complete auto GI/GR closure (`docs/tasks/20260620-erp-production-start-complete-auto-warehouse.md`) plus earlier manufacturing-order draft support, MO filter/progress work, goods-receipt quantity fix, and purchase-order draft voucher + warehouse-history fix.
-- `current-lane.md` vẫn chưa phản ánh các artifacts/closure mới hơn này.
-- Treat this as **task-artifact drift**: before further feature work, create/close the remaining corresponding repo task artifact(s) under `docs/tasks/` and keep `current-lane.md` aligned with recent commits.
+## Recent closed artifacts (2026-06-21 → 2026-06-22)
+- `docs/tasks/20260621-mo-dynamic-identifiers-and-bom-bugfixes.md` ← DONE (85e37d8)
+- `docs/tasks/20260622-071200-cleanup-root-scripts.md` ← DONE (175c023)
+- `docs/tasks/20260622-090500-db-schema-sync-and-root-hygiene-closure.md` ← DONE (e81804d, 175c023)
+- `docs/tasks/update-production-api-notes-names.md` ← DONE (per source)
+- `docs/tasks/20260620-erp-production-start-complete-auto-warehouse.md` ← DONE (a9e4707)
+
+## Recent closed artifacts (2026-06-22 afternoon)
+- `docs/tasks/20260622-r2-company-profile-sys-file-migration.md` ← DONE (`e06188e`)
+- `docs/tasks/20260622-143500-production-sorting-debug-artifact-cleanup.md` ← DONE (`52711c9`; lineage includes `1806a1d`, `a702977`, `0e9aae8`)
+
+## Current checkpoint gap (2026-06-22 evening)
+- API lane closure artifacts are now reconciled with recent pushed commits through `52711c9`.
+- Pending staging QC: full-flow MO → tracking-policy → complete + GR must be verified on staging after CI deploy.
+- No open API code hygiene blocker visible from current worktree.
 
 ## Current lane lessons
 

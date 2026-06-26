@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, Like, In, Brackets } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
@@ -23,83 +23,113 @@ export class InventoryStockCoreService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    // Build item filter to restrict balance lookup
-    let filteredItemIds: string[] | null = null;
-    if (query.item_type || query.search) {
-      const whereConditions: any[] = [];
-      if (query.item_type && query.search) {
-        whereConditions.push(
-          { itemType: query.item_type, sku: Like(`%${query.search}%`) },
-          { itemType: query.item_type, itemName: Like(`%${query.search}%`) },
-        );
-      } else if (query.item_type) {
-        whereConditions.push({ itemType: query.item_type });
-      } else if (query.search) {
-        whereConditions.push(
-          { sku: Like(`%${query.search}%`) },
-          { itemName: Like(`%${query.search}%`) },
-        );
-      }
-      const matchedItems = await this.itemRepository.find({
-        where: whereConditions,
-      });
-      filteredItemIds = matchedItems.map((i) => i.id);
+    const qb = this.itemRepository.createQueryBuilder('item');
+    qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+    qb.leftJoinAndSelect('item.uom', 'uom');
+    qb.leftJoinAndSelect('item.itemType', 'itemType');
+
+    if (query.item_type && query.search) {
+      qb.where(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('itemType.code = :type AND item.sku ILIKE :search', {
+              type: query.item_type,
+              search: `%${query.search}%`,
+            })
+            .orWhere('itemType.code = :type AND item.itemName ILIKE :search', {
+              type: query.item_type,
+              search: `%${query.search}%`,
+            });
+        }),
+      );
+    } else if (query.item_type) {
+      qb.where('itemType.code = :type', { type: query.item_type });
+    } else if (query.search) {
+      qb.where(
+        new Brackets((qbInner) => {
+          qbInner
+            .where('item.sku ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('item.itemName ILIKE :search', {
+              search: `%${query.search}%`,
+            });
+        }),
+      );
     }
 
-    // If filtered and no items match, return empty
-    if (filteredItemIds !== null && filteredItemIds.length === 0) {
+    if (query.sort) {
+      const isDesc = query.sort.startsWith('-');
+      const field = isDesc ? query.sort.substring(1) : query.sort;
+      const order = isDesc ? 'DESC' : 'ASC';
+
+      let sortField = '';
+      if (field === 'item_code') sortField = 'item.sku';
+      else if (field === 'item_type') sortField = 'itemType.code';
+      else if (field === 'status') sortField = 'item.status';
+      else if (field === 'unit') sortField = 'uom.name';
+      else if (field === 'item') sortField = 'item.itemName';
+
+      if (sortField) {
+        qb.orderBy(sortField, order);
+      } else {
+        qb.addSelect('b.updatedAt').orderBy(
+          'b.updatedAt',
+          'DESC',
+          'NULLS LAST',
+        );
+      }
+    } else {
+      qb.addSelect('b.updatedAt').orderBy('b.updatedAt', 'DESC', 'NULLS LAST');
+    }
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getMany();
+
+    const countQb = qb.clone();
+    countQb.orderBy(); // clear order by for count query to avoid distinctAlias error
+    const total = await countQb.getCount();
+
+    if (items.length === 0) {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };
     }
 
-    const whereBalance: any =
-      filteredItemIds !== null ? { itemId: In(filteredItemIds) } : {};
+    const itemIds = items.map((i) => i.id);
 
-    const [balances, total] = await this.balanceRepository.findAndCount({
-      where: whereBalance,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { updatedAt: 'DESC' },
+    const balances = await this.balanceRepository.find({
+      where: { itemId: In(itemIds) },
     });
+    const balanceMap = new Map(balances.map((b) => [b.itemId, b]));
 
-    const itemIds = [
-      ...new Set(balances.map((b) => b.itemId).filter(Boolean)),
-    ] as string[];
-    const items = itemIds.length
-      ? await this.itemRepository.findByIds(itemIds as any)
-      : [];
-    const itemMap = new Map(items.map((i) => [i.id, i]));
-
-    const transactionSums = itemIds.length
-      ? await this.transactionRepository
-          .createQueryBuilder('txn')
-          .select('txn.itemId', 'itemId')
-          .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
-          .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
-          .where('txn.itemId IN (:...itemIds)', { itemIds })
-          .groupBy('txn.itemId')
-          .getRawMany<{
-            itemId: string;
-            receivedQty: string;
-            issuedQty: string;
-          }>()
-      : [];
+    const transactionSums = await this.transactionRepository
+      .createQueryBuilder('txn')
+      .select('txn.itemId', 'itemId')
+      .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
+      .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
+      .where('txn.itemId IN (:...itemIds)', { itemIds })
+      .groupBy('txn.itemId')
+      .getRawMany<{
+        itemId: string;
+        receivedQty: string;
+        issuedQty: string;
+      }>();
     const txnMap = new Map(transactionSums.map((row) => [row.itemId, row]));
 
-    const rows = balances.map((b) => {
-      const item = b.itemId ? itemMap.get(b.itemId) : null;
-      const txn = b.itemId ? txnMap.get(b.itemId) : null;
+    const rows = items.map((item) => {
+      const b = balanceMap.get(item.id);
+      const txn = txnMap.get(item.id);
       return {
-        inventory_item_id: b.itemId,
+        inventory_item_id: item.id,
         branch_id: null,
-        item_code: item?.sku ?? '',
-        item_name: item?.itemName ?? '',
-        item_type: item?.itemType ?? '',
-        unit: item?.uom ?? '',
+        item_code: item.sku ?? '',
+        item_name: item.itemName ?? '',
+        item_type: item.itemType?.code ?? '',
+        unit: item.uom?.name ?? '',
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
-        on_hand_qty: Number(b.qtyOnHand || 0),
-        stock_value: Number(b.inventoryValue || 0),
-        last_transaction_date: b.updatedAt?.toISOString?.() ?? null,
+        on_hand_qty: Number(b?.qtyOnHand || 0),
+        stock_value: Number(b?.inventoryValue || 0),
+        last_transaction_date: b?.updatedAt?.toISOString?.() ?? null,
+        status: item.status,
       };
     });
 
