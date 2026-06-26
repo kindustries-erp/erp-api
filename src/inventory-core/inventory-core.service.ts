@@ -374,6 +374,24 @@ export class InventoryItemsService {
     return { message: 'Cập nhật loại item thành công', data };
   }
 
+  async listTrackingPolicies(query: InventoryMasterQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 100;
+    const [items, total] = await this.trackingPolicyRepository.findAndCount({
+      where: this.buildMasterWhere(query),
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      order: { code: 'ASC' },
+    });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async listTrackingCategories(query: InventoryMasterQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 100;
