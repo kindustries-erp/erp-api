@@ -80,6 +80,17 @@ export class TagsCoreController {
     return this.tagsCoreService.getEntityTags(entityType, entityId);
   }
 
+  @Post('entity-tags/batch')
+  @ApiOperation({
+    summary: 'Get tags for multiple entities in a single request',
+  })
+  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  batchGetEntityTags(
+    @Body() body: { queries: { entityType: string; entityId: string }[] },
+  ) {
+    return this.tagsCoreService.batchGetEntityTags(body.queries);
+  }
+
   @Get(':id/connections')
   @ApiOperation({ summary: 'Get all entity connections for a specific tag' })
   @RequirePermissions({ resource: 'sys_tags', action: 'read' })

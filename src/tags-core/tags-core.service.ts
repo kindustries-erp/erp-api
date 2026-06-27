@@ -31,11 +31,32 @@ export class TagsCoreService {
     return this.tagRepository.save(tag);
   }
 
-  async findAll(): Promise<SysTag[]> {
-    return this.tagRepository.find({
+  async findAll(): Promise<any[]> {
+    const tags = await this.tagRepository.find({
       where: { isDeleted: false },
       order: { name: 'ASC' },
     });
+
+    if (tags.length === 0) return [];
+
+    const tagIds = tags.map((t) => t.id);
+
+    const counts = await this.entityTagRepository
+      .createQueryBuilder('et')
+      .select('et.tag_id', 'tagId')
+      .addSelect('COUNT(et.id)', 'connectionCount')
+      .where('et.tag_id IN (:...tagIds)', { tagIds })
+      .groupBy('et.tag_id')
+      .getRawMany();
+
+    const countMap = new Map(
+      counts.map((c) => [c.tagId, parseInt(c.connectionCount, 10)]),
+    );
+
+    return tags.map((tag) => ({
+      ...tag,
+      connectionCount: countMap.get(tag.id) || 0,
+    }));
   }
 
   async findOne(id: string): Promise<SysTag> {
@@ -108,6 +129,17 @@ export class TagsCoreService {
     return this.tagRepository.find({
       where: { id: In(tagIds), isDeleted: false },
     });
+  }
+
+  // Batch fetch tags for multiple entities
+  async batchGetEntityTags(
+    queries: { entityType: string; entityId: string }[],
+  ): Promise<any[]> {
+    // Execute getEntityTags for each query in parallel, preserving order
+    const results = await Promise.all(
+      queries.map((q) => this.getEntityTags(q.entityType, q.entityId)),
+    );
+    return results;
   }
 
   // Get all entities tagged with a specific tag
