@@ -197,6 +197,8 @@ export class RbacCoreService {
       },
       { resource: 'invoices', label: 'Hóa đơn' },
       { resource: 'sys_tags', label: 'Tags' },
+      { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
+      { resource: 'bank_statements', label: 'Bank Statements (Import)' },
     ];
   }
 }

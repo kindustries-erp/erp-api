@@ -1,0 +1,206 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Express } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { BankTransactionsCoreService } from './bank-transactions-core.service';
+import {
+  CreateBankAccountDto,
+  UpdateBankAccountDto,
+} from './dto/create-bank-account.dto';
+import {
+  CreateCashBookDto,
+  UpdateCashBookDto,
+} from './dto/create-cash-book.dto';
+import { BankTransactionFilterDto } from './dto/bank-transaction-filter.dto';
+import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
+import {
+  CreateBankAccountBalanceDto,
+  UpdateBankAccountBalanceDto,
+} from './dto/create-bank-account-balance.dto';
+import {
+  CreateCashBookBalanceDto,
+  UpdateCashBookBalanceDto,
+} from './dto/create-cash-book-balance.dto';
+
+@ApiTags('bank-transactions-core')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@Controller('bank-transactions-core')
+export class BankTransactionsCoreController {
+  constructor(private readonly service: BankTransactionsCoreService) {}
+
+  // --- Bank Accounts ---
+  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @Get('bank-accounts')
+  getBankAccounts(@Query('branchId') branchId?: string) {
+    return this.service.getBankAccounts(branchId);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @Post('bank-accounts')
+  createBankAccount(@Body() dto: CreateBankAccountDto) {
+    return this.service.createBankAccount(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @Patch('bank-accounts/:id')
+  updateBankAccount(
+    @Param('id') id: string,
+    @Body() dto: UpdateBankAccountDto,
+  ) {
+    return this.service.updateBankAccount(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @Delete('bank-accounts/:id')
+  deleteBankAccount(@Param('id') id: string) {
+    return this.service.deleteBankAccount(id);
+  }
+
+  // --- Cash Books ---
+  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @Get('cash-books')
+  getCashBooks(@Query('branchId') branchId?: string) {
+    return this.service.getCashBooks(branchId);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @Post('cash-books')
+  createCashBook(@Body() dto: CreateCashBookDto) {
+    return this.service.createCashBook(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @Patch('cash-books/:id')
+  updateCashBook(@Param('id') id: string, @Body() dto: UpdateCashBookDto) {
+    return this.service.updateCashBook(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @Delete('cash-books/:id')
+  deleteCashBook(@Param('id') id: string) {
+    return this.service.deleteCashBook(id);
+  }
+
+  // --- Transactions ---
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('transactions')
+  getTransactions(@Query() filter: BankTransactionFilterDto) {
+    return this.service.getTransactions(filter);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @Post('transactions/manual')
+  createManualTransaction(@Body() dto: CreateBankTransactionDto) {
+    return this.service.createManualTransaction(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @Post('transactions/import')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        branchId: { type: 'string' },
+        bankAccountId: { type: 'string' },
+        cashBookId: { type: 'string' },
+      },
+    },
+  })
+  importFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('branchId') branchId: string,
+    @Body('bankAccountId') bankAccountId?: string,
+    @Body('cashBookId') cashBookId?: string,
+  ) {
+    if (!file) throw new BadRequestException('File is required');
+    if (!branchId) throw new BadRequestException('branchId is required');
+    return this.service.importFile(file, branchId, bankAccountId, cashBookId);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
+  @Delete('transactions/batch/:batchId')
+  rollbackBatch(@Param('batchId') batchId: string) {
+    return this.service.rollbackBatch(batchId);
+  }
+
+  // --- Balances ---
+  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @Get('bank-account-balances')
+  getBankAccountBalances(@Query('bankAccountId') bankAccountId: string) {
+    if (!bankAccountId)
+      throw new BadRequestException('bankAccountId is required');
+    return this.service.getBankAccountBalances(bankAccountId);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @Post('bank-account-balances')
+  createBankAccountBalance(@Body() dto: CreateBankAccountBalanceDto) {
+    return this.service.createBankAccountBalance(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @Patch('bank-account-balances/:id')
+  updateBankAccountBalance(
+    @Param('id') id: string,
+    @Body() dto: UpdateBankAccountBalanceDto,
+  ) {
+    return this.service.updateBankAccountBalance(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @Delete('bank-account-balances/:id')
+  deleteBankAccountBalance(@Param('id') id: string) {
+    return this.service.deleteBankAccountBalance(id);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @Get('cash-book-balances')
+  getCashBookBalances(@Query('cashBookId') cashBookId: string) {
+    if (!cashBookId) throw new BadRequestException('cashBookId is required');
+    return this.service.getCashBookBalances(cashBookId);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @Post('cash-book-balances')
+  createCashBookBalance(@Body() dto: CreateCashBookBalanceDto) {
+    return this.service.createCashBookBalance(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @Patch('cash-book-balances/:id')
+  updateCashBookBalance(
+    @Param('id') id: string,
+    @Body() dto: UpdateCashBookBalanceDto,
+  ) {
+    return this.service.updateCashBookBalance(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @Delete('cash-book-balances/:id')
+  deleteCashBookBalance(@Param('id') id: string) {
+    return this.service.deleteCashBookBalance(id);
+  }
+}
