@@ -1,5 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import * as ExcelJS from 'exceljs';
 
 export function parseTcbCsv(
   buffer: Buffer,
@@ -123,6 +124,121 @@ export function parseTcbCsv(
       correspondentBank,
     });
   }
+
+  return transactions;
+}
+
+export async function parseTcbXlsx(
+  buffer: Buffer | any,
+  branchId: string,
+  bankAccountId?: string,
+  cashBookId?: string,
+): Promise<CreateBankTransactionDto[]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error('File excel không có dữ liệu');
+  }
+
+  const transactions: CreateBankTransactionDto[] = [];
+  let startParsing = false;
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (!startParsing) {
+      const rowValues = row.values as any[];
+      const hasDate = rowValues.some(
+        (v) =>
+          String(v).toLowerCase().includes('ngày kh thực hiện') ||
+          String(v).toLowerCase().includes('ngày giao dịch'),
+      );
+      if (hasDate) {
+        startParsing = true;
+      }
+      return;
+    }
+
+    const rowValues = row.values as any[];
+    // row.values is 1-indexed in exceljs
+    const efdDateRaw = rowValues[1];
+    const transDateRaw = rowValues[2];
+    const referenceNumber = rowValues[3]?.toString().trim() || undefined;
+    const correspondentBank = rowValues[4]?.toString().trim() || undefined;
+    const correspondentAccount = rowValues[5]?.toString().trim() || undefined;
+    const correspondentName = rowValues[6]?.toString().trim() || undefined;
+    const description = rowValues[7]?.toString().trim() || undefined;
+
+    const parseAmount = (val: any) => {
+      if (val === null || val === undefined || val === '') return 0;
+      if (typeof val === 'number') return Math.abs(val);
+      const num = Number(String(val).replace(/,/g, '').replace(/ /g, ''));
+      return isNaN(num) ? 0 : Math.abs(num);
+    };
+
+    let debitAmount = parseAmount(rowValues[8]);
+    const creditAmount = parseAmount(rowValues[9]);
+    const fee = parseAmount(rowValues[10]);
+    const balance = parseAmount(rowValues[12]);
+
+    if (fee > 0) {
+      if (debitAmount > 0) {
+        debitAmount += fee;
+      } else if (creditAmount === 0 && debitAmount === 0) {
+        debitAmount = fee;
+      }
+    }
+
+    if (!transDateRaw) return;
+    if (String(transDateRaw).includes('TỔNG PHÁT SINH')) return;
+
+    let transDate = new Date(transDateRaw);
+    if (isNaN(transDate.getTime())) {
+      const parts = String(transDateRaw).trim().split('/');
+      if (parts.length === 3) {
+        transDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else {
+        const partsSpace = String(transDateRaw).trim().split(' ')[0].split('/');
+        if (partsSpace.length === 3) {
+          transDate = new Date(
+            `${partsSpace[2]}-${partsSpace[1]}-${partsSpace[0]}`,
+          );
+        }
+      }
+    }
+    if (isNaN(transDate.getTime())) return;
+
+    let efdDate: Date | undefined;
+    if (efdDateRaw) {
+      efdDate = new Date(efdDateRaw);
+      if (isNaN(efdDate.getTime())) {
+        const parts = String(efdDateRaw).trim().split('/');
+        if (parts.length === 3) {
+          efdDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+      }
+    }
+
+    transactions.push({
+      sourceType: bankAccountId ? 'BANK' : 'CASH',
+      branchId,
+      bankAccountId,
+      cashBookId,
+      transDate: transDate.toISOString(),
+      efdDate:
+        efdDate && !isNaN(efdDate.getTime())
+          ? efdDate.toISOString()
+          : undefined,
+      referenceNumber,
+      debitAmount,
+      creditAmount,
+      balance: balance === 0 && !rowValues[12] ? undefined : balance,
+      description,
+      correspondentAccount,
+      correspondentName,
+      correspondentBank,
+    });
+  });
 
   return transactions;
 }

@@ -10,10 +10,11 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
@@ -105,6 +106,12 @@ export class BankTransactionsCoreController {
     return this.service.getTransactions(filter);
   }
 
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('dashboard-stats')
+  getDashboardStats(@Query() filter: BankTransactionFilterDto) {
+    return this.service.getDashboardStats(filter);
+  }
+
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('transactions/manual')
   createManualTransaction(@Body() dto: CreateBankTransactionDto) {
@@ -113,15 +120,18 @@ export class BankTransactionsCoreController {
 
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('transactions/import')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FilesInterceptor('files', 5))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
         },
         branchId: { type: 'string' },
         bankAccountId: { type: 'string' },
@@ -129,15 +139,16 @@ export class BankTransactionsCoreController {
       },
     },
   })
-  importFile(
-    @UploadedFile() file: Express.Multer.File,
+  importFiles(
+    @UploadedFiles() files: Express.Multer.File[],
     @Body('branchId') branchId: string,
     @Body('bankAccountId') bankAccountId?: string,
     @Body('cashBookId') cashBookId?: string,
   ) {
-    if (!file) throw new BadRequestException('File is required');
+    if (!files || files.length === 0) throw new BadRequestException('At least one file is required');
+    if (files.length > 5) throw new BadRequestException('Cannot upload more than 5 files');
     if (!branchId) throw new BadRequestException('branchId is required');
-    return this.service.importFile(file, branchId, bankAccountId, cashBookId);
+    return this.service.importFiles(files, branchId, bankAccountId, cashBookId);
   }
 
   @RequirePermissions({ resource: 'bank_statements', action: 'delete' })

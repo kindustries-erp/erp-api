@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner } from 'typeorm';
+import { Repository, DataSource, QueryRunner, Brackets } from 'typeorm';
 import * as crypto from 'crypto';
 import { ErpBankAccount } from './entities/erp_bank_account.entity';
 import { ErpCashBook } from './entities/erp_cash_book.entity';
@@ -20,7 +20,7 @@ import {
   UpdateCashBookDto,
 } from './dto/create-cash-book.dto';
 import { BankTransactionFilterDto } from './dto/bank-transaction-filter.dto';
-import { parseTcbCsv } from './parsers/tcb.parser';
+import { parseTcbCsv, parseTcbXlsx } from './parsers/tcb.parser';
 import { parseBidvXlsx } from './parsers/bidv.parser';
 import { parseCashXlsx } from './parsers/cash.parser';
 import {
@@ -67,9 +67,24 @@ export class BankTransactionsCoreService {
           where: { bankAccountId: acc.id, isDeleted: false },
           order: { periodDate: 'DESC' },
         });
+        const openingBalance = balance ? Number(balance.openingBalance) : 0;
+        
+        const stats = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('SUM(txn.creditAmount)', 'totalCredit')
+          .addSelect('SUM(txn.debitAmount)', 'totalDebit')
+          .where('txn.bankAccountId = :bankAccountId', { bankAccountId: acc.id })
+          .andWhere('txn.isDeleted = :isDeleted', { isDeleted: false })
+          .getRawOne();
+          
+        const totalCredit = Number(stats?.totalCredit || 0);
+        const totalDebit = Number(stats?.totalDebit || 0);
+        const currentBalance = openingBalance + totalCredit - totalDebit;
+
         return {
           ...acc,
-          openingBalance: balance ? Number(balance.openingBalance) : 0,
+          openingBalance,
+          currentBalance,
           periodDate:
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
@@ -154,9 +169,24 @@ export class BankTransactionsCoreService {
           where: { cashBookId: book.id, isDeleted: false },
           order: { periodDate: 'DESC' },
         });
+        const openingBalance = balance ? Number(balance.openingBalance) : 0;
+        
+        const stats = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('SUM(txn.creditAmount)', 'totalCredit')
+          .addSelect('SUM(txn.debitAmount)', 'totalDebit')
+          .where('txn.cashBookId = :cashBookId', { cashBookId: book.id })
+          .andWhere('txn.isDeleted = :isDeleted', { isDeleted: false })
+          .getRawOne();
+          
+        const totalCredit = Number(stats?.totalCredit || 0);
+        const totalDebit = Number(stats?.totalDebit || 0);
+        const currentBalance = openingBalance + totalCredit - totalDebit;
+
         return {
           ...book,
-          openingBalance: balance ? Number(balance.openingBalance) : 0,
+          openingBalance,
+          currentBalance,
           periodDate:
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
@@ -274,6 +304,14 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      qb.innerJoin(
+        'sys_entity_tags',
+        'et',
+        `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
+      ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
     if (filter.sortBy) {
       const validSorts = ['transDate', 'debitAmount', 'creditAmount', 'amount'];
       if (validSorts.includes(filter.sortBy)) {
@@ -309,6 +347,161 @@ export class BankTransactionsCoreService {
     };
   }
 
+  async getDashboardStats(filter: BankTransactionFilterDto) {
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
+      .leftJoinAndSelect('txn.cashBook', 'cashBook')
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (filter.startDate) {
+      qb.andWhere('txn.transDate >= :startDate', { startDate: filter.startDate });
+    }
+    if (filter.endDate) {
+      qb.andWhere('txn.transDate <= :endDate', { endDate: filter.endDate });
+    }
+    if (filter.sourceType) {
+      qb.andWhere('txn.sourceType = :sourceType', { sourceType: filter.sourceType });
+    }
+    if (filter.branchId) {
+      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    }
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      qb.innerJoin(
+        'sys_entity_tags',
+        'et',
+        `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
+      ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    const allTxns = await qb.getMany();
+
+    let totalCashIn = 0;
+    let totalCashOut = 0;
+    const trendMap = new Map<string, { cashIn: number; cashOut: number }>();
+    const sourceMap = new Map<string, { cashIn: number; cashOut: number; trendMap: Map<string, { cashIn: number; cashOut: number }> }>();
+
+    for (const t of allTxns) {
+      const inAmt = Number(t.creditAmount || 0);
+      const outAmt = Number(t.debitAmount || 0);
+      totalCashIn += inAmt;
+      totalCashOut += outAmt;
+
+      // Group by month for trend
+      const dateStr = t.transDate ? new Date(t.transDate).toISOString().substring(0, 7) : 'Unknown'; // YYYY-MM
+      if (!trendMap.has(dateStr)) {
+        trendMap.set(dateStr, { cashIn: 0, cashOut: 0 });
+      }
+      const trend = trendMap.get(dateStr)!;
+      trend.cashIn += inAmt;
+      trend.cashOut += outAmt;
+
+      // Group by source for source breakdown
+      let sourceLabel = 'Unknown';
+      if (t.sourceType === 'BANK' && t.bankAccount) {
+        sourceLabel = t.bankAccount.bankName ? `${t.bankAccount.bankName} - ${t.bankAccount.accountNumber}` : t.bankAccount.accountNumber || 'Bank';
+      } else if (t.sourceType === 'CASH' && t.cashBook) {
+        sourceLabel = t.cashBook.name || 'Cash Fund';
+      }
+
+      if (!sourceMap.has(sourceLabel)) {
+        sourceMap.set(sourceLabel, { cashIn: 0, cashOut: 0, trendMap: new Map() });
+      }
+      const sourceData = sourceMap.get(sourceLabel)!;
+      sourceData.cashIn += inAmt;
+      sourceData.cashOut += outAmt;
+
+      if (!sourceData.trendMap.has(dateStr)) {
+        sourceData.trendMap.set(dateStr, { cashIn: 0, cashOut: 0 });
+      }
+      const sTrend = sourceData.trendMap.get(dateStr)!;
+      sTrend.cashIn += inAmt;
+      sTrend.cashOut += outAmt;
+    }
+
+    const sourceBreakdown = Array.from(sourceMap.entries()).map(([label, data]) => ({ 
+      label, 
+      cashIn: data.cashIn,
+      cashOut: data.cashOut,
+      trend: Array.from(data.trendMap.entries())
+        .sort((a, b) => b[0].localeCompare(a[0])) // Descending
+        .slice(0, 6)
+        .sort((a, b) => a[0].localeCompare(b[0])) // Ascending
+        .map(([tLabel, tData]) => ({ label: tLabel, ...tData }))
+    }));
+    
+    const topTransactionsIn = [...allTxns]
+      .filter(t => Number(t.creditAmount) > 0)
+      .sort((a, b) => Number(b.creditAmount) - Number(a.creditAmount))
+      .slice(0, 10);
+      
+    const topTransactionsOut = [...allTxns]
+      .filter(t => Number(t.debitAmount) > 0)
+      .sort((a, b) => Number(b.debitAmount) - Number(a.debitAmount))
+      .slice(0, 10);
+
+    // Sort trend by month and take latest 6
+    const cashTrend = Array.from(trendMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0])) // Descending
+      .slice(0, 6)
+      .sort((a, b) => a[0].localeCompare(b[0])) // Ascending
+      .map(([label, data]) => ({ label, ...data }));
+
+    const categoryBreakdownQb = this.transactionRepo.manager.createQueryBuilder()
+      .select('tag.id', 'tagId')
+      .addSelect('tag.name', 'label')
+      .addSelect('tag.color', 'color')
+      .addSelect('SUM(COALESCE(txn.debit_amount, 0) + COALESCE(txn.credit_amount, 0))', 'amount')
+      .from('erp_bank_transactions', 'txn')
+      .innerJoin('sys_entity_tags', 'etFilter', "etFilter.entity_id = txn.id AND etFilter.entity_type = 'bank_transaction'")
+      .innerJoin('sys_tags', 'tag', 'tag.id = etFilter.tag_id')
+      .where('txn.is_deleted = :isDeleted', { isDeleted: false });
+
+    if (filter.startDate) {
+      categoryBreakdownQb.andWhere('txn.trans_date >= :startDate', { startDate: filter.startDate });
+    }
+    if (filter.endDate) {
+      categoryBreakdownQb.andWhere('txn.trans_date <= :endDate', { endDate: filter.endDate });
+    }
+    if (filter.sourceType) {
+      categoryBreakdownQb.andWhere('txn.source_type = :sourceType', { sourceType: filter.sourceType });
+    }
+    if (filter.branchId) {
+      categoryBreakdownQb.andWhere('txn.branch_id = :branchId', { branchId: filter.branchId });
+    }
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      categoryBreakdownQb.innerJoin(
+        'sys_entity_tags',
+        'etFilter2',
+        `etFilter2.entity_id = txn.id AND etFilter2.entity_type = 'bank_transaction'`,
+      ).andWhere('etFilter2.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    const rawCategories = await categoryBreakdownQb
+      .groupBy('tag.id')
+      .addGroupBy('tag.name')
+      .addGroupBy('tag.color')
+      .getRawMany();
+
+    const categoryBreakdown = rawCategories.map(r => ({
+      tagId: r.tagId,
+      label: r.label,
+      color: r.color,
+      amount: Number(r.amount || 0)
+    }));
+
+    return {
+      totalCashIn,
+      totalCashOut,
+      netCashFlow: totalCashIn - totalCashOut,
+      cashTrend,
+      categoryBreakdown,
+      sourceBreakdown,
+      topTransactionsIn,
+      topTransactionsOut
+    };
+  }
+
   async createManualTransaction(dto: CreateBankTransactionDto) {
     if (!dto.bankAccountId && !dto.cashBookId) {
       throw new BadRequestException(
@@ -319,8 +512,8 @@ export class BankTransactionsCoreService {
     return this.transactionRepo.save(txn);
   }
 
-  async importFile(
-    file: Express.Multer.File,
+  async importFiles(
+    files: Express.Multer.File[],
     branchId: string,
     bankAccountId?: string,
     cashBookId?: string,
@@ -331,39 +524,98 @@ export class BankTransactionsCoreService {
       );
     }
 
-    const ext = file.originalname.split('.').pop()?.toLowerCase();
-    let dtos: CreateBankTransactionDto[] = [];
+    let allDtos: CreateBankTransactionDto[] = [];
 
-    if (ext === 'csv') {
-      dtos = parseTcbCsv(file.buffer, branchId, bankAccountId, cashBookId);
-    } else if (ext === 'xlsx') {
-      if (cashBookId) {
-        dtos = await parseCashXlsx(
-          file.buffer,
-          branchId,
-          bankAccountId,
-          cashBookId,
-        );
+    for (const file of files) {
+      const ext = file.originalname.split('.').pop()?.toLowerCase();
+      let dtos: CreateBankTransactionDto[] = [];
+
+      if (ext === 'csv') {
+        dtos = parseTcbCsv(file.buffer, branchId, bankAccountId, cashBookId);
+      } else if (ext === 'xlsx') {
+        if (cashBookId) {
+          dtos = await parseCashXlsx(
+            file.buffer,
+            branchId,
+            bankAccountId,
+            cashBookId,
+          );
+        } else {
+          if (file.originalname.toLowerCase().includes('tcb')) {
+            dtos = await parseTcbXlsx(
+              file.buffer,
+              branchId,
+              bankAccountId,
+              cashBookId,
+            );
+          } else {
+            dtos = await parseBidvXlsx(
+              file.buffer,
+              branchId,
+              bankAccountId,
+              cashBookId,
+            );
+          }
+        }
       } else {
-        dtos = await parseBidvXlsx(
-          file.buffer,
-          branchId,
-          bankAccountId,
-          cashBookId,
+        throw new BadRequestException(
+          `Unsupported file format: ${file.originalname}. Please upload .csv or .xlsx`,
         );
       }
-    } else {
-      throw new BadRequestException(
-        'Unsupported file format. Please upload .csv or .xlsx',
-      );
+      
+      allDtos = [...allDtos, ...dtos];
     }
 
-    if (dtos.length === 0) {
-      throw new BadRequestException('No valid transactions found in file');
+    if (allDtos.length === 0) {
+      throw new BadRequestException('No valid transactions found in the uploaded files');
+    }
+
+    // Deduplication logic
+    const startDate = new Date(Math.min(...allDtos.map(d => new Date(d.transDate).getTime())));
+    const endDate = new Date(Math.max(...allDtos.map(d => new Date(d.transDate).getTime())));
+
+    // Expand search window to handle timezone offsets
+    startDate.setDate(startDate.getDate() - 2);
+    endDate.setDate(endDate.getDate() + 2);
+
+    const referenceNumbers = allDtos.map(d => d.referenceNumber).filter(Boolean);
+
+    const existingQb = this.transactionRepo.createQueryBuilder('txn')
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere(new Brackets(qb => {
+        qb.where('txn.transDate >= :startDate AND txn.transDate <= :endDate', { startDate, endDate });
+        if (referenceNumbers.length > 0) {
+          qb.orWhere('txn.referenceNumber IN (:...referenceNumbers)', { referenceNumbers });
+        }
+      }));
+
+    if (bankAccountId) {
+      existingQb.andWhere('txn.bankAccountId = :bankAccountId', { bankAccountId });
+    }
+    if (cashBookId) {
+      existingQb.andWhere('txn.cashBookId = :cashBookId', { cashBookId });
+    }
+
+    const existingTxns = await existingQb.getMany();
+    
+    const existingKeys = new Set(existingTxns.map(t => {
+      if (t.referenceNumber) return `REF_${t.referenceNumber}`;
+      return `${new Date(t.transDate).toISOString()}_${Number(t.debitAmount || 0)}_${Number(t.creditAmount || 0)}_${(t.description || '').trim()}`;
+    }));
+
+    const newDtos = allDtos.filter(d => {
+      const key = d.referenceNumber 
+        ? `REF_${d.referenceNumber}` 
+        : `${new Date(d.transDate).toISOString()}_${Number(d.debitAmount || 0)}_${Number(d.creditAmount || 0)}_${(d.description || '').trim()}`;
+      return !existingKeys.has(key);
+    });
+
+    if (newDtos.length === 0) {
+      throw new BadRequestException('Tất cả giao dịch trong file này đã tồn tại trong hệ thống');
     }
 
     const importBatchId = crypto.randomUUID();
-    const entities = dtos.map((dto) =>
+    const entities = newDtos.map((dto) =>
       this.transactionRepo.create({ ...dto, importBatchId }),
     );
 

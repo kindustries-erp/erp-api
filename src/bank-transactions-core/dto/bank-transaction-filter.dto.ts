@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -11,6 +12,12 @@ import {
 } from 'class-validator';
 
 export class BankTransactionFilterDto {
+  @ApiProperty({ required: false, type: [String] })
+  @Transform(({ value }) => (value === undefined ? undefined : Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tagIds?: string[];
   @ApiProperty({ required: false })
   @IsNumber()
   @Type(() => Number)
@@ -30,9 +37,10 @@ export class BankTransactionFilterDto {
   @IsOptional()
   search?: string;
 
-  @ApiProperty({ enum: ['BANK', 'CASH'] })
+  @ApiProperty({ enum: ['BANK', 'CASH'], required: false })
   @IsEnum(['BANK', 'CASH'])
-  sourceType: 'BANK' | 'CASH';
+  @IsOptional()
+  sourceType?: 'BANK' | 'CASH';
 
   @ApiProperty({ required: false })
   @IsUUID()
