@@ -98,9 +98,12 @@ export async function parseCashXlsx(
       const val = getVal(colKey);
       if (val === null || val === undefined) return null;
       if (typeof val === 'object' && 'richText' in val) {
-        return (val as any).richText.map((t: any) => t.text).join('').trim();
+        return (val as any).richText
+          .map((t: any) => t.text)
+          .join('')
+          .trim();
       }
-      return String(val?.toString?.() || '').trim();
+      return String((val as any)?.toString?.() || '').trim();
     };
 
     const parseNumber = (colKey: string) => {

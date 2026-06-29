@@ -5,8 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  Between,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+  IsNull,
+} from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
+import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import {
@@ -14,6 +21,7 @@ import {
   PortalImportDto,
   PortalInvoiceDto,
 } from './dto/portal-invoice.dto';
+import { Subject } from 'rxjs';
 import { R2Service } from '../r2/r2.service';
 import {
   parseVietnamInvoiceXml,
@@ -39,6 +47,14 @@ export interface ErpInvoiceQuery {
 @Injectable()
 export class ErpInvoicesCoreService {
   private readonly logger = new Logger(ErpInvoicesCoreService.name);
+  public readonly progress$ = new Subject<{
+    processId: string;
+    type: string;
+    total: number;
+    current: number;
+    message: string;
+    completed: boolean;
+  }>();
 
   constructor(
     @InjectRepository(ErpInvoice)
@@ -227,9 +243,9 @@ export class ErpInvoicesCoreService {
     this.repository.merge(existing, updatePayload);
 
     if (dto.items) {
-      existing.items = dto.items.map((i) =>
-        this.repository.manager.create('ErpInvoiceItem', {
-          invoice: existing,
+      await this.repository.manager.delete(ErpInvoiceItem, { invoiceId: id });
+      const newItems = dto.items.map((i) =>
+        this.repository.manager.create(ErpInvoiceItem, {
           invoiceId: id,
           description: i.description,
           unit: i.unit,
@@ -242,6 +258,8 @@ export class ErpInvoicesCoreService {
           totalAmount: String(i.totalAmount ?? 0),
         }),
       );
+      await this.repository.manager.save(ErpInvoiceItem, newItems);
+      delete (existing as any).items;
     }
 
     await this.repository.save(existing);
@@ -334,105 +352,168 @@ export class ErpInvoicesCoreService {
     const type = dto.type ?? 'purchase';
     const direction: 'IN' | 'OUT' = type === 'purchase' ? 'IN' : 'OUT';
 
-    // Build GDT URL – purchase uses /api/query, sold uses /api/sco-query
+    // Build GDT URL
     const basePath =
       type === 'purchase'
         ? 'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase'
-        : 'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/sold';
+        : 'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold';
 
     const [fromY, fromM, fromD] = dto.dateFrom.split('-');
     const formattedDateFrom = `${fromD}/${fromM}/${fromY}`;
     const [toY, toM, toD] = dto.dateTo.split('-');
     const formattedDateTo = `${toD}/${toM}/${toY}`;
 
-    const url = new URL(basePath);
-    url.searchParams.set('sort', 'tdlap:desc');
-    url.searchParams.set('size', '50');
-    url.searchParams.set(
-      'search',
-      `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
-    );
-
-    const response = await this.fetchWithRetry(url, {
-      headers: { Authorization: `Bearer ${dto.token}` },
-    });
-    if (!response.ok)
-      throw new BadRequestException(
-        `Portal request failed with status ${response.status}`,
-      );
-
-    const payload = (await response.json()) as {
-      datas?: any[];
-      total?: number;
-    };
-    const rawItems: any[] = payload.datas ?? [];
-
-    // ── Save new invoices to DB ───────────────────────────────────────────────
-    let created = 0;
-    let skipped = 0;
-    const errors: string[] = [];
-    const newlyCreatedIds: string[] = []; // track for XML download
-
-    for (const raw of rawItems) {
+    // Run the sync process in the background
+    (async () => {
       try {
-        const invoiceNo = String(raw.shdon ?? '');
-        const serialNo = raw.khhdon ?? null;
+        const rawItems: any[] = [];
+        let state: string | null = null;
+        let totalFromPortal = 0;
+        let pagesFetched = 0;
+        const maxPages = 50;
 
-        const existing = await this.repository.findOne({
-          where: { invoiceNo, serialNo, direction, isDeleted: false },
-        });
-        if (existing) {
-          skipped++;
-          continue;
+        do {
+          const url = new URL(basePath);
+          url.searchParams.set('sort', 'tdlap:desc');
+          url.searchParams.set('size', '50');
+          url.searchParams.set(
+            'search',
+            `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
+          );
+          if (state) {
+            url.searchParams.set('state', state);
+          }
+
+          this.progress$.next({
+            processId: 'sync-progress',
+            type: 'bulk',
+            total: 100, // Unknown total pages initially
+            current: pagesFetched,
+            message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
+            completed: false,
+          });
+
+          const response = await this.fetchWithRetry(url, {
+            headers: { Authorization: `Bearer ${dto.token}` },
+          });
+          if (!response.ok)
+            throw new BadRequestException(
+              `Portal request failed with status ${response.status}`,
+            );
+
+          const payload = (await response.json()) as {
+            datas?: any[];
+            total?: number;
+            state?: string;
+          };
+
+          if (pagesFetched === 0) {
+            totalFromPortal = payload.total ?? 0;
+          }
+
+          if (payload.datas && payload.datas.length > 0) {
+            rawItems.push(...payload.datas);
+          }
+
+          state = payload.state ?? null;
+          pagesFetched++;
+
+          if (state && pagesFetched < maxPages) {
+            const delay = (2 + Math.random() * 3) * 1000;
+            await this.sleep(Math.round(delay));
+          }
+        } while (state && pagesFetched < maxPages);
+
+        // ── Save new invoices to DB ───────────────────────────────────────────────
+        let created = 0;
+        let skipped = 0;
+        const errors: string[] = [];
+        const backgroundSyncIds: string[] = []; // track for XML and Detail download
+
+        for (const raw of rawItems) {
+          try {
+            const invoiceNo = String(raw.shdon ?? '');
+            const serialNo = raw.khhdon ?? null;
+
+            const existing = await this.repository.findOne({
+              where: { invoiceNo, serialNo, direction, isDeleted: false },
+            });
+            if (existing) {
+              // Self-heal: Nếu hóa đơn cũ thiếu XML hoặc thiếu Diễn giải -> Xếp hàng tải lại
+              if (!existing.xmlFileKey || !existing.description) {
+                backgroundSyncIds.push(existing.id);
+              }
+              skipped++;
+              continue;
+            }
+
+            const vatRate = this.resolvePortalVatRate(raw);
+            const invoice = this.repository.create({
+              invoiceNo,
+              serialNo,
+              invoiceDate: this.parsePortalIsoDate(raw.tdlap),
+              direction,
+              status: Number(raw.tthai) === 2 ? 'CANCELLED' : 'CONFIRMED',
+              sellerTaxCode: raw.nbmst ?? null,
+              sellerName: raw.nbten ?? null,
+              sellerAddress: raw.nbdchi ?? null,
+              buyerTaxCode: raw.nmmst ?? raw.mst ?? null,
+              buyerName: raw.nmten ?? null,
+              buyerAddress: raw.nmdchi ?? null,
+              invoiceType: raw.thdon ?? null,
+              preVatAmount: String(raw.tgtcthue ?? 0),
+              vatRate,
+              vatAmount: String(raw.tgtthue ?? 0),
+              discountAmount: String(raw.ttcktmai ?? 0),
+              totalAmount: String(raw.tgtttbso ?? 0),
+              source: 'PORTAL',
+              externalId: `${serialNo}_${invoiceNo}`,
+            } as any);
+
+            const saved = (await this.repository.save(
+              invoice,
+            )) as unknown as ErpInvoice;
+            backgroundSyncIds.push(saved.id);
+            created++;
+          } catch (err) {
+            errors.push((err as Error).message);
+          }
         }
 
-        const vatRate = this.resolvePortalVatRate(raw);
-        const invoice = this.repository.create({
-          invoiceNo,
-          serialNo,
-          invoiceDate: this.parsePortalIsoDate(raw.tdlap),
-          direction,
-          status: Number(raw.tthai) === 2 ? 'CANCELLED' : 'CONFIRMED',
-          sellerTaxCode: raw.nbmst ?? null,
-          sellerName: raw.nbten ?? null,
-          sellerAddress: raw.nbdchi ?? null,
-          buyerTaxCode: raw.nmmst ?? raw.mst ?? null,
-          buyerName: raw.nmten ?? null,
-          buyerAddress: raw.nmdchi ?? null,
-          invoiceType: raw.thdon ?? null,
-          preVatAmount: String(raw.tgtcthue ?? 0),
-          vatRate,
-          vatAmount: String(raw.tgtthue ?? 0),
-          discountAmount: String(raw.ttcktmai ?? 0),
-          totalAmount: String(raw.tgtttbso ?? 0),
-          source: 'PORTAL',
-          externalId: `${serialNo}_${invoiceNo}`,
-        } as any);
+        this.progress$.next({
+          processId: 'sync-progress',
+          type: 'bulk',
+          total: rawItems.length,
+          current: rawItems.length,
+          message: `Đã lấy xong ${rawItems.length} hóa đơn. Đang chuyển sang tải chi tiết...`,
+          completed: false,
+        });
 
-        const saved = (await this.repository.save(
-          invoice,
-        )) as unknown as ErpInvoice;
-        newlyCreatedIds.push(saved.id);
-        created++;
+        // ── XML background download (fire & forget, rate-limited) ─────────────────
+        if (backgroundSyncIds.length > 0) {
+          this.downloadXmlsInBackground(backgroundSyncIds, dto.token).catch(
+            (e) => this.logger.error('XML background download failed', e),
+          );
+        }
+
+        this.logger.log(
+          `Background portal sync completed. Fetched: ${rawItems.length}, Imported: ${created}, Skipped: ${skipped}`,
+        );
       } catch (err) {
-        errors.push((err as Error).message);
+        this.logger.error('Background portal sync failed', err);
       }
-    }
-
-    // ── XML background download (fire & forget, rate-limited) ─────────────────
-    if (newlyCreatedIds.length > 0) {
-      this.downloadXmlsInBackground(newlyCreatedIds, dto.token).catch((e) =>
-        this.logger.error('XML background download failed', e),
-      );
-    }
+    })();
 
     return {
-      total: rawItems.length,
-      imported: created,
-      skipped,
+      totalItemsFetched: 0,
+      totalFromPortal: 0,
+      pagesFetched: 0,
+      imported: 0,
+      skipped: 0,
       direction,
-      errors,
-      xmlDownloadQueued: newlyCreatedIds.length,
+      errors: [],
+      xmlDownloadQueued: 0,
+      note: 'Tiến trình đồng bộ đang chạy ngầm trên máy chủ. Vui lòng chờ ít phút.',
     };
   }
 
@@ -444,9 +525,26 @@ export class ErpInvoicesCoreService {
     invoiceIds: string[],
     token: string,
   ): Promise<void> {
+    const processId = 'sync-progress';
     const BATCH_SIZE = 10;
     const invoices = await this.repository.findByIds(invoiceIds);
-    const targets = invoices.filter((inv) => !inv.xmlFileKey);
+    const targets = invoices.filter(
+      (inv) => !inv.xmlFileKey || !inv.description,
+    );
+
+    const total = targets.length;
+    if (total === 0) return;
+
+    this.progress$.next({
+      processId,
+      type: 'sync',
+      total,
+      current: 0,
+      message: `Đang tải chi tiết & XML (0/${total})...`,
+      completed: false,
+    });
+
+    let current = 0;
 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
       const batch = targets.slice(i, i + BATCH_SIZE);
@@ -455,12 +553,31 @@ export class ErpInvoicesCoreService {
         batch.map((inv) => this.downloadAndSaveXml(inv, token)),
       );
 
+      current += batch.length;
+      this.progress$.next({
+        processId,
+        type: 'sync',
+        total,
+        current,
+        message: `Đang tải chi tiết & XML (${current}/${total})...`,
+        completed: false,
+      });
+
       // Random sleep 5-10s giữa batch (trừ batch cuối)
       if (i + BATCH_SIZE < targets.length) {
         const delay = (5 + Math.random() * 5) * 1000;
         await this.sleep(Math.round(delay));
       }
     }
+
+    this.progress$.next({
+      processId,
+      type: 'sync',
+      total,
+      current,
+      message: `Đã hoàn tất tải ${total} hóa đơn!`,
+      completed: true,
+    });
 
     this.logger.log(`XML download complete: ${targets.length} files processed`);
   }
@@ -469,6 +586,10 @@ export class ErpInvoicesCoreService {
     invoice: ErpInvoice,
     token: string,
   ): Promise<void> {
+    // 1. Luôn ưu tiên lấy chi tiết từ API JSON trước
+    await this.syncInvoiceDetailFromJson(invoice, token);
+
+    // 2. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
     try {
       const xmlUrl = new URL(
         'https://hoadondientu.gdt.gov.vn/api/query/invoices/export-xml',
@@ -519,9 +640,6 @@ export class ErpInvoicesCoreService {
       await this.r2.uploadBuffer(xmlKey, xmlBuffer, contentType);
       await this.repository.update(invoice.id, { xmlFileKey: xmlKey } as any);
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);
-
-      // Lấy chi tiết hóa đơn từ API JSON
-      await this.syncInvoiceDetailFromJson(invoice, token);
     } catch (err) {
       this.logger.warn(
         `downloadAndSaveXml error for ${invoice.invoiceNo}: ${(err as Error).message}`,
@@ -606,6 +724,89 @@ export class ErpInvoicesCoreService {
     }
   }
 
+  async bulkDownloadXml(token: string, direction: 'IN' | 'OUT') {
+    if (!token) throw new BadRequestException('Token portal là bắt buộc.');
+
+    const invoices = await this.repository.find({
+      where: [
+        { source: 'PORTAL', direction, xmlFileKey: IsNull(), isDeleted: false },
+        {
+          source: 'PORTAL',
+          direction,
+          description: IsNull(),
+          isDeleted: false,
+        },
+      ],
+    });
+
+    const total = invoices.length;
+
+    if (total === 0) {
+      return {
+        message: 'Không có hóa đơn nào thiếu XML hoặc Diễn giải cần tải lại.',
+        count: 0,
+      };
+    }
+
+    const processId = 'sync-progress';
+
+    // Chạy ngầm
+    (async () => {
+      this.logger.log(`Bắt đầu tải nền XML cho ${total} hóa đơn`);
+
+      this.progress$.next({
+        processId,
+        type: 'bulk',
+        total,
+        current: 0,
+        message: `Đang tải chi tiết & XML hàng loạt (0/${total})...`,
+        completed: false,
+      });
+
+      let current = 0;
+
+      for (const inv of invoices) {
+        try {
+          await this.downloadAndSaveXml(inv as any, token);
+          current++;
+
+          this.progress$.next({
+            processId,
+            type: 'bulk',
+            total,
+            current,
+            message: `Đang tải chi tiết & XML hàng loạt (${current}/${total})...`,
+            completed: false,
+          });
+
+          await new Promise((r) => setTimeout(r, 500)); // Ngừng 0.5s để tránh rate limit
+        } catch (e) {
+          this.logger.warn(
+            `Lỗi tải XML cho ${inv.invoiceNo}: ${(e as Error).message}`,
+          );
+        }
+      }
+
+      this.progress$.next({
+        processId,
+        type: 'bulk',
+        total,
+        current,
+        message: `Đã hoàn tất tải hàng loạt ${total} hóa đơn!`,
+        completed: true,
+      });
+
+      this.logger.log(`Hoàn thành tải nền XML cho ${total} hóa đơn`);
+    })().catch((err) => {
+      this.logger.error('Lỗi khi chạy background bulk download', err);
+    });
+
+    return {
+      message: `Đang tải lại XML ngầm cho ${invoices.length} hóa đơn. Vui lòng chờ ít phút.`,
+      count: invoices.length,
+    };
+  }
+
   async syncDetailFromPortal(id: string, token: string): Promise<ErpInvoice> {
     const invoiceResp = await this.findOne(id);
     const invoice = invoiceResp.data as any;
@@ -671,6 +872,7 @@ export class ErpInvoicesCoreService {
         sellerAddress: json.nbdchi,
         buyerName: json.nmten,
         buyerAddress: json.nmdchi,
+        description: items.length > 0 ? items[0].description : undefined,
         items,
       });
 

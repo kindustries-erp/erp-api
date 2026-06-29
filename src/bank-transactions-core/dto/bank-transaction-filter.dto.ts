@@ -13,7 +13,9 @@ import {
 
 export class BankTransactionFilterDto {
   @ApiProperty({ required: false, type: [String] })
-  @Transform(({ value }) => (value === undefined ? undefined : Array.isArray(value) ? value : [value]))
+  @Transform(({ value }) =>
+    value === undefined ? undefined : Array.isArray(value) ? value : [value],
+  )
   @IsArray()
   @IsString({ each: true })
   @IsOptional()

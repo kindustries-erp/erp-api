@@ -9,9 +9,13 @@ import {
   Post,
   Query,
   UploadedFiles,
+  Sse,
+  MessageEvent,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -97,6 +101,15 @@ export class ErpInvoicesCoreController {
   @Post('portal/sync')
   syncPortal(@Body() dto: PortalFetchDto) {
     return this.service.syncFromPortal(dto);
+  }
+
+  /**
+   * POST /api/v1/erp-invoices/portal/bulk-download-xml
+   * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
+   */
+  @Post('portal/bulk-download-xml')
+  bulkDownloadXml(@Body() body: { token: string; direction: 'IN' | 'OUT' }) {
+    return this.service.bulkDownloadXml(body.token, body.direction);
   }
 
   // ---------------------------------------------------------------------------
@@ -204,5 +217,16 @@ export class ErpInvoicesCoreController {
       throw new BadRequestException('fileType phải là pdf hoặc xml');
     }
     return this.service.getFileUploadUrl(id, body.fileType);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Server-Sent Events (SSE)
+  // ---------------------------------------------------------------------------
+
+  @Sse('portal/progress')
+  progress(): Observable<MessageEvent> {
+    return this.service.progress$.pipe(
+      map((data) => ({ data: JSON.stringify(data) }) as MessageEvent),
+    );
   }
 }

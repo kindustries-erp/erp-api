@@ -145,8 +145,10 @@ export class BankTransactionsCoreController {
     @Body('bankAccountId') bankAccountId?: string,
     @Body('cashBookId') cashBookId?: string,
   ) {
-    if (!files || files.length === 0) throw new BadRequestException('At least one file is required');
-    if (files.length > 5) throw new BadRequestException('Cannot upload more than 5 files');
+    if (!files || files.length === 0)
+      throw new BadRequestException('At least one file is required');
+    if (files.length > 5)
+      throw new BadRequestException('Cannot upload more than 5 files');
     if (!branchId) throw new BadRequestException('branchId is required');
     return this.service.importFiles(files, branchId, bankAccountId, cashBookId);
   }

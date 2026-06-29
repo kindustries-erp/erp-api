@@ -622,39 +622,48 @@ export class SinvoiceService {
     const allInvoices: any[] = [];
     const invoiceNos: string[] = [];
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+    // Run the long sync process in the background
+    (async () => {
+      try {
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
 
-      // Throttling: Random delay 3-5s between chunks (except first) to avoid GDT rate limiting
-      if (i > 0) {
-        const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
-        this.logger.log(
-          `Throttling: Sleeping ${delay}ms before next GDT chunk...`,
-        );
-        await this.sleep(delay);
-      }
-
-      const chunkInvoices = await this.fetchFromGdtApi(
-        direction,
-        config,
-        chunk.start,
-        chunk.end,
-        size,
-      );
-
-      for (const invoice of chunkInvoices) {
-        const persisted = await this.upsertExternalEinvoice(invoice);
-        const persistedData = (persisted as any)?.data;
-        if (persistedData) {
-          allInvoices.push(persistedData);
-          if (invoiceNos.length < 10) {
-            invoiceNos.push(
-              persistedData.invoice_no || persistedData.document_no,
+          if (i > 0) {
+            const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
+            this.logger.log(
+              `Throttling: Sleeping ${delay}ms before next GDT chunk...`,
             );
+            await this.sleep(delay);
+          }
+
+          const chunkInvoices = await this.fetchFromGdtApi(
+            direction,
+            config,
+            chunk.start,
+            chunk.end,
+            size,
+          );
+
+          for (const invoice of chunkInvoices) {
+            const persisted = await this.upsertExternalEinvoice(invoice);
+            const persistedData = (persisted as any)?.data;
+            if (persistedData) {
+              allInvoices.push(persistedData);
+              if (invoiceNos.length < 10) {
+                invoiceNos.push(
+                  persistedData.invoice_no || persistedData.document_no,
+                );
+              }
+            }
           }
         }
+        this.logger.log(
+          `Background sync completed for ${direction}. Synced ${allInvoices.length} invoices.`,
+        );
+      } catch (error) {
+        this.logger.error(`Background sync failed for ${direction}`, error);
       }
-    }
+    })();
 
     return {
       ok: true,
@@ -666,10 +675,10 @@ export class SinvoiceService {
         endDate: endDate.toISOString(),
       },
       chunk_count: chunks.length,
-      count: allInvoices.length,
+      count: 0,
       synced_at: new Date().toISOString(),
-      invoice_nos: invoiceNos,
-      note: `Đồng bộ dữ liệu trực tiếp từ Tổng cục Thuế qua ${chunks.length} lần gọi (chunking hàng tháng).`,
+      invoice_nos: [],
+      note: `Tiến trình đồng bộ đang chạy ngầm. Vui lòng tải lại trang sau ít phút để xem kết quả.`,
     };
   }
 
@@ -680,7 +689,8 @@ export class SinvoiceService {
     end: Date,
     pageSize: number,
   ) {
-    const endpoint = direction === 'IN' ? 'purchase' : 'sold';
+    const apiPath =
+      direction === 'IN' ? 'query/invoices/purchase' : 'query/invoices/sold';
 
     const formatDate = (d: Date) => {
       const day = String(d.getDate()).padStart(2, '0');
@@ -697,7 +707,10 @@ export class SinvoiceService {
       searchStr += ';ttxly==5';
     }
 
-    const url = `https://hoadondientu.gdt.gov.vn/api/query/invoices/${endpoint}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(searchStr)}`;
+    let state: string | null = null;
+    let allRawItems: any[] = [];
+    let pagesFetched = 0;
+    const maxPages = 50;
 
     let token = config.gdtJwt;
     if (token && !token.startsWith('Bearer ')) {
@@ -722,44 +735,62 @@ export class SinvoiceService {
       headers['Cookie'] = config.gdtCookie;
     }
 
-    this.logger.log(`Fetching from GDT: ${url}`);
+    do {
+      let currentUrl = `https://hoadondientu.gdt.gov.vn/api/${apiPath}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(searchStr)}`;
+      if (state) {
+        currentUrl += `&state=${state}`;
+      }
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+      this.logger.log(`Fetching from GDT: ${currentUrl}`);
 
-      const res = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error(
-            'Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.',
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+        const res = await fetch(currentUrl, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          if (res.status === 401) {
+            throw new Error(
+              'Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.',
+            );
+          }
+          throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
+        }
+
+        const data: any = await res.json();
+        if (!data || !Array.isArray(data.datas)) {
+          this.logger.warn(
+            `Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`,
+          );
+          break;
+        }
+
+        allRawItems.push(...data.datas);
+        state = data.state ?? null;
+        pagesFetched++;
+
+        if (state && pagesFetched < maxPages) {
+          const delay = (2 + Math.random() * 3) * 1000;
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.round(delay)),
           );
         }
-        throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
-      }
-
-      const data: any = await res.json();
-      if (!data || !Array.isArray(data.datas)) {
-        this.logger.warn(
-          `Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`,
+      } catch (err: any) {
+        this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
+        throw new InternalServerErrorException(
+          err.message ?? 'Lỗi khi gọi API Tổng cục Thuế',
         );
-        return [];
       }
+    } while (state && pagesFetched < maxPages);
 
-      return data.datas.map((item: any) =>
-        this.mapGdtInvoiceToErp(item, direction, config),
-      );
-    } catch (err: any) {
-      this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
-      throw new InternalServerErrorException(
-        err.message ?? 'Lỗi khi gọi API Tổng cục Thuế',
-      );
-    }
+    return allRawItems.map((item: any) =>
+      this.mapGdtInvoiceToErp(item, direction, config),
+    );
   }
 
   private mapGdtInvoiceToErp(raw: any, direction: InvoiceDirection, cfg: any) {
