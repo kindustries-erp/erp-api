@@ -39,6 +39,11 @@ import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { SysTag } from '../tags-core/entities/sys_tag.entity';
 import { SysEntityTag } from '../tags-core/entities/sys_entity_tag.entity';
+import { ErpBankAccount } from '../bank-transactions-core/entities/erp_bank_account.entity';
+import { ErpCashBook } from '../bank-transactions-core/entities/erp_cash_book.entity';
+import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
+import { ErpBankAccountBalance } from '../bank-transactions-core/entities/erp_bank_account_balance.entity';
+import { ErpCashBookBalance } from '../bank-transactions-core/entities/erp_cash_book_balance.entity';
 const entities = [
   CoreUser,
   CoreRole,
@@ -79,6 +84,11 @@ const entities = [
   ErpVehicle,
   SysTag,
   SysEntityTag,
+  ErpBankAccount,
+  ErpCashBook,
+  ErpBankTransaction,
+  ErpBankAccountBalance,
+  ErpCashBookBalance,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

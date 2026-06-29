@@ -35,6 +35,8 @@ import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
+import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
+
 @Module({
   imports: [
     CommonModule,
@@ -100,6 +102,7 @@ import { TagsCoreModule } from './tags-core/tags-core.module';
     CompanyProfileModule,
     FilesModule,
     TagsCoreModule,
+    BankTransactionsCoreModule,
   ],
   controllers: [AppController],
   providers: [
