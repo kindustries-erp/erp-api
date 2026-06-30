@@ -52,6 +52,9 @@ import { GreenwayReceivable } from '../greenway-api-core/entities/gw_receivable.
 import { GreenwayPayable } from '../greenway-api-core/entities/gw_payable.entity';
 import { GreenwayCaseService } from '../greenway-api-core/entities/gw_case_service.entity';
 import { GreenwayCasePayment } from '../greenway-api-core/entities/gw_case_payment.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 
 const entities = [
   CoreUser,
@@ -106,6 +109,9 @@ const entities = [
   GreenwayPayable,
   GreenwayCaseService,
   GreenwayCasePayment,
+  ErpChartOfAccount,
+  ErpJournalEntry,
+  ErpJournalEntryLine,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

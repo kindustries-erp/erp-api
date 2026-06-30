@@ -9,6 +9,8 @@ import { ErpBankTransaction } from './entities/erp_bank_transaction.entity';
 import { ErpBankAccountBalance } from './entities/erp_bank_account_balance.entity';
 import { ErpCashBookBalance } from './entities/erp_cash_book_balance.entity';
 
+import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -19,6 +21,7 @@ import { ErpCashBookBalance } from './entities/erp_cash_book_balance.entity';
       ErpCashBookBalance,
     ]),
     RbacCoreModule,
+    AccountingCoreModule,
   ],
   controllers: [BankTransactionsCoreController],
   providers: [BankTransactionsCoreService],

@@ -12,6 +12,7 @@ import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
+import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_bank_transactions' })
 export class ErpBankTransaction {
@@ -110,11 +111,22 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 255,
+    length: 100,
     name: 'correspondent_bank',
     nullable: true,
   })
   correspondentBank: string | null;
+
+  @Column({
+    type: 'uuid',
+    name: 'correspondent_accounting_account_id',
+    nullable: true,
+  })
+  correspondentAccountingAccountId: string | null;
+
+  @ManyToOne(() => ErpChartOfAccount)
+  @JoinColumn({ name: 'correspondent_accounting_account_id' })
+  correspondentAccountingAccount: ErpChartOfAccount | null;
 
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;

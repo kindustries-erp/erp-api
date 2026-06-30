@@ -32,6 +32,7 @@ import {
   UpdateCashBookBalanceDto,
 } from './dto/create-cash-book-balance.dto';
 import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
 
 @Injectable()
 export class BankTransactionsCoreService {
@@ -47,6 +48,7 @@ export class BankTransactionsCoreService {
     @InjectRepository(ErpCashBookBalance)
     private readonly cashBookBalanceRepo: Repository<ErpCashBookBalance>,
     private readonly dataSource: DataSource,
+    private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
   // --- Bank Accounts ---
@@ -596,6 +598,90 @@ export class BankTransactionsCoreService {
     }
     const txn = this.transactionRepo.create(dto);
     return this.transactionRepo.save(txn);
+  }
+
+  async updateTransaction(
+    id: string,
+    dto: import('./dto/update-bank-transaction.dto').UpdateBankTransactionDto,
+  ) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+      relations: ['bankAccount', 'cashBook'],
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+    Object.assign(txn, dto);
+    const saved = await this.transactionRepo.save(txn);
+
+    // Sync to Journal Entries
+    // Always delete old entry first
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      saved.id,
+      saved.sourceType,
+    );
+
+    if (saved.correspondentAccountingAccountId) {
+      let defaultAccountId: string | null = null;
+      if (saved.sourceType === 'BANK') {
+        defaultAccountId = saved.bankAccount?.accountingAccountId || null;
+        if (!defaultAccountId) {
+          const res = await this.dataSource.query(
+            `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+            ['1121'],
+          );
+          if (res && res.length > 0) defaultAccountId = res[0].id;
+        }
+      } else if (saved.sourceType === 'CASH') {
+        defaultAccountId = saved.cashBook?.accountingAccountId || null;
+        if (!defaultAccountId) {
+          const res = await this.dataSource.query(
+            `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+            ['1111'],
+          );
+          if (res && res.length > 0) defaultAccountId = res[0].id;
+        }
+      }
+
+      if (defaultAccountId) {
+        const debitAccount =
+          Number(saved.creditAmount) > 0
+            ? defaultAccountId
+            : saved.correspondentAccountingAccountId;
+        const creditAccount =
+          Number(saved.creditAmount) > 0
+            ? saved.correspondentAccountingAccountId
+            : defaultAccountId;
+        const amount =
+          Number(saved.creditAmount) > 0
+            ? Number(saved.creditAmount)
+            : Number(saved.debitAmount);
+
+        await this.accountingCoreService.createJournalEntry({
+          branchId: saved.branchId,
+          date: saved.transDate,
+          description: saved.description || '',
+          sourceType: saved.sourceType,
+          sourceId: saved.id,
+          lines: [
+            {
+              accountId: debitAccount,
+              debit: amount,
+              credit: 0,
+              description: saved.description || '',
+            },
+            {
+              accountId: creditAccount,
+              debit: 0,
+              credit: amount,
+              description: saved.description || '',
+            },
+          ],
+        });
+      }
+    }
+
+    return saved;
   }
 
   async importFiles(

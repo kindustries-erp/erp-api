@@ -37,6 +37,7 @@ import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
 import { GreenwayApiCoreModule } from './greenway-api-core/greenway-api-core.module';
+import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { GreenwayApiCoreModule } from './greenway-api-core/greenway-api-core.mod
     TagsCoreModule,
     BankTransactionsCoreModule,
     GreenwayApiCoreModule,
+    AccountingCoreModule,
   ],
   controllers: [AppController],
   providers: [

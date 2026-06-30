@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { ErpPurchaseOrder } from './erp_purchase_order.entity';
+import type { ErpPurchaseOrder } from './erp_purchase_order.entity';
 
 @Entity({ name: 'erp_purchase_order_lines' })
 export class ErpPurchaseOrderLine {
@@ -17,7 +17,7 @@ export class ErpPurchaseOrderLine {
   @Column({ type: 'uuid', name: 'purchase_order_id' })
   purchaseOrderId: string;
 
-  @ManyToOne(() => ErpPurchaseOrder, (po) => po.lines)
+  @ManyToOne('ErpPurchaseOrder', 'lines')
   @JoinColumn({ name: 'purchase_order_id' })
   purchaseOrder?: ErpPurchaseOrder;
 

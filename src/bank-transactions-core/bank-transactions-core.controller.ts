@@ -30,6 +30,7 @@ import {
 } from './dto/create-cash-book.dto';
 import { BankTransactionFilterDto } from './dto/bank-transaction-filter.dto';
 import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
+import { UpdateBankTransactionDto } from './dto/update-bank-transaction.dto';
 import {
   CreateBankAccountBalanceDto,
   UpdateBankAccountBalanceDto,
@@ -122,6 +123,15 @@ export class BankTransactionsCoreController {
   @Post('transactions/manual')
   createManualTransaction(@Body() dto: CreateBankTransactionDto) {
     return this.service.createManualTransaction(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @Patch('transactions/:id')
+  updateTransaction(
+    @Param('id') id: string,
+    @Body() dto: UpdateBankTransactionDto,
+  ) {
+    return this.service.updateTransaction(id, dto);
   }
 
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })

@@ -4,14 +4,14 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
-import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
-@Entity({ name: 'erp_cash_books' })
-export class ErpCashBook {
+@Entity({ name: 'erp_chart_of_accounts' })
+export class ErpChartOfAccount {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -22,18 +22,24 @@ export class ErpCashBook {
   @JoinColumn({ name: 'branch_id' })
   branch: ErpBranch;
 
-  @Column({ type: 'uuid', name: 'accounting_account_id', nullable: true })
-  accountingAccountId: string | null;
+  @Column({ type: 'varchar', length: 50, name: 'account_code', unique: true })
+  accountCode: string;
 
-  @ManyToOne(() => ErpChartOfAccount)
-  @JoinColumn({ name: 'accounting_account_id' })
-  accountingAccount: ErpChartOfAccount | null;
+  @Column({ type: 'varchar', length: 255, name: 'account_name' })
+  accountName: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'name' })
-  name: string;
+  @Column({ type: 'varchar', length: 50, name: 'account_type' })
+  accountType: string;
 
-  @Column({ type: 'varchar', length: 10, name: 'currency', default: 'VND' })
-  currency: string;
+  @Column({ type: 'uuid', name: 'parent_id', nullable: true })
+  parentId: string | null;
+
+  @ManyToOne(() => ErpChartOfAccount, (account) => account.children)
+  @JoinColumn({ name: 'parent_id' })
+  parent: ErpChartOfAccount | null;
+
+  @OneToMany(() => ErpChartOfAccount, (account) => account.parent)
+  children: ErpChartOfAccount[];
 
   @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive: boolean;
