@@ -22,12 +22,19 @@ export class AccountingCoreService {
     sourceType: 'BANK' | 'CASH',
     transDate: Date,
     branchId: string,
+    isReceipt?: boolean,
   ): Promise<string> {
     const date = transDate || new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    const prefix =
-      sourceType === 'BANK' ? `UNC-${year}${month}` : `PC-${year}${month}`;
+    let prefix = 'CT';
+    if (sourceType === 'BANK') {
+      prefix = isReceipt ? `UNT-${year}${month}` : `UNC-${year}${month}`;
+    } else if (sourceType === 'CASH') {
+      prefix = isReceipt ? `PT-${year}${month}` : `PC-${year}${month}`;
+    } else {
+      prefix = `CT-${year}${month}`;
+    }
 
     const lastEntry = await this.journalEntryRepo
       .createQueryBuilder('je')
@@ -64,6 +71,8 @@ export class AccountingCoreService {
     description?: string;
     sourceType?: string;
     sourceId?: string;
+    reference?: string | null;
+    isReceipt?: boolean;
     lines: {
       accountId: string;
       debit: number;
@@ -75,6 +84,7 @@ export class AccountingCoreService {
       data.sourceType === 'BANK' ? 'BANK' : 'CASH',
       data.date,
       data.branchId,
+      data.isReceipt,
     );
 
     const entry = this.journalEntryRepo.create({
@@ -84,6 +94,7 @@ export class AccountingCoreService {
       description: data.description,
       sourceId: data.sourceId,
       sourceType: data.sourceType,
+      reference: data.reference,
       status: 'POSTED',
       lines: data.lines.map((l, index) =>
         this.journalEntryLineRepo.create({
@@ -107,6 +118,7 @@ export class AccountingCoreService {
       .createQueryBuilder('je')
       .leftJoinAndSelect('je.lines', 'lines')
       .leftJoinAndSelect('lines.account', 'account')
+      .leftJoinAndSelect('je.branch', 'branch')
       .where('je.isDeleted = :isDeleted', { isDeleted: false });
 
     if (query.branchId) {

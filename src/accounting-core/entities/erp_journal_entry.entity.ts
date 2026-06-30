@@ -35,6 +35,9 @@ export class ErpJournalEntry {
   @Column({ type: 'varchar', length: 50, name: 'status', default: 'POSTED' })
   status: string;
 
+  @Column({ type: 'varchar', length: 100, name: 'reference', nullable: true })
+  reference: string | null;
+
   @Column({ type: 'uuid', name: 'source_id', nullable: true })
   sourceId: string | null;
 

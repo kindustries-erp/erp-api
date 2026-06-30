@@ -663,6 +663,8 @@ export class BankTransactionsCoreService {
           description: saved.description || '',
           sourceType: saved.sourceType,
           sourceId: saved.id,
+          reference: saved.referenceNumber,
+          isReceipt: Number(saved.creditAmount) > 0,
           lines: [
             {
               accountId: debitAccount,
