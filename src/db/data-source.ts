@@ -44,6 +44,14 @@ import { ErpCashBook } from '../bank-transactions-core/entities/erp_cash_book.en
 import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { ErpBankAccountBalance } from '../bank-transactions-core/entities/erp_bank_account_balance.entity';
 import { ErpCashBookBalance } from '../bank-transactions-core/entities/erp_cash_book_balance.entity';
+import { GreenwayAuth } from '../greenway-api-core/entities/gw_auth.entity';
+import { GreenwayBranch } from '../greenway-api-core/entities/gw_branch.entity';
+import { GreenwayCase } from '../greenway-api-core/entities/gw_case.entity';
+import { GreenwayReceivable } from '../greenway-api-core/entities/gw_receivable.entity';
+import { GreenwayPayable } from '../greenway-api-core/entities/gw_payable.entity';
+import { GreenwayCaseService } from '../greenway-api-core/entities/gw_case_service.entity';
+import { GreenwayCasePayment } from '../greenway-api-core/entities/gw_case_payment.entity';
+
 const entities = [
   CoreUser,
   CoreRole,
@@ -89,6 +97,13 @@ const entities = [
   ErpBankTransaction,
   ErpBankAccountBalance,
   ErpCashBookBalance,
+  GreenwayAuth,
+  GreenwayBranch,
+  GreenwayCase,
+  GreenwayReceivable,
+  GreenwayPayable,
+  GreenwayCaseService,
+  GreenwayCasePayment,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

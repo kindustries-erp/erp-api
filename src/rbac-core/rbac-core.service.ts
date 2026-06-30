@@ -199,6 +199,10 @@ export class RbacCoreService {
       { resource: 'sys_tags', label: 'Tags' },
       { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
       { resource: 'bank_statements', label: 'Bank Statements (Import)' },
+      {
+        resource: 'greenway_integration',
+        label: 'Greenway Integration (Garage)',
+      },
     ];
   }
 }
