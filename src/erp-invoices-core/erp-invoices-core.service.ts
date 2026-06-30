@@ -14,6 +14,7 @@ import {
 } from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
+import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import {
@@ -61,6 +62,31 @@ export class ErpInvoicesCoreService {
     private readonly repository: Repository<ErpInvoice>,
     private readonly r2: R2Service,
   ) {}
+
+  private async loadNetOffAmounts(invoices: ErpInvoice[]) {
+    if (invoices.length === 0) return invoices;
+    const ids = invoices.map((i) => i.id);
+    const netOffs = await this.repository.manager
+      .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
+      .select('netoff.invoice_id', 'invoiceId')
+      .addSelect('SUM(netoff.net_off_amount)', 'sum')
+      .where('netoff.invoice_id IN (:...ids)', { ids })
+      .groupBy('netoff.invoice_id')
+      .getRawMany();
+
+    const netOffMap = netOffs.reduce(
+      (acc, curr) => {
+        acc[curr.invoiceId] = Number(curr.sum) || 0;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return invoices.map((i) => ({
+      ...i,
+      netOffAmount: String(netOffMap[i.id] || 0),
+    }));
+  }
 
   async findAll(query: ErpInvoiceQuery) {
     const page = Number(query.page) || 1;
@@ -162,8 +188,10 @@ export class ErpInvoicesCoreService {
         .take(pageSize)
         .getManyAndCount();
 
+      const mappedItems = await this.loadNetOffAmounts(searchResults[0]);
+
       return {
-        items: searchResults[0].map((i) => this.toDto(i)),
+        items: mappedItems.map((i: any) => this.toDto(i)),
         total: searchResults[1],
         page,
         pageSize,
@@ -178,8 +206,10 @@ export class ErpInvoicesCoreService {
       take: pageSize,
     });
 
+    const mappedItems = await this.loadNetOffAmounts(items);
+
     return {
-      items: items.map((i) => this.toDto(i)),
+      items: mappedItems.map((i: any) => this.toDto(i)),
       total,
       page,
       pageSize,
@@ -190,7 +220,7 @@ export class ErpInvoicesCoreService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id, isDeleted: false },
-      relations: ['items'],
+      relations: ['items', 'voucherNetOffs', 'voucherNetOffs.bankTransaction'],
     });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: this.toDto(data) };
@@ -314,6 +344,7 @@ export class ErpInvoicesCoreService {
   private toDto(invoice: ErpInvoice) {
     return {
       ...invoice,
+      netOffAmount: (invoice as any).netOffAmount || '0',
       preVatAmount:
         invoice.preVatAmount != null ? String(invoice.preVatAmount) : '0',
       vatRate: invoice.vatRate != null ? String(invoice.vatRate) : null,
@@ -335,7 +366,39 @@ export class ErpInvoicesCoreService {
             totalAmount: i.totalAmount != null ? String(i.totalAmount) : '0',
           }))
         : undefined,
+      voucherNetOffs: invoice.voucherNetOffs,
     };
+  }
+
+  async linkVouchersToInvoice(
+    invoiceId: string,
+    payload: { bankTransactionId: string; netOffAmount?: number }[],
+  ) {
+    const existing = await this.repository.findOne({
+      where: { id: invoiceId, isDeleted: false },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+    }
+
+    const netOffEntities = payload.map((p) =>
+      this.repository.manager.create(ErpInvoiceVoucherNetOff, {
+        invoiceId,
+        bankTransactionId: p.bankTransactionId,
+        netOffAmount: p.netOffAmount ?? 0,
+      }),
+    );
+
+    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
+    return { message: 'Đã liên kết phiếu thành công' };
+  }
+
+  async removeVoucherFromInvoice(invoiceId: string, voucherId: string) {
+    await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
+      invoiceId,
+      bankTransactionId: voucherId,
+    });
+    return { message: 'Đã xóa liên kết phiếu thành công' };
   }
 
   /**

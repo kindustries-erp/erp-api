@@ -94,6 +94,24 @@ export class ErpInvoicesCoreController {
     return this.service.syncDetailFromPortal(id, token);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/net-off-vouchers')
+  linkVouchers(
+    @Param('id') id: string,
+    @Body() payload: { bankTransactionId: string; netOffAmount?: number }[],
+  ) {
+    return this.service.linkVouchersToInvoice(id, payload);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Delete(':id/net-off-vouchers/:voucherId')
+  removeVoucherLink(
+    @Param('id') id: string,
+    @Param('voucherId') voucherId: string,
+  ) {
+    return this.service.removeVoucherFromInvoice(id, voucherId);
+  }
+
   /**
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.

@@ -101,6 +101,12 @@ export class BankTransactionsCoreController {
 
   // --- Transactions ---
   @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('transactions/:id')
+  getTransaction(@Param('id') id: string) {
+    return this.service.getTransaction(id);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
   @Get('transactions')
   getTransactions(@Query() filter: BankTransactionFilterDto) {
     return this.service.getTransactions(filter);

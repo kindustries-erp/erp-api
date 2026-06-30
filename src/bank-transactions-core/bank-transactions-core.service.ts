@@ -257,6 +257,48 @@ export class BankTransactionsCoreService {
   }
 
   // --- Transactions ---
+  async getTransaction(id: string) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+      relations: [
+        'branch',
+        'bankAccount',
+        'cashBook',
+        'invoiceNetOffs',
+        'invoiceNetOffs.invoice',
+      ],
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+    const [mappedTxn] = await this.loadNetOffAmounts([txn]);
+    return mappedTxn;
+  }
+  private async loadNetOffAmounts(transactions: ErpBankTransaction[]) {
+    if (transactions.length === 0) return transactions;
+    const ids = transactions.map((i) => i.id);
+    const netOffs = await this.transactionRepo.manager
+      .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
+      .select('netoff.bank_transaction_id', 'bankTransactionId')
+      .addSelect('SUM(netoff.net_off_amount)', 'sum')
+      .where('netoff.bank_transaction_id IN (:...ids)', { ids })
+      .groupBy('netoff.bank_transaction_id')
+      .getRawMany();
+
+    const netOffMap = netOffs.reduce(
+      (acc, curr) => {
+        acc[curr.bankTransactionId] = Number(curr.sum) || 0;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return transactions.map((i) => ({
+      ...i,
+      netOffAmount: String(netOffMap[i.id] || 0),
+    }));
+  }
+
   async getTransactions(filter: BankTransactionFilterDto) {
     const page = filter.page || 1;
     const pageSize = filter.pageSize || 20;
@@ -339,9 +381,10 @@ export class BankTransactionsCoreService {
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
+    const mappedItems = await this.loadNetOffAmounts(items);
 
     return {
-      items,
+      items: mappedItems,
       total,
       page,
       pageSize,

@@ -4,12 +4,14 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
+import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 
 @Entity({ name: 'erp_bank_transactions' })
 export class ErpBankTransaction {
@@ -130,4 +132,10 @@ export class ErpBankTransaction {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToMany(
+    'ErpInvoiceVoucherNetOff',
+    (netOff: ErpInvoiceVoucherNetOff) => netOff.bankTransaction,
+  )
+  invoiceNetOffs: ErpInvoiceVoucherNetOff[];
 }
