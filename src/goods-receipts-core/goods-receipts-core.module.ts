@@ -9,6 +9,7 @@ import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purch
 import { GoodsReceiptsCoreController } from './goods-receipts-core.controller';
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { DocumentDependenciesCoreModule } from '../document-dependencies-core/document-dependencies-core.module';
+import { CompanyProfileModule } from '../company-profile/company-profile.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { DocumentDependenciesCoreModule } from '../document-dependencies-core/do
       ErpPurchaseOrderLine,
     ]),
     DocumentDependenciesCoreModule,
+    CompanyProfileModule,
   ],
   controllers: [GoodsReceiptsCoreController],
   providers: [GoodsReceiptsCoreService],
