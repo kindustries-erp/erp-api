@@ -38,7 +38,7 @@ Use this skill only inside this repository.
 - Do not let historical Directus/Gitea-era docs drive new implementation by default
 - No code without a task file under `docs/tasks/`
 - Keep task checklist updated in realtime
-- Before commit/push, run `bun run lint:check` and `bun run build`
+- Before commit/push, run `bun run check:ci` and `bun run build`
 - If backend source changed, run `bunx jest --forceExit` or a narrower affected test scope and report the scope used
 - When task docs are stale, verify with code + build/test + git state before correcting status/checklist
 - **New Module Registration**: Always verify that newly created NestJS modules (e.g. `feature.module.ts`) are explicitly imported in `src/app.module.ts` to prevent 404 Not Found endpoint errors.

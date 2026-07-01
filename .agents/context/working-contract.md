@@ -12,7 +12,7 @@
 - evidence-first
 - do not use historical Directus/Gitea docs as default guidance
 - before commit/push, `cd` into the repo root
-- before commit/push, remember to run `bun build`, `bun lint`, and `bun lint:check`
+- before commit/push, remember to run `bun run check:ci` and `bun run build`
 - push this repo with `github-industries`
 - when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account: `admin@liouni.com` | `admiN@123`
 - by default, always work on ERP_MASTER_DATABASE_URL unless ERP_KLTOUS_STAGING_DATABASE_URL or ERP_KLTOUS_MASTER_DATABASE_URL is explicitly indicated
