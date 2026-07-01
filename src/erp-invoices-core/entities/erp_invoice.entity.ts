@@ -15,6 +15,9 @@ export class ErpInvoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
+
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
 

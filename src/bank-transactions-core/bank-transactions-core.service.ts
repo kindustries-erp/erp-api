@@ -671,7 +671,7 @@ export class BankTransactionsCoreService {
 
     // Load net-offs with invoice info
     const netOffRows: any[] = await this.dataSource.query(
-      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no
+      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.branch_id, i.description as invoice_desc
        FROM erp_invoice_voucher_netoff n
        JOIN erp_invoices i ON i.id = n.invoice_id AND i.is_deleted = false
        WHERE n.bank_transaction_id = $1
@@ -686,11 +686,13 @@ export class BankTransactionsCoreService {
     const isReceipt = Number(txn.creditAmount) > 0;
     const baseDescription = txn.accountingDescription || txn.description || '';
 
-    // Build groups: [{subject, amount, counterpartAccountId}]
+    // Build groups: [{subject, amount, counterpartAccountId, branchId, description}]
     type Group = {
       subject: string | null;
       amount: number;
       counterpartAccountId: string;
+      branchId: string;
+      description: string;
     };
     const groups: Group[] = [];
 
@@ -700,6 +702,8 @@ export class BankTransactionsCoreService {
         subject: txn.correspondentName || null,
         amount: totalAmount,
         counterpartAccountId: txn.correspondentAccountingAccountId,
+        branchId: txn.branchId,
+        description: baseDescription,
       });
     } else {
       // Group by subject and counterpart account
@@ -717,12 +721,19 @@ export class BankTransactionsCoreService {
         if (row.direction === 'OUT' && arAccountId)
           counterpartAccountId = arAccountId;
 
-        const key = `${subject || ''}_${counterpartAccountId}`;
+        const branchId = row.branch_id || txn.branchId;
+
+        const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
         if (!groupMap.has(key)) {
+          const desc = row.invoice_desc
+            ? `${baseDescription} - ${row.invoice_desc}`
+            : baseDescription;
           groupMap.set(key, {
             subject: subject || null,
             amount: 0,
             counterpartAccountId,
+            branchId,
+            description: desc,
           });
         }
         groupMap.get(key)!.amount += Number(row.net_off_amount);
@@ -744,6 +755,8 @@ export class BankTransactionsCoreService {
           subject: txn.correspondentName || null,
           amount: remaining,
           counterpartAccountId: txn.correspondentAccountingAccountId,
+          branchId: txn.branchId,
+          description: baseDescription,
         });
       }
     }
@@ -780,9 +793,9 @@ export class BankTransactionsCoreService {
 
       await this.accountingCoreService.createJournalEntry({
         entryNo,
-        branchId: txn.branchId,
+        branchId: group.branchId,
         date: txn.transDate,
-        description: baseDescription,
+        description: group.description,
         subjectName: group.subject || undefined,
         sourceType: txn.sourceType,
         sourceId: txn.id,
@@ -793,13 +806,13 @@ export class BankTransactionsCoreService {
             accountId: debitAccount,
             debit: group.amount,
             credit: 0,
-            description: baseDescription,
+            description: group.description,
           },
           {
             accountId: creditAccount,
             debit: 0,
             credit: group.amount,
-            description: baseDescription,
+            description: group.description,
           },
         ],
       });

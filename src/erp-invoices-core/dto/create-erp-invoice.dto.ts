@@ -65,6 +65,11 @@ export class CreateErpInvoiceItemDto {
 }
 
 export class CreateErpInvoiceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiProperty()
   @IsString()
   @MaxLength(128)
