@@ -65,6 +65,17 @@ export class AccountingCoreService {
     );
   }
 
+  async updateJournalEntrySubject(
+    sourceId: string,
+    sourceType: string,
+    subjectName: string | null,
+  ) {
+    await this.journalEntryRepo.update(
+      { sourceId, sourceType, isDeleted: false },
+      { subjectName: subjectName ?? undefined },
+    );
+  }
+
   async createJournalEntry(data: {
     branchId: string;
     date: Date;
@@ -82,7 +93,11 @@ export class AccountingCoreService {
     }[];
   }) {
     const entryNo = await this.generateEntryNo(
-      data.sourceType === 'BANK' ? 'BANK' : 'CASH',
+      data.sourceType === 'BANK'
+        ? 'BANK'
+        : data.sourceType === 'CASH'
+          ? 'CASH'
+          : 'BANK',
       data.date,
       data.branchId,
       data.isReceipt,

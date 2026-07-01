@@ -7,6 +7,7 @@ import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.e
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
 import { R2Module } from '../r2/r2.module';
+import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { R2Module } from '../r2/r2.module';
       ErpInvoiceVoucherNetOff,
     ]),
     R2Module,
+    AccountingCoreModule,
   ],
   controllers: [ErpInvoicesCoreController],
   providers: [ErpInvoicesCoreService],
