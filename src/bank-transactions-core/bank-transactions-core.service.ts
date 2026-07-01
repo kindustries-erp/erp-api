@@ -632,6 +632,20 @@ export class BankTransactionsCoreService {
     });
     if (!txn || !txn.correspondentAccountingAccountId) return;
 
+    // Load 331 and 131 account IDs (active, any branch)
+    const [apAccountRes, arAccountRes] = await Promise.all([
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['331'],
+      ),
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['131'],
+      ),
+    ]);
+    const apAccountId = apAccountRes.length > 0 ? apAccountRes[0].id : null;
+    const arAccountId = arAccountRes.length > 0 ? arAccountRes[0].id : null;
+
     // Find bank/cash accounting account
     let defaultAccountId: string | null = null;
     if (txn.sourceType === 'BANK') {
@@ -672,29 +686,46 @@ export class BankTransactionsCoreService {
     const isReceipt = Number(txn.creditAmount) > 0;
     const baseDescription = txn.accountingDescription || txn.description || '';
 
-    // Build groups: [{subject, amount}]
-    type Group = { subject: string | null; amount: number };
+    // Build groups: [{subject, amount, counterpartAccountId}]
+    type Group = {
+      subject: string | null;
+      amount: number;
+      counterpartAccountId: string;
+    };
     const groups: Group[] = [];
 
     if (netOffRows.length === 0) {
-      // No net-offs: single entry with correspondentName as subject
+      // No net-offs: single entry with correspondentName as subject and original counterpart account
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
+        counterpartAccountId: txn.correspondentAccountingAccountId,
       });
     } else {
-      // Group by subject (from invoice)
-      const subjectMap = new Map<string, number>();
+      // Group by subject and counterpart account
+      const groupMap = new Map<string, Group>();
+
       for (const row of netOffRows) {
         const subject: string | null =
           row.direction === 'IN'
             ? row.seller_name || null
             : row.buyer_name || null;
-        const key = subject || '';
-        subjectMap.set(
-          key,
-          (subjectMap.get(key) || 0) + Number(row.net_off_amount),
-        );
+
+        let counterpartAccountId = txn.correspondentAccountingAccountId;
+        if (row.direction === 'IN' && apAccountId)
+          counterpartAccountId = apAccountId;
+        if (row.direction === 'OUT' && arAccountId)
+          counterpartAccountId = arAccountId;
+
+        const key = `${subject || ''}_${counterpartAccountId}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            subject: subject || null,
+            amount: 0,
+            counterpartAccountId,
+          });
+        }
+        groupMap.get(key)!.amount += Number(row.net_off_amount);
       }
 
       const netOffTotal = netOffRows.reduce(
@@ -702,16 +733,17 @@ export class BankTransactionsCoreService {
         0,
       );
 
-      for (const [subjectKey, amount] of subjectMap.entries()) {
-        groups.push({ subject: subjectKey || null, amount });
+      for (const group of groupMap.values()) {
+        groups.push(group);
       }
 
-      // Remaining amount → use correspondentName
+      // Remaining amount → use correspondentName and original counterpart account
       const remaining = Math.round((totalAmount - netOffTotal) * 100) / 100;
       if (remaining > 0.01) {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
+          counterpartAccountId: txn.correspondentAccountingAccountId,
         });
       }
     }
@@ -730,13 +762,6 @@ export class BankTransactionsCoreService {
       isReceipt,
     );
 
-    const debitAccount = isReceipt
-      ? defaultAccountId
-      : txn.correspondentAccountingAccountId;
-    const creditAccount = isReceipt
-      ? txn.correspondentAccountingAccountId
-      : defaultAccountId;
-
     // Create one journal entry per group
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
@@ -745,6 +770,13 @@ export class BankTransactionsCoreService {
         groups.length === 1
           ? baseEntryNo
           : `${baseEntryNo}${String.fromCharCode(97 + i)}`;
+
+      const debitAccount = isReceipt
+        ? defaultAccountId
+        : group.counterpartAccountId;
+      const creditAccount = isReceipt
+        ? group.counterpartAccountId
+        : defaultAccountId;
 
       await this.accountingCoreService.createJournalEntry({
         entryNo,
