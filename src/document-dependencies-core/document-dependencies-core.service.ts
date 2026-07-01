@@ -23,7 +23,7 @@ export class DocumentDependenciesCoreService {
         `SELECT DISTINCT gr.receipt_no 
          FROM public.erp_goods_receipt_lines grl
          JOIN public.erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
-         JOIN public.purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
+         JOIN public.erp_purchase_order_lines pol ON grl.purchase_order_line_id = pol.id
          WHERE pol.purchase_order_id = $1`,
         [documentId],
       );
@@ -32,40 +32,42 @@ export class DocumentDependenciesCoreService {
       }
 
       // Check Payment Vouchers (through document_payment_links)
-      const payments = await this.dataSource.query(
-        `SELECT DISTINCT pv.voucher_no 
-         FROM public.document_payment_links dpl
-         JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
-         WHERE dpl.document_type = 'purchase_orders' AND dpl.document_id = $1`,
-        [documentId],
-      );
-      if (payments.length > 0) {
-        dependencies.push(
-          ...payments.map((r) => `Phiếu thanh toán: ${r.voucher_no}`),
-        );
-      }
+      // TODO: Restore when document_payment_links table is confirmed to exist in Postgres
+      // const payments = await this.dataSource.query(
+      //   `SELECT DISTINCT pv.voucher_no
+      //    FROM public.document_payment_links dpl
+      //    JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
+      //    WHERE dpl.document_type = 'purchase_orders' AND dpl.document_id = $1`,
+      //   [documentId],
+      // );
+      // if (payments.length > 0) {
+      //   dependencies.push(
+      //     ...payments.map((r) => `Phiếu thanh toán: ${r.voucher_no}`),
+      //   );
+      // }
     } else if (moduleName === 'sales_service_orders') {
       // Check Payment Vouchers
-      const payments = await this.dataSource.query(
-        `SELECT DISTINCT pv.voucher_no 
-         FROM public.document_payment_links dpl
-         JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
-         WHERE dpl.document_type = 'sales_service_orders' AND dpl.document_id = $1`,
-        [documentId],
-      );
-      if (payments.length > 0) {
-        dependencies.push(
-          ...payments.map((r) => `Phiếu thanh toán: ${r.voucher_no}`),
-        );
-      }
+      // TODO: Restore when document_payment_links table is confirmed to exist in Postgres
+      // const payments = await this.dataSource.query(
+      //   `SELECT DISTINCT pv.voucher_no
+      //    FROM public.document_payment_links dpl
+      //    JOIN public.payment_vouchers pv ON dpl.payment_voucher_id = pv.id
+      //    WHERE dpl.document_type = 'sales_service_orders' AND dpl.document_id = $1`,
+      //   [documentId],
+      // );
+      // if (payments.length > 0) {
+      //   dependencies.push(
+      //     ...payments.map((r) => `Phiếu thanh toán: ${r.voucher_no}`),
+      //   );
+      // }
 
       // Check Inventory Transactions (Goods Issues)
       const issues = await this.dataSource.query(
         `SELECT DISTINCT gi.issue_no 
          FROM public.erp_goods_issue_lines gil
          JOIN public.erp_goods_issues gi ON gil.goods_issue_id = gi.id
-         JOIN public.sales_service_order_lines sol ON gil.sales_order_line_id = sol.id
-         WHERE sol.order_id = $1`,
+         JOIN public.erp_sales_order_lines sol ON gil.sales_order_line_id = sol.id
+         WHERE sol.sales_order_id = $1`,
         [documentId],
       );
       if (issues.length > 0) {

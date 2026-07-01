@@ -8,6 +8,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { ErpInvoiceItem } from './erp_invoice_item.entity';
+import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -187,4 +188,7 @@ export class ErpInvoice {
     orphanedRowAction: 'delete',
   })
   items: ErpInvoiceItem[];
+
+  @OneToMany('ErpInvoiceVoucherNetOff', (netOff: any) => netOff.invoice)
+  voucherNetOffs: ErpInvoiceVoucherNetOff[];
 }

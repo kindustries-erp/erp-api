@@ -3,6 +3,10 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import * as pg from 'pg';
+
+// Parse TIMESTAMP WITHOUT TIME ZONE as UTC instead of local time
+pg.types.setTypeParser(1114, (str) => new Date(str + 'Z'));
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

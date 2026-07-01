@@ -9,12 +9,18 @@ import {
   Post,
   Query,
   UploadedFiles,
+  Sse,
+  MessageEvent,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
@@ -23,7 +29,7 @@ import { PortalFetchDto } from './dto/portal-invoice.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('erp-invoices')
 export class ErpInvoicesCoreController {
   constructor(private readonly service: ErpInvoicesCoreService) {}
@@ -32,6 +38,7 @@ export class ErpInvoicesCoreController {
   // CRUD cơ bản
   // ---------------------------------------------------------------------------
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get()
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
@@ -40,32 +47,38 @@ export class ErpInvoicesCoreController {
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'tag_id', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
   findAll(@Query() query: ErpInvoiceQuery) {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
     return this.service.create(dto);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'delete' })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
@@ -81,6 +94,24 @@ export class ErpInvoicesCoreController {
     return this.service.syncDetailFromPortal(id, token);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/net-off-vouchers')
+  linkVouchers(
+    @Param('id') id: string,
+    @Body() payload: { bankTransactionId: string; netOffAmount?: number }[],
+  ) {
+    return this.service.linkVouchersToInvoice(id, payload);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Delete(':id/net-off-vouchers/:voucherId')
+  removeVoucherLink(
+    @Param('id') id: string,
+    @Param('voucherId') voucherId: string,
+  ) {
+    return this.service.removeVoucherFromInvoice(id, voucherId);
+  }
+
   /**
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
@@ -88,6 +119,15 @@ export class ErpInvoicesCoreController {
   @Post('portal/sync')
   syncPortal(@Body() dto: PortalFetchDto) {
     return this.service.syncFromPortal(dto);
+  }
+
+  /**
+   * POST /api/v1/erp-invoices/portal/bulk-download-xml
+   * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
+   */
+  @Post('portal/bulk-download-xml')
+  bulkDownloadXml(@Body() body: { token: string; direction: 'IN' | 'OUT' }) {
+    return this.service.bulkDownloadXml(body.token, body.direction);
   }
 
   // ---------------------------------------------------------------------------
@@ -195,5 +235,16 @@ export class ErpInvoicesCoreController {
       throw new BadRequestException('fileType phải là pdf hoặc xml');
     }
     return this.service.getFileUploadUrl(id, body.fileType);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Server-Sent Events (SSE)
+  // ---------------------------------------------------------------------------
+
+  @Sse('portal/progress')
+  progress(): Observable<MessageEvent> {
+    return this.service.progress$.pipe(
+      map((data) => ({ data: JSON.stringify(data) }) as MessageEvent),
+    );
   }
 }

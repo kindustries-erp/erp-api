@@ -25,6 +25,7 @@ import { ErpProductionOrder } from '../production-core/entities/erp_production_o
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
+import { ErpInvoiceVoucherNetOff } from '../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { SysFile } from '../files/entities/sys-file.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
@@ -39,6 +40,22 @@ import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { SysTag } from '../tags-core/entities/sys_tag.entity';
 import { SysEntityTag } from '../tags-core/entities/sys_entity_tag.entity';
+import { ErpBankAccount } from '../bank-transactions-core/entities/erp_bank_account.entity';
+import { ErpCashBook } from '../bank-transactions-core/entities/erp_cash_book.entity';
+import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
+import { ErpBankAccountBalance } from '../bank-transactions-core/entities/erp_bank_account_balance.entity';
+import { ErpCashBookBalance } from '../bank-transactions-core/entities/erp_cash_book_balance.entity';
+import { GreenwayAuth } from '../greenway-api-core/entities/gw_auth.entity';
+import { GreenwayBranch } from '../greenway-api-core/entities/gw_branch.entity';
+import { GreenwayCase } from '../greenway-api-core/entities/gw_case.entity';
+import { GreenwayReceivable } from '../greenway-api-core/entities/gw_receivable.entity';
+import { GreenwayPayable } from '../greenway-api-core/entities/gw_payable.entity';
+import { GreenwayCaseService } from '../greenway-api-core/entities/gw_case_service.entity';
+import { GreenwayCasePayment } from '../greenway-api-core/entities/gw_case_payment.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+
 const entities = [
   CoreUser,
   CoreRole,
@@ -65,6 +82,7 @@ const entities = [
   ErpProductionOrderMaterial,
   ErpInvoice,
   ErpInvoiceItem,
+  ErpInvoiceVoucherNetOff,
   CompanyProfile,
   SysFile,
   ErpInventoryTrackingSerial,
@@ -79,6 +97,21 @@ const entities = [
   ErpVehicle,
   SysTag,
   SysEntityTag,
+  ErpBankAccount,
+  ErpCashBook,
+  ErpBankTransaction,
+  ErpBankAccountBalance,
+  ErpCashBookBalance,
+  GreenwayAuth,
+  GreenwayBranch,
+  GreenwayCase,
+  GreenwayReceivable,
+  GreenwayPayable,
+  GreenwayCaseService,
+  GreenwayCasePayment,
+  ErpChartOfAccount,
+  ErpJournalEntry,
+  ErpJournalEntryLine,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -43,4 +43,29 @@ export class BranchesCoreService {
       totalPages: Math.ceil(total / pageSize),
     };
   }
+
+  async create(data: any) {
+    const item = this.repository.create({
+      code: data.code,
+      name: data.name,
+      isActive: data.is_active,
+    });
+    const saved = await this.repository.save(item);
+    return { data: saved, message: 'Branch created successfully' };
+  }
+
+  async update(id: string, data: any) {
+    await this.repository.update(id, {
+      code: data.code,
+      name: data.name,
+      isActive: data.is_active,
+    });
+    const updated = await this.repository.findOne({ where: { id } });
+    return { data: updated, message: 'Branch updated successfully' };
+  }
+
+  async remove(id: string) {
+    await this.repository.delete(id);
+    return { message: 'Branch deleted successfully' };
+  }
 }

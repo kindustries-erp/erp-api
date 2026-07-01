@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -18,51 +20,60 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 
 @ApiTags('erp_purchase_orders')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('purchase-orders')
 export class PurchaseOrdersCoreController {
   constructor(private readonly service: PurchaseOrdersCoreService) {}
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
   @Post()
   create(@Body() dto: CreatePurchaseOrderDto) {
     return this.service.create(dto);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get()
   findAll(@Query() query: OperationalQueryDto) {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextPoNo(date);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get(':id/receipts')
   getReceipts(@Param('id') id: string) {
     return this.service.getReceiptTimeline(id);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get(':id/connections')
   getConnections(@Param('id') id: string) {
     return this.service.getConnections(id);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'delete' })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
+  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);

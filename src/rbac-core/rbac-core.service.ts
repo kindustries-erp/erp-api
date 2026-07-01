@@ -184,6 +184,7 @@ export class RbacCoreService {
       { resource: 'purchase_orders', label: 'Purchase Orders' },
       { resource: 'sales_orders', label: 'Sales Orders' },
       { resource: 'inventory_items', label: 'Inventory Items' },
+      { resource: 'inventory_vouchers', label: 'Chứng từ kho' },
       { resource: 'goods_receipts', label: 'Goods Receipts' },
       { resource: 'goods_issues', label: 'Goods Issues' },
       { resource: 'bom', label: 'BOM' },
@@ -196,6 +197,17 @@ export class RbacCoreService {
       },
       { resource: 'invoices', label: 'Hóa đơn' },
       { resource: 'sys_tags', label: 'Tags' },
+      { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
+      { resource: 'bank_statements', label: 'Bank Statements (Import)' },
+      {
+        resource: 'purchase_requests',
+        label: 'Purchase Requests / Yêu cầu mua hàng',
+      },
+      { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
+      {
+        resource: 'greenway_integration',
+        label: 'Greenway Integration (Garage)',
+      },
     ];
   }
 }

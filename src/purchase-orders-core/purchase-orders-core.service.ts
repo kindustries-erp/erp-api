@@ -144,6 +144,24 @@ export class PurchaseOrdersCoreService {
       where.id = In(poIds);
     }
 
+    if ((query as any).tag_id) {
+      const taggedRows = await this.dataSource.query(
+        `SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_purchase_order' AND tag_id = $1`,
+        [(query as any).tag_id],
+      );
+      const taggedIds = taggedRows.map((r: any) => r.entity_id);
+      if (taggedIds.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      where.id = where.id
+        ? In(
+            taggedIds.filter((id: string) =>
+              (where.id as any)._value?.includes(id),
+            ),
+          )
+        : In(taggedIds);
+    }
+
     const order = resolveSortOrder(query.sort, {
       allowedFields: [
         'createdAt',
