@@ -295,6 +295,25 @@ export class ErpInvoicesCoreService {
     }
 
     await this.repository.save(existing);
+
+    // Refresh journal entries for any linked bank transactions in case branchId or description changed
+    const netOffs = await this.repository.manager.find(
+      ErpInvoiceVoucherNetOff,
+      {
+        where: { invoiceId: id },
+      },
+    );
+    if (netOffs && netOffs.length > 0) {
+      const uniqueTxnIds = [
+        ...new Set(netOffs.map((n) => n.bankTransactionId)),
+      ];
+      for (const txnId of uniqueTxnIds) {
+        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
+          txnId,
+        );
+      }
+    }
+
     return this.findOne(id);
   }
 
