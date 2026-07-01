@@ -1755,7 +1755,7 @@ export class ProductionCoreService {
     infoRow1.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
 
     const infoRow2 = sheet.addRow([
-      `- Thành phẩm: ${order.finishedGoodItemName || ''} (${order.finishedGoodItemId})`,
+      `- Thành phẩm: ${order.finishedGoodItemName || ''}`,
     ]);
     sheet.mergeCells(`A${infoRow2.number}:H${infoRow2.number}`);
     infoRow2.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
@@ -1922,15 +1922,16 @@ export class ProductionCoreService {
     const signRow1 = sheet.addRow([
       'Người lập phiếu',
       '',
-      '',
+      'Thủ kho',
       '',
       'Quản đốc phân xưởng',
       '',
       'Giám đốc',
       '',
     ]);
-    sheet.mergeCells(`A${signRow1.number}:C${signRow1.number}`);
-    sheet.mergeCells(`D${signRow1.number}:F${signRow1.number}`);
+    sheet.mergeCells(`A${signRow1.number}:B${signRow1.number}`);
+    sheet.mergeCells(`C${signRow1.number}:D${signRow1.number}`);
+    sheet.mergeCells(`E${signRow1.number}:F${signRow1.number}`);
     sheet.mergeCells(`G${signRow1.number}:H${signRow1.number}`);
     signRow1.eachCell((cell) => {
       cell.font = { ...defaultFont, bold: true };
@@ -1944,15 +1945,16 @@ export class ProductionCoreService {
     const signRow2 = sheet.addRow([
       '(Ký, họ tên)',
       '',
-      '',
+      '(Ký, họ tên)',
       '',
       '(Ký, họ tên)',
       '',
       '(Ký, họ tên)',
       '',
     ]);
-    sheet.mergeCells(`A${signRow2.number}:C${signRow2.number}`);
-    sheet.mergeCells(`D${signRow2.number}:F${signRow2.number}`);
+    sheet.mergeCells(`A${signRow2.number}:B${signRow2.number}`);
+    sheet.mergeCells(`C${signRow2.number}:D${signRow2.number}`);
+    sheet.mergeCells(`E${signRow2.number}:F${signRow2.number}`);
     sheet.mergeCells(`G${signRow2.number}:H${signRow2.number}`);
     signRow2.eachCell((cell) => {
       cell.font = { ...defaultFont, italic: true, size: 10 };
