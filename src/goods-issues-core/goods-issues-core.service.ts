@@ -70,6 +70,9 @@ export class GoodsIssuesCoreService {
     const vehicleRepo = manager
       ? manager.getRepository(ErpVehicle)
       : this.dataSource.getRepository(ErpVehicle);
+    const itemRepo = manager
+      ? manager.getRepository(ErpInventoryItem)
+      : this.dataSource.getRepository(ErpInventoryItem);
 
     const serialIds = [
       ...new Set(lines.map((line) => line.serialId).filter(Boolean)),
@@ -77,16 +80,25 @@ export class GoodsIssuesCoreService {
     const vehicleIds = [
       ...new Set(lines.map((line) => line.vehicleId).filter(Boolean)),
     ] as string[];
+    const itemIds = [
+      ...new Set(lines.map((line) => line.itemId).filter(Boolean)),
+    ] as string[];
 
-    const [serials, vehicles]: [ErpInventoryTrackingSerial[], ErpVehicle[]] =
-      await Promise.all([
-        serialIds.length
-          ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpInventoryTrackingSerial[]),
-        vehicleIds.length
-          ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpVehicle[]),
-      ]);
+    const [serials, vehicles, items]: [
+      ErpInventoryTrackingSerial[],
+      ErpVehicle[],
+      ErpInventoryItem[],
+    ] = await Promise.all([
+      serialIds.length
+        ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpInventoryTrackingSerial[]),
+      vehicleIds.length
+        ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpVehicle[]),
+      itemIds.length
+        ? itemRepo.findBy(itemIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpInventoryItem[]),
+    ]);
 
     const serialMap = new Map(
       serials.map((row: ErpInventoryTrackingSerial) => [row.id, row]),
@@ -94,15 +106,20 @@ export class GoodsIssuesCoreService {
     const vehicleMap = new Map(
       vehicles.map((row: ErpVehicle) => [row.id, row]),
     );
+    const itemMap = new Map(
+      items.map((row: ErpInventoryItem) => [row.id, row]),
+    );
 
     return lines.map((line) => {
       const serial = line.serialId ? serialMap.get(line.serialId) : null;
       const vehicle = line.vehicleId ? vehicleMap.get(line.vehicleId) : null;
+      const item = line.itemId ? itemMap.get(line.itemId) : null;
       return {
         ...line,
         serialNo: serial?.serialNo ?? null,
         vehicleVinNo: vehicle?.vinNo ?? null,
         engineNo: vehicle?.engineNo ?? null,
+        itemName: item ? `${item.sku} — ${item.itemName}` : null,
       };
     });
   }
