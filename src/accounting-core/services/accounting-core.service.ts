@@ -77,6 +77,7 @@ export class AccountingCoreService {
   }
 
   async createJournalEntry(data: {
+    entryNo?: string;
     branchId: string;
     date: Date;
     description?: string;
@@ -92,16 +93,18 @@ export class AccountingCoreService {
       description?: string;
     }[];
   }) {
-    const entryNo = await this.generateEntryNo(
-      data.sourceType === 'BANK'
-        ? 'BANK'
-        : data.sourceType === 'CASH'
-          ? 'CASH'
-          : 'BANK',
-      data.date,
-      data.branchId,
-      data.isReceipt,
-    );
+    const entryNo =
+      data.entryNo ??
+      (await this.generateEntryNo(
+        data.sourceType === 'BANK'
+          ? 'BANK'
+          : data.sourceType === 'CASH'
+            ? 'CASH'
+            : 'BANK',
+        data.date,
+        data.branchId,
+        data.isReceipt,
+      ));
 
     const entry = this.journalEntryRepo.create({
       branchId: data.branchId,

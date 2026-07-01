@@ -29,7 +29,7 @@ import {
   XmlParseError,
 } from './xml-parser/vietnam-invoice-xml.parser';
 import AdmZip from 'adm-zip';
-import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
+import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
 
 export interface ErpInvoiceQuery {
   direction?: string;
@@ -62,7 +62,7 @@ export class ErpInvoicesCoreService {
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
     private readonly r2: R2Service,
-    private readonly accountingCoreService: AccountingCoreService,
+    private readonly bankTransactionsCoreService: BankTransactionsCoreService,
   ) {}
 
   private async loadNetOffAmounts(invoices: ErpInvoice[]) {
@@ -383,19 +383,6 @@ export class ErpInvoicesCoreService {
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
     }
 
-    // Xác định tên đối tượng từ hóa đơn
-    const subjectName =
-      invoice.direction === 'IN' ? invoice.sellerName : invoice.buyerName;
-
-    // Xác định tài khoản công nợ theo chiều hóa đơn (không lọc theo branch)
-    const arApCode = invoice.direction === 'IN' ? '331' : '131';
-    const arApAccounts = await this.repository.manager.query(
-      `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
-      [arApCode],
-    );
-    const arApAccountId: string | null =
-      arApAccounts.length > 0 ? arApAccounts[0].id : null;
-
     const netOffEntities = payload.map((p) =>
       this.repository.manager.create(ErpInvoiceVoucherNetOff, {
         invoiceId,
@@ -404,158 +391,29 @@ export class ErpInvoicesCoreService {
       }),
     );
 
-    const saved = await this.repository.manager.save(
-      ErpInvoiceVoucherNetOff,
-      netOffEntities,
-    );
+    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
 
-    // Với mỗi item, tạo bút toán NETOFF và cập nhật subject của bút toán sao kê
-    for (let i = 0; i < payload.length; i++) {
-      const p = payload[i];
-      const netOffRecord = saved[i];
-      const amount = p.netOffAmount ?? 0;
-
-      // Load bank transaction để lấy thông tin chi nhánh, ngày, tài khoản NH
-      const txnRows = await this.repository.manager.query(
-        `SELECT t.*, ba.accounting_account_id as bank_acct_id, ba.branch_id as ba_branch
-         FROM erp_bank_transactions t
-         LEFT JOIN erp_bank_accounts ba ON ba.id = t.bank_account_id
-         WHERE t.id = $1 AND t.is_deleted = false`,
-        [p.bankTransactionId],
+    // Refresh journal entries for each affected bank transaction
+    const uniqueTxnIds = [...new Set(payload.map((p) => p.bankTransactionId))];
+    for (const txnId of uniqueTxnIds) {
+      await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
+        txnId,
       );
-
-      if (txnRows.length === 0) continue;
-      const txn = txnRows[0];
-
-      // Tìm tài khoản ngân hàng/quỹ (1121 hoặc theo cấu hình tài khoản)
-      let bankAccountId: string | null = txn.bank_acct_id || null;
-      if (!bankAccountId) {
-        const accCode = txn.source_type === 'CASH' ? '1111' : '1121';
-        const bankAccRows = await this.repository.manager.query(
-          `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
-          [accCode],
-        );
-        if (bankAccRows.length > 0) bankAccountId = bankAccRows[0].id;
-      }
-      if (!bankAccountId || !arApAccountId) continue;
-
-      // Xác định Nợ / Có theo chiều hóa đơn
-      // IN (đầu vào/mua hàng): Trả NCC → Nợ 331 / Có 112
-      // OUT (đầu ra/bán hàng): Thu KH → Nợ 112 / Có 131
-      const debitAccountId =
-        invoice.direction === 'IN' ? arApAccountId : bankAccountId;
-      const creditAccountId =
-        invoice.direction === 'IN' ? bankAccountId : arApAccountId;
-
-      const description =
-        txn.accounting_description ||
-        txn.description ||
-        invoice.invoiceNo ||
-        '';
-      const netOffDescription = `Cấn trừ ${invoice.direction === 'IN' ? 'NCC' : 'KH'}: ${invoice.invoiceNo || ''} - ${description}`;
-
-      if (amount > 0) {
-        await this.accountingCoreService.createJournalEntry({
-          branchId: txn.branch_id,
-          date: new Date(txn.trans_date),
-          description: netOffDescription,
-          subjectName: subjectName || undefined,
-          sourceType: 'NETOFF',
-          sourceId: netOffRecord.id,
-          reference: txn.reference_number,
-          isReceipt: invoice.direction === 'OUT',
-          lines: [
-            {
-              accountId: debitAccountId,
-              debit: amount,
-              credit: 0,
-              description: netOffDescription,
-            },
-            {
-              accountId: creditAccountId,
-              debit: 0,
-              credit: amount,
-              description: netOffDescription,
-            },
-          ],
-        });
-      }
-
-      // Cập nhật subject_name trên bút toán sao kê gốc
-      if (subjectName) {
-        await this.accountingCoreService.updateJournalEntrySubject(
-          p.bankTransactionId,
-          txn.source_type || 'BANK',
-          subjectName,
-        );
-      }
     }
 
     return { message: 'Đã liên kết phiếu thành công' };
   }
 
   async removeVoucherFromInvoice(invoiceId: string, voucherId: string) {
-    // Load net-off record trước khi xóa để lấy id cho việc xóa journal entry
-    const netOffRecord = await this.repository.manager.findOne(
-      ErpInvoiceVoucherNetOff,
-      { where: { invoiceId, bankTransactionId: voucherId } },
-    );
-
     await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
       invoiceId,
       bankTransactionId: voucherId,
     });
 
-    if (netOffRecord) {
-      // Xóa bút toán NETOFF
-      await this.accountingCoreService.deleteJournalEntryBySource(
-        netOffRecord.id,
-        'NETOFF',
-      );
-
-      // Load bank transaction để lấy source_type và correspondentName
-      const txnRows = await this.repository.manager.query(
-        `SELECT t.correspondent_name, t.source_type FROM erp_bank_transactions t
-         WHERE t.id = $1 AND t.is_deleted = false`,
-        [voucherId],
-      );
-
-      if (txnRows.length > 0) {
-        const txn = txnRows[0];
-
-        // Kiểm tra còn net-off nào khác trên bank transaction này không
-        const remainingNetOffs = await this.repository.manager.find(
-          ErpInvoiceVoucherNetOff,
-          {
-            where: { bankTransactionId: voucherId },
-            order: { createdAt: 'ASC' },
-          },
-        );
-
-        let newSubject: string | null = txn.correspondent_name || null;
-
-        if (remainingNetOffs.length > 0) {
-          // Lấy đối tượng từ net-off đầu tiên còn lại
-          const firstNetOff = remainingNetOffs[0];
-          const firstInvoice = await this.repository.findOne({
-            where: { id: firstNetOff.invoiceId, isDeleted: false },
-          });
-          if (firstInvoice) {
-            newSubject =
-              firstInvoice.direction === 'IN'
-                ? firstInvoice.sellerName
-                : firstInvoice.buyerName;
-          }
-        }
-
-        // Cập nhật subject của bút toán sao kê gốc
-        await this.accountingCoreService.updateJournalEntrySubject(
-          voucherId,
-          txn.source_type || 'BANK',
-          newSubject,
-        );
-      }
-    }
+    // Refresh journal entries for the affected bank transaction
+    await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
+      voucherId,
+    );
 
     return { message: 'Đã xóa liên kết phiếu thành công' };
   }
