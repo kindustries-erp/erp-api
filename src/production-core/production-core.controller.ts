@@ -9,7 +9,9 @@ import {
   Post,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -60,6 +62,25 @@ export class ProductionCoreController {
   @Get('orders/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'read' })
+  @Get('orders/:id/export-xlsx')
+  async exportXlsx(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportXlsx(id);
+    const orderRes = await this.service.findOne(id);
+    const refNo = orderRes?.data?.referenceNo || 'LSX';
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="LenhSanXuat_${refNo}.xlsx"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @RequirePermissions({ resource: 'production', action: 'update' })
