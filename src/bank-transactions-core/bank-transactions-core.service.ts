@@ -660,7 +660,8 @@ export class BankTransactionsCoreService {
         await this.accountingCoreService.createJournalEntry({
           branchId: saved.branchId,
           date: saved.transDate,
-          description: saved.description || '',
+          description: saved.accountingDescription || saved.description || '',
+          subjectName: saved.correspondentName || undefined,
           sourceType: saved.sourceType,
           sourceId: saved.id,
           reference: saved.referenceNumber,
@@ -670,13 +671,15 @@ export class BankTransactionsCoreService {
               accountId: debitAccount,
               debit: amount,
               credit: 0,
-              description: saved.description || '',
+              description:
+                saved.accountingDescription || saved.description || '',
             },
             {
               accountId: creditAccount,
               debit: 0,
               credit: amount,
-              description: saved.description || '',
+              description:
+                saved.accountingDescription || saved.description || '',
             },
           ],
         });

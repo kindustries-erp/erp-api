@@ -69,6 +69,7 @@ export class AccountingCoreService {
     branchId: string;
     date: Date;
     description?: string;
+    subjectName?: string;
     sourceType?: string;
     sourceId?: string;
     reference?: string | null;
@@ -92,6 +93,7 @@ export class AccountingCoreService {
       entryNo,
       date: data.date,
       description: data.description,
+      subjectName: data.subjectName,
       sourceId: data.sourceId,
       sourceType: data.sourceType,
       reference: data.reference,
