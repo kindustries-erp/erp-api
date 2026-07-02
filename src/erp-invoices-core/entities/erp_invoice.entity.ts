@@ -157,6 +157,23 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy: string | null;
 
+  // --- Trích xuất tự động ---
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'license_plate',
+    nullable: true,
+  })
+  licensePlate: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'settlement_order',
+    nullable: true,
+  })
+  settlementOrder: string | null;
+
   // --- R2 Storage ---
   @Column({
     type: 'varchar',

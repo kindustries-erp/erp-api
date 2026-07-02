@@ -13,7 +13,9 @@ import {
   MessageEvent,
   UseGuards,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -52,6 +54,18 @@ export class ErpInvoicesCoreController {
   @ApiQuery({ name: 'pageSize', required: false })
   findAll(@Query() query: ErpInvoiceQuery) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel')
+  async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
+    const buffer = await this.service.exportExcel(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename=invoices.xlsx');
+    res.send(buffer);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'create' })

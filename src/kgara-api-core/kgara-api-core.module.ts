@@ -1,0 +1,35 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
+
+import { KgaraAuth } from './entities/kgara_auth.entity';
+import { KgaraBranch } from './entities/kgara_branch.entity';
+import { KgaraCase } from './entities/kgara_case.entity';
+import { KgaraReceivable } from './entities/kgara_receivable.entity';
+import { KgaraPayable } from './entities/kgara_payable.entity';
+import { KgaraCaseService } from './entities/kgara_case_service.entity';
+import { GwSyncRun } from './entities/kgara_sync_run.entity';
+
+import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraClientService } from './kgara-client.service';
+import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraApiCoreController } from './kgara-api-core.controller';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      KgaraAuth,
+      KgaraBranch,
+      KgaraCase,
+      KgaraReceivable,
+      KgaraPayable,
+      KgaraCaseService,
+      GwSyncRun,
+    ]),
+    ConfigModule,
+  ],
+  providers: [KgaraAuthService, KgaraClientService, KgaraSyncService],
+  controllers: [KgaraApiCoreController],
+  exports: [KgaraSyncService, KgaraClientService],
+})
+export class KgaraApiCoreModule {}

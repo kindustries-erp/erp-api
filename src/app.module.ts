@@ -36,7 +36,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
-import { GreenwayApiCoreModule } from './greenway-api-core/greenway-api-core.module';
+import { KgaraApiCoreModule } from './kgara-api-core/kgara-api-core.module';
 import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 
 @Module({
@@ -105,7 +105,7 @@ import { AccountingCoreModule } from './accounting-core/accounting-core.module';
     FilesModule,
     TagsCoreModule,
     BankTransactionsCoreModule,
-    GreenwayApiCoreModule,
+    KgaraApiCoreModule,
     AccountingCoreModule,
   ],
   controllers: [AppController],

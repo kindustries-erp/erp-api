@@ -7,8 +7,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'gw_payables' })
-export class GreenwayPayable {
+@Entity({ name: 'kgara_branches' })
+export class KgaraBranch {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -22,35 +22,12 @@ export class GreenwayPayable {
   @Column({ type: 'varchar', length: 255, name: 'name', nullable: true })
   name: string | null;
 
-  @Column({
-    type: 'decimal',
-    precision: 18,
-    scale: 2,
-    name: 'total_amount',
-    nullable: true,
-  })
-  totalAmount: number | null;
+  /** ParentID from KGara V2 branch list – org tree support */
+  @Column({ type: 'varchar', length: 100, name: 'parent_id', nullable: true })
+  parentId: string | null;
 
-  @Column({
-    type: 'decimal',
-    precision: 18,
-    scale: 2,
-    name: 'paid_amount',
-    nullable: true,
-  })
-  paidAmount: number | null;
-
-  @Index()
-  @Column({
-    type: 'varchar',
-    length: 100,
-    name: 'branch_external_id',
-    nullable: true,
-  })
-  branchExternalId: string | null;
-
-  @Column({ type: 'jsonb', name: 'raw_data', nullable: true })
-  rawData: any;
+  @Column({ type: 'boolean', name: 'is_active', default: true })
+  isActive: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

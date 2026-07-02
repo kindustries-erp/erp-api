@@ -29,6 +29,7 @@ import {
   XmlParseError,
 } from './xml-parser/vietnam-invoice-xml.parser';
 import AdmZip from 'adm-zip';
+import * as ExcelJS from 'exceljs';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
 
 export interface ErpInvoiceQuery {
@@ -88,6 +89,32 @@ export class ErpInvoicesCoreService {
       ...i,
       netOffAmount: String(netOffMap[i.id] || 0),
     }));
+  }
+
+  private extractInvoiceMetadata(invoice: any): void {
+    const fullDesc = [
+      invoice.description,
+      invoice.notes,
+      ...(invoice.items || []).map((i: any) => i.description),
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    // Extract Lệnh quyết toán (-WO- or GR-)
+    const woMatch = fullDesc.match(/(\S*-WO-\S*|GR-\S*)/i);
+    if (woMatch) {
+      let wo = woMatch[0];
+      if (wo.toUpperCase().startsWith('QT')) {
+        wo = wo.substring(2);
+      }
+      invoice.settlementOrder = wo;
+    }
+
+    // Extract Biển số xe (e.g. 50E82434, 50H-38666, 89A-482.19, etc.)
+    const plateMatch = fullDesc.match(/\d{2}[A-ZĐ][A-Z0-9]?[-.\s]?\d{4,5}/i);
+    if (plateMatch) {
+      invoice.licensePlate = plateMatch[0];
+    }
   }
 
   async findAll(query: ErpInvoiceQuery) {
@@ -248,6 +275,9 @@ export class ErpInvoicesCoreService {
         totalAmount: String(i.totalAmount ?? 0),
       })),
     } as any);
+
+    this.extractInvoiceMetadata(invoice);
+
     const saved = (await this.repository.save(
       invoice,
     )) as unknown as ErpInvoice;
@@ -293,6 +323,8 @@ export class ErpInvoicesCoreService {
       await this.repository.manager.save(ErpInvoiceItem, newItems);
       delete (existing as any).items;
     }
+
+    this.extractInvoiceMetadata(existing);
 
     await this.repository.save(existing);
 
@@ -568,6 +600,8 @@ export class ErpInvoicesCoreService {
               source: 'PORTAL',
               externalId: `${serialNo}_${invoiceNo}`,
             } as any);
+
+            this.extractInvoiceMetadata(invoice);
 
             const saved = (await this.repository.save(
               invoice,
@@ -1046,8 +1080,16 @@ export class ErpInvoicesCoreService {
   }
 
   private parsePortalIsoDate(isoDate: string): string {
-    // GDT trả về ISO: "2026-04-29T17:00:00Z"
-    return isoDate ? isoDate.slice(0, 10) : '';
+    if (!isoDate) return '';
+    try {
+      // GDT trả về ISO: "2026-07-01T17:00:00Z" (UTC). Shift to GMT+7.
+      const date = new Date(isoDate);
+      if (isNaN(date.getTime())) return isoDate.slice(0, 10);
+      const tzDate = new Date(date.getTime() + 7 * 3600 * 1000);
+      return tzDate.toISOString().slice(0, 10);
+    } catch {
+      return isoDate.slice(0, 10);
+    }
   }
 
   private normalizePortalVatRate(rate: number | string) {
@@ -1160,6 +1202,8 @@ export class ErpInvoicesCoreService {
           xmlImportId: importId,
         } as any);
 
+        this.extractInvoiceMetadata(invoice);
+
         await this.repository.save(invoice);
         created++;
       } catch (err) {
@@ -1241,6 +1285,142 @@ export class ErpInvoicesCoreService {
     }
 
     return { url, key, expiresAt };
+  }
+
+  async exportExcel(query: ErpInvoiceQuery): Promise<Buffer> {
+    const qb = this.repository
+      .createQueryBuilder('inv')
+      .leftJoinAndSelect('inv.items', 'items')
+      .where('inv.is_deleted = false')
+      .andWhere(query.direction ? 'inv.direction = :dir' : '1=1', {
+        dir: query.direction,
+      })
+      .andWhere(query.status ? 'inv.status = :status' : '1=1', {
+        status: query.status,
+      })
+      .andWhere(query.date_from ? 'inv.invoice_date >= :dateFrom' : '1=1', {
+        dateFrom: query.date_from,
+      })
+      .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
+        dateTo: query.date_to,
+      });
+
+    if (query.search) {
+      qb.andWhere(
+        `(inv.invoice_no ILIKE :q OR inv.serial_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q)`,
+        { q: `%${query.search}%` },
+      );
+    }
+    if (query.seller_name) {
+      qb.andWhere('inv.seller_name ILIKE :sn', {
+        sn: `%${query.seller_name}%`,
+      });
+    }
+    if (query.buyer_name) {
+      qb.andWhere('inv.buyer_name ILIKE :bn', {
+        bn: `%${query.buyer_name}%`,
+      });
+    }
+    if (query.tag_id) {
+      qb.andWhere(
+        `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
+        { tagId: query.tag_id },
+      );
+    }
+
+    let orderColumn = 'inv.invoice_date';
+    let orderDirection: 'ASC' | 'DESC' = 'DESC';
+    if (query.sort_by) {
+      if (query.sort_by === 'invoiceNo') orderColumn = 'inv.invoice_no';
+      else if (query.sort_by === 'totalAmount')
+        orderColumn = 'inv.total_amount';
+      else if (query.sort_by === 'sellerName') orderColumn = 'inv.seller_name';
+      else if (query.sort_by === 'buyerName') orderColumn = 'inv.buyer_name';
+      else if (query.sort_by === 'status') orderColumn = 'inv.status';
+    }
+    if (query.sort_order) {
+      orderDirection = query.sort_order.toUpperCase() as 'ASC' | 'DESC';
+    }
+
+    qb.orderBy(orderColumn, orderDirection).addOrderBy(
+      'inv.created_at',
+      'DESC',
+    );
+
+    const items = await qb.getMany();
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Invoices');
+
+    worksheet.columns = [
+      { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+      { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+      { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+      { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+      {
+        header: 'Tiền trước VAT',
+        key: 'preVat',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
+      {
+        header: 'Sau VAT',
+        key: 'total',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+      { header: 'Diễn giải', key: 'description', width: 50 },
+    ];
+
+    // Style header
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+    });
+
+    for (const inv of items) {
+      const partnerName =
+        query.direction === 'IN' ? inv.sellerName : inv.buyerName;
+      const taxCode =
+        query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
+      const address =
+        query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
+
+      const fullDesc = [
+        inv.description,
+        (inv as any).notes,
+        ...(inv.items || []).map((i) => i.description),
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      worksheet.addRow({
+        invoiceDate: inv.invoiceDate,
+        serialNo: inv.serialNo,
+        invoiceNo: inv.invoiceNo,
+        partnerName,
+        taxCode,
+        address,
+        preVat: Number(inv.preVatAmount) || 0,
+        vat: Number(inv.vatAmount) || 0,
+        total: Number(inv.totalAmount) || 0,
+        licensePlate: inv.licensePlate || '',
+        wo: inv.settlementOrder || '',
+        description: fullDesc,
+      });
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as any;
   }
 }
 

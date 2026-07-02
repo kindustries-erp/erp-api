@@ -205,8 +205,8 @@ export class RbacCoreService {
       },
       { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
       {
-        resource: 'greenway_integration',
-        label: 'Greenway Integration (Garage)',
+        resource: 'kgara_integration',
+        label: 'Kgara Integration (Garage)',
       },
     ];
   }

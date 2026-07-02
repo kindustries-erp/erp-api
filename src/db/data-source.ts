@@ -45,13 +45,13 @@ import { ErpCashBook } from '../bank-transactions-core/entities/erp_cash_book.en
 import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { ErpBankAccountBalance } from '../bank-transactions-core/entities/erp_bank_account_balance.entity';
 import { ErpCashBookBalance } from '../bank-transactions-core/entities/erp_cash_book_balance.entity';
-import { GreenwayAuth } from '../greenway-api-core/entities/gw_auth.entity';
-import { GreenwayBranch } from '../greenway-api-core/entities/gw_branch.entity';
-import { GreenwayCase } from '../greenway-api-core/entities/gw_case.entity';
-import { GreenwayReceivable } from '../greenway-api-core/entities/gw_receivable.entity';
-import { GreenwayPayable } from '../greenway-api-core/entities/gw_payable.entity';
-import { GreenwayCaseService } from '../greenway-api-core/entities/gw_case_service.entity';
-import { GreenwayCasePayment } from '../greenway-api-core/entities/gw_case_payment.entity';
+import { KgaraAuth } from '../kgara-api-core/entities/kgara_auth.entity';
+import { KgaraBranch } from '../kgara-api-core/entities/kgara_branch.entity';
+import { KgaraCase } from '../kgara-api-core/entities/kgara_case.entity';
+import { KgaraReceivable } from '../kgara-api-core/entities/kgara_receivable.entity';
+import { KgaraPayable } from '../kgara-api-core/entities/kgara_payable.entity';
+import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.entity';
+import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -102,13 +102,13 @@ const entities = [
   ErpBankTransaction,
   ErpBankAccountBalance,
   ErpCashBookBalance,
-  GreenwayAuth,
-  GreenwayBranch,
-  GreenwayCase,
-  GreenwayReceivable,
-  GreenwayPayable,
-  GreenwayCaseService,
-  GreenwayCasePayment,
+  KgaraAuth,
+  KgaraBranch,
+  KgaraCase,
+  KgaraReceivable,
+  KgaraPayable,
+  KgaraCaseService,
+  GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,
   ErpJournalEntryLine,
