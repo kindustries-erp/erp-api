@@ -770,8 +770,42 @@ export class ErpInvoicesCoreService {
       const fileName = `${dateStr}_${safeTax}_${safeSerial}_${safeNo}`;
       const xmlKey = `invoices/${invoice.direction}/${yyyy}/${mm}/${fileName}.${ext}`;
 
+      let xmlString = '';
+      if (isZip) {
+        const zip = new AdmZip(xmlBuffer);
+        const zipEntries = zip.getEntries();
+        const xmlEntry = zipEntries.find((e: any) =>
+          e.entryName.toLowerCase().endsWith('.xml'),
+        );
+        if (xmlEntry) {
+          xmlString = xmlEntry.getData().toString('utf8');
+        }
+      } else {
+        xmlString = xmlBuffer.toString('utf8');
+      }
+
+      let notesToAppend = '';
+      if (xmlString) {
+        try {
+          const parsedXml = parseVietnamInvoiceXml(xmlString);
+          if (parsedXml.lookupCode || parsedXml.providerLink) {
+            notesToAppend = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
       await this.r2.uploadBuffer(xmlKey, xmlBuffer, contentType);
-      await this.repository.update(invoice.id, { xmlFileKey: xmlKey } as any);
+
+      const updateData: any = { xmlFileKey: xmlKey };
+      if (notesToAppend && !(invoice.notes || '').includes(notesToAppend)) {
+        updateData.notes = invoice.notes
+          ? invoice.notes + '\n' + notesToAppend
+          : notesToAppend;
+      }
+
+      await this.repository.update(invoice.id, updateData);
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);
     } catch (err) {
       this.logger.warn(
@@ -826,6 +860,15 @@ export class ErpInvoicesCoreService {
       }
 
       const parsedXml = parseVietnamInvoiceXml(xmlString);
+
+      let newNotes = invoice.notes || '';
+      if (parsedXml.lookupCode || parsedXml.providerLink) {
+        const infoStr = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
+        if (!newNotes.includes(infoStr)) {
+          newNotes = newNotes ? newNotes + '\n' + infoStr : infoStr;
+        }
+      }
+
       await this.update(invoice.id, {
         preVatAmount: parsedXml.preVatAmount,
         vatRate: parsedXml.vatRate ?? undefined,
@@ -837,6 +880,7 @@ export class ErpInvoicesCoreService {
         buyerName: parsedXml.buyerName ?? undefined,
         buyerAddress: parsedXml.buyerAddress ?? undefined,
         description: parsedXml.description ?? undefined,
+        notes: newNotes || undefined,
         items: parsedXml.items.map((i) => ({
           ...i,
           unit: i.unit ?? undefined,
@@ -1179,6 +1223,11 @@ export class ErpInvoicesCoreService {
         }
 
         // 4. Tạo record erp_invoice
+        let notes = '';
+        if (parsed.lookupCode || parsed.providerLink) {
+          notes = `[Lookup Info] Code: ${parsed.lookupCode ?? 'N/A'} - Link: ${parsed.providerLink ?? 'N/A'}`;
+        }
+
         const invoice = this.repository.create({
           invoiceNo: parsed.invoiceNo,
           serialNo: parsed.serialNo,
@@ -1193,6 +1242,7 @@ export class ErpInvoicesCoreService {
           buyerTaxCode: parsed.buyerTaxCode,
           buyerAddress: parsed.buyerAddress,
           description: parsed.description,
+          notes: notes || undefined,
           preVatAmount: String(parsed.preVatAmount),
           vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
           vatAmount: String(parsed.vatAmount),
