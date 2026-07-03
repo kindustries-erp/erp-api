@@ -1337,6 +1337,73 @@ export class ErpInvoicesCoreService {
     return { url, key, expiresAt };
   }
 
+  async uploadPdfs(
+    invoiceId: string,
+    files: { filename: string; buffer: Buffer; mimetype: string }[],
+  ) {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const safeNo = invoice.invoiceNo.replace(/[^\w-]/g, '_');
+
+    let pdfFiles = Array.isArray(invoice.pdfFiles) ? [...invoice.pdfFiles] : [];
+
+    const uploadPromises = files.map(async (file, index) => {
+      const ts = Date.now();
+      const safeFilename = file.filename.replace(/[^\w.-]/g, '_');
+      const key = `invoices/${invoice.direction}/${yyyy}/${mm}/${safeNo}_${ts}_${index}_${safeFilename}`;
+      await this.r2.uploadBuffer(
+        key,
+        file.buffer,
+        file.mimetype || 'application/pdf',
+      );
+
+      return {
+        key,
+        filename: file.filename,
+        uploadedAt: new Date().toISOString(),
+      };
+    });
+
+    const newFiles = await Promise.all(uploadPromises);
+    pdfFiles = [...pdfFiles, ...newFiles];
+
+    await this.repository.update(invoiceId, { pdfFiles } as any);
+    return { success: true, pdfFiles };
+  }
+
+  async getPdfDownloadUrl(invoiceId: string, fileKey: string) {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    const file = Array.isArray(invoice.pdfFiles)
+      ? invoice.pdfFiles.find((f) => f.key === fileKey)
+      : null;
+    const filename = file ? file.filename : 'document.pdf';
+
+    const url = await this.r2.getPresignedDownloadUrl(fileKey, 3600, filename);
+    return { url };
+  }
+
+  async deletePdf(invoiceId: string, fileKey: string) {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    let pdfFiles = Array.isArray(invoice.pdfFiles) ? [...invoice.pdfFiles] : [];
+    pdfFiles = pdfFiles.filter((f) => f.key !== fileKey);
+
+    await this.r2.deleteObject(fileKey).catch(() => {});
+    await this.repository.update(invoiceId, { pdfFiles } as any);
+
+    return { success: true, pdfFiles };
+  }
+
   async exportExcel(query: ErpInvoiceQuery): Promise<Buffer> {
     const qb = this.repository
       .createQueryBuilder('inv')

@@ -931,6 +931,8 @@ export class InventoryItemsService {
     }
 
     qb.orderBy(sortColumn, sortDirection);
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
     const [itemsRaw, total] = await Promise.all([
       qb.getRawMany(),
       qb.getCount(),

@@ -251,6 +251,58 @@ export class ErpInvoicesCoreController {
     return this.service.getFileUploadUrl(id, body.fileType);
   }
 
+  /**
+   * POST /api/v1/erp-invoices/:id/pdfs
+   */
+  @Post(':id/pdfs')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('files', 20, {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const ok =
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.mimetype === 'application/pdf';
+        if (!ok) {
+          cb(
+            new BadRequestException(
+              `File "${file.originalname}" không phải PDF`,
+            ),
+            false,
+          );
+        } else {
+          cb(null, true);
+        }
+      },
+    }),
+  )
+  uploadPdfs(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Chưa chọn file PDF nào');
+    }
+    return this.service.uploadPdfs(
+      id,
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+    );
+  }
+
+  @Get(':id/pdfs/:key/download-url')
+  getPdfDownloadUrl(@Param('id') id: string, @Param('key') key: string) {
+    return this.service.getPdfDownloadUrl(id, decodeURIComponent(key));
+  }
+
+  @Delete(':id/pdfs/:key')
+  deletePdf(@Param('id') id: string, @Param('key') key: string) {
+    return this.service.deletePdf(id, decodeURIComponent(key));
+  }
+
   // ---------------------------------------------------------------------------
   // Server-Sent Events (SSE)
   // ---------------------------------------------------------------------------
