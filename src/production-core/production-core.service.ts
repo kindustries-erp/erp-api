@@ -1239,30 +1239,36 @@ export class ProductionCoreService {
         }
       }
 
-      // Generate GI number
-      const today = new Date();
-      const ym = getGMT7YearMonthString(today);
-      const giPrefix = `XK-${ym}`;
-      const latestGi = await giRepo
-        .createQueryBuilder('gi')
-        .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
-        .orderBy('LENGTH(gi.issueNo)', 'DESC')
-        .addOrderBy('gi.issueNo', 'DESC')
-        .getOne();
-      const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
-      const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
+      const hasLineToIssue = aggregatedToIssue.size > 0;
+      let gi: any = null;
+      let issueDate = new Date().toISOString();
 
-      const issueDate = today.toISOString();
-      const gi = (await giRepo.save(
-        giRepo.create({
-          issueNo: giNo,
-          issueDate,
-          issueType: 'PRODUCTION',
-          productionOrderId: id,
-          status: 'POSTED',
-          remarks: `Xuất NVL sản xuất ${order.referenceNo} — ${qtyToManufacture} SP`,
-        } as any),
-      )) as unknown as ErpGoodsIssue;
+      if (hasLineToIssue) {
+        // Generate GI number
+        const today = new Date();
+        const ym = getGMT7YearMonthString(today);
+        const giPrefix = `XK-${ym}`;
+        const latestGi = await giRepo
+          .createQueryBuilder('gi')
+          .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
+          .orderBy('LENGTH(gi.issueNo)', 'DESC')
+          .addOrderBy('gi.issueNo', 'DESC')
+          .getOne();
+        const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
+        const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
+
+        issueDate = today.toISOString();
+        gi = (await giRepo.save(
+          giRepo.create({
+            issueNo: giNo,
+            issueDate,
+            issueType: 'PRODUCTION',
+            productionOrderId: id,
+            status: 'POSTED',
+            remarks: `Xuất NVL sản xuất ${order.referenceNo} — ${qtyToManufacture} SP`,
+          } as any),
+        )) as unknown as ErpGoodsIssue;
+      }
 
       let lineNo = 1;
       const updatedMaterials: ErpProductionOrderMaterial[] = [];
@@ -1281,27 +1287,29 @@ export class ProductionCoreService {
           continue;
         }
 
-        // GI line
-        giLinesToSave.push(
-          giLineRepo.create({
-            goodsIssueId: gi.id,
-            lineNo: lineNo++,
-            productionOrderMaterialId: mat.id,
-            itemId: mat.itemId,
-            qtyIssued: toIssue.toFixed(3),
-            salesOrderLineId: null,
-            serialId: null,
-            vehicleId: null,
-          } as any),
-        );
-
         const item = itemMap.get(mat.itemId);
         const isService = item?.itemType?.code === 'SERVICE';
+
+        // GI line
+        if (gi) {
+          giLinesToSave.push(
+            giLineRepo.create({
+              goodsIssueId: gi.id,
+              lineNo: lineNo++,
+              productionOrderMaterialId: mat.id,
+              itemId: mat.itemId,
+              qtyIssued: toIssue.toFixed(3),
+              salesOrderLineId: null,
+              serialId: null,
+              vehicleId: null,
+            } as any),
+          );
+        }
 
         const balance = balanceMap.get(mat.itemId);
         const unitCost = Number(balance?.avgUnitCost || 0);
 
-        if (!isService) {
+        if (!isService && gi) {
           // Inventory: deduct on-hand + reserved
           if (balance) {
             const newOnHand = Math.max(
@@ -1354,13 +1362,15 @@ export class ProductionCoreService {
       }
 
       return {
-        message: 'Bắt đầu sản xuất thành công',
+        message: gi
+          ? `Bắt đầu sản xuất thành công (Đã tạo phiếu ${gi.issueNo})`
+          : 'Bắt đầu sản xuất thành công (Không có vật tư cần xuất thêm)',
         data: {
           id: order.id,
           referenceNo: order.referenceNo,
           status: order.status,
-          goodsIssueId: gi.id,
-          goodsIssueNo: gi.issueNo,
+          goodsIssueId: gi?.id || null,
+          goodsIssueNo: gi?.issueNo || null,
           qtyToManufacture,
         },
       };
