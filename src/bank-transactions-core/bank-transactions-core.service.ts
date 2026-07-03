@@ -32,6 +32,7 @@ import {
   UpdateCashBookBalanceDto,
 } from './dto/create-cash-book-balance.dto';
 import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
 
 @Injectable()
 export class BankTransactionsCoreService {
@@ -47,6 +48,7 @@ export class BankTransactionsCoreService {
     @InjectRepository(ErpCashBookBalance)
     private readonly cashBookBalanceRepo: Repository<ErpCashBookBalance>,
     private readonly dataSource: DataSource,
+    private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
   // --- Bank Accounts ---
@@ -257,6 +259,48 @@ export class BankTransactionsCoreService {
   }
 
   // --- Transactions ---
+  async getTransaction(id: string) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+      relations: [
+        'branch',
+        'bankAccount',
+        'cashBook',
+        'invoiceNetOffs',
+        'invoiceNetOffs.invoice',
+      ],
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+    const [mappedTxn] = await this.loadNetOffAmounts([txn]);
+    return mappedTxn;
+  }
+  private async loadNetOffAmounts(transactions: ErpBankTransaction[]) {
+    if (transactions.length === 0) return transactions;
+    const ids = transactions.map((i) => i.id);
+    const netOffs = await this.transactionRepo.manager
+      .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
+      .select('netoff.bank_transaction_id', 'bankTransactionId')
+      .addSelect('SUM(netoff.net_off_amount)', 'sum')
+      .where('netoff.bank_transaction_id IN (:...ids)', { ids })
+      .groupBy('netoff.bank_transaction_id')
+      .getRawMany();
+
+    const netOffMap = netOffs.reduce(
+      (acc, curr) => {
+        acc[curr.bankTransactionId] = Number(curr.sum) || 0;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return transactions.map((i) => ({
+      ...i,
+      netOffAmount: String(netOffMap[i.id] || 0),
+    }));
+  }
+
   async getTransactions(filter: BankTransactionFilterDto) {
     const page = filter.page || 1;
     const pageSize = filter.pageSize || 20;
@@ -339,9 +383,10 @@ export class BankTransactionsCoreService {
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
+    const mappedItems = await this.loadNetOffAmounts(items);
 
     return {
-      items,
+      items: mappedItems,
       total,
       page,
       pageSize,
@@ -553,6 +598,225 @@ export class BankTransactionsCoreService {
     }
     const txn = this.transactionRepo.create(dto);
     return this.transactionRepo.save(txn);
+  }
+
+  async updateTransaction(
+    id: string,
+    dto: import('./dto/update-bank-transaction.dto').UpdateBankTransactionDto,
+  ) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+      relations: ['bankAccount', 'cashBook'],
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+    Object.assign(txn, dto);
+    const saved = await this.transactionRepo.save(txn);
+
+    // Refresh journal entries (handles split by subject if net-offs exist)
+    await this.refreshJournalEntriesForBankTransaction(saved.id);
+
+    return saved;
+  }
+
+  /**
+   * Re-generates journal entries for a bank transaction.
+   * Handles split entries when multiple invoices with different subjects
+   * are linked to the same bank transaction.
+   */
+  async refreshJournalEntriesForBankTransaction(txnId: string): Promise<void> {
+    const txn = await this.transactionRepo.findOne({
+      where: { id: txnId, isDeleted: false },
+      relations: ['bankAccount', 'cashBook'],
+    });
+    if (!txn || !txn.correspondentAccountingAccountId) return;
+
+    // Load 331 and 131 account IDs (active, any branch)
+    const [apAccountRes, arAccountRes] = await Promise.all([
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['331'],
+      ),
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['131'],
+      ),
+    ]);
+    const apAccountId = apAccountRes.length > 0 ? apAccountRes[0].id : null;
+    const arAccountId = arAccountRes.length > 0 ? arAccountRes[0].id : null;
+
+    // Find bank/cash accounting account
+    let defaultAccountId: string | null = null;
+    if (txn.sourceType === 'BANK') {
+      defaultAccountId = txn.bankAccount?.accountingAccountId || null;
+      if (!defaultAccountId) {
+        const res = await this.dataSource.query(
+          `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+          ['1121'],
+        );
+        if (res && res.length > 0) defaultAccountId = res[0].id;
+      }
+    } else if (txn.sourceType === 'CASH') {
+      defaultAccountId = txn.cashBook?.accountingAccountId || null;
+      if (!defaultAccountId) {
+        const res = await this.dataSource.query(
+          `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+          ['1111'],
+        );
+        if (res && res.length > 0) defaultAccountId = res[0].id;
+      }
+    }
+    if (!defaultAccountId) return;
+
+    // Load net-offs with invoice info
+    const netOffRows: any[] = await this.dataSource.query(
+      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.branch_id, i.description as invoice_desc
+       FROM erp_invoice_voucher_netoff n
+       JOIN erp_invoices i ON i.id = n.invoice_id AND i.is_deleted = false
+       WHERE n.bank_transaction_id = $1
+       ORDER BY n.created_at ASC`,
+      [txnId],
+    );
+
+    const totalAmount =
+      Number(txn.creditAmount) > 0
+        ? Number(txn.creditAmount)
+        : Number(txn.debitAmount);
+    const isReceipt = Number(txn.creditAmount) > 0;
+    const baseDescription = txn.accountingDescription || txn.description || '';
+
+    // Build groups: [{subject, amount, counterpartAccountId, branchId, description}]
+    type Group = {
+      subject: string | null;
+      amount: number;
+      counterpartAccountId: string;
+      branchId: string;
+      description: string;
+    };
+    const groups: Group[] = [];
+
+    if (netOffRows.length === 0) {
+      // No net-offs: single entry with correspondentName as subject and original counterpart account
+      groups.push({
+        subject: txn.correspondentName || null,
+        amount: totalAmount,
+        counterpartAccountId: txn.correspondentAccountingAccountId,
+        branchId: txn.branchId,
+        description: baseDescription,
+      });
+    } else {
+      // Group by subject and counterpart account
+      const groupMap = new Map<string, Group>();
+
+      for (const row of netOffRows) {
+        const subject: string | null =
+          row.direction === 'IN'
+            ? row.seller_name || null
+            : row.buyer_name || null;
+
+        let counterpartAccountId = txn.correspondentAccountingAccountId;
+        if (row.direction === 'IN' && apAccountId)
+          counterpartAccountId = apAccountId;
+        if (row.direction === 'OUT' && arAccountId)
+          counterpartAccountId = arAccountId;
+
+        const branchId = row.branch_id || txn.branchId;
+
+        const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
+        if (!groupMap.has(key)) {
+          const desc = row.invoice_desc
+            ? `${baseDescription} - ${row.invoice_desc}`
+            : baseDescription;
+          groupMap.set(key, {
+            subject: subject || null,
+            amount: 0,
+            counterpartAccountId,
+            branchId,
+            description: desc,
+          });
+        }
+        groupMap.get(key)!.amount += Number(row.net_off_amount);
+      }
+
+      const netOffTotal = netOffRows.reduce(
+        (sum: number, r: any) => sum + Number(r.net_off_amount),
+        0,
+      );
+
+      for (const group of groupMap.values()) {
+        groups.push(group);
+      }
+
+      // Remaining amount → use correspondentName and original counterpart account
+      const remaining = Math.round((totalAmount - netOffTotal) * 100) / 100;
+      if (remaining > 0.01) {
+        groups.push({
+          subject: txn.correspondentName || null,
+          amount: remaining,
+          counterpartAccountId: txn.correspondentAccountingAccountId,
+          branchId: txn.branchId,
+          description: baseDescription,
+        });
+      }
+    }
+
+    // Delete existing journal entries for this transaction
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      txn.id,
+      txn.sourceType,
+    );
+
+    // Generate base entry number (only once)
+    const baseEntryNo = await this.accountingCoreService.generateEntryNo(
+      txn.sourceType === 'BANK' ? 'BANK' : 'CASH',
+      txn.transDate,
+      txn.branchId,
+      isReceipt,
+    );
+
+    // Create one journal entry per group
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      // Single group → no suffix; multiple groups → a, b, c...
+      const entryNo =
+        groups.length === 1
+          ? baseEntryNo
+          : `${baseEntryNo}${String.fromCharCode(97 + i)}`;
+
+      const debitAccount = isReceipt
+        ? defaultAccountId
+        : group.counterpartAccountId;
+      const creditAccount = isReceipt
+        ? group.counterpartAccountId
+        : defaultAccountId;
+
+      await this.accountingCoreService.createJournalEntry({
+        entryNo,
+        branchId: group.branchId,
+        date: txn.transDate,
+        description: group.description,
+        subjectName: group.subject || undefined,
+        sourceType: txn.sourceType,
+        sourceId: txn.id,
+        reference: txn.referenceNumber,
+        isReceipt,
+        lines: [
+          {
+            accountId: debitAccount,
+            debit: group.amount,
+            credit: 0,
+            description: group.description,
+          },
+          {
+            accountId: creditAccount,
+            debit: 0,
+            credit: group.amount,
+            description: group.description,
+          },
+        ],
+      });
+    }
   }
 
   async importFiles(

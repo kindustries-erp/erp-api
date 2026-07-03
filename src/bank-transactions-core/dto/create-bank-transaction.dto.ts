@@ -76,6 +76,11 @@ export class CreateBankTransactionDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
+  accountingDescription?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
   correspondentAccount?: string;
 
   @ApiProperty({ required: false })

@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_bank_accounts' })
 export class ErpBankAccount {
@@ -20,6 +21,13 @@ export class ErpBankAccount {
   @ManyToOne(() => ErpBranch)
   @JoinColumn({ name: 'branch_id' })
   branch: ErpBranch;
+
+  @Column({ type: 'uuid', name: 'accounting_account_id', nullable: true })
+  accountingAccountId: string | null;
+
+  @ManyToOne(() => ErpChartOfAccount)
+  @JoinColumn({ name: 'accounting_account_id' })
+  accountingAccount: ErpChartOfAccount | null;
 
   @Column({ type: 'varchar', length: 50, name: 'bank_code' })
   bankCode: string;

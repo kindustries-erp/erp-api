@@ -8,11 +8,15 @@ import {
   OneToMany,
 } from 'typeorm';
 import { ErpInvoiceItem } from './erp_invoice_item.entity';
+import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
 
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
@@ -153,6 +157,23 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy: string | null;
 
+  // --- Trích xuất tự động ---
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'license_plate',
+    nullable: true,
+  })
+  licensePlate: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'settlement_order',
+    nullable: true,
+  })
+  settlementOrder: string | null;
+
   // --- R2 Storage ---
   @Column({
     type: 'varchar',
@@ -187,4 +208,7 @@ export class ErpInvoice {
     orphanedRowAction: 'delete',
   })
   items: ErpInvoiceItem[];
+
+  @OneToMany('ErpInvoiceVoucherNetOff', (netOff: any) => netOff.invoice)
+  voucherNetOffs: ErpInvoiceVoucherNetOff[];
 }

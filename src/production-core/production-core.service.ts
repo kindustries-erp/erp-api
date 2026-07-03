@@ -35,6 +35,9 @@ import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
 
 import { ListProductionDto } from './dto/list-production.dto';
+import { CompanyProfileService } from '../company-profile/company-profile.service';
+import * as ExcelJS from 'exceljs';
+import { format } from 'date-fns';
 
 @Injectable()
 export class ProductionCoreService {
@@ -88,6 +91,7 @@ export class ProductionCoreService {
     private readonly goodsReceiptRepository: Repository<ErpGoodsReceipt>,
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly goodsReceiptLineRepository: Repository<ErpGoodsReceiptLine>,
+    private readonly companyProfileService: CompanyProfileService,
   ) {}
 
   async findOrders(query: ListProductionDto) {
@@ -1676,5 +1680,293 @@ export class ProductionCoreService {
         },
       };
     });
+  }
+
+  async exportXlsx(id: string): Promise<Buffer> {
+    const orderRes = await this.findOne(id);
+    const order = orderRes.data;
+
+    const companyProfile = await this.companyProfileService.getProfile();
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('LenhSanXuat');
+
+    const defaultFont = { name: 'Times New Roman', size: 11 };
+
+    // Header setup
+    sheet.getColumn('A').width = 5;
+    sheet.getColumn('B').width = 30;
+    sheet.getColumn('C').width = 18;
+    sheet.getColumn('D').width = 10;
+    sheet.getColumn('E').width = 12;
+    sheet.getColumn('F').width = 12;
+    sheet.getColumn('G').width = 15;
+    sheet.getColumn('H').width = 18;
+
+    // Row 1: Company
+    sheet.mergeCells('A1:H1');
+    sheet.getCell('A1').value = (
+      companyProfile?.company_name || 'Đơn vị: ............................'
+    ).toUpperCase();
+    sheet.getCell('A1').font = { ...defaultFont, bold: true };
+    sheet.getCell('A1').alignment = {
+      vertical: 'middle',
+      horizontal: 'left',
+      wrapText: true,
+    };
+    sheet.getRow(1).height = 25;
+
+    // Row 2: Address
+    sheet.mergeCells('A2:H2');
+    sheet.getCell('A2').value =
+      companyProfile?.address || 'Địa chỉ: ............................';
+    sheet.getCell('A2').font = defaultFont;
+    sheet.getCell('A2').alignment = {
+      vertical: 'top',
+      horizontal: 'left',
+      wrapText: true,
+    };
+    sheet.getRow(2).height = 35;
+
+    // Row 3: Title
+    sheet.mergeCells('A4:H4');
+    sheet.getCell('A4').value = 'LỆNH SẢN XUẤT';
+    sheet.getCell('A4').font = { ...defaultFont, bold: true, size: 16 };
+    sheet.getCell('A4').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    // Row 4: Date
+    const orderDate = order.createdAt ? new Date(order.createdAt) : new Date();
+    sheet.mergeCells('A5:H5');
+    sheet.getCell('A5').value =
+      `Ngày ${format(orderDate, 'dd')} tháng ${format(orderDate, 'MM')} năm ${format(orderDate, 'yyyy')}`;
+    sheet.getCell('A5').font = { ...defaultFont, italic: true };
+    sheet.getCell('A5').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    // Info
+    sheet.addRow([]);
+    const infoRow1 = sheet.addRow([`- Số lệnh: ${order.referenceNo}`]);
+    sheet.mergeCells(`A${infoRow1.number}:H${infoRow1.number}`);
+    infoRow1.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    const infoRow2 = sheet.addRow([
+      `- Thành phẩm: ${order.finishedGoodItemName || ''}`,
+    ]);
+    sheet.mergeCells(`A${infoRow2.number}:H${infoRow2.number}`);
+    infoRow2.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    const infoRow3 = sheet.addRow([
+      `- Số lượng sản xuất: ${order.qtyToProduce}      Kho: ${order.warehouseCode || '..................'}`,
+    ]);
+    sheet.mergeCells(`A${infoRow3.number}:H${infoRow3.number}`);
+    infoRow3.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    const pStart = order.plannedStartDate
+      ? format(new Date(order.plannedStartDate), 'dd/MM/yyyy')
+      : '...';
+    const pEnd = order.plannedEndDate
+      ? format(new Date(order.plannedEndDate), 'dd/MM/yyyy')
+      : '...';
+    const infoRow4 = sheet.addRow([
+      `- Kế hoạch: Từ ngày ${pStart} đến ngày ${pEnd}`,
+    ]);
+    sheet.mergeCells(`A${infoRow4.number}:H${infoRow4.number}`);
+    infoRow4.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    sheet.addRow([]);
+
+    // Table Headers
+    const headerRow1 = sheet.addRow([
+      'STT',
+      'Tên, nhãn hiệu, quy cách...',
+      'Mã số',
+      'Đơn vị tính',
+      'Số lượng',
+      '',
+      'Đơn giá',
+      'Thành tiền',
+    ]);
+    const headerRow2 = sheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      'Yêu cầu',
+      'Đã xuất',
+      '',
+      '',
+    ]);
+    const headerRow3 = sheet.addRow(['A', 'B', 'C', 'D', '1', '2', '3', '4']);
+
+    sheet.mergeCells(`A${headerRow1.number}:A${headerRow2.number}`);
+    sheet.mergeCells(`B${headerRow1.number}:B${headerRow2.number}`);
+    sheet.mergeCells(`C${headerRow1.number}:C${headerRow2.number}`);
+    sheet.mergeCells(`D${headerRow1.number}:D${headerRow2.number}`);
+    sheet.mergeCells(`E${headerRow1.number}:F${headerRow1.number}`);
+    sheet.mergeCells(`G${headerRow1.number}:G${headerRow2.number}`);
+    sheet.mergeCells(`H${headerRow1.number}:H${headerRow2.number}`);
+
+    [headerRow1, headerRow2, headerRow3].forEach((row) => {
+      row.eachCell((cell) => {
+        cell.font = { ...defaultFont, bold: row !== headerRow3 };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    let totalQtyReq = 0;
+    let totalQtyIss = 0;
+    let totalAmount = 0;
+
+    (order.materials || []).forEach((mat, index) => {
+      const m = mat as any;
+      const qtyReq = Number(m.qtyRequired) || 0;
+      const qtyIss = Number(m.qtyIssued) || 0;
+      const cost = Number(m.unitCost) || 0;
+      const amount = Number(m.amount) || 0;
+      totalQtyReq += qtyReq;
+      totalQtyIss += qtyIss;
+      totalAmount += amount;
+
+      const row = sheet.addRow([
+        index + 1,
+        m.itemName || '',
+        m.itemCode || m.itemId || '',
+        '',
+        qtyReq,
+        qtyIss,
+        cost,
+        amount,
+      ]);
+      row.eachCell((cell, colNum) => {
+        cell.font = defaultFont;
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        if (colNum === 1 || colNum === 3 || colNum === 4) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (colNum >= 5) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0.00';
+        } else {
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'left',
+            wrapText: true,
+          };
+        }
+      });
+    });
+
+    const summaryRow = sheet.addRow([
+      'Cộng',
+      '',
+      '',
+      '',
+      totalQtyReq,
+      totalQtyIss,
+      'x',
+      totalAmount,
+    ]);
+    sheet.mergeCells(`A${summaryRow.number}:D${summaryRow.number}`);
+    summaryRow.eachCell((cell, colNum) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+      if (colNum === 1 || colNum === 7) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNum === 5 || colNum === 6 || colNum === 8) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+      }
+    });
+
+    sheet.addRow([]);
+    const dateRow = sheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      `Ngày ${format(orderDate, 'dd')} tháng ${format(orderDate, 'MM')} năm ${format(orderDate, 'yyyy')}`,
+    ]);
+    sheet.mergeCells(`G${dateRow.number}:H${dateRow.number}`);
+    dateRow.getCell('G').font = { ...defaultFont, italic: true };
+    dateRow.getCell('G').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    const signRow1 = sheet.addRow([
+      'Người lập phiếu',
+      '',
+      'Thủ kho',
+      '',
+      'Quản đốc phân xưởng',
+      '',
+      'Giám đốc',
+      '',
+    ]);
+    sheet.mergeCells(`A${signRow1.number}:B${signRow1.number}`);
+    sheet.mergeCells(`C${signRow1.number}:D${signRow1.number}`);
+    sheet.mergeCells(`E${signRow1.number}:F${signRow1.number}`);
+    sheet.mergeCells(`G${signRow1.number}:H${signRow1.number}`);
+    signRow1.eachCell((cell) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+    });
+
+    const signRow2 = sheet.addRow([
+      '(Ký, họ tên)',
+      '',
+      '(Ký, họ tên)',
+      '',
+      '(Ký, họ tên)',
+      '',
+      '(Ký, họ tên)',
+      '',
+    ]);
+    sheet.mergeCells(`A${signRow2.number}:B${signRow2.number}`);
+    sheet.mergeCells(`C${signRow2.number}:D${signRow2.number}`);
+    sheet.mergeCells(`E${signRow2.number}:F${signRow2.number}`);
+    sheet.mergeCells(`G${signRow2.number}:H${signRow2.number}`);
+    signRow2.eachCell((cell) => {
+      cell.font = { ...defaultFont, italic: true, size: 10 };
+      cell.alignment = {
+        vertical: 'top',
+        horizontal: 'center',
+        wrapText: true,
+      };
+    });
+    sheet.getRow(signRow2.number).height = 30;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 }

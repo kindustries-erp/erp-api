@@ -13,7 +13,9 @@ import {
   MessageEvent,
   UseGuards,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -54,6 +56,18 @@ export class ErpInvoicesCoreController {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel')
+  async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
+    const buffer = await this.service.exportExcel(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename=invoices.xlsx');
+    res.send(buffer);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
@@ -92,6 +106,24 @@ export class ErpInvoicesCoreController {
   @Post(':id/sync-detail')
   syncDetail(@Param('id') id: string, @Body('token') token: string) {
     return this.service.syncDetailFromPortal(id, token);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/net-off-vouchers')
+  linkVouchers(
+    @Param('id') id: string,
+    @Body() payload: { bankTransactionId: string; netOffAmount?: number }[],
+  ) {
+    return this.service.linkVouchersToInvoice(id, payload);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Delete(':id/net-off-vouchers/:voucherId')
+  removeVoucherLink(
+    @Param('id') id: string,
+    @Param('voucherId') voucherId: string,
+  ) {
+    return this.service.removeVoucherFromInvoice(id, voucherId);
   }
 
   /**

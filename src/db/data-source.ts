@@ -25,6 +25,7 @@ import { ErpProductionOrder } from '../production-core/entities/erp_production_o
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
+import { ErpInvoiceVoucherNetOff } from '../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { SysFile } from '../files/entities/sys-file.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
@@ -44,6 +45,17 @@ import { ErpCashBook } from '../bank-transactions-core/entities/erp_cash_book.en
 import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { ErpBankAccountBalance } from '../bank-transactions-core/entities/erp_bank_account_balance.entity';
 import { ErpCashBookBalance } from '../bank-transactions-core/entities/erp_cash_book_balance.entity';
+import { KgaraAuth } from '../kgara-api-core/entities/kgara_auth.entity';
+import { KgaraBranch } from '../kgara-api-core/entities/kgara_branch.entity';
+import { KgaraCase } from '../kgara-api-core/entities/kgara_case.entity';
+import { KgaraReceivable } from '../kgara-api-core/entities/kgara_receivable.entity';
+import { KgaraPayable } from '../kgara-api-core/entities/kgara_payable.entity';
+import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.entity';
+import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+
 const entities = [
   CoreUser,
   CoreRole,
@@ -70,6 +82,7 @@ const entities = [
   ErpProductionOrderMaterial,
   ErpInvoice,
   ErpInvoiceItem,
+  ErpInvoiceVoucherNetOff,
   CompanyProfile,
   SysFile,
   ErpInventoryTrackingSerial,
@@ -89,6 +102,16 @@ const entities = [
   ErpBankTransaction,
   ErpBankAccountBalance,
   ErpCashBookBalance,
+  KgaraAuth,
+  KgaraBranch,
+  KgaraCase,
+  KgaraReceivable,
+  KgaraPayable,
+  KgaraCaseService,
+  GwSyncRun,
+  ErpChartOfAccount,
+  ErpJournalEntry,
+  ErpJournalEntryLine,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -15,7 +15,7 @@ Apply to all work in this repo.
 - inspect current state before edits
 - use evidence-first wording
 - before push/commit, `cd /opt/repos/liouni-erp-core/liouni-erp-api`
-- before push/commit, always run `bun run lint:check` and `bun run build`
+- before push/commit, always run `bun run check:ci` and `bun run build`
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
 - always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
