@@ -1592,6 +1592,8 @@ export class ProductionCoreService {
               productionOrderId: order.id,
               salesOrderLineId: null,
               goodsIssueLineId: null,
+              notes: identifier.notes ?? null,
+              attributes: identifier.attributes ?? null,
             } as any),
           );
         }
@@ -1609,6 +1611,8 @@ export class ProductionCoreService {
               productionOrderId: order.id,
               salesOrderLineId: null,
               goodsIssueLineId: null,
+              notes: identifier.notes ?? null,
+              attributes: identifier.attributes ?? null,
             } as any),
           );
         }
