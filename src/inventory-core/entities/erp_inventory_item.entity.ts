@@ -61,6 +61,9 @@ export class ErpInventoryItem {
   @JoinColumn({ name: 'tracking_category_id' })
   trackingCategory: ErpTrackingCategory | null;
 
+  @Column({ type: 'text', array: true, default: [] })
+  attributes: string[];
+
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 
