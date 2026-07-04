@@ -49,6 +49,9 @@ export class ErpProductionOrder {
   @Column({ type: 'jsonb', name: 'output_metadata', nullable: true })
   outputMetadata: Record<string, any> | null;
 
+  @Column({ type: 'text', name: 'notes', nullable: true })
+  notes: string | null;
+
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy: string | null;
 
