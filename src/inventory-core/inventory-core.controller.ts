@@ -27,6 +27,7 @@ import { UpdateItemTypeDto } from './dto/update-item-type.dto';
 import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
+import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -183,5 +184,20 @@ export class InventoryItemsController {
   @Get('serials')
   listSerials(@Query() query: InventorySerialQueryDto) {
     return this.service.listSerials(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials/:id')
+  getSerial(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getSerial(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'update' })
+  @Patch('serials/:id')
+  updateSerial(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateInventorySerialDto,
+  ) {
+    return this.service.updateSerial(id, dto);
   }
 }

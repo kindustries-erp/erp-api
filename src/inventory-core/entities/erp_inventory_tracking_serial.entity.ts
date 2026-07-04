@@ -59,6 +59,10 @@ export class ErpInventoryTrackingSerial {
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
 
+  /** Thuộc tính mở rộng tự do dạng key-value (JSONB) */
+  @Column({ type: 'jsonb', name: 'attributes', nullable: true })
+  attributes: Record<string, string> | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

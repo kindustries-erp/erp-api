@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -38,6 +39,16 @@ export class ProductionIdentifierDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Thuộc tính mở rộng tự do dạng key-value — áp dụng cho mọi tracking policy',
+    type: 'object',
+    additionalProperties: { type: 'string' },
+  })
+  @IsOptional()
+  @IsObject()
+  attributes?: Record<string, string>;
 }
 
 export class CompleteProductionDto {

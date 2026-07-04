@@ -454,6 +454,7 @@ export class ProductionCoreService {
         } as any,
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
+        notes: dto.notes ?? null,
         createdBy: dto.createdBy ?? null,
       };
       const productionOrder = await productionRepo.save(productionPayload);
@@ -563,10 +564,11 @@ export class ProductionCoreService {
 
     // Load produced identifiers (vehicles / serials) linked to this production order
     const producedVehicles = await this.dataSource.query(
-      `SELECT id, vin_no AS "vinNo", engine_no AS "engineNo", notes, created_at AS "createdAt"
-       FROM public.erp_vehicles
-       WHERE production_order_id = $1::uuid
-       ORDER BY created_at ASC`,
+      `SELECT v.id, v.vin_no AS "vinNo", v.engine_no AS "engineNo", v.notes, v.created_at AS "createdAt", s.attributes
+       FROM public.erp_vehicles v
+       LEFT JOIN public.erp_inventory_tracking_serials s ON s.vin_id = v.id
+       WHERE v.production_order_id = $1::uuid
+       ORDER BY v.created_at ASC`,
       [id],
     );
     const producedSerials = await this.dataSource.query(
@@ -862,10 +864,11 @@ export class ProductionCoreService {
       }
 
       if (existing.status !== 'DRAFT') {
-        // ALLOW updating outputMetadata and planned dates for non-draft orders
+        // ALLOW updating outputMetadata, planned dates and notes for non-draft orders
         existing.plannedStartDate =
           dto.plannedStartDate ?? existing.plannedStartDate;
         existing.plannedEndDate = dto.plannedEndDate ?? existing.plannedEndDate;
+        if (dto.notes !== undefined) existing.notes = dto.notes;
         existing.outputMetadata = {
           ...(existing.outputMetadata ?? {}),
           ...(dto.outputMetadata ?? {}),
@@ -1005,6 +1008,7 @@ export class ProductionCoreService {
       existing.warehouseCode = dto.warehouseCode ?? null;
       existing.plannedStartDate = dto.plannedStartDate ?? null;
       existing.plannedEndDate = dto.plannedEndDate ?? null;
+      existing.notes = dto.notes ?? null;
       existing.outputMetadata = {
         ...(dto.outputMetadata ?? {}),
         materialOverrides: dto.materialOverrides ?? [],
@@ -1239,30 +1243,36 @@ export class ProductionCoreService {
         }
       }
 
-      // Generate GI number
-      const today = new Date();
-      const ym = getGMT7YearMonthString(today);
-      const giPrefix = `XK-${ym}`;
-      const latestGi = await giRepo
-        .createQueryBuilder('gi')
-        .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
-        .orderBy('LENGTH(gi.issueNo)', 'DESC')
-        .addOrderBy('gi.issueNo', 'DESC')
-        .getOne();
-      const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
-      const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
+      const hasLineToIssue = aggregatedToIssue.size > 0;
+      let gi: any = null;
+      let issueDate = new Date().toISOString();
 
-      const issueDate = today.toISOString();
-      const gi = (await giRepo.save(
-        giRepo.create({
-          issueNo: giNo,
-          issueDate,
-          issueType: 'PRODUCTION',
-          productionOrderId: id,
-          status: 'POSTED',
-          remarks: `Xuất NVL sản xuất ${order.referenceNo} — ${qtyToManufacture} SP`,
-        } as any),
-      )) as unknown as ErpGoodsIssue;
+      if (hasLineToIssue) {
+        // Generate GI number
+        const today = new Date();
+        const ym = getGMT7YearMonthString(today);
+        const giPrefix = `XK-${ym}`;
+        const latestGi = await giRepo
+          .createQueryBuilder('gi')
+          .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
+          .orderBy('LENGTH(gi.issueNo)', 'DESC')
+          .addOrderBy('gi.issueNo', 'DESC')
+          .getOne();
+        const latestSeq = latestGi?.issueNo?.slice(giPrefix.length) ?? '000';
+        const giNo = `${giPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
+
+        issueDate = today.toISOString();
+        gi = (await giRepo.save(
+          giRepo.create({
+            issueNo: giNo,
+            issueDate,
+            issueType: 'PRODUCTION',
+            productionOrderId: id,
+            status: 'POSTED',
+            remarks: `Xuất NVL sản xuất ${order.referenceNo} — ${qtyToManufacture} SP`,
+          } as any),
+        )) as unknown as ErpGoodsIssue;
+      }
 
       let lineNo = 1;
       const updatedMaterials: ErpProductionOrderMaterial[] = [];
@@ -1281,27 +1291,29 @@ export class ProductionCoreService {
           continue;
         }
 
-        // GI line
-        giLinesToSave.push(
-          giLineRepo.create({
-            goodsIssueId: gi.id,
-            lineNo: lineNo++,
-            productionOrderMaterialId: mat.id,
-            itemId: mat.itemId,
-            qtyIssued: toIssue.toFixed(3),
-            salesOrderLineId: null,
-            serialId: null,
-            vehicleId: null,
-          } as any),
-        );
-
         const item = itemMap.get(mat.itemId);
         const isService = item?.itemType?.code === 'SERVICE';
+
+        // GI line
+        if (gi) {
+          giLinesToSave.push(
+            giLineRepo.create({
+              goodsIssueId: gi.id,
+              lineNo: lineNo++,
+              productionOrderMaterialId: mat.id,
+              itemId: mat.itemId,
+              qtyIssued: toIssue.toFixed(3),
+              salesOrderLineId: null,
+              serialId: null,
+              vehicleId: null,
+            } as any),
+          );
+        }
 
         const balance = balanceMap.get(mat.itemId);
         const unitCost = Number(balance?.avgUnitCost || 0);
 
-        if (!isService) {
+        if (!isService && gi) {
           // Inventory: deduct on-hand + reserved
           if (balance) {
             const newOnHand = Math.max(
@@ -1354,13 +1366,15 @@ export class ProductionCoreService {
       }
 
       return {
-        message: 'Bắt đầu sản xuất thành công',
+        message: gi
+          ? `Bắt đầu sản xuất thành công (Đã tạo phiếu ${gi.issueNo})`
+          : 'Bắt đầu sản xuất thành công (Không có vật tư cần xuất thêm)',
         data: {
           id: order.id,
           referenceNo: order.referenceNo,
           status: order.status,
-          goodsIssueId: gi.id,
-          goodsIssueNo: gi.issueNo,
+          goodsIssueId: gi?.id || null,
+          goodsIssueNo: gi?.issueNo || null,
           qtyToManufacture,
         },
       };
@@ -1582,6 +1596,8 @@ export class ProductionCoreService {
               productionOrderId: order.id,
               salesOrderLineId: null,
               goodsIssueLineId: null,
+              notes: identifier.notes ?? null,
+              attributes: identifier.attributes ?? null,
             } as any),
           );
         }
@@ -1599,6 +1615,8 @@ export class ProductionCoreService {
               productionOrderId: order.id,
               salesOrderLineId: null,
               goodsIssueLineId: null,
+              notes: identifier.notes ?? null,
+              attributes: identifier.attributes ?? null,
             } as any),
           );
         }

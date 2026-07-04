@@ -51,6 +51,11 @@ export class ExecuteProductionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   status?: string;
 
   @ApiPropertyOptional({

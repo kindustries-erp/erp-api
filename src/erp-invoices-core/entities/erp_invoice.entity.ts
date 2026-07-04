@@ -183,6 +183,9 @@ export class ErpInvoice {
   })
   pdfFileKey: string | null;
 
+  @Column({ type: 'jsonb', name: 'pdf_files', nullable: true })
+  pdfFiles: any[] | null;
+
   @Column({
     type: 'varchar',
     length: 512,

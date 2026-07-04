@@ -27,6 +27,7 @@ import { InventoryMasterQueryDto } from './dto/inventory-master-query.dto';
 import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { GraphLayoutService } from '../common/services/graph-layout.service';
+import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 @Injectable()
 export class InventoryItemsService {
   constructor(
@@ -797,7 +798,8 @@ export class InventoryItemsService {
         SELECT g.id, g.receipt_no as "voucherNo", g.receipt_date as "date", 'receipt' as "type",
                g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
-               po.po_no as "poNo"
+               po.po_no as "poNo",
+               (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id) as "totalQty"
         FROM public.erp_goods_receipts g
         LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
         LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id
@@ -810,7 +812,8 @@ export class InventoryItemsService {
         SELECT g.id, g.issue_no as "voucherNo", g.issue_date as "date", 'issue' as "type",
                g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
-               NULL as "poNo"
+               NULL as "poNo",
+               (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id) as "totalQty"
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         WHERE ${issueWhere}
@@ -868,13 +871,30 @@ export class InventoryItemsService {
 
     const qb = this.serialRepository
       .createQueryBuilder('s')
-      .leftJoinAndSelect('erp_inventory_items', 'i', 's.item_id = i.id')
-      .leftJoinAndSelect('erp_vehicles', 'v', 's.vin_id = v.id')
-      .leftJoinAndSelect(
-        'erp_tracking_policies',
-        'tp',
-        'i.tracking_policy_id = tp.id',
-      );
+      .select([
+        's.id as s_id',
+        's.serial_no as s_serial_no',
+        's.item_id as s_item_id',
+        's.vin_id as s_vin_id',
+        's.custom_id as s_custom_id',
+        's.created_at as s_created_at',
+        's.updated_at as s_updated_at',
+        's.lot_no as s_lot_no',
+        's.notes as s_notes',
+        's.attributes as s_attributes',
+        'i.id as i_id',
+        'i.sku as i_sku',
+        'i.item_name as i_item_name',
+        'i.item_type_id as i_item_type',
+        'i.tracking_policy_id as i_tracking_policy_id',
+        'i.tracking_category_id as i_tracking_category_id',
+        'v.vin_no as v_vin_no',
+        'v.engine_no as v_engine_no',
+        'tp.name as tp_name',
+      ])
+      .leftJoin('erp_inventory_items', 'i', 's.item_id = i.id')
+      .leftJoin('erp_vehicles', 'v', 's.vin_id = v.id')
+      .leftJoin('erp_tracking_policies', 'tp', 'i.tracking_policy_id = tp.id');
 
     if (query.itemId) {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
@@ -931,6 +951,8 @@ export class InventoryItemsService {
     }
 
     qb.orderBy(sortColumn, sortDirection);
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
     const [itemsRaw, total] = await Promise.all([
       qb.getRawMany(),
       qb.getCount(),
@@ -967,6 +989,9 @@ export class InventoryItemsService {
       vinNo: raw.v_vin_no,
       engineNo: raw.v_engine_no,
       customId: raw.s_custom_id,
+      lotNo: raw.s_lot_no,
+      notes: raw.s_notes,
+      attributes: raw.s_attributes,
       createdAt: fixTimezone(raw.s_created_at),
       updatedAt: fixTimezone(raw.s_updated_at),
       item: {
@@ -987,5 +1012,76 @@ export class InventoryItemsService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async getSerial(id: string) {
+    const serial = await this.serialRepository.findOne({
+      where: { id },
+    });
+    if (!serial)
+      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
+
+    // Fetch related item manually since it's not a direct TypeORM relation mapping yet
+    const itemRaw = await this.serialRepository.manager.query(
+      `
+      SELECT i.id, i.sku, i.item_name, i.item_type_id, i.tracking_policy_id, i.tracking_category_id, tp.name as tp_name
+      FROM erp_inventory_items i
+      LEFT JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id
+      WHERE i.id = $1
+      `,
+      [serial.itemId],
+    );
+
+    let vinNo = null;
+    let engineNo = null;
+    if (serial.vinId) {
+      const vinRaw = await this.serialRepository.manager.query(
+        `SELECT vin_no, engine_no FROM erp_vehicles WHERE id = $1`,
+        [serial.vinId],
+      );
+      if (vinRaw[0]) {
+        vinNo = vinRaw[0].vin_no;
+        engineNo = vinRaw[0].engine_no;
+      }
+    }
+
+    const itemObj = itemRaw[0]
+      ? {
+          id: itemRaw[0].id,
+          sku: itemRaw[0].sku,
+          itemName: itemRaw[0].item_name,
+          itemType: itemRaw[0].item_type_id,
+          trackingPolicyId: itemRaw[0].tracking_policy_id,
+          trackingCategoryId: itemRaw[0].tracking_category_id,
+          trackingPolicyName: itemRaw[0].tp_name,
+        }
+      : null;
+
+    return {
+      id: serial.id,
+      serialNo: serial.serialNo,
+      itemId: serial.itemId,
+      vinId: serial.vinId,
+      vinNo,
+      engineNo,
+      customId: serial.customId,
+      lotNo: serial.lotNo,
+      notes: serial.notes,
+      attributes: serial.attributes,
+      createdAt: serial.createdAt,
+      updatedAt: serial.updatedAt,
+      item: itemObj,
+    };
+  }
+
+  async updateSerial(id: string, dto: UpdateInventorySerialDto) {
+    const serial = await this.serialRepository.findOne({ where: { id } });
+    if (!serial) {
+      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
+    }
+    if (dto.notes !== undefined) serial.notes = dto.notes;
+    if (dto.attributes !== undefined) serial.attributes = dto.attributes;
+    await this.serialRepository.save(serial);
+    return serial;
   }
 }
