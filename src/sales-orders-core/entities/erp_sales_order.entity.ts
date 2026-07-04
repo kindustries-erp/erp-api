@@ -22,6 +22,9 @@ export class ErpSalesOrder {
   @Column({ type: 'date', name: 'order_date' })
   orderDate: string;
 
+  @Column({ type: 'date', name: 'expected_delivery_date', nullable: true })
+  expectedDeliveryDate: string | null;
+
   @Column({ type: 'varchar', length: 255, name: 'status', default: 'ACTIVE' })
   status: string;
 

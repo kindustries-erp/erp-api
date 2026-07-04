@@ -127,6 +127,7 @@ export class InventoryStockCoreService {
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
         on_hand_qty: Number(b?.qtyOnHand || 0),
+        reserved_qty: Number(b?.qtyReserved || 0),
         stock_value: Number(b?.inventoryValue || 0),
         last_transaction_date: b?.updatedAt?.toISOString?.() ?? null,
         status: item.status,

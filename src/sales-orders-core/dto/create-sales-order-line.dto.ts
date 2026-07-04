@@ -7,6 +7,10 @@ export class CreateSalesOrderLineDto {
   @IsUUID()
   itemId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  itemName?: string;
+
   @ApiProperty()
   @IsNumberString()
   qtyOrdered: string;

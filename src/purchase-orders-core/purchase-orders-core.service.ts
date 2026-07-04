@@ -41,7 +41,7 @@ export class PurchaseOrdersCoreService {
     const baseDate = orderDate ? new Date(orderDate) : new Date();
     const year = baseDate.getUTCFullYear();
     const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `PO-${year}${month}`;
+    const prefix = `PO-${year}${month}-`;
     const latest = await manager
       .getRepository(ErpPurchaseOrder)
       .createQueryBuilder('po')

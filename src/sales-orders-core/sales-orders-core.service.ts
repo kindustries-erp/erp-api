@@ -40,14 +40,41 @@ export class SalesOrdersCoreService {
     return salesOrder;
   }
 
+  private async generateMonthlySoNo(manager: any, orderDate?: string) {
+    const baseDate = orderDate ? new Date(orderDate) : new Date();
+    const year = baseDate.getUTCFullYear();
+    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `SO-${year}${month}-`;
+    const latest = await manager
+      .getRepository(ErpSalesOrder)
+      .createQueryBuilder('so')
+      .where('so.soNo LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('so.soNo', 'DESC')
+      .getOne();
+    const latestSeq = latest?.soNo?.slice(prefix.length) ?? '000';
+    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
+    return `${prefix}${nextSeq}`;
+  }
+
+  async getNextSoNo(date?: string): Promise<{ nextNo: string }> {
+    const nextNo = await this.dataSource.transaction((manager) =>
+      this.generateMonthlySoNo(manager, date),
+    );
+    return { nextNo };
+  }
+
   async create(dto: CreateSalesOrderDto) {
     const { lines = [], ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpSalesOrder);
       const lineRepo = manager.getRepository(ErpSalesOrderLine);
+      const soNo =
+        header.soNo?.trim() ||
+        (await this.generateMonthlySoNo(manager, header.orderDate));
       const headerPayload: DeepPartial<ErpSalesOrder> = {
         status: header.status ?? 'DRAFT',
         ...header,
+        soNo,
       };
       const data = await headerRepo.save(headerPayload);
       const savedLines: ErpSalesOrderLine[] = [];
@@ -57,6 +84,7 @@ export class SalesOrdersCoreService {
           salesOrderId: data.id,
           lineNo: lineNo++,
           itemId: line.itemId ?? null,
+          itemName: line.itemName ?? null,
           qtyOrdered: line.qtyOrdered,
           qtyReserved: '0',
           qtyDelivered: '0',
@@ -103,13 +131,13 @@ export class SalesOrdersCoreService {
         take: pageSize,
         order,
       });
-      return {
+      return this.enrichCustomerNames({
         items,
         total,
         page,
         pageSize,
         totalPages: Math.ceil(total / pageSize),
-      };
+      });
     }
 
     const [items, total] = await this.repository.findAndCount({
@@ -123,13 +151,34 @@ export class SalesOrdersCoreService {
       take: pageSize,
       order,
     });
-    return {
+    return this.enrichCustomerNames({
       items,
       total,
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
-    };
+    });
+  }
+
+  private async enrichCustomerNames(result: any) {
+    if (result.items.length > 0) {
+      const customerIds = [
+        ...new Set(result.items.map((i: any) => i.customerId).filter(Boolean)),
+      ];
+      if (customerIds.length > 0) {
+        const partners = await this.dataSource.query(
+          `SELECT id, name FROM erp_business_partners WHERE id = ANY($1)`,
+          [customerIds],
+        );
+        const partnerMap = new Map(partners.map((p: any) => [p.id, p.name]));
+        for (const item of result.items) {
+          if (item.customerId) {
+            item.customerName = partnerMap.get(item.customerId);
+          }
+        }
+      }
+    }
+    return result;
   }
 
   async findOne(id: string) {
@@ -165,6 +214,7 @@ export class SalesOrdersCoreService {
             salesOrderId: id,
             lineNo: lineNo++,
             itemId: line.itemId ?? null,
+            itemName: line.itemName ?? null,
             qtyOrdered: line.qtyOrdered,
             qtyReserved: line.qtyReserved ?? '0',
             qtyDelivered: line.qtyDelivered ?? '0',
@@ -316,7 +366,7 @@ export class SalesOrdersCoreService {
       } else if (anyDelivered) {
         so.status = 'PARTIAL_DELIVERED';
       } else {
-        so.status = 'DRAFT';
+        so.status = 'CONFIRMED';
       }
       await soRepo.save(so);
 
@@ -339,27 +389,66 @@ export class SalesOrdersCoreService {
   }
 
   async cancel(id: string) {
-    const existing = await this.repository.findOne({
-      where: { id, isDeleted: false },
+    return this.dataSource.transaction(async (manager) => {
+      const soRepo = manager.getRepository(ErpSalesOrder);
+      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+
+      const existing = await soRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+      if (!existing)
+        throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+      if (existing.status === 'CANCELLED') {
+        throw new BadRequestException('Đơn bán hàng đã bị hủy');
+      }
+      if (existing.status === 'DRAFT') {
+        throw new BadRequestException('Không thể hủy đơn nháp, vui lòng xóa');
+      }
+
+      // Call dependencies check just in case
+      await this.dependencyService.checkDependencies(
+        'sales_service_orders',
+        id,
+      );
+
+      // Unreserve logic
+      const lines = await soLineRepo.find({ where: { salesOrderId: id } });
+      for (const line of lines) {
+        const qtyReserved = Number(line.qtyReserved || 0);
+        if (qtyReserved > 0) {
+          const balances = await balanceRepo.find({
+            where: { itemId: line.itemId ?? undefined } as any,
+          });
+          let remainingToUnreserve = qtyReserved;
+          for (const balance of balances) {
+            if (remainingToUnreserve <= 0) break;
+            const balanceReserved = Number(balance.qtyReserved || 0);
+            if (balanceReserved > 0) {
+              const qtyToRelease = Math.min(
+                balanceReserved,
+                remainingToUnreserve,
+              );
+              balance.qtyReserved = Math.max(
+                0,
+                balanceReserved - qtyToRelease,
+              ).toFixed(3);
+              await balanceRepo.save(balance);
+              remainingToUnreserve -= qtyToRelease;
+            }
+          }
+          line.qtyReserved = '0';
+          await soLineRepo.save(line);
+        }
+      }
+
+      existing.status = 'CANCELLED';
+      await soRepo.save(existing);
+
+      return {
+        message: 'Hủy thành công',
+        data: { id },
+      };
     });
-    if (!existing)
-      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
-    if (existing.status === 'CANCELLED') {
-      throw new BadRequestException('Đơn bán hàng đã bị hủy');
-    }
-    if (existing.status === 'DRAFT') {
-      throw new BadRequestException('Không thể hủy đơn nháp, vui lòng xóa');
-    }
-
-    // Call dependencies check just in case
-    await this.dependencyService.checkDependencies('sales_service_orders', id);
-
-    existing.status = 'CANCELLED';
-    await this.repository.save(existing);
-
-    return {
-      message: 'Hủy thành công',
-      data: { id },
-    };
   }
 }
