@@ -162,6 +162,28 @@ export class PurchaseOrdersCoreService {
         : In(taggedIds);
     }
 
+    if (query.only_receivable) {
+      const receivableLines = await this.lineRepository
+        .createQueryBuilder('line')
+        .select('line.purchaseOrderId', 'purchaseOrderId')
+        .where(
+          'CAST(line.qtyOrdered AS NUMERIC) > CAST(line.qtyReceived AS NUMERIC)',
+        )
+        .getRawMany();
+
+      const receivablePoIds = receivableLines.map((l) => l.purchaseOrderId);
+      if (receivablePoIds.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      where.id = where.id
+        ? In(
+            receivablePoIds.filter((id: string) =>
+              (where.id as any)._value?.includes(id),
+            ),
+          )
+        : In(receivablePoIds);
+    }
+
     const order = resolveSortOrder(query.sort, {
       allowedFields: [
         'createdAt',
