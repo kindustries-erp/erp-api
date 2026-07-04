@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, ILike, Repository, In } from 'typeorm';
+import { DataSource, ILike, Repository, In, ArrayContains } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpInventoryItem } from './entities/erp_inventory_item.entity';
@@ -153,26 +153,15 @@ export class InventoryItemsService {
   }
 
   async create(dto: CreateInventoryItemDto) {
-    let uomId = dto.uomId;
-    if (!uomId) {
-      const uom = await this.uomRepository.findOne({ where: { code: 'PCS' } });
-      if (uom) uomId = uom.id;
-    }
-
-    let itemTypeId = dto.itemTypeId;
-    if (!itemTypeId) {
-      const itemType = await this.itemTypeRepository.findOne({
-        where: { code: 'RAW' },
-      });
-      if (itemType) itemTypeId = itemType.id;
-    }
-
     const entity = this.repository.create({
       ...dto,
-      uomId: uomId,
-      itemTypeId: itemTypeId,
-      trackingPolicyId: dto.trackingPolicyId ?? null,
-      trackingCategoryId: dto.trackingCategoryId ?? null,
+      uomId: dto.uomId,
+      itemTypeId: dto.itemTypeId,
+      status: dto.status || 'ACTIVE',
+      note: dto.note || undefined,
+      trackingPolicyId: dto.trackingPolicyId || null,
+      trackingCategoryId: dto.trackingCategoryId || null,
+      attributes: dto.attributes || [],
     } as Partial<ErpInventoryItem>);
     const data = await this.repository.save(entity);
     return { message: 'Tạo thành công', data };
@@ -204,6 +193,21 @@ export class InventoryItemsService {
         { ...baseWhere, itemName: ILike(`%${query.search}%`) },
         { ...baseWhere, sku: ILike(`%${query.search}%`) },
       ];
+    }
+
+    if (query.attributes) {
+      const attrs = query.attributes.split(',').map((a: string) => a.trim());
+      if (Array.isArray(whereCondition)) {
+        whereCondition = whereCondition.map((wc) => ({
+          ...wc,
+          attributes: ArrayContains(attrs),
+        }));
+      } else {
+        whereCondition = {
+          ...whereCondition,
+          attributes: ArrayContains(attrs),
+        };
+      }
     }
 
     const order = resolveSortOrder(query.sort, {
@@ -270,22 +274,22 @@ export class InventoryItemsService {
   }
 
   async update(id: string, dto: UpdateInventoryItemDto) {
-    const patch: Partial<ErpInventoryItem> = {
-      ...dto,
-    } as Partial<ErpInventoryItem>;
-    if (dto.uomId !== undefined) {
-      patch.uomId = dto.uomId;
-    }
-    if (dto.itemTypeId !== undefined) {
-      patch.itemTypeId = dto.itemTypeId;
-    }
-    if (dto.trackingPolicyId !== undefined) {
-      patch.trackingPolicyId = dto.trackingPolicyId;
-    }
-    if (dto.trackingCategoryId !== undefined) {
-      patch.trackingCategoryId = dto.trackingCategoryId;
-    }
-    await this.repository.update(id, patch);
+    const item = await this.repository.findOneBy({ id });
+    if (!item) throw new NotFoundException('Không tìm thấy item');
+
+    if (dto.uomId !== undefined) item.uomId = dto.uomId;
+    if (dto.itemTypeId !== undefined) item.itemTypeId = dto.itemTypeId;
+    if (dto.itemName !== undefined) item.itemName = dto.itemName;
+    if (dto.sku !== undefined) item.sku = dto.sku;
+    if (dto.note !== undefined) item.note = dto.note;
+    if (dto.status !== undefined) item.status = dto.status;
+    if (dto.trackingPolicyId !== undefined)
+      item.trackingPolicyId = dto.trackingPolicyId;
+    if (dto.trackingCategoryId !== undefined)
+      item.trackingCategoryId = dto.trackingCategoryId;
+    if (dto.attributes !== undefined) item.attributes = dto.attributes;
+
+    await this.repository.save(item);
     const data = await this.repository.findOne({
       where: { id },
       relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
