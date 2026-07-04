@@ -41,6 +41,12 @@ export class SalesOrdersCoreController {
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get('next-no')
+  getNextNo(@Query('date') date?: string) {
+    return this.service.getNextSoNo(date);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);

@@ -41,7 +41,7 @@ export class PurchaseOrdersCoreService {
     const baseDate = orderDate ? new Date(orderDate) : new Date();
     const year = baseDate.getUTCFullYear();
     const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `PO-${year}${month}`;
+    const prefix = `PO-${year}${month}-`;
     const latest = await manager
       .getRepository(ErpPurchaseOrder)
       .createQueryBuilder('po')
@@ -160,6 +160,28 @@ export class PurchaseOrdersCoreService {
             ),
           )
         : In(taggedIds);
+    }
+
+    if (query.only_receivable) {
+      const receivableLines = await this.lineRepository
+        .createQueryBuilder('line')
+        .select('line.purchaseOrderId', 'purchaseOrderId')
+        .where(
+          'CAST(line.qtyOrdered AS NUMERIC) > CAST(line.qtyReceived AS NUMERIC)',
+        )
+        .getRawMany();
+
+      const receivablePoIds = receivableLines.map((l) => l.purchaseOrderId);
+      if (receivablePoIds.length === 0) {
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      }
+      where.id = where.id
+        ? In(
+            receivablePoIds.filter((id: string) =>
+              (where.id as any)._value?.includes(id),
+            ),
+          )
+        : In(receivablePoIds);
     }
 
     const order = resolveSortOrder(query.sort, {

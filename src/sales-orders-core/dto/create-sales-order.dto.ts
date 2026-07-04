@@ -11,9 +11,10 @@ import {
 import { CreateSalesOrderLineDto } from './create-sales-order-line.dto';
 
 export class CreateSalesOrderDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  soNo: string;
+  soNo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -23,6 +24,11 @@ export class CreateSalesOrderDto {
   @ApiProperty()
   @IsDateString()
   orderDate: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expectedDeliveryDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
