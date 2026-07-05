@@ -24,6 +24,7 @@ import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
+import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
 import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { format } from 'date-fns';
@@ -480,6 +481,28 @@ export class GoodsIssuesCoreService {
             serial.vinId = vehicle.id;
           }
           await serialRepo.save(serial);
+
+          const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
+          const existingLifecycle = await lifecycleRepo.findOneBy({
+            serialId: serial.id,
+          });
+          if (!existingLifecycle) {
+            await lifecycleRepo.save(
+              lifecycleRepo.create({
+                serialId: serial.id,
+                salesOrderId: issue.salesOrderId,
+                goodsIssueId: issue.id,
+                dealerId: issue.customerId, // Using customerId as dealerId
+                status: 'ACTIVE',
+              }),
+            );
+          } else {
+            existingLifecycle.salesOrderId = issue.salesOrderId;
+            existingLifecycle.goodsIssueId = issue.id;
+            existingLifecycle.dealerId = issue.customerId;
+            existingLifecycle.status = 'ACTIVE';
+            await lifecycleRepo.save(existingLifecycle);
+          }
         }
 
         if (vehicle) {

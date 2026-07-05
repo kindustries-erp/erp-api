@@ -55,6 +55,7 @@ import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
 
 const entities = [
   CoreUser,
@@ -112,6 +113,7 @@ const entities = [
   ErpChartOfAccount,
   ErpJournalEntry,
   ErpJournalEntryLine,
+  ErpSerialLifecycle,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

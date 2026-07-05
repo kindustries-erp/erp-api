@@ -28,6 +28,10 @@ import { WarehouseVoucherQueryDto } from './dto/warehouse-voucher-query.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { GraphLayoutService } from '../common/services/graph-layout.service';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
+import { ErpSerialLifecycle } from './entities/erp_serial_lifecycle.entity';
+import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
+
 @Injectable()
 export class InventoryItemsService {
   constructor(
@@ -886,6 +890,10 @@ export class InventoryItemsService {
         's.lot_no as s_lot_no',
         's.notes as s_notes',
         's.attributes as s_attributes',
+        's.status as s_status',
+        's.sales_order_line_id as s_sales_order_line_id',
+        'so.id as so_id',
+        'so.so_no as so_no',
         'i.id as i_id',
         'i.sku as i_sku',
         'i.item_name as i_item_name',
@@ -898,10 +906,35 @@ export class InventoryItemsService {
       ])
       .leftJoin('erp_inventory_items', 'i', 's.item_id = i.id')
       .leftJoin('erp_vehicles', 'v', 's.vin_id = v.id')
-      .leftJoin('erp_tracking_policies', 'tp', 'i.tracking_policy_id = tp.id');
+      .leftJoin('erp_tracking_policies', 'tp', 'i.tracking_policy_id = tp.id')
+      .leftJoin(
+        'erp_sales_order_lines',
+        'sol',
+        's.sales_order_line_id = sol.id',
+      )
+      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id');
+
+    if (query.ids) {
+      const idsArr = Array.isArray(query.ids)
+        ? query.ids
+        : query.ids.split(',');
+      if (idsArr.length > 0) {
+        qb.andWhere('s.id IN (:...ids)', { ids: idsArr });
+      }
+    }
 
     if (query.itemId) {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
+    }
+
+    if (query.status) {
+      qb.andWhere('s.status = :status', { status: query.status });
+    }
+
+    if (query.salesOrderLineId) {
+      qb.andWhere('s.sales_order_line_id = :solId', {
+        solId: query.salesOrderLineId,
+      });
     }
 
     if (query.itemTypeId) {
@@ -996,6 +1029,10 @@ export class InventoryItemsService {
       lotNo: raw.s_lot_no,
       notes: raw.s_notes,
       attributes: raw.s_attributes,
+      status: raw.s_status,
+      salesOrderLineId: raw.s_sales_order_line_id,
+      soId: raw.so_id,
+      soNo: raw.so_no,
       createdAt: fixTimezone(raw.s_created_at),
       updatedAt: fixTimezone(raw.s_updated_at),
       item: {
@@ -1061,7 +1098,7 @@ export class InventoryItemsService {
         }
       : null;
 
-    return {
+    const result: any = {
       id: serial.id,
       serialNo: serial.serialNo,
       itemId: serial.itemId,
@@ -1075,7 +1112,17 @@ export class InventoryItemsService {
       createdAt: serial.createdAt,
       updatedAt: serial.updatedAt,
       item: itemObj,
+      lifecycle: null,
     };
+
+    const lifecycleRepo =
+      this.serialRepository.manager.getRepository(ErpSerialLifecycle);
+    const lifecycle = await lifecycleRepo.findOne({ where: { serialId: id } });
+    if (lifecycle) {
+      result.lifecycle = lifecycle;
+    }
+
+    return result;
   }
 
   async updateSerial(id: string, dto: UpdateInventorySerialDto) {
@@ -1087,5 +1134,162 @@ export class InventoryItemsService {
     if (dto.attributes !== undefined) serial.attributes = dto.attributes;
     await this.serialRepository.save(serial);
     return serial;
+  }
+
+  async confirmDelivery(serialId: string, dto: ConfirmDeliveryDto) {
+    const lifecycleRepo =
+      this.serialRepository.manager.getRepository(ErpSerialLifecycle);
+    const lifecycle = await lifecycleRepo.findOne({ where: { serialId } });
+    if (!lifecycle) {
+      throw new NotFoundException(
+        `Lifecycle cho serial '${serialId}' không tồn tại`,
+      );
+    }
+    lifecycle.deliveryDate = dto.deliveryDate;
+    if (dto.notes !== undefined) {
+      lifecycle.notes = dto.notes;
+    }
+    await lifecycleRepo.save(lifecycle);
+    return lifecycle;
+  }
+
+  async updateSerialLifecycle(serialId: string, dto: UpdateSerialLifecycleDto) {
+    const lifecycleRepo =
+      this.serialRepository.manager.getRepository(ErpSerialLifecycle);
+    const lifecycle = await lifecycleRepo.findOne({ where: { serialId } });
+    if (!lifecycle) {
+      throw new NotFoundException(
+        `Lifecycle cho serial '${serialId}' không tồn tại`,
+      );
+    }
+
+    if (dto.customerName !== undefined)
+      lifecycle.customerName = dto.customerName;
+    if (dto.customerPhone !== undefined)
+      lifecycle.customerPhone = dto.customerPhone;
+    if (dto.customerAddress !== undefined)
+      lifecycle.customerAddress = dto.customerAddress;
+    if (dto.customerIdNumber !== undefined)
+      lifecycle.customerIdNumber = dto.customerIdNumber;
+    if (dto.warrantyActivatedAt !== undefined) {
+      lifecycle.warrantyActivatedAt = dto.warrantyActivatedAt
+        ? new Date(dto.warrantyActivatedAt)
+        : null;
+    }
+    if (dto.warrantyMonths !== undefined)
+      lifecycle.warrantyMonths = dto.warrantyMonths;
+    if (dto.notes !== undefined) lifecycle.notes = dto.notes;
+
+    // Recalculate warranty_end_date if needed
+    if (lifecycle.warrantyActivatedAt && lifecycle.warrantyMonths) {
+      const endDate = new Date(lifecycle.warrantyActivatedAt);
+      endDate.setMonth(endDate.getMonth() + lifecycle.warrantyMonths);
+      lifecycle.warrantyEndDate = endDate.toISOString().split('T')[0];
+    }
+
+    await lifecycleRepo.save(lifecycle);
+    return lifecycle;
+  }
+
+  async listSerialLifecycles(query: any) {
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+    const skip = (page - 1) * pageSize;
+
+    let sql = `
+      SELECT 
+        l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
+        l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id,
+        s.id as serial_id, s.serial_no, s.item_id, s.vin_id,
+        i.sku, i.item_name,
+        v.vin_no, v.engine_no,
+        so.so_no
+      FROM erp_serial_lifecycles l
+      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_vehicles v ON s.vin_id = v.id
+      LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (query.status) {
+      sql += ` AND s.status = $${paramIdx++}`;
+      params.push(query.status);
+    }
+
+    if (query.deliveryDateFrom) {
+      sql += ` AND l.delivery_date >= $${paramIdx++}`;
+      params.push(query.deliveryDateFrom);
+    }
+
+    if (query.deliveryDateTo) {
+      sql += ` AND l.delivery_date <= $${paramIdx++}`;
+      params.push(query.deliveryDateTo);
+    }
+
+    if (query.search) {
+      sql += ` AND (
+        s.serial_no ILIKE $${paramIdx} OR 
+        v.vin_no ILIKE $${paramIdx} OR 
+        l.customer_name ILIKE $${paramIdx} OR 
+        l.customer_phone ILIKE $${paramIdx}
+      )`;
+      params.push(`%${query.search}%`);
+      paramIdx++;
+    }
+
+    if (query.warrantyStatus === 'NOT_ACTIVATED') {
+      sql += ` AND l.warranty_activated_at IS NULL`;
+    } else if (query.warrantyStatus === 'ACTIVE') {
+      sql += ` AND l.warranty_activated_at IS NOT NULL AND (l.warranty_end_date IS NULL OR l.warranty_end_date >= CURRENT_DATE)`;
+    } else if (query.warrantyStatus === 'EXPIRED') {
+      sql += ` AND l.warranty_end_date < CURRENT_DATE`;
+    }
+
+    // Count
+    const countSql = `SELECT COUNT(*) as count FROM (${sql}) as t`;
+    const countRes = await this.serialRepository.manager.query(
+      countSql,
+      params,
+    );
+    const total = parseInt(countRes[0].count, 10);
+
+    // Data
+    sql += ` ORDER BY l.delivery_date DESC NULLS LAST, l.created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    params.push(pageSize, skip);
+
+    const data = await this.serialRepository.manager.query(sql, params);
+
+    // Map to camelCase
+    const items = data.map((row: any) => ({
+      lifecycleId: row.lifecycle_id,
+      serialId: row.serial_id,
+      status: row.status,
+      deliveryDate: row.delivery_date,
+      customerName: row.customer_name,
+      customerPhone: row.customer_phone,
+      warrantyActivatedAt: row.warranty_activated_at,
+      warrantyMonths: row.warranty_months,
+      warrantyEndDate: row.warranty_end_date,
+      serialNo: row.serial_no,
+      itemId: row.item_id,
+      sku: row.sku,
+      itemName: row.item_name,
+      vinNo: row.vin_no,
+      engineNo: row.engine_no,
+      salesOrderId: row.sales_order_id,
+      soNo: row.so_no,
+      dealerId: row.dealer_id,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 }
