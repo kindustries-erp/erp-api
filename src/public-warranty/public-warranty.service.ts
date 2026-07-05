@@ -26,27 +26,49 @@ export class PublicWarrantyService {
   }
 
   async check(dto: CheckWarrantyDto) {
-    const sokhung = this.normalize(dto.sokhung);
-    const somay = this.normalize(dto.somay);
+    const vin_no = this.normalize(dto.vin_no);
+    const engine_no = this.normalize(dto.engine_no);
 
-    let vehicle = await this.vehicleRepo.findOne({
-      where: { vinNo: sokhung, engineNo: somay },
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { vinNo: vin_no, engineNo: engine_no },
     });
 
     if (!vehicle) {
-      // Fallback: check by vinNo only
-      vehicle = await this.vehicleRepo.findOne({
-        where: { vinNo: sokhung },
-      });
-    }
-
-    if (!vehicle) {
-      return { found: false, vehicle: null, active_warranty: null };
+      return {
+        found: false,
+        reason: 'VEHICLE_NOT_FOUND',
+        vehicle: null,
+        active_warranty: null,
+      };
     }
 
     const trackingSerial = await this.trackingSerialRepo.findOne({
       where: { vinId: vehicle.id },
     });
+
+    if (!trackingSerial) {
+      return {
+        found: false,
+        reason: 'NOT_IN_SYSTEM',
+        vehicle: null,
+        active_warranty: null,
+      };
+    }
+
+    if (trackingSerial.status !== 'SOLD') {
+      return {
+        found: true,
+        eligible: false,
+        reason: 'NOT_DELIVERED',
+        vehicle: {
+          vin_no: vehicle.vinNo,
+          engine_no: vehicle.engineNo,
+          model_name: 'KL Lotus',
+          warranty_status: 'NOT_ACTIVATED',
+        },
+        active_warranty: null,
+      };
+    }
 
     let active_warranty: any = null;
     if (trackingSerial) {
@@ -56,7 +78,7 @@ export class PublicWarrantyService {
 
       if (lifecycle && lifecycle.warrantyActivatedAt) {
         active_warranty = {
-          warranty_code: `WRN-${lifecycle.warrantyActivatedAt.toISOString().slice(0, 10).replace(/-/g, '')}-${sokhung.slice(-6)}`,
+          warranty_code: `WRN-${lifecycle.warrantyActivatedAt.toISOString().slice(0, 10).replace(/-/g, '')}-${vin_no.slice(-6)}`,
           status: lifecycle.status,
           activated_at: lifecycle.warrantyActivatedAt.toISOString(),
           warranty_end_date: lifecycle.warrantyEndDate,
@@ -70,8 +92,9 @@ export class PublicWarrantyService {
 
     return {
       found: true,
+      eligible: true,
       vehicle: {
-        frame_no: vehicle.vinNo,
+        vin_no: vehicle.vinNo,
         engine_no: vehicle.engineNo,
         model_name: 'KL Lotus', // Placeholder or relation
         warranty_status: active_warranty ? 'ACTIVE' : 'NOT_ACTIVATED',
@@ -81,40 +104,31 @@ export class PublicWarrantyService {
   }
 
   async activate(dto: ActivateWarrantyDto) {
-    const sokhung = this.normalize(dto.sokhung);
-    const somay = this.normalize(dto.somay);
+    const vin_no = this.normalize(dto.vin_no);
+    const engine_no = this.normalize(dto.engine_no);
 
-    let vehicle = await this.vehicleRepo.findOne({
-      where: { vinNo: sokhung, engineNo: somay },
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { vinNo: vin_no, engineNo: engine_no },
     });
 
     if (!vehicle) {
-      vehicle = await this.vehicleRepo.findOne({
-        where: { vinNo: sokhung },
-      });
+      throw new BadRequestException(
+        'Không tìm thấy thông tin xe. Vui lòng kiểm tra lại số khung và số máy.',
+      );
     }
 
-    if (!vehicle) {
-      // Create dummy vehicle if not found
-      vehicle = this.vehicleRepo.create({
-        vinNo: sokhung,
-        engineNo: somay,
-        status: 'ASSEMBLED',
-      });
-      await this.vehicleRepo.save(vehicle);
-    }
-
-    let trackingSerial = await this.trackingSerialRepo.findOne({
+    const trackingSerial = await this.trackingSerialRepo.findOne({
       where: { vinId: vehicle.id },
     });
 
     if (!trackingSerial) {
-      trackingSerial = this.trackingSerialRepo.create({
-        serialNo: somay,
-        vinId: vehicle.id,
-        status: 'IN_STOCK',
-      });
-      await this.trackingSerialRepo.save(trackingSerial);
+      throw new BadRequestException('Xe chưa được ghi nhận trong hệ thống');
+    }
+
+    if (trackingSerial.status !== 'SOLD') {
+      throw new BadRequestException(
+        'Xe chưa được bàn giao, không thể kích hoạt bảo hành. Vui lòng liên hệ đại lý.',
+      );
     }
 
     let lifecycle = await this.lifecycleRepo.findOne({
@@ -176,7 +190,7 @@ export class PublicWarrantyService {
     return {
       message: 'Kích hoạt bảo hành thành công',
       activation: {
-        warranty_code: `WRN-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${sokhung.slice(-6)}`,
+        warranty_code: `WRN-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${vin_no.slice(-6)}`,
         activated_at: now.toISOString(),
         warranty_end_date: lifecycle.warrantyEndDate,
         status: 'ACTIVE',
