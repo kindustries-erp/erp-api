@@ -35,6 +35,8 @@ export interface ParsedVietnamInvoice {
   vatAmount: number;
   discountAmount: number;
   totalAmount: number;
+  lookupCode: string | null;
+  providerLink: string | null;
   rawSource: string; // 'TT78' | 'SINVOICE_V2' | 'VINFAST' | 'GENERIC'
   items: ParsedVietnamInvoiceItem[];
 }
@@ -103,6 +105,61 @@ function normalizeDate(raw: string | null): string {
   }
 
   return new Date().toISOString().slice(0, 10);
+}
+
+function extractLookupInfo(
+  doc: Document,
+  sellerTaxCode: string | null,
+): { lookupCode: string | null; providerLink: string | null } {
+  let lookupCode: string | null = null;
+  let providerLink: string | null = null;
+
+  // Scan <TTKhac> blocks
+  const ttkhacs = doc.getElementsByTagName('TTKhac');
+  for (let i = 0; i < ttkhacs.length; i++) {
+    const parent = ttkhacs[i];
+    const ttins = parent.getElementsByTagName('TTin');
+    for (let j = 0; j < ttins.length; j++) {
+      const ttin = ttins[j];
+      const truong = getTextIn(ttin, 'TTruong', 'Ten');
+      const lowerTruong = (truong || '').toLowerCase();
+      if (
+        lowerTruong === 'matracuu' ||
+        lowerTruong === 'transactionid' ||
+        lowerTruong === 'macuutra' ||
+        lowerTruong === 'mã tra cứu' ||
+        lowerTruong === 'refid'
+      ) {
+        const value = getTextIn(ttin, 'DLieu', 'KDLieu'); // sometimes DLieu, sometimes they place it differently
+        // Wait, standard is <TTruong>MaTraCuu</TTruong><DLieu>123</DLieu>
+        const exactValue =
+          getTextIn(ttin, 'DLieu') || getTextIn(ttin, 'GiaTri');
+        if (exactValue && exactValue !== 'string') lookupCode = exactValue;
+      }
+    }
+  }
+
+  // Guess provider link
+  if (sellerTaxCode === '0108926276') {
+    // Vinfast
+    providerLink = 'https://hoadon.vinfastauto.com/';
+  }
+
+  // Generic heuristic for provider link if we know the tags
+  if (!providerLink) {
+    if (doc.getElementsByTagName('inv:HDon').length > 0) {
+      providerLink = 'https://sinvoice.viettel.vn/tracuuhoadon';
+    } else if (doc.documentElement.namespaceURI?.includes('vnpt')) {
+      providerLink = 'https://hoadondientu.vnpt.vn/';
+    } else if (
+      doc.documentElement.namespaceURI?.includes('misa') ||
+      getText(doc, 'InvoiceTemplateID')
+    ) {
+      providerLink = 'https://www.meinvoice.vn/tra-cuu/';
+    }
+  }
+
+  return { lookupCode, providerLink };
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +273,8 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     vatRate = n > 1 ? n / 100 : n; // normalize về dạng decimal
   }
 
+  const { lookupCode, providerLink } = extractLookupInfo(doc, sellerTaxCode);
+
   return {
     invoiceNo,
     serialNo,
@@ -233,6 +292,8 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     vatAmount: toNum(vatAmtRaw),
     discountAmount: toNum(discountRaw),
     totalAmount: toNum(totalRaw),
+    lookupCode,
+    providerLink,
     rawSource: 'TT78',
     items,
   };
@@ -396,6 +457,8 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     vatRate = n > 1 ? n / 100 : n;
   }
 
+  const { lookupCode, providerLink } = extractLookupInfo(doc, sellerTaxCode);
+
   return {
     invoiceNo,
     serialNo: getTextIn(root, 'SerialNo', 'serialNo', 'Series') ?? null,
@@ -413,6 +476,8 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     vatAmount: toNum(vatAmtRaw),
     discountAmount: toNum(discountRaw),
     totalAmount: toNum(totalRaw),
+    lookupCode,
+    providerLink,
     rawSource: 'VINFAST',
     items,
   };
@@ -485,6 +550,8 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     vatAmount: toNum(getText(doc, 'vat_amount', 'VatAmount', 'TienThue')),
     discountAmount: toNum(getText(doc, 'discount_amount', 'DiscountAmount')),
     totalAmount: toNum(getText(doc, ...TOTAL_TAGS)),
+    lookupCode: null,
+    providerLink: null,
     rawSource: 'GENERIC',
     items: [],
   };

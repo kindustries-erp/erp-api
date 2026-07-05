@@ -1,11 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumberString, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsArray,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateSalesOrderLineDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
   itemId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  itemName?: string;
 
   @ApiProperty()
   @IsNumberString()
@@ -20,4 +30,10 @@ export class CreateSalesOrderLineDto {
   @IsOptional()
   @IsNumberString()
   amount?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  serialIds?: string[];
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, Repository, ArrayContains } from 'typeorm';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
@@ -13,6 +13,7 @@ export interface BasicMastersQueryDto {
   limit?: number;
   page?: number;
   entities?: string;
+  inventoryItemAttributes?: string;
 }
 
 @Injectable()
@@ -96,7 +97,7 @@ export class BasicMastersCoreService {
         ]
       : { partnerType: 'VENDOR', isDeleted: false, status: 'ACTIVE' };
 
-    const itemWhere = search
+    let itemWhere: any = search
       ? [
           {
             isDeleted: false,
@@ -106,6 +107,20 @@ export class BasicMastersCoreService {
           { isDeleted: false, status: 'ACTIVE', sku: ILike(`%${search}%`) },
         ]
       : { isDeleted: false, status: 'ACTIVE' };
+
+    if (query.inventoryItemAttributes) {
+      const attrs = query.inventoryItemAttributes
+        .split(',')
+        .map((a) => a.trim());
+      if (Array.isArray(itemWhere)) {
+        itemWhere = itemWhere.map((w) => ({
+          ...w,
+          attributes: ArrayContains(attrs),
+        }));
+      } else {
+        itemWhere.attributes = ArrayContains(attrs);
+      }
+    }
 
     const uomWhere = search
       ? [
@@ -169,8 +184,17 @@ export class BasicMastersCoreService {
             take: limit,
             skip,
             order: { itemName: 'ASC' },
-            select: ['id', 'sku', 'itemName', 'uomId', 'itemTypeId', 'status'],
-            relations: ['uom', 'itemType'],
+            select: [
+              'id',
+              'sku',
+              'itemName',
+              'uomId',
+              'itemTypeId',
+              'trackingPolicyId',
+              'status',
+              'attributes',
+            ],
+            relations: ['uom', 'itemType', 'trackingPolicy'],
           })
         : Promise.resolve([]),
       includeUoms

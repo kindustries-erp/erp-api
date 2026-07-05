@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -25,6 +26,7 @@ export class ErpInventoryTrackingSerial {
   @Column({ type: 'varchar', length: 255, name: 'serial_no' })
   serialNo: string;
 
+  @Index('idx_inv_tracking_serial_status')
   @Column({
     type: 'varchar',
     length: 50,
@@ -44,6 +46,7 @@ export class ErpInventoryTrackingSerial {
   @Column({ type: 'uuid', name: 'receipt_line_id', nullable: true })
   receiptLineId: string | null;
 
+  @Index('idx_inv_tracking_serial_so_line')
   @Column({ type: 'uuid', name: 'sales_order_line_id', nullable: true })
   salesOrderLineId: string | null;
 
@@ -58,6 +61,10 @@ export class ErpInventoryTrackingSerial {
 
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
+
+  /** Thuộc tính mở rộng tự do dạng key-value (JSONB) */
+  @Column({ type: 'jsonb', name: 'attributes', nullable: true })
+  attributes: Record<string, string> | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

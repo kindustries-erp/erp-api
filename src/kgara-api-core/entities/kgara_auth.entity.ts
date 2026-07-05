@@ -6,8 +6,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity({ name: 'gw_auth' })
-export class GreenwayAuth {
+@Entity({ name: 'kgara_auth' })
+export class KgaraAuth {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -19,6 +19,15 @@ export class GreenwayAuth {
 
   @Column({ type: 'timestamp', name: 'token_expires', nullable: true })
   tokenExpires: Date | null;
+
+  /** Default branch ID returned by login (SS_ClientID). Can be empty string if account has no default branch. */
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'ss_client_id',
+    nullable: true,
+  })
+  ssClientId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

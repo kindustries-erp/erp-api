@@ -13,7 +13,9 @@ import {
   MessageEvent,
   UseGuards,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -52,6 +54,18 @@ export class ErpInvoicesCoreController {
   @ApiQuery({ name: 'pageSize', required: false })
   findAll(@Query() query: ErpInvoiceQuery) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel')
+  async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
+    const buffer = await this.service.exportExcel(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename=invoices.xlsx');
+    res.send(buffer);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'create' })
@@ -235,6 +249,58 @@ export class ErpInvoicesCoreController {
       throw new BadRequestException('fileType phải là pdf hoặc xml');
     }
     return this.service.getFileUploadUrl(id, body.fileType);
+  }
+
+  /**
+   * POST /api/v1/erp-invoices/:id/pdfs
+   */
+  @Post(':id/pdfs')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FilesInterceptor('files', 20, {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const ok =
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.mimetype === 'application/pdf';
+        if (!ok) {
+          cb(
+            new BadRequestException(
+              `File "${file.originalname}" không phải PDF`,
+            ),
+            false,
+          );
+        } else {
+          cb(null, true);
+        }
+      },
+    }),
+  )
+  uploadPdfs(
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Chưa chọn file PDF nào');
+    }
+    return this.service.uploadPdfs(
+      id,
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+    );
+  }
+
+  @Get(':id/pdfs/:key/download-url')
+  getPdfDownloadUrl(@Param('id') id: string, @Param('key') key: string) {
+    return this.service.getPdfDownloadUrl(id, decodeURIComponent(key));
+  }
+
+  @Delete(':id/pdfs/:key')
+  deletePdf(@Param('id') id: string, @Param('key') key: string) {
+    return this.service.deletePdf(id, decodeURIComponent(key));
   }
 
   // ---------------------------------------------------------------------------

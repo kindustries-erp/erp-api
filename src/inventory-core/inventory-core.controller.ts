@@ -27,6 +27,9 @@ import { UpdateItemTypeDto } from './dto/update-item-type.dto';
 import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
+import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
+import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -183,5 +186,44 @@ export class InventoryItemsController {
   @Get('serials')
   listSerials(@Query() query: InventorySerialQueryDto) {
     return this.service.listSerials(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials/:id')
+  getSerial(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getSerial(id);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'update' })
+  @Patch('serials/:id')
+  updateSerial(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateInventorySerialDto,
+  ) {
+    return this.service.updateSerial(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @Patch('serials/:id/confirm-delivery')
+  confirmDelivery(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ConfirmDeliveryDto,
+  ) {
+    return this.service.confirmDelivery(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get('serial-lifecycles')
+  listSerialLifecycles(@Query() query: any) {
+    return this.service.listSerialLifecycles(query);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @Patch('serial-lifecycles/:id')
+  updateSerialLifecycle(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateSerialLifecycleDto,
+  ) {
+    return this.service.updateSerialLifecycle(id, dto);
   }
 }

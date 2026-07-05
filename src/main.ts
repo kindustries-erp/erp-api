@@ -35,7 +35,7 @@ async function bootstrap() {
   // Cấu hình Swagger UI
   const config = new DocumentBuilder()
     .setTitle('ERP API Backend')
-    .setDescription('Tài liệu API cho hệ thống ERP Greenway')
+    .setDescription('Tài liệu API cho hệ thống ERP Kgara')
     .setVersion('1.0')
     .addBearerAuth({
       type: 'http',

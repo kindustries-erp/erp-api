@@ -15,6 +15,9 @@ export class ErpInvoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
+
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
 
@@ -154,6 +157,23 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy: string | null;
 
+  // --- Trích xuất tự động ---
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'license_plate',
+    nullable: true,
+  })
+  licensePlate: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'settlement_order',
+    nullable: true,
+  })
+  settlementOrder: string | null;
+
   // --- R2 Storage ---
   @Column({
     type: 'varchar',
@@ -162,6 +182,9 @@ export class ErpInvoice {
     nullable: true,
   })
   pdfFileKey: string | null;
+
+  @Column({ type: 'jsonb', name: 'pdf_files', nullable: true })
+  pdfFiles: any[] | null;
 
   @Column({
     type: 'varchar',

@@ -23,6 +23,9 @@ export class ErpGoodsReceiptLine {
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
 
+  @Column({ type: 'jsonb', name: 'returned_serial_ids', nullable: true })
+  returnedSerialIds: string[] | null;
+
   @Column({
     type: 'numeric',
     name: 'qty_received',

@@ -23,11 +23,6 @@ export class OperationalQueryDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  status?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   exclude_status?: string;
 
   @ApiPropertyOptional()
@@ -64,6 +59,14 @@ export class OperationalQueryDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   supplier_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Chỉ lấy các đơn còn số lượng có thể nhập kho',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  only_receivable?: boolean;
 }
 
 export class OperationalLineDto {

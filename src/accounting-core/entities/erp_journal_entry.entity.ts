@@ -32,6 +32,14 @@ export class ErpJournalEntry {
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'subject_name',
+    nullable: true,
+  })
+  subjectName: string | null;
+
   @Column({ type: 'varchar', length: 50, name: 'status', default: 'POSTED' })
   status: string;
 

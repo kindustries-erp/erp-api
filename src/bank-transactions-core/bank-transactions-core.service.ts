@@ -614,76 +614,209 @@ export class BankTransactionsCoreService {
     Object.assign(txn, dto);
     const saved = await this.transactionRepo.save(txn);
 
-    // Sync to Journal Entries
-    // Always delete old entry first
-    await this.accountingCoreService.deleteJournalEntryBySource(
-      saved.id,
-      saved.sourceType,
+    // Refresh journal entries (handles split by subject if net-offs exist)
+    await this.refreshJournalEntriesForBankTransaction(saved.id);
+
+    return saved;
+  }
+
+  /**
+   * Re-generates journal entries for a bank transaction.
+   * Handles split entries when multiple invoices with different subjects
+   * are linked to the same bank transaction.
+   */
+  async refreshJournalEntriesForBankTransaction(txnId: string): Promise<void> {
+    const txn = await this.transactionRepo.findOne({
+      where: { id: txnId, isDeleted: false },
+      relations: ['bankAccount', 'cashBook'],
+    });
+    if (!txn || !txn.correspondentAccountingAccountId) return;
+
+    // Load 331 and 131 account IDs (active, any branch)
+    const [apAccountRes, arAccountRes] = await Promise.all([
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['331'],
+      ),
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+        ['131'],
+      ),
+    ]);
+    const apAccountId = apAccountRes.length > 0 ? apAccountRes[0].id : null;
+    const arAccountId = arAccountRes.length > 0 ? arAccountRes[0].id : null;
+
+    // Find bank/cash accounting account
+    let defaultAccountId: string | null = null;
+    if (txn.sourceType === 'BANK') {
+      defaultAccountId = txn.bankAccount?.accountingAccountId || null;
+      if (!defaultAccountId) {
+        const res = await this.dataSource.query(
+          `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+          ['1121'],
+        );
+        if (res && res.length > 0) defaultAccountId = res[0].id;
+      }
+    } else if (txn.sourceType === 'CASH') {
+      defaultAccountId = txn.cashBook?.accountingAccountId || null;
+      if (!defaultAccountId) {
+        const res = await this.dataSource.query(
+          `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
+          ['1111'],
+        );
+        if (res && res.length > 0) defaultAccountId = res[0].id;
+      }
+    }
+    if (!defaultAccountId) return;
+
+    // Load net-offs with invoice info
+    const netOffRows: any[] = await this.dataSource.query(
+      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.branch_id, i.description as invoice_desc
+       FROM erp_invoice_voucher_netoff n
+       JOIN erp_invoices i ON i.id = n.invoice_id AND i.is_deleted = false
+       WHERE n.bank_transaction_id = $1
+       ORDER BY n.created_at ASC`,
+      [txnId],
     );
 
-    if (saved.correspondentAccountingAccountId) {
-      let defaultAccountId: string | null = null;
-      if (saved.sourceType === 'BANK') {
-        defaultAccountId = saved.bankAccount?.accountingAccountId || null;
-        if (!defaultAccountId) {
-          const res = await this.dataSource.query(
-            `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
-            ['1121'],
-          );
-          if (res && res.length > 0) defaultAccountId = res[0].id;
+    const totalAmount =
+      Number(txn.creditAmount) > 0
+        ? Number(txn.creditAmount)
+        : Number(txn.debitAmount);
+    const isReceipt = Number(txn.creditAmount) > 0;
+    const baseDescription = txn.accountingDescription || txn.description || '';
+
+    // Build groups: [{subject, amount, counterpartAccountId, branchId, description}]
+    type Group = {
+      subject: string | null;
+      amount: number;
+      counterpartAccountId: string;
+      branchId: string;
+      description: string;
+    };
+    const groups: Group[] = [];
+
+    if (netOffRows.length === 0) {
+      // No net-offs: single entry with correspondentName as subject and original counterpart account
+      groups.push({
+        subject: txn.correspondentName || null,
+        amount: totalAmount,
+        counterpartAccountId: txn.correspondentAccountingAccountId,
+        branchId: txn.branchId,
+        description: baseDescription,
+      });
+    } else {
+      // Group by subject and counterpart account
+      const groupMap = new Map<string, Group>();
+
+      for (const row of netOffRows) {
+        const subject: string | null =
+          row.direction === 'IN'
+            ? row.seller_name || null
+            : row.buyer_name || null;
+
+        let counterpartAccountId = txn.correspondentAccountingAccountId;
+        if (row.direction === 'IN' && apAccountId)
+          counterpartAccountId = apAccountId;
+        if (row.direction === 'OUT' && arAccountId)
+          counterpartAccountId = arAccountId;
+
+        const branchId = row.branch_id || txn.branchId;
+
+        const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
+        if (!groupMap.has(key)) {
+          const desc = row.invoice_desc
+            ? `${baseDescription} - ${row.invoice_desc}`
+            : baseDescription;
+          groupMap.set(key, {
+            subject: subject || null,
+            amount: 0,
+            counterpartAccountId,
+            branchId,
+            description: desc,
+          });
         }
-      } else if (saved.sourceType === 'CASH') {
-        defaultAccountId = saved.cashBook?.accountingAccountId || null;
-        if (!defaultAccountId) {
-          const res = await this.dataSource.query(
-            `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
-            ['1111'],
-          );
-          if (res && res.length > 0) defaultAccountId = res[0].id;
-        }
+        groupMap.get(key)!.amount += Number(row.net_off_amount);
       }
 
-      if (defaultAccountId) {
-        const debitAccount =
-          Number(saved.creditAmount) > 0
-            ? defaultAccountId
-            : saved.correspondentAccountingAccountId;
-        const creditAccount =
-          Number(saved.creditAmount) > 0
-            ? saved.correspondentAccountingAccountId
-            : defaultAccountId;
-        const amount =
-          Number(saved.creditAmount) > 0
-            ? Number(saved.creditAmount)
-            : Number(saved.debitAmount);
+      const netOffTotal = netOffRows.reduce(
+        (sum: number, r: any) => sum + Number(r.net_off_amount),
+        0,
+      );
 
-        await this.accountingCoreService.createJournalEntry({
-          branchId: saved.branchId,
-          date: saved.transDate,
-          description: saved.description || '',
-          sourceType: saved.sourceType,
-          sourceId: saved.id,
-          reference: saved.referenceNumber,
-          isReceipt: Number(saved.creditAmount) > 0,
-          lines: [
-            {
-              accountId: debitAccount,
-              debit: amount,
-              credit: 0,
-              description: saved.description || '',
-            },
-            {
-              accountId: creditAccount,
-              debit: 0,
-              credit: amount,
-              description: saved.description || '',
-            },
-          ],
+      for (const group of groupMap.values()) {
+        groups.push(group);
+      }
+
+      // Remaining amount → use correspondentName and original counterpart account
+      const remaining = Math.round((totalAmount - netOffTotal) * 100) / 100;
+      if (remaining > 0.01) {
+        groups.push({
+          subject: txn.correspondentName || null,
+          amount: remaining,
+          counterpartAccountId: txn.correspondentAccountingAccountId,
+          branchId: txn.branchId,
+          description: baseDescription,
         });
       }
     }
 
-    return saved;
+    // Delete existing journal entries for this transaction
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      txn.id,
+      txn.sourceType,
+    );
+
+    // Generate base entry number (only once)
+    const baseEntryNo = await this.accountingCoreService.generateEntryNo(
+      txn.sourceType === 'BANK' ? 'BANK' : 'CASH',
+      txn.transDate,
+      txn.branchId,
+      isReceipt,
+    );
+
+    // Create one journal entry per group
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      // Single group → no suffix; multiple groups → a, b, c...
+      const entryNo =
+        groups.length === 1
+          ? baseEntryNo
+          : `${baseEntryNo}${String.fromCharCode(97 + i)}`;
+
+      const debitAccount = isReceipt
+        ? defaultAccountId
+        : group.counterpartAccountId;
+      const creditAccount = isReceipt
+        ? group.counterpartAccountId
+        : defaultAccountId;
+
+      await this.accountingCoreService.createJournalEntry({
+        entryNo,
+        branchId: group.branchId,
+        date: txn.transDate,
+        description: group.description,
+        subjectName: group.subject || undefined,
+        sourceType: txn.sourceType,
+        sourceId: txn.id,
+        reference: txn.referenceNumber,
+        isReceipt,
+        lines: [
+          {
+            accountId: debitAccount,
+            debit: group.amount,
+            credit: 0,
+            description: group.description,
+          },
+          {
+            accountId: creditAccount,
+            debit: 0,
+            credit: group.amount,
+            description: group.description,
+          },
+        ],
+      });
+    }
   }
 
   async importFiles(

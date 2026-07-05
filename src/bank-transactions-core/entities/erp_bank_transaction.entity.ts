@@ -93,6 +93,9 @@ export class ErpBankTransaction {
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
+  @Column({ type: 'text', name: 'accounting_description', nullable: true })
+  accountingDescription: string | null;
+
   @Column({
     type: 'varchar',
     length: 100,

@@ -39,4 +39,19 @@ export class PaginationDto {
   @IsOptional()
   @IsString()
   partnerType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notFullyIssued?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tag_id?: string;
 }

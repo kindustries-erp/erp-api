@@ -20,6 +20,9 @@ export class ErpSalesOrderLine {
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
 
+  @Column({ type: 'varchar', length: 255, name: 'item_name', nullable: true })
+  itemName: string | null;
+
   @Column({ type: 'numeric', name: 'qty_ordered', precision: 18, scale: 3 })
   qtyOrdered: string;
 
@@ -58,6 +61,9 @@ export class ErpSalesOrderLine {
     nullable: true,
   })
   amount: string | null;
+
+  @Column({ type: 'jsonb', name: 'selected_serial_ids', nullable: true })
+  selectedSerialIds: string[] | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

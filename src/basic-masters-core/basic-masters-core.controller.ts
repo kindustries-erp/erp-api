@@ -14,7 +14,7 @@ export class BasicMastersCoreController {
   constructor(private readonly service: BasicMastersCoreService) {}
 
   @Get()
-  findBasicLists(@Query() query: BasicMastersQueryDto) {
+  async findBasicLists(@Query() query: BasicMastersQueryDto) {
     return this.service.findBasicLists(query);
   }
 }

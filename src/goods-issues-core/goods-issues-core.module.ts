@@ -10,6 +10,7 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { GoodsIssuesCoreController } from './goods-issues-core.controller';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
+import { CompanyProfileModule } from '../company-profile/company-profile.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { GoodsIssuesCoreService } from './goods-issues-core.service';
       ErpInventoryTrackingSerial,
       ErpVehicle,
     ]),
+    CompanyProfileModule,
   ],
   controllers: [GoodsIssuesCoreController],
   providers: [GoodsIssuesCoreService],

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsArray } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @ApiProperty()
@@ -43,4 +43,10 @@ export class CreateInventoryItemDto {
   @IsOptional()
   @IsUUID()
   trackingCategoryId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  attributes?: string[];
 }

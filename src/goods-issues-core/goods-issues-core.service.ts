@@ -24,6 +24,10 @@ import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
+import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
+import * as ExcelJS from 'exceljs';
+import { CompanyProfileService } from '../company-profile/company-profile.service';
+import { format } from 'date-fns';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -50,6 +54,7 @@ export class GoodsIssuesCoreService {
     private readonly repository: Repository<ErpGoodsIssue>,
     @InjectRepository(ErpGoodsIssueLine)
     private readonly lineRepository: Repository<ErpGoodsIssueLine>,
+    private readonly companyProfileService: CompanyProfileService,
   ) {}
 
   private async getIssueOrThrow(
@@ -70,6 +75,9 @@ export class GoodsIssuesCoreService {
     const vehicleRepo = manager
       ? manager.getRepository(ErpVehicle)
       : this.dataSource.getRepository(ErpVehicle);
+    const itemRepo = manager
+      ? manager.getRepository(ErpInventoryItem)
+      : this.dataSource.getRepository(ErpInventoryItem);
 
     const serialIds = [
       ...new Set(lines.map((line) => line.serialId).filter(Boolean)),
@@ -77,16 +85,25 @@ export class GoodsIssuesCoreService {
     const vehicleIds = [
       ...new Set(lines.map((line) => line.vehicleId).filter(Boolean)),
     ] as string[];
+    const itemIds = [
+      ...new Set(lines.map((line) => line.itemId).filter(Boolean)),
+    ] as string[];
 
-    const [serials, vehicles]: [ErpInventoryTrackingSerial[], ErpVehicle[]] =
-      await Promise.all([
-        serialIds.length
-          ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpInventoryTrackingSerial[]),
-        vehicleIds.length
-          ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
-          : Promise.resolve([] as ErpVehicle[]),
-      ]);
+    const [serials, vehicles, items]: [
+      ErpInventoryTrackingSerial[],
+      ErpVehicle[],
+      ErpInventoryItem[],
+    ] = await Promise.all([
+      serialIds.length
+        ? serialRepo.findBy(serialIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpInventoryTrackingSerial[]),
+      vehicleIds.length
+        ? vehicleRepo.findBy(vehicleIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpVehicle[]),
+      itemIds.length
+        ? itemRepo.findBy(itemIds.map((id) => ({ id })) as any)
+        : Promise.resolve([] as ErpInventoryItem[]),
+    ]);
 
     const serialMap = new Map(
       serials.map((row: ErpInventoryTrackingSerial) => [row.id, row]),
@@ -94,15 +111,20 @@ export class GoodsIssuesCoreService {
     const vehicleMap = new Map(
       vehicles.map((row: ErpVehicle) => [row.id, row]),
     );
+    const itemMap = new Map(
+      items.map((row: ErpInventoryItem) => [row.id, row]),
+    );
 
     return lines.map((line) => {
       const serial = line.serialId ? serialMap.get(line.serialId) : null;
       const vehicle = line.vehicleId ? vehicleMap.get(line.vehicleId) : null;
+      const item = line.itemId ? itemMap.get(line.itemId) : null;
       return {
         ...line,
         serialNo: serial?.serialNo ?? null,
         vehicleVinNo: vehicle?.vinNo ?? null,
         engineNo: vehicle?.engineNo ?? null,
+        itemName: item ? `${item.sku} — ${item.itemName}` : null,
       };
     });
   }
@@ -459,6 +481,28 @@ export class GoodsIssuesCoreService {
             serial.vinId = vehicle.id;
           }
           await serialRepo.save(serial);
+
+          const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
+          const existingLifecycle = await lifecycleRepo.findOneBy({
+            serialId: serial.id,
+          });
+          if (!existingLifecycle) {
+            await lifecycleRepo.save(
+              lifecycleRepo.create({
+                serialId: serial.id,
+                salesOrderId: issue.salesOrderId,
+                goodsIssueId: issue.id,
+                dealerId: issue.customerId, // Using customerId as dealerId
+                status: 'ACTIVE',
+              }),
+            );
+          } else {
+            existingLifecycle.salesOrderId = issue.salesOrderId;
+            existingLifecycle.goodsIssueId = issue.id;
+            existingLifecycle.dealerId = issue.customerId;
+            existingLifecycle.status = 'ACTIVE';
+            await lifecycleRepo.save(existingLifecycle);
+          }
         }
 
         if (vehicle) {
@@ -788,5 +832,355 @@ export class GoodsIssuesCoreService {
       message: 'Xóa phiếu xuất thành công',
       data,
     };
+  }
+
+  async exportXlsx(id: string): Promise<Buffer> {
+    const issueRes = await this.findOne(id);
+    if (!issueRes || !issueRes.data) {
+      throw new NotFoundException('Không tìm thấy phiếu xuất');
+    }
+    const issue = issueRes.data;
+
+    const companyProfile = await this.companyProfileService.getProfile();
+    const itemIds = issue.lines?.map((l) => l.itemId).filter(Boolean) || [];
+    const items = itemIds.length
+      ? await this.dataSource
+          .getRepository(ErpInventoryItem)
+          .findBy({ id: In(itemIds) })
+      : [];
+    const itemsDict = Object.fromEntries(items.map((i) => [i.id, i]));
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Phiếu Xuất Kho', {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'portrait',
+        margins: {
+          left: 0.4,
+          right: 0.4,
+          top: 0.4,
+          bottom: 0.4,
+          header: 0.3,
+          footer: 0.3,
+        },
+      },
+      views: [{ showGridLines: false }],
+    });
+
+    const defaultFont = { name: 'Times New Roman', size: 12 };
+
+    // Header setup
+    sheet.getColumn('A').width = 5;
+    sheet.getColumn('B').width = 30;
+    sheet.getColumn('C').width = 18;
+    sheet.getColumn('D').width = 10;
+    sheet.getColumn('E').width = 12;
+    sheet.getColumn('F').width = 12;
+    sheet.getColumn('G').width = 15;
+    sheet.getColumn('H').width = 18;
+
+    // Row 1: Company + Form
+    sheet.mergeCells('A1:E1');
+    sheet.getCell('A1').value = (
+      companyProfile?.company_name || 'Đơn vị: ............................'
+    ).toUpperCase();
+    sheet.getCell('A1').font = { ...defaultFont, bold: true };
+    sheet.getCell('A1').alignment = {
+      vertical: 'middle',
+      horizontal: 'left',
+      wrapText: true,
+    };
+
+    sheet.mergeCells('F1:H1');
+    sheet.getCell('F1').value = 'Mẫu số 02 - VT';
+    sheet.getCell('F1').font = { ...defaultFont, bold: true };
+    sheet.getCell('F1').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+    sheet.getRow(1).height = 25;
+
+    // Row 2: Address + Form sub
+    sheet.mergeCells('A2:E2');
+    sheet.getCell('A2').value =
+      companyProfile?.address || 'Địa chỉ: ............................';
+    sheet.getCell('A2').font = defaultFont;
+    sheet.getCell('A2').alignment = {
+      vertical: 'top',
+      horizontal: 'left',
+      wrapText: true,
+    };
+
+    sheet.mergeCells('F2:H2');
+    sheet.getCell('F2').value =
+      '(Kèm theo Thông tư số 99/2025/TT-BTC ngày 27 tháng 10 năm 2025 của Bộ trưởng Bộ Tài chính)';
+    sheet.getCell('F2').font = { ...defaultFont, italic: true, size: 10 };
+    sheet.getCell('F2').alignment = {
+      vertical: 'top',
+      horizontal: 'center',
+      wrapText: true,
+    };
+    sheet.getRow(2).height = 35;
+
+    // Row 3: Title
+    sheet.mergeCells('A4:H4');
+    sheet.getCell('A4').value = 'PHIẾU XUẤT KHO';
+    sheet.getCell('A4').font = { ...defaultFont, bold: true, size: 16 };
+    sheet.getCell('A4').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    // Row 4: Date
+    const issueDate = issue.issueDate ? new Date(issue.issueDate) : new Date();
+    sheet.mergeCells('A5:H5');
+    sheet.getCell('A5').value =
+      `Ngày ${format(issueDate, 'dd')} tháng ${format(issueDate, 'MM')} năm ${format(issueDate, 'yyyy')}`;
+    sheet.getCell('A5').font = { ...defaultFont, italic: true };
+    sheet.getCell('A5').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    // Row 5: Info
+    sheet.mergeCells('A6:H6');
+    sheet.getCell('A6').value =
+      `Số: ${issue.issueNo}        Nợ: ............        Có: ............`;
+    sheet.getCell('A6').font = { ...defaultFont, bold: true };
+    sheet.getCell('A6').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    sheet.addRow([]);
+
+    const infoRow1 = sheet.addRow([
+      `- Họ và tên người nhận hàng: ${(issue as any).customerName || '..............................................'}    Địa chỉ: ........................................`,
+    ]);
+    sheet.mergeCells(`A${infoRow1.number}:H${infoRow1.number}`);
+    infoRow1.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    const infoRow2 = sheet.addRow([
+      `- Lý do xuất kho: ${issue.remarks || '..........................................................................................'}`,
+    ]);
+    sheet.mergeCells(`A${infoRow2.number}:H${infoRow2.number}`);
+    infoRow2.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    const infoRow3 = sheet.addRow([
+      `- Xuất tại kho (ngăn lô): ...................................................... Địa điểm ............................................................`,
+    ]);
+    sheet.mergeCells(`A${infoRow3.number}:H${infoRow3.number}`);
+    infoRow3.getCell('A').alignment = { wrapText: true, vertical: 'middle' };
+
+    sheet.addRow([]);
+
+    // Table Headers
+    const headerRow1 = sheet.addRow([
+      'STT',
+      'Tên, nhãn hiệu, quy cách...',
+      'Mã số',
+      'Đơn vị tính',
+      'Số lượng',
+      '',
+      'Đơn giá',
+      'Thành tiền',
+    ]);
+    const headerRow2 = sheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      'Yêu cầu',
+      'Thực xuất',
+      '',
+      '',
+    ]);
+    const headerRow3 = sheet.addRow(['A', 'B', 'C', 'D', '1', '2', '3', '4']);
+
+    sheet.mergeCells(`A${headerRow1.number}:A${headerRow2.number}`);
+    sheet.mergeCells(`B${headerRow1.number}:B${headerRow2.number}`);
+    sheet.mergeCells(`C${headerRow1.number}:C${headerRow2.number}`);
+    sheet.mergeCells(`D${headerRow1.number}:D${headerRow2.number}`);
+    sheet.mergeCells(`E${headerRow1.number}:F${headerRow1.number}`);
+    sheet.mergeCells(`G${headerRow1.number}:G${headerRow2.number}`);
+    sheet.mergeCells(`H${headerRow1.number}:H${headerRow2.number}`);
+
+    [headerRow1, headerRow2, headerRow3].forEach((row) => {
+      row.eachCell((cell) => {
+        cell.font = { ...defaultFont, bold: row !== headerRow3 };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    let totalQty = 0;
+    let totalAmount = 0;
+
+    (issue.lines || []).forEach((line, index) => {
+      const item = itemsDict[line.itemId || ''];
+      const qty = Number(line.qtyIssued) || 0;
+      const cost = Number(line.unitCost) || 0;
+      const amount = qty * cost;
+      totalQty += qty;
+      totalAmount += amount;
+
+      const row = sheet.addRow([
+        index + 1,
+        item?.itemName || '',
+        item?.sku || line.itemId || '',
+        '',
+        '',
+        qty,
+        cost,
+        amount,
+      ]);
+      row.eachCell((cell, colNum) => {
+        cell.font = defaultFont;
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        if (colNum === 1 || colNum === 3 || colNum === 4 || colNum === 5) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (colNum >= 6) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0.00';
+        } else {
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'left',
+            wrapText: true,
+          };
+        }
+      });
+    });
+
+    const summaryRow = sheet.addRow([
+      'Cộng',
+      '',
+      '',
+      '',
+      'x',
+      totalQty,
+      'x',
+      totalAmount,
+    ]);
+    sheet.mergeCells(`A${summaryRow.number}:D${summaryRow.number}`);
+    summaryRow.eachCell((cell, colNum) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+      if (colNum === 1 || colNum === 5 || colNum === 7) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNum === 6 || colNum === 8) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+      }
+    });
+
+    sheet.addRow([]);
+    sheet.addRow([
+      '- Tổng số tiền (viết bằng chữ):',
+      '........................................................................................................................',
+    ]);
+    sheet.mergeCells(`B${sheet.lastRow!.number}:H${sheet.lastRow!.number}`);
+    sheet.addRow([
+      '- Số chứng từ gốc kèm theo:',
+      '........................................................................................................................',
+    ]);
+    sheet.mergeCells(`B${sheet.lastRow!.number}:H${sheet.lastRow!.number}`);
+
+    sheet.addRow([]);
+    const dateRow = sheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      `Ngày ${format(issueDate, 'dd')} tháng ${format(issueDate, 'MM')} năm ${format(issueDate, 'yyyy')}`,
+    ]);
+    sheet.mergeCells(`G${dateRow.number}:H${dateRow.number}`);
+    dateRow.getCell('G').font = { ...defaultFont, italic: true };
+    dateRow.getCell('G').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    const signRow1 = sheet.addRow([
+      'Người lập phiếu',
+      '',
+      'Người nhận hàng',
+      '',
+      'Thủ kho',
+      '',
+      'Kế toán trưởng',
+      'Giám đốc',
+    ]);
+    sheet.mergeCells(`A${signRow1.number}:B${signRow1.number}`);
+    sheet.mergeCells(`C${signRow1.number}:D${signRow1.number}`);
+    sheet.mergeCells(`E${signRow1.number}:F${signRow1.number}`);
+    signRow1.eachCell((cell) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+    });
+
+    const signRow2 = sheet.addRow([
+      '(Ký, họ tên)',
+      '',
+      '(Ký, họ tên)',
+      '',
+      '(Ký, họ tên)',
+      '',
+      '(Hoặc bộ phận có nhu cầu xuất)',
+      '(Ký, họ tên)',
+    ]);
+    sheet.mergeCells(`A${signRow2.number}:B${signRow2.number}`);
+    sheet.mergeCells(`C${signRow2.number}:D${signRow2.number}`);
+    sheet.mergeCells(`E${signRow2.number}:F${signRow2.number}`);
+    signRow2.eachCell((cell) => {
+      cell.font = { ...defaultFont, italic: true, size: 10 };
+      cell.alignment = {
+        vertical: 'top',
+        horizontal: 'center',
+        wrapText: true,
+      };
+    });
+    sheet.getRow(signRow2.number).height = 30;
+
+    const signRow3 = sheet.addRow(['', '', '', '', '', '', '(Ký, họ tên)', '']);
+    sheet.mergeCells(`A${signRow3.number}:B${signRow3.number}`);
+    sheet.mergeCells(`C${signRow3.number}:D${signRow3.number}`);
+    sheet.mergeCells(`E${signRow3.number}:F${signRow3.number}`);
+    signRow3.eachCell((cell) => {
+      cell.font = { ...defaultFont, italic: true, size: 10 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+    signRow3.eachCell((cell) => {
+      cell.font = { ...defaultFont, italic: true, size: 10 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
   }
 }

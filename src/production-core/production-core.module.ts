@@ -16,8 +16,11 @@ import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_r
 import { ProductionCoreController } from './production-core.controller';
 import { ProductionCoreService } from './production-core.service';
 
+import { CompanyProfileModule } from '../company-profile/company-profile.module';
+
 @Module({
   imports: [
+    CompanyProfileModule,
     TypeOrmModule.forFeature([
       ErpBom,
       ErpBomLine,

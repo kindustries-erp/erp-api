@@ -9,8 +9,10 @@ import {
   Post,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -48,6 +50,26 @@ export class GoodsReceiptsCoreController {
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: 'goods_receipts', action: 'read' })
+  @Get(':id/export-xlsx')
+  async exportXlsx(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportXlsx(id);
+    const receiptRes = await this.service.findOne(id);
+    const receiptNo = receiptRes.data.receiptNo || 'draft';
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="PhieuNhapKho_${receiptNo}.xlsx"`,
+    );
+    res.send(buffer);
   }
 
   @RequirePermissions({ resource: 'goods_receipts', action: 'update' })
