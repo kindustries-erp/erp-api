@@ -60,6 +60,10 @@ export class PublicWarrantyService {
           status: lifecycle.status,
           activated_at: lifecycle.warrantyActivatedAt.toISOString(),
           warranty_end_date: lifecycle.warrantyEndDate,
+          customer_name: lifecycle.customerName,
+          customer_phone: lifecycle.customerPhone,
+          customer_address: lifecycle.customerAddress,
+          dealer_name: lifecycle.attributes?.dealer_name,
         };
       }
     }
@@ -176,6 +180,10 @@ export class PublicWarrantyService {
         activated_at: now.toISOString(),
         warranty_end_date: lifecycle.warrantyEndDate,
         status: 'ACTIVE',
+        customer_name: lifecycle.customerName,
+        customer_phone: lifecycle.customerPhone,
+        customer_address: lifecycle.customerAddress,
+        dealer_name: lifecycle.attributes?.dealer_name,
       },
     };
   }
