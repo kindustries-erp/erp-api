@@ -1179,6 +1179,10 @@ export class InventoryItemsService {
     if (dto.warrantyMonths !== undefined)
       lifecycle.warrantyMonths = dto.warrantyMonths;
     if (dto.notes !== undefined) lifecycle.notes = dto.notes;
+    if (dto.dealerName !== undefined) {
+      lifecycle.attributes = lifecycle.attributes || {};
+      lifecycle.attributes.dealer_name = dto.dealerName;
+    }
 
     // Recalculate warranty_end_date if needed
     if (lifecycle.warrantyActivatedAt && lifecycle.warrantyMonths) {
@@ -1199,7 +1203,7 @@ export class InventoryItemsService {
     let sql = `
       SELECT 
         l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
-        l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id,
+        l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id, l.attributes,
         s.id as serial_id, s.serial_no, s.item_id, s.vin_id,
         i.sku, i.item_name,
         v.vin_no, v.engine_no,
@@ -1282,6 +1286,10 @@ export class InventoryItemsService {
       salesOrderId: row.sales_order_id,
       soNo: row.so_no,
       dealerId: row.dealer_id,
+      dealerName: row.attributes?.dealer_name || null,
+      warrantyCode: row.warranty_activated_at
+        ? `WRN-${new Date(row.warranty_activated_at).toISOString().slice(0, 10).replace(/-/g, '')}-${(row.vin_no || row.serial_no || '000000').slice(-6)}`
+        : null,
     }));
 
     return {
