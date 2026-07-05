@@ -3,9 +3,9 @@ import { IsNotEmpty, IsString } from 'class-validator';
 export class CheckWarrantyDto {
   @IsString()
   @IsNotEmpty()
-  sokhung: string;
+  vin_no: string;
 
   @IsString()
   @IsNotEmpty()
-  somay: string;
+  engine_no: string;
 }
