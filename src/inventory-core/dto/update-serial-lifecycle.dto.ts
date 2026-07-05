@@ -43,4 +43,9 @@ export class UpdateSerialLifecycleDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  dealerName?: string;
 }
