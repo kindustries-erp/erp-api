@@ -18,11 +18,6 @@ export class WarehouseVoucherQueryDto extends PaginationDto {
   @IsString()
   dateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Trạng thái chứng từ' })
-  @IsOptional()
-  @IsString()
-  status?: string;
-
   @ApiPropertyOptional({ description: 'ID đối tác (Khách hàng / NCC)' })
   @IsOptional()
   @IsString()

@@ -11,6 +11,7 @@ import { ErpTrackingPolicy } from './entities/erp_tracking_policy.entity';
 import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
 import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryTrackingCustom } from './entities/erp_inventory_tracking_custom.entity';
+import { ErpSerialLifecycle } from './entities/erp_serial_lifecycle.entity';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ErpInventoryTrackingCustom } from './entities/erp_inventory_tracking_cu
       ErpTrackingCategory,
       ErpInventoryTrackingSerial,
       ErpInventoryTrackingCustom,
+      ErpSerialLifecycle,
     ]),
   ],
   controllers: [InventoryItemsController],

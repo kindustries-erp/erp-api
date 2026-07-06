@@ -6,11 +6,6 @@ export class ListProductionDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  status?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   dateFrom?: string;
 
   @ApiPropertyOptional()

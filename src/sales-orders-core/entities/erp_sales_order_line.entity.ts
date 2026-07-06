@@ -62,6 +62,9 @@ export class ErpSalesOrderLine {
   })
   amount: string | null;
 
+  @Column({ type: 'jsonb', name: 'selected_serial_ids', nullable: true })
+  selectedSerialIds: string[] | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

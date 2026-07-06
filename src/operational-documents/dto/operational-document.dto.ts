@@ -23,11 +23,6 @@ export class OperationalQueryDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  status?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   exclude_status?: string;
 
   @ApiPropertyOptional()

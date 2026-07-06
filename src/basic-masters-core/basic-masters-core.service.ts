@@ -190,10 +190,11 @@ export class BasicMastersCoreService {
               'itemName',
               'uomId',
               'itemTypeId',
+              'trackingPolicyId',
               'status',
               'attributes',
             ],
-            relations: ['uom', 'itemType'],
+            relations: ['uom', 'itemType', 'trackingPolicy'],
           })
         : Promise.resolve([]),
       includeUoms

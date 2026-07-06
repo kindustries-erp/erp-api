@@ -14,6 +14,9 @@ import { UpdateSalesOrderDto } from './dto/update-sales-order.dto';
 import { ReserveSalesOrderDto } from './dto/reserve-sales-order.dto';
 import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
+import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 
 @Injectable()
@@ -56,6 +59,45 @@ export class SalesOrdersCoreService {
     return `${prefix}${nextSeq}`;
   }
 
+  private async reserveSerialsForLine(
+    manager: any,
+    line: any,
+    savedLineId: string,
+    itemId: string | null,
+  ) {
+    let reservedQtyForLine = 0;
+    if (line.serialIds && line.serialIds.length > 0) {
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+      const balanceRepo = manager.getRepository(ErpInventoryBalance);
+      const serials = await serialRepo.find({
+        where: { id: In(line.serialIds), status: 'IN_STOCK' },
+      });
+      if (serials.length > 0) {
+        reservedQtyForLine = serials.length;
+        await serialRepo.update(
+          { id: In(serials.map((s: any) => s.id)) },
+          { status: 'RESERVED', salesOrderLineId: savedLineId },
+        );
+
+        const balances = await balanceRepo.find({
+          where: { itemId: itemId ?? undefined } as any,
+        });
+        let remainingToReserve = reservedQtyForLine;
+        for (const b of balances) {
+          const available =
+            Number(b.qtyOnHand || 0) - Number(b.qtyReserved || 0);
+          if (available > 0 && remainingToReserve > 0) {
+            const toReserve = Math.min(available, remainingToReserve);
+            b.qtyReserved = (Number(b.qtyReserved || 0) + toReserve).toFixed(3);
+            await balanceRepo.save(b);
+            remainingToReserve -= toReserve;
+          }
+        }
+      }
+    }
+    return reservedQtyForLine;
+  }
+
   async getNextSoNo(date?: string): Promise<{ nextNo: string }> {
     const nextNo = await this.dataSource.transaction((manager) =>
       this.generateMonthlySoNo(manager, date),
@@ -90,10 +132,44 @@ export class SalesOrdersCoreService {
           qtyDelivered: '0',
           unitPrice: line.unitPrice ?? null,
           amount: line.amount ?? null,
+          selectedSerialIds: line.serialIds ?? null,
         };
         const saved = await lineRepo.save(linePayload);
+
+        const reservedQtyForLine = await this.reserveSerialsForLine(
+          manager,
+          line as any,
+          saved.id,
+          saved.itemId,
+        );
+        if (reservedQtyForLine > 0) {
+          saved.qtyReserved = String(reservedQtyForLine);
+          await lineRepo.save(saved);
+        }
+
         savedLines.push(saved);
       }
+
+      const anyReserved = savedLines.some(
+        (l) => Number(l.qtyReserved || 0) > 0,
+      );
+      const allReserved =
+        savedLines.length > 0 &&
+        savedLines.every(
+          (l) => Number(l.qtyReserved || 0) >= Number(l.qtyOrdered || 0),
+        );
+      if (allReserved && data.status !== 'RESERVED') {
+        data.status = 'RESERVED';
+        await headerRepo.save(data);
+      } else if (
+        anyReserved &&
+        data.status !== 'PARTIAL_RESERVED' &&
+        data.status !== 'RESERVED'
+      ) {
+        data.status = 'PARTIAL_RESERVED';
+        await headerRepo.save(data);
+      }
+
       return {
         message: 'Tạo thành công',
         data: { ...data, lines: savedLines },
@@ -108,6 +184,20 @@ export class SalesOrdersCoreService {
       defaultOrder: { createdAt: 'DESC' },
     });
 
+    const notFullyIssued = (query as any).notFullyIssued === 'true';
+    const statusFilter = (query as any).status;
+
+    const baseWhere: any = {
+      ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
+      isDeleted: false,
+    };
+
+    if (notFullyIssued) {
+      baseWhere.status = In(['RESERVED', 'PARTIAL_DELIVERED']);
+    } else if (statusFilter) {
+      baseWhere.status = statusFilter;
+    }
+
     const tagId = (query as any).tag_id as string | undefined;
 
     if (tagId) {
@@ -120,13 +210,7 @@ export class SalesOrdersCoreService {
         return { items: [], total: 0, page, pageSize, totalPages: 0 };
       }
       const [items, total] = await this.repository.findAndCount({
-        where: [
-          {
-            id: In(taggedIds),
-            ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
-            isDeleted: false,
-          },
-        ] as any,
+        where: [{ ...baseWhere, id: In(taggedIds) }],
         skip: (page - 1) * pageSize,
         take: pageSize,
         order,
@@ -141,12 +225,7 @@ export class SalesOrdersCoreService {
     }
 
     const [items, total] = await this.repository.findAndCount({
-      where: [
-        {
-          ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
-          isDeleted: false,
-        },
-      ] as any,
+      where: [baseWhere],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,
@@ -187,7 +266,78 @@ export class SalesOrdersCoreService {
       where: { salesOrderId: id },
       order: { lineNo: 'ASC' },
     });
-    return { message: 'Lấy thông tin thành công', data: { ...data, lines } };
+
+    // Inject serialIds
+    const serialRepo = this.dataSource.getRepository(
+      ErpInventoryTrackingSerial,
+    );
+    const serials = await serialRepo.find({
+      where: { salesOrderLineId: In(lines.map((l) => l.id)) },
+    });
+    const serialsByLine = serials.reduce(
+      (acc, s) => {
+        if (!acc[s.salesOrderLineId!]) acc[s.salesOrderLineId!] = [];
+        acc[s.salesOrderLineId!].push(s.id);
+        return acc;
+      },
+      {} as Record<string, string[]>,
+    );
+
+    const linesWithSerials = lines.map((l) => ({
+      ...l,
+      serialIds: serialsByLine[l.id] || [],
+    }));
+
+    const goodsIssueRepo = this.dataSource.getRepository(ErpGoodsIssue);
+    const goodsIssues = await goodsIssueRepo.find({
+      where: { salesOrderId: id } as any,
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, lines: linesWithSerials, goodsIssues },
+    };
+  }
+
+  private async releaseSerialsAndBalances(manager: any, salesOrderId: string) {
+    const lineRepo = manager.getRepository(ErpSalesOrderLine);
+    const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+    const balanceRepo = manager.getRepository(ErpInventoryBalance);
+
+    const lines = await lineRepo.find({ where: { salesOrderId } });
+    if (lines.length === 0) return;
+
+    for (const line of lines) {
+      const qtyReserved = Number(line.qtyReserved || 0);
+      if (qtyReserved > 0) {
+        const balances = await balanceRepo.find({
+          where: { itemId: line.itemId ?? undefined } as any,
+        });
+        let remainingToUnreserve = qtyReserved;
+        for (const balance of balances) {
+          if (remainingToUnreserve <= 0) break;
+          const balanceReserved = Number(balance.qtyReserved || 0);
+          if (balanceReserved > 0) {
+            const qtyToRelease = Math.min(
+              balanceReserved,
+              remainingToUnreserve,
+            );
+            balance.qtyReserved = Math.max(
+              0,
+              balanceReserved - qtyToRelease,
+            ).toFixed(3);
+            await balanceRepo.save(balance);
+            remainingToUnreserve -= qtyToRelease;
+          }
+        }
+      }
+    }
+
+    await serialRepo.update(
+      { salesOrderLineId: In(lines.map((l) => l.id)), status: 'RESERVED' },
+      { status: 'IN_STOCK', salesOrderLineId: null },
+    );
   }
 
   async update(id: string, dto: UpdateSalesOrderDto) {
@@ -206,9 +356,11 @@ export class SalesOrdersCoreService {
     await this.repository.update(id, header);
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
+        await this.releaseSerialsAndBalances(manager, id);
         const lineRepo = manager.getRepository(ErpSalesOrderLine);
         await lineRepo.delete({ salesOrderId: id });
         let lineNo = 1;
+        const savedLines: ErpSalesOrderLine[] = [];
         for (const line of lines) {
           const linePayload: DeepPartial<ErpSalesOrderLine> = {
             salesOrderId: id,
@@ -220,8 +372,44 @@ export class SalesOrdersCoreService {
             qtyDelivered: line.qtyDelivered ?? '0',
             unitPrice: line.unitPrice ?? null,
             amount: line.amount ?? null,
+            selectedSerialIds: line.serialIds ?? null,
           };
-          await lineRepo.save(linePayload);
+          const saved = await lineRepo.save(linePayload);
+
+          const reservedQtyForLine = await this.reserveSerialsForLine(
+            manager,
+            line as any,
+            saved.id,
+            saved.itemId,
+          );
+          if (reservedQtyForLine > 0) {
+            saved.qtyReserved = String(reservedQtyForLine);
+            await lineRepo.save(saved);
+          }
+          savedLines.push(saved);
+        }
+
+        const so = await manager.getRepository(ErpSalesOrder).findOneBy({ id });
+        if (so && so.status !== 'CANCELLED') {
+          const anyReserved = savedLines.some(
+            (l) => Number(l.qtyReserved || 0) > 0,
+          );
+          const allReserved =
+            savedLines.length > 0 &&
+            savedLines.every(
+              (l) => Number(l.qtyReserved || 0) >= Number(l.qtyOrdered || 0),
+            );
+          if (allReserved && so.status !== 'RESERVED') {
+            so.status = 'RESERVED';
+            await manager.getRepository(ErpSalesOrder).save(so);
+          } else if (
+            anyReserved &&
+            so.status !== 'PARTIAL_RESERVED' &&
+            so.status !== 'RESERVED'
+          ) {
+            so.status = 'PARTIAL_RESERVED';
+            await manager.getRepository(ErpSalesOrder).save(so);
+          }
         }
       });
     }
@@ -264,9 +452,40 @@ export class SalesOrdersCoreService {
         const onHand = Number(balance.qtyOnHand || 0);
         const reserved = Number(balance.qtyReserved || 0);
         const available = onHand - reserved;
-        const qtyToReserve = Math.min(available, qtyNeedReserve);
+        let qtyToReserve = Math.min(available, qtyNeedReserve);
         if (qtyToReserve <= 0) {
           continue;
+        }
+
+        const item = line.itemId
+          ? await manager
+              .getRepository(ErpInventoryItem)
+              .findOne({ where: { id: line.itemId } as any })
+          : null;
+        if (
+          item?.trackingPolicyId &&
+          item.trackingPolicyId !== 'NONE' &&
+          line.itemId
+        ) {
+          if (!line.selectedSerialIds || line.selectedSerialIds.length === 0) {
+            continue;
+          }
+          const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+          const availableSerials = await serialRepo.find({
+            where: { id: In(line.selectedSerialIds), status: 'IN_STOCK' },
+          });
+
+          if (availableSerials.length === 0) {
+            continue;
+          }
+
+          qtyToReserve = Math.min(qtyToReserve, availableSerials.length);
+          const serialsToReserve = availableSerials.slice(0, qtyToReserve);
+
+          await serialRepo.update(
+            { id: In(serialsToReserve.map((s) => s.id)) },
+            { status: 'RESERVED', salesOrderLineId: line.id },
+          );
         }
 
         balance.qtyReserved = (reserved + qtyToReserve).toFixed(3);
@@ -343,6 +562,15 @@ export class SalesOrdersCoreService {
         await soLineRepo.save(line);
       }
 
+      // Release serials
+      if (lines.length > 0) {
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+        await serialRepo.update(
+          { salesOrderLineId: In(lines.map((l) => l.id)), status: 'RESERVED' },
+          { status: 'IN_STOCK', salesOrderLineId: null },
+        );
+      }
+
       const refreshedLines = await soLineRepo.find({
         where: { salesOrderId: id },
       });
@@ -360,11 +588,11 @@ export class SalesOrdersCoreService {
       );
 
       if (allDelivered) {
-        so.status = 'DELIVERED';
+        so.status = 'DELIVERING';
       } else if (anyReserved) {
         so.status = 'PARTIAL_RESERVED';
       } else if (anyDelivered) {
-        so.status = 'PARTIAL_DELIVERED';
+        so.status = 'PARTIAL_DELIVERING';
       } else {
         so.status = 'CONFIRMED';
       }
@@ -374,18 +602,67 @@ export class SalesOrdersCoreService {
     });
   }
 
-  async remove(id: string) {
-    const existing = await this.repository.findOne({
-      where: { id, isDeleted: false },
-    });
-    if (!existing)
-      throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
-    if (existing.status !== 'DRAFT') {
-      throw new BadRequestException('Chỉ có thể xóa đơn bán hàng nháp');
-    }
+  async confirmAllDelivery(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const soRepo = manager.getRepository(ErpSalesOrder);
+      const so = await this.getSalesOrderOrThrow(soRepo, id);
 
-    await this.repository.update(id, { isDeleted: true } as any);
-    return { message: 'Xóa thành công' };
+      if (so.status !== 'DELIVERING' && so.status !== 'PARTIAL_DELIVERING') {
+        throw new BadRequestException(
+          'Chỉ có thể xác nhận giao hàng khi đơn hàng đang ở trạng thái đang giao',
+        );
+      }
+
+      // Check if there are any DELIVERING serials to prevent bypassing tracking
+      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+      const lines = await soLineRepo.find({ where: { salesOrderId: so.id } });
+      if (lines.length > 0) {
+        const anyDeliveringSerial = await serialRepo.findOne({
+          where: {
+            salesOrderLineId: In(lines.map((l) => l.id)),
+            status: 'DELIVERING',
+          },
+        });
+        if (anyDeliveringSerial) {
+          throw new BadRequestException(
+            'Đơn hàng có thiết bị tracking đang giao, vui lòng xác nhận giao từng serial/xe cụ thể',
+          );
+        }
+      }
+
+      so.status = 'DELIVERED';
+      await soRepo.save(so);
+
+      return this.findOne(id);
+    });
+  }
+
+  async remove(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const soRepo = manager.getRepository(ErpSalesOrder);
+      const existing = await soRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+      if (!existing)
+        throw new NotFoundException(`Đơn bán hàng ${id} không tìm thấy`);
+      if (existing.status !== 'DRAFT') {
+        throw new BadRequestException('Chỉ có thể xóa đơn bán hàng nháp');
+      }
+
+      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const lines = await soLineRepo.find({ where: { salesOrderId: id } });
+      if (lines.length > 0) {
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+        await serialRepo.update(
+          { salesOrderLineId: In(lines.map((l) => l.id)), status: 'RESERVED' },
+          { status: 'IN_STOCK', salesOrderLineId: null },
+        );
+      }
+
+      await soRepo.update(id, { isDeleted: true } as any);
+      return { message: 'Xóa thành công' };
+    });
   }
 
   async cancel(id: string) {
@@ -440,6 +717,15 @@ export class SalesOrdersCoreService {
           line.qtyReserved = '0';
           await soLineRepo.save(line);
         }
+      }
+
+      // Release serials
+      if (lines.length > 0) {
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+        await serialRepo.update(
+          { salesOrderLineId: In(lines.map((l) => l.id)), status: 'RESERVED' },
+          { status: 'IN_STOCK', salesOrderLineId: null },
+        );
       }
 
       existing.status = 'CANCELLED';

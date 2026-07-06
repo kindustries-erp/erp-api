@@ -38,6 +38,7 @@ import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
 import { KgaraApiCoreModule } from './kgara-api-core/kgara-api-core.module';
 import { AccountingCoreModule } from './accounting-core/accounting-core.module';
+import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { AccountingCoreModule } from './accounting-core/accounting-core.module';
     BankTransactionsCoreModule,
     KgaraApiCoreModule,
     AccountingCoreModule,
+    PublicWarrantyModule,
   ],
   controllers: [AppController],
   providers: [
