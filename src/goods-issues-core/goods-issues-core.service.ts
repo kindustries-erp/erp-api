@@ -476,37 +476,41 @@ export class GoodsIssuesCoreService {
 
         if (serial) {
           serial.goodsIssueLineId = line.id;
-          serial.status = 'SOLD';
+          if (line.salesOrderLineId) {
+            serial.status = 'DELIVERING';
+          }
           if (!serial.vinId && vehicle?.id) {
             serial.vinId = vehicle.id;
           }
           await serialRepo.save(serial);
 
-          const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
-          const existingLifecycle = await lifecycleRepo.findOneBy({
-            serialId: serial.id,
-          });
-          if (!existingLifecycle) {
-            await lifecycleRepo.save(
-              lifecycleRepo.create({
-                serialId: serial.id,
-                salesOrderId: issue.salesOrderId,
-                goodsIssueId: issue.id,
-                dealerId: issue.customerId, // Using customerId as dealerId
-                status: 'ACTIVE',
-              }),
-            );
-          } else {
-            existingLifecycle.salesOrderId = issue.salesOrderId;
-            existingLifecycle.goodsIssueId = issue.id;
-            existingLifecycle.dealerId = issue.customerId;
-            existingLifecycle.status = 'ACTIVE';
-            await lifecycleRepo.save(existingLifecycle);
+          if (line.salesOrderLineId) {
+            const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
+            const existingLifecycle = await lifecycleRepo.findOneBy({
+              serialId: serial.id,
+            });
+            if (!existingLifecycle) {
+              await lifecycleRepo.save(
+                lifecycleRepo.create({
+                  serialId: serial.id,
+                  salesOrderId: issue.salesOrderId,
+                  goodsIssueId: issue.id,
+                  dealerId: issue.customerId, // Using customerId as dealerId
+                  status: 'ACTIVE',
+                }),
+              );
+            } else {
+              existingLifecycle.salesOrderId = issue.salesOrderId;
+              existingLifecycle.goodsIssueId = issue.id;
+              existingLifecycle.dealerId = issue.customerId;
+              existingLifecycle.status = 'ACTIVE';
+              await lifecycleRepo.save(existingLifecycle);
+            }
           }
         }
 
-        if (vehicle) {
-          vehicle.status = 'SOLD';
+        if (vehicle && line.salesOrderLineId) {
+          vehicle.status = 'DELIVERING';
           await vehicleRepo.save(vehicle);
         }
 
@@ -556,11 +560,11 @@ export class GoodsIssuesCoreService {
         );
 
         if (allDelivered) {
-          so.status = 'DELIVERED';
+          so.status = 'DELIVERING';
         } else if (anyReserved) {
           so.status = 'PARTIAL_RESERVED';
         } else if (anyDelivered) {
-          so.status = 'PARTIAL_DELIVERED';
+          so.status = 'PARTIAL_DELIVERING';
         } else {
           so.status = 'CONFIRMED';
         }
@@ -768,9 +772,9 @@ export class GoodsIssuesCoreService {
           if (totalDelivered <= 0) {
             so.status = so.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
           } else if (totalDelivered < totalOrdered) {
-            so.status = 'PARTIAL_DELIVERED';
+            so.status = 'PARTIAL_DELIVERING';
           } else {
-            so.status = 'DELIVERED';
+            so.status = 'DELIVERING';
           }
           await soRepo.save(so);
         }

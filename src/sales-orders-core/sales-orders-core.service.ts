@@ -588,14 +588,50 @@ export class SalesOrdersCoreService {
       );
 
       if (allDelivered) {
-        so.status = 'DELIVERED';
+        so.status = 'DELIVERING';
       } else if (anyReserved) {
         so.status = 'PARTIAL_RESERVED';
       } else if (anyDelivered) {
-        so.status = 'PARTIAL_DELIVERED';
+        so.status = 'PARTIAL_DELIVERING';
       } else {
         so.status = 'CONFIRMED';
       }
+      await soRepo.save(so);
+
+      return this.findOne(id);
+    });
+  }
+
+  async confirmAllDelivery(id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const soRepo = manager.getRepository(ErpSalesOrder);
+      const so = await this.getSalesOrderOrThrow(soRepo, id);
+
+      if (so.status !== 'DELIVERING' && so.status !== 'PARTIAL_DELIVERING') {
+        throw new BadRequestException(
+          'Chỉ có thể xác nhận giao hàng khi đơn hàng đang ở trạng thái đang giao',
+        );
+      }
+
+      // Check if there are any DELIVERING serials to prevent bypassing tracking
+      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+      const lines = await soLineRepo.find({ where: { salesOrderId: so.id } });
+      if (lines.length > 0) {
+        const anyDeliveringSerial = await serialRepo.findOne({
+          where: {
+            salesOrderLineId: In(lines.map((l) => l.id)),
+            status: 'DELIVERING',
+          },
+        });
+        if (anyDeliveringSerial) {
+          throw new BadRequestException(
+            'Đơn hàng có thiết bị tracking đang giao, vui lòng xác nhận giao từng serial/xe cụ thể',
+          );
+        }
+      }
+
+      so.status = 'DELIVERED';
       await soRepo.save(so);
 
       return this.findOne(id);

@@ -79,6 +79,12 @@ export class SalesOrdersCoreController {
     return this.service.unreserve(id, dto);
   }
 
+  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @Post(':id/confirm-all-delivery')
+  confirmAllDelivery(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.confirmAllDelivery(id);
+  }
+
   @RequirePermissions({ resource: 'sales_orders', action: 'delete' })
   @Delete(':id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
