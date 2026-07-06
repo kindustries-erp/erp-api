@@ -1268,7 +1268,7 @@ export class InventoryItemsService {
         s.id as serial_id, s.serial_no, s.item_id, s.vin_id,
         i.sku, i.item_name,
         v.vin_no, v.engine_no,
-        so.so_no
+        so.so_no, so.expected_delivery_date as expected_delivery_date
       FROM erp_serial_lifecycles l
       JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
       JOIN erp_inventory_items i ON s.item_id = i.id
@@ -1346,6 +1346,7 @@ export class InventoryItemsService {
       engineNo: row.engine_no,
       salesOrderId: row.sales_order_id,
       soNo: row.so_no,
+      expectedDeliveryDate: row.expected_delivery_date,
       dealerId: row.dealer_id,
       dealerName: row.attributes?.dealer_name || null,
       warrantyCode: row.warranty_activated_at

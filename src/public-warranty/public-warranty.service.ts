@@ -140,7 +140,7 @@ export class PublicWarrantyService {
     }
 
     const now = new Date();
-    const warrantyMonths = 24; // should be configurable
+    const warrantyMonths = 36; // should be configurable
     const endDate = new Date(now);
     endDate.setMonth(endDate.getMonth() + warrantyMonths);
 
