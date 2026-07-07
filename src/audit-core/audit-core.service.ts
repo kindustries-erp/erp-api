@@ -89,8 +89,13 @@ export class AuditCoreService {
       qb.andWhere('log.status = :status', { status: query.status });
     if (query.dateFrom)
       qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: query.dateFrom });
-    if (query.dateTo)
-      qb.andWhere('log.createdAt <= :dateTo', { dateTo: query.dateTo });
+    if (query.dateTo) {
+      const dTo =
+        query.dateTo.length === 10
+          ? `${query.dateTo} 23:59:59.999`
+          : query.dateTo;
+      qb.andWhere('log.createdAt <= :dateTo', { dateTo: dTo });
+    }
     if (query.search) {
       qb.andWhere(
         '(log.actorEmail ILIKE :search OR log.entityId ILIKE :search OR log.message ILIKE :search OR log.route ILIKE :search)',

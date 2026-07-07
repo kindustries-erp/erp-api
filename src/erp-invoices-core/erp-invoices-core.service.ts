@@ -156,12 +156,17 @@ export class ErpInvoicesCoreService {
     if (query.status) {
       where.status = query.status;
     }
-    if (query.date_from && query.date_to) {
-      where.invoiceDate = Between(query.date_from, query.date_to);
+    let effectiveDateTo = query.date_to;
+    if (effectiveDateTo && effectiveDateTo.length === 10) {
+      effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
+    }
+
+    if (query.date_from && effectiveDateTo) {
+      where.invoiceDate = Between(query.date_from, effectiveDateTo);
     } else if (query.date_from) {
       where.invoiceDate = MoreThanOrEqual(query.date_from);
-    } else if (query.date_to) {
-      where.invoiceDate = LessThanOrEqual(query.date_to);
+    } else if (effectiveDateTo) {
+      where.invoiceDate = LessThanOrEqual(effectiveDateTo);
     }
 
     // Search / explicit seller/buyer name filters via QueryBuilder
@@ -185,7 +190,10 @@ export class ErpInvoicesCoreService {
           dateFrom: query.date_from,
         })
         .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
-          dateTo: query.date_to,
+          dateTo:
+            query.date_to?.length === 10
+              ? `${query.date_to} 23:59:59.999`
+              : query.date_to,
         });
 
       if (query.search) {
@@ -1464,7 +1472,10 @@ export class ErpInvoicesCoreService {
         dateFrom: query.date_from,
       })
       .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
-        dateTo: query.date_to,
+        dateTo:
+          query.date_to?.length === 10
+            ? `${query.date_to} 23:59:59.999`
+            : query.date_to,
       });
 
     if (query.search) {
