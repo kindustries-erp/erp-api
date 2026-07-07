@@ -773,7 +773,11 @@ export class InventoryItemsService {
     if (query.dateTo) {
       receiptWhere += ` AND g.receipt_date <= $${pIndex}`;
       issueWhere += ` AND g.issue_date <= $${pIndex}`;
-      params.push(query.dateTo);
+      params.push(
+        query.dateTo.length === 10
+          ? `${query.dateTo} 23:59:59.999`
+          : query.dateTo,
+      );
       pIndex++;
     }
     if (query.status) {

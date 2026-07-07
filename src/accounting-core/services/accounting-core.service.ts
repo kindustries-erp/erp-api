@@ -148,7 +148,11 @@ export class AccountingCoreService {
       qb.andWhere('je.date >= :startDate', { startDate: query.startDate });
     }
     if (query.endDate) {
-      qb.andWhere('je.date <= :endDate', { endDate: query.endDate });
+      const eDate =
+        query.endDate.length === 10
+          ? `${query.endDate} 23:59:59.999`
+          : query.endDate;
+      qb.andWhere('je.date <= :endDate', { endDate: eDate });
     }
     if (query.search) {
       qb.andWhere(

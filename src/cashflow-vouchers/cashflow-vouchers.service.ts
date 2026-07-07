@@ -374,8 +374,13 @@ export class CashflowVouchersService {
     parts.push('filter[is_active][_eq]=true');
     if (query.date_from)
       parts.push(`filter[voucher_date][_gte]=${query.date_from}`);
-    if (query.date_to)
-      parts.push(`filter[voucher_date][_lte]=${query.date_to}`);
+    if (query.date_to) {
+      const dTo =
+        query.date_to.length === 10
+          ? `${query.date_to} 23:59:59.999`
+          : query.date_to;
+      parts.push(`filter[voucher_date][_lte]=${dTo}`);
+    }
     if (query.search) parts.push(`search=${encodeURIComponent(query.search)}`);
 
     const res = await fetch(

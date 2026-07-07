@@ -57,6 +57,7 @@ export class BankTransactionsCoreService {
     startDate?: string,
     endDate?: string,
   ) {
+    if (endDate && endDate.length === 10) endDate = `${endDate} 23:59:59.999`;
     const where: any = { isDeleted: false };
     if (branchId) where.branchId = branchId;
 
@@ -213,6 +214,7 @@ export class BankTransactionsCoreService {
 
   // --- Cash Books ---
   async getCashBooks(branchId?: string, startDate?: string, endDate?: string) {
+    if (endDate && endDate.length === 10) endDate = `${endDate} 23:59:59.999`;
     const where: any = { isDeleted: false };
     if (branchId) where.branchId = branchId;
 
@@ -445,7 +447,11 @@ export class BankTransactionsCoreService {
       });
     }
     if (filter.endDate) {
-      qb.andWhere('txn.transDate <= :endDate', { endDate: filter.endDate });
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
+      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
     }
     if (filter.search) {
       qb.andWhere(
@@ -516,7 +522,11 @@ export class BankTransactionsCoreService {
       });
     }
     if (filter.endDate) {
-      qb.andWhere('txn.transDate <= :endDate', { endDate: filter.endDate });
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
+      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
     }
     if (filter.sourceType) {
       qb.andWhere('txn.sourceType = :sourceType', {
@@ -648,8 +658,12 @@ export class BankTransactionsCoreService {
       });
     }
     if (filter.endDate) {
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
       categoryBreakdownQb.andWhere('txn.trans_date <= :endDate', {
-        endDate: filter.endDate,
+        endDate: eDate,
       });
     }
     if (filter.sourceType) {
