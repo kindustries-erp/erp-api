@@ -177,47 +177,36 @@ async function seedChartOfAccounts() {
   await AppDataSource.initialize();
   console.log('Database connected.');
 
-  const branchRepo = AppDataSource.getRepository('erp_branches');
-  const branches = await branchRepo.find();
-  if (!branches.length) {
-    throw new Error('No branch found! Please create a branch first.');
-  }
-
   const repo = AppDataSource.getRepository(ErpChartOfAccount);
 
   // Clear existing accounts
   await repo.delete({});
   console.log('Cleared existing Chart of Accounts.');
 
-  for (const branch of branches) {
-    console.log(`Seeding for branch: ${branch.id}`);
+  // Create a map to resolve parent IDs later
+  const createdAccounts: Record<string, ErpChartOfAccount> = {};
 
-    // Create a map to resolve parent IDs later per branch
-    const createdAccounts: Record<string, ErpChartOfAccount> = {};
-
-    for (const account of chartOfAccountsTT99) {
-      let parentId: string | null = null;
-      if (account.parentCode) {
-        const parent = createdAccounts[account.parentCode];
-        if (parent) {
-          parentId = parent.id;
-        }
+  for (const account of chartOfAccountsTT99) {
+    let parentId: string | null = null;
+    if (account.parentCode) {
+      const parent = createdAccounts[account.parentCode];
+      if (parent) {
+        parentId = parent.id;
       }
-
-      const newAccount = repo.create({
-        branchId: branch.id,
-        accountCode: account.accountCode,
-        accountName: account.accountName,
-        accountType: account.accountType,
-        parentId,
-        isActive: true,
-      });
-      const saved = await repo.save(newAccount);
-      createdAccounts[account.accountCode] = saved;
-      console.log(
-        `Created account for branch ${branch.id}: ${account.accountCode} - ${account.accountName}`,
-      );
     }
+
+    const newAccount = repo.create({
+      accountCode: account.accountCode,
+      accountName: account.accountName,
+      accountType: account.accountType,
+      parentId,
+      isActive: true,
+    });
+    const saved = await repo.save(newAccount);
+    createdAccounts[account.accountCode] = saved;
+    console.log(
+      `Created account: ${account.accountCode} - ${account.accountName}`,
+    );
   }
 
   console.log('Seed completed successfully for TT99/2025!');

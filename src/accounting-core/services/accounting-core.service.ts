@@ -181,16 +181,60 @@ export class AccountingCoreService {
   }
 
   async getChartOfAccounts(query: any) {
+    const page = query.page || 1;
+    const pageSize = query.pageSize || 50;
+
     const qb = this.chartOfAccountRepo
       .createQueryBuilder('coa')
       .where('coa.isDeleted = :isDeleted', { isDeleted: false });
 
-    if (query.branchId) {
-      qb.andWhere('coa.branchId = :branchId', { branchId: query.branchId });
+    if (query.search) {
+      qb.andWhere(
+        '(coa.accountCode ILIKE :search OR coa.accountName ILIKE :search)',
+        { search: `%${query.search}%` },
+      );
     }
 
     qb.orderBy('coa.accountCode', 'ASC');
+    qb.skip((page - 1) * pageSize).take(pageSize);
 
-    return qb.getMany();
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async createChartOfAccount(dto: any) {
+    const account = this.chartOfAccountRepo.create({
+      accountCode: dto.account_code,
+      accountName: dto.account_name,
+      accountType: dto.account_type,
+      parentId: dto.parent_account_id || null,
+      isActive: dto.is_active ?? true,
+    });
+    return this.chartOfAccountRepo.save(account);
+  }
+
+  async updateChartOfAccount(id: string, dto: any) {
+    const account = await this.chartOfAccountRepo.findOne({ where: { id } });
+    if (!account) {
+      throw new Error('Account not found');
+    }
+    if (dto.account_code) account.accountCode = dto.account_code;
+    if (dto.account_name) account.accountName = dto.account_name;
+    if (dto.account_type) account.accountType = dto.account_type;
+    if (dto.parent_account_id !== undefined)
+      account.parentId = dto.parent_account_id;
+    if (dto.is_active !== undefined) account.isActive = dto.is_active;
+    return this.chartOfAccountRepo.save(account);
+  }
+
+  async deleteChartOfAccount(id: string) {
+    return this.chartOfAccountRepo.update(id, { isDeleted: true });
   }
 }

@@ -8,19 +8,11 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 
 @Entity({ name: 'erp_chart_of_accounts' })
 export class ErpChartOfAccount {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Column({ type: 'uuid', name: 'branch_id' })
-  branchId: string;
-
-  @ManyToOne(() => ErpBranch)
-  @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch;
 
   @Column({ type: 'varchar', length: 50, name: 'account_code', unique: true })
   accountCode: string;

@@ -954,6 +954,16 @@ export class BankTransactionsCoreService {
       );
     }
 
+    let bankCode: string | undefined;
+    if (bankAccountId) {
+      const bankAccount = await this.bankAccountRepo.findOne({
+        where: { id: bankAccountId },
+      });
+      if (bankAccount) {
+        bankCode = bankAccount.bankCode?.toUpperCase();
+      }
+    }
+
     let allDtos: CreateBankTransactionDto[] = [];
 
     for (const file of files) {
@@ -971,7 +981,12 @@ export class BankTransactionsCoreService {
             cashBookId,
           );
         } else {
-          if (file.originalname.toLowerCase().includes('tcb')) {
+          // Check bankCode first, fallback to filename if missing
+          const isTcb =
+            bankCode === 'TCB' ||
+            (!bankCode && file.originalname.toLowerCase().includes('tcb'));
+
+          if (isTcb) {
             dtos = await parseTcbXlsx(
               file.buffer,
               branchId,

@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpJournalEntry } from './erp_journal_entry.entity';
+import type { ErpJournalEntry } from './erp_journal_entry.entity';
 import { ErpChartOfAccount } from './erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_journal_entry_lines' })
@@ -18,9 +18,9 @@ export class ErpJournalEntryLine {
   @Column({ type: 'uuid', name: 'journal_entry_id' })
   journalEntryId: string;
 
-  @ManyToOne(() => ErpJournalEntry, (entry) => entry.lines)
+  @ManyToOne('ErpJournalEntry', (entry: any) => entry.lines)
   @JoinColumn({ name: 'journal_entry_id' })
-  journalEntry: ErpJournalEntry;
+  journalEntry: import('typeorm').Relation<ErpJournalEntry>;
 
   @Column({ type: 'uuid', name: 'account_id' })
   accountId: string;
