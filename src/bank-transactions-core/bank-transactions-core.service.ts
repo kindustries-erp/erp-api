@@ -52,7 +52,11 @@ export class BankTransactionsCoreService {
   ) {}
 
   // --- Bank Accounts ---
-  async getBankAccounts(branchId?: string) {
+  async getBankAccounts(
+    branchId?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
     const where: any = { isDeleted: false };
     if (branchId) where.branchId = branchId;
 
@@ -62,32 +66,83 @@ export class BankTransactionsCoreService {
       order: { createdAt: 'DESC' },
     });
 
-    // Fetch latest balance for each account
     const accountsWithBalance = await Promise.all(
       accounts.map(async (acc) => {
-        const balance = await this.bankAccountBalanceRepo.findOne({
-          where: { bankAccountId: acc.id, isDeleted: false },
-          order: { periodDate: 'DESC' },
-        });
-        const openingBalance = balance ? Number(balance.openingBalance) : 0;
+        let baseBalance = 0;
+        let baseDate: string | null = null;
 
-        const stats = await this.transactionRepo
+        const balanceQb = this.bankAccountBalanceRepo
+          .createQueryBuilder('bal')
+          .where('bal.bankAccountId = :id', { id: acc.id })
+          .andWhere('bal.isDeleted = false')
+          .orderBy('bal.periodDate', 'DESC');
+
+        if (startDate) {
+          balanceQb.andWhere('bal.periodDate <= :startDate', { startDate });
+        } else {
+          balanceQb.orderBy('bal.periodDate', 'ASC');
+        }
+
+        const balance = await balanceQb.getOne();
+        if (balance) {
+          baseBalance = Number(balance.openingBalance);
+          baseDate = new Date(balance.periodDate).toISOString();
+        }
+
+        let openingBalanceAtStart = baseBalance;
+        if (startDate && baseDate) {
+          const qbBefore = this.transactionRepo
+            .createQueryBuilder('txn')
+            .select('SUM(txn.creditAmount)', 'credit')
+            .addSelect('SUM(txn.debitAmount)', 'debit')
+            .where('txn.bankAccountId = :id', { id: acc.id })
+            .andWhere('txn.isDeleted = false')
+            .andWhere('txn.transDate >= :baseDate', { baseDate })
+            .andWhere('txn.transDate < :startDate', { startDate });
+          const beforeStats = await qbBefore.getRawOne();
+          openingBalanceAtStart +=
+            Number(beforeStats?.credit || 0) - Number(beforeStats?.debit || 0);
+        } else if (startDate && !baseDate) {
+          const qbBefore = this.transactionRepo
+            .createQueryBuilder('txn')
+            .select('SUM(txn.creditAmount)', 'credit')
+            .addSelect('SUM(txn.debitAmount)', 'debit')
+            .where('txn.bankAccountId = :id', { id: acc.id })
+            .andWhere('txn.isDeleted = false')
+            .andWhere('txn.transDate < :startDate', { startDate });
+          const beforeStats = await qbBefore.getRawOne();
+          openingBalanceAtStart +=
+            Number(beforeStats?.credit || 0) - Number(beforeStats?.debit || 0);
+        }
+
+        const qbDuring = this.transactionRepo
           .createQueryBuilder('txn')
-          .select('SUM(txn.creditAmount)', 'totalCredit')
-          .addSelect('SUM(txn.debitAmount)', 'totalDebit')
-          .where('txn.bankAccountId = :bankAccountId', {
-            bankAccountId: acc.id,
-          })
-          .andWhere('txn.isDeleted = :isDeleted', { isDeleted: false })
-          .getRawOne();
+          .select('SUM(txn.creditAmount)', 'credit')
+          .addSelect('SUM(txn.debitAmount)', 'debit')
+          .where('txn.bankAccountId = :id', { id: acc.id })
+          .andWhere('txn.isDeleted = false');
 
-        const totalCredit = Number(stats?.totalCredit || 0);
-        const totalDebit = Number(stats?.totalDebit || 0);
-        const currentBalance = openingBalance + totalCredit - totalDebit;
+        if (startDate) {
+          qbDuring.andWhere('txn.transDate >= :startDate', { startDate });
+        } else if (baseDate) {
+          qbDuring.andWhere('txn.transDate >= :baseDate', { baseDate });
+        }
+        if (endDate) {
+          qbDuring.andWhere('txn.transDate <= :endDate', { endDate });
+        }
+
+        const duringStats = await qbDuring.getRawOne();
+        const totalCredit = Number(duringStats?.credit || 0);
+        const totalDebit = Number(duringStats?.debit || 0);
+
+        const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
         return {
           ...acc,
-          openingBalance,
+          openingBalance: openingBalanceAtStart,
+          totalCredit,
+          totalDebit,
+          netChange: totalCredit - totalDebit,
           currentBalance,
           periodDate:
             balance && balance.periodDate
@@ -157,7 +212,7 @@ export class BankTransactionsCoreService {
   }
 
   // --- Cash Books ---
-  async getCashBooks(branchId?: string) {
+  async getCashBooks(branchId?: string, startDate?: string, endDate?: string) {
     const where: any = { isDeleted: false };
     if (branchId) where.branchId = branchId;
 
@@ -169,27 +224,81 @@ export class BankTransactionsCoreService {
 
     const booksWithBalance = await Promise.all(
       books.map(async (book) => {
-        const balance = await this.cashBookBalanceRepo.findOne({
-          where: { cashBookId: book.id, isDeleted: false },
-          order: { periodDate: 'DESC' },
-        });
-        const openingBalance = balance ? Number(balance.openingBalance) : 0;
+        let baseBalance = 0;
+        let baseDate: string | null = null;
 
-        const stats = await this.transactionRepo
+        const balanceQb = this.cashBookBalanceRepo
+          .createQueryBuilder('bal')
+          .where('bal.cashBookId = :id', { id: book.id })
+          .andWhere('bal.isDeleted = false')
+          .orderBy('bal.periodDate', 'DESC');
+
+        if (startDate) {
+          balanceQb.andWhere('bal.periodDate <= :startDate', { startDate });
+        } else {
+          balanceQb.orderBy('bal.periodDate', 'ASC');
+        }
+
+        const balance = await balanceQb.getOne();
+        if (balance) {
+          baseBalance = Number(balance.openingBalance);
+          baseDate = new Date(balance.periodDate).toISOString();
+        }
+
+        let openingBalanceAtStart = baseBalance;
+        if (startDate && baseDate) {
+          const qbBefore = this.transactionRepo
+            .createQueryBuilder('txn')
+            .select('SUM(txn.creditAmount)', 'credit')
+            .addSelect('SUM(txn.debitAmount)', 'debit')
+            .where('txn.cashBookId = :id', { id: book.id })
+            .andWhere('txn.isDeleted = false')
+            .andWhere('txn.transDate >= :baseDate', { baseDate })
+            .andWhere('txn.transDate < :startDate', { startDate });
+          const beforeStats = await qbBefore.getRawOne();
+          openingBalanceAtStart +=
+            Number(beforeStats?.credit || 0) - Number(beforeStats?.debit || 0);
+        } else if (startDate && !baseDate) {
+          const qbBefore = this.transactionRepo
+            .createQueryBuilder('txn')
+            .select('SUM(txn.creditAmount)', 'credit')
+            .addSelect('SUM(txn.debitAmount)', 'debit')
+            .where('txn.cashBookId = :id', { id: book.id })
+            .andWhere('txn.isDeleted = false')
+            .andWhere('txn.transDate < :startDate', { startDate });
+          const beforeStats = await qbBefore.getRawOne();
+          openingBalanceAtStart +=
+            Number(beforeStats?.credit || 0) - Number(beforeStats?.debit || 0);
+        }
+
+        const qbDuring = this.transactionRepo
           .createQueryBuilder('txn')
-          .select('SUM(txn.creditAmount)', 'totalCredit')
-          .addSelect('SUM(txn.debitAmount)', 'totalDebit')
-          .where('txn.cashBookId = :cashBookId', { cashBookId: book.id })
-          .andWhere('txn.isDeleted = :isDeleted', { isDeleted: false })
-          .getRawOne();
+          .select('SUM(txn.creditAmount)', 'credit')
+          .addSelect('SUM(txn.debitAmount)', 'debit')
+          .where('txn.cashBookId = :id', { id: book.id })
+          .andWhere('txn.isDeleted = false');
 
-        const totalCredit = Number(stats?.totalCredit || 0);
-        const totalDebit = Number(stats?.totalDebit || 0);
-        const currentBalance = openingBalance + totalCredit - totalDebit;
+        if (startDate) {
+          qbDuring.andWhere('txn.transDate >= :startDate', { startDate });
+        } else if (baseDate) {
+          qbDuring.andWhere('txn.transDate >= :baseDate', { baseDate });
+        }
+        if (endDate) {
+          qbDuring.andWhere('txn.transDate <= :endDate', { endDate });
+        }
+
+        const duringStats = await qbDuring.getRawOne();
+        const totalCredit = Number(duringStats?.credit || 0);
+        const totalDebit = Number(duringStats?.debit || 0);
+
+        const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
         return {
           ...book,
-          openingBalance,
+          openingBalance: openingBalanceAtStart,
+          totalCredit,
+          totalDebit,
+          netChange: totalCredit - totalDebit,
           currentBalance,
           periodDate:
             balance && balance.periodDate

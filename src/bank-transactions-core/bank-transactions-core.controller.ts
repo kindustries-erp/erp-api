@@ -50,8 +50,12 @@ export class BankTransactionsCoreController {
   // --- Bank Accounts ---
   @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
   @Get('bank-accounts')
-  getBankAccounts(@Query('branchId') branchId?: string) {
-    return this.service.getBankAccounts(branchId);
+  getBankAccounts(
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.service.getBankAccounts(branchId, startDate, endDate);
   }
 
   @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
@@ -78,8 +82,12 @@ export class BankTransactionsCoreController {
   // --- Cash Books ---
   @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
   @Get('cash-books')
-  getCashBooks(@Query('branchId') branchId?: string) {
-    return this.service.getCashBooks(branchId);
+  getCashBooks(
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.service.getCashBooks(branchId, startDate, endDate);
   }
 
   @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
