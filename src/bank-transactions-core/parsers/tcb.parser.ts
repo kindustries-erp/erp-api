@@ -67,15 +67,15 @@ export function parseTcbCsv(
     let debitAmount = parseAmount(record[7]);
     const creditAmount = parseAmount(record[8]);
     const fee = parseAmount(record[9]);
+    const tax = parseAmount(record[10]);
     const balance = parseAmount(record[11]);
 
     // If there is fee and it's a debit transaction, add fee to debit
-    if (fee > 0) {
+    if (fee > 0 || tax > 0) {
       if (debitAmount > 0) {
-        debitAmount += fee;
+        debitAmount += fee + tax;
       } else if (creditAmount === 0 && debitAmount === 0) {
-        // If it's just a fee transaction
-        debitAmount = fee;
+        debitAmount = fee + tax;
       }
     }
 
@@ -179,13 +179,14 @@ export async function parseTcbXlsx(
     let debitAmount = parseAmount(rowValues[8]);
     const creditAmount = parseAmount(rowValues[9]);
     const fee = parseAmount(rowValues[10]);
+    const tax = parseAmount(rowValues[11]);
     const balance = parseAmount(rowValues[12]);
 
-    if (fee > 0) {
+    if (fee > 0 || tax > 0) {
       if (debitAmount > 0) {
-        debitAmount += fee;
+        debitAmount += fee + tax;
       } else if (creditAmount === 0 && debitAmount === 0) {
-        debitAmount = fee;
+        debitAmount = fee + tax;
       }
     }
 

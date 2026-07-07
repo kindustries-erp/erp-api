@@ -11,6 +11,7 @@ import {
   MoreThanOrEqual,
   Repository,
   IsNull,
+  In,
 } from 'typeorm';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
@@ -155,12 +156,17 @@ export class ErpInvoicesCoreService {
     if (query.status) {
       where.status = query.status;
     }
-    if (query.date_from && query.date_to) {
-      where.invoiceDate = Between(query.date_from, query.date_to);
+    let effectiveDateTo = query.date_to;
+    if (effectiveDateTo && effectiveDateTo.length === 10) {
+      effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
+    }
+
+    if (query.date_from && effectiveDateTo) {
+      where.invoiceDate = Between(query.date_from, effectiveDateTo);
     } else if (query.date_from) {
       where.invoiceDate = MoreThanOrEqual(query.date_from);
-    } else if (query.date_to) {
-      where.invoiceDate = LessThanOrEqual(query.date_to);
+    } else if (effectiveDateTo) {
+      where.invoiceDate = LessThanOrEqual(effectiveDateTo);
     }
 
     // Search / explicit seller/buyer name filters via QueryBuilder
@@ -184,7 +190,10 @@ export class ErpInvoicesCoreService {
           dateFrom: query.date_from,
         })
         .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
-          dateTo: query.date_to,
+          dateTo:
+            query.date_to?.length === 10
+              ? `${query.date_to} 23:59:59.999`
+              : query.date_to,
         });
 
       if (query.search) {
@@ -1376,7 +1385,7 @@ export class ErpInvoicesCoreService {
     return { success: true, pdfFiles };
   }
 
-  async getPdfDownloadUrl(invoiceId: string, fileKey: string) {
+  async getPdfDownloadUrl(invoiceId: string, fileKey: string, inline = false) {
     const invoice = await this.repository.findOne({ where: { id: invoiceId } });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
@@ -1386,8 +1395,52 @@ export class ErpInvoicesCoreService {
       : null;
     const filename = file ? file.filename : 'document.pdf';
 
-    const url = await this.r2.getPresignedDownloadUrl(fileKey, 3600, filename);
+    const url = await this.r2.getPresignedDownloadUrl(
+      fileKey,
+      3600,
+      filename,
+      inline,
+    );
     return { url };
+  }
+
+  async downloadAllPdfsZip(invoiceId: string): Promise<Buffer> {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    const files = Array.isArray(invoice.pdfFiles) ? invoice.pdfFiles : [];
+    if (files.length === 0) {
+      if (invoice.pdfFileKey) {
+        files.push({ key: invoice.pdfFileKey, filename: 'document.pdf' });
+      } else {
+        throw new NotFoundException(
+          `Invoice ${invoiceId} không có file PDF nào`,
+        );
+      }
+    }
+
+    const zip = new AdmZip();
+    for (const file of files) {
+      try {
+        const buffer = await this.r2.downloadBuffer(file.key);
+        let safeFilename = file.filename || 'document.pdf';
+        // Prevent duplicate filenames in zip
+        while (zip.getEntry(safeFilename)) {
+          const match = safeFilename.match(/(.*)(\.[^.]+)$/);
+          if (match) {
+            safeFilename = `${match[1]}_1${match[2]}`;
+          } else {
+            safeFilename = `${safeFilename}_1`;
+          }
+        }
+        zip.addFile(safeFilename, buffer);
+      } catch (err) {
+        console.error(`Failed to download ${file.key} for zip`, err);
+      }
+    }
+
+    return zip.toBuffer();
   }
 
   async deletePdf(invoiceId: string, fileKey: string) {
@@ -1419,7 +1472,10 @@ export class ErpInvoicesCoreService {
         dateFrom: query.date_from,
       })
       .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
-        dateTo: query.date_to,
+        dateTo:
+          query.date_to?.length === 10
+            ? `${query.date_to} 23:59:59.999`
+            : query.date_to,
       });
 
     if (query.search) {

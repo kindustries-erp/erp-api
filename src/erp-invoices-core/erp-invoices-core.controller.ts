@@ -293,9 +293,28 @@ export class ErpInvoicesCoreController {
     );
   }
 
+  @Get(':id/pdfs/zip')
+  async getPdfZip(@Param('id') id: string, @Res() res: any) {
+    const buffer = await this.service.downloadAllPdfsZip(id);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="invoices_${id}.zip"`,
+      'Content-Length': buffer.length,
+    });
+    res.send(buffer);
+  }
+
   @Get(':id/pdfs/:key/download-url')
-  getPdfDownloadUrl(@Param('id') id: string, @Param('key') key: string) {
-    return this.service.getPdfDownloadUrl(id, decodeURIComponent(key));
+  getPdfDownloadUrl(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Query('inline') inline?: string,
+  ) {
+    return this.service.getPdfDownloadUrl(
+      id,
+      decodeURIComponent(key),
+      inline === 'true',
+    );
   }
 
   @Delete(':id/pdfs/:key')
