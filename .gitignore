@@ -9,6 +9,8 @@ dist/
 .env.local
 .env.production
 .env.klotus-*
+.env.greenway-*
+.env.blueway-*
 .history
 
 # Docker
