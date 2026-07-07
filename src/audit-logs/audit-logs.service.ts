@@ -132,7 +132,13 @@ export class AuditLogsService {
     if (query.actor_id) filterAnd.push({ actor_id: { _eq: query.actor_id } });
     if (query.date_from)
       filterAnd.push({ created_at: { _gte: query.date_from } });
-    if (query.date_to) filterAnd.push({ created_at: { _lte: query.date_to } });
+    if (query.date_to) {
+      const dTo =
+        query.date_to.length === 10
+          ? `${query.date_to} 23:59:59.999`
+          : query.date_to;
+      filterAnd.push({ created_at: { _lte: dTo } });
+    }
     if (filterAnd.length)
       url.searchParams.append('filter', JSON.stringify({ _and: filterAnd }));
     const res = await fetch(url.toString(), {

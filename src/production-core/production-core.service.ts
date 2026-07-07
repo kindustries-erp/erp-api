@@ -136,15 +136,20 @@ export class ProductionCoreService {
         fgId: query.finishedGoodItemId,
       });
     }
-    if (query.dateFrom && query.dateTo) {
+    let effectiveDateTo = query.dateTo;
+    if (effectiveDateTo && effectiveDateTo.length === 10) {
+      effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
+    }
+
+    if (query.dateFrom && effectiveDateTo) {
       qb.andWhere('po.plannedStartDate BETWEEN :from AND :to', {
         from: query.dateFrom,
-        to: query.dateTo,
+        to: effectiveDateTo,
       });
     } else if (query.dateFrom) {
       qb.andWhere('po.plannedStartDate >= :from', { from: query.dateFrom });
-    } else if (query.dateTo) {
-      qb.andWhere('po.plannedStartDate <= :to', { to: query.dateTo });
+    } else if (effectiveDateTo) {
+      qb.andWhere('po.plannedStartDate <= :to', { to: effectiveDateTo });
     }
 
     for (const [key, dir] of Object.entries(order)) {
