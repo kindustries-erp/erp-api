@@ -203,7 +203,7 @@ export class PurchaseOrdersCoreService {
         payment_status: 'paymentStatus',
         supplier_id: 'supplierId',
       },
-      defaultOrder: { createdAt: 'DESC' },
+      defaultOrder: { orderDate: 'DESC', createdAt: 'DESC' },
     });
 
     let finalWhere: any = where;
