@@ -471,6 +471,31 @@ export class InventoryItemsService {
       order: { transactionDate: 'ASC', createdAt: 'ASC' } as never,
     });
 
+    const receiptIds = txns
+      .filter((t) => t.documentType === 'GOODS_RECEIPT' && t.documentId)
+      .map((t) => t.documentId);
+    const issueIds = txns
+      .filter((t) => t.documentType === 'GOODS_ISSUE' && t.documentId)
+      .map((t) => t.documentId);
+
+    const docNoMap: Record<string, string> = {};
+
+    if (receiptIds.length > 0) {
+      const receipts = await this.dataSource.query(
+        `SELECT id, receipt_no FROM public.erp_goods_receipts WHERE id = ANY($1)`,
+        [receiptIds],
+      );
+      receipts.forEach((r) => (docNoMap[r.id] = r.receipt_no));
+    }
+
+    if (issueIds.length > 0) {
+      const issues = await this.dataSource.query(
+        `SELECT id, issue_no FROM public.erp_goods_issues WHERE id = ANY($1)`,
+        [issueIds],
+      );
+      issues.forEach((i) => (docNoMap[i.id] = i.issue_no));
+    }
+
     let running = 0;
     const movements = txns.map((txn) => {
       const qtyIn = Number(txn.qtyIn ?? 0);
@@ -482,6 +507,7 @@ export class InventoryItemsService {
         transactionType: txn.transactionType,
         documentType: txn.documentType,
         documentId: txn.documentId,
+        documentNo: txn.documentId ? docNoMap[txn.documentId] : null,
         qtyIn,
         qtyOut,
         unitCost: txn.unitCost ? Number(txn.unitCost) : null,
