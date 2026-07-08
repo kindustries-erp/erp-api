@@ -174,7 +174,8 @@ export class ErpInvoicesCoreService {
       query.search ||
       query.seller_name ||
       query.buyer_name ||
-      query.tag_id
+      query.tag_id ||
+      query.sort_by === 'invoiceNo'
     );
     if (needsQb) {
       const qb = this.repository
@@ -197,9 +198,23 @@ export class ErpInvoicesCoreService {
         });
 
       if (query.search) {
+        const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
         qb.andWhere(
-          `(inv.invoice_no ILIKE :q OR inv.serial_no ILIKE :q OR inv.buyer_name ILIKE :q OR inv.seller_name ILIKE :q OR inv.buyer_tax_code ILIKE :q OR inv.seller_tax_code ILIKE :q)`,
-          { q: `%${query.search}%` },
+          `(
+            inv.invoice_no ILIKE :q 
+            OR inv.serial_no ILIKE :q 
+            OR inv.buyer_name ILIKE :q 
+            OR inv.seller_name ILIKE :q 
+            OR inv.buyer_tax_code ILIKE :q 
+            OR inv.seller_tax_code ILIKE :q
+            OR inv.description ILIKE :q
+            OR REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+            OR REPLACE(REPLACE(CAST(inv.vat_rate AS TEXT), '.', ''), ',', '') ILIKE :qClean
+            OR REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+            OR REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+            OR REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          )`,
+          { q: `%${query.search}%`, qClean },
         );
       }
       if (query.seller_name) {
@@ -219,8 +234,18 @@ export class ErpInvoicesCoreService {
         );
       }
 
-      const searchResults = await qb
-        .orderBy(orderColumn, orderDirection)
+      let qbOrderColumn = orderColumn;
+      if (query.sort_by === 'invoiceNo') {
+        qbOrderColumn =
+          "NULLIF(regexp_replace(inv.invoice_no, '\\\\D', '', 'g'), '')::numeric";
+      }
+
+      let qbOrdered = qb.orderBy(qbOrderColumn, orderDirection);
+      if (query.sort_by === 'invoiceNo') {
+        qbOrdered = qbOrdered.addOrderBy('inv.invoice_no', orderDirection);
+      }
+
+      const searchResults = await qbOrdered
         .addOrderBy('inv.created_at', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
