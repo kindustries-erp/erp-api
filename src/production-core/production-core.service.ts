@@ -584,7 +584,7 @@ export class ProductionCoreService {
 
     // Load produced identifiers (vehicles / serials) linked to this production order
     const producedVehicles = await this.dataSource.query(
-      `SELECT v.id, v.vin_no AS "vinNo", v.engine_no AS "engineNo", v.notes, v.created_at AS "createdAt", s.attributes
+      `SELECT v.id, v.vin_no AS "vinNo", v.engine_no AS "engineNo", v.notes, v.created_at AS "createdAt", s.attributes, s.serial_no AS "serialNo"
        FROM public.erp_vehicles v
        LEFT JOIN public.erp_inventory_tracking_serials s ON s.vin_id = v.id
        WHERE v.production_order_id = $1::uuid
