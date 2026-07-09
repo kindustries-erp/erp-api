@@ -1,3 +1,4 @@
+import { ReportsCoreModule } from './reports-core/reports-core.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -42,6 +43,7 @@ import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 
 @Module({
   imports: [
+    ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
