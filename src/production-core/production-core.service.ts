@@ -175,11 +175,26 @@ export class ProductionCoreService {
       inventoryItems.map((item) => [item.id, item.itemName]),
     );
 
+    const bomIds = Array.from(
+      new Set(items.map((item) => item.outputMetadata?.bomId).filter(Boolean)),
+    ) as string[];
+    const bomVersionMap = new Map<string, string>();
+    if (bomIds.length) {
+      const boms = await this.dataSource.query(
+        `SELECT id, bom_name, version FROM erp_boms WHERE id = ANY($1)`,
+        [bomIds],
+      );
+      boms.forEach((b: any) =>
+        bomVersionMap.set(b.id, `${b.bom_name} (v${b.version ?? '?'})`),
+      );
+    }
+
     return {
       items: items.map((item) => ({
         ...item,
         finishedGoodItemName:
           itemNameMap.get(item.finishedGoodItemId ?? '') ?? null,
+        bomVersion: bomVersionMap.get(item.outputMetadata?.bomId ?? '') ?? null,
         qtyProduced: item.qtyProduced,
       })),
       total,
