@@ -283,9 +283,22 @@ export class SalesOrdersCoreService {
       {} as Record<string, string[]>,
     );
 
+    const itemIds = [
+      ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
+    ] as string[];
+    const itemsMap: Record<string, string> = {};
+    if (itemIds.length > 0) {
+      const itemRepo = this.dataSource.getRepository(ErpInventoryItem);
+      const items = await itemRepo.find({ where: { id: In(itemIds) } });
+      for (const it of items) {
+        itemsMap[it.id] = it.itemName;
+      }
+    }
+
     const linesWithSerials = lines.map((l) => ({
       ...l,
       serialIds: serialsByLine[l.id] || [],
+      itemName: l.itemName || (l.itemId ? itemsMap[l.itemId] : null),
     }));
 
     const goodsIssueRepo = this.dataSource.getRepository(ErpGoodsIssue);

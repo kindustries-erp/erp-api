@@ -1295,7 +1295,7 @@ export class InventoryItemsService {
       SELECT 
         l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
         l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id, l.attributes,
-        s.id as serial_id, s.serial_no, s.item_id, s.vin_id,
+        s.id as serial_id, s.serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
         i.sku, i.item_name,
         v.vin_no, v.engine_no,
         so.so_no, so.expected_delivery_date as expected_delivery_date
@@ -1343,6 +1343,11 @@ export class InventoryItemsService {
       sql += ` AND l.warranty_end_date < CURRENT_DATE`;
     }
 
+    if (query.dealerId) {
+      sql += ` AND l.dealer_id = $${paramIdx++}`;
+      params.push(query.dealerId);
+    }
+
     // Count
     const countSql = `SELECT COUNT(*) as count FROM (${sql}) as t`;
     const countRes = await this.serialRepository.manager.query(
@@ -1352,7 +1357,28 @@ export class InventoryItemsService {
     const total = parseInt(countRes[0].count, 10);
 
     // Data
-    sql += ` ORDER BY l.delivery_date DESC NULLS LAST, l.created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    let orderByClause =
+      'ORDER BY l.delivery_date DESC NULLS LAST, l.created_at DESC';
+    if (query.sortField && query.sortOrder) {
+      const dir = query.sortOrder === 'asc' ? 'ASC' : 'DESC';
+      let sortCol = '';
+      switch (query.sortField) {
+        case 'deliveryDate':
+          sortCol = 'l.delivery_date';
+          break;
+        case 'expectedDeliveryDate':
+          sortCol = 'so.expected_delivery_date';
+          break;
+        case 'activationDate':
+          sortCol = 'l.warranty_activated_at';
+          break;
+      }
+      if (sortCol) {
+        orderByClause = `ORDER BY ${sortCol} ${dir} NULLS LAST, l.created_at DESC`;
+      }
+    }
+
+    sql += ` ${orderByClause} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
     params.push(pageSize, skip);
 
     const data = await this.serialRepository.manager.query(sql, params);
@@ -1379,6 +1405,7 @@ export class InventoryItemsService {
       expectedDeliveryDate: row.expected_delivery_date,
       dealerId: row.dealer_id,
       dealerName: row.attributes?.dealer_name || null,
+      trackingAttributes: row.tracking_attributes || null,
       warrantyCode: row.warranty_activated_at
         ? `WRN-${new Date(row.warranty_activated_at).toISOString().slice(0, 10).replace(/-/g, '')}-${(row.vin_no || row.serial_no || '000000').slice(-6)}`
         : null,
