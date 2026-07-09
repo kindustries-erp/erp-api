@@ -150,17 +150,21 @@ export class PublicWarrantyService {
       });
     }
 
-    let actualDealerId: string | null = null;
-    if (dto.dealer_id) {
-      const partner = await this.businessPartnerRepo.findOne({
-        where: { code: dto.dealer_id },
-      });
-      if (partner) {
-        actualDealerId = partner.id;
-      }
+    if (!lifecycle.dealerId) {
+      throw new BadRequestException(
+        'Xe này chưa được cập nhật thông tin đại lý phân phối, không thể kích hoạt bảo hành.',
+      );
     }
 
-    lifecycle.dealerId = actualDealerId;
+    const ownerPartner = await this.businessPartnerRepo.findOne({
+      where: { id: lifecycle.dealerId },
+    });
+
+    if (!ownerPartner || ownerPartner.code !== dto.dealer_id) {
+      throw new BadRequestException(
+        'Mã đại lý không hợp lệ hoặc không khớp với đại lý phân phối xe này.',
+      );
+    }
     lifecycle.customerName = dto.customer_name;
     lifecycle.customerPhone = dto.customer_phone;
     lifecycle.customerAddress = dto.customer_address;
