@@ -927,6 +927,7 @@ export class InventoryItemsService {
         's.sales_order_line_id as s_sales_order_line_id',
         'so.id as so_id',
         'so.so_no as so_no',
+        'so.expected_delivery_date as so_delivery_date',
         'i.id as i_id',
         'i.sku as i_sku',
         'i.item_name as i_item_name',
@@ -1076,6 +1077,11 @@ export class InventoryItemsService {
         trackingPolicyId: raw.i_tracking_policy_id,
         trackingCategoryId: raw.i_tracking_category_id,
         trackingPolicyName: raw.tp_name,
+      },
+      lifecycle: {
+        deliveryDate: raw.so_delivery_date
+          ? fixTimezone(raw.so_delivery_date)
+          : null,
       },
     }));
 
