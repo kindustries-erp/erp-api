@@ -957,6 +957,10 @@ export class InventoryItemsService {
       }
     }
 
+    if (query.missingSerial === true || query.missingSerial === 'true') {
+      qb.andWhere('s.serial_no IS NULL');
+    }
+
     if (query.itemId) {
       qb.andWhere('s.item_id = :itemId', { itemId: query.itemId });
     }
