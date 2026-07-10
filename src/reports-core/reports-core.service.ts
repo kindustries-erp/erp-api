@@ -42,11 +42,12 @@ export class ReportsCoreService {
     const sortMap: Record<string, string> = {
       itemCode: 'b.item_code',
       month: 'b.month',
-      qtyBought: 'SUM(b.qty)',
-      qtySold: 'SUM(s.qty)',
-      avgBuyPrice: 'ROUND(AVG(b.unit_price))',
-      avgSellPrice: 'ROUND(AVG(s.unit_price))',
-      margin: 'ROUND(AVG(s.unit_price)) - ROUND(AVG(b.unit_price))',
+      qtyBought: 'COALESCE(SUM(b.qty), 0)',
+      qtySold: 'COALESCE(SUM(s.qty), 0)',
+      avgBuyPrice: 'COALESCE(ROUND(AVG(b.unit_price)), 0)',
+      avgSellPrice: 'COALESCE(ROUND(AVG(s.unit_price)), 0)',
+      margin:
+        'COALESCE(ROUND(AVG(s.unit_price)), 0) - COALESCE(ROUND(AVG(b.unit_price)), 0)',
     };
 
     let orderByClause = 'ORDER BY b.month DESC, b.item_code ASC';
@@ -220,6 +221,7 @@ export class ReportsCoreService {
         c.direction,
         c.invoice_no AS "invoiceNo",
         c.invoice_date AS "invoiceDate",
+        c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
         b.item_name AS "itemName",
         c.qty,
