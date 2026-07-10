@@ -26,4 +26,8 @@ export class InventorySerialQueryDto extends PaginationDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   ids?: string[] | string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  missingSerial?: string | boolean;
 }
