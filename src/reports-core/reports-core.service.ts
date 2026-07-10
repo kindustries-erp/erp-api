@@ -185,14 +185,24 @@ export class ReportsCoreService {
         SELECT 
           'IN' as direction,
           i.invoice_no,
+          i.serial_no,
+          i.status,
+          i.seller_name AS partner_name,
+          i.seller_tax_code AS tax_code,
           TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
           ii.invoice_id,
           TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
           TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ii.unit,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
+          ii.vat_amount::numeric AS vat_amount,
+          (ii.quantity::numeric * ii.unit_price::numeric) + ii.vat_amount::numeric AS total_amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.license_plate,
+          i.settlement_order
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -204,14 +214,24 @@ export class ReportsCoreService {
         SELECT 
           'OUT' as direction,
           i.invoice_no,
+          i.serial_no,
+          i.status,
+          i.buyer_name AS partner_name,
+          i.buyer_tax_code AS tax_code,
           TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
           ii.invoice_id,
           TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
           '' AS item_name,
+          ii.unit,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
+          ii.vat_amount::numeric AS vat_amount,
+          (ii.quantity::numeric * ii.unit_price::numeric) + ii.vat_amount::numeric AS total_amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.license_plate,
+          i.settlement_order
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -222,13 +242,23 @@ export class ReportsCoreService {
       SELECT 
         c.direction,
         c.invoice_no AS "invoiceNo",
+        c.serial_no AS "serialNo",
+        c.status,
+        c.partner_name AS "partnerName",
+        c.tax_code AS "taxCode",
         c.invoice_date AS "invoiceDate",
         c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
         b.item_name AS "itemName",
+        c.unit,
         c.qty,
         c.unit_price AS "unitPrice",
+        c.pre_vat_amount AS "preVatAmount",
+        c.vat_rate AS "vatRate",
+        c.vat_amount AS "vatAmount",
         c.total_amount AS "totalAmount",
+        c.license_plate AS "licensePlate",
+        c.settlement_order AS "settlementOrder",
         TO_CHAR(c.month, 'YYYY-MM') AS "month"
       FROM (
         SELECT * FROM buy_codes
@@ -263,15 +293,47 @@ export class ReportsCoreService {
       { header: 'Mã phụ tùng', key: 'itemCode', width: 15 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
       { header: 'Phân loại', key: 'direction', width: 12 },
-      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Ngày hóa đơn', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+      { header: 'Trạng thái', key: 'status', width: 15 },
+      { header: 'Tên đối tác', key: 'partnerName', width: 40 },
+      { header: 'Mã số thuế', key: 'taxCode', width: 15 },
+      { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
       { header: 'Đơn giá', key: 'unitPrice', width: 20 },
+      { header: 'Tiền trước thuế', key: 'preVatAmount', width: 20 },
+      {
+        header: 'Thuế suất VAT (%)',
+        key: 'vatRate',
+        width: 15,
+        style: { numFmt: '0%' },
+      },
+      { header: 'Tiền thuế VAT', key: 'vatAmount', width: 20 },
       { header: 'Thành tiền', key: 'totalAmount', width: 20 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Lệnh sửa chữa', key: 'settlementOrder', width: 20 },
     ];
 
     sheet.getRow(1).font = { bold: true };
     sheet.getRow(1).alignment = { horizontal: 'center' };
+    sheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
+    };
+
+    sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }];
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: sheet.columns.length },
+    };
+
+    const parseVat = (val: any) => {
+      if (!val) return '';
+      const n = parseFloat(val);
+      return isNaN(n) ? val : n / 100;
+    };
 
     rawData.forEach((row: any) => {
       sheet.addRow({
@@ -279,15 +341,31 @@ export class ReportsCoreService {
         itemCode: row.itemCode,
         itemName: row.itemName,
         direction: row.direction === 'IN' ? 'Mua vào' : 'Bán ra',
-        invoiceNo: row.invoiceNo,
         invoiceDate: row.invoiceDate,
+        serialNo: row.serialNo,
+        invoiceNo: row.invoiceNo,
+        status: row.status,
+        partnerName: row.partnerName,
+        taxCode: row.taxCode,
+        unit: row.unit,
         qty: parseFloat(row.qty || '0'),
         unitPrice: parseFloat(row.unitPrice || '0'),
+        preVatAmount: parseFloat(row.preVatAmount || '0'),
+        vatRate: parseVat(row.vatRate),
+        vatAmount: parseFloat(row.vatAmount || '0'),
         totalAmount: parseFloat(row.totalAmount || '0'),
+        licensePlate: row.licensePlate,
+        settlementOrder: row.settlementOrder,
       });
     });
 
-    const numColumns = ['qty', 'unitPrice', 'totalAmount'];
+    const numColumns = [
+      'qty',
+      'unitPrice',
+      'preVatAmount',
+      'vatAmount',
+      'totalAmount',
+    ];
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
         numColumns.forEach((key) => {

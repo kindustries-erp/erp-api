@@ -46,6 +46,7 @@ export interface ErpInvoiceQuery {
   pageSize?: number;
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
+  export_type?: 'summary' | 'detailed';
 }
 
 @Injectable()
@@ -1550,30 +1551,76 @@ export class ErpInvoicesCoreService {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Invoices');
 
-    worksheet.columns = [
-      { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
-      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
-      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-      { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
-      { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-      { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
-      {
-        header: 'Tiền trước VAT',
-        key: 'preVat',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
-      {
-        header: 'Sau VAT',
-        key: 'total',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-      { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
-      { header: 'Diễn giải', key: 'description', width: 50 },
-    ];
+    const isDetailed = query.export_type === 'detailed';
+
+    if (isDetailed) {
+      worksheet.columns = [
+        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+        { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
+        { header: 'Đơn vị tính', key: 'uom', width: 15 },
+        {
+          header: 'Số lượng',
+          key: 'qty',
+          width: 15,
+          style: { numFmt: '#,##0.###' },
+        },
+        {
+          header: 'Đơn giá',
+          key: 'unitPrice',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Thành tiền',
+          key: 'totalAmount',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Thuế suất VAT (%)',
+          key: 'vatRate',
+          width: 15,
+          style: { numFmt: '0%' },
+        },
+        {
+          header: 'Tiền thuế VAT',
+          key: 'vatAmount',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+      ];
+    } else {
+      worksheet.columns = [
+        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+        { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+        {
+          header: 'Tiền trước VAT',
+          key: 'preVat',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
+        {
+          header: 'Sau VAT',
+          key: 'total',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+        { header: 'Diễn giải', key: 'description', width: 50 },
+      ];
+    }
 
     // Style header
     worksheet.getRow(1).eachCell((cell) => {
@@ -1585,6 +1632,14 @@ export class ErpInvoicesCoreService {
       };
     });
 
+    worksheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    ];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columns.length },
+    };
+
     for (const inv of items) {
       const partnerName =
         query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -1593,28 +1648,75 @@ export class ErpInvoicesCoreService {
       const address =
         query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
 
-      const fullDesc = [
-        inv.description,
-        (inv as any).notes,
-        ...(inv.items || []).map((i) => i.description),
-      ]
-        .filter(Boolean)
-        .join(' | ');
+      const parseVat = (val: any) => {
+        if (!val) return '';
+        const n = parseFloat(val);
+        return isNaN(n) ? val : n / 100;
+      };
 
-      worksheet.addRow({
-        invoiceDate: inv.invoiceDate,
-        serialNo: inv.serialNo,
-        invoiceNo: inv.invoiceNo,
-        partnerName,
-        taxCode,
-        address,
-        preVat: Number(inv.preVatAmount) || 0,
-        vat: Number(inv.vatAmount) || 0,
-        total: Number(inv.totalAmount) || 0,
-        licensePlate: inv.licensePlate || '',
-        wo: inv.settlementOrder || '',
-        description: fullDesc,
-      });
+      if (isDetailed) {
+        if (!inv.items || inv.items.length === 0) {
+          // If no items, output a single row with empty item details
+          worksheet.addRow({
+            invoiceDate: inv.invoiceDate,
+            serialNo: inv.serialNo,
+            invoiceNo: inv.invoiceNo,
+            partnerName,
+            taxCode,
+            itemName: inv.description || '',
+            uom: '',
+            qty: 0,
+            unitPrice: 0,
+            totalAmount: Number(inv.preVatAmount) || 0,
+            vatRate: parseVat(inv.vatRate),
+            vatAmount: Number(inv.vatAmount) || 0,
+            licensePlate: inv.licensePlate || '',
+            wo: inv.settlementOrder || '',
+          });
+        } else {
+          for (const item of inv.items) {
+            worksheet.addRow({
+              invoiceDate: inv.invoiceDate,
+              serialNo: inv.serialNo,
+              invoiceNo: inv.invoiceNo,
+              partnerName,
+              taxCode,
+              itemName: item.description || '',
+              uom: item.unit || '',
+              qty: Number(item.quantity) || 0,
+              unitPrice: Number(item.unitPrice) || 0,
+              totalAmount: Number(item.preVatAmount) || 0,
+              vatRate: parseVat(item.vatRate || inv.vatRate),
+              vatAmount: Number(item.vatAmount) || 0,
+              licensePlate: inv.licensePlate || '',
+              wo: inv.settlementOrder || '',
+            });
+          }
+        }
+      } else {
+        const fullDesc = [
+          inv.description,
+          (inv as any).notes,
+          ...(inv.items || []).map((i) => i.description),
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        worksheet.addRow({
+          invoiceDate: inv.invoiceDate,
+          serialNo: inv.serialNo,
+          invoiceNo: inv.invoiceNo,
+          partnerName,
+          taxCode,
+          address,
+          preVat: Number(inv.preVatAmount) || 0,
+          vat: Number(inv.vatAmount) || 0,
+          total: Number(inv.totalAmount) || 0,
+          licensePlate: inv.licensePlate || '',
+          wo: inv.settlementOrder || '',
+          description: fullDesc,
+        });
+      }
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
