@@ -16,6 +16,7 @@ import {
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
+import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import {
@@ -64,6 +65,8 @@ export class ErpInvoicesCoreService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(CompanyProfile)
+    private readonly companyProfileRepo: Repository<CompanyProfile>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
   ) {}
@@ -91,6 +94,30 @@ export class ErpInvoicesCoreService {
       ...i,
       netOffAmount: String(netOffMap[i.id] || 0),
     }));
+  }
+
+  async getPortalToken(): Promise<string> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    return profile?.gdt_portal_token || '';
+  }
+
+  async savePortalToken(token: string): Promise<void> {
+    let profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    if (!profile) {
+      profile = this.companyProfileRepo.create({
+        company_name: 'Your Company Name',
+        gdt_portal_token: token,
+      });
+    } else {
+      profile.gdt_portal_token = token;
+    }
+    await this.companyProfileRepo.save(profile);
   }
 
   private extractInvoiceMetadata(invoice: any): void {
@@ -510,7 +537,11 @@ export class ErpInvoicesCoreService {
    * sau đó download XML theo batch 10 với delay ngẫu nhiên 5-10s.
    */
   async syncFromPortal(dto: PortalFetchDto) {
-    if (!dto.token) throw new BadRequestException('token is required');
+    let token = dto.token?.trim();
+    if (!token) {
+      token = await this.getPortalToken();
+    }
+    if (!token) throw new BadRequestException('token is required');
     if (!dto.dateFrom || !dto.dateTo) {
       throw new BadRequestException('dateFrom and dateTo are required');
     }
@@ -560,7 +591,7 @@ export class ErpInvoicesCoreService {
           });
 
           const response = await this.fetchWithRetry(url, {
-            headers: { Authorization: `Bearer ${dto.token}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
           if (!response.ok)
             throw new BadRequestException(
@@ -850,16 +881,20 @@ export class ErpInvoicesCoreService {
   }
 
   async reparseXml(id: string, token?: string): Promise<ErpInvoice> {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
     const invoiceResp = await this.findOne(id);
     let invoice = invoiceResp.data;
 
     if (!invoice.xmlFileKey) {
-      if (!token) {
+      if (!activeToken) {
         throw new BadRequestException(
           'Hóa đơn này chưa có file XML đính kèm và không có token portal để tự tải.',
         );
       }
-      await this.downloadAndSaveXml(invoice as any, token);
+      await this.downloadAndSaveXml(invoice as any, activeToken);
       const updatedResp = await this.findOne(id);
       invoice = updatedResp.data;
       if (!invoice.xmlFileKey) {
@@ -936,7 +971,12 @@ export class ErpInvoicesCoreService {
     }
   }
 
-  async bulkDownloadXml(token: string, direction: 'IN' | 'OUT') {
+  async bulkDownloadXml(token: string | undefined, direction: 'IN' | 'OUT') {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
+    if (!activeToken) throw new BadRequestException('token is required');
     if (!token) throw new BadRequestException('Token portal là bắt buộc.');
 
     const invoices = await this.repository.find({
@@ -979,7 +1019,7 @@ export class ErpInvoicesCoreService {
 
       for (const inv of invoices) {
         try {
-          await this.downloadAndSaveXml(inv as any, token);
+          await this.downloadAndSaveXml(inv as any, activeToken);
           current++;
 
           this.progress$.next({
@@ -1019,17 +1059,17 @@ export class ErpInvoicesCoreService {
     };
   }
 
-  async syncDetailFromPortal(id: string, token: string): Promise<ErpInvoice> {
+  async syncDetailFromPortal(id: string, token?: string): Promise<ErpInvoice> {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
+    if (!activeToken)
+      throw new BadRequestException('Token portal là bắt buộc.');
     const invoiceResp = await this.findOne(id);
     const invoice = invoiceResp.data as any;
 
-    if (!token) {
-      throw new BadRequestException(
-        'Token portal là bắt buộc để đồng bộ từ GDT.',
-      );
-    }
-
-    await this.syncInvoiceDetailFromJson(invoice, token);
+    await this.syncInvoiceDetailFromJson(invoice, activeToken);
     return (await this.findOne(id)).data as ErpInvoice;
   }
 
