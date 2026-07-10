@@ -48,6 +48,8 @@ export class ReportsCoreService {
       avgSellPrice: 'COALESCE(ROUND(AVG(s.unit_price)), 0)',
       margin:
         'COALESCE(ROUND(AVG(s.unit_price)), 0) - COALESCE(ROUND(AVG(b.unit_price)), 0)',
+      marginPct:
+        'CASE WHEN COALESCE(ROUND(AVG(b.unit_price)), 0) > 0 THEN ((COALESCE(ROUND(AVG(s.unit_price)), 0) - COALESCE(ROUND(AVG(b.unit_price)), 0)) / COALESCE(ROUND(AVG(b.unit_price)), 0)) ELSE 0 END',
     };
 
     let orderByClause = 'ORDER BY b.month DESC, b.item_code ASC';
