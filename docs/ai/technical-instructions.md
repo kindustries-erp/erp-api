@@ -19,7 +19,7 @@ Nếu có mâu thuẫn, ưu tiên theo thứ tự trên. Không tham chiếu fil
 
 ### Gate 0 — DB Precheck bắt buộc
 Trước khi sửa workflow/API, phải ghi rõ DB precheck trong task:
-- Tables/fields liên quan (trên Neon Postgres, không còn Directus staging)
+- Tables/fields liên quan (trên Neon Postgres, không còn hệ thống staging)
 - Data nền cần có
 - Constraint/index/default cần có
 - Kết quả: `DB_READY` hoặc `DB_GAP_FOUND`
@@ -45,7 +45,7 @@ Nếu `DB_GAP_FOUND`: tạo/hoàn tất TypeORM migration trước, sau đó m�
 
 ### 3.4 Task closing rule
 - Hoàn tất task phải commit + push code web/api liên quan.
-- Riêng DB/directus staging không bắt buộc commit/push code DB repo; bắt buộc có evidence apply + verify + documentation.
+- Riêng DB/hệ thống staging không bắt buộc commit/push code DB repo; bắt buộc có evidence apply + verify + documentation.
 - Nếu task artifact bị stale so với code thật, phải verify bằng code state + build/test + git state trước khi chỉnh status/checklist.
 
 ## 4) API architecture rules
@@ -54,7 +54,7 @@ Nếu `DB_GAP_FOUND`: tạo/hoàn tất TypeORM migration trước, sau đó m�
 - Không trộn controller/service/dto của domain khác nếu không cần thiết.
 
 ### 4.2 Neon/Postgres integration discipline (lane erp-core)
-- Lane `erp-core` **không dùng Directus SDK**. DB là Neon Postgres qua TypeORM/DataSource.
+- Lane `erp-core` **không dùng hệ thống SDK**. DB là Neon Postgres qua TypeORM/DataSource.
 - Thay đổi schema phải đi qua TypeORM migration (`src/migrations/`), chạy bằng `bun run migration:run`.
 - Khi đổi entity/DTO/response, phải đồng bộ với ERP Web nếu có ảnh hưởng response shape.
 - Migration class name phải kết thúc bằng Unix timestamp integer (ví dụ: `AddField1749772800001`), không dùng YYYYMMDDNN alone.
@@ -66,7 +66,7 @@ Nếu `DB_GAP_FOUND`: tạo/hoàn tất TypeORM migration trước, sau đó m�
 ### 4.4 Reuse-first
 Trước khi tạo mới utility/service/helper, rà soát:
 - `src/common/**`
-- `src/directus/**`
+- `src/hệ thống/**`
 - module hiện có theo domain
 
 ### 4.5 Team-scale backend structure
@@ -75,7 +75,7 @@ Trước khi tạo mới utility/service/helper, rà soát:
 - DTO là boundary contract; không để entity shape vô tình trở thành public response shape nếu có thể cần đổi độc lập.
 - Nếu tạo primitive mới thay vì reuse, ghi lý do ngắn trong task artifact hoặc PR note.
 
-## 5) Data-safety rules (Directus staging aware)
+## 5) Data-safety rules (hệ thống staging aware)
 - Không viết migration phá huỷ dữ liệu khi chưa có backup.
 - Không đổi schema staging mà không ghi rõ migration note + verification.
 - Không in secret từ `.env` ra log/report.

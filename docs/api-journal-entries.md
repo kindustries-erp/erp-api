@@ -1,7 +1,7 @@
 # Journal Entries API Contract
 
 Base path: `/api/v1/journal-entries`
-Auth: `Bearer <Directus access token>` (hoặc impersonation token, backend dùng effective Directus token).
+Auth: `Bearer <hệ thống access token>` (hoặc impersonation token, backend dùng effective hệ thống token).
 
 ## Data model
 

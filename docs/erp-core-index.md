@@ -12,7 +12,7 @@ File này là entrypoint nhanh cho agent/developer khi vào repo `liouni-erp-api
 - Giúp agent đọc đúng bộ docs cho lane `erp-core`
 - Tránh nhầm giữa:
   - **active ERP CORE docs**
-  - **legacy ERP/Directus docs kept for history**
+  - **legacy ERP/hệ thống docs kept for history**
 
 ## Read this first
 1. `../AGENTS.md`
@@ -25,8 +25,8 @@ File này là entrypoint nhanh cho agent/developer khi vào repo `liouni-erp-api
 
 ## Canonical lane meaning
 - `/opt/repos/liouni-erp-core/liouni-erp-api` = active ERP CORE API source root
-- `/opt/repos/liouni-erp` = legacy/Directus lane source root
-- Các link sang `/opt/repos/liouni-erp/directus-staging/...` trong task docs có thể là **historical DB references**, không mặc định là bug
+- `/opt/repos/liouni-erp` = legacy/hệ thống lane source root
+- Các link sang `/opt/repos/liouni-erp/hệ thống-staging/...` trong task docs có thể là **historical DB references**, không mặc định là bug
 
 ## Recommended active ERP CORE docs
 Đây là nhóm file nên ưu tiên đọc khi làm lane `erp-core`:
@@ -40,7 +40,7 @@ File này là entrypoint nhanh cho agent/developer khi vào repo `liouni-erp-api
 - `docs/tasks/20260608-101936-fix-wave2-action-endpoint-invalid-uuid.md`
 - `docs/tasks/20260608-123500-erp-core-elite-deploy.md`
 - `docs/tasks/20260608-145500-create-erp-core-admin-account.md`
-- `docs/tasks/20260608-204700-erp-core-wave2-mfg-directus-cleanup.md`
+- `docs/tasks/20260608-204700-erp-core-wave2-mfg-hệ thống-cleanup.md`
 - `docs/tasks/20260608-214100-erp-core-wave2-lot-serial-stock-summary.md`
 - `docs/tasks/20260608-233500-purchase-order-core-compatibility-fix.md`
 - `docs/tasks/20260608-235600-po-core-strict-and-wave2-flow-verify.md`
@@ -62,7 +62,7 @@ Các docs về các mảng sau thường là legacy ERP lane, không phải acti
 - cash/bank
 - sinvoice / tax portal
 - approval-log cũ
-- Directus-era module behavior ngoài phạm vi core
+- hệ thống-era module behavior ngoài phạm vi core
 
 ### C. Mixed docs
 Một số doc có thể chứa cả:

@@ -140,7 +140,7 @@ Ghi chú: users được fetch batch bằng một request duy nhất sau khi l�
 
 ## 3) POST /rbac/roles
 
-Tạo role mới. Payload được forward sang Directus `/roles`.
+Tạo role mới. Payload được forward sang hệ thống `/roles`.
 
 ### Request body (example)
 
@@ -163,13 +163,13 @@ Tạo role mới. Payload được forward sang Directus `/roles`.
 }
 ```
 
-Ghi chú: cấu trúc field hợp lệ phụ thuộc schema/validation của Directus.
+Ghi chú: cấu trúc field hợp lệ phụ thuộc schema/validation của hệ thống.
 
 ---
 
 ## 4) PATCH /rbac/roles/:id
 
-Cập nhật role theo `id`. Payload được forward sang Directus `/roles/:id`.
+Cập nhật role theo `id`. Payload được forward sang hệ thống `/roles/:id`.
 
 ### Path param
 
@@ -218,7 +218,7 @@ Authorization: Bearer <access_token>
 
 ### Response 200/204
 
-API forward theo phản hồi từ Directus khi xóa thành công (thường không có payload chi tiết).
+API forward theo phản hồi từ hệ thống khi xóa thành công (thường không có payload chi tiết).
 
 ---
 
@@ -312,8 +312,8 @@ Luồng xử lý hiện tại:
 | `permissions[].action`      | Bắt buộc | `string`             | Action (ví dụ: `read`, `create`, `update`, `delete`) |
 | `permissions[].access`      | Bắt buộc | `boolean`            | `false` để xóa permission; `true` để tạo/cập nhật    |
 | `permissions[].fields`      | Không    | `string[] \| string` | Field whitelist cho action                           |
-| `permissions[].permissions` | Không    | `object`             | Điều kiện filter của Directus                        |
-| `permissions[].validation`  | Không    | `object`             | Validation rule của Directus                         |
+| `permissions[].permissions` | Không    | `object`             | Điều kiện filter của hệ thống                        |
+| `permissions[].validation`  | Không    | `object`             | Validation rule của hệ thống                         |
 
 ### Request body (example)
 
@@ -457,4 +457,4 @@ Ghi chú: gửi `userIds: []` sẽ bỏ toàn bộ user ra khỏi role (set `rol
 | ------------------ | ---------------------------------------------------------------------------------- |
 | `400 Bad Request`  | Payload không qua được `ValidationPipe` (sai kiểu, thiếu field bắt buộc trong DTO) |
 | `401 Unauthorized` | Thiếu hoặc sai Bearer token                                                        |
-| `4xx/5xx`          | Lỗi từ Directus sẽ được forward lại qua `HttpException`                            |
+| `4xx/5xx`          | Lỗi từ hệ thống sẽ được forward lại qua `HttpException`                            |

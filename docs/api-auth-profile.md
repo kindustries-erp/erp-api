@@ -38,12 +38,12 @@ Authorization: Bearer <access_token>
 
 #### `profile`
 
-Thông tin cơ bản của Directus user đang đăng nhập.
+Thông tin cơ bản của hệ thống user đang đăng nhập.
 
 ```json
 {
   "profile": {
-    "id": "uuid-directus-user",
+    "id": "uuid-hệ thống-user",
     "email": "user@example.com",
     "first_name": "Nguyen",
     "last_name": "Van A",
@@ -59,7 +59,7 @@ Thông tin cơ bản của Directus user đang đăng nhập.
 
 | Field | Type | Mô tả |
 | --- | --- | --- |
-| `id` | `string` | Directus user UUID |
+| `id` | `string` | hệ thống user UUID |
 | `email` | `string` | Email đăng nhập |
 | `first_name` | `string` | Họ |
 | `last_name` | `string` | Tên |
@@ -81,7 +81,7 @@ Bản ghi nhân viên (`gw_employees`) tương ứng với user, kèm department
     "id": "uuid-employee",
     "full_name": "Nguyen Van A",
     "phone": "0901234567",
-    "directus_user_id": "uuid-directus-user",
+    "directus_user_id": "uuid-hệ thống-user",
     "department_id": {
       "id": "uuid-dept",
       "name": "Phòng Kế toán"
@@ -129,11 +129,11 @@ Danh sách quyền được định nghĩa **cho Role** của user, group theo c
 
 | Field | Type | Mô tả |
 | --- | --- | --- |
-| `collection` | `string` | Tên collection trong Directus |
+| `collection` | `string` | Tên collection trong hệ thống |
 | `actions` | `string[]` | Danh sách action được phép: `read`, `create`, `update`, `delete`, `share` |
 | `details[].action` | `string` | Tên action |
 | `details[].fields` | `string[] \| null` | Các field được phép truy cập. `["*"]` = tất cả |
-| `details[].permissions` | `object \| null` | Row-level filter (Directus permission filter) |
+| `details[].permissions` | `object \| null` | Row-level filter (hệ thống permission filter) |
 | `details[].validation` | `object \| null` | Validation rule khi write |
 
 > Mảng rỗng `[]` nếu Role chưa được cấu hình Policy hoặc user không có Role.
@@ -252,13 +252,13 @@ const allowedFields = updateDetail?.fields ?? [];
 | HTTP | Mô tả |
 | --- | --- |
 | `401 Unauthorized` | Thiếu hoặc sai `access_token` |
-| `500 Internal Server Error` | Lỗi kết nối Directus |
+| `500 Internal Server Error` | Lỗi kết nối hệ thống |
 
 ---
 
 ### Ghi chú kỹ thuật
 
-- **Employee data** được fetch bằng `userToken` — Directus tự enforce row-level permission.
+- **Employee data** được fetch bằng `userToken` — hệ thống tự enforce row-level permission.
 - **Role info, Role permissions, Custom permissions** được fetch bằng `DIRECTUS_ADMIN_TOKEN` — vì user thông thường không có quyền đọc `/roles`, `/access`, `/permissions`.
 - Role info và Role access record được fetch **song song** (`Promise.all`) để tối ưu latency.
 - Nếu bất kỳ bước phụ nào lỗi (employee, role, custom perms), endpoint vẫn trả về thành công với field tương ứng là `null` hoặc `[]`.
@@ -314,7 +314,7 @@ Content-Type: application/json
 | `hire_date` | Ngày ký hợp đồng, do HR nhập |
 | `resign_date` | Ngày nghỉ việc, do HR xác nhận |
 | `is_active` | Kích hoạt/khóa tài khoản, thuộc Admin |
-| `email` | Cần sync với Directus user — xử lý riêng |
+| `email` | Cần sync với hệ thống user — xử lý riêng |
 
 ### Response
 
@@ -340,6 +340,6 @@ Content-Type: application/json
 ### PATCH Ghi chú kỹ thuật
 
 - `employee.id` được resolve tự động từ `directus_user_id` trong token — client không cần biết và không thể thay đổi.
-- Update dùng `userToken` (không phải admin token) — Directus tự enforce row-level permission cho employee record.
+- Update dùng `userToken` (không phải admin token) — hệ thống tự enforce row-level permission cho employee record.
 - `email`: cần update đồng thời cả `gw_employees.email` và `directus_users.email` (dùng để login) → chưa implement, cần endpoint riêng `PATCH /auth/profile/email`.
 - `password`: đã có endpoint riêng `POST /auth/change-password`.
