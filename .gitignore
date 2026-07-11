@@ -24,3 +24,4 @@ yarn-error.log*
 # Local test scripts
 scripts/
 !scripts/sync-db.sh
+backups/
