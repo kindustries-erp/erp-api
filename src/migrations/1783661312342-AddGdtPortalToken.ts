@@ -5,13 +5,13 @@ export class AddGdtPortalToken1783661312342 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "company_profile" ADD "gdt_portal_token" text`,
+      `ALTER TABLE "company_profile" ADD COLUMN IF NOT EXISTS "gdt_portal_token" text`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "company_profile" DROP COLUMN "gdt_portal_token"`,
+      `ALTER TABLE "company_profile" DROP COLUMN IF EXISTS "gdt_portal_token"`,
     );
   }
 }

@@ -1,124 +1,177 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-ACTION=$1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+cd "$REPO_ROOT"
 
-if [ -z "$ACTION" ]; then
-  echo "Usage: bun run typeorm-runner.sh [generate|run|sync] [args...]"
-  exit 1
-fi
+TYPEORM_CMD=(node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js)
+BACKUP_DIR="$REPO_ROOT/.agents/skills/db-migrate/backups"
+mkdir -p "$BACKUP_DIR"
 
-extract_db_url() {
-  local env_file=$1
-  if [ ! -f "$env_file" ]; then
-    echo "Error: Env file $env_file not found."
-    exit 1
-  fi
-  # Extract DATABASE_URL handling quotes
-  local db_url=$(grep -v '^#' "$env_file" | grep 'DATABASE_URL' | cut -d '=' -f2- | tr -d '"' | tr -d "'")
-  if [ -z "$db_url" ]; then
-    echo "Error: DATABASE_URL not found in $env_file"
-    exit 1
-  fi
-  echo "$db_url"
+usage() {
+  cat <<'EOF'
+Usage:
+  bash .agents/skills/db-migrate/scripts/typeorm-runner.sh generate <TARGET_ENV_FILE> <MIGRATION_NAME>
+  bash .agents/skills/db-migrate/scripts/typeorm-runner.sh run <TARGET_ENV_FILE>
+  bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync-schema <TARGET_ENV_FILE>
+  bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync <SOURCE_ENV_FILE> <TARGET_ENV_FILE>
+EOF
 }
 
-backup_db() {
-  local db_url=$1
-  echo "=> Backing up target database..."
-  mkdir -p backups
-  local timestamp=$(date +%Y%m%d_%H%M%S)
-  local backup_file="backups/db_backup_${timestamp}.dump"
-  
-  # Using pg_dump to dump the DB. Requires pg_dump installed on the system.
-  pg_dump "$db_url" -F c -f "$backup_file" || {
-    echo "Error: Database backup failed."
-    exit 1
-  }
-  echo "=> Backup completed: $backup_file"
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
 }
 
-if [ "$ACTION" == "generate" ]; then
-  TARGET_ENV_FILE=$2
-  MIGRATION_NAME=$3
-  if [ -z "$TARGET_ENV_FILE" ] || [ -z "$MIGRATION_NAME" ]; then
-    echo "Usage: bun run typeorm-runner.sh generate <TARGET_ENV_FILE> <MIGRATION_NAME>"
-    exit 1
+require_cmd() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || die "Missing required command: $cmd"
+}
+
+read_database_url_from_env() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || die "Env file not found: $env_file"
+
+  local line
+  line="$(grep -E '^DATABASE_URL=' "$env_file" | tail -n1 || true)"
+  [[ -n "$line" ]] || die "DATABASE_URL not found in $env_file"
+
+  local value="${line#DATABASE_URL=}"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+
+  [[ -n "$value" ]] || die "DATABASE_URL is empty in $env_file"
+  printf '%s' "$value"
+}
+
+normalize_neon_url_for_migration() {
+  local raw_url="$1"
+  local normalized="$raw_url"
+  local changed=0
+
+  if [[ "$normalized" == *"-pooler."* ]]; then
+    normalized="${normalized/-pooler./.}"
+    changed=1
   fi
 
-  export DATABASE_URL=$(extract_db_url "$TARGET_ENV_FILE")
-  echo "=> Generating TypeORM migration for target: $TARGET_ENV_FILE"
-  bunx typeorm-ts-node-commonjs migration:generate -d src/db/data-source.cli.ts "src/migrations/$MIGRATION_NAME"
-
-elif [ "$ACTION" == "run" ]; then
-  TARGET_ENV_FILE=$2
-  if [ -z "$TARGET_ENV_FILE" ]; then
-    echo "Usage: bun run typeorm-runner.sh run <TARGET_ENV_FILE>"
-    exit 1
+  if [[ "$normalized" == *"channel_binding=require"* ]]; then
+    normalized="$(printf '%s' "$normalized" | sed -E 's/([?&])channel_binding=require&/\1/g; s/[?&]channel_binding=require$//; s/\?&/?/g; s/[?&]$//')"
+    changed=1
   fi
 
-  TARGET_URL=$(extract_db_url "$TARGET_ENV_FILE")
-  export DATABASE_URL=$TARGET_URL
-  
-  backup_db "$TARGET_URL"
-  
-  echo "=> Running TypeORM migrations on target: $TARGET_ENV_FILE"
-  bun run migration:run
-
-elif [ "$ACTION" == "sync" ]; then
-  SOURCE_ENV_FILE=$2
-  TARGET_ENV_FILE=$3
-  if [ -z "$SOURCE_ENV_FILE" ] || [ -z "$TARGET_ENV_FILE" ]; then
-    echo "Usage: bun run typeorm-runner.sh sync <SOURCE_ENV_FILE> <TARGET_ENV_FILE>"
-    exit 1
+  if [[ $changed -eq 1 ]]; then
+    echo "INFO: Normalized DATABASE_URL for migration/schema operations (Neon pooler guard)." >&2
   fi
 
-  SOURCE_URL=$(extract_db_url "$SOURCE_ENV_FILE")
-  TARGET_URL=$(extract_db_url "$TARGET_ENV_FILE")
+  printf '%s' "$normalized"
+}
 
-  echo "=> Warning: This will OVERWRITE the target database ($TARGET_ENV_FILE) with data from source ($SOURCE_ENV_FILE)."
-  backup_db "$TARGET_URL"
+typeorm() {
+  DATABASE_URL="$1" "${TYPEORM_CMD[@]}" "$2" -d src/db/data-source.cli.ts ${3+"$3"}
+}
 
-  echo "=> Dumping source database..."
-  mkdir -p .tmp
-  local_dump=".tmp/sync_source.sql"
-  pg_dump "$SOURCE_URL" --clean --if-exists --no-owner --no-privileges -f "$local_dump" || {
-    echo "Error: Failed to dump source database."
+backup_schema() {
+  local db_url="$1"
+  local env_name="$2"
+  local ts
+  ts="$(date +%Y%m%d-%H%M%S)"
+  local backup_file="$BACKUP_DIR/${ts}-${env_name}-schema.sql"
+
+  if command -v pg_dump >/dev/null 2>&1; then
+    echo "INFO: Backing up schema to $backup_file"
+    pg_dump --schema-only "$db_url" > "$backup_file"
+  else
+    echo "WARN: pg_dump is not available, skipping schema backup." >&2
+  fi
+}
+
+run_generate() {
+  local env_file="$1"
+  local migration_name="$2"
+  local target_url
+  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+
+  [[ "$migration_name" == src/migrations/* ]] || migration_name="src/migrations/$migration_name"
+
+  echo "INFO: Generating migration against $env_file"
+  typeorm "$target_url" migration:generate "$migration_name"
+}
+
+run_migrations() {
+  local env_file="$1"
+  local target_url
+  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+
+  backup_schema "$target_url" "$(basename "$env_file")"
+
+  echo "INFO: Running migrations on $env_file"
+  typeorm "$target_url" migration:run
+}
+
+run_sync_schema() {
+  local env_file="$1"
+  local target_url
+  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+
+  backup_schema "$target_url" "$(basename "$env_file")"
+
+  echo "INFO: Syncing schema on $env_file"
+  typeorm "$target_url" schema:sync
+}
+
+run_sync_data() {
+  local source_env="$1"
+  local target_env="$2"
+
+  require_cmd pg_dump
+  require_cmd psql
+
+  local source_url target_url
+  source_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$source_env")")"
+  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$target_env")")"
+
+  echo "WARN: Full sync will overwrite data in target DB: $target_env"
+  echo "INFO: Backing up target schema before sync"
+  backup_schema "$target_url" "$(basename "$target_env")"
+
+  echo "INFO: Syncing data from $source_env to $target_env"
+  pg_dump --clean --if-exists --no-owner --no-privileges "$source_url" | psql "$target_url"
+}
+
+main() {
+  [[ $# -ge 2 ]] || {
+    usage
     exit 1
   }
 
-  echo "=> Restoring to target database..."
-  # using psql since we dumped raw SQL
-  psql "$TARGET_URL" -f "$local_dump" || {
-    echo "Error: Failed to restore to target database."
-    exit 1
-  }
-  
-  rm -f "$local_dump"
-  echo "=> Sync completed successfully."
+  local mode="$1"
+  shift
 
-elif [ "$ACTION" == "sync-schema" ]; then
-  TARGET_ENV_FILE=$2
-  if [ -z "$TARGET_ENV_FILE" ]; then
-    echo "Usage: bun run typeorm-runner.sh sync-schema <TARGET_ENV_FILE>"
-    exit 1
-  fi
+  case "$mode" in
+    generate)
+      [[ $# -eq 2 ]] || die "generate requires <TARGET_ENV_FILE> <MIGRATION_NAME>"
+      run_generate "$1" "$2"
+      ;;
+    run)
+      [[ $# -eq 1 ]] || die "run requires <TARGET_ENV_FILE>"
+      run_migrations "$1"
+      ;;
+    sync-schema)
+      [[ $# -eq 1 ]] || die "sync-schema requires <TARGET_ENV_FILE>"
+      run_sync_schema "$1"
+      ;;
+    sync)
+      [[ $# -eq 2 ]] || die "sync requires <SOURCE_ENV_FILE> <TARGET_ENV_FILE>"
+      run_sync_data "$1" "$2"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
 
-  TARGET_URL=$(extract_db_url "$TARGET_ENV_FILE")
-  export DATABASE_URL=$TARGET_URL
-
-  echo "=> Warning: This will safely synchronize the target database schema ($TARGET_ENV_FILE) to match current Code entities (preserving data)."
-  backup_db "$TARGET_URL"
-
-  echo "=> Syncing schema to target database using TypeORM..."
-  bunx typeorm-ts-node-commonjs schema:sync -d src/db/data-source.cli.ts || {
-    echo "Error: Failed to sync schema."
-    exit 1
-  }
-  
-  echo "=> Sync-schema completed successfully."
-
-else
-  echo "Error: Unknown action $ACTION"
-  exit 1
-fi
+main "$@"
