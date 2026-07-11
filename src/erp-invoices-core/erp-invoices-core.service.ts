@@ -16,6 +16,7 @@ import {
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
+import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import {
@@ -46,6 +47,7 @@ export interface ErpInvoiceQuery {
   pageSize?: number;
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
+  export_type?: 'summary' | 'detailed';
 }
 
 @Injectable()
@@ -63,6 +65,8 @@ export class ErpInvoicesCoreService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(CompanyProfile)
+    private readonly companyProfileRepo: Repository<CompanyProfile>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
   ) {}
@@ -90,6 +94,30 @@ export class ErpInvoicesCoreService {
       ...i,
       netOffAmount: String(netOffMap[i.id] || 0),
     }));
+  }
+
+  async getPortalToken(): Promise<string> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    return profile?.gdt_portal_token || '';
+  }
+
+  async savePortalToken(token: string): Promise<void> {
+    let profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    if (!profile) {
+      profile = this.companyProfileRepo.create({
+        company_name: 'Your Company Name',
+        gdt_portal_token: token,
+      });
+    } else {
+      profile.gdt_portal_token = token;
+    }
+    await this.companyProfileRepo.save(profile);
   }
 
   private extractInvoiceMetadata(invoice: any): void {
@@ -509,7 +537,11 @@ export class ErpInvoicesCoreService {
    * sau đó download XML theo batch 10 với delay ngẫu nhiên 5-10s.
    */
   async syncFromPortal(dto: PortalFetchDto) {
-    if (!dto.token) throw new BadRequestException('token is required');
+    let token = dto.token?.trim();
+    if (!token) {
+      token = await this.getPortalToken();
+    }
+    if (!token) throw new BadRequestException('token is required');
     if (!dto.dateFrom || !dto.dateTo) {
       throw new BadRequestException('dateFrom and dateTo are required');
     }
@@ -517,11 +549,17 @@ export class ErpInvoicesCoreService {
     const type = dto.type ?? 'purchase';
     const direction: 'IN' | 'OUT' = type === 'purchase' ? 'IN' : 'OUT';
 
-    // Build GDT URL
-    const basePath =
+    // Build GDT URLs (support both standard and cash register invoices)
+    const basePaths =
       type === 'purchase'
-        ? 'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase'
-        : 'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold';
+        ? [
+            'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+          ]
+        : [
+            'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
+            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/sold',
+          ];
 
     const [fromY, fromM, fromD] = dto.dateFrom.split('-');
     const formattedDateFrom = `${fromD}/${fromM}/${fromY}`;
@@ -532,62 +570,67 @@ export class ErpInvoicesCoreService {
     (async () => {
       try {
         const rawItems: any[] = [];
-        let state: string | null = null;
         let totalFromPortal = 0;
         let pagesFetched = 0;
-        const maxPages = 50;
+        const maxPages = 50; // max pages per endpoint
 
-        do {
-          const url = new URL(basePath);
-          url.searchParams.set('sort', 'tdlap:desc');
-          url.searchParams.set('size', '50');
-          url.searchParams.set(
-            'search',
-            `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
-          );
-          if (state) {
-            url.searchParams.set('state', state);
-          }
+        for (const basePath of basePaths) {
+          let state: string | null = null;
+          let pathPagesFetched = 0;
 
-          this.progress$.next({
-            processId: 'sync-progress',
-            type: 'bulk',
-            total: 100, // Unknown total pages initially
-            current: pagesFetched,
-            message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
-            completed: false,
-          });
-
-          const response = await this.fetchWithRetry(url, {
-            headers: { Authorization: `Bearer ${dto.token}` },
-          });
-          if (!response.ok)
-            throw new BadRequestException(
-              `Portal request failed with status ${response.status}`,
+          do {
+            const url = new URL(basePath);
+            url.searchParams.set('sort', 'tdlap:desc');
+            url.searchParams.set('size', '50');
+            url.searchParams.set(
+              'search',
+              `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
             );
+            if (state) {
+              url.searchParams.set('state', state);
+            }
 
-          const payload = (await response.json()) as {
-            datas?: any[];
-            total?: number;
-            state?: string;
-          };
+            this.progress$.next({
+              processId: 'sync-progress',
+              type: 'bulk',
+              total: 100, // Unknown total pages initially
+              current: pagesFetched,
+              message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
+              completed: false,
+            });
 
-          if (pagesFetched === 0) {
-            totalFromPortal = payload.total ?? 0;
-          }
+            const response = await this.fetchWithRetry(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok)
+              throw new BadRequestException(
+                `Portal request failed with status ${response.status}`,
+              );
 
-          if (payload.datas && payload.datas.length > 0) {
-            rawItems.push(...payload.datas);
-          }
+            const payload = (await response.json()) as {
+              datas?: any[];
+              total?: number;
+              state?: string;
+            };
 
-          state = payload.state ?? null;
-          pagesFetched++;
+            if (pathPagesFetched === 0) {
+              totalFromPortal += payload.total ?? 0;
+            }
 
-          if (state && pagesFetched < maxPages) {
-            const delay = (2 + Math.random() * 3) * 1000;
-            await this.sleep(Math.round(delay));
-          }
-        } while (state && pagesFetched < maxPages);
+            if (payload.datas && payload.datas.length > 0) {
+              rawItems.push(...payload.datas);
+            }
+
+            state = payload.state ?? null;
+            pathPagesFetched++;
+            pagesFetched++;
+
+            if (state && pathPagesFetched < maxPages) {
+              const delay = (2 + Math.random() * 3) * 1000;
+              await this.sleep(Math.round(delay));
+            }
+          } while (state && pathPagesFetched < maxPages);
+        }
 
         // ── Save new invoices to DB ───────────────────────────────────────────────
         let created = 0;
@@ -658,8 +701,8 @@ export class ErpInvoicesCoreService {
 
         // ── XML background download (fire & forget, rate-limited) ─────────────────
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(backgroundSyncIds, dto.token).catch(
-            (e) => this.logger.error('XML background download failed', e),
+          this.downloadXmlsInBackground(backgroundSyncIds, token).catch((e) =>
+            this.logger.error('XML background download failed', e),
           );
         }
 
@@ -849,16 +892,20 @@ export class ErpInvoicesCoreService {
   }
 
   async reparseXml(id: string, token?: string): Promise<ErpInvoice> {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
     const invoiceResp = await this.findOne(id);
     let invoice = invoiceResp.data;
 
     if (!invoice.xmlFileKey) {
-      if (!token) {
+      if (!activeToken) {
         throw new BadRequestException(
           'Hóa đơn này chưa có file XML đính kèm và không có token portal để tự tải.',
         );
       }
-      await this.downloadAndSaveXml(invoice as any, token);
+      await this.downloadAndSaveXml(invoice as any, activeToken);
       const updatedResp = await this.findOne(id);
       invoice = updatedResp.data;
       if (!invoice.xmlFileKey) {
@@ -935,7 +982,12 @@ export class ErpInvoicesCoreService {
     }
   }
 
-  async bulkDownloadXml(token: string, direction: 'IN' | 'OUT') {
+  async bulkDownloadXml(token: string | undefined, direction: 'IN' | 'OUT') {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
+    if (!activeToken) throw new BadRequestException('token is required');
     if (!token) throw new BadRequestException('Token portal là bắt buộc.');
 
     const invoices = await this.repository.find({
@@ -978,7 +1030,7 @@ export class ErpInvoicesCoreService {
 
       for (const inv of invoices) {
         try {
-          await this.downloadAndSaveXml(inv as any, token);
+          await this.downloadAndSaveXml(inv as any, activeToken);
           current++;
 
           this.progress$.next({
@@ -1018,17 +1070,17 @@ export class ErpInvoicesCoreService {
     };
   }
 
-  async syncDetailFromPortal(id: string, token: string): Promise<ErpInvoice> {
+  async syncDetailFromPortal(id: string, token?: string): Promise<ErpInvoice> {
+    let activeToken = token?.trim();
+    if (!activeToken) {
+      activeToken = await this.getPortalToken();
+    }
+    if (!activeToken)
+      throw new BadRequestException('Token portal là bắt buộc.');
     const invoiceResp = await this.findOne(id);
     const invoice = invoiceResp.data as any;
 
-    if (!token) {
-      throw new BadRequestException(
-        'Token portal là bắt buộc để đồng bộ từ GDT.',
-      );
-    }
-
-    await this.syncInvoiceDetailFromJson(invoice, token);
+    await this.syncInvoiceDetailFromJson(invoice, activeToken);
     return (await this.findOne(id)).data as ErpInvoice;
   }
 
@@ -1550,30 +1602,76 @@ export class ErpInvoicesCoreService {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Invoices');
 
-    worksheet.columns = [
-      { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
-      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
-      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-      { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
-      { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-      { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
-      {
-        header: 'Tiền trước VAT',
-        key: 'preVat',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
-      {
-        header: 'Sau VAT',
-        key: 'total',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-      { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
-      { header: 'Diễn giải', key: 'description', width: 50 },
-    ];
+    const isDetailed = query.export_type === 'detailed';
+
+    if (isDetailed) {
+      worksheet.columns = [
+        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+        { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
+        { header: 'Đơn vị tính', key: 'uom', width: 15 },
+        {
+          header: 'Số lượng',
+          key: 'qty',
+          width: 15,
+          style: { numFmt: '#,##0.###' },
+        },
+        {
+          header: 'Đơn giá',
+          key: 'unitPrice',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Thành tiền',
+          key: 'totalAmount',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Thuế suất VAT (%)',
+          key: 'vatRate',
+          width: 15,
+          style: { numFmt: '0%' },
+        },
+        {
+          header: 'Tiền thuế VAT',
+          key: 'vatAmount',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+      ];
+    } else {
+      worksheet.columns = [
+        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+        { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+        {
+          header: 'Tiền trước VAT',
+          key: 'preVat',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
+        {
+          header: 'Sau VAT',
+          key: 'total',
+          width: 20,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+        { header: 'Diễn giải', key: 'description', width: 50 },
+      ];
+    }
 
     // Style header
     worksheet.getRow(1).eachCell((cell) => {
@@ -1585,6 +1683,14 @@ export class ErpInvoicesCoreService {
       };
     });
 
+    worksheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    ];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columns.length },
+    };
+
     for (const inv of items) {
       const partnerName =
         query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -1593,28 +1699,75 @@ export class ErpInvoicesCoreService {
       const address =
         query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
 
-      const fullDesc = [
-        inv.description,
-        (inv as any).notes,
-        ...(inv.items || []).map((i) => i.description),
-      ]
-        .filter(Boolean)
-        .join(' | ');
+      const parseVat = (val: any) => {
+        if (!val) return '';
+        const n = parseFloat(val);
+        return isNaN(n) ? val : n / 100;
+      };
 
-      worksheet.addRow({
-        invoiceDate: inv.invoiceDate,
-        serialNo: inv.serialNo,
-        invoiceNo: inv.invoiceNo,
-        partnerName,
-        taxCode,
-        address,
-        preVat: Number(inv.preVatAmount) || 0,
-        vat: Number(inv.vatAmount) || 0,
-        total: Number(inv.totalAmount) || 0,
-        licensePlate: inv.licensePlate || '',
-        wo: inv.settlementOrder || '',
-        description: fullDesc,
-      });
+      if (isDetailed) {
+        if (!inv.items || inv.items.length === 0) {
+          // If no items, output a single row with empty item details
+          worksheet.addRow({
+            invoiceDate: inv.invoiceDate,
+            serialNo: inv.serialNo,
+            invoiceNo: inv.invoiceNo,
+            partnerName,
+            taxCode,
+            itemName: inv.description || '',
+            uom: '',
+            qty: 0,
+            unitPrice: 0,
+            totalAmount: Number(inv.preVatAmount) || 0,
+            vatRate: parseVat(inv.vatRate),
+            vatAmount: Number(inv.vatAmount) || 0,
+            licensePlate: inv.licensePlate || '',
+            wo: inv.settlementOrder || '',
+          });
+        } else {
+          for (const item of inv.items) {
+            worksheet.addRow({
+              invoiceDate: inv.invoiceDate,
+              serialNo: inv.serialNo,
+              invoiceNo: inv.invoiceNo,
+              partnerName,
+              taxCode,
+              itemName: item.description || '',
+              uom: item.unit || '',
+              qty: Number(item.quantity) || 0,
+              unitPrice: Number(item.unitPrice) || 0,
+              totalAmount: Number(item.preVatAmount) || 0,
+              vatRate: parseVat(item.vatRate || inv.vatRate),
+              vatAmount: Number(item.vatAmount) || 0,
+              licensePlate: inv.licensePlate || '',
+              wo: inv.settlementOrder || '',
+            });
+          }
+        }
+      } else {
+        const fullDesc = [
+          inv.description,
+          (inv as any).notes,
+          ...(inv.items || []).map((i) => i.description),
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        worksheet.addRow({
+          invoiceDate: inv.invoiceDate,
+          serialNo: inv.serialNo,
+          invoiceNo: inv.invoiceNo,
+          partnerName,
+          taxCode,
+          address,
+          preVat: Number(inv.preVatAmount) || 0,
+          vat: Number(inv.vatAmount) || 0,
+          total: Number(inv.totalAmount) || 0,
+          licensePlate: inv.licensePlate || '',
+          wo: inv.settlementOrder || '',
+          description: fullDesc,
+        });
+      }
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
