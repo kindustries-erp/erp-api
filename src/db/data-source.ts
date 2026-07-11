@@ -123,6 +123,7 @@ export default new DataSource(
     ? {
         type: 'postgres',
         url: databaseUrl,
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,
@@ -135,6 +136,7 @@ export default new DataSource(
         username: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_DATABASE || 'erp_core',
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,

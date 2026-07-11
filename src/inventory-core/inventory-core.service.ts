@@ -1284,6 +1284,9 @@ export class InventoryItemsService {
       lifecycle.attributes = lifecycle.attributes || {};
       lifecycle.attributes.dealer_name = dto.dealerName;
     }
+    if (dto.dealerId !== undefined) {
+      lifecycle.dealerId = dto.dealerId ? dto.dealerId : null;
+    }
 
     // Recalculate warranty_end_date if needed
     if (lifecycle.warrantyActivatedAt && lifecycle.warrantyMonths) {

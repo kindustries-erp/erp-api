@@ -18,6 +18,11 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
+import { CompanyProfileService } from '../company-profile/company-profile.service';
+import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
+import * as ExcelJS from 'exceljs';
+import { format } from 'date-fns';
 
 @Injectable()
 export class SalesOrdersCoreService {
@@ -28,6 +33,7 @@ export class SalesOrdersCoreService {
     @InjectRepository(ErpSalesOrderLine)
     private readonly lineRepository: Repository<ErpSalesOrderLine>,
     private readonly dependencyService: DocumentDependenciesCoreService,
+    private readonly companyProfileService: CompanyProfileService,
   ) {}
 
   private async getSalesOrderOrThrow(
@@ -749,5 +755,273 @@ export class SalesOrdersCoreService {
         data: { id },
       };
     });
+  }
+
+  async exportXlsx(id: string): Promise<Buffer> {
+    const orderRes = await this.findOne(id);
+    const order = orderRes.data;
+
+    const companyProfile = await this.companyProfileService.getProfile();
+
+    let customerName = (order as any).customerName || '';
+    let customerTaxCode = '';
+    let customerAddress = '';
+    if (order.customerId) {
+      const customer = await this.dataSource
+        .getRepository(ErpBusinessPartner)
+        .findOne({
+          where: { id: order.customerId },
+        });
+      if (customer) {
+        const namePart = customer.displayName || customer.name;
+        customerName = `${customer.code} - ${namePart}`;
+        customerTaxCode = customer.taxCode || '';
+        customerAddress = customer.address || '';
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('DonBanHang');
+
+    const defaultFont = { name: 'Times New Roman', size: 11 };
+
+    // Header setup
+    sheet.getColumn('A').width = 5; // STT
+    sheet.getColumn('B').width = 25; // Ten hang
+    sheet.getColumn('C').width = 20; // So khung
+    sheet.getColumn('D').width = 20; // So may
+    sheet.getColumn('E').width = 15; // So serial
+    sheet.getColumn('F').width = 10; // Mau xe
+    sheet.getColumn('G').width = 10; // So luong
+    sheet.getColumn('H').width = 15; // Don gia
+    sheet.getColumn('I').width = 15; // Thanh tien
+
+    // Row 1: Company
+    sheet.mergeCells('A1:I1');
+    sheet.getCell('A1').value = (
+      companyProfile?.company_name || 'Đơn vị: ............................'
+    ).toUpperCase();
+    sheet.getCell('A1').font = { ...defaultFont, bold: true };
+    sheet.getCell('A1').alignment = {
+      vertical: 'middle',
+      horizontal: 'left',
+      wrapText: true,
+    };
+    sheet.getRow(1).height = 25;
+
+    // Row 2: Address
+    sheet.mergeCells('A2:I2');
+    sheet.getCell('A2').value =
+      companyProfile?.address || 'Địa chỉ: ............................';
+    sheet.getCell('A2').font = defaultFont;
+    sheet.getCell('A2').alignment = {
+      vertical: 'top',
+      horizontal: 'left',
+      wrapText: true,
+    };
+    sheet.getRow(2).height = 35;
+
+    // Row 4: Title
+    sheet.mergeCells('A4:I4');
+    sheet.getCell('A4').value = 'ĐƠN BÁN HÀNG';
+    sheet.getCell('A4').font = { ...defaultFont, bold: true, size: 16 };
+    sheet.getCell('A4').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    // Row 5: Date
+    const orderDate = order.orderDate ? new Date(order.orderDate) : new Date();
+    sheet.mergeCells('A5:I5');
+    sheet.getCell('A5').value = `Ngày ${format(
+      orderDate,
+      'dd',
+    )} tháng ${format(orderDate, 'MM')} năm ${format(orderDate, 'yyyy')}`;
+    sheet.getCell('A5').font = { ...defaultFont, italic: true };
+    sheet.getCell('A5').alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    sheet.addRow([]);
+
+    const infoRow1 = sheet.addRow([`- Số đơn hàng: ${order.soNo || ''}`]);
+    sheet.mergeCells(`A${infoRow1.number}:I${infoRow1.number}`);
+
+    const infoRow2 = sheet.addRow([`- Khách hàng: ${customerName || ''}`]);
+    sheet.mergeCells(`A${infoRow2.number}:I${infoRow2.number}`);
+
+    const taxRow = sheet.addRow([`- Mã số thuế: ${customerTaxCode || ''}`]);
+    sheet.mergeCells(`A${taxRow.number}:I${taxRow.number}`);
+
+    const addrRow = sheet.addRow([`- Địa chỉ: ${customerAddress || ''}`]);
+    sheet.mergeCells(`A${addrRow.number}:I${addrRow.number}`);
+
+    const statusMap: Record<string, string> = {
+      DRAFT: 'Nháp',
+      CONFIRMED: 'Đã xác nhận',
+      IN_PROGRESS: 'Đang xử lý',
+      DELIVERED: 'Đã giao hàng',
+      CANCELLED: 'Đã hủy',
+    };
+    const translatedStatus = statusMap[order.status] || order.status;
+    const infoRow3 = sheet.addRow([`- Trạng thái: ${translatedStatus || ''}`]);
+    sheet.mergeCells(`A${infoRow3.number}:I${infoRow3.number}`);
+
+    const infoRow4 = sheet.addRow([`- Ghi chú: ${order.remarks || ''}`]);
+    sheet.mergeCells(`A${infoRow4.number}:I${infoRow4.number}`);
+
+    sheet.addRow([]);
+
+    // Table Headers
+    const headerRow = sheet.addRow([
+      'STT',
+      'Tên hàng',
+      'Số khung',
+      'Số máy',
+      'Số serial',
+      'Màu xe',
+      'Số lượng',
+      'Đơn giá',
+      'Thành tiền',
+    ]);
+    headerRow.eachCell((cell) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    let index = 1;
+    let totalAmount = 0;
+
+    const serialRepo = this.dataSource.getRepository(
+      ErpInventoryTrackingSerial,
+    );
+    const vehicleRepo = this.dataSource.getRepository(ErpVehicle);
+
+    if (order.lines && order.lines.length > 0) {
+      for (const line of order.lines) {
+        let serials: ErpInventoryTrackingSerial[] = [];
+        if (line.selectedSerialIds && line.selectedSerialIds.length > 0) {
+          serials = await serialRepo.find({
+            where: { id: In(line.selectedSerialIds) },
+          });
+        } else if (order.status !== 'DRAFT') {
+          serials = await serialRepo.find({
+            where: { salesOrderLineId: line.id },
+          });
+        }
+
+        const qty = Number(line.qtyOrdered) || 0;
+        const price = Number(line.unitPrice) || 0;
+        const amount = Number(line.amount) || qty * price;
+        totalAmount += amount;
+
+        if (serials.length > 0) {
+          // Pre-fetch vehicles
+          const vinIds = serials
+            .map((s) => s.vinId)
+            .filter((id): id is string => Boolean(id));
+          const vehicles =
+            vinIds.length > 0
+              ? await vehicleRepo.find({ where: { id: In(vinIds) } })
+              : [];
+          const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
+
+          for (let i = 0; i < serials.length; i++) {
+            const serial = serials[i];
+            const attrs = serial.attributes || {};
+            const vehicle = serial.vinId ? vehicleMap.get(serial.vinId) : null;
+            const isFirst = i === 0;
+
+            const chassisNo =
+              vehicle?.vinNo || attrs.chassisNo || attrs['Số khung'] || '';
+            const engineNo =
+              vehicle?.engineNo || attrs.engineNo || attrs['Số máy'] || '';
+
+            const row = sheet.addRow([
+              index++,
+              line.itemName || '',
+              chassisNo,
+              engineNo,
+              serial.serialNo || '',
+              attrs.color || attrs['Màu xe'] || '',
+              1, // each serial is 1 unit
+              price,
+              price, // each row is price * 1
+            ]);
+            row.eachCell((cell) => {
+              cell.font = defaultFont;
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+              };
+            });
+            // format number
+            row.getCell('G').numFmt = '#,##0.00';
+            row.getCell('H').numFmt = '#,##0.00';
+            row.getCell('I').numFmt = '#,##0.00';
+          }
+        } else {
+          const row = sheet.addRow([
+            index++,
+            line.itemName || '',
+            '',
+            '',
+            '',
+            '',
+            qty,
+            price,
+            amount,
+          ]);
+          row.eachCell((cell) => {
+            cell.font = defaultFont;
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' },
+            };
+          });
+          row.getCell('G').numFmt = '#,##0.00';
+          row.getCell('H').numFmt = '#,##0.00';
+          row.getCell('I').numFmt = '#,##0.00';
+        }
+      }
+    }
+
+    const totalRow = sheet.addRow([
+      '',
+      'Tổng cộng',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      totalAmount,
+    ]);
+    sheet.mergeCells(`B${totalRow.number}:H${totalRow.number}`);
+    totalRow.eachCell((cell) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+    totalRow.getCell('I').numFmt = '#,##0.00';
+    totalRow.getCell('B').alignment = { horizontal: 'right' };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as any as Buffer;
   }
 }
