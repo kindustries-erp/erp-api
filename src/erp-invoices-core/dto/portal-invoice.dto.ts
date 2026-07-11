@@ -32,7 +32,7 @@ export class PortalInvoiceDto {
 }
 
 export class PortalFetchDto {
-  @IsString() @IsNotEmpty() token: string;
+  @IsString() @IsOptional() token?: string;
   @IsString() @IsNotEmpty() dateFrom: string;
   @IsString() @IsNotEmpty() dateTo: string;
   @IsString() @IsOptional() @IsIn(['purchase', 'sold']) type?:
@@ -41,7 +41,7 @@ export class PortalFetchDto {
 }
 
 export class PortalImportDto {
-  @IsString() @IsNotEmpty() token: string;
+  @IsString() @IsOptional() token?: string;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PortalInvoiceDto)
