@@ -17,25 +17,17 @@ export class ReportsCoreService {
       WITH line_totals AS (
         SELECT
           sol.sales_order_id,
-          SUM(COALESCE(sol.amount::numeric, sol.qty_ordered::numeric * COALESCE(sol.unit_price::numeric, 0))) AS total_amount,
-          SUM(
-            CASE
-              WHEN sol.qty_ordered::numeric > 0 THEN
-                (COALESCE(sol.amount::numeric, sol.qty_ordered::numeric * COALESCE(sol.unit_price::numeric, 0))
-                 * LEAST(sol.qty_delivered::numeric, sol.qty_ordered::numeric)
-                 / sol.qty_ordered::numeric)
-              ELSE 0
-            END
-          ) AS delivered_amount
+          SUM(COALESCE(sol.qty_ordered::numeric, 0)) AS total_qty_ordered,
+          SUM(COALESCE(sol.qty_delivered::numeric, 0)) AS total_qty_delivered
         FROM erp_sales_order_lines sol
         GROUP BY sol.sales_order_id
       )
       SELECT
         COUNT(so.id)::int AS total_orders,
-        COALESCE(SUM(lt.total_amount), 0)::numeric AS total_revenue,
+        COALESCE(SUM(lt.total_qty_ordered), 0)::numeric AS total_qty,
         CASE
-          WHEN COALESCE(SUM(lt.total_amount), 0) = 0 THEN 0
-          ELSE ROUND(COALESCE(SUM(lt.delivered_amount), 0) * 100.0 / NULLIF(SUM(lt.total_amount), 0), 2)
+          WHEN COALESCE(SUM(lt.total_qty_ordered), 0) = 0 THEN 0
+          ELSE ROUND(COALESCE(SUM(lt.total_qty_delivered), 0) * 100.0 / NULLIF(SUM(lt.total_qty_ordered), 0), 2)
         END AS completion_rate
       FROM erp_sales_orders so
       LEFT JOIN line_totals lt ON lt.sales_order_id = so.id
@@ -54,7 +46,7 @@ export class ReportsCoreService {
       WITH monthly AS (
         SELECT
           DATE_TRUNC('month', so.order_date::date) AS month,
-          SUM(COALESCE(sol.amount::numeric, sol.qty_ordered::numeric * COALESCE(sol.unit_price::numeric, 0))) AS amount
+          SUM(COALESCE(sol.qty_ordered::numeric, 0)) AS qty
         FROM erp_sales_orders so
         LEFT JOIN erp_sales_order_lines sol ON sol.sales_order_id = so.id
         WHERE so.is_deleted = false ${whereSql}
@@ -62,7 +54,7 @@ export class ReportsCoreService {
       )
       SELECT
         TO_CHAR(month, 'YYYY-MM') AS month,
-        COALESCE(amount, 0)::numeric AS amount
+        COALESCE(qty, 0)::numeric AS qty
       FROM monthly
       ORDER BY month ASC
     `;
@@ -72,29 +64,45 @@ export class ReportsCoreService {
         so.customer_id AS "customerId",
         COALESCE(bp.display_name, bp.name, 'Khách lẻ') AS "customerName",
         COUNT(DISTINCT so.id)::int AS orders,
-        COALESCE(SUM(COALESCE(sol.amount::numeric, sol.qty_ordered::numeric * COALESCE(sol.unit_price::numeric, 0))), 0)::numeric AS amount
+        COALESCE(SUM(COALESCE(sol.qty_ordered::numeric, 0)), 0)::numeric AS qty
       FROM erp_sales_orders so
       LEFT JOIN erp_sales_order_lines sol ON sol.sales_order_id = so.id
       LEFT JOIN erp_business_partners bp ON bp.id = so.customer_id
       WHERE so.is_deleted = false ${whereSql}
       GROUP BY so.customer_id, bp.display_name, bp.name
-      ORDER BY amount DESC, orders DESC
+      ORDER BY qty DESC, orders DESC
       LIMIT 10
     `;
 
-    const [kpiRows, statusBreakdown, trend, topCustomers] = await Promise.all([
-      this.dataSource.query(kpiSql, params),
-      this.dataSource.query(statusSql, params),
-      this.dataSource.query(trendSql, params),
-      this.dataSource.query(topCustomersSql, params),
-    ]);
+    const colorBreakdownSql = `
+      SELECT
+        its.attributes->>'color' AS color,
+        COUNT(its.id)::int AS qty,
+        string_agg(DISTINCT COALESCE(bp.display_name, bp.name, 'Khách lẻ'), ', ') AS customers
+      FROM erp_inventory_tracking_serials its
+      JOIN erp_sales_order_lines sol ON sol.id = its.sales_order_line_id
+      JOIN erp_sales_orders so ON so.id = sol.sales_order_id
+      LEFT JOIN erp_business_partners bp ON bp.id = so.customer_id
+      WHERE so.is_deleted = false AND its.attributes->>'color' IS NOT NULL ${whereSql}
+      GROUP BY its.attributes->>'color'
+      ORDER BY qty DESC
+    `;
+
+    const [kpiRows, statusBreakdown, trend, topCustomers, colorBreakdown] =
+      await Promise.all([
+        this.dataSource.query(kpiSql, params),
+        this.dataSource.query(statusSql, params),
+        this.dataSource.query(trendSql, params),
+        this.dataSource.query(topCustomersSql, params),
+        this.dataSource.query(colorBreakdownSql, params),
+      ]);
 
     return {
       dateFrom: query.dateFrom || null,
       dateTo: query.dateTo || null,
       kpi: {
         totalOrders: Number(kpiRows?.[0]?.total_orders || 0),
-        totalRevenue: Number(kpiRows?.[0]?.total_revenue || 0),
+        totalQty: Number(kpiRows?.[0]?.total_qty || 0),
         completionRate: Number(kpiRows?.[0]?.completion_rate || 0),
       },
       statusBreakdown: (statusBreakdown || []).map((row: any) => ({
@@ -103,13 +111,18 @@ export class ReportsCoreService {
       })),
       trend: (trend || []).map((row: any) => ({
         month: row.month,
-        amount: Number(row.amount || 0),
+        qty: Number(row.qty || 0),
       })),
       topCustomers: (topCustomers || []).map((row: any) => ({
         customerId: row.customerId,
         customerName: row.customerName,
         orders: Number(row.orders || 0),
-        amount: Number(row.amount || 0),
+        qty: Number(row.qty || 0),
+      })),
+      colorBreakdown: (colorBreakdown || []).map((row: any) => ({
+        color: row.color,
+        qty: Number(row.qty || 0),
+        customers: row.customers,
       })),
     };
   }
@@ -125,25 +138,17 @@ export class ReportsCoreService {
       WITH line_totals AS (
         SELECT
           pol.purchase_order_id,
-          SUM(COALESCE(pol.amount::numeric, pol.qty_ordered::numeric * COALESCE(pol.unit_price::numeric, 0))) AS total_amount,
-          SUM(
-            CASE
-              WHEN pol.qty_ordered::numeric > 0 THEN
-                (COALESCE(pol.amount::numeric, pol.qty_ordered::numeric * COALESCE(pol.unit_price::numeric, 0))
-                 * LEAST(pol.qty_received::numeric, pol.qty_ordered::numeric)
-                 / pol.qty_ordered::numeric)
-              ELSE 0
-            END
-          ) AS received_amount
+          SUM(COALESCE(pol.qty_ordered::numeric, 0)) AS total_qty_ordered,
+          SUM(COALESCE(pol.qty_received::numeric, 0)) AS total_qty_received
         FROM erp_purchase_order_lines pol
         GROUP BY pol.purchase_order_id
       )
       SELECT
         COUNT(po.id)::int AS total_orders,
-        COALESCE(SUM(lt.total_amount), 0)::numeric AS total_purchase_amount,
+        COALESCE(SUM(lt.total_qty_ordered), 0)::numeric AS total_qty,
         CASE
-          WHEN COALESCE(SUM(lt.total_amount), 0) = 0 THEN 0
-          ELSE ROUND(COALESCE(SUM(lt.received_amount), 0) * 100.0 / NULLIF(SUM(lt.total_amount), 0), 2)
+          WHEN COALESCE(SUM(lt.total_qty_ordered), 0) = 0 THEN 0
+          ELSE ROUND(COALESCE(SUM(lt.total_qty_received), 0) * 100.0 / NULLIF(SUM(lt.total_qty_ordered), 0), 2)
         END AS completion_rate
       FROM erp_purchase_orders po
       LEFT JOIN line_totals lt ON lt.purchase_order_id = po.id
@@ -162,7 +167,7 @@ export class ReportsCoreService {
       WITH monthly AS (
         SELECT
           DATE_TRUNC('month', po.order_date::date) AS month,
-          SUM(COALESCE(pol.amount::numeric, pol.qty_ordered::numeric * COALESCE(pol.unit_price::numeric, 0))) AS amount
+          SUM(COALESCE(pol.qty_ordered::numeric, 0)) AS qty
         FROM erp_purchase_orders po
         LEFT JOIN erp_purchase_order_lines pol ON pol.purchase_order_id = po.id
         WHERE po.is_deleted = false ${whereSql}
@@ -170,7 +175,7 @@ export class ReportsCoreService {
       )
       SELECT
         TO_CHAR(month, 'YYYY-MM') AS month,
-        COALESCE(amount, 0)::numeric AS amount
+        COALESCE(qty, 0)::numeric AS qty
       FROM monthly
       ORDER BY month ASC
     `;
@@ -180,13 +185,13 @@ export class ReportsCoreService {
         po.supplier_id AS "supplierId",
         COALESCE(bp.display_name, bp.name, 'NCC lẻ') AS "supplierName",
         COUNT(DISTINCT po.id)::int AS orders,
-        COALESCE(SUM(COALESCE(pol.amount::numeric, pol.qty_ordered::numeric * COALESCE(pol.unit_price::numeric, 0))), 0)::numeric AS amount
+        COALESCE(SUM(COALESCE(pol.qty_ordered::numeric, 0)), 0)::numeric AS qty
       FROM erp_purchase_orders po
       LEFT JOIN erp_purchase_order_lines pol ON pol.purchase_order_id = po.id
       LEFT JOIN erp_business_partners bp ON bp.id = po.supplier_id
       WHERE po.is_deleted = false ${whereSql}
       GROUP BY po.supplier_id, bp.display_name, bp.name
-      ORDER BY amount DESC, orders DESC
+      ORDER BY qty DESC, orders DESC
       LIMIT 10
     `;
 
@@ -202,7 +207,7 @@ export class ReportsCoreService {
       dateTo: query.dateTo || null,
       kpi: {
         totalOrders: Number(kpiRows?.[0]?.total_orders || 0),
-        totalPurchaseAmount: Number(kpiRows?.[0]?.total_purchase_amount || 0),
+        totalQty: Number(kpiRows?.[0]?.total_qty || 0),
         completionRate: Number(kpiRows?.[0]?.completion_rate || 0),
       },
       statusBreakdown: (statusBreakdown || []).map((row: any) => ({
@@ -211,13 +216,13 @@ export class ReportsCoreService {
       })),
       trend: (trend || []).map((row: any) => ({
         month: row.month,
-        amount: Number(row.amount || 0),
+        qty: Number(row.qty || 0),
       })),
       topSuppliers: (topSuppliers || []).map((row: any) => ({
         supplierId: row.supplierId,
         supplierName: row.supplierName,
         orders: Number(row.orders || 0),
-        amount: Number(row.amount || 0),
+        qty: Number(row.qty || 0),
       })),
     };
   }
