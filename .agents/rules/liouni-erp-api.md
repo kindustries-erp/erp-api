@@ -14,7 +14,7 @@ Apply to all work in this repo.
 - follow DB -> API -> UI -> QC
 - inspect current state before edits
 - use evidence-first wording
-- before push/commit, `cd /opt/repos/liouni-erp-core/liouni-erp-api`
+- before push/commit, `cd` vào root của repo hiện tại (`./erp-api` từ workspace root)
 - before push/commit, always run `bun run check:ci` and `bun run build`
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`

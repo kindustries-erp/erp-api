@@ -41,6 +41,10 @@ export class CompanyProfile {
   @ApiProperty({ description: 'URL hoặc ID của logo', required: false })
   logo: string | null;
 
+  @Column({ name: 'gdt_portal_token', type: 'text', nullable: true })
+  @ApiProperty({ description: 'Token đồng bộ Portal GDT', required: false })
+  gdt_portal_token: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   @ApiProperty({ description: 'Thời gian tạo' })
   created_at: Date;

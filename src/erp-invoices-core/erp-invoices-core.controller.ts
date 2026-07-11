@@ -144,6 +144,18 @@ export class ErpInvoicesCoreController {
     return this.service.bulkDownloadXml(body.token, body.direction);
   }
 
+  @Get('portal/token')
+  async getPortalToken() {
+    const token = await this.service.getPortalToken();
+    return { token };
+  }
+
+  @Post('portal/token')
+  async savePortalToken(@Body() body: { token: string }) {
+    await this.service.savePortalToken(body.token);
+    return { message: 'Token saved successfully' };
+  }
+
   // ---------------------------------------------------------------------------
   // Bulk XML import
   // ---------------------------------------------------------------------------
