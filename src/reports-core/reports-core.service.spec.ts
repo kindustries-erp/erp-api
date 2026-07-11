@@ -15,18 +15,19 @@ describe('ReportsCoreService', () => {
   it('maps sales dashboard payload from SQL rows', async () => {
     dataSource.query
       .mockResolvedValueOnce([
-        { total_orders: '2', total_revenue: '1000', completion_rate: '75.5' },
+        { total_orders: '2', total_qty: '1000', completion_rate: '75.5' },
       ])
       .mockResolvedValueOnce([{ status: 'DELIVERED', count: '1' }])
-      .mockResolvedValueOnce([{ month: '2026-07', amount: '1000' }])
+      .mockResolvedValueOnce([{ month: '2026-07', qty: '1000' }])
       .mockResolvedValueOnce([
         {
           customerId: 'c1',
           customerName: 'ACME',
           orders: '2',
-          amount: '1000',
+          qty: '1000',
         },
-      ]);
+      ])
+      .mockResolvedValueOnce([{ color: 'ĐỎ', qty: '500', customers: 'ACME' }]);
 
     const result = await service.getSalesDashboard({
       dateFrom: '2026-07-01',
@@ -34,10 +35,10 @@ describe('ReportsCoreService', () => {
     });
 
     expect(result.kpi.totalOrders).toBe(2);
-    expect(result.kpi.totalRevenue).toBe(1000);
+    expect(result.kpi.totalQty).toBe(1000);
     expect(result.kpi.completionRate).toBe(75.5);
     expect(result.statusBreakdown).toEqual([{ status: 'DELIVERED', count: 1 }]);
-    expect(result.trend).toEqual([{ month: '2026-07', amount: 1000 }]);
+    expect(result.trend).toEqual([{ month: '2026-07', qty: 1000 }]);
     expect(result.topCustomers[0].customerName).toBe('ACME');
   });
 
@@ -46,18 +47,18 @@ describe('ReportsCoreService', () => {
       .mockResolvedValueOnce([
         {
           total_orders: '3',
-          total_purchase_amount: '2400',
+          total_qty: '2400',
           completion_rate: '60',
         },
       ])
       .mockResolvedValueOnce([{ status: 'CONFIRMED', count: '2' }])
-      .mockResolvedValueOnce([{ month: '2026-07', amount: '2400' }])
+      .mockResolvedValueOnce([{ month: '2026-07', qty: '2400' }])
       .mockResolvedValueOnce([
         {
           supplierId: 's1',
           supplierName: 'Supplier A',
           orders: '3',
-          amount: '2400',
+          qty: '2400',
         },
       ]);
 
@@ -67,10 +68,10 @@ describe('ReportsCoreService', () => {
     });
 
     expect(result.kpi.totalOrders).toBe(3);
-    expect(result.kpi.totalPurchaseAmount).toBe(2400);
+    expect(result.kpi.totalQty).toBe(2400);
     expect(result.kpi.completionRate).toBe(60);
     expect(result.statusBreakdown).toEqual([{ status: 'CONFIRMED', count: 2 }]);
-    expect(result.trend).toEqual([{ month: '2026-07', amount: 2400 }]);
+    expect(result.trend).toEqual([{ month: '2026-07', qty: 2400 }]);
     expect(result.topSuppliers[0].supplierName).toBe('Supplier A');
   });
 });
