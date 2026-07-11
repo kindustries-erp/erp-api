@@ -549,11 +549,17 @@ export class ErpInvoicesCoreService {
     const type = dto.type ?? 'purchase';
     const direction: 'IN' | 'OUT' = type === 'purchase' ? 'IN' : 'OUT';
 
-    // Build GDT URL
-    const basePath =
+    // Build GDT URLs (support both standard and cash register invoices)
+    const basePaths =
       type === 'purchase'
-        ? 'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase'
-        : 'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold';
+        ? [
+            'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+          ]
+        : [
+            'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
+            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/sold',
+          ];
 
     const [fromY, fromM, fromD] = dto.dateFrom.split('-');
     const formattedDateFrom = `${fromD}/${fromM}/${fromY}`;
@@ -564,62 +570,67 @@ export class ErpInvoicesCoreService {
     (async () => {
       try {
         const rawItems: any[] = [];
-        let state: string | null = null;
         let totalFromPortal = 0;
         let pagesFetched = 0;
-        const maxPages = 50;
+        const maxPages = 50; // max pages per endpoint
 
-        do {
-          const url = new URL(basePath);
-          url.searchParams.set('sort', 'tdlap:desc');
-          url.searchParams.set('size', '50');
-          url.searchParams.set(
-            'search',
-            `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
-          );
-          if (state) {
-            url.searchParams.set('state', state);
-          }
+        for (const basePath of basePaths) {
+          let state: string | null = null;
+          let pathPagesFetched = 0;
 
-          this.progress$.next({
-            processId: 'sync-progress',
-            type: 'bulk',
-            total: 100, // Unknown total pages initially
-            current: pagesFetched,
-            message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
-            completed: false,
-          });
-
-          const response = await this.fetchWithRetry(url, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!response.ok)
-            throw new BadRequestException(
-              `Portal request failed with status ${response.status}`,
+          do {
+            const url = new URL(basePath);
+            url.searchParams.set('sort', 'tdlap:desc');
+            url.searchParams.set('size', '50');
+            url.searchParams.set(
+              'search',
+              `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
             );
+            if (state) {
+              url.searchParams.set('state', state);
+            }
 
-          const payload = (await response.json()) as {
-            datas?: any[];
-            total?: number;
-            state?: string;
-          };
+            this.progress$.next({
+              processId: 'sync-progress',
+              type: 'bulk',
+              total: 100, // Unknown total pages initially
+              current: pagesFetched,
+              message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
+              completed: false,
+            });
 
-          if (pagesFetched === 0) {
-            totalFromPortal = payload.total ?? 0;
-          }
+            const response = await this.fetchWithRetry(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok)
+              throw new BadRequestException(
+                `Portal request failed with status ${response.status}`,
+              );
 
-          if (payload.datas && payload.datas.length > 0) {
-            rawItems.push(...payload.datas);
-          }
+            const payload = (await response.json()) as {
+              datas?: any[];
+              total?: number;
+              state?: string;
+            };
 
-          state = payload.state ?? null;
-          pagesFetched++;
+            if (pathPagesFetched === 0) {
+              totalFromPortal += payload.total ?? 0;
+            }
 
-          if (state && pagesFetched < maxPages) {
-            const delay = (2 + Math.random() * 3) * 1000;
-            await this.sleep(Math.round(delay));
-          }
-        } while (state && pagesFetched < maxPages);
+            if (payload.datas && payload.datas.length > 0) {
+              rawItems.push(...payload.datas);
+            }
+
+            state = payload.state ?? null;
+            pathPagesFetched++;
+            pagesFetched++;
+
+            if (state && pathPagesFetched < maxPages) {
+              const delay = (2 + Math.random() * 3) * 1000;
+              await this.sleep(Math.round(delay));
+            }
+          } while (state && pathPagesFetched < maxPages);
+        }
 
         // ── Save new invoices to DB ───────────────────────────────────────────────
         let created = 0;
@@ -690,8 +701,8 @@ export class ErpInvoicesCoreService {
 
         // ── XML background download (fire & forget, rate-limited) ─────────────────
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(backgroundSyncIds, dto.token).catch(
-            (e) => this.logger.error('XML background download failed', e),
+          this.downloadXmlsInBackground(backgroundSyncIds, token).catch((e) =>
+            this.logger.error('XML background download failed', e),
           );
         }
 

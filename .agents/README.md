@@ -1,6 +1,6 @@
 # Liouni ERP API Agent Pack
 
-Source of truth for this repo.
+Source of truth for this repo (`./erp-api`).
 
 ## Read order
 1. `context/current-truth.md`
