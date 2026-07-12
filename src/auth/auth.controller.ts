@@ -1,20 +1,12 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength } from 'class-validator';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
 import { RegisterLocalUserDto } from './dto/register-local-user.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
-
-class LoginDto {
-  @IsEmail()
-  email: string;
-
-  @IsString()
-  @MinLength(8)
-  password: string;
-}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -24,8 +16,11 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'ERP Core local login' })
   @ApiBody({ type: LoginDto })
-  login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.password);
+  login(@Body() body: LoginDto, @Req() req: Request) {
+    return this.authService.login(body.email, body.password, {
+      userAgent: req.headers['user-agent'] ?? undefined,
+      ipAddress: req.ip ?? undefined,
+    });
   }
 
   @Post('register')
@@ -35,6 +30,20 @@ export class AuthController {
   @ApiBody({ type: RegisterLocalUserDto })
   register(@Body() body: RegisterLocalUserDto) {
     return this.authService.registerLocalUser(body);
+  }
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'Làm mới access token bằng refresh token' })
+  @ApiBody({ type: RefreshTokenDto })
+  refresh(@Body() body: RefreshTokenDto) {
+    return this.authService.refresh(body.refresh_token);
+  }
+
+  @Post('logout')
+  @ApiOperation({ summary: 'Đăng xuất và revoke refresh token' })
+  @ApiBody({ type: RefreshTokenDto })
+  logout(@Body() body: RefreshTokenDto) {
+    return this.authService.logout(body.refresh_token);
   }
 
   @Post('change-password')
@@ -60,7 +69,10 @@ export class AuthController {
     @Body() body: { targetUserId: string },
     @Req() request: Request & { user: { sub: string } },
   ) {
-    return this.authService.impersonate(request.user.sub, body.targetUserId);
+    return this.authService.impersonate(request.user.sub, body.targetUserId, {
+      userAgent: request.headers['user-agent'] ?? undefined,
+      ipAddress: request.ip ?? undefined,
+    });
   }
 
   @Get('profile')

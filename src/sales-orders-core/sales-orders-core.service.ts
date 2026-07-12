@@ -217,6 +217,7 @@ export class SalesOrdersCoreService {
       }
       const [items, total] = await this.repository.findAndCount({
         where: [{ ...baseWhere, id: In(taggedIds) }],
+        relations: ['lines'],
         skip: (page - 1) * pageSize,
         take: pageSize,
         order,
@@ -232,6 +233,7 @@ export class SalesOrdersCoreService {
 
     const [items, total] = await this.repository.findAndCount({
       where: [baseWhere],
+      relations: ['lines'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,

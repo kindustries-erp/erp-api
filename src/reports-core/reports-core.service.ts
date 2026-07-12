@@ -6,6 +6,251 @@ import * as ExcelJS from 'exceljs';
 export class ReportsCoreService {
   constructor(private readonly dataSource: DataSource) {}
 
+  async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
+    const { whereSql, params } = this.buildDateFilter(
+      query.dateFrom,
+      query.dateTo,
+      'so.order_date',
+    );
+
+    const kpiSql = `
+      WITH line_totals AS (
+        SELECT
+          sol.sales_order_id,
+          SUM(COALESCE(sol.qty_ordered::numeric, 0)) AS total_qty_ordered,
+          SUM(COALESCE(sol.qty_delivered::numeric, 0)) AS total_qty_delivered
+        FROM erp_sales_order_lines sol
+        GROUP BY sol.sales_order_id
+      )
+      SELECT
+        COUNT(so.id)::int AS total_orders,
+        COALESCE(SUM(lt.total_qty_ordered), 0)::numeric AS total_qty,
+        CASE
+          WHEN COALESCE(SUM(lt.total_qty_ordered), 0) = 0 THEN 0
+          ELSE ROUND(COALESCE(SUM(lt.total_qty_delivered), 0) * 100.0 / NULLIF(SUM(lt.total_qty_ordered), 0), 2)
+        END AS completion_rate
+      FROM erp_sales_orders so
+      LEFT JOIN line_totals lt ON lt.sales_order_id = so.id
+      WHERE so.is_deleted = false ${whereSql}
+    `;
+
+    const statusSql = `
+      SELECT so.status AS status, COUNT(so.id)::int AS count
+      FROM erp_sales_orders so
+      WHERE so.is_deleted = false ${whereSql}
+      GROUP BY so.status
+      ORDER BY count DESC, so.status ASC
+    `;
+
+    const trendSql = `
+      WITH monthly AS (
+        SELECT
+          DATE_TRUNC('month', so.order_date::date) AS month,
+          SUM(COALESCE(sol.qty_ordered::numeric, 0)) AS qty
+        FROM erp_sales_orders so
+        LEFT JOIN erp_sales_order_lines sol ON sol.sales_order_id = so.id
+        WHERE so.is_deleted = false ${whereSql}
+        GROUP BY DATE_TRUNC('month', so.order_date::date)
+      )
+      SELECT
+        TO_CHAR(month, 'YYYY-MM') AS month,
+        COALESCE(qty, 0)::numeric AS qty
+      FROM monthly
+      ORDER BY month ASC
+    `;
+
+    const topCustomersSql = `
+      SELECT
+        so.customer_id AS "customerId",
+        COALESCE(bp.display_name, bp.name, 'Khách lẻ') AS "customerName",
+        COUNT(DISTINCT so.id)::int AS orders,
+        COALESCE(SUM(COALESCE(sol.qty_ordered::numeric, 0)), 0)::numeric AS qty
+      FROM erp_sales_orders so
+      LEFT JOIN erp_sales_order_lines sol ON sol.sales_order_id = so.id
+      LEFT JOIN erp_business_partners bp ON bp.id = so.customer_id
+      WHERE so.is_deleted = false ${whereSql}
+      GROUP BY so.customer_id, bp.display_name, bp.name
+      ORDER BY qty DESC, orders DESC
+      LIMIT 10
+    `;
+
+    const colorBreakdownSql = `
+      SELECT
+        its.attributes->>'color' AS color,
+        COUNT(its.id)::int AS qty,
+        string_agg(DISTINCT COALESCE(bp.display_name, bp.name, 'Khách lẻ'), ', ') AS customers
+      FROM erp_inventory_tracking_serials its
+      JOIN erp_sales_order_lines sol ON sol.id = its.sales_order_line_id
+      JOIN erp_sales_orders so ON so.id = sol.sales_order_id
+      LEFT JOIN erp_business_partners bp ON bp.id = so.customer_id
+      WHERE so.is_deleted = false AND its.attributes->>'color' IS NOT NULL ${whereSql}
+      GROUP BY its.attributes->>'color'
+      ORDER BY qty DESC
+    `;
+
+    const [kpiRows, statusBreakdown, trend, topCustomers, colorBreakdown] =
+      await Promise.all([
+        this.dataSource.query(kpiSql, params),
+        this.dataSource.query(statusSql, params),
+        this.dataSource.query(trendSql, params),
+        this.dataSource.query(topCustomersSql, params),
+        this.dataSource.query(colorBreakdownSql, params),
+      ]);
+
+    return {
+      dateFrom: query.dateFrom || null,
+      dateTo: query.dateTo || null,
+      kpi: {
+        totalOrders: Number(kpiRows?.[0]?.total_orders || 0),
+        totalQty: Number(kpiRows?.[0]?.total_qty || 0),
+        completionRate: Number(kpiRows?.[0]?.completion_rate || 0),
+      },
+      statusBreakdown: (statusBreakdown || []).map((row: any) => ({
+        status: row.status,
+        count: Number(row.count || 0),
+      })),
+      trend: (trend || []).map((row: any) => ({
+        month: row.month,
+        qty: Number(row.qty || 0),
+      })),
+      topCustomers: (topCustomers || []).map((row: any) => ({
+        customerId: row.customerId,
+        customerName: row.customerName,
+        orders: Number(row.orders || 0),
+        qty: Number(row.qty || 0),
+      })),
+      colorBreakdown: (colorBreakdown || []).map((row: any) => ({
+        color: row.color,
+        qty: Number(row.qty || 0),
+        customers: row.customers,
+      })),
+    };
+  }
+
+  async getPurchasingDashboard(query: { dateFrom?: string; dateTo?: string }) {
+    const { whereSql, params } = this.buildDateFilter(
+      query.dateFrom,
+      query.dateTo,
+      'po.order_date',
+    );
+
+    const kpiSql = `
+      WITH line_totals AS (
+        SELECT
+          pol.purchase_order_id,
+          SUM(COALESCE(pol.qty_ordered::numeric, 0)) AS total_qty_ordered,
+          SUM(COALESCE(pol.qty_received::numeric, 0)) AS total_qty_received
+        FROM erp_purchase_order_lines pol
+        GROUP BY pol.purchase_order_id
+      )
+      SELECT
+        COUNT(po.id)::int AS total_orders,
+        COALESCE(SUM(lt.total_qty_ordered), 0)::numeric AS total_qty,
+        CASE
+          WHEN COALESCE(SUM(lt.total_qty_ordered), 0) = 0 THEN 0
+          ELSE ROUND(COALESCE(SUM(lt.total_qty_received), 0) * 100.0 / NULLIF(SUM(lt.total_qty_ordered), 0), 2)
+        END AS completion_rate
+      FROM erp_purchase_orders po
+      LEFT JOIN line_totals lt ON lt.purchase_order_id = po.id
+      WHERE po.is_deleted = false ${whereSql}
+    `;
+
+    const statusSql = `
+      SELECT po.status AS status, COUNT(po.id)::int AS count
+      FROM erp_purchase_orders po
+      WHERE po.is_deleted = false ${whereSql}
+      GROUP BY po.status
+      ORDER BY count DESC, po.status ASC
+    `;
+
+    const trendSql = `
+      WITH monthly AS (
+        SELECT
+          DATE_TRUNC('month', po.order_date::date) AS month,
+          SUM(COALESCE(pol.qty_ordered::numeric, 0)) AS qty
+        FROM erp_purchase_orders po
+        LEFT JOIN erp_purchase_order_lines pol ON pol.purchase_order_id = po.id
+        WHERE po.is_deleted = false ${whereSql}
+        GROUP BY DATE_TRUNC('month', po.order_date::date)
+      )
+      SELECT
+        TO_CHAR(month, 'YYYY-MM') AS month,
+        COALESCE(qty, 0)::numeric AS qty
+      FROM monthly
+      ORDER BY month ASC
+    `;
+
+    const topSuppliersSql = `
+      SELECT
+        po.supplier_id AS "supplierId",
+        COALESCE(bp.display_name, bp.name, 'NCC lẻ') AS "supplierName",
+        COUNT(DISTINCT po.id)::int AS orders,
+        COALESCE(SUM(COALESCE(pol.qty_ordered::numeric, 0)), 0)::numeric AS qty
+      FROM erp_purchase_orders po
+      LEFT JOIN erp_purchase_order_lines pol ON pol.purchase_order_id = po.id
+      LEFT JOIN erp_business_partners bp ON bp.id = po.supplier_id
+      WHERE po.is_deleted = false ${whereSql}
+      GROUP BY po.supplier_id, bp.display_name, bp.name
+      ORDER BY qty DESC, orders DESC
+      LIMIT 10
+    `;
+
+    const [kpiRows, statusBreakdown, trend, topSuppliers] = await Promise.all([
+      this.dataSource.query(kpiSql, params),
+      this.dataSource.query(statusSql, params),
+      this.dataSource.query(trendSql, params),
+      this.dataSource.query(topSuppliersSql, params),
+    ]);
+
+    return {
+      dateFrom: query.dateFrom || null,
+      dateTo: query.dateTo || null,
+      kpi: {
+        totalOrders: Number(kpiRows?.[0]?.total_orders || 0),
+        totalQty: Number(kpiRows?.[0]?.total_qty || 0),
+        completionRate: Number(kpiRows?.[0]?.completion_rate || 0),
+      },
+      statusBreakdown: (statusBreakdown || []).map((row: any) => ({
+        status: row.status,
+        count: Number(row.count || 0),
+      })),
+      trend: (trend || []).map((row: any) => ({
+        month: row.month,
+        qty: Number(row.qty || 0),
+      })),
+      topSuppliers: (topSuppliers || []).map((row: any) => ({
+        supplierId: row.supplierId,
+        supplierName: row.supplierName,
+        orders: Number(row.orders || 0),
+        qty: Number(row.qty || 0),
+      })),
+    };
+  }
+
+  private buildDateFilter(
+    dateFrom?: string,
+    dateTo?: string,
+    dateColumn = 'created_at',
+  ) {
+    const params: string[] = [];
+    const predicates: string[] = [];
+
+    if (dateFrom) {
+      params.push(dateFrom);
+      predicates.push(`${dateColumn}::date >= $${params.length}`);
+    }
+
+    if (dateTo) {
+      params.push(dateTo);
+      predicates.push(`${dateColumn}::date <= $${params.length}`);
+    }
+
+    return {
+      whereSql: predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '',
+      params,
+    };
+  }
+
   async getVinfastPartsTracking(query: {
     dateFrom?: string;
     dateTo?: string;
@@ -38,7 +283,6 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
-    // Mapping sortBy to exact SQL columns
     const sortMap: Record<string, string> = {
       itemCode: 'b.item_code',
       month: 'b.month',

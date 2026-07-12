@@ -18,4 +18,20 @@ export class InventoryStockCoreController {
   findAll(@Query() query: InventoryStockQueryDto) {
     return this.service.findAll(query);
   }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+    );
+  }
 }

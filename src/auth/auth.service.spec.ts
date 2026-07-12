@@ -2,8 +2,10 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { RbacCoreService } from '../rbac-core/rbac-core.service';
 
@@ -59,6 +61,16 @@ describe('AuthService', () => {
           useValue: {
             get: jest.fn().mockReturnValue(undefined),
             getOrThrow: jest.fn().mockReturnValue('mock'),
+          },
+        },
+        {
+          provide: getRepositoryToken(CoreRefreshToken),
+          useValue: {
+            create: jest.fn().mockImplementation((v) => v),
+            save: jest.fn(),
+            findOne: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
           },
         },
       ],

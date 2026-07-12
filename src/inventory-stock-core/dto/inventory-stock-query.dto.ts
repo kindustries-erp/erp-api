@@ -9,4 +9,14 @@ export class InventoryStockQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   item_type?: string;
+
+  @ApiPropertyOptional({ description: 'JSON string of column searches' })
+  @IsOptional()
+  @IsString()
+  searches?: string;
+
+  @ApiPropertyOptional({ description: 'JSON string of column filters' })
+  @IsOptional()
+  @IsString()
+  filters?: string;
 }
