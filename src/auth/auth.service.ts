@@ -5,10 +5,22 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { LessThan, Repository } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { randomBytes, createHash } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 import { RbacCoreService } from '../rbac-core/rbac-core.service';
+import { CoreRefreshToken } from './entities/core-refresh-token.entity';
+
+// Refresh token lifetime: 30 days in seconds
+const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
+
+function hashToken(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -18,6 +30,8 @@ export class AuthService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly auditCoreService: AuditCoreService,
     private readonly rbacCoreService: RbacCoreService,
+    @InjectRepository(CoreRefreshToken)
+    private readonly refreshTokenRepo: Repository<CoreRefreshToken>,
   ) {}
 
   async onModuleInit() {
@@ -40,7 +54,88 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(email: string, password: string) {
+  // ── Refresh token helpers ─────────────────────────────────────────────────
+
+  private async createRefreshToken(
+    userId: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ): Promise<string> {
+    const raw = randomBytes(48).toString('hex');
+    const tokenHash = hashToken(raw);
+    const expiresAt = new Date(
+      Date.now() + REFRESH_TOKEN_LIFETIME_SECONDS * 1000,
+    );
+
+    await this.refreshTokenRepo.save(
+      this.refreshTokenRepo.create({
+        userId,
+        tokenHash,
+        expiresAt,
+        revokedAt: null,
+        userAgent: meta.userAgent ?? null,
+        ipAddress: meta.ipAddress ?? null,
+      }),
+    );
+
+    return raw;
+  }
+
+  private async findValidRefreshToken(
+    raw: string,
+  ): Promise<CoreRefreshToken | null> {
+    const tokenHash = hashToken(raw);
+    const record = await this.refreshTokenRepo.findOne({
+      where: { tokenHash },
+    });
+
+    if (!record) return null;
+
+    // Already revoked — potential reuse attack: revoke ALL tokens for user
+    if (record.revokedAt !== null) {
+      await this.revokeAllUserTokens(record.userId);
+      return null;
+    }
+
+    // Expired
+    if (record.expiresAt < new Date()) {
+      return null;
+    }
+
+    return record;
+  }
+
+  async revokeToken(raw: string): Promise<void> {
+    const tokenHash = hashToken(raw);
+    await this.refreshTokenRepo.update(
+      { tokenHash },
+      { revokedAt: new Date() },
+    );
+  }
+
+  async revokeAllUserTokens(userId: string): Promise<void> {
+    await this.refreshTokenRepo.update(
+      { userId, revokedAt: null as any },
+      { revokedAt: new Date() },
+    );
+  }
+
+  // ── Cleanup cron: remove expired tokens older than 7 days ─────────────────
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async cleanupExpiredTokens(): Promise<void> {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await this.refreshTokenRepo.delete({
+      expiresAt: LessThan(cutoff),
+    });
+  }
+
+  // ── Auth flows ─────────────────────────────────────────────────────────────
+
+  async login(
+    email: string,
+    password: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ) {
     const normalizedEmail = email.toLowerCase().trim();
     const user = await this.usersService.findByEmail(normalizedEmail);
 
@@ -86,6 +181,8 @@ export class AuthService implements OnModuleInit {
       status: user.status,
     });
 
+    const refreshToken = await this.createRefreshToken(user.id, meta);
+
     await this.auditCoreService.recordAction({
       actorUserId: user.id,
       actorEmail: user.email,
@@ -97,8 +194,13 @@ export class AuthService implements OnModuleInit {
       message: 'Đăng nhập thành công',
     });
 
+    const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
+    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+
     return {
       accessToken,
+      refreshToken,
+      expiresIn: expiresInSeconds,
       tokenType: 'Bearer',
       user: {
         id: user.id,
@@ -109,6 +211,72 @@ export class AuthService implements OnModuleInit {
       },
     };
   }
+
+  async refresh(raw: string) {
+    const record = await this.findValidRefreshToken(raw);
+    if (!record) {
+      throw new UnauthorizedException(
+        'Refresh token không hợp lệ hoặc đã hết hạn',
+      );
+    }
+
+    // Load user
+    const user = await this.usersService.findById(record.userId);
+    if (!user || user.status !== 'ACTIVE') {
+      await this.revokeToken(raw);
+      throw new UnauthorizedException('Tài khoản không hoạt động');
+    }
+
+    // Rotate: revoke old, issue new
+    await this.refreshTokenRepo.update(
+      { id: record.id },
+      { revokedAt: new Date() },
+    );
+
+    const newRefreshToken = await this.createRefreshToken(user.id, {
+      userAgent: record.userAgent ?? undefined,
+      ipAddress: record.ipAddress ?? undefined,
+    });
+
+    const newAccessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      status: user.status,
+    });
+
+    const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
+    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+
+    return {
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+      expires: expiresInSeconds,
+    };
+  }
+
+  async logout(raw: string): Promise<{ message: string }> {
+    await this.revokeToken(raw);
+    return { message: 'Đăng xuất thành công' };
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private parseExpiresIn(expiresIn: string): number {
+    // Parse '8h', '30d', '3600' (seconds) etc.
+    const match = /^(\d+)(s|m|h|d)?$/.exec(expiresIn);
+    if (!match) return 8 * 3600;
+    const value = parseInt(match[1], 10);
+    const unit = match[2] ?? 's';
+    const multipliers: Record<string, number> = {
+      s: 1,
+      m: 60,
+      h: 3600,
+      d: 86400,
+    };
+    return value * (multipliers[unit] ?? 1);
+  }
+
+  // ── Existing flows (preserved) ────────────────────────────────────────────
 
   async registerLocalUser(input: {
     email: string;
@@ -156,6 +324,10 @@ export class AuthService implements OnModuleInit {
     user.passwordHash = this.usersService.hashPassword(dto.newPassword);
     user.passwordChangedAt = new Date();
     await this.usersService.save(user as any);
+
+    // Revoke all refresh tokens after password change
+    await this.revokeAllUserTokens(user.id);
+
     await this.auditCoreService.recordAction({
       actorUserId: user.id,
       actorEmail: user.email,
@@ -174,7 +346,11 @@ export class AuthService implements OnModuleInit {
     return { message: 'Đổi mật khẩu thành công' };
   }
 
-  async impersonate(adminUserId: string, targetUserId: string) {
+  async impersonate(
+    adminUserId: string,
+    targetUserId: string,
+    meta: { userAgent?: string; ipAddress?: string } = {},
+  ) {
     const adminUser = await this.usersService.findById(adminUserId);
     if (adminUser?.email !== 'admin@liouni.com') {
       throw new UnauthorizedException(
@@ -200,6 +376,11 @@ export class AuthService implements OnModuleInit {
       impersonatorId: adminUser.id,
     });
 
+    const refreshToken = await this.createRefreshToken(targetUser.id, meta);
+
+    const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
+    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+
     await this.auditCoreService.recordAction({
       actorUserId: adminUser.id,
       actorEmail: adminUser.email,
@@ -213,6 +394,8 @@ export class AuthService implements OnModuleInit {
 
     return {
       accessToken,
+      refreshToken,
+      expiresIn: expiresInSeconds,
       tokenType: 'Bearer',
       user: {
         id: targetUser.id,

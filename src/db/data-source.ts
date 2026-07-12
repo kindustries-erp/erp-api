@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -59,6 +60,7 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 
 const entities = [
   CoreUser,
+  CoreRefreshToken,
   CoreRole,
   CorePermission,
   CoreUserRole,
@@ -123,6 +125,7 @@ export default new DataSource(
     ? {
         type: 'postgres',
         url: databaseUrl,
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,
@@ -135,6 +138,7 @@ export default new DataSource(
         username: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_DATABASE || 'erp_core',
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,

@@ -196,6 +196,8 @@ export class RbacCoreService {
         label: 'Accounting Configs (Cấu hình kế toán)',
       },
       { resource: 'invoices', label: 'Hóa đơn' },
+      { resource: 'sales_reports', label: 'Sales Reports' },
+      { resource: 'purchasing_reports', label: 'Purchasing Reports' },
       { resource: 'sys_tags', label: 'Tags' },
       { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
       { resource: 'bank_statements', label: 'Bank Statements (Import)' },
