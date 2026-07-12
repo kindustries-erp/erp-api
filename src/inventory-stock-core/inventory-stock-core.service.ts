@@ -18,7 +18,12 @@ export class InventoryStockCoreService {
   ) {}
 
   async findAll(
-    query: PaginationDto & { item_type?: string; search?: string },
+    query: PaginationDto & {
+      item_type?: string;
+      search?: string;
+      searches?: string;
+      filters?: string;
+    },
   ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -56,26 +61,123 @@ export class InventoryStockCoreService {
       );
     }
 
+    if (query.searches) {
+      try {
+        const searches = JSON.parse(query.searches) as Record<string, string>;
+        for (const [col, val] of Object.entries(searches)) {
+          if (!val) continue;
+          if (col === 'item_code')
+            qb.andWhere('item.sku ILIKE :val', { val: `%${val}%` });
+          else if (col === 'item_name')
+            qb.andWhere('item.itemName ILIKE :val', { val: `%${val}%` });
+          else if (col === 'item_type')
+            qb.andWhere('itemType.code ILIKE :val', { val: `%${val}%` });
+          else if (col === 'status')
+            qb.andWhere('item.status ILIKE :val', { val: `%${val}%` });
+          else if (col === 'unit')
+            qb.andWhere('uom.name ILIKE :val', { val: `%${val}%` });
+          else if (col === 'on_hand_qty' && !isNaN(Number(val)))
+            qb.andWhere('b.qtyOnHand = :val', { val: Number(val) });
+          else if (col === 'reserved_qty' && !isNaN(Number(val)))
+            qb.andWhere('b.qtyReserved = :val', { val: Number(val) });
+        }
+      } catch (e) {}
+    }
+
+    if (query.filters) {
+      try {
+        const filters = JSON.parse(query.filters) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'item_type')
+            qb.andWhere('itemType.code IN (:...vals)', { vals });
+          else if (col === 'status')
+            qb.andWhere('item.status IN (:...vals)', { vals });
+          else if (col === 'item_code')
+            qb.andWhere('item.sku IN (:...vals)', { vals });
+          else if (col === 'item_name')
+            qb.andWhere('item.itemName IN (:...vals)', { vals });
+          else if (col === 'unit')
+            qb.andWhere('uom.name IN (:...vals)', { vals });
+        }
+      } catch (e) {}
+    }
+
     if (query.sort) {
-      const isDesc = query.sort.startsWith('-');
-      const field = isDesc ? query.sort.substring(1) : query.sort;
-      const order = isDesc ? 'DESC' : 'ASC';
+      const sorts = query.sort.split(',');
+      let firstSort = true;
+      let hasDefaultSort = false;
 
-      let sortField = '';
-      if (field === 'item_code') sortField = 'item.sku';
-      else if (field === 'item_type') sortField = 'itemType.code';
-      else if (field === 'status') sortField = 'item.status';
-      else if (field === 'unit') sortField = 'uom.name';
-      else if (field === 'item') sortField = 'item.itemName';
+      for (const s of sorts) {
+        if (!s) continue;
+        const isDesc = s.startsWith('-');
+        const field = isDesc ? s.substring(1) : s;
+        const order = isDesc ? 'DESC' : 'ASC';
 
-      if (sortField) {
-        qb.orderBy(sortField, order);
-      } else {
-        qb.addSelect('b.updatedAt').orderBy(
-          'b.updatedAt',
-          'DESC',
-          'NULLS LAST',
-        );
+        let sortField = '';
+        if (field === 'item_code') sortField = 'item.sku';
+        else if (field === 'item_type') sortField = 'itemType.code';
+        else if (field === 'status') sortField = 'item.status';
+        else if (field === 'unit') sortField = 'uom.name';
+        else if (field === 'item_name') sortField = 'item.itemName';
+        else if (field === 'on_hand_qty') sortField = 'b.qtyOnHand';
+        else if (field === 'reserved_qty') sortField = 'b.qtyReserved';
+        else if (field === 'last') sortField = 'b.updatedAt';
+        else if (field === 'received_qty') {
+          qb.addSelect(
+            '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+            'receivedQty_sort',
+          );
+          sortField = '"receivedQty_sort"';
+        } else if (field === 'issued_qty') {
+          qb.addSelect(
+            '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+            'issuedQty_sort',
+          );
+          sortField = '"issuedQty_sort"';
+        }
+
+        if (sortField) {
+          if (firstSort) {
+            if (sortField === 'b.updatedAt') {
+              qb.addSelect('b.updatedAt').orderBy(
+                'b.updatedAt',
+                order,
+                'NULLS LAST',
+              );
+              hasDefaultSort = true;
+            } else {
+              qb.orderBy(sortField, order, 'NULLS LAST');
+            }
+            firstSort = false;
+          } else {
+            if (sortField === 'b.updatedAt') {
+              qb.addSelect('b.updatedAt').addOrderBy(
+                'b.updatedAt',
+                order,
+                'NULLS LAST',
+              );
+              hasDefaultSort = true;
+            } else {
+              qb.addOrderBy(sortField, order, 'NULLS LAST');
+            }
+          }
+        }
+      }
+      if (firstSort || !hasDefaultSort) {
+        if (firstSort) {
+          qb.addSelect('b.updatedAt').orderBy(
+            'b.updatedAt',
+            'DESC',
+            'NULLS LAST',
+          );
+        } else {
+          qb.addSelect('b.updatedAt').addOrderBy(
+            'b.updatedAt',
+            'DESC',
+            'NULLS LAST',
+          );
+        }
       }
     } else {
       qb.addSelect('b.updatedAt').orderBy('b.updatedAt', 'DESC', 'NULLS LAST');
@@ -136,6 +238,70 @@ export class InventoryStockCoreService {
 
     return {
       items: rows,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+  ) {
+    const qb = this.itemRepository.createQueryBuilder('item');
+    qb.leftJoin('item.itemType', 'itemType');
+    qb.leftJoin('item.uom', 'uom');
+
+    let selectField = '';
+    if (column === 'item_code') selectField = 'item.sku';
+    else if (column === 'item_name') selectField = 'item.itemName';
+    else if (column === 'item_type') selectField = 'itemType.code';
+    else if (column === 'status') selectField = 'item.status';
+    else if (column === 'unit') selectField = 'uom.name';
+    else if (column === 'on_hand_qty') {
+      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+      selectField = 'b.qtyOnHand';
+    } else if (column === 'reserved_qty') {
+      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+      selectField = 'b.qtyReserved';
+    } else if (column === 'received_qty') {
+      selectField =
+        '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
+    } else if (column === 'issued_qty') {
+      selectField =
+        '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
+    } else if (column === 'last') {
+      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+      selectField = 'b.updatedAt';
+    } else return { items: [], total: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.where(`${selectField} IS NOT NULL`);
+    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (search) {
+      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
+        search: `%${search}%`,
+      });
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+
+    return {
+      items: results.map((r) => r.value).filter(Boolean),
       total,
       page,
       pageSize,

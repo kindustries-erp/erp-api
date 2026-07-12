@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -59,6 +60,7 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 
 const entities = [
   CoreUser,
+  CoreRefreshToken,
   CoreRole,
   CorePermission,
   CoreUserRole,

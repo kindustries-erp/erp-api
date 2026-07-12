@@ -1,13 +1,37 @@
 import { Controller, Get, Query, UseGuards, Res } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ReportsCoreService } from './reports-core.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import type { Response } from 'express';
 
-@UseGuards(JwtAuthGuard)
+@ApiTags('reports')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('reports')
 export class ReportsCoreController {
   constructor(private readonly reportsCoreService: ReportsCoreService) {}
 
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @Get('sales-dashboard')
+  async getSalesDashboard(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsCoreService.getSalesDashboard({ dateFrom, dateTo });
+  }
+
+  @RequirePermissions({ resource: 'purchasing_reports', action: 'read' })
+  @Get('purchasing-dashboard')
+  async getPurchasingDashboard(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsCoreService.getPurchasingDashboard({ dateFrom, dateTo });
+  }
+
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
   @Get('vinfast-parts')
   async getVinfastPartsTracking(
     @Query('dateFrom') dateFrom?: string,
@@ -30,6 +54,7 @@ export class ReportsCoreController {
     return result;
   }
 
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
   @Get('vinfast-parts/details')
   async getVinfastPartsTrackingDetails(
     @Query('dateFrom') dateFrom?: string,
@@ -45,6 +70,7 @@ export class ReportsCoreController {
     });
   }
 
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
   @Get('vinfast-parts/export/excel')
   async exportVinfastPartsTrackingExcel(
     @Query('dateFrom') dateFrom: string,

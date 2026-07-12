@@ -39,15 +39,21 @@ describe('AuthController', () => {
       };
       authService.login.mockResolvedValue(loginResult);
 
-      const result = await controller.login({
-        email: 'test@example.com',
-        password: 'password123',
-      });
+      const req = { headers: {}, ip: '127.0.0.1' } as any;
+
+      const result = await controller.login(
+        {
+          email: 'test@example.com',
+          password: 'password123',
+        },
+        req,
+      );
 
       expect(result).toEqual(loginResult);
       expect(authService.login).toHaveBeenCalledWith(
         'test@example.com',
         'password123',
+        { userAgent: undefined, ipAddress: '127.0.0.1' },
       );
     });
   });
