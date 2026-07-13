@@ -9,6 +9,7 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
 import { R2Module } from '../r2/r2.module';
 import { BankTransactionsCoreModule } from '../bank-transactions-core/bank-transactions-core.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { BankTransactionsCoreModule } from '../bank-transactions-core/bank-trans
     ]),
     R2Module,
     BankTransactionsCoreModule,
+    NotificationsModule,
   ],
   controllers: [ErpInvoicesCoreController],
   providers: [ErpInvoicesCoreService],

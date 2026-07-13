@@ -14,6 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
   Res,
+  Request,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
@@ -131,8 +132,8 @@ export class ErpInvoicesCoreController {
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
   @Post('portal/sync')
-  syncPortal(@Body() dto: PortalFetchDto) {
-    return this.service.syncFromPortal(dto);
+  syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
+    return this.service.syncFromPortal(dto, req.user?.sub);
   }
 
   /**

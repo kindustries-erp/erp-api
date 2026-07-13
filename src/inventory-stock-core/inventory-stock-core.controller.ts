@@ -26,12 +26,14 @@ export class InventoryStockCoreController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('filters') filters?: string,
   ) {
     return this.service.getColumnOptions(
       column,
       search,
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
+      filters,
     );
   }
 }
