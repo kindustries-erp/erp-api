@@ -40,6 +40,7 @@ import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transa
 import { KgaraApiCoreModule } from './kgara-api-core/kgara-api-core.module';
 import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -111,6 +112,7 @@ import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
     KgaraApiCoreModule,
     AccountingCoreModule,
     PublicWarrantyModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

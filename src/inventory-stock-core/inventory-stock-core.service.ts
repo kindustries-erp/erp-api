@@ -90,15 +90,47 @@ export class InventoryStockCoreService {
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
           if (col === 'item_type')
-            qb.andWhere('itemType.code IN (:...vals)', { vals });
+            qb.andWhere(`itemType.code IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           else if (col === 'status')
-            qb.andWhere('item.status IN (:...vals)', { vals });
+            qb.andWhere(`item.status IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           else if (col === 'item_code')
-            qb.andWhere('item.sku IN (:...vals)', { vals });
+            qb.andWhere(`item.sku IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           else if (col === 'item_name')
-            qb.andWhere('item.itemName IN (:...vals)', { vals });
+            qb.andWhere(`item.itemName IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           else if (col === 'unit')
-            qb.andWhere('uom.name IN (:...vals)', { vals });
+            qb.andWhere(`uom.name IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'on_hand_qty')
+            qb.andWhere(`b.qtyOnHand IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals.map(Number),
+            });
+          else if (col === 'reserved_qty')
+            qb.andWhere(`b.qtyReserved IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals.map(Number),
+            });
+          else if (col === 'received_qty')
+            qb.andWhere(
+              `(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
+              { [`vals_${col}`]: vals.map(Number) },
+            );
+          else if (col === 'issued_qty')
+            qb.andWhere(
+              `(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
+              { [`vals_${col}`]: vals.map(Number) },
+            );
+          else if (col === 'last')
+            qb.andWhere(`CAST(b.updatedAt AS TEXT) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
         }
       } catch (e) {}
     }
@@ -250,10 +282,12 @@ export class InventoryStockCoreService {
     search: string | undefined,
     page: number,
     pageSize: number,
+    filtersStr?: string,
   ) {
     const qb = this.itemRepository.createQueryBuilder('item');
     qb.leftJoin('item.itemType', 'itemType');
     qb.leftJoin('item.uom', 'uom');
+    qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
 
     let selectField = '';
     if (column === 'item_code') selectField = 'item.sku';
@@ -261,26 +295,73 @@ export class InventoryStockCoreService {
     else if (column === 'item_type') selectField = 'itemType.code';
     else if (column === 'status') selectField = 'item.status';
     else if (column === 'unit') selectField = 'uom.name';
-    else if (column === 'on_hand_qty') {
-      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
-      selectField = 'b.qtyOnHand';
-    } else if (column === 'reserved_qty') {
-      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
-      selectField = 'b.qtyReserved';
-    } else if (column === 'received_qty') {
+    else if (column === 'on_hand_qty') selectField = 'b.qtyOnHand';
+    else if (column === 'reserved_qty') selectField = 'b.qtyReserved';
+    else if (column === 'received_qty') {
       selectField =
         '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
     } else if (column === 'issued_qty') {
       selectField =
         '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
-    } else if (column === 'last') {
-      qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
-      selectField = 'b.updatedAt';
-    } else return { items: [], total: 0 };
+    } else if (column === 'last') selectField = 'b.updatedAt';
+    else return { items: [], total: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
     qb.where(`${selectField} IS NOT NULL`);
     qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue; // DO NOT apply filter for the column we are querying options for!
+
+          if (col === 'item_type')
+            qb.andWhere(`itemType.code IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'status')
+            qb.andWhere(`item.status IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'item_code')
+            qb.andWhere(`item.sku IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'item_name')
+            qb.andWhere(`item.itemName IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'unit')
+            qb.andWhere(`uom.name IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'on_hand_qty')
+            qb.andWhere(`b.qtyOnHand IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals.map(Number),
+            });
+          else if (col === 'reserved_qty')
+            qb.andWhere(`b.qtyReserved IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals.map(Number),
+            });
+          else if (col === 'received_qty')
+            qb.andWhere(
+              `(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
+              { [`vals_${col}`]: vals.map(Number) },
+            );
+          else if (col === 'issued_qty')
+            qb.andWhere(
+              `(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
+              { [`vals_${col}`]: vals.map(Number) },
+            );
+          else if (col === 'last')
+            qb.andWhere(`CAST(b.updatedAt AS TEXT) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+        }
+      } catch (e) {}
+    }
 
     if (search) {
       qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {

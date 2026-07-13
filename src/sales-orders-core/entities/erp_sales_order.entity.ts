@@ -5,7 +5,9 @@ import {
   Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { ErpSalesOrderLine } from './erp_sales_order_line.entity';
 
 @Entity({ name: 'erp_sales_orders' })
 export class ErpSalesOrder {
@@ -42,4 +44,7 @@ export class ErpSalesOrder {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToMany(() => ErpSalesOrderLine, (line) => line.salesOrder)
+  lines?: ErpSalesOrderLine[];
 }
