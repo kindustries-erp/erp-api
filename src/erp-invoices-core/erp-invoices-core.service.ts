@@ -33,6 +33,7 @@ import {
 import AdmZip from 'adm-zip';
 import * as ExcelJS from 'exceljs';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface ErpInvoiceQuery {
   direction?: string;
@@ -69,6 +70,7 @@ export class ErpInvoicesCoreService {
     private readonly companyProfileRepo: Repository<CompanyProfile>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async loadNetOffAmounts(invoices: ErpInvoice[]) {
@@ -274,6 +276,7 @@ export class ErpInvoicesCoreService {
       }
 
       const searchResults = await qbOrdered
+        .leftJoinAndSelect('inv.items', 'items')
         .addOrderBy('inv.created_at', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
@@ -292,6 +295,7 @@ export class ErpInvoicesCoreService {
 
     const [items, total] = await this.repository.findAndCount({
       where,
+      relations: ['items'],
       order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -536,7 +540,7 @@ export class ErpInvoicesCoreService {
    * Lấy danh sách hóa đơn từ GDT portal, lưu vào DB (skip trùng),
    * sau đó download XML theo batch 10 với delay ngẫu nhiên 5-10s.
    */
-  async syncFromPortal(dto: PortalFetchDto) {
+  async syncFromPortal(dto: PortalFetchDto, userId?: string) {
     let token = dto.token?.trim();
     if (!token) {
       token = await this.getPortalToken();
@@ -550,21 +554,32 @@ export class ErpInvoicesCoreService {
     const direction: 'IN' | 'OUT' = type === 'purchase' ? 'IN' : 'OUT';
 
     // Build GDT URLs (support both standard and cash register invoices)
-    const basePaths =
+    const queryConfigs =
       type === 'purchase'
         ? [
-            'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
-            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+            {
+              basePath:
+                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+              extraParams: '',
+            },
+            {
+              basePath:
+                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+              extraParams: ';ttxly==8',
+            },
           ]
         : [
-            'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
-            'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/sold',
+            {
+              basePath:
+                'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
+              extraParams: '',
+            },
           ];
 
-    const [fromY, fromM, fromD] = dto.dateFrom.split('-');
-    const formattedDateFrom = `${fromD}/${fromM}/${fromY}`;
-    const [toY, toM, toD] = dto.dateTo.split('-');
-    const formattedDateTo = `${toD}/${toM}/${toY}`;
+    const [fromY, fromM, fromD] = dto.dateFrom.split('-').map(Number);
+    const startDate = new Date(fromY, fromM - 1, fromD);
+    const [toY, toM, toD] = dto.dateTo.split('-').map(Number);
+    const endDate = new Date(toY, toM - 1, toD);
 
     // Run the sync process in the background
     (async () => {
@@ -574,62 +589,73 @@ export class ErpInvoicesCoreService {
         let pagesFetched = 0;
         const maxPages = 50; // max pages per endpoint
 
-        for (const basePath of basePaths) {
-          let state: string | null = null;
-          let pathPagesFetched = 0;
+        for (
+          let d = new Date(startDate);
+          d <= endDate;
+          d.setDate(d.getDate() + 1)
+        ) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const formattedDate = `${day}/${m}/${y}`;
 
-          do {
-            const url = new URL(basePath);
-            url.searchParams.set('sort', 'tdlap:desc');
-            url.searchParams.set('size', '50');
-            url.searchParams.set(
-              'search',
-              `tdlap=ge=${formattedDateFrom}T00:00:00;tdlap=le=${formattedDateTo}T23:59:59`,
-            );
-            if (state) {
-              url.searchParams.set('state', state);
-            }
+          for (const config of queryConfigs) {
+            let state: string | null = null;
+            let pathPagesFetched = 0;
 
-            this.progress$.next({
-              processId: 'sync-progress',
-              type: 'bulk',
-              total: 100, // Unknown total pages initially
-              current: pagesFetched,
-              message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (trang ${pagesFetched + 1})...`,
-              completed: false,
-            });
-
-            const response = await this.fetchWithRetry(url, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok)
-              throw new BadRequestException(
-                `Portal request failed with status ${response.status}`,
+            do {
+              const url = new URL(config.basePath);
+              url.searchParams.set('sort', 'tdlap:desc');
+              url.searchParams.set('size', '50');
+              url.searchParams.set(
+                'search',
+                `tdlap=ge=${formattedDate}T00:00:00;tdlap=le=${formattedDate}T23:59:59${config.extraParams}`,
               );
+              if (state) {
+                url.searchParams.set('state', state);
+              }
 
-            const payload = (await response.json()) as {
-              datas?: any[];
-              total?: number;
-              state?: string;
-            };
+              this.progress$.next({
+                processId: 'sync-progress',
+                type: 'bulk',
+                total: 100, // Unknown total pages initially
+                current: pagesFetched,
+                message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (ngày ${formattedDate}, trang ${pagesFetched + 1})...`,
+                completed: false,
+              });
 
-            if (pathPagesFetched === 0) {
-              totalFromPortal += payload.total ?? 0;
-            }
+              const response = await this.fetchWithRetry(url, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!response.ok)
+                throw new BadRequestException(
+                  `Portal request failed with status ${response.status}`,
+                );
 
-            if (payload.datas && payload.datas.length > 0) {
-              rawItems.push(...payload.datas);
-            }
+              const payload = (await response.json()) as {
+                datas?: any[];
+                total?: number;
+                state?: string;
+              };
 
-            state = payload.state ?? null;
-            pathPagesFetched++;
-            pagesFetched++;
+              if (pathPagesFetched === 0) {
+                totalFromPortal += payload.total ?? 0;
+              }
 
-            if (state && pathPagesFetched < maxPages) {
-              const delay = (2 + Math.random() * 3) * 1000;
-              await this.sleep(Math.round(delay));
-            }
-          } while (state && pathPagesFetched < maxPages);
+              if (payload.datas && payload.datas.length > 0) {
+                rawItems.push(...payload.datas);
+              }
+
+              state = payload.state ?? null;
+              pathPagesFetched++;
+              pagesFetched++;
+
+              if (state && pathPagesFetched < maxPages) {
+                const delay = (2 + Math.random() * 3) * 1000;
+                await this.sleep(Math.round(delay));
+              }
+            } while (state && pathPagesFetched < maxPages);
+          }
         }
 
         // ── Save new invoices to DB ───────────────────────────────────────────────
@@ -711,6 +737,13 @@ export class ErpInvoicesCoreService {
         );
       } catch (err) {
         this.logger.error('Background portal sync failed', err);
+        if (userId) {
+          await this.notificationsService.createForUser(userId, {
+            title: 'Lỗi đồng bộ hóa đơn',
+            message: `Tiến trình đồng bộ hóa đơn bị lỗi: ${(err as Error).message}`,
+            type: 'ERROR',
+          });
+        }
       }
     })();
 
@@ -1157,7 +1190,7 @@ export class ErpInvoicesCoreService {
     for (let i = 0; i <= retries; i++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
         const res = await fetch(url, { ...options, signal: controller.signal });
         clearTimeout(timeoutId);
@@ -1166,12 +1199,13 @@ export class ErpInvoicesCoreService {
           return res;
         }
 
-        if (res.status >= 500 && res.status <= 599) {
+        if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
           if (i < retries) {
             this.logger.warn(
-              `GDT API 50x error (${res.status}) on ${url}, retrying ${i + 1}/${retries}...`,
+              `GDT API rate limit or server error (${res.status}) on ${url}, retrying ${i + 1}/${retries}...`,
             );
-            await this.sleep(1000 * (i + 1));
+            const delay = res.status === 429 ? 5000 * (i + 1) : 1000 * (i + 1);
+            await this.sleep(delay);
             continue;
           }
         }
