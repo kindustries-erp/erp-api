@@ -249,7 +249,10 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
       const n = toNum(vatRateRawEl);
       itemVatRate = n > 1 ? n / 100 : n;
     }
-    const vatAmt = toNum(getTextIn(el, 'TThue', 'tthue'));
+    let vatAmt = toNum(getTextIn(el, 'TThue', 'tthue'));
+    if (!vatAmt && itemVatRate) {
+      vatAmt = Math.round(preVat * itemVatRate);
+    }
     const discount = toNum(getTextIn(el, 'STCKhau', 'stckhau'));
     const total = preVat + vatAmt - discount;
     items.push({
@@ -436,7 +439,10 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
       const n = toNum(vRateRaw);
       vRate = n > 1 ? n / 100 : n;
     }
-    const vAmt = toNum(getTextIn(line, 'VATAmount', 'TaxAmount'));
+    let vAmt = toNum(getTextIn(line, 'VATAmount', 'TaxAmount'));
+    if (!vAmt && vRate) {
+      vAmt = Math.round(preVat * vRate);
+    }
     const disc = toNum(getTextIn(line, 'DiscountAmount'));
     items.push({
       description: desc,
