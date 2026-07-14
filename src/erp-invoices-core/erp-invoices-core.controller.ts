@@ -58,6 +58,26 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      direction,
+    );
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('export/excel')
   async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
     const buffer = await this.service.exportExcel(query);

@@ -49,6 +49,8 @@ export interface ErpInvoiceQuery {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
   export_type?: 'summary' | 'detailed';
+  column_search?: string;
+  column_filters?: string;
 }
 
 @Injectable()
@@ -96,6 +98,115 @@ export class ErpInvoicesCoreService {
       ...i,
       netOffAmount: String(netOffMap[i.id] || 0),
     }));
+  }
+
+  async getColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    direction?: 'IN' | 'OUT',
+  ) {
+    const qb = this.repository.createQueryBuilder('inv');
+
+    if (direction) {
+      qb.where('inv.direction = :direction', { direction });
+    } else {
+      qb.where('1 = 1');
+    }
+
+    let selectField = '';
+    if (column === 'invoiceDate') selectField = 'inv.invoice_date';
+    else if (column === 'serialNo') selectField = 'inv.serial_no';
+    else if (column === 'invoiceNo') selectField = 'inv.invoice_no';
+    else if (column === 'partner') {
+      if (direction === 'IN') selectField = 'inv.seller_name';
+      else if (direction === 'OUT') selectField = 'inv.buyer_name';
+      else selectField = 'COALESCE(inv.seller_name, inv.buyer_name)'; // fallback
+    } else if (column === 'taxCode') {
+      if (direction === 'IN') selectField = 'inv.seller_tax_code';
+      else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
+      else selectField = 'COALESCE(inv.seller_tax_code, inv.buyer_tax_code)';
+    } else if (column === 'description') selectField = 'inv.description';
+    else if (column === 'preVatAmount') selectField = 'inv.pre_vat_amount';
+    else if (column === 'vatAmount') selectField = 'inv.vat_amount';
+    else if (column === 'discountAmount') selectField = 'inv.discount_amount';
+    else if (column === 'totalAmount') selectField = 'inv.total_amount';
+    else if (column === 'licensePlate') selectField = 'inv.license_plate';
+    else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
+    else if (column === 'branchId') selectField = 'inv.branch_id';
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'invoiceDate') filterField = 'inv.invoice_date';
+          else if (col === 'serialNo') filterField = 'inv.serial_no';
+          else if (col === 'invoiceNo') filterField = 'inv.invoice_no';
+          else if (col === 'partner') {
+            if (direction === 'IN') filterField = 'inv.seller_name';
+            else if (direction === 'OUT') filterField = 'inv.buyer_name';
+            else filterField = 'COALESCE(inv.seller_name, inv.buyer_name)';
+          } else if (col === 'taxCode') {
+            if (direction === 'IN') filterField = 'inv.seller_tax_code';
+            else if (direction === 'OUT') filterField = 'inv.buyer_tax_code';
+            else
+              filterField = 'COALESCE(inv.seller_tax_code, inv.buyer_tax_code)';
+          } else if (col === 'description') filterField = 'inv.description';
+          else if (col === 'preVatAmount') filterField = 'inv.pre_vat_amount';
+          else if (col === 'vatAmount') filterField = 'inv.vat_amount';
+          else if (col === 'discountAmount')
+            filterField = 'inv.discount_amount';
+          else if (col === 'totalAmount') filterField = 'inv.total_amount';
+          else if (col === 'licensePlate') filterField = 'inv.license_plate';
+          else if (col === 'settlementOrder')
+            filterField = 'inv.settlement_order';
+          else if (col === 'branchId') filterField = 'inv.branch_id';
+
+          if (filterField) {
+            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
+        search: `%${search}%`,
+      });
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+
+    return {
+      items: results.map((r) => String(r.value)).filter(Boolean),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async getPortalToken(): Promise<string> {
@@ -152,26 +263,69 @@ export class ErpInvoicesCoreService {
     const page = Number(query.page) || 1;
     const pageSize = Number(query.pageSize) || 40;
 
-    let orderColumn = 'inv.invoice_date';
+    let orderColumn = 'inv.invoiceDate';
     let orderProperty = 'invoiceDate';
     let orderDirection: 'ASC' | 'DESC' = 'DESC';
 
     if (query.sort_by) {
       if (query.sort_by === 'invoiceNo') {
-        orderColumn = 'inv.invoice_no';
+        orderColumn = 'inv.invoiceNo';
         orderProperty = 'invoiceNo';
       } else if (query.sort_by === 'totalAmount') {
-        orderColumn = 'inv.total_amount';
+        orderColumn = 'inv.totalAmount';
         orderProperty = 'totalAmount';
       } else if (query.sort_by === 'sellerName') {
-        orderColumn = 'inv.seller_name';
+        orderColumn = 'inv.sellerName';
         orderProperty = 'sellerName';
       } else if (query.sort_by === 'buyerName') {
-        orderColumn = 'inv.buyer_name';
+        orderColumn = 'inv.buyerName';
         orderProperty = 'buyerName';
       } else if (query.sort_by === 'status') {
         orderColumn = 'inv.status';
         orderProperty = 'status';
+      } else if (query.sort_by === 'invoiceDate') {
+        orderColumn = 'inv.invoiceDate';
+        orderProperty = 'invoiceDate';
+      } else if (query.sort_by === 'serialNo') {
+        orderColumn = 'inv.serialNo';
+        orderProperty = 'serialNo';
+      } else if (query.sort_by === 'partner') {
+        if (query.direction === 'IN') {
+          orderColumn = 'inv.sellerName';
+          orderProperty = 'sellerName';
+        } else {
+          orderColumn = 'inv.buyerName';
+          orderProperty = 'buyerName';
+        }
+      } else if (query.sort_by === 'taxCode') {
+        if (query.direction === 'IN') {
+          orderColumn = 'inv.sellerTaxCode';
+          orderProperty = 'sellerTaxCode';
+        } else {
+          orderColumn = 'inv.buyerTaxCode';
+          orderProperty = 'buyerTaxCode';
+        }
+      } else if (query.sort_by === 'description') {
+        orderColumn = 'inv.description';
+        orderProperty = 'description';
+      } else if (query.sort_by === 'preVatAmount') {
+        orderColumn = 'inv.preVatAmount';
+        orderProperty = 'preVatAmount';
+      } else if (query.sort_by === 'vatAmount') {
+        orderColumn = 'inv.vatAmount';
+        orderProperty = 'vatAmount';
+      } else if (query.sort_by === 'discountAmount') {
+        orderColumn = 'inv.discountAmount';
+        orderProperty = 'discountAmount';
+      } else if (query.sort_by === 'licensePlate') {
+        orderColumn = 'inv.licensePlate';
+        orderProperty = 'licensePlate';
+      } else if (query.sort_by === 'settlementOrder') {
+        orderColumn = 'inv.settlementOrder';
+        orderProperty = 'settlementOrder';
+      } else if (query.sort_by === 'branchId') {
+        orderColumn = 'inv.branchId';
+        orderProperty = 'branchId';
       }
     }
     if (query.sort_order) {
@@ -199,13 +353,25 @@ export class ErpInvoicesCoreService {
       where.invoiceDate = LessThanOrEqual(effectiveDateTo);
     }
 
+    let columnSearch: Record<string, string> = {};
+    let columnFilters: Record<string, string[]> = {};
+    try {
+      if (query.column_search) columnSearch = JSON.parse(query.column_search);
+      if (query.column_filters)
+        columnFilters = JSON.parse(query.column_filters);
+    } catch (e) {
+      this.logger.error('Failed to parse column_search or column_filters', e);
+    }
+
     // Search / explicit seller/buyer name filters via QueryBuilder
     const needsQb = !!(
       query.search ||
       query.seller_name ||
       query.buyer_name ||
       query.tag_id ||
-      query.sort_by === 'invoiceNo'
+      query.sort_by === 'invoiceNo' ||
+      Object.keys(columnSearch).length > 0 ||
+      Object.keys(columnFilters).length > 0
     );
     if (needsQb) {
       const qb = this.repository
@@ -264,6 +430,172 @@ export class ErpInvoicesCoreService {
         );
       }
 
+      // -------------------------------------------------------------
+      // Dynamic Column Search
+      // -------------------------------------------------------------
+      Object.keys(columnSearch).forEach((key) => {
+        const val = columnSearch[key];
+        if (!val) return;
+
+        if (key === 'invoiceNo') {
+          qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
+            invoiceNoSearch: `%${val}%`,
+          });
+        } else if (key === 'serialNo') {
+          qb.andWhere('inv.serial_no ILIKE :serialNoSearch', {
+            serialNoSearch: `%${val}%`,
+          });
+        } else if (key === 'partner') {
+          if (query.direction === 'IN') {
+            qb.andWhere('inv.seller_name ILIKE :partnerSearch', {
+              partnerSearch: `%${val}%`,
+            });
+          } else if (query.direction === 'OUT') {
+            qb.andWhere('inv.buyer_name ILIKE :partnerSearch', {
+              partnerSearch: `%${val}%`,
+            });
+          } else {
+            qb.andWhere(
+              '(inv.seller_name ILIKE :partnerSearch OR inv.buyer_name ILIKE :partnerSearch)',
+              { partnerSearch: `%${val}%` },
+            );
+          }
+        } else if (key === 'taxCode') {
+          if (query.direction === 'IN') {
+            qb.andWhere('inv.seller_tax_code ILIKE :taxCodeSearch', {
+              taxCodeSearch: `%${val}%`,
+            });
+          } else if (query.direction === 'OUT') {
+            qb.andWhere('inv.buyer_tax_code ILIKE :taxCodeSearch', {
+              taxCodeSearch: `%${val}%`,
+            });
+          } else {
+            qb.andWhere(
+              '(inv.seller_tax_code ILIKE :taxCodeSearch OR inv.buyer_tax_code ILIKE :taxCodeSearch)',
+              { taxCodeSearch: `%${val}%` },
+            );
+          }
+        } else if (key === 'description') {
+          qb.andWhere('inv.description ILIKE :descSearch', {
+            descSearch: `%${val}%`,
+          });
+        } else if (key === 'preVatAmount') {
+          qb.andWhere(
+            "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
+            { preVatSearch: `%${val}%` },
+          );
+        } else if (key === 'vatAmount') {
+          qb.andWhere(
+            "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
+            { vatSearch: `%${val}%` },
+          );
+        } else if (key === 'discountAmount') {
+          qb.andWhere(
+            "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
+            { discountSearch: `%${val}%` },
+          );
+        } else if (key === 'totalAmount') {
+          qb.andWhere(
+            "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
+            { totalSearch: `%${val}%` },
+          );
+        } else if (key === 'settlementOrder') {
+          qb.andWhere('inv.settlement_order ILIKE :settlementSearch', {
+            settlementSearch: `%${val}%`,
+          });
+        } else if (key === 'licensePlate') {
+          qb.andWhere('inv.license_plate ILIKE :plateSearch', {
+            plateSearch: `%${val}%`,
+          });
+        }
+      });
+
+      // -------------------------------------------------------------
+      // Dynamic Column Filters
+      // -------------------------------------------------------------
+      Object.keys(columnFilters).forEach((key) => {
+        const vals = columnFilters[key];
+        if (!vals || vals.length === 0) return;
+
+        if (key === 'status') {
+          qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+        } else if (key === 'branchId') {
+          qb.andWhere('inv.branch_id IN (:...branchVals)', {
+            branchVals: vals,
+          });
+        } else if (key === 'invoiceDate') {
+          qb.andWhere(
+            'CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)',
+            { invoiceDateVals: vals },
+          );
+        } else if (key === 'serialNo') {
+          qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
+            serialNoVals: vals,
+          });
+        } else if (key === 'invoiceNo') {
+          qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
+            invoiceNoVals: vals,
+          });
+        } else if (key === 'partner') {
+          if (query.direction === 'IN') {
+            qb.andWhere('inv.seller_name IN (:...partnerVals)', {
+              partnerVals: vals,
+            });
+          } else if (query.direction === 'OUT') {
+            qb.andWhere('inv.buyer_name IN (:...partnerVals)', {
+              partnerVals: vals,
+            });
+          } else {
+            qb.andWhere(
+              'COALESCE(inv.seller_name, inv.buyer_name) IN (:...partnerVals)',
+              { partnerVals: vals },
+            );
+          }
+        } else if (key === 'taxCode') {
+          if (query.direction === 'IN') {
+            qb.andWhere('inv.seller_tax_code IN (:...taxCodeVals)', {
+              taxCodeVals: vals,
+            });
+          } else if (query.direction === 'OUT') {
+            qb.andWhere('inv.buyer_tax_code IN (:...taxCodeVals)', {
+              taxCodeVals: vals,
+            });
+          } else {
+            qb.andWhere(
+              'COALESCE(inv.seller_tax_code, inv.buyer_tax_code) IN (:...taxCodeVals)',
+              { taxCodeVals: vals },
+            );
+          }
+        } else if (key === 'description') {
+          qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+        } else if (key === 'preVatAmount') {
+          qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
+            preVatVals: vals,
+          });
+        } else if (key === 'vatAmount') {
+          qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
+            vatVals: vals,
+          });
+        } else if (key === 'discountAmount') {
+          qb.andWhere(
+            'CAST(inv.discount_amount AS TEXT) IN (:...discountVals)',
+            { discountVals: vals },
+          );
+        } else if (key === 'totalAmount') {
+          qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
+            totalVals: vals,
+          });
+        } else if (key === 'settlementOrder') {
+          qb.andWhere('inv.settlement_order IN (:...settleVals)', {
+            settleVals: vals,
+          });
+        } else if (key === 'licensePlate') {
+          qb.andWhere('inv.license_plate IN (:...plateVals)', {
+            plateVals: vals,
+          });
+        }
+      });
+
       let qbOrderColumn = orderColumn;
       if (query.sort_by === 'invoiceNo') {
         qbOrderColumn =
@@ -272,12 +604,12 @@ export class ErpInvoicesCoreService {
 
       let qbOrdered = qb.orderBy(qbOrderColumn, orderDirection);
       if (query.sort_by === 'invoiceNo') {
-        qbOrdered = qbOrdered.addOrderBy('inv.invoice_no', orderDirection);
+        qbOrdered = qbOrdered.addOrderBy('inv.invoiceNo', orderDirection);
       }
 
       const searchResults = await qbOrdered
         .leftJoinAndSelect('inv.items', 'items')
-        .addOrderBy('inv.created_at', 'DESC')
+        .addOrderBy('inv.createdAt', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
         .getManyAndCount();
@@ -1612,24 +1944,212 @@ export class ErpInvoicesCoreService {
       );
     }
 
-    let orderColumn = 'inv.invoice_date';
+    let columnSearch: Record<string, string> = {};
+    let columnFilters: Record<string, string[]> = {};
+    try {
+      if (query.column_search) columnSearch = JSON.parse(query.column_search);
+      if (query.column_filters)
+        columnFilters = JSON.parse(query.column_filters);
+    } catch (e) {
+      this.logger.error('Failed to parse column_search or column_filters', e);
+    }
+
+    // -------------------------------------------------------------
+    // Dynamic Column Search
+    // -------------------------------------------------------------
+    Object.keys(columnSearch).forEach((key) => {
+      const val = columnSearch[key];
+      if (!val) return;
+
+      if (key === 'invoiceNo') {
+        qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
+          invoiceNoSearch: `%${val}%`,
+        });
+      } else if (key === 'serialNo') {
+        qb.andWhere('inv.serial_no ILIKE :serialNoSearch', {
+          serialNoSearch: `%${val}%`,
+        });
+      } else if (key === 'partner') {
+        if (query.direction === 'IN') {
+          qb.andWhere('inv.seller_name ILIKE :partnerSearch', {
+            partnerSearch: `%${val}%`,
+          });
+        } else if (query.direction === 'OUT') {
+          qb.andWhere('inv.buyer_name ILIKE :partnerSearch', {
+            partnerSearch: `%${val}%`,
+          });
+        } else {
+          qb.andWhere(
+            '(inv.seller_name ILIKE :partnerSearch OR inv.buyer_name ILIKE :partnerSearch)',
+            { partnerSearch: `%${val}%` },
+          );
+        }
+      } else if (key === 'taxCode') {
+        if (query.direction === 'IN') {
+          qb.andWhere('inv.seller_tax_code ILIKE :taxCodeSearch', {
+            taxCodeSearch: `%${val}%`,
+          });
+        } else if (query.direction === 'OUT') {
+          qb.andWhere('inv.buyer_tax_code ILIKE :taxCodeSearch', {
+            taxCodeSearch: `%${val}%`,
+          });
+        } else {
+          qb.andWhere(
+            '(inv.seller_tax_code ILIKE :taxCodeSearch OR inv.buyer_tax_code ILIKE :taxCodeSearch)',
+            { taxCodeSearch: `%${val}%` },
+          );
+        }
+      } else if (key === 'description') {
+        qb.andWhere('inv.description ILIKE :descSearch', {
+          descSearch: `%${val}%`,
+        });
+      } else if (key === 'preVatAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
+          { preVatSearch: `%${val}%` },
+        );
+      } else if (key === 'vatAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
+          { vatSearch: `%${val}%` },
+        );
+      } else if (key === 'discountAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
+          { discountSearch: `%${val}%` },
+        );
+      } else if (key === 'totalAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
+          { totalSearch: `%${val}%` },
+        );
+      } else if (key === 'settlementOrder') {
+        qb.andWhere('inv.settlement_order ILIKE :settlementSearch', {
+          settlementSearch: `%${val}%`,
+        });
+      } else if (key === 'licensePlate') {
+        qb.andWhere('inv.license_plate ILIKE :plateSearch', {
+          plateSearch: `%${val}%`,
+        });
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Dynamic Column Filters
+    // -------------------------------------------------------------
+    Object.keys(columnFilters).forEach((key) => {
+      const vals = columnFilters[key];
+      if (!vals || vals.length === 0) return;
+
+      if (key === 'status') {
+        qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+      } else if (key === 'branchId') {
+        qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
+      } else if (key === 'invoiceDate') {
+        qb.andWhere('CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)', {
+          invoiceDateVals: vals,
+        });
+      } else if (key === 'serialNo') {
+        qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
+          serialNoVals: vals,
+        });
+      } else if (key === 'invoiceNo') {
+        qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
+          invoiceNoVals: vals,
+        });
+      } else if (key === 'partner') {
+        if (query.direction === 'IN') {
+          qb.andWhere('inv.seller_name IN (:...partnerVals)', {
+            partnerVals: vals,
+          });
+        } else if (query.direction === 'OUT') {
+          qb.andWhere('inv.buyer_name IN (:...partnerVals)', {
+            partnerVals: vals,
+          });
+        } else {
+          qb.andWhere(
+            'COALESCE(inv.seller_name, inv.buyer_name) IN (:...partnerVals)',
+            { partnerVals: vals },
+          );
+        }
+      } else if (key === 'taxCode') {
+        if (query.direction === 'IN') {
+          qb.andWhere('inv.seller_tax_code IN (:...taxCodeVals)', {
+            taxCodeVals: vals,
+          });
+        } else if (query.direction === 'OUT') {
+          qb.andWhere('inv.buyer_tax_code IN (:...taxCodeVals)', {
+            taxCodeVals: vals,
+          });
+        } else {
+          qb.andWhere(
+            'COALESCE(inv.seller_tax_code, inv.buyer_tax_code) IN (:...taxCodeVals)',
+            { taxCodeVals: vals },
+          );
+        }
+      } else if (key === 'description') {
+        qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+      } else if (key === 'preVatAmount') {
+        qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
+          preVatVals: vals,
+        });
+      } else if (key === 'vatAmount') {
+        qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
+          vatVals: vals,
+        });
+      } else if (key === 'discountAmount') {
+        qb.andWhere('CAST(inv.discount_amount AS TEXT) IN (:...discountVals)', {
+          discountVals: vals,
+        });
+      } else if (key === 'totalAmount') {
+        qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
+          totalVals: vals,
+        });
+      } else if (key === 'settlementOrder') {
+        qb.andWhere('inv.settlement_order IN (:...settleVals)', {
+          settleVals: vals,
+        });
+      } else if (key === 'licensePlate') {
+        qb.andWhere('inv.license_plate IN (:...plateVals)', {
+          plateVals: vals,
+        });
+      }
+    });
+
+    let orderColumn = 'inv.invoiceDate';
     let orderDirection: 'ASC' | 'DESC' = 'DESC';
     if (query.sort_by) {
-      if (query.sort_by === 'invoiceNo') orderColumn = 'inv.invoice_no';
-      else if (query.sort_by === 'totalAmount')
-        orderColumn = 'inv.total_amount';
-      else if (query.sort_by === 'sellerName') orderColumn = 'inv.seller_name';
-      else if (query.sort_by === 'buyerName') orderColumn = 'inv.buyer_name';
+      if (query.sort_by === 'invoiceNo') orderColumn = 'inv.invoiceNo';
+      else if (query.sort_by === 'totalAmount') orderColumn = 'inv.totalAmount';
+      else if (query.sort_by === 'sellerName') orderColumn = 'inv.sellerName';
+      else if (query.sort_by === 'buyerName') orderColumn = 'inv.buyerName';
       else if (query.sort_by === 'status') orderColumn = 'inv.status';
+      else if (query.sort_by === 'invoiceDate') orderColumn = 'inv.invoiceDate';
+      else if (query.sort_by === 'serialNo') orderColumn = 'inv.serialNo';
+      else if (query.sort_by === 'partner') {
+        if (query.direction === 'IN') orderColumn = 'inv.sellerName';
+        else orderColumn = 'inv.buyerName';
+      } else if (query.sort_by === 'taxCode') {
+        if (query.direction === 'IN') orderColumn = 'inv.sellerTaxCode';
+        else orderColumn = 'inv.buyerTaxCode';
+      } else if (query.sort_by === 'description')
+        orderColumn = 'inv.description';
+      else if (query.sort_by === 'preVatAmount')
+        orderColumn = 'inv.preVatAmount';
+      else if (query.sort_by === 'vatAmount') orderColumn = 'inv.vatAmount';
+      else if (query.sort_by === 'discountAmount')
+        orderColumn = 'inv.discountAmount';
+      else if (query.sort_by === 'licensePlate')
+        orderColumn = 'inv.licensePlate';
+      else if (query.sort_by === 'settlementOrder')
+        orderColumn = 'inv.settlementOrder';
+      else if (query.sort_by === 'branchId') orderColumn = 'inv.branchId';
     }
     if (query.sort_order) {
       orderDirection = query.sort_order.toUpperCase() as 'ASC' | 'DESC';
     }
 
-    qb.orderBy(orderColumn, orderDirection).addOrderBy(
-      'inv.created_at',
-      'DESC',
-    );
+    qb.orderBy(orderColumn, orderDirection).addOrderBy('inv.createdAt', 'DESC');
 
     const items = await qb.getMany();
 
