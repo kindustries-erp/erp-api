@@ -896,7 +896,7 @@ export class ErpInvoicesCoreService {
             },
             {
               basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+                'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
               extraParams: ';ttxly==8',
             },
           ]
@@ -1166,7 +1166,7 @@ export class ErpInvoicesCoreService {
 
     // 2. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
     try {
-      const xmlUrl = new URL(
+      let xmlUrl = new URL(
         'https://hoadondientu.gdt.gov.vn/api/query/invoices/export-xml',
       );
       xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
@@ -1175,9 +1175,32 @@ export class ErpInvoicesCoreService {
       // khmshdon is not stored in entity; default to '1'
       xmlUrl.searchParams.set('khmshdon', '1');
 
-      const res = await this.fetchWithRetry(xmlUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let res = await this.fetchWithRetry(
+        xmlUrl.toString(),
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        0,
+      );
+
+      if (!res.ok) {
+        xmlUrl = new URL(
+          'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/export-xml',
+        );
+        xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
+        xmlUrl.searchParams.set('shdon', invoice.invoiceNo);
+        xmlUrl.searchParams.set('khmshdon', '1');
+
+        res = await this.fetchWithRetry(
+          xmlUrl.toString(),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          2,
+        );
+      }
+
       if (!res.ok) {
         this.logger.warn(
           `XML download failed for invoice ${invoice.invoiceNo}: HTTP ${res.status}`,
@@ -1454,7 +1477,7 @@ export class ErpInvoicesCoreService {
     token: string,
   ): Promise<void> {
     try {
-      const url = new URL(
+      let url = new URL(
         'https://hoadondientu.gdt.gov.vn/api/query/invoices/detail',
       );
       url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
@@ -1462,9 +1485,32 @@ export class ErpInvoicesCoreService {
       url.searchParams.set('shdon', invoice.invoiceNo);
       url.searchParams.set('khmshdon', '1');
 
-      const res = await this.fetchWithRetry(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let res = await this.fetchWithRetry(
+        url.toString(),
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+        0,
+      );
+
+      if (!res.ok) {
+        url = new URL(
+          'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/detail',
+        );
+        url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        url.searchParams.set('khhdon', invoice.serialNo ?? '');
+        url.searchParams.set('shdon', invoice.invoiceNo);
+        url.searchParams.set('khmshdon', '1');
+
+        res = await this.fetchWithRetry(
+          url.toString(),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          2,
+        );
+      }
+
       if (!res.ok) {
         this.logger.warn(
           `Failed to fetch JSON detail for ${invoice.invoiceNo}: HTTP ${res.status}`,
