@@ -1204,7 +1204,7 @@ export class BankTransactionsCoreService {
       });
     }
 
-    qb.orderBy('file.createdAt', 'DESC');
+    qb.orderBy('file.periodDate', 'ASC').addOrderBy('file.createdAt', 'DESC');
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();

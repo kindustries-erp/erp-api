@@ -337,6 +337,28 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
+  @Post('bulk-download-files')
+  async bulkDownloadFiles(
+    @Body() payload: { query: ErpInvoiceQuery; types: string[] },
+    @Res() res: Response,
+  ) {
+    if (!payload.types || payload.types.length === 0) {
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất 1 loại file (pdf, xml)',
+      );
+    }
+    const monthStr = payload.query?.date_from?.substring(0, 7) || 'All';
+    const directionStr = payload.query?.direction || 'IN_OUT';
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="HoaDon_${monthStr}_${directionStr}.zip"`,
+    );
+
+    return this.service.bulkDownloadFilesZip(payload, res);
+  }
+
   @Get(':id/pdfs/:key/content')
   async getPdfContent(
     @Param('id') id: string,

@@ -1972,6 +1972,118 @@ export class ErpInvoicesCoreService {
     return zip.toBuffer();
   }
 
+  async bulkDownloadFilesZip(
+    payload: { query: ErpInvoiceQuery; types: string[] },
+    res: any,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const archiver = require('archiver');
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('error', (err: any) => {
+      this.logger.error(`Error during zip creation: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(500).send({ error: err.message });
+      }
+    });
+
+    archive.pipe(res);
+
+    const qb = this.repository.createQueryBuilder('inv');
+    qb.where('inv.is_deleted = false');
+
+    if (payload.query.date_from) {
+      qb.andWhere('inv.invoice_date >= :dateFrom', {
+        dateFrom: payload.query.date_from,
+      });
+    }
+    if (payload.query.date_to) {
+      qb.andWhere('inv.invoice_date <= :dateTo', {
+        dateTo: payload.query.date_to,
+      });
+    }
+    if (payload.query.direction) {
+      qb.andWhere('inv.direction = :direction', {
+        direction: payload.query.direction,
+      });
+    }
+    if (payload.query.status) {
+      qb.andWhere('inv.status = :status', { status: payload.query.status });
+    }
+    if (payload.query.search) {
+      qb.andWhere(
+        '(inv.invoice_no ILIKE :search OR inv.document_no ILIKE :search OR inv.seller_name ILIKE :search OR inv.buyer_name ILIKE :search)',
+        { search: `%${payload.query.search}%` },
+      );
+    }
+    // Limit to prevent system overload
+    qb.take(500);
+
+    const invoices = await qb.getMany();
+    let fileCount = 0;
+
+    for (const invoice of invoices) {
+      const partnerName =
+        invoice.direction === 'IN' ? invoice.sellerName : invoice.buyerName;
+      const taxCode =
+        invoice.direction === 'IN'
+          ? invoice.sellerTaxCode
+          : invoice.buyerTaxCode;
+      const sanitizedName = (partnerName || 'KhongTen')
+        .replace(/[\\/:"*?<>|]/g, '-')
+        .substring(0, 50);
+      const sanitizedTaxCode = (taxCode || 'KhongMST').replace(
+        /[\\/:"*?<>|]/g,
+        '-',
+      );
+      const folderName = `${sanitizedTaxCode} - ${sanitizedName}`;
+      const docNo = (invoice.invoiceNo || invoice.id).replace(
+        /[\\/:"*?<>|]/g,
+        '-',
+      );
+
+      if (payload.types.includes('pdf')) {
+        const files: any[] = Array.isArray(invoice.pdfFiles)
+          ? invoice.pdfFiles
+          : [];
+        if (files.length === 0 && invoice.pdfFileKey) {
+          files.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
+        }
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          try {
+            const stream = await this.r2.downloadStream(file.key);
+            const ext = file.filename?.split('.').pop() || 'pdf';
+            const finalName =
+              files.length > 1 ? `${docNo}_${i + 1}.${ext}` : `${docNo}.${ext}`;
+            archive.append(stream, { name: `${folderName}/${finalName}` });
+            fileCount++;
+          } catch (err) {
+            this.logger.error(`Failed to stream PDF ${file.key}`, err);
+          }
+        }
+      }
+
+      if (payload.types.includes('xml') && invoice.xmlFileKey) {
+        try {
+          const stream = await this.r2.downloadStream(invoice.xmlFileKey);
+          archive.append(stream, { name: `${folderName}/${docNo}.xml` });
+          fileCount++;
+        } catch (err) {
+          this.logger.error(`Failed to stream XML ${invoice.xmlFileKey}`, err);
+        }
+      }
+    }
+
+    if (fileCount === 0) {
+      archive.append('No files found or downloaded', { name: 'README.txt' });
+    }
+
+    await archive.finalize();
+  }
+
   async deletePdf(invoiceId: string, fileKey: string) {
     const invoice = await this.repository.findOne({ where: { id: invoiceId } });
     if (!invoice)
