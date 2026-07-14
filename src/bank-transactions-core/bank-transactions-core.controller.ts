@@ -240,4 +240,38 @@ export class BankTransactionsCoreController {
   deleteCashBookBalance(@Param('id') id: string) {
     return this.service.deleteCashBookBalance(id);
   }
+
+  // --- Statement Files ---
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('statement-files')
+  getStatementFiles(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('branchId') branchId?: string,
+    @Query('bankAccountId') bankAccountId?: string,
+    @Query('cashBookId') cashBookId?: string,
+  ) {
+    return this.service.getStatementFiles({
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      branchId,
+      bankAccountId,
+      cashBookId,
+    });
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @Post('statement-files')
+  createStatementFile(
+    @Body()
+    dto: import('./dto/create-bank-statement-file.dto').CreateBankStatementFileDto,
+  ) {
+    return this.service.createStatementFile(dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
+  @Delete('statement-files/:id')
+  deleteStatementFile(@Param('id') id: string) {
+    return this.service.deleteStatementFile(id);
+  }
 }

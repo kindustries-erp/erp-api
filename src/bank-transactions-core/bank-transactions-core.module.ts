@@ -8,7 +8,7 @@ import { ErpCashBook } from './entities/erp_cash_book.entity';
 import { ErpBankTransaction } from './entities/erp_bank_transaction.entity';
 import { ErpBankAccountBalance } from './entities/erp_bank_account_balance.entity';
 import { ErpCashBookBalance } from './entities/erp_cash_book_balance.entity';
-
+import { ErpBankStatementFile } from './entities/erp_bank_statement_file.entity';
 import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
 
 @Module({
@@ -19,6 +19,7 @@ import { AccountingCoreModule } from '../accounting-core/accounting-core.module'
       ErpBankTransaction,
       ErpBankAccountBalance,
       ErpCashBookBalance,
+      ErpBankStatementFile,
     ]),
     RbacCoreModule,
     AccountingCoreModule,
