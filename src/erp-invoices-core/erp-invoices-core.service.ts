@@ -1570,7 +1570,17 @@ export class ErpInvoicesCoreService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
-        const res = await fetch(url, { ...options, signal: controller.signal });
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: 'application/json, text/plain, */*',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            ...(options?.headers || {}),
+          },
+          signal: controller.signal,
+        });
         clearTimeout(timeoutId);
 
         if (res.ok) {

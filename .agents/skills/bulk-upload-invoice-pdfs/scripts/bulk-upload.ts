@@ -8,20 +8,28 @@ const targetDir = process.argv[2];
 const direction = process.argv[3]?.toUpperCase() || 'IN';
 
 if (!targetDir || !['IN', 'OUT'].includes(direction)) {
-  console.error("Cách dùng: bun run bulk-upload.ts <thư_mục_chứa_pdf> [IN|OUT]");
-  console.error("VD: bun run bulk-upload.ts /path/to/dir IN");
+  console.error(
+    'Cách dùng: bun run bulk-upload.ts <thư_mục_chứa_pdf> [IN|OUT]',
+  );
+  console.error('VD: bun run bulk-upload.ts /path/to/dir IN');
   process.exit(1);
 }
 
-const envContent = fs.readFileSync(path.join(process.cwd(), 'erp-api', '.env'), 'utf-8');
+const envContent = fs.readFileSync(
+  path.join(process.cwd(), 'erp-api', '.env'),
+  'utf-8',
+);
 const envVars = Object.fromEntries(
   envContent
     .split('\n')
-    .filter(line => line && !line.startsWith('#'))
-    .map(line => {
+    .filter((line) => line && !line.startsWith('#'))
+    .map((line) => {
       const idx = line.indexOf('=');
-      return [line.slice(0, idx), line.slice(idx + 1).replace(/['"]/g, '')]; // Remove quotes
-    })
+      return [line.slice(0, idx), line.slice(idx + 1).replace(/['"]/g, '')] as [
+        string,
+        string,
+      ]; // Remove quotes
+    }),
 );
 
 const accountId = envVars['R2_ACCOUNT_ID'];
@@ -31,7 +39,7 @@ const bucket = envVars['R2_BUCKET_NAME']?.trim();
 const dbUrl = envVars['DATABASE_URL']?.trim();
 
 if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !dbUrl) {
-  console.error("Thiếu thông tin R2 credentials hoặc DATABASE_URL trong .env");
+  console.error('Thiếu thông tin R2 credentials hoặc DATABASE_URL trong .env');
   process.exit(1);
 }
 
@@ -50,32 +58,42 @@ const pgClient = new Client({
 
 async function main() {
   await pgClient.connect();
-  console.log("Đã kết nối Database");
+  console.log('Đã kết nối Database');
 
-  const files = fs.readdirSync(targetDir).filter(f => f.toLowerCase().endsWith('.pdf'));
+  const files = fs
+    .readdirSync(targetDir)
+    .filter((f) => f.toLowerCase().endsWith('.pdf'));
   console.log(`Tìm thấy ${files.length} file PDF trong thư mục ${targetDir}`);
 
   // Lấy tất cả hóa đơn theo direction chưa có pdf_file_key
-  const res = await pgClient.query("SELECT id, invoice_no, serial_no, invoice_date FROM erp_invoices WHERE direction = $1 AND pdf_file_key IS NULL", [direction]);
+  const res = await pgClient.query(
+    'SELECT id, invoice_no, serial_no, invoice_date FROM erp_invoices WHERE direction = $1 AND pdf_file_key IS NULL',
+    [direction],
+  );
   const pendingInvoices = res.rows;
-  console.log(`Tìm thấy ${pendingInvoices.length} hóa đơn ${direction} chưa có PDF.`);
+  console.log(
+    `Tìm thấy ${pendingInvoices.length} hóa đơn ${direction} chưa có PDF.`,
+  );
 
   const processedInvoices = new Set<string>();
 
   for (const filename of files) {
     const filePath = path.join(targetDir, filename);
-    
+
     // Tìm hóa đơn khớp với tên file
-    // Cách khớp: Tên file phải chứa invoice_no (có word boundary) 
+    // Cách khớp: Tên file phải chứa invoice_no (có word boundary)
     // và (tuỳ chọn) chứa serial_no nếu có.
-    const matchedInvoices = pendingInvoices.filter(inv => {
+    const matchedInvoices = pendingInvoices.filter((inv) => {
       // Bỏ đi các ký tự 0 ở đầu nếu có (tuỳ nhu cầu, tạm thời giữ nguyên)
       const invNo = inv.invoice_no;
       const serial = inv.serial_no;
-      
-      const noRegex = new RegExp(`(^|[^a-zA-Z0-9])${invNo}([^a-zA-Z0-9]|$)`, 'i');
+
+      const noRegex = new RegExp(
+        `(^|[^a-zA-Z0-9])${invNo}([^a-zA-Z0-9]|$)`,
+        'i',
+      );
       const matchNo = noRegex.test(filename);
-      
+
       let matchSerial = true;
       if (serial) {
         // Có thể serial_no trong file bị thiếu ký tự đầu (vd: 1C26THA -> C26THA)
@@ -89,12 +107,16 @@ async function main() {
     });
 
     if (matchedInvoices.length === 0) {
-      console.warn(`[SKIPPED] Không tìm thấy hóa đơn khớp cho file: ${filename}`);
+      console.warn(
+        `[SKIPPED] Không tìm thấy hóa đơn khớp cho file: ${filename}`,
+      );
       continue;
     }
 
     if (matchedInvoices.length > 1) {
-      console.warn(`[SKIPPED] Tìm thấy nhiều hơn 1 hóa đơn khớp cho file: ${filename}. Vui lòng xử lý tay.`);
+      console.warn(
+        `[SKIPPED] Tìm thấy nhiều hơn 1 hóa đơn khớp cho file: ${filename}. Vui lòng xử lý tay.`,
+      );
       continue;
     }
 
@@ -102,7 +124,9 @@ async function main() {
     const invoiceNo = record.invoice_no;
 
     if (processedInvoices.has(record.id)) {
-      console.log(`[SKIPPED] File trùng lặp của hóa đơn số ${invoiceNo}. Sẽ bị xóa: ${filename}`);
+      console.log(
+        `[SKIPPED] File trùng lặp của hóa đơn số ${invoiceNo}. Sẽ bị xóa: ${filename}`,
+      );
       try {
         fs.unlinkSync(filePath);
       } catch (err) {
@@ -125,25 +149,32 @@ async function main() {
           Key: r2Key,
           Body: fileBuffer,
           ContentType: 'application/pdf',
-        })
+        }),
       );
-      
+
       // Update database
-      await pgClient.query("UPDATE erp_invoices SET pdf_file_key = $1 WHERE id = $2", [r2Key, record.id]);
-      
-      console.log(`[SUCCESS] Đã upload và cập nhật hóa đơn số ${invoiceNo} (File: ${filename})`);
+      await pgClient.query(
+        'UPDATE erp_invoices SET pdf_file_key = $1 WHERE id = $2',
+        [r2Key, record.id],
+      );
+
+      console.log(
+        `[SUCCESS] Đã upload và cập nhật hóa đơn số ${invoiceNo} (File: ${filename})`,
+      );
       processedInvoices.add(record.id);
 
       // Xóa file local sau khi thành công
       fs.unlinkSync(filePath);
       console.log(`[DELETED] Đã xóa file local: ${filename}`);
     } catch (error: any) {
-      console.error(`[ERROR] Lỗi khi xử lý hóa đơn số ${invoiceNo}: ${error.message}`);
+      console.error(
+        `[ERROR] Lỗi khi xử lý hóa đơn số ${invoiceNo}: ${error.message}`,
+      );
     }
   }
 
   await pgClient.end();
-  console.log("Hoàn tất.");
+  console.log('Hoàn tất.');
 }
 
 main();
