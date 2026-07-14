@@ -603,6 +603,14 @@ export class ErpInvoicesCoreService {
           if (vals.includes('has_xml')) {
             conditions.push('inv.xml_file_key IS NOT NULL');
           }
+          if (vals.includes('no_pdf')) {
+            conditions.push(
+              "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null'))",
+            );
+          }
+          if (vals.includes('no_xml')) {
+            conditions.push('inv.xml_file_key IS NULL');
+          }
           if (conditions.length > 0) {
             qb.andWhere(`(${conditions.join(' OR ')})`);
           }
