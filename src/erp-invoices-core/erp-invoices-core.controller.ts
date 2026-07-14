@@ -337,6 +337,25 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
+  @Get(':id/pdfs/:key/content')
+  async getPdfContent(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Res() res: any,
+  ) {
+    const buffer = await this.service.getPdfContent(
+      id,
+      decodeURIComponent(key),
+    );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'private, max-age=300',
+    });
+    res.send(buffer);
+  }
+
   @Get(':id/pdfs/:key/download-url')
   getPdfDownloadUrl(
     @Param('id') id: string,
