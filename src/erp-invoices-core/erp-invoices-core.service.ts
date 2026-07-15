@@ -118,8 +118,11 @@ export class ErpInvoicesCoreService {
     }
 
     let selectField = '';
-    if (column === 'invoiceDate') selectField = 'inv.invoice_date';
-    else if (column === 'serialNo') selectField = 'inv.serial_no';
+    let isDateColumn = false;
+    if (column === 'invoiceDate') {
+      selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'serialNo') selectField = 'inv.serial_no';
     else if (column === 'invoiceNo') selectField = 'inv.invoice_no';
     else if (column === 'partner') {
       if (direction === 'IN') selectField = 'inv.seller_name';
@@ -140,8 +143,13 @@ export class ErpInvoicesCoreService {
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
-    qb.andWhere(`${selectField} IS NOT NULL`);
-    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    if (isDateColumn) {
+      qb.andWhere('inv.invoice_date IS NOT NULL');
+      qb.andWhere(`${selectField} != ''`);
+    } else {
+      qb.andWhere(`${selectField} IS NOT NULL`);
+      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    }
 
     if (filtersStr) {
       try {
@@ -151,7 +159,8 @@ export class ErpInvoicesCoreService {
           if (col === column) continue;
 
           let filterField = '';
-          if (col === 'invoiceDate') filterField = 'inv.invoice_date';
+          if (col === 'invoiceDate')
+            filterField = `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`;
           else if (col === 'serialNo') filterField = 'inv.serial_no';
           else if (col === 'invoiceNo') filterField = 'inv.invoice_no';
           else if (col === 'partner') {
@@ -535,7 +544,7 @@ export class ErpInvoicesCoreService {
           });
         } else if (key === 'invoiceDate') {
           qb.andWhere(
-            'CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)',
+            `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
             { invoiceDateVals: vals },
           );
         } else if (key === 'serialNo') {
@@ -2254,9 +2263,12 @@ export class ErpInvoicesCoreService {
       } else if (key === 'branchId') {
         qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
       } else if (key === 'invoiceDate') {
-        qb.andWhere('CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)', {
-          invoiceDateVals: vals,
-        });
+        qb.andWhere(
+          `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
+          {
+            invoiceDateVals: vals,
+          },
+        );
       } else if (key === 'serialNo') {
         qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
           serialNoVals: vals,
