@@ -30,6 +30,7 @@ import {
   parseVietnamInvoiceXml,
   XmlParseError,
 } from './xml-parser/vietnam-invoice-xml.parser';
+import { normalizeInvoiceNo } from './utils/normalize-invoice-no';
 import AdmZip from 'adm-zip';
 import * as ExcelJS from 'exceljs';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
@@ -1724,12 +1725,13 @@ export class ErpInvoicesCoreService {
         // 1. Parse XML
         const parsed = parseVietnamInvoiceXml(file.buffer.toString('utf-8'));
 
-        // 2. Kiểm tra duplicate: invoice_no + seller_tax_code
+        // 2. Kiểm tra duplicate: invoiceNoNormalized + seller_tax_code
+        const invoiceNoNorm = normalizeInvoiceNo(parsed.invoiceNo);
         const existing = await this.repository.findOne({
           where: {
-            invoiceNo: parsed.invoiceNo,
+            invoiceNoNormalized: invoiceNoNorm || undefined,
             sellerTaxCode: parsed.sellerTaxCode ?? undefined,
-          },
+          } as any, // Typecast to any to avoid TypeORM type inference issues
         });
 
         if (existing) {
@@ -1778,6 +1780,7 @@ export class ErpInvoicesCoreService {
 
         const invoice = this.repository.create({
           invoiceNo: parsed.invoiceNo,
+          invoiceNoNormalized: invoiceNoNorm || undefined,
           serialNo: parsed.serialNo,
           invoiceDate: parsed.invoiceDate,
           direction,
@@ -1820,6 +1823,302 @@ export class ErpInvoicesCoreService {
       created,
       skipped,
       errors,
+    };
+  }
+
+  async bulkImportMixed(
+    files: Array<{ filename: string; buffer: Buffer; mimetype: string }>,
+    direction: 'IN' | 'OUT',
+  ): Promise<BulkImportResult> {
+    const importId = crypto.randomUUID();
+    const skipped: BulkImportSkippedItem[] = [];
+    const errors: BulkImportErrorItem[] = [];
+    let created = 0;
+    const pdfAttached: any[] = [];
+    const pdfOrphans: any[] = [];
+
+    // 1. Phân loại files & Giải nén ZIP
+    const xmlEntries: { filename: string; buffer: Buffer }[] = [];
+    const pdfEntries: { filename: string; buffer: Buffer; mimetype: string }[] =
+      [];
+
+    for (const f of files) {
+      const lowerName = f.filename.toLowerCase();
+      if (lowerName.endsWith('.zip') || f.mimetype === 'application/zip') {
+        try {
+          const zip = new AdmZip(f.buffer);
+          const zipEntries = zip.getEntries();
+          for (const entry of zipEntries) {
+            if (entry.isDirectory) continue;
+            const entryName = entry.entryName;
+            const ext = entryName.split('.').pop()?.toLowerCase();
+            if (ext === 'xml') {
+              xmlEntries.push({ filename: entryName, buffer: entry.getData() });
+            } else if (ext === 'pdf') {
+              pdfEntries.push({
+                filename: entryName,
+                buffer: entry.getData(),
+                mimetype: 'application/pdf',
+              });
+            }
+          }
+        } catch (e) {
+          errors.push({
+            filename: f.filename,
+            reason: `Không thể giải nén file ZIP: ${(e as Error).message}`,
+          });
+        }
+      } else if (
+        lowerName.endsWith('.xml') ||
+        f.mimetype === 'application/xml' ||
+        f.mimetype === 'text/xml'
+      ) {
+        xmlEntries.push(f);
+      } else if (
+        lowerName.endsWith('.pdf') ||
+        f.mimetype === 'application/pdf'
+      ) {
+        pdfEntries.push(f);
+      } else {
+        // Skip unknown files
+      }
+    }
+
+    // 2. Build Map cho PDF theo basename
+    // basename: "Inv001" từ "Inv001.pdf"
+    const pdfMap = new Map<
+      string,
+      { filename: string; buffer: Buffer; mimetype: string }
+    >();
+    for (const p of pdfEntries) {
+      const basename = p.filename
+        .substring(0, p.filename.lastIndexOf('.'))
+        .toLowerCase();
+      pdfMap.set(basename, p);
+    }
+
+    // 3. Xử lý XML
+    for (const file of xmlEntries) {
+      try {
+        const parsed = parseVietnamInvoiceXml(file.buffer.toString('utf-8'));
+        const invoiceNoNorm = normalizeInvoiceNo(parsed.invoiceNo);
+
+        let existingInvoice = await this.repository.findOne({
+          where: {
+            invoiceNoNormalized: invoiceNoNorm || undefined,
+            sellerTaxCode: parsed.sellerTaxCode ?? undefined,
+            direction,
+          } as any,
+        });
+
+        const basename = file.filename
+          .substring(0, file.filename.lastIndexOf('.'))
+          .toLowerCase();
+        const matchedPdf = pdfMap.get(basename);
+
+        if (existingInvoice) {
+          skipped.push({
+            filename: file.filename,
+            invoiceNo: parsed.invoiceNo,
+            sellerName: parsed.sellerName,
+            sellerTaxCode: parsed.sellerTaxCode,
+            reason: 'DUPLICATE',
+          });
+
+          // Dù duplicate XML, nếu có PDF đi kèm và hóa đơn chưa có PDF này, attach nó vào (optional)
+          // Ở đây ta xoá PDF khỏi map để không đưa vào orphan
+          if (matchedPdf) {
+            pdfMap.delete(basename);
+          }
+          continue;
+        }
+
+        // Upload XML
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dateStr = parsed.invoiceDate || `${yyyy}-${mm}-01`;
+        const mst =
+          direction === 'IN' ? parsed.sellerTaxCode : parsed.buyerTaxCode;
+        const safeTax = (mst ?? 'unknown').replace(/[^\w]/g, '');
+        const safeSerial = (parsed.serialNo ?? 'unknown').replace(
+          /[^\w-]/g,
+          '_',
+        );
+        const safeNo = parsed.invoiceNo.replace(/[^\w-]/g, '_');
+
+        const fileName = `${dateStr}_${safeTax}_${safeSerial}_${safeNo}`;
+        const xmlKey = `invoices/${direction}/${yyyy}/${mm}/${fileName}.xml`;
+        let xmlUploaded = false;
+        try {
+          await this.r2.uploadBuffer(xmlKey, file.buffer, 'application/xml');
+          xmlUploaded = true;
+        } catch (r2Err) {
+          this.logger.warn(
+            `R2 upload failed for ${file.filename}: ${(r2Err as Error).message}`,
+          );
+        }
+
+        // Tạo record
+        let notes = '';
+        if (parsed.lookupCode || parsed.providerLink) {
+          notes = `[Lookup Info] Code: ${parsed.lookupCode ?? 'N/A'} - Link: ${parsed.providerLink ?? 'N/A'}`;
+        }
+
+        const newInvoiceData: any = {
+          invoiceNo: parsed.invoiceNo,
+          invoiceNoNormalized: invoiceNoNorm || undefined,
+          serialNo: parsed.serialNo,
+          invoiceDate: parsed.invoiceDate,
+          direction,
+          status: 'CONFIRMED',
+          sellerName: parsed.sellerName,
+          sellerTaxCode: parsed.sellerTaxCode,
+          sellerAddress: parsed.sellerAddress,
+          sellerBank: parsed.sellerBank,
+          buyerName: parsed.buyerName,
+          buyerTaxCode: parsed.buyerTaxCode,
+          buyerAddress: parsed.buyerAddress,
+          description: parsed.description,
+          notes: notes || undefined,
+          preVatAmount: String(parsed.preVatAmount),
+          vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
+          vatAmount: String(parsed.vatAmount),
+          discountAmount: String(parsed.discountAmount),
+          totalAmount: String(parsed.totalAmount),
+          xmlFileKey: xmlUploaded ? xmlKey : null,
+          xmlImportId: importId,
+          pdfFiles: [],
+        };
+        const newInvoice = this.repository.create(
+          newInvoiceData,
+        ) as any as ErpInvoice;
+
+        this.extractInvoiceMetadata(newInvoice);
+
+        // Xử lý PDF đi kèm XML
+        if (matchedPdf) {
+          pdfMap.delete(basename); // Remove from orphans
+
+          const ts = Date.now();
+          const safePdfName = matchedPdf.filename.replace(/[^\w.-]/g, '_');
+          const pdfKey = `invoices/${direction}/${yyyy}/${mm}/${safeNo}_${ts}_0_${safePdfName}`;
+          try {
+            await this.r2.uploadBuffer(
+              pdfKey,
+              matchedPdf.buffer,
+              matchedPdf.mimetype || 'application/pdf',
+            );
+            newInvoice.pdfFileKey = pdfKey;
+            newInvoice.pdfFiles = [
+              {
+                key: pdfKey,
+                filename: matchedPdf.filename,
+                uploadedAt: new Date().toISOString(),
+              },
+            ];
+            pdfAttached.push({
+              filename: matchedPdf.filename,
+              invoiceNo: newInvoice.invoiceNo,
+            });
+          } catch (r2Err) {
+            this.logger.warn(`R2 PDF upload failed for ${matchedPdf.filename}`);
+          }
+        }
+
+        await this.repository.save(newInvoice);
+        created++;
+      } catch (err) {
+        const reason =
+          err instanceof XmlParseError
+            ? err.message
+            : `Lỗi hệ thống: ${(err as Error).message}`;
+        errors.push({ filename: file.filename, reason });
+      }
+    }
+
+    // 4. Xử lý Orphans PDF (cố tìm trong DB)
+    for (const [basename, pdf] of pdfMap.entries()) {
+      // Tìm số hóa đơn và ký hiệu từ tên file.
+      // Dựa trên comment của user: "có thể ky hiệu và số hóa đơn bị đảo, hoặc là dính vào nhau"
+      // Lấy toàn bộ chữ số liên tiếp từ chuỗi, normalize để match invoiceNo
+      const digitsMatch = pdf.filename.match(/(\d{2,})/g);
+      let foundInvoice: any = null;
+
+      if (digitsMatch) {
+        // Thử tìm theo tất cả các cụm số xuất hiện trong tên file
+        for (const strNum of digitsMatch) {
+          const normNo = normalizeInvoiceNo(strNum);
+          if (!normNo) continue;
+
+          // Tìm xem có hóa đơn nào match invoiceNoNormalized không
+          // Để chính xác, chỉ tìm các hóa đơn có hướng (IN/OUT) tương ứng và thuộc đợt này
+          foundInvoice = await this.repository.findOne({
+            where: { invoiceNoNormalized: normNo, direction } as any,
+          });
+
+          if (foundInvoice) break;
+        }
+      }
+
+      if (foundInvoice) {
+        // Upload và attach vào foundInvoice
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const safeNo = foundInvoice.invoiceNo.replace(/[^\w-]/g, '_');
+        const ts = Date.now();
+        const safePdfName = pdf.filename.replace(/[^\w.-]/g, '_');
+        const pdfKey = `invoices/${direction}/${yyyy}/${mm}/${safeNo}_${ts}_orphan_${safePdfName}`;
+
+        try {
+          await this.r2.uploadBuffer(
+            pdfKey,
+            pdf.buffer,
+            pdf.mimetype || 'application/pdf',
+          );
+
+          const currentPdfFiles = Array.isArray(foundInvoice.pdfFiles)
+            ? [...foundInvoice.pdfFiles]
+            : [];
+          currentPdfFiles.push({
+            key: pdfKey,
+            filename: pdf.filename,
+            uploadedAt: new Date().toISOString(),
+          });
+
+          await this.repository.update(foundInvoice.id, {
+            pdfFiles: currentPdfFiles,
+            pdfFileKey: foundInvoice.pdfFileKey || pdfKey, // Set primary pdf nếu chưa có
+          } as any);
+
+          pdfAttached.push({
+            filename: pdf.filename,
+            invoiceNo: foundInvoice.invoiceNo,
+          });
+        } catch (r2Err) {
+          pdfOrphans.push({
+            filename: pdf.filename,
+            reason: 'R2 upload failed',
+          });
+        }
+      } else {
+        pdfOrphans.push({
+          filename: pdf.filename,
+          reason: 'Không tìm thấy hóa đơn khớp',
+        });
+      }
+    }
+
+    return {
+      importId,
+      direction,
+      total: files.length,
+      created,
+      skipped,
+      errors,
+      pdfAttached,
+      pdfOrphans,
     };
   }
 
@@ -2573,4 +2872,6 @@ export interface BulkImportResult {
   created: number;
   skipped: BulkImportSkippedItem[];
   errors: BulkImportErrorItem[];
+  pdfAttached?: any[];
+  pdfOrphans?: any[];
 }

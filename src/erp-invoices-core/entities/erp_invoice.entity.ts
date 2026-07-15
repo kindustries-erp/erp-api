@@ -21,6 +21,16 @@ export class ErpInvoice {
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
 
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'invoice_no_normalized',
+    nullable: true,
+    insert: false,
+    update: false,
+  })
+  invoiceNoNormalized: string | null;
+
   @Column({ type: 'varchar', length: 64, name: 'serial_no', nullable: true })
   serialNo: string | null;
 
