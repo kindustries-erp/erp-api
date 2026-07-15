@@ -295,7 +295,7 @@ export class ReportsCoreService {
       avgSellPrice: '"avgSellPrice"',
       margin: '("avgSellPrice" - "avgBuyPrice")',
       marginPct:
-        'CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice") ELSE 0 END',
+        '(TO_CHAR(CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
     };
 
     let orderByClause = 'ORDER BY "month" DESC, "itemCode" ASC';
@@ -377,10 +377,10 @@ export class ReportsCoreService {
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
-          SUM(b.qty) AS "qtyBought",
-          SUM(s.qty) AS "qtySold",
-          ROUND(AVG(b.unit_price)) AS "avgBuyPrice",
-          ROUND(AVG(s.unit_price)) AS "avgSellPrice",
+          COALESCE(SUM(b.qty), 0) AS "qtyBought",
+          COALESCE(SUM(s.qty), 0) AS "qtySold",
+          COALESCE(ROUND(AVG(b.unit_price)), 0) AS "avgBuyPrice",
+          COALESCE(ROUND(AVG(s.unit_price)), 0) AS "avgSellPrice",
           ARRAY_AGG(DISTINCT b.invoice_id) AS "buyInvoiceIds",
           ARRAY_AGG(DISTINCT s.invoice_id) FILTER (WHERE s.invoice_id IS NOT NULL) AS "sellInvoiceIds"
         FROM buy_codes b
@@ -685,6 +685,9 @@ export class ReportsCoreService {
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
       avgSellPrice: '"avgSellPrice"',
+      margin: '("avgSellPrice" - "avgBuyPrice")',
+      marginPct:
+        '(TO_CHAR(CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
     };
 
     const sqlCol = mapColumn[query.columnKey];
@@ -753,10 +756,10 @@ export class ReportsCoreService {
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
-          SUM(b.qty) AS "qtyBought",
-          SUM(s.qty) AS "qtySold",
-          ROUND(AVG(b.unit_price)) AS "avgBuyPrice",
-          ROUND(AVG(s.unit_price)) AS "avgSellPrice"
+          COALESCE(SUM(b.qty), 0) AS "qtyBought",
+          COALESCE(SUM(s.qty), 0) AS "qtySold",
+          COALESCE(ROUND(AVG(b.unit_price)), 0) AS "avgBuyPrice",
+          COALESCE(ROUND(AVG(s.unit_price)), 0) AS "avgSellPrice"
         FROM buy_codes b
         LEFT JOIN sell_codes s ON s.item_code = b.item_code AND s.month = b.month
         GROUP BY b.item_code, b.item_name, b.month

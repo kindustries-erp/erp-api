@@ -193,12 +193,19 @@ export class ErpInvoicesCoreController {
       fileFilter: (_req, file, cb) => {
         const ok =
           file.originalname.toLowerCase().endsWith('.xml') ||
-          file.mimetype === 'application/xml' ||
-          file.mimetype === 'text/xml';
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.originalname.toLowerCase().endsWith('.zip') ||
+          [
+            'application/xml',
+            'text/xml',
+            'application/pdf',
+            'application/zip',
+            'application/x-zip-compressed',
+          ].includes(file.mimetype);
         if (!ok) {
           cb(
             new BadRequestException(
-              `File "${file.originalname}" không phải .xml`,
+              `File "${file.originalname}" không được hỗ trợ (chỉ nhận .xml, .pdf, .zip)`,
             ),
             false,
           );
@@ -210,10 +217,15 @@ export class ErpInvoicesCoreController {
   )
   async bulkImportBuyer(@UploadedFiles() files: Express.Multer.File[]) {
     if (!files || files.length === 0) {
-      throw new BadRequestException('Chưa chọn file XML nào');
+      throw new BadRequestException('Chưa chọn file nào');
     }
-    return this.service.bulkImportBuyerXml(
-      files.map((f) => ({ filename: f.originalname, buffer: f.buffer })),
+    return this.service.bulkImportMixed(
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+      'IN',
     );
   }
 
@@ -229,12 +241,19 @@ export class ErpInvoicesCoreController {
       fileFilter: (_req, file, cb) => {
         const ok =
           file.originalname.toLowerCase().endsWith('.xml') ||
-          file.mimetype === 'application/xml' ||
-          file.mimetype === 'text/xml';
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.originalname.toLowerCase().endsWith('.zip') ||
+          [
+            'application/xml',
+            'text/xml',
+            'application/pdf',
+            'application/zip',
+            'application/x-zip-compressed',
+          ].includes(file.mimetype);
         if (!ok) {
           cb(
             new BadRequestException(
-              `File "${file.originalname}" không phải .xml`,
+              `File "${file.originalname}" không được hỗ trợ (chỉ nhận .xml, .pdf, .zip)`,
             ),
             false,
           );
@@ -246,10 +265,15 @@ export class ErpInvoicesCoreController {
   )
   async bulkImportSeller(@UploadedFiles() files: Express.Multer.File[]) {
     if (!files || files.length === 0) {
-      throw new BadRequestException('Chưa chọn file XML nào');
+      throw new BadRequestException('Chưa chọn file nào');
     }
-    return this.service.bulkImportSellerXml(
-      files.map((f) => ({ filename: f.originalname, buffer: f.buffer })),
+    return this.service.bulkImportMixed(
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+      'OUT',
     );
   }
 
