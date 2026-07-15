@@ -40,6 +40,7 @@ export interface ErpInvoiceQuery {
   search?: string;
   seller_name?: string;
   buyer_name?: string;
+  partner_tax_code?: string;
   date_from?: string;
   date_to?: string;
   status?: string;
@@ -368,6 +369,7 @@ export class ErpInvoicesCoreService {
       query.search ||
       query.seller_name ||
       query.buyer_name ||
+      query.partner_tax_code ||
       query.tag_id ||
       query.sort_by === 'invoiceNo' ||
       Object.keys(columnSearch).length > 0 ||
@@ -422,6 +424,14 @@ export class ErpInvoicesCoreService {
         qb.andWhere('inv.buyer_name ILIKE :bn', {
           bn: `%${query.buyer_name}%`,
         });
+      }
+      if (query.partner_tax_code) {
+        qb.andWhere(
+          '(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)',
+          {
+            ptc: query.partner_tax_code,
+          },
+        );
       }
       if (query.tag_id) {
         qb.andWhere(
