@@ -477,6 +477,105 @@ export class BankTransactionsCoreService {
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
     }
 
+    if (filter.column_filters) {
+      try {
+        const cFilters = JSON.parse(filter.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          let filterField = '';
+          if (col === 'account') {
+            if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
+            else if (filter.sourceType === 'CASH')
+              filterField = 'txn.cashBookId';
+            else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+          } else if (col === 'transDate')
+            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') filterField = 'txn.description';
+          else if (col === 'thu') filterField = 'txn.creditAmount';
+          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'netOffAmount')
+            filterField = 'txn.netOffAmount'; // Special case, might not work as it's computed, better skip or handle specifically
+          else if (col === 'remainingAmount')
+            filterField = 'remainingAmount'; // Computed
+          else if (col === 'balance') filterField = 'txn.balance';
+          else if (col === 'correspondentName')
+            filterField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            filterField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            filterField = 'txn.correspondentBank';
+          else if (col === 'branch') filterField = 'txn.branchId';
+          else if (col === 'referenceNumber')
+            filterField = 'txn.referenceNumber';
+
+          if (
+            filterField &&
+            col !== 'netOffAmount' &&
+            col !== 'remainingAmount'
+          ) {
+            if (col === 'transDate') {
+              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            } else {
+              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (filter.column_search) {
+      try {
+        const cSearch = JSON.parse(filter.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          let searchField = '';
+          if (col === 'account') {
+            if (filter.sourceType === 'BANK')
+              searchField = 'bankAccount.bankName'; // Note: ILIKE on relations needs careful join, already joined 'bankAccount' and 'cashBook'
+            else if (filter.sourceType === 'CASH')
+              searchField = 'cashBook.name';
+            else searchField = 'COALESCE(bankAccount.bankName, cashBook.name)';
+          } else if (col === 'transDate')
+            searchField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') searchField = 'txn.description';
+          else if (col === 'thu') searchField = 'txn.creditAmount';
+          else if (col === 'chi') searchField = 'txn.debitAmount';
+          else if (col === 'balance') searchField = 'txn.balance';
+          else if (col === 'correspondentName')
+            searchField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            searchField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            searchField = 'txn.correspondentBank';
+          else if (col === 'branch') searchField = 'branch.name';
+          else if (col === 'referenceNumber')
+            searchField = 'txn.referenceNumber';
+
+          if (searchField) {
+            if (col === 'transDate') {
+              qb.andWhere(`${searchField} ILIKE :search_${col}`, {
+                [`search_${col}`]: `%${val}%`,
+              });
+            } else {
+              qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
+                [`search_${col}`]: `%${val}%`,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
     if (filter.sortBy) {
       const validSorts = ['transDate', 'debitAmount', 'creditAmount', 'amount'];
       if (validSorts.includes(filter.sortBy)) {
@@ -506,6 +605,153 @@ export class BankTransactionsCoreService {
 
     return {
       items: mappedItems,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    sourceType?: 'BANK' | 'CASH',
+  ) {
+    const qb = this.transactionRepo.createQueryBuilder('txn');
+
+    if (sourceType) {
+      qb.where('txn.sourceType = :sourceType', { sourceType });
+    } else {
+      qb.where('1 = 1');
+    }
+
+    let selectField = '';
+    let labelField = '';
+
+    if (column === 'account') {
+      if (sourceType === 'BANK') {
+        qb.leftJoin('txn.bankAccount', 'bankAccount');
+        selectField = 'txn.bankAccountId';
+        labelField = `COALESCE(bankAccount.bankName, '') || ' - ' || COALESCE(bankAccount.accountNumber, '')`;
+      } else if (sourceType === 'CASH') {
+        qb.leftJoin('txn.cashBook', 'cashBook');
+        selectField = 'txn.cashBookId';
+        labelField = 'cashBook.name';
+      } else {
+        qb.leftJoin('txn.bankAccount', 'bankAccount');
+        qb.leftJoin('txn.cashBook', 'cashBook');
+        selectField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+        labelField = `COALESCE(bankAccount.bankName || ' - ' || bankAccount.accountNumber, cashBook.name)`;
+      }
+    } else if (column === 'transDate')
+      selectField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+    else if (column === 'description') selectField = 'txn.description';
+    else if (column === 'thu') selectField = 'txn.creditAmount';
+    else if (column === 'chi') selectField = 'txn.debitAmount';
+    else if (column === 'balance') selectField = 'txn.balance';
+    else if (column === 'correspondentName')
+      selectField = 'txn.correspondentName';
+    else if (column === 'correspondentAccount')
+      selectField = 'txn.correspondentAccount';
+    else if (column === 'correspondentBank')
+      selectField = 'txn.correspondentBank';
+    else if (column === 'branch') {
+      qb.leftJoin('txn.branch', 'branch');
+      selectField = 'txn.branchId';
+      labelField = 'branch.name';
+    } else if (column === 'referenceNumber')
+      selectField = 'txn.referenceNumber';
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    if (!labelField) labelField = selectField;
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.addSelect(`MAX(${labelField})`, 'label');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    if (column !== 'transDate') {
+      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    } else {
+      qb.andWhere(`${selectField} != ''`);
+    }
+    qb.groupBy(selectField);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'account') {
+            if (sourceType === 'BANK') filterField = 'txn.bankAccountId';
+            else if (sourceType === 'CASH') filterField = 'txn.cashBookId';
+            else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+          } else if (col === 'transDate')
+            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') filterField = 'txn.description';
+          else if (col === 'thu') filterField = 'txn.creditAmount';
+          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'balance') filterField = 'txn.balance';
+          else if (col === 'correspondentName')
+            filterField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            filterField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            filterField = 'txn.correspondentBank';
+          else if (col === 'branch') filterField = 'txn.branchId';
+          else if (col === 'referenceNumber')
+            filterField = 'txn.referenceNumber';
+
+          if (filterField) {
+            if (col === 'transDate') {
+              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            } else {
+              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      if (column === 'transDate') {
+        qb.andWhere(`${labelField} ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      } else {
+        qb.andWhere(`CAST(${labelField} AS TEXT) ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      }
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+
+    return {
+      items: results
+        .map((r) => ({
+          value: String(r.value),
+          label: r.label ? String(r.label) : String(r.value),
+        }))
+        .filter((r) => r.value),
       total,
       page,
       pageSize,

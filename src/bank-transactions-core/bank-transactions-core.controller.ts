@@ -110,6 +110,26 @@ export class BankTransactionsCoreController {
 
   // --- Transactions ---
   @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('transactions/column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('sourceType') sourceType?: 'BANK' | 'CASH',
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      sourceType,
+    );
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
   @Get('transactions/:id')
   getTransaction(@Param('id') id: string) {
     return this.service.getTransaction(id);
