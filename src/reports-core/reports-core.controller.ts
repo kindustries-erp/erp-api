@@ -39,6 +39,8 @@ export class ReportsCoreController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '50',
   ) {
@@ -48,6 +50,8 @@ export class ReportsCoreController {
       search,
       sortBy,
       sortDir,
+      columnSearch,
+      columnFilters,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
     });
@@ -67,6 +71,24 @@ export class ReportsCoreController {
       dateTo,
       search,
       itemCode,
+    });
+  }
+
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @Get('vinfast-parts/column-options')
+  async getVinfastPartsColumnOptions(
+    @Query('columnKey') columnKey: string,
+    @Query('search') search: string = '',
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('filters') filtersStr: string = '{}',
+  ) {
+    return this.reportsCoreService.getVinfastPartsColumnOptions({
+      columnKey,
+      search,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      filtersStr,
     });
   }
 

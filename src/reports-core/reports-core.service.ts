@@ -257,6 +257,8 @@ export class ReportsCoreService {
     search?: string;
     sortBy?: string;
     sortDir?: string;
+    columnSearch?: string;
+    columnFilters?: string;
     page?: number;
     limit?: number;
   }) {
@@ -284,22 +286,56 @@ export class ReportsCoreService {
     }
 
     const sortMap: Record<string, string> = {
-      itemCode: 'b.item_code',
-      month: 'b.month',
-      qtyBought: 'COALESCE(SUM(b.qty), 0)',
-      qtySold: 'COALESCE(SUM(s.qty), 0)',
-      avgBuyPrice: 'COALESCE(ROUND(AVG(b.unit_price)), 0)',
-      avgSellPrice: 'COALESCE(ROUND(AVG(s.unit_price)), 0)',
-      margin:
-        'COALESCE(ROUND(AVG(s.unit_price)), 0) - COALESCE(ROUND(AVG(b.unit_price)), 0)',
+      itemCode: '"itemCode"',
+      month: '"month"',
+      itemName: '"itemName"',
+      qtyBought: '"qtyBought"',
+      qtySold: '"qtySold"',
+      avgBuyPrice: '"avgBuyPrice"',
+      avgSellPrice: '"avgSellPrice"',
+      margin: '("avgSellPrice" - "avgBuyPrice")',
       marginPct:
-        'CASE WHEN COALESCE(ROUND(AVG(b.unit_price)), 0) > 0 THEN ((COALESCE(ROUND(AVG(s.unit_price)), 0) - COALESCE(ROUND(AVG(b.unit_price)), 0)) / COALESCE(ROUND(AVG(b.unit_price)), 0)) ELSE 0 END',
+        'CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice") ELSE 0 END',
     };
 
-    let orderByClause = 'ORDER BY b.month DESC, b.item_code ASC';
+    let orderByClause = 'ORDER BY "month" DESC, "itemCode" ASC';
     if (query.sortBy && sortMap[query.sortBy]) {
       const dir = query.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       orderByClause = `ORDER BY ${sortMap[query.sortBy]} ${dir}`;
+    }
+
+    let columnSearchFilter = '';
+    if (query.columnSearch) {
+      try {
+        const cs = JSON.parse(query.columnSearch);
+        for (const [key, val] of Object.entries(cs)) {
+          if (val && typeof val === 'string' && sortMap[key]) {
+            columnSearchFilter += ` AND ${sortMap[key]}::text ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let columnFiltersFilter = '';
+    if (query.columnFilters) {
+      try {
+        const cf = JSON.parse(query.columnFilters);
+        for (const [key, vals] of Object.entries(cf)) {
+          if (Array.isArray(vals) && vals.length > 0 && sortMap[key]) {
+            const placeholders = vals
+              .map(() => {
+                const ph = `$${paramIndex}`;
+                paramIndex++;
+                return ph;
+              })
+              .join(', ');
+            columnFiltersFilter += ` AND ${sortMap[key]}::text IN (${placeholders})`;
+            params.push(...vals);
+          }
+        }
+      } catch (e) {}
     }
 
     const limit = query.limit || 50;
@@ -335,24 +371,34 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code AS "itemCode",
+          b.item_name AS "itemName",
+          TO_CHAR(b.month, 'YYYY-MM') AS "month",
+          SUM(b.qty) AS "qtyBought",
+          SUM(s.qty) AS "qtySold",
+          ROUND(AVG(b.unit_price)) AS "avgBuyPrice",
+          ROUND(AVG(s.unit_price)) AS "avgSellPrice",
+          ARRAY_AGG(DISTINCT b.invoice_id) AS "buyInvoiceIds",
+          ARRAY_AGG(DISTINCT s.invoice_id) FILTER (WHERE s.invoice_id IS NOT NULL) AS "sellInvoiceIds"
+        FROM buy_codes b
+        LEFT JOIN sell_codes s ON s.item_code = b.item_code AND s.month = b.month
+        WHERE 1=1
+          ${dateFilter}
+          ${searchFilter}
+        GROUP BY b.item_code, b.item_name, b.month
+      ),
+      filtered_data AS (
+        SELECT *, COUNT(*) OVER() AS "totalCount"
+        FROM base_data
+        WHERE 1=1
+          ${columnSearchFilter}
+          ${columnFiltersFilter}
       )
-      SELECT 
-        b.item_code AS "itemCode",
-        b.item_name AS "itemName",
-        TO_CHAR(b.month, 'YYYY-MM') AS "month",
-        SUM(b.qty) AS "qtyBought",
-        SUM(s.qty) AS "qtySold",
-        ROUND(AVG(b.unit_price)) AS "avgBuyPrice",
-        ROUND(AVG(s.unit_price)) AS "avgSellPrice",
-        ARRAY_AGG(DISTINCT b.invoice_id) AS "buyInvoiceIds",
-        ARRAY_AGG(DISTINCT s.invoice_id) FILTER (WHERE s.invoice_id IS NOT NULL) AS "sellInvoiceIds",
-        COUNT(*) OVER() AS "totalCount"
-      FROM buy_codes b
-      LEFT JOIN sell_codes s ON s.item_code = b.item_code AND s.month = b.month
-      WHERE 1=1
-        ${dateFilter}
-        ${searchFilter}
-      GROUP BY b.item_code, b.item_name, b.month
+      SELECT *
+      FROM filtered_data
       ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -621,5 +667,130 @@ export class ReportsCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any;
+  }
+
+  async getVinfastPartsColumnOptions(query: {
+    columnKey: string;
+    search: string;
+    page: number;
+    limit: number;
+    filtersStr: string;
+  }) {
+    // Re-use the CTEs to get the base data, then fetch distinct values for the requested column
+    const mapColumn: Record<string, string> = {
+      itemCode: '"itemCode"',
+      month: '"month"',
+      itemName: '"itemName"',
+      qtyBought: '"qtyBought"',
+      qtySold: '"qtySold"',
+      avgBuyPrice: '"avgBuyPrice"',
+      avgSellPrice: '"avgSellPrice"',
+    };
+
+    const sqlCol = mapColumn[query.columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page: query.page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let otherFiltersSql = '';
+
+    try {
+      const filters = JSON.parse(query.filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === query.columnKey) continue;
+        if (Array.isArray(vals) && vals.length > 0 && mapColumn[key]) {
+          const placeholders = vals
+            .map(() => {
+              const ph = `$${paramIndex++}`;
+              return ph;
+            })
+            .join(', ');
+          otherFiltersSql += ` AND ${mapColumn[key]}::text IN (${placeholders})`;
+          params.push(...vals);
+        }
+      }
+    } catch (e) {}
+
+    if (query.search) {
+      otherFiltersSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${query.search}%`);
+    }
+
+    const sql = `
+      WITH buy_codes AS (
+        SELECT 
+          ii.invoice_id,
+          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
+          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ii.quantity::numeric AS qty,
+          ii.unit_price::numeric AS unit_price,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code = '0108926276'
+          AND ii.description LIKE '% - %'
+      ),
+      sell_codes AS (
+        SELECT 
+          ii.invoice_id,
+          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          ii.quantity::numeric AS qty,
+          ii.unit_price::numeric AS unit_price,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code AS "itemCode",
+          b.item_name AS "itemName",
+          TO_CHAR(b.month, 'YYYY-MM') AS "month",
+          SUM(b.qty) AS "qtyBought",
+          SUM(s.qty) AS "qtySold",
+          ROUND(AVG(b.unit_price)) AS "avgBuyPrice",
+          ROUND(AVG(s.unit_price)) AS "avgSellPrice"
+        FROM buy_codes b
+        LEFT JOIN sell_codes s ON s.item_code = b.item_code AND s.month = b.month
+        GROUP BY b.item_code, b.item_name, b.month
+      ),
+      filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM base_data
+        WHERE 1=1 ${otherFiltersSql}
+        AND ${sqlCol} IS NOT NULL
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const limit = query.limit || 20;
+    const page = query.page || 1;
+    const offset = (page - 1) * limit;
+
+    params.push(limit, offset);
+
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    const items = rows.map((r: any) => ({
+      value: r.value,
+      label: r.value,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }
