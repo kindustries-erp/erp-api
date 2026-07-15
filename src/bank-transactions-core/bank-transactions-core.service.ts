@@ -469,6 +469,17 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
+    }
+
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
         'sys_entity_tags',
@@ -486,6 +497,9 @@ export class BankTransactionsCoreService {
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           let filterField = '';
+          const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+          const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
           if (col === 'account') {
             if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (filter.sourceType === 'CASH')
@@ -496,10 +510,9 @@ export class BankTransactionsCoreService {
           else if (col === 'description') filterField = 'txn.description';
           else if (col === 'thu') filterField = 'txn.creditAmount';
           else if (col === 'chi') filterField = 'txn.debitAmount';
-          else if (col === 'netOffAmount')
-            filterField = 'txn.netOffAmount'; // Special case, might not work as it's computed, better skip or handle specifically
+          else if (col === 'netOffAmount') filterField = netOffSubquery;
           else if (col === 'remainingAmount')
-            filterField = 'remainingAmount'; // Computed
+            filterField = remainingAmountSubquery;
           else if (col === 'balance') filterField = 'txn.balance';
           else if (col === 'correspondentName')
             filterField = 'txn.correspondentName';
@@ -511,11 +524,7 @@ export class BankTransactionsCoreService {
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
 
-          if (
-            filterField &&
-            col !== 'netOffAmount' &&
-            col !== 'remainingAmount'
-          ) {
+          if (filterField) {
             if (col === 'transDate') {
               qb.andWhere(`${filterField} IN (:...vals_${col})`, {
                 [`vals_${col}`]: vals,
@@ -651,6 +660,10 @@ export class BankTransactionsCoreService {
     else if (column === 'description') selectField = 'txn.description';
     else if (column === 'thu') selectField = 'txn.creditAmount';
     else if (column === 'chi') selectField = 'txn.debitAmount';
+    else if (column === 'netOffAmount')
+      selectField = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+    else if (column === 'remainingAmount')
+      selectField = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0))`;
     else if (column === 'balance') selectField = 'txn.balance';
     else if (column === 'correspondentName')
       selectField = 'txn.correspondentName';
@@ -686,6 +699,9 @@ export class BankTransactionsCoreService {
           if (col === column) continue;
 
           let filterField = '';
+          const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+          const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
           if (col === 'account') {
             if (sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (sourceType === 'CASH') filterField = 'txn.cashBookId';
@@ -695,6 +711,9 @@ export class BankTransactionsCoreService {
           else if (col === 'description') filterField = 'txn.description';
           else if (col === 'thu') filterField = 'txn.creditAmount';
           else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'netOffAmount') filterField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            filterField = remainingAmountSubquery;
           else if (col === 'balance') filterField = 'txn.balance';
           else if (col === 'correspondentName')
             filterField = 'txn.correspondentName';
@@ -759,6 +778,142 @@ export class BankTransactionsCoreService {
     };
   }
 
+  async getPartnerStats(filter: BankTransactionFilterDto) {
+    const page = filter.page || 1;
+    const pageSize = filter.pageSize || 20;
+
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (filter.startDate) {
+      qb.andWhere('txn.transDate >= :startDate', {
+        startDate: filter.startDate,
+      });
+    }
+    if (filter.endDate) {
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
+      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+    }
+    if (filter.sourceType) {
+      qb.andWhere('txn.sourceType = :sourceType', {
+        sourceType: filter.sourceType,
+      });
+    }
+    if (filter.branchId) {
+      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    }
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      qb.innerJoin(
+        'sys_entity_tags',
+        'et',
+        `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
+      ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    const groupField =
+      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
+
+    qb.select(groupField, 'groupId')
+      .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
+      .addSelect('MAX(txn.correspondentName)', 'correspondentName')
+      .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
+      .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .groupBy(groupField);
+
+    if (filter.column_filters) {
+      try {
+        const cFilters = JSON.parse(filter.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (filter.column_search) {
+      try {
+        const cSearch = JSON.parse(filter.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    if (filter.sortBy) {
+      const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      if (filter.sortBy === 'correspondentAccount') {
+        qb.orderBy('MAX(txn.correspondentAccount)', order);
+      } else if (filter.sortBy === 'correspondentName') {
+        qb.orderBy('MAX(txn.correspondentName)', order);
+      } else if (filter.sortBy === 'totalCredit') {
+        qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
+      } else if (filter.sortBy === 'totalDebit') {
+        qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
+      } else {
+        qb.orderBy(
+          'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+          'DESC',
+        );
+      }
+    } else {
+      qb.orderBy(
+        'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+        'DESC',
+      );
+    }
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getRawMany();
+
+    return {
+      items: items.map((item) => ({
+        id: item.groupId,
+        correspondentAccount: item.correspondentAccount,
+        correspondentName: item.correspondentName,
+        totalCredit: parseFloat(item.totalCredit) || 0,
+        totalDebit: parseFloat(item.totalDebit) || 0,
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async getDashboardStats(filter: BankTransactionFilterDto) {
     const qb = this.transactionRepo
       .createQueryBuilder('txn')
@@ -792,6 +947,17 @@ export class BankTransactionsCoreService {
         'et',
         `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
     }
 
     const allTxns = await qb.getMany();

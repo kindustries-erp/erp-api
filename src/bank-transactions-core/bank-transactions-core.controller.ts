@@ -147,6 +147,12 @@ export class BankTransactionsCoreController {
     return this.service.getDashboardStats(filter);
   }
 
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('partner-stats')
+  getPartnerStats(@Query() filter: BankTransactionFilterDto) {
+    return this.service.getPartnerStats(filter);
+  }
+
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('transactions/manual')
   createManualTransaction(@Body() dto: CreateBankTransactionDto) {

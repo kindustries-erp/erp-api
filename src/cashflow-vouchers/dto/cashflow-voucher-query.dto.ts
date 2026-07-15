@@ -58,6 +58,14 @@ export class CashflowVoucherQueryDto {
   @IsOptional()
   @IsString()
   sort?: string;
+
+  @IsOptional()
+  @IsString()
+  column_filters?: string;
+
+  @IsOptional()
+  @IsString()
+  column_search?: string;
 }
 
 export class AddRelatedDocumentDto {
