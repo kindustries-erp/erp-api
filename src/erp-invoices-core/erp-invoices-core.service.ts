@@ -723,6 +723,28 @@ export class ErpInvoicesCoreService {
     return { message: 'Tạo thành công', data: this.toDto(saved) };
   }
 
+  async bulkSetBranch(ids: string[], branchId: string | null) {
+    if (!ids || !ids.length) {
+      return { updated: 0, ids: [] };
+    }
+
+    // Lọc ra các hóa đơn hợp lệ (chưa bị xóa)
+    const existingInvoices = await this.repository.find({
+      where: { id: In(ids), isDeleted: false },
+      select: ['id'],
+    });
+
+    const validIds = existingInvoices.map((inv) => inv.id);
+    if (validIds.length === 0) {
+      return { updated: 0, ids: [] };
+    }
+
+    // Bulk update branchId
+    await this.repository.update({ id: In(validIds) }, { branchId });
+
+    return { updated: validIds.length, ids: validIds };
+  }
+
   async update(id: string, dto: UpdateErpInvoiceDto) {
     const existing = await this.repository.findOne({
       where: { id, isDeleted: false },
