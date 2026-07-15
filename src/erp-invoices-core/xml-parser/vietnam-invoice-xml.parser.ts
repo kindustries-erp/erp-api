@@ -612,7 +612,13 @@ export function parseVietnamInvoiceXml(
   for (const [name, fn] of strategies) {
     try {
       const result = fn(doc);
-      if (result) return result;
+      if (result) {
+        if (result.invoiceNo) {
+          result.invoiceNo = result.invoiceNo.replace(/^0+/, '');
+          if (result.invoiceNo === '') result.invoiceNo = '0';
+        }
+        return result;
+      }
     } catch {
       // Strategy lỗi → thử tiếp
     }
