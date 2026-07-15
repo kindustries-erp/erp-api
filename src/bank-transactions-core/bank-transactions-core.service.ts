@@ -469,6 +469,17 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
+    }
+
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
         'sys_entity_tags',
@@ -759,6 +770,82 @@ export class BankTransactionsCoreService {
     };
   }
 
+  async getPartnerStats(filter: BankTransactionFilterDto) {
+    const page = filter.page || 1;
+    const pageSize = filter.pageSize || 20;
+
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (filter.startDate) {
+      qb.andWhere('txn.transDate >= :startDate', {
+        startDate: filter.startDate,
+      });
+    }
+    if (filter.endDate) {
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
+      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+    }
+    if (filter.sourceType) {
+      qb.andWhere('txn.sourceType = :sourceType', {
+        sourceType: filter.sourceType,
+      });
+    }
+    if (filter.branchId) {
+      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    }
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      qb.innerJoin(
+        'sys_entity_tags',
+        'et',
+        `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
+      ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    const groupField =
+      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
+
+    qb.select(groupField, 'groupId')
+      .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
+      .addSelect('MAX(txn.correspondentName)', 'correspondentName')
+      .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
+      .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .groupBy(groupField);
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.orderBy(
+      'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+      'DESC',
+    );
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getRawMany();
+
+    return {
+      items: items.map((item) => ({
+        id: item.groupId,
+        correspondentAccount: item.correspondentAccount,
+        correspondentName: item.correspondentName,
+        totalCredit: parseFloat(item.totalCredit) || 0,
+        totalDebit: parseFloat(item.totalDebit) || 0,
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async getDashboardStats(filter: BankTransactionFilterDto) {
     const qb = this.transactionRepo
       .createQueryBuilder('txn')
@@ -792,6 +879,17 @@ export class BankTransactionsCoreService {
         'et',
         `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
     }
 
     const allTxns = await qb.getMany();

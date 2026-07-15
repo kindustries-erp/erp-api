@@ -93,4 +93,14 @@ export class BankTransactionFilterDto {
   @IsString()
   @IsOptional()
   column_filters?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  correspondentAccount?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  correspondentName?: string;
 }
