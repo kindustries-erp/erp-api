@@ -824,6 +824,48 @@ export class BankTransactionsCoreService {
       .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
       .groupBy(groupField);
 
+    if (filter.column_filters) {
+      try {
+        const cFilters = JSON.parse(filter.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (filter.column_search) {
+      try {
+        const cSearch = JSON.parse(filter.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
     const totalRaw = await qb
       .clone()
       .orderBy()
@@ -831,10 +873,28 @@ export class BankTransactionsCoreService {
       .getRawOne();
     const total = parseInt(totalRaw?.cnt || '0', 10);
 
-    qb.orderBy(
-      'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
-      'DESC',
-    );
+    if (filter.sortBy) {
+      const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      if (filter.sortBy === 'correspondentAccount') {
+        qb.orderBy('MAX(txn.correspondentAccount)', order);
+      } else if (filter.sortBy === 'correspondentName') {
+        qb.orderBy('MAX(txn.correspondentName)', order);
+      } else if (filter.sortBy === 'totalCredit') {
+        qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
+      } else if (filter.sortBy === 'totalDebit') {
+        qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
+      } else {
+        qb.orderBy(
+          'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+          'DESC',
+        );
+      }
+    } else {
+      qb.orderBy(
+        'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+        'DESC',
+      );
+    }
     qb.offset((page - 1) * pageSize).limit(pageSize);
 
     const items = await qb.getRawMany();
