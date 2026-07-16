@@ -207,6 +207,21 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'xml_import_id', nullable: true })
   xmlImportId: string | null;
 
+  // --- Hạch toán kế toán ---
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'posting_status',
+    default: 'UNPOSTED',
+  })
+  postingStatus: string;
+
+  @Column({ type: 'date', name: 'posting_date', nullable: true })
+  postingDate: string | null;
+
+  @Column({ type: 'uuid', name: 'journal_entry_id', nullable: true })
+  journalEntryId: string | null;
+
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 

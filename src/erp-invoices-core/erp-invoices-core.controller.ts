@@ -28,6 +28,7 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
 
 @ApiTags('erp_invoices')
@@ -99,6 +100,18 @@ export class ErpInvoicesCoreController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/post')
+  postInvoice(@Param('id') id: string, @Body() dto: PostInvoiceDto) {
+    return this.service.postInvoice(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/unpost')
+  unpostInvoice(@Param('id') id: string) {
+    return this.service.unpostInvoice(id);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })

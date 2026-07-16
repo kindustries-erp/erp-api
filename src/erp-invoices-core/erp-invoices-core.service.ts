@@ -35,6 +35,8 @@ import AdmZip from 'adm-zip';
 import * as ExcelJS from 'exceljs';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
 
 export interface ErpInvoiceQuery {
   direction?: string;
@@ -75,6 +77,7 @@ export class ErpInvoicesCoreService {
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
   private async loadNetOffAmounts(invoices: ErpInvoice[]) {
@@ -2867,6 +2870,78 @@ export class ErpInvoicesCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any;
+  }
+
+  async postInvoice(id: string, dto: PostInvoiceDto) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.isDeleted) throw new BadRequestException('Invoice is deleted');
+    if (invoice.postingStatus === 'POSTED')
+      throw new BadRequestException('Invoice is already posted');
+
+    const totalDebit = dto.lines.reduce((sum, line) => sum + line.debit, 0);
+    const totalCredit = dto.lines.reduce((sum, line) => sum + line.credit, 0);
+
+    const invTotal = parseFloat(invoice.totalAmount);
+    if (
+      Math.abs(totalDebit - invTotal) > 0.01 ||
+      Math.abs(totalCredit - invTotal) > 0.01
+    ) {
+      throw new BadRequestException(
+        'Total debit and credit must equal the invoice total amount',
+      );
+    }
+
+    const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
+    const description =
+      dto.description ||
+      invoice.description ||
+      `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+
+    const journalEntry = await this.accountingCoreService.createJournalEntry({
+      branchId: invoice.branchId || '',
+      date: new Date(dto.postingDate),
+      description,
+      subjectName:
+        invoice.direction === 'IN'
+          ? invoice.sellerName || undefined
+          : invoice.buyerName || undefined,
+      sourceType: 'INVOICE',
+      sourceId: invoice.id,
+      entryNoPrefix,
+      lines: dto.lines.map((line) => ({
+        accountId: line.accountId,
+        debit: line.debit,
+        credit: line.credit,
+        description: line.description || description,
+      })),
+    });
+
+    invoice.postingStatus = 'POSTED';
+    invoice.postingDate = dto.postingDate;
+    invoice.journalEntryId = journalEntry.id;
+
+    await this.repository.save(invoice);
+    return invoice;
+  }
+
+  async unpostInvoice(id: string) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.postingStatus !== 'POSTED')
+      throw new BadRequestException('Invoice is not posted');
+
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      invoice.id,
+      'INVOICE',
+    );
+
+    invoice.postingStatus = 'UNPOSTED';
+    invoice.postingDate = null;
+    invoice.journalEntryId = null;
+
+    await this.repository.save(invoice);
+    return invoice;
   }
 }
 

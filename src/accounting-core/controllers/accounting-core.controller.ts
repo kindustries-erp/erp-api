@@ -24,6 +24,12 @@ export class AccountingCoreController {
     return this.accountingCoreService.getJournalEntries(query);
   }
 
+  @Get('journal-entries/:id')
+  async getJournalEntryById(@Param('id') id: string) {
+    const data = await this.accountingCoreService.getJournalEntryById(id);
+    return { data };
+  }
+
   @Get('chart-of-accounts')
   async getChartOfAccounts(@Query() query: any) {
     return this.accountingCoreService.getChartOfAccounts(query);

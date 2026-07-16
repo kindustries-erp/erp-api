@@ -1244,7 +1244,7 @@ export class BankTransactionsCoreService {
       where: { id: txnId, isDeleted: false },
       relations: ['bankAccount', 'cashBook'],
     });
-    if (!txn || !txn.correspondentAccountingAccountId) return;
+    if (!txn) return;
 
     // Load 331 and 131 account IDs (active, any branch)
     const [apAccountRes, arAccountRes] = await Promise.all([
@@ -1300,11 +1300,10 @@ export class BankTransactionsCoreService {
     const isReceipt = Number(txn.creditAmount) > 0;
     const baseDescription = txn.accountingDescription || txn.description || '';
 
-    // Build groups: [{subject, amount, counterpartAccountId, branchId, description}]
     type Group = {
       subject: string | null;
       amount: number;
-      counterpartAccountId: string;
+      counterpartAccountId: string | null;
       branchId: string;
       description: string;
     };
@@ -1389,21 +1388,19 @@ export class BankTransactionsCoreService {
       isReceipt,
     );
 
-    // Create one journal entry per group
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
+    // Create one journal entry per valid group
+    const validGroups = groups.filter((g) => g.counterpartAccountId);
+    for (let i = 0; i < validGroups.length; i++) {
+      const group = validGroups[i];
       // Single group → no suffix; multiple groups → a, b, c...
       const entryNo =
-        groups.length === 1
+        validGroups.length === 1
           ? baseEntryNo
           : `${baseEntryNo}${String.fromCharCode(97 + i)}`;
 
-      const debitAccount = isReceipt
-        ? defaultAccountId
-        : group.counterpartAccountId;
-      const creditAccount = isReceipt
-        ? group.counterpartAccountId
-        : defaultAccountId;
+      const counterpartAccountId = group.counterpartAccountId as string;
+      const debitAccount = isReceipt ? defaultAccountId : counterpartAccountId;
+      const creditAccount = isReceipt ? counterpartAccountId : defaultAccountId;
 
       await this.accountingCoreService.createJournalEntry({
         entryNo,
