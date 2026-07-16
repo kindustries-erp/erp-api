@@ -425,6 +425,8 @@ export class BankTransactionsCoreService {
       .leftJoinAndSelect('txn.branch', 'branch')
       .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
       .leftJoinAndSelect('txn.cashBook', 'cashBook')
+      .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
+      .leftJoinAndSelect('invoiceNetOffs.invoice', 'invoice')
       .where('txn.isDeleted = :isDeleted', { isDeleted: false });
 
     if (filter.sourceType) {
@@ -677,6 +679,9 @@ export class BankTransactionsCoreService {
       labelField = 'branch.name';
     } else if (column === 'referenceNumber')
       selectField = 'txn.referenceNumber';
+    else if (column === 'partner')
+      selectField =
+        "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     if (!labelField) labelField = selectField;
@@ -724,6 +729,9 @@ export class BankTransactionsCoreService {
           else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
+          else if (col === 'partner')
+            filterField =
+              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
 
           if (filterField) {
             if (col === 'transDate') {
@@ -754,8 +762,9 @@ export class BankTransactionsCoreService {
 
     qb.orderBy('value', 'ASC');
 
-    const totalRaw = await qb
-      .clone()
+    const countQb = qb.clone();
+    countQb.expressionMap.groupBys = [];
+    const totalRaw = await countQb
       .orderBy()
       .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
       .getRawOne();
@@ -817,12 +826,9 @@ export class BankTransactionsCoreService {
     const groupField =
       "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
 
-    qb.select(groupField, 'groupId')
-      .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
-      .addSelect('MAX(txn.correspondentName)', 'correspondentName')
-      .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
-      .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
-      .groupBy(groupField);
+    qb.andWhere(
+      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, '')) IS NOT NULL",
+    );
 
     if (filter.column_filters) {
       try {
@@ -840,6 +846,13 @@ export class BankTransactionsCoreService {
             qb.andWhere(`txn.correspondentName IN (:...vals_${col})`, {
               [`vals_${col}`]: vals,
             });
+          } else if (col === 'partner') {
+            qb.andWhere(
+              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, '')) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
           }
         }
       } catch (e) {}
@@ -861,17 +874,45 @@ export class BankTransactionsCoreService {
             qb.andWhere(`txn.correspondentName ILIKE :search_${col}`, {
               [`search_${col}`]: `%${val}%`,
             });
+          } else if (col === 'partner') {
+            qb.andWhere(
+              `(
+              txn.correspondentAccount ILIKE :search_${col} OR
+              txn.correspondentName ILIKE :search_${col}
+            )`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'invoiceSubject') {
+            qb.andWhere(
+              `EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff n
+              JOIN erp_invoices i ON n.invoice_id = i.id
+              WHERE n.bank_transaction_id = txn.id
+              AND (i.seller_name ILIKE :search_${col} OR i.buyer_name ILIKE :search_${col} OR i.seller_tax_code ILIKE :search_${col} OR i.buyer_tax_code ILIKE :search_${col})
+            )`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
           }
         }
       } catch (e) {}
     }
 
-    const totalRaw = await qb
-      .clone()
-      .orderBy()
+    const countQb = qb.clone();
+    const totalRaw = await countQb
       .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
       .getRawOne();
     const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.select(groupField, 'groupId')
+      .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
+      .addSelect('MAX(txn.correspondentName)', 'correspondentName')
+      .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
+      .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .groupBy(groupField);
 
     if (filter.sortBy) {
       const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -899,6 +940,39 @@ export class BankTransactionsCoreService {
 
     const items = await qb.getRawMany();
 
+    let subjectsMap: Record<string, string> = {};
+    if (items.length > 0) {
+      const groupConditions = items
+        .map((item) => {
+          const escapedId = String(item.groupId).replace(/'/g, "''");
+          return `(COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') = '${escapedId}')`;
+        })
+        .join(' OR ');
+
+      const subjectQuery = `
+        SELECT 
+          COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') as group_id,
+          CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END as subject
+        FROM erp_invoice_voucher_netoff netoff
+        INNER JOIN erp_invoices inv ON inv.id = netoff.invoice_id
+        INNER JOIN erp_bank_transactions t2 ON t2.id = netoff.bank_transaction_id
+        WHERE t2.is_deleted = false
+          AND (${groupConditions})
+      `;
+      const subjectsRows = await this.transactionRepo.query(subjectQuery);
+
+      const groupedSubjects = subjectsRows.reduce((acc: any, curr: any) => {
+        if (!curr.subject) return acc;
+        if (!acc[curr.group_id]) acc[curr.group_id] = new Set();
+        acc[curr.group_id].add(curr.subject);
+        return acc;
+      }, {});
+
+      for (const [groupId, set] of Object.entries(groupedSubjects)) {
+        subjectsMap[groupId] = Array.from(set as Set<string>).join(', ');
+      }
+    }
+
     return {
       items: items.map((item) => ({
         id: item.groupId,
@@ -906,6 +980,7 @@ export class BankTransactionsCoreService {
         correspondentName: item.correspondentName,
         totalCredit: parseFloat(item.totalCredit) || 0,
         totalDebit: parseFloat(item.totalDebit) || 0,
+        invoiceSubject: subjectsMap[item.groupId] || null,
       })),
       total,
       page,

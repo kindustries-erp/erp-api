@@ -110,9 +110,13 @@ export class ReportsCoreController {
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
+    const timeStr = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = encodeURIComponent(
+      `Báo_cáo_phụ_tùng_VINFAST_${timeStr}.xlsx`,
+    );
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename=bang_ke_phu_tung_vinfast.xlsx',
+      `attachment; filename*=UTF-8''${fileName}`,
     );
     res.send(buffer);
   }

@@ -616,7 +616,7 @@ export class ReportsCoreService {
     sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }];
     sheet.autoFilter = {
       from: { row: 1, column: 1 },
-      to: { row: 1, column: sheet.columns.length },
+      to: { row: 1, column: 19 },
     };
 
     const parseVat = (val: any) => {

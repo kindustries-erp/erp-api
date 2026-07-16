@@ -102,6 +102,12 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch('bulk-set-branch')
+  bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
+    return this.service.bulkSetBranch(body.ids, body.branchId);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
