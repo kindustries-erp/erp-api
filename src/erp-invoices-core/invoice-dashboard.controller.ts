@@ -1,5 +1,6 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Param, Query, UseGuards, Res } from '@nestjs/common';
+import { ApiBearerAuth, ApiQuery, ApiTags, ApiProduces } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -67,5 +68,30 @@ export class InvoiceDashboardController {
     @Query('date_to') dateTo?: string,
   ) {
     return this.service.getPartnerStats(taxCode, dateFrom, dateTo);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export')
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'branch_id', required: false })
+  async exportExcel(
+    @Res() res: Response,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('branch_id') branchId?: string,
+  ) {
+    const buffer = await this.service.exportExcel(dateFrom, dateTo, branchId);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition':
+        'attachment; filename="Invoice_Dashboard_Report.xlsx"',
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 }
