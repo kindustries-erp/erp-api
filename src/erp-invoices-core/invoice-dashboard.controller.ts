@@ -33,6 +33,8 @@ export class InvoiceDashboardController {
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'branch_id', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', required: false })
   getDashboardPartners(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -40,6 +42,8 @@ export class InvoiceDashboardController {
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
     @Query('branch_id') branchId?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
   ) {
     return this.service.getDashboardPartners(
       page ? parseInt(page, 10) : 1,
@@ -48,6 +52,8 @@ export class InvoiceDashboardController {
       dateFrom,
       dateTo,
       branchId,
+      sortBy,
+      sortOrder,
     );
   }
 

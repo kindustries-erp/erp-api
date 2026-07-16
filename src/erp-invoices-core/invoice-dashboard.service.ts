@@ -40,7 +40,11 @@ export class InvoiceDashboardService {
       qb.andWhere('inv.invoice_date <= :dateTo', { dateTo: effectiveDateTo });
     }
     if (branchId) {
-      qb.andWhere('inv.branch_id = :branchId', { branchId });
+      if (branchId === 'null') {
+        qb.andWhere('inv.branch_id IS NULL');
+      } else {
+        qb.andWhere('inv.branch_id = :branchId', { branchId });
+      }
     }
 
     qb.groupBy("TO_CHAR(inv.invoice_date, 'YYYY-MM')");
@@ -65,6 +69,8 @@ export class InvoiceDashboardService {
     dateFrom?: string,
     dateTo?: string,
     branchId?: string,
+    sortBy?: string,
+    sortOrder?: 'ASC' | 'DESC',
   ) {
     // Build the query to get aggregated data grouped by taxCode and partnerName
     // Because a partner might be both buyer and seller (though rare), we group by the relevant side
@@ -87,23 +93,47 @@ export class InvoiceDashboardService {
       WHERE inv.is_deleted = false AND inv.status != 'CANCELLED'
         ${dateFrom ? `AND inv.invoice_date >= '${dateFrom}'` : ''}
         ${dateTo ? `AND inv.invoice_date <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
-        ${branchId ? `AND inv.branch_id = '${branchId}'` : ''}
+        ${branchId ? (branchId === 'null' ? `AND inv.branch_id IS NULL` : `AND inv.branch_id = '${branchId}'`) : ''}
       GROUP BY COALESCE(inv.seller_tax_code, inv.buyer_tax_code)
       HAVING COALESCE(inv.seller_tax_code, inv.buyer_tax_code) IS NOT NULL AND COALESCE(inv.seller_tax_code, inv.buyer_tax_code) != ''
     `;
 
     // Wrapping for search and pagination
     let finalQuery = `SELECT * FROM (${partnerQuery}) p`;
+    const whereConditions: string[] = [];
+
     if (search) {
       const s = search.replace(/'/g, "''");
-      finalQuery += ` WHERE p."taxCode" ILIKE '%${s}%' OR p."partnerName" ILIKE '%${s}%'`;
+      whereConditions.push(
+        `(p."taxCode" ILIKE '%${s}%' OR p."partnerName" ILIKE '%${s}%')`,
+      );
+    }
+
+    if (sortBy === 'payableAmount') {
+      whereConditions.push(`(p."totalInAmount" - p."paidAmount") > 0`);
+    } else if (sortBy === 'receivableAmount') {
+      whereConditions.push(`(p."totalOutAmount" - p."receivedAmount") > 0`);
+    }
+
+    if (whereConditions.length > 0) {
+      finalQuery += ` WHERE ${whereConditions.join(' AND ')}`;
     }
 
     const countQuery = `SELECT COUNT(*) as count FROM (${finalQuery}) as t`;
     const countResult = await this.invoiceRepo.query(countQuery);
     const total = parseInt(countResult[0]?.count || '0', 10);
 
-    const dataQuery = `${finalQuery} ORDER BY p."totalInAmount" + p."totalOutAmount" DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
+    let orderClause = `ORDER BY p."totalInAmount" + p."totalOutAmount" DESC`;
+    if (sortBy === 'payableAmount') {
+      orderClause = `ORDER BY p."totalInAmount" - p."paidAmount" ${sortOrder || 'DESC'}`;
+    } else if (sortBy === 'receivableAmount') {
+      orderClause = `ORDER BY p."totalOutAmount" - p."receivedAmount" ${sortOrder || 'DESC'}`;
+    } else if (sortBy) {
+      // Just in case other columns are sorted
+      orderClause = `ORDER BY p."${sortBy}" ${sortOrder || 'DESC'}`;
+    }
+
+    const dataQuery = `${finalQuery} ${orderClause} LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
     const rawData = await this.invoiceRepo.query(dataQuery);
 
     const items = rawData.map((r: any) => {
