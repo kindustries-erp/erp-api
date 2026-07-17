@@ -542,6 +542,10 @@ export class ErpInvoicesCoreService {
 
         if (key === 'status') {
           qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+        } else if (key === 'postingStatus') {
+          qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
+            postingStatusVals: vals,
+          });
         } else if (key === 'branchId') {
           qb.andWhere('inv.branch_id IN (:...branchVals)', {
             branchVals: vals,
@@ -745,6 +749,26 @@ export class ErpInvoicesCoreService {
     // Bulk update branchId
     await this.repository.update({ id: In(validIds) }, { branchId });
 
+    // Sync branch to journal entries for POSTED invoices
+    const postedInvoices = await this.repository.find({
+      where: { id: In(validIds), postingStatus: 'POSTED', isDeleted: false },
+      select: ['id'],
+    });
+
+    if (postedInvoices.length > 0 && branchId) {
+      Promise.all(
+        postedInvoices.map((inv) =>
+          this.accountingCoreService
+            .updateJournalEntryBranch(inv.id, 'INVOICE', branchId)
+            .catch((e) =>
+              this.logger.warn(
+                `UC2 bulk branch sync failed for ${inv.id}: ${e.message}`,
+              ),
+            ),
+        ),
+      ).catch(() => {});
+    }
+
     return { updated: validIds.length, ids: validIds };
   }
 
@@ -764,6 +788,10 @@ export class ErpInvoicesCoreService {
       updatePayload.discountAmount = String(dto.discountAmount);
     if (dto.totalAmount != null)
       updatePayload.totalAmount = String(dto.totalAmount);
+
+    // Capture before merge for branch sync
+    const oldBranchId = existing.branchId;
+    const wasPosted = existing.postingStatus === 'POSTED';
 
     // Merge entity first so that cascade update works
     this.repository.merge(existing, updatePayload);
@@ -791,6 +819,20 @@ export class ErpInvoicesCoreService {
     this.extractInvoiceMetadata(existing);
 
     await this.repository.save(existing);
+
+    // Sync journal entry branch if changed
+    if (
+      wasPosted &&
+      dto.branchId !== undefined &&
+      dto.branchId !== oldBranchId &&
+      dto.branchId
+    ) {
+      this.accountingCoreService
+        .updateJournalEntryBranch(id, 'INVOICE', dto.branchId)
+        .catch((e) =>
+          this.logger.warn(`UC2 branch sync failed for ${id}: ${e.message}`),
+        );
+    }
 
     // Refresh journal entries for any linked bank transactions in case branchId or description changed
     const netOffs = await this.repository.manager.find(
@@ -2584,6 +2626,10 @@ export class ErpInvoicesCoreService {
 
       if (key === 'status') {
         qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+      } else if (key === 'postingStatus') {
+        qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
+          postingStatusVals: vals,
+        });
       } else if (key === 'branchId') {
         qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
       } else if (key === 'invoiceDate') {
@@ -2879,6 +2925,12 @@ export class ErpInvoicesCoreService {
     if (invoice.postingStatus === 'POSTED')
       throw new BadRequestException('Invoice is already posted');
 
+    if (!invoice.branchId) {
+      throw new BadRequestException(
+        'Hóa đơn chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
+      );
+    }
+
     const totalDebit = dto.lines.reduce((sum, line) => sum + line.debit, 0);
     const totalCredit = dto.lines.reduce((sum, line) => sum + line.credit, 0);
 
@@ -2895,19 +2947,19 @@ export class ErpInvoicesCoreService {
     const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
 
     const invoiceRef = invoice.serialNo
-      ? `${invoice.invoiceNo} ${invoice.serialNo}`
+      ? `${invoice.invoiceNo}-${invoice.serialNo}`
       : invoice.invoiceNo;
 
     const defaultDesc = `Hạch toán hóa đơn ${invoice.invoiceNo}`;
     const userDesc = dto.description || invoice.description || defaultDesc;
-    const description = `${invoiceRef} - ${userDesc}`;
+    const description = `${invoiceRef}_${userDesc}`;
 
     const documentDate = dto.documentDate
       ? new Date(dto.documentDate)
       : new Date(invoice.invoiceDate);
 
     const journalEntry = await this.accountingCoreService.createJournalEntry({
-      branchId: invoice.branchId || '',
+      branchId: invoice.branchId,
       date: new Date(dto.postingDate),
       documentDate,
       reference: invoiceRef,
@@ -2919,12 +2971,18 @@ export class ErpInvoicesCoreService {
       sourceType: 'INVOICE',
       sourceId: invoice.id,
       entryNoPrefix,
-      lines: dto.lines.map((line) => ({
-        accountId: line.accountId,
-        debit: line.debit,
-        credit: line.credit,
-        description: line.description || description,
-      })),
+      lines: dto.lines.map((line) => {
+        let lineDesc = line.description || description;
+        if (line.description && !line.description.startsWith(invoiceRef)) {
+          lineDesc = `${invoiceRef}_${line.description}`;
+        }
+        return {
+          accountId: line.accountId,
+          debit: line.debit,
+          credit: line.credit,
+          description: lineDesc,
+        };
+      }),
     });
 
     invoice.postingStatus = 'POSTED';
@@ -2945,6 +3003,27 @@ export class ErpInvoicesCoreService {
       invoice.id,
       'INVOICE',
     );
+
+    // Xóa các bút toán cấn trừ liên quan
+    const netOffs = await this.repository.manager.find(
+      ErpInvoiceVoucherNetOff,
+      {
+        where: { invoiceId: id },
+      },
+    );
+    if (netOffs && netOffs.length > 0) {
+      await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
+        invoiceId: id,
+      });
+      const uniqueTxnIds = [
+        ...new Set(netOffs.map((n) => n.bankTransactionId)),
+      ];
+      for (const txnId of uniqueTxnIds) {
+        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
+          txnId,
+        );
+      }
+    }
 
     invoice.postingStatus = 'UNPOSTED';
     invoice.postingDate = null;

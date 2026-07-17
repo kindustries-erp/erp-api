@@ -14,6 +14,10 @@ describe('ErpInvoicesCoreService', () => {
     repository = {
       findOne: jest.fn(),
       save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+      manager: {
+        find: jest.fn().mockResolvedValue([]),
+        delete: jest.fn().mockResolvedValue({}),
+      },
     };
     companyProfileRepo = {};
     bankTransactionsCoreService = {};
@@ -44,6 +48,7 @@ describe('ErpInvoicesCoreService', () => {
         direction: 'IN',
         totalAmount: '1000',
         postingStatus: 'UNPOSTED',
+        branchId: 'branch-1',
       };
       repository.findOne.mockResolvedValue(mockInvoice);
 
@@ -60,9 +65,9 @@ describe('ErpInvoicesCoreService', () => {
 
       expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
         expect.objectContaining({
-          reference: '0000174 C26TAA',
+          reference: '0000174-C26TAA',
           documentDate: new Date('2026-07-05'),
-          description: '0000174 C26TAA - Mua NVL',
+          description: '0000174-C26TAA_Mua NVL',
         }),
       );
       expect(result.postingStatus).toBe('POSTED');
@@ -77,6 +82,7 @@ describe('ErpInvoicesCoreService', () => {
         invoiceDate: '2026-07-05',
         totalAmount: '1000',
         postingStatus: 'UNPOSTED',
+        branchId: 'branch-1',
       };
       repository.findOne.mockResolvedValue(mockInvoice);
 
@@ -100,6 +106,7 @@ describe('ErpInvoicesCoreService', () => {
         id: 'inv-1',
         totalAmount: '1000',
         postingStatus: 'UNPOSTED',
+        branchId: 'branch-1',
       };
       repository.findOne.mockResolvedValue(mockInvoice);
 
@@ -112,7 +119,10 @@ describe('ErpInvoicesCoreService', () => {
     });
 
     it('throws BadRequestException if invoice already POSTED', async () => {
-      repository.findOne.mockResolvedValue({ postingStatus: 'POSTED' });
+      repository.findOne.mockResolvedValue({
+        postingStatus: 'POSTED',
+        branchId: 'branch-1',
+      });
       await expect(
         service.postInvoice('inv-1', { postingDate: '2026-07-17', lines: [] }),
       ).rejects.toThrow(BadRequestException);

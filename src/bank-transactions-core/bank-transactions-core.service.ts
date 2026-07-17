@@ -1285,7 +1285,7 @@ export class BankTransactionsCoreService {
 
     // Load net-offs with invoice info
     const netOffRows: any[] = await this.dataSource.query(
-      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.branch_id, i.description as invoice_desc
+      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.serial_no, i.branch_id, i.description as invoice_desc
        FROM erp_invoice_voucher_netoff n
        JOIN erp_invoices i ON i.id = n.invoice_id AND i.is_deleted = false
        WHERE n.bank_transaction_id = $1
@@ -1338,9 +1338,12 @@ export class BankTransactionsCoreService {
 
         const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
         if (!groupMap.has(key)) {
+          const invoiceRef = row.serial_no
+            ? `${row.invoice_no}-${row.serial_no}`
+            : row.invoice_no;
           const desc = row.invoice_desc
-            ? `${baseDescription} - ${row.invoice_desc}`
-            : baseDescription;
+            ? `${invoiceRef}_${baseDescription} - ${row.invoice_desc}`
+            : `${invoiceRef}_${baseDescription}`;
           groupMap.set(key, {
             subject: subject || null,
             amount: 0,
@@ -1374,6 +1377,14 @@ export class BankTransactionsCoreService {
       }
     }
 
+    // Get existing date before deleting journal entries
+    const existingEntries = await this.dataSource.query(
+      `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
+      [txn.id, txn.sourceType],
+    );
+    const postingDate =
+      existingEntries.length > 0 ? existingEntries[0].date : new Date();
+
     // Delete existing journal entries for this transaction
     await this.accountingCoreService.deleteJournalEntryBySource(
       txn.id,
@@ -1405,7 +1416,8 @@ export class BankTransactionsCoreService {
       await this.accountingCoreService.createJournalEntry({
         entryNo,
         branchId: group.branchId,
-        date: txn.transDate,
+        date: postingDate,
+        documentDate: txn.transDate,
         description: group.description,
         subjectName: group.subject || undefined,
         sourceType: txn.sourceType,

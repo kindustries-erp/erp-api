@@ -81,6 +81,17 @@ export class AccountingCoreService {
     );
   }
 
+  async updateJournalEntryBranch(
+    sourceId: string,
+    sourceType: string,
+    branchId: string,
+  ): Promise<void> {
+    await this.journalEntryRepo.update(
+      { sourceId, sourceType, isDeleted: false },
+      { branchId },
+    );
+  }
+
   async createJournalEntry(data: {
     entryNoPrefix?: string;
     entryNo?: string;
