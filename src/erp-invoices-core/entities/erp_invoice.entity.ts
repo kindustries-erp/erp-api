@@ -50,6 +50,20 @@ export class ErpInvoice {
   @Column({ type: 'varchar', length: 255, name: 'external_id', nullable: true })
   externalId: string | null;
 
+  @Column({ type: 'int', name: 'tax_invoice_status', nullable: true })
+  taxInvoiceStatus: number | null;
+
+  @Column({ type: 'int', name: 'tax_process_status', nullable: true })
+  taxProcessStatus: number | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'tax_invoice_type',
+    nullable: true,
+  })
+  taxInvoiceType: string | null;
+
   // --- Bên bán ---
   @Column({ type: 'varchar', length: 255, name: 'seller_name', nullable: true })
   sellerName: string | null;

@@ -1000,19 +1000,22 @@ export class ErpInvoicesCoreService {
             {
               basePath:
                 'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
-              extraParams: '',
+              ttxlyList: [5, 6],
+              invoiceType: 'STANDARD',
             },
             {
               basePath:
                 'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
-              extraParams: ';ttxly==8',
+              ttxlyList: [8],
+              invoiceType: 'CASH_REGISTER',
             },
           ]
         : [
             {
               basePath:
                 'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
-              extraParams: '',
+              ttxlyList: [],
+              invoiceType: 'STANDARD',
             },
           ];
 
@@ -1028,6 +1031,7 @@ export class ErpInvoicesCoreService {
         let totalFromPortal = 0;
         let pagesFetched = 0;
         const maxPages = 50; // max pages per endpoint
+        let isFirstRequest = true;
 
         for (
           let d = new Date(startDate);
@@ -1040,61 +1044,74 @@ export class ErpInvoicesCoreService {
           const formattedDate = `${day}/${m}/${y}`;
 
           for (const config of queryConfigs) {
-            let state: string | null = null;
-            let pathPagesFetched = 0;
+            const loopTtxlys =
+              config.ttxlyList.length > 0 ? config.ttxlyList : [null];
 
-            do {
-              const url = new URL(config.basePath);
-              url.searchParams.set('sort', 'tdlap:desc');
-              url.searchParams.set('size', '50');
-              url.searchParams.set(
-                'search',
-                `tdlap=ge=${formattedDate}T00:00:00;tdlap=le=${formattedDate}T23:59:59${config.extraParams}`,
-              );
-              if (state) {
-                url.searchParams.set('state', state);
-              }
+            for (const currentTtxly of loopTtxlys) {
+              let state: string | null = null;
+              let pathPagesFetched = 0;
 
-              this.progress$.next({
-                processId: 'sync-progress',
-                type: 'bulk',
-                total: 100, // Unknown total pages initially
-                current: pagesFetched,
-                message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (ngày ${formattedDate}, trang ${pagesFetched + 1})...`,
-                completed: false,
-              });
+              do {
+                const url = new URL(config.basePath);
+                url.searchParams.set('sort', 'tdlap:desc');
+                url.searchParams.set('size', '50');
 
-              const response = await this.fetchWithRetry(url, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!response.ok)
-                throw new BadRequestException(
-                  `Portal request failed with status ${response.status}`,
-                );
+                let searchStr = `tdlap=ge=${formattedDate}T00:00:00;tdlap=le=${formattedDate}T23:59:59`;
+                if (currentTtxly !== null) {
+                  searchStr += `;ttxly==${currentTtxly}`;
+                }
+                url.searchParams.set('search', searchStr);
 
-              const payload = (await response.json()) as {
-                datas?: any[];
-                total?: number;
-                state?: string;
-              };
+                if (state) {
+                  url.searchParams.set('state', state);
+                }
 
-              if (pathPagesFetched === 0) {
-                totalFromPortal += payload.total ?? 0;
-              }
+                this.progress$.next({
+                  processId: 'sync-progress',
+                  type: 'bulk',
+                  total: 100, // Unknown total pages initially
+                  current: pagesFetched,
+                  message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (ngày ${formattedDate}, trang ${pagesFetched + 1})...`,
+                  completed: false,
+                });
 
-              if (payload.datas && payload.datas.length > 0) {
-                rawItems.push(...payload.datas);
-              }
+                if (!isFirstRequest) {
+                  const delay = (4 + Math.random() * 3) * 1000;
+                  await this.sleep(Math.round(delay));
+                }
+                isFirstRequest = false;
 
-              state = payload.state ?? null;
-              pathPagesFetched++;
-              pagesFetched++;
+                const response = await this.fetchWithRetry(url, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok)
+                  throw new BadRequestException(
+                    `Portal request failed with status ${response.status}`,
+                  );
 
-              if (state && pathPagesFetched < maxPages) {
-                const delay = (2 + Math.random() * 3) * 1000;
-                await this.sleep(Math.round(delay));
-              }
-            } while (state && pathPagesFetched < maxPages);
+                const payload = (await response.json()) as {
+                  datas?: any[];
+                  total?: number;
+                  state?: string;
+                };
+
+                if (pathPagesFetched === 0) {
+                  totalFromPortal += payload.total ?? 0;
+                }
+
+                if (payload.datas && payload.datas.length > 0) {
+                  const mappedDatas = payload.datas.map((d: any) => ({
+                    ...d,
+                    __taxInvoiceType: config.invoiceType,
+                  }));
+                  rawItems.push(...mappedDatas);
+                }
+
+                state = payload.state ?? null;
+                pathPagesFetched++;
+                pagesFetched++;
+              } while (state && pathPagesFetched < maxPages);
+            }
           }
         }
 
@@ -1109,10 +1126,38 @@ export class ErpInvoicesCoreService {
             const invoiceNo = String(raw.shdon ?? '');
             const serialNo = raw.khhdon ?? null;
 
+            const taxInvoiceStatus =
+              raw.tthai !== undefined && raw.tthai !== null
+                ? Number(raw.tthai)
+                : null;
+            const taxProcessStatus =
+              raw.ttxly !== undefined && raw.ttxly !== null
+                ? Number(raw.ttxly)
+                : null;
+            const taxInvoiceType = raw.__taxInvoiceType || 'STANDARD';
+
             const existing = await this.repository.findOne({
               where: { invoiceNo, serialNo, direction, isDeleted: false },
             });
             if (existing) {
+              let updated = false;
+              if (existing.taxInvoiceStatus !== taxInvoiceStatus) {
+                existing.taxInvoiceStatus = taxInvoiceStatus;
+                updated = true;
+              }
+              if (existing.taxProcessStatus !== taxProcessStatus) {
+                existing.taxProcessStatus = taxProcessStatus;
+                updated = true;
+              }
+              if (existing.taxInvoiceType !== taxInvoiceType) {
+                existing.taxInvoiceType = taxInvoiceType;
+                updated = true;
+              }
+
+              if (updated) {
+                await this.repository.save(existing);
+              }
+
               // Self-heal: Nếu hóa đơn cũ thiếu XML hoặc thiếu Diễn giải -> Xếp hàng tải lại
               if (!existing.xmlFileKey || !existing.description) {
                 backgroundSyncIds.push(existing.id);
@@ -1128,6 +1173,9 @@ export class ErpInvoicesCoreService {
               invoiceDate: this.parsePortalIsoDate(raw.tdlap),
               direction,
               status: Number(raw.tthai) === 2 ? 'CANCELLED' : 'CONFIRMED',
+              taxInvoiceStatus,
+              taxProcessStatus,
+              taxInvoiceType,
               sellerTaxCode: raw.nbmst ?? null,
               sellerName: raw.nbten ?? null,
               sellerAddress: raw.nbdchi ?? null,
@@ -1229,14 +1277,13 @@ export class ErpInvoicesCoreService {
 
     let current = 0;
 
-    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-      const batch = targets.slice(i, i + BATCH_SIZE);
-
-      await Promise.allSettled(
-        batch.map((inv) => this.downloadAndSaveXml(inv, token)),
+    for (let i = 0; i < targets.length; i++) {
+      const inv = targets[i];
+      await this.downloadAndSaveXml(inv, token).catch((e) =>
+        this.logger.error(`Error downloading XML for ${inv.invoiceNo}:`, e),
       );
 
-      current += batch.length;
+      current++;
       this.progress$.next({
         processId,
         type: 'sync',
@@ -1246,9 +1293,9 @@ export class ErpInvoicesCoreService {
         completed: false,
       });
 
-      // Random sleep 5-10s giữa batch (trừ batch cuối)
-      if (i + BATCH_SIZE < targets.length) {
-        const delay = (5 + Math.random() * 5) * 1000;
+      // Bắt buộc chờ 4-7s giữa MỖI hóa đơn để tránh 429
+      if (i + 1 < targets.length) {
+        const delay = (4 + Math.random() * 3) * 1000;
         await this.sleep(Math.round(delay));
       }
     }
@@ -1272,28 +1319,25 @@ export class ErpInvoicesCoreService {
     // 1. Luôn ưu tiên lấy chi tiết từ API JSON trước
     await this.syncInvoiceDetailFromJson(invoice, token);
 
-    // 2. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
+    // 2. Nghỉ 2s trước khi tải XML để tránh dồn dập
+    await this.sleep(2000);
+
+    // 3. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
     try {
-      let xmlUrl = new URL(
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/export-xml',
-      );
-      xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
-      xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
-      xmlUrl.searchParams.set('shdon', invoice.invoiceNo);
-      // khmshdon is not stored in entity; default to '1'
-      xmlUrl.searchParams.set('khmshdon', '1');
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
 
-      let res = await this.fetchWithRetry(
-        xmlUrl.toString(),
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        0,
-      );
-
-      if (!res.ok) {
-        xmlUrl = new URL(
-          'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/export-xml',
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const xmlUrl = new URL(
+          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/export-xml`,
         );
         xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -1305,13 +1349,15 @@ export class ErpInvoicesCoreService {
           {
             headers: { Authorization: `Bearer ${token}` },
           },
-          2,
+          i === endpoints.length - 1 ? 2 : 0,
         );
+
+        if (res.ok) break;
       }
 
-      if (!res.ok) {
+      if (!res || !res.ok) {
         this.logger.warn(
-          `XML download failed for invoice ${invoice.invoiceNo}: HTTP ${res.status}`,
+          `XML download failed for invoice ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
         );
         return;
       }
@@ -1585,25 +1631,20 @@ export class ErpInvoicesCoreService {
     token: string,
   ): Promise<void> {
     try {
-      let url = new URL(
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/detail',
-      );
-      url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
-      url.searchParams.set('khhdon', invoice.serialNo ?? '');
-      url.searchParams.set('shdon', invoice.invoiceNo);
-      url.searchParams.set('khmshdon', '1');
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
 
-      let res = await this.fetchWithRetry(
-        url.toString(),
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        0,
-      );
-
-      if (!res.ok) {
-        url = new URL(
-          'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/detail',
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const url = new URL(
+          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/detail`,
         );
         url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         url.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -1615,13 +1656,15 @@ export class ErpInvoicesCoreService {
           {
             headers: { Authorization: `Bearer ${token}` },
           },
-          2,
+          i === endpoints.length - 1 ? 2 : 0,
         );
+
+        if (res.ok) break;
       }
 
-      if (!res.ok) {
+      if (!res || !res.ok) {
         this.logger.warn(
-          `Failed to fetch JSON detail for ${invoice.invoiceNo}: HTTP ${res.status}`,
+          `Failed to fetch JSON detail for ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
         );
         return;
       }
