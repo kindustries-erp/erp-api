@@ -33,6 +33,10 @@ export class PostInvoiceDto {
 
   @IsString()
   @IsOptional()
+  documentDate?: string;
+
+  @IsString()
+  @IsOptional()
   description?: string;
 
   @ValidateNested({ each: true })

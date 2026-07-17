@@ -86,6 +86,7 @@ export class AccountingCoreService {
     entryNo?: string;
     branchId: string;
     date: Date;
+    documentDate?: Date;
     description?: string;
     subjectName?: string;
     sourceType?: string;
@@ -157,6 +158,7 @@ export class AccountingCoreService {
       branchId: data.branchId,
       entryNo,
       date: data.date,
+      documentDate: data.documentDate,
       description: data.description,
       subjectName: data.subjectName,
       sourceId: data.sourceId,

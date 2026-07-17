@@ -1,0 +1,149 @@
+import { ErpInvoicesCoreService } from './erp-invoices-core.service';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+
+describe('ErpInvoicesCoreService', () => {
+  let service: ErpInvoicesCoreService;
+  let repository: any;
+  let companyProfileRepo: any;
+  let r2Service: any;
+  let bankTransactionsCoreService: any;
+  let notificationsService: any;
+  let accountingCoreService: any;
+
+  beforeEach(() => {
+    repository = {
+      findOne: jest.fn(),
+      save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+    };
+    companyProfileRepo = {};
+    bankTransactionsCoreService = {};
+    notificationsService = {};
+    r2Service = {};
+    accountingCoreService = {
+      createJournalEntry: jest.fn().mockResolvedValue({ id: 'je-123' }),
+      deleteJournalEntryBySource: jest.fn().mockResolvedValue(true),
+    };
+
+    service = new ErpInvoicesCoreService(
+      repository,
+      companyProfileRepo,
+      r2Service,
+      bankTransactionsCoreService,
+      notificationsService,
+      accountingCoreService,
+    );
+  });
+
+  describe('postInvoice', () => {
+    it('creates journal entry with correct reference, description, and documentDate', async () => {
+      const mockInvoice = {
+        id: 'inv-1',
+        invoiceNo: '0000174',
+        serialNo: 'C26TAA',
+        invoiceDate: '2026-07-05',
+        direction: 'IN',
+        totalAmount: '1000',
+        postingStatus: 'UNPOSTED',
+      };
+      repository.findOne.mockResolvedValue(mockInvoice);
+
+      const dto = {
+        postingDate: '2026-07-17',
+        description: 'Mua NVL',
+        lines: [
+          { accountId: '152', debit: 1000, credit: 0 },
+          { accountId: '331', debit: 0, credit: 1000 },
+        ],
+      };
+
+      const result = await service.postInvoice('inv-1', dto);
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reference: '0000174 C26TAA',
+          documentDate: new Date('2026-07-05'),
+          description: '0000174 C26TAA - Mua NVL',
+        }),
+      );
+      expect(result.postingStatus).toBe('POSTED');
+      expect(result.journalEntryId).toBe('je-123');
+    });
+
+    it('sets reference without serialNo if empty', async () => {
+      const mockInvoice = {
+        id: 'inv-1',
+        invoiceNo: '0000174',
+        serialNo: null,
+        invoiceDate: '2026-07-05',
+        totalAmount: '1000',
+        postingStatus: 'UNPOSTED',
+      };
+      repository.findOne.mockResolvedValue(mockInvoice);
+
+      await service.postInvoice('inv-1', {
+        postingDate: '2026-07-17',
+        lines: [
+          { accountId: '152', debit: 1000, credit: 0 },
+          { accountId: '331', debit: 0, credit: 1000 },
+        ],
+      });
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reference: '0000174',
+        }),
+      );
+    });
+
+    it('throws BadRequestException if total debit != invoice total', async () => {
+      const mockInvoice = {
+        id: 'inv-1',
+        totalAmount: '1000',
+        postingStatus: 'UNPOSTED',
+      };
+      repository.findOne.mockResolvedValue(mockInvoice);
+
+      await expect(
+        service.postInvoice('inv-1', {
+          postingDate: '2026-07-17',
+          lines: [{ accountId: '152', debit: 500, credit: 500 }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException if invoice already POSTED', async () => {
+      repository.findOne.mockResolvedValue({ postingStatus: 'POSTED' });
+      await expect(
+        service.postInvoice('inv-1', { postingDate: '2026-07-17', lines: [] }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('unpostInvoice', () => {
+    it('calls deleteJournalEntryBySource and sets status to UNPOSTED', async () => {
+      const mockInvoice = {
+        id: 'inv-1',
+        postingStatus: 'POSTED',
+        postingDate: '2026-07-17',
+        journalEntryId: 'je-123',
+      };
+      repository.findOne.mockResolvedValue(mockInvoice);
+
+      const result = await service.unpostInvoice('inv-1');
+
+      expect(
+        accountingCoreService.deleteJournalEntryBySource,
+      ).toHaveBeenCalledWith('inv-1', 'INVOICE');
+      expect(result.postingStatus).toBe('UNPOSTED');
+      expect(result.postingDate).toBeNull();
+      expect(result.journalEntryId).toBeNull();
+    });
+
+    it('throws BadRequestException if invoice is not POSTED', async () => {
+      repository.findOne.mockResolvedValue({ postingStatus: 'UNPOSTED' });
+      await expect(service.unpostInvoice('inv-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+});

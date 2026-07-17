@@ -2893,14 +2893,24 @@ export class ErpInvoicesCoreService {
     }
 
     const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
-    const description =
-      dto.description ||
-      invoice.description ||
-      `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+
+    const invoiceRef = invoice.serialNo
+      ? `${invoice.invoiceNo} ${invoice.serialNo}`
+      : invoice.invoiceNo;
+
+    const defaultDesc = `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+    const userDesc = dto.description || invoice.description || defaultDesc;
+    const description = `${invoiceRef} - ${userDesc}`;
+
+    const documentDate = dto.documentDate
+      ? new Date(dto.documentDate)
+      : new Date(invoice.invoiceDate);
 
     const journalEntry = await this.accountingCoreService.createJournalEntry({
       branchId: invoice.branchId || '',
       date: new Date(dto.postingDate),
+      documentDate,
+      reference: invoiceRef,
       description,
       subjectName:
         invoice.direction === 'IN'
