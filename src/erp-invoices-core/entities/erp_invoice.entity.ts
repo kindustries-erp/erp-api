@@ -64,6 +64,15 @@ export class ErpInvoice {
   })
   taxInvoiceType: string | null;
 
+  @Column({ type: 'boolean', name: 'is_valid', default: false })
+  isValid: boolean;
+
+  @Column({ type: 'timestamptz', name: 'validated_at', nullable: true })
+  validatedAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'validated_by', nullable: true })
+  validatedBy: string | null;
+
   // --- Bên bán ---
   @Column({ type: 'varchar', length: 255, name: 'seller_name', nullable: true })
   sellerName: string | null;

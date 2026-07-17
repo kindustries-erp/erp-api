@@ -155,5 +155,74 @@ describe('ErpInvoicesCoreService', () => {
         BadRequestException,
       );
     });
+    describe('setInvoiceValid', () => {
+      it('sets isValid=true, validatedAt, and validatedBy', async () => {
+        const mockInvoice = { id: 'inv-1', isDeleted: false };
+        repository.findOne.mockResolvedValue(mockInvoice);
+
+        await service.setInvoiceValid('inv-1', true, 'user-1');
+
+        expect(mockInvoice).toMatchObject({
+          isValid: true,
+          validatedBy: 'user-1',
+        });
+        expect(mockInvoice).toHaveProperty('validatedAt');
+        expect(repository.save).toHaveBeenCalledWith(mockInvoice);
+      });
+
+      it('clears validatedAt and validatedBy when isValid=false', async () => {
+        const mockInvoice = {
+          id: 'inv-1',
+          isDeleted: false,
+          isValid: true,
+          validatedBy: 'user-1',
+          validatedAt: new Date(),
+        };
+        repository.findOne.mockResolvedValue(mockInvoice);
+
+        await service.setInvoiceValid('inv-1', false, 'user-1');
+
+        expect(mockInvoice).toMatchObject({
+          isValid: false,
+          validatedBy: null,
+          validatedAt: null,
+        });
+        expect(repository.save).toHaveBeenCalledWith(mockInvoice);
+      });
+
+      it('throws NotFoundException if invoice not found', async () => {
+        repository.findOne.mockResolvedValue(null);
+        await expect(
+          service.setInvoiceValid('inv-1', true, 'user-1'),
+        ).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('checkTokenValid', () => {
+      beforeEach(() => {
+        global.fetch = jest.fn();
+      });
+
+      it('returns false if token is empty', async () => {
+        expect(await service.checkTokenValid('')).toBe(false);
+      });
+
+      it('returns true if GDT returns 200', async () => {
+        (global.fetch as jest.Mock).mockResolvedValue({ status: 200 });
+        expect(await service.checkTokenValid('valid')).toBe(true);
+      });
+
+      it('returns false if GDT returns 401', async () => {
+        (global.fetch as jest.Mock).mockResolvedValue({ status: 401 });
+        expect(await service.checkTokenValid('invalid')).toBe(false);
+      });
+
+      it('returns false if fetch throws error', async () => {
+        (global.fetch as jest.Mock).mockRejectedValue(
+          new Error('Network error'),
+        );
+        expect(await service.checkTokenValid('invalid')).toBe(false);
+      });
+    });
   });
 });

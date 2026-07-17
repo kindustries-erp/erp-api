@@ -55,6 +55,7 @@ export interface ErpInvoiceQuery {
   export_type?: 'summary' | 'detailed';
   column_search?: string;
   column_filters?: string;
+  is_valid?: string;
 }
 
 @Injectable()
@@ -354,6 +355,9 @@ export class ErpInvoicesCoreService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.is_valid) {
+      where.isValid = query.is_valid === 'true' || query.is_valid === '1';
+    }
     let effectiveDateTo = query.date_to;
     if (effectiveDateTo && effectiveDateTo.length === 10) {
       effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
@@ -397,6 +401,9 @@ export class ErpInvoicesCoreService {
         })
         .andWhere(query.status ? 'inv.status = :status' : '1=1', {
           status: query.status,
+        })
+        .andWhere(query.is_valid ? 'inv.is_valid = :isValid' : '1=1', {
+          isValid: query.is_valid === 'true' || query.is_valid === '1',
         })
         .andWhere(query.date_from ? 'inv.invoice_date >= :dateFrom' : '1=1', {
           dateFrom: query.date_from,
@@ -595,6 +602,14 @@ export class ErpInvoicesCoreService {
           }
         } else if (key === 'description') {
           qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+        } else if (key === 'isValid') {
+          const validFilter = vals.includes('true') || vals.includes('1');
+          const invalidFilter = vals.includes('false') || vals.includes('0');
+          if (validFilter && !invalidFilter) {
+            qb.andWhere('inv.is_valid = true');
+          } else if (invalidFilter && !validFilter) {
+            qb.andWhere('inv.is_valid = false');
+          }
         } else if (key === 'preVatAmount') {
           qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
             preVatVals: vals,
@@ -1738,6 +1753,10 @@ export class ErpInvoicesCoreService {
           return res;
         }
 
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('GDT_TOKEN_EXPIRED');
+        }
+
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
           if (i < retries) {
             this.logger.warn(
@@ -1766,6 +1785,51 @@ export class ErpInvoicesCoreService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async setInvoiceValid(
+    id: string,
+    isValid: boolean,
+    userId: string,
+  ): Promise<void> {
+    const invoice = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (isValid) {
+      invoice.isValid = true;
+      invoice.validatedAt = new Date();
+      invoice.validatedBy = userId;
+    } else {
+      invoice.isValid = false;
+      invoice.validatedAt = null;
+      invoice.validatedBy = null;
+    }
+
+    await this.repository.save(invoice);
+  }
+
+  async checkTokenValid(token: string): Promise<boolean> {
+    if (!token) return false;
+    try {
+      const url =
+        'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase?sort=tdlap%3Adesc&size=1';
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+      });
+      return res.status === 200;
+    } catch (e) {
+      return false;
+    }
   }
 
   private resolvePortalVatRate(raw: any): string | null {
