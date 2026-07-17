@@ -38,6 +38,11 @@ export class CreateCashBookDto {
   @IsString()
   @IsOptional()
   periodDate?: string;
+
+  @ApiProperty()
+  @IsUUID()
+  @IsNotEmpty()
+  accountingAccountId: string;
 }
 
 export class UpdateCashBookDto {
@@ -65,4 +70,9 @@ export class UpdateCashBookDto {
   @IsString()
   @IsOptional()
   periodDate?: string;
+
+  @ApiProperty()
+  @IsUUID()
+  @IsNotEmpty()
+  accountingAccountId: string;
 }

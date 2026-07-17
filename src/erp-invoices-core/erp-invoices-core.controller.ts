@@ -28,14 +28,20 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+
+import { NotificationsService } from '../notifications/notifications.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('erp-invoices')
 export class ErpInvoicesCoreController {
-  constructor(private readonly service: ErpInvoicesCoreService) {}
+  constructor(
+    private readonly service: ErpInvoicesCoreService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
@@ -102,6 +108,18 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/post')
+  postInvoice(@Param('id') id: string, @Body() dto: PostInvoiceDto) {
+    return this.service.postInvoice(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/unpost')
+  unpostInvoice(@Param('id') id: string) {
+    return this.service.unpostInvoice(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch('bulk-set-branch')
   bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
     return this.service.bulkSetBranch(body.ids, body.branchId);
@@ -158,8 +176,34 @@ export class ErpInvoicesCoreController {
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
   @Post('portal/sync')
-  syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
-    return this.service.syncFromPortal(dto, req.user?.sub);
+  async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
+    try {
+      return await this.service.syncFromPortal(dto, req.user?.sub);
+    } catch (e: any) {
+      if (e.message === 'GDT_TOKEN_EXPIRED') {
+        if (req.user?.sub) {
+          await this.notificationsService.createForUser(req.user.sub, {
+            type: 'ERROR',
+            title: 'Token GDT hết hạn',
+            message:
+              'Vui lòng đăng nhập lại tại hoadondientu.gdt.gov.vn và cập nhật token trong hệ thống.',
+          });
+        }
+        throw new BadRequestException('GDT_TOKEN_EXPIRED');
+      }
+      throw e;
+    }
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch(':id/validate')
+  async validateInvoice(
+    @Param('id') id: string,
+    @Body() body: { isValid: boolean },
+    @Request() req: any,
+  ) {
+    await this.service.setInvoiceValid(id, body.isValid, req.user?.sub);
+    return { success: true };
   }
 
   /**
