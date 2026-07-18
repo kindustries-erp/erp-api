@@ -1,5 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
@@ -8,8 +12,9 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 
 @Injectable()
-export class ErpInvoicesCronService {
+export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ErpInvoicesCronService.name);
+  private timeoutId: NodeJS.Timeout;
 
   constructor(
     private readonly erpInvoicesCoreService: ErpInvoicesCoreService,
@@ -20,7 +25,32 @@ export class ErpInvoicesCronService {
     private readonly userRoleRepo: Repository<CoreUserRole>,
   ) {}
 
-  @Cron('0 * * * *') // Run at minute 0 of every hour
+  onModuleInit() {
+    this.scheduleNextSync();
+  }
+
+  onModuleDestroy() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+    }
+  }
+
+  private scheduleNextSync() {
+    const minMinutes = 30;
+    const maxMinutes = 45;
+    const nextMinutes =
+      Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) + minMinutes;
+    const nextMs = nextMinutes * 60 * 1000;
+
+    this.logger.log(`Next auto-sync scheduled in ${nextMinutes} minutes.`);
+
+    this.timeoutId = setTimeout(() => {
+      this.autoSyncCurrentMonth().finally(() => {
+        this.scheduleNextSync();
+      });
+    }, nextMs);
+  }
+
   async autoSyncCurrentMonth() {
     this.logger.log('Auto-sync started for current month.');
 

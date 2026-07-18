@@ -45,6 +45,7 @@ import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
