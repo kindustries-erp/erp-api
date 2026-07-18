@@ -45,6 +45,13 @@ export class CompanyProfile {
   @ApiProperty({ description: 'Token đồng bộ Portal GDT', required: false })
   gdt_portal_token: string | null;
 
+  @Column({ name: 'gdt_portal_cookies', type: 'text', nullable: true })
+  @ApiProperty({
+    description: 'Cookies đồng bộ Portal GDT (WAF bypass)',
+    required: false,
+  })
+  gdt_portal_cookies: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   @ApiProperty({ description: 'Thời gian tạo' })
   created_at: Date;

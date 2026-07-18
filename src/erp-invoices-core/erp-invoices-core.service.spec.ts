@@ -36,6 +36,9 @@ describe('ErpInvoicesCoreService', () => {
       notificationsService,
       accountingCoreService,
     );
+
+    // Mock sleep to avoid timeouts
+    jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
   });
 
   describe('postInvoice', () => {
