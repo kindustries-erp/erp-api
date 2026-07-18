@@ -689,9 +689,6 @@ export class SinvoiceService {
     end: Date,
     pageSize: number,
   ) {
-    const apiPath =
-      direction === 'IN' ? 'query/invoices/purchase' : 'query/invoices/sold';
-
     const formatDate = (d: Date) => {
       const day = String(d.getDate()).padStart(2, '0');
       const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -699,17 +696,28 @@ export class SinvoiceService {
       return `${day}/${month}/${year}`;
     };
 
-    // Build search string based on direction and pattern
-    // Purchase: tdlap=ge=DD/MM/YYYYT00:00:00;tdlap=le=DD/MM/YYYYT23:59:59;ttxly==5
-    // Sold: tdlap=ge=DD/MM/YYYYT00:00:00;tdlap=le=DD/MM/YYYYT23:59:59
-    let searchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59`;
-    if (direction === 'IN') {
-      searchStr += ';ttxly==5';
-    }
+    const baseSearchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59`;
 
-    let state: string | null = null;
+    const fetchConfigs =
+      direction === 'IN'
+        ? [
+            {
+              apiPath: 'query/invoices/purchase',
+              searchStr: baseSearchStr,
+            },
+            {
+              apiPath: 'sco-query/invoices/purchase',
+              searchStr: `${baseSearchStr};ttxly==8`,
+            },
+          ]
+        : [
+            {
+              apiPath: 'query/invoices/sold',
+              searchStr: baseSearchStr,
+            },
+          ];
+
     let allRawItems: any[] = [];
-    let pagesFetched = 0;
     const maxPages = 50;
 
     let token = config.gdtJwt;
@@ -735,58 +743,63 @@ export class SinvoiceService {
       headers['Cookie'] = config.gdtCookie;
     }
 
-    do {
-      let currentUrl = `https://hoadondientu.gdt.gov.vn/api/${apiPath}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(searchStr)}`;
-      if (state) {
-        currentUrl += `&state=${state}`;
-      }
+    for (const fetchConfig of fetchConfigs) {
+      let state: string | null = null;
+      let pagesFetched = 0;
 
-      this.logger.log(`Fetching from GDT: ${currentUrl}`);
+      do {
+        let currentUrl = `https://hoadondientu.gdt.gov.vn/api/${fetchConfig.apiPath}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(fetchConfig.searchStr)}`;
+        if (state) {
+          currentUrl += `&state=${state}`;
+        }
 
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+        this.logger.log(`Fetching from GDT: ${currentUrl}`);
 
-        const res = await fetch(currentUrl, {
-          method: 'GET',
-          headers,
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (!res.ok) {
-          if (res.status === 401) {
-            throw new Error(
-              'Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.',
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+          const res = await fetch(currentUrl, {
+            method: 'GET',
+            headers,
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (!res.ok) {
+            if (res.status === 401) {
+              throw new Error(
+                'Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.',
+              );
+            }
+            throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
+          }
+
+          const data: any = await res.json();
+          if (!data || !Array.isArray(data.datas)) {
+            this.logger.warn(
+              `Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`,
+            );
+            break;
+          }
+
+          allRawItems.push(...data.datas);
+          state = data.state ?? null;
+          pagesFetched++;
+
+          if (state && pagesFetched < maxPages) {
+            const delay = (2 + Math.random() * 3) * 1000;
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.round(delay)),
             );
           }
-          throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
-        }
-
-        const data: any = await res.json();
-        if (!data || !Array.isArray(data.datas)) {
-          this.logger.warn(
-            `Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`,
-          );
-          break;
-        }
-
-        allRawItems.push(...data.datas);
-        state = data.state ?? null;
-        pagesFetched++;
-
-        if (state && pagesFetched < maxPages) {
-          const delay = (2 + Math.random() * 3) * 1000;
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.round(delay)),
+        } catch (err: any) {
+          this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
+          throw new InternalServerErrorException(
+            err.message ?? 'Lỗi khi gọi API Tổng cục Thuế',
           );
         }
-      } catch (err: any) {
-        this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
-        throw new InternalServerErrorException(
-          err.message ?? 'Lỗi khi gọi API Tổng cục Thuế',
-        );
-      }
-    } while (state && pagesFetched < maxPages);
+      } while (state && pagesFetched < maxPages);
+    }
 
     return allRawItems.map((item: any) =>
       this.mapGdtInvoiceToErp(item, direction, config),

@@ -39,6 +39,8 @@ export class ReportsCoreController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '50',
   ) {
@@ -48,6 +50,8 @@ export class ReportsCoreController {
       search,
       sortBy,
       sortDir,
+      columnSearch,
+      columnFilters,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
     });
@@ -71,6 +75,24 @@ export class ReportsCoreController {
   }
 
   @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @Get('vinfast-parts/column-options')
+  async getVinfastPartsColumnOptions(
+    @Query('columnKey') columnKey: string,
+    @Query('search') search: string = '',
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('filters') filtersStr: string = '{}',
+  ) {
+    return this.reportsCoreService.getVinfastPartsColumnOptions({
+      columnKey,
+      search,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      filtersStr,
+    });
+  }
+
+  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
   @Get('vinfast-parts/export/excel')
   async exportVinfastPartsTrackingExcel(
     @Query('dateFrom') dateFrom: string,
@@ -88,9 +110,13 @@ export class ReportsCoreController {
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
+    const timeStr = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = encodeURIComponent(
+      `Báo_cáo_phụ_tùng_VINFAST_${timeStr}.xlsx`,
+    );
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename=bang_ke_phu_tung_vinfast.xlsx',
+      `attachment; filename*=UTF-8''${fileName}`,
     );
     res.send(buffer);
   }

@@ -30,6 +30,7 @@ import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
 import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
+import { InventoryDashboardQueryDto } from './dto/inventory-dashboard-query.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
@@ -37,6 +38,12 @@ import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 @Controller('inventory')
 export class InventoryItemsController {
   constructor(private readonly service: InventoryItemsService) {}
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('dashboard')
+  getDashboardStats(@Query() query: InventoryDashboardQueryDto) {
+    return this.service.getDashboardStats(query);
+  }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'create' })
   @Post('items')

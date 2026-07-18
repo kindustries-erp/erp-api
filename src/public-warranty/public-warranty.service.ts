@@ -22,7 +22,7 @@ export class PublicWarrantyService {
   ) {}
 
   private normalize(val: string): string {
-    return val?.trim().toUpperCase() || '';
+    return val?.trim().toUpperCase().replace(/[-\s]/g, '') || '';
   }
 
   async check(dto: CheckWarrantyDto) {

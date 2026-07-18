@@ -14,6 +14,7 @@ import {
   UseGuards,
   UseInterceptors,
   Res,
+  Request,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
@@ -27,14 +28,20 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type { ErpInvoiceQuery } from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+
+import { NotificationsService } from '../notifications/notifications.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('erp-invoices')
 export class ErpInvoicesCoreController {
-  constructor(private readonly service: ErpInvoicesCoreService) {}
+  constructor(
+    private readonly service: ErpInvoicesCoreService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
@@ -54,6 +61,26 @@ export class ErpInvoicesCoreController {
   @ApiQuery({ name: 'pageSize', required: false })
   findAll(@Query() query: ErpInvoiceQuery) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      direction,
+    );
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })
@@ -78,6 +105,24 @@ export class ErpInvoicesCoreController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/post')
+  postInvoice(@Param('id') id: string, @Body() dto: PostInvoiceDto) {
+    return this.service.postInvoice(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/unpost')
+  unpostInvoice(@Param('id') id: string) {
+    return this.service.unpostInvoice(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch('bulk-set-branch')
+  bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
+    return this.service.bulkSetBranch(body.ids, body.branchId);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
@@ -131,8 +176,34 @@ export class ErpInvoicesCoreController {
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
   @Post('portal/sync')
-  syncPortal(@Body() dto: PortalFetchDto) {
-    return this.service.syncFromPortal(dto);
+  async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
+    try {
+      return await this.service.syncFromPortal(dto, req.user?.sub);
+    } catch (e: any) {
+      if (e.message === 'GDT_TOKEN_EXPIRED') {
+        if (req.user?.sub) {
+          await this.notificationsService.createForUser(req.user.sub, {
+            type: 'ERROR',
+            title: 'Token GDT hết hạn',
+            message:
+              'Vui lòng đăng nhập lại tại hoadondientu.gdt.gov.vn và cập nhật token trong hệ thống.',
+          });
+        }
+        throw new BadRequestException('GDT_TOKEN_EXPIRED');
+      }
+      throw e;
+    }
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch(':id/validate')
+  async validateInvoice(
+    @Param('id') id: string,
+    @Body() body: { isValid: boolean },
+    @Request() req: any,
+  ) {
+    await this.service.setInvoiceValid(id, body.isValid, req.user?.sub);
+    return { success: true };
   }
 
   /**
@@ -172,12 +243,19 @@ export class ErpInvoicesCoreController {
       fileFilter: (_req, file, cb) => {
         const ok =
           file.originalname.toLowerCase().endsWith('.xml') ||
-          file.mimetype === 'application/xml' ||
-          file.mimetype === 'text/xml';
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.originalname.toLowerCase().endsWith('.zip') ||
+          [
+            'application/xml',
+            'text/xml',
+            'application/pdf',
+            'application/zip',
+            'application/x-zip-compressed',
+          ].includes(file.mimetype);
         if (!ok) {
           cb(
             new BadRequestException(
-              `File "${file.originalname}" không phải .xml`,
+              `File "${file.originalname}" không được hỗ trợ (chỉ nhận .xml, .pdf, .zip)`,
             ),
             false,
           );
@@ -189,10 +267,15 @@ export class ErpInvoicesCoreController {
   )
   async bulkImportBuyer(@UploadedFiles() files: Express.Multer.File[]) {
     if (!files || files.length === 0) {
-      throw new BadRequestException('Chưa chọn file XML nào');
+      throw new BadRequestException('Chưa chọn file nào');
     }
-    return this.service.bulkImportBuyerXml(
-      files.map((f) => ({ filename: f.originalname, buffer: f.buffer })),
+    return this.service.bulkImportMixed(
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+      'IN',
     );
   }
 
@@ -208,12 +291,19 @@ export class ErpInvoicesCoreController {
       fileFilter: (_req, file, cb) => {
         const ok =
           file.originalname.toLowerCase().endsWith('.xml') ||
-          file.mimetype === 'application/xml' ||
-          file.mimetype === 'text/xml';
+          file.originalname.toLowerCase().endsWith('.pdf') ||
+          file.originalname.toLowerCase().endsWith('.zip') ||
+          [
+            'application/xml',
+            'text/xml',
+            'application/pdf',
+            'application/zip',
+            'application/x-zip-compressed',
+          ].includes(file.mimetype);
         if (!ok) {
           cb(
             new BadRequestException(
-              `File "${file.originalname}" không phải .xml`,
+              `File "${file.originalname}" không được hỗ trợ (chỉ nhận .xml, .pdf, .zip)`,
             ),
             false,
           );
@@ -225,10 +315,15 @@ export class ErpInvoicesCoreController {
   )
   async bulkImportSeller(@UploadedFiles() files: Express.Multer.File[]) {
     if (!files || files.length === 0) {
-      throw new BadRequestException('Chưa chọn file XML nào');
+      throw new BadRequestException('Chưa chọn file nào');
     }
-    return this.service.bulkImportSellerXml(
-      files.map((f) => ({ filename: f.originalname, buffer: f.buffer })),
+    return this.service.bulkImportMixed(
+      files.map((f) => ({
+        filename: f.originalname,
+        buffer: f.buffer,
+        mimetype: f.mimetype,
+      })),
+      'OUT',
     );
   }
 
@@ -316,6 +411,47 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
+  @Post('bulk-download-files')
+  async bulkDownloadFiles(
+    @Body() payload: { query: ErpInvoiceQuery; types: string[] },
+    @Res() res: Response,
+  ) {
+    if (!payload.types || payload.types.length === 0) {
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất 1 loại file (pdf, xml)',
+      );
+    }
+    const monthStr = payload.query?.date_from?.substring(0, 7) || 'All';
+    const directionStr = payload.query?.direction || 'IN_OUT';
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="HoaDon_${monthStr}_${directionStr}.zip"`,
+    );
+
+    return this.service.bulkDownloadFilesZip(payload, res);
+  }
+
+  @Get(':id/pdfs/:key/content')
+  async getPdfContent(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Res() res: any,
+  ) {
+    const buffer = await this.service.getPdfContent(
+      id,
+      decodeURIComponent(key),
+    );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'private, max-age=300',
+    });
+    res.send(buffer);
+  }
+
   @Get(':id/pdfs/:key/download-url')
   getPdfDownloadUrl(
     @Param('id') id: string,
@@ -340,8 +476,43 @@ export class ErpInvoicesCoreController {
 
   @Sse('portal/progress')
   progress(): Observable<MessageEvent> {
-    return this.service.progress$.pipe(
-      map((data) => ({ data: JSON.stringify(data) }) as MessageEvent),
-    );
+    const keepAlive$ = new Observable<MessageEvent>((subscriber) => {
+      // Emit initial event to force 200 OK and establish connection
+      subscriber.next({
+        data: JSON.stringify({
+          message: 'Connected',
+          processId: 'ping',
+          current: 0,
+          total: 0,
+          completed: false,
+        }),
+      } as MessageEvent);
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            message: 'Ping',
+            processId: 'ping',
+            current: 0,
+            total: 0,
+            completed: false,
+          }),
+        } as MessageEvent);
+      }, 15000); // 15s keep-alive
+
+      const subscription = this.service.progress$.subscribe({
+        next: (data) =>
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent),
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
+
+    return keepAlive$;
   }
 }

@@ -34,6 +34,8 @@ import {
 import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
 import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
 
+import { ErpBankStatementFile } from './entities/erp_bank_statement_file.entity';
+
 @Injectable()
 export class BankTransactionsCoreService {
   constructor(
@@ -47,6 +49,8 @@ export class BankTransactionsCoreService {
     private readonly bankAccountBalanceRepo: Repository<ErpBankAccountBalance>,
     @InjectRepository(ErpCashBookBalance)
     private readonly cashBookBalanceRepo: Repository<ErpCashBookBalance>,
+    @InjectRepository(ErpBankStatementFile)
+    private readonly statementFileRepo: Repository<ErpBankStatementFile>,
     private readonly dataSource: DataSource,
     private readonly accountingCoreService: AccountingCoreService,
   ) {}
@@ -421,6 +425,8 @@ export class BankTransactionsCoreService {
       .leftJoinAndSelect('txn.branch', 'branch')
       .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
       .leftJoinAndSelect('txn.cashBook', 'cashBook')
+      .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
+      .leftJoinAndSelect('invoiceNetOffs.invoice', 'invoice')
       .where('txn.isDeleted = :isDeleted', { isDeleted: false });
 
     if (filter.sourceType) {
@@ -465,12 +471,120 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
+    }
+
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
         'sys_entity_tags',
         'et',
         `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    if (filter.column_filters) {
+      try {
+        const cFilters = JSON.parse(filter.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          let filterField = '';
+          const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+          const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
+          if (col === 'account') {
+            if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
+            else if (filter.sourceType === 'CASH')
+              filterField = 'txn.cashBookId';
+            else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+          } else if (col === 'transDate')
+            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') filterField = 'txn.description';
+          else if (col === 'thu') filterField = 'txn.creditAmount';
+          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'netOffAmount') filterField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            filterField = remainingAmountSubquery;
+          else if (col === 'balance') filterField = 'txn.balance';
+          else if (col === 'correspondentName')
+            filterField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            filterField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            filterField = 'txn.correspondentBank';
+          else if (col === 'branch') filterField = 'txn.branchId';
+          else if (col === 'referenceNumber')
+            filterField = 'txn.referenceNumber';
+
+          if (filterField) {
+            if (col === 'transDate') {
+              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            } else {
+              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (filter.column_search) {
+      try {
+        const cSearch = JSON.parse(filter.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          let searchField = '';
+          if (col === 'account') {
+            if (filter.sourceType === 'BANK')
+              searchField = 'bankAccount.bankName'; // Note: ILIKE on relations needs careful join, already joined 'bankAccount' and 'cashBook'
+            else if (filter.sourceType === 'CASH')
+              searchField = 'cashBook.name';
+            else searchField = 'COALESCE(bankAccount.bankName, cashBook.name)';
+          } else if (col === 'transDate')
+            searchField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') searchField = 'txn.description';
+          else if (col === 'thu') searchField = 'txn.creditAmount';
+          else if (col === 'chi') searchField = 'txn.debitAmount';
+          else if (col === 'balance') searchField = 'txn.balance';
+          else if (col === 'correspondentName')
+            searchField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            searchField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            searchField = 'txn.correspondentBank';
+          else if (col === 'branch') searchField = 'branch.name';
+          else if (col === 'referenceNumber')
+            searchField = 'txn.referenceNumber';
+
+          if (searchField) {
+            if (col === 'transDate') {
+              qb.andWhere(`${searchField} ILIKE :search_${col}`, {
+                [`search_${col}`]: `%${val}%`,
+              });
+            } else {
+              qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
+                [`search_${col}`]: `%${val}%`,
+              });
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     if (filter.sortBy) {
@@ -502,6 +616,372 @@ export class BankTransactionsCoreService {
 
     return {
       items: mappedItems,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    sourceType?: 'BANK' | 'CASH',
+  ) {
+    const qb = this.transactionRepo.createQueryBuilder('txn');
+
+    if (sourceType) {
+      qb.where('txn.sourceType = :sourceType', { sourceType });
+    } else {
+      qb.where('1 = 1');
+    }
+
+    let selectField = '';
+    let labelField = '';
+
+    if (column === 'account') {
+      if (sourceType === 'BANK') {
+        qb.leftJoin('txn.bankAccount', 'bankAccount');
+        selectField = 'txn.bankAccountId';
+        labelField = `COALESCE(bankAccount.bankName, '') || ' - ' || COALESCE(bankAccount.accountNumber, '')`;
+      } else if (sourceType === 'CASH') {
+        qb.leftJoin('txn.cashBook', 'cashBook');
+        selectField = 'txn.cashBookId';
+        labelField = 'cashBook.name';
+      } else {
+        qb.leftJoin('txn.bankAccount', 'bankAccount');
+        qb.leftJoin('txn.cashBook', 'cashBook');
+        selectField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+        labelField = `COALESCE(bankAccount.bankName || ' - ' || bankAccount.accountNumber, cashBook.name)`;
+      }
+    } else if (column === 'transDate')
+      selectField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+    else if (column === 'description') selectField = 'txn.description';
+    else if (column === 'thu') selectField = 'txn.creditAmount';
+    else if (column === 'chi') selectField = 'txn.debitAmount';
+    else if (column === 'netOffAmount')
+      selectField = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+    else if (column === 'remainingAmount')
+      selectField = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0))`;
+    else if (column === 'balance') selectField = 'txn.balance';
+    else if (column === 'correspondentName')
+      selectField = 'txn.correspondentName';
+    else if (column === 'correspondentAccount')
+      selectField = 'txn.correspondentAccount';
+    else if (column === 'correspondentBank')
+      selectField = 'txn.correspondentBank';
+    else if (column === 'branch') {
+      qb.leftJoin('txn.branch', 'branch');
+      selectField = 'txn.branchId';
+      labelField = 'branch.name';
+    } else if (column === 'referenceNumber')
+      selectField = 'txn.referenceNumber';
+    else if (column === 'partner')
+      selectField =
+        "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    if (!labelField) labelField = selectField;
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.addSelect(`MAX(${labelField})`, 'label');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    if (column !== 'transDate') {
+      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    } else {
+      qb.andWhere(`${selectField} != ''`);
+    }
+    qb.groupBy(selectField);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+          const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
+          if (col === 'account') {
+            if (sourceType === 'BANK') filterField = 'txn.bankAccountId';
+            else if (sourceType === 'CASH') filterField = 'txn.cashBookId';
+            else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
+          } else if (col === 'transDate')
+            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+          else if (col === 'description') filterField = 'txn.description';
+          else if (col === 'thu') filterField = 'txn.creditAmount';
+          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'netOffAmount') filterField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            filterField = remainingAmountSubquery;
+          else if (col === 'balance') filterField = 'txn.balance';
+          else if (col === 'correspondentName')
+            filterField = 'txn.correspondentName';
+          else if (col === 'correspondentAccount')
+            filterField = 'txn.correspondentAccount';
+          else if (col === 'correspondentBank')
+            filterField = 'txn.correspondentBank';
+          else if (col === 'branch') filterField = 'txn.branchId';
+          else if (col === 'referenceNumber')
+            filterField = 'txn.referenceNumber';
+          else if (col === 'partner')
+            filterField =
+              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
+
+          if (filterField) {
+            if (col === 'transDate') {
+              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            } else {
+              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+                [`vals_${col}`]: vals,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      if (column === 'transDate') {
+        qb.andWhere(`${labelField} ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      } else {
+        qb.andWhere(`CAST(${labelField} AS TEXT) ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      }
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const countQb = qb.clone();
+    countQb.expressionMap.groupBys = [];
+    const totalRaw = await countQb
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+
+    return {
+      items: results
+        .map((r) => ({
+          value: String(r.value),
+          label: r.label ? String(r.label) : String(r.value),
+        }))
+        .filter((r) => r.value),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getPartnerStats(filter: BankTransactionFilterDto) {
+    const page = filter.page || 1;
+    const pageSize = filter.pageSize || 20;
+
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (filter.startDate) {
+      qb.andWhere('txn.transDate >= :startDate', {
+        startDate: filter.startDate,
+      });
+    }
+    if (filter.endDate) {
+      const eDate =
+        filter.endDate.length === 10
+          ? `${filter.endDate} 23:59:59.999`
+          : filter.endDate;
+      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+    }
+    if (filter.sourceType) {
+      qb.andWhere('txn.sourceType = :sourceType', {
+        sourceType: filter.sourceType,
+      });
+    }
+    if (filter.branchId) {
+      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    }
+    if (filter.tagIds && filter.tagIds.length > 0) {
+      qb.innerJoin(
+        'sys_entity_tags',
+        'et',
+        `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
+      ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    const groupField =
+      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
+
+    qb.andWhere(
+      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, '')) IS NOT NULL",
+    );
+
+    if (filter.column_filters) {
+      try {
+        const cFilters = JSON.parse(filter.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          } else if (col === 'partner') {
+            qb.andWhere(
+              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, '')) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (filter.column_search) {
+      try {
+        const cSearch = JSON.parse(filter.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          if (col === 'correspondentAccount') {
+            qb.andWhere(`txn.correspondentAccount ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          } else if (col === 'correspondentName') {
+            qb.andWhere(`txn.correspondentName ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
+          } else if (col === 'partner') {
+            qb.andWhere(
+              `(
+              txn.correspondentAccount ILIKE :search_${col} OR
+              txn.correspondentName ILIKE :search_${col}
+            )`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'invoiceSubject') {
+            qb.andWhere(
+              `EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff n
+              JOIN erp_invoices i ON n.invoice_id = i.id
+              WHERE n.bank_transaction_id = txn.id
+              AND (i.seller_name ILIKE :search_${col} OR i.buyer_name ILIKE :search_${col} OR i.seller_tax_code ILIKE :search_${col} OR i.buyer_tax_code ILIKE :search_${col})
+            )`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          }
+        }
+      } catch (e) {}
+    }
+
+    const countQb = qb.clone();
+    const totalRaw = await countQb
+      .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.select(groupField, 'groupId')
+      .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
+      .addSelect('MAX(txn.correspondentName)', 'correspondentName')
+      .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
+      .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .groupBy(groupField);
+
+    if (filter.sortBy) {
+      const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      if (filter.sortBy === 'correspondentAccount') {
+        qb.orderBy('MAX(txn.correspondentAccount)', order);
+      } else if (filter.sortBy === 'correspondentName') {
+        qb.orderBy('MAX(txn.correspondentName)', order);
+      } else if (filter.sortBy === 'totalCredit') {
+        qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
+      } else if (filter.sortBy === 'totalDebit') {
+        qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
+      } else {
+        qb.orderBy(
+          'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+          'DESC',
+        );
+      }
+    } else {
+      qb.orderBy(
+        'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
+        'DESC',
+      );
+    }
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getRawMany();
+
+    let subjectsMap: Record<string, string> = {};
+    if (items.length > 0) {
+      const groupConditions = items
+        .map((item) => {
+          const escapedId = String(item.groupId).replace(/'/g, "''");
+          return `(COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') = '${escapedId}')`;
+        })
+        .join(' OR ');
+
+      const subjectQuery = `
+        SELECT 
+          COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') as group_id,
+          CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END as subject
+        FROM erp_invoice_voucher_netoff netoff
+        INNER JOIN erp_invoices inv ON inv.id = netoff.invoice_id
+        INNER JOIN erp_bank_transactions t2 ON t2.id = netoff.bank_transaction_id
+        WHERE t2.is_deleted = false
+          AND (${groupConditions})
+      `;
+      const subjectsRows = await this.transactionRepo.query(subjectQuery);
+
+      const groupedSubjects = subjectsRows.reduce((acc: any, curr: any) => {
+        if (!curr.subject) return acc;
+        if (!acc[curr.group_id]) acc[curr.group_id] = new Set();
+        acc[curr.group_id].add(curr.subject);
+        return acc;
+      }, {});
+
+      for (const [groupId, set] of Object.entries(groupedSubjects)) {
+        subjectsMap[groupId] = Array.from(set as Set<string>).join(', ');
+      }
+    }
+
+    return {
+      items: items.map((item) => ({
+        id: item.groupId,
+        correspondentAccount: item.correspondentAccount,
+        correspondentName: item.correspondentName,
+        totalCredit: parseFloat(item.totalCredit) || 0,
+        totalDebit: parseFloat(item.totalDebit) || 0,
+        invoiceSubject: subjectsMap[item.groupId] || null,
+      })),
       total,
       page,
       pageSize,
@@ -542,6 +1022,17 @@ export class BankTransactionsCoreService {
         'et',
         `et.entity_id = txn.id AND et.entity_type = 'bank_transaction'`,
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
+    }
+
+    if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
+    }
+    if (filter.correspondentName) {
+      qb.andWhere('txn.correspondentName = :correspondentName', {
+        correspondentName: filter.correspondentName,
+      });
     }
 
     const allTxns = await qb.getMany();
@@ -753,7 +1244,7 @@ export class BankTransactionsCoreService {
       where: { id: txnId, isDeleted: false },
       relations: ['bankAccount', 'cashBook'],
     });
-    if (!txn || !txn.correspondentAccountingAccountId) return;
+    if (!txn) return;
 
     // Load 331 and 131 account IDs (active, any branch)
     const [apAccountRes, arAccountRes] = await Promise.all([
@@ -794,7 +1285,7 @@ export class BankTransactionsCoreService {
 
     // Load net-offs with invoice info
     const netOffRows: any[] = await this.dataSource.query(
-      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.branch_id, i.description as invoice_desc
+      `SELECT n.id, n.net_off_amount, i.direction, i.seller_name, i.buyer_name, i.invoice_no, i.serial_no, i.branch_id, i.description as invoice_desc
        FROM erp_invoice_voucher_netoff n
        JOIN erp_invoices i ON i.id = n.invoice_id AND i.is_deleted = false
        WHERE n.bank_transaction_id = $1
@@ -809,11 +1300,10 @@ export class BankTransactionsCoreService {
     const isReceipt = Number(txn.creditAmount) > 0;
     const baseDescription = txn.accountingDescription || txn.description || '';
 
-    // Build groups: [{subject, amount, counterpartAccountId, branchId, description}]
     type Group = {
       subject: string | null;
       amount: number;
-      counterpartAccountId: string;
+      counterpartAccountId: string | null;
       branchId: string;
       description: string;
     };
@@ -848,9 +1338,12 @@ export class BankTransactionsCoreService {
 
         const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
         if (!groupMap.has(key)) {
+          const invoiceRef = row.serial_no
+            ? `${row.invoice_no}-${row.serial_no}`
+            : row.invoice_no;
           const desc = row.invoice_desc
-            ? `${baseDescription} - ${row.invoice_desc}`
-            : baseDescription;
+            ? `${invoiceRef}_${baseDescription} - ${row.invoice_desc}`
+            : `${invoiceRef}_${baseDescription}`;
           groupMap.set(key, {
             subject: subject || null,
             amount: 0,
@@ -884,6 +1377,14 @@ export class BankTransactionsCoreService {
       }
     }
 
+    // Get existing date before deleting journal entries
+    const existingEntries = await this.dataSource.query(
+      `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
+      [txn.id, txn.sourceType],
+    );
+    const postingDate =
+      existingEntries.length > 0 ? existingEntries[0].date : new Date();
+
     // Delete existing journal entries for this transaction
     await this.accountingCoreService.deleteJournalEntryBySource(
       txn.id,
@@ -898,26 +1399,25 @@ export class BankTransactionsCoreService {
       isReceipt,
     );
 
-    // Create one journal entry per group
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
+    // Create one journal entry per valid group
+    const validGroups = groups.filter((g) => g.counterpartAccountId);
+    for (let i = 0; i < validGroups.length; i++) {
+      const group = validGroups[i];
       // Single group → no suffix; multiple groups → a, b, c...
       const entryNo =
-        groups.length === 1
+        validGroups.length === 1
           ? baseEntryNo
           : `${baseEntryNo}${String.fromCharCode(97 + i)}`;
 
-      const debitAccount = isReceipt
-        ? defaultAccountId
-        : group.counterpartAccountId;
-      const creditAccount = isReceipt
-        ? group.counterpartAccountId
-        : defaultAccountId;
+      const counterpartAccountId = group.counterpartAccountId as string;
+      const debitAccount = isReceipt ? defaultAccountId : counterpartAccountId;
+      const creditAccount = isReceipt ? counterpartAccountId : defaultAccountId;
 
       await this.accountingCoreService.createJournalEntry({
         entryNo,
         branchId: group.branchId,
-        date: txn.transDate,
+        date: postingDate,
+        documentDate: txn.transDate,
         description: group.description,
         subjectName: group.subject || undefined,
         sourceType: txn.sourceType,
@@ -1167,5 +1667,93 @@ export class BankTransactionsCoreService {
     if (!balance) throw new NotFoundException('Balance not found');
     balance.isDeleted = true;
     return this.cashBookBalanceRepo.save(balance);
+  }
+
+  // --- Bank Statement Files ---
+  async getStatementFiles(params: {
+    page?: number;
+    pageSize?: number;
+    branchId?: string;
+    bankAccountId?: string;
+    cashBookId?: string;
+  }) {
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 20;
+
+    const qb = this.statementFileRepo
+      .createQueryBuilder('file')
+      .leftJoinAndSelect('file.bankAccount', 'bankAccount')
+      .leftJoinAndSelect('file.cashBook', 'cashBook')
+      .where('file.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (params.branchId) {
+      qb.andWhere('file.branchId = :branchId', { branchId: params.branchId });
+    }
+    if (params.bankAccountId) {
+      qb.andWhere('file.bankAccountId = :bankAccountId', {
+        bankAccountId: params.bankAccountId,
+      });
+    }
+    if (params.cashBookId) {
+      qb.andWhere('file.cashBookId = :cashBookId', {
+        cashBookId: params.cashBookId,
+      });
+    }
+
+    qb.orderBy('file.periodDate', 'ASC').addOrderBy('file.createdAt', 'DESC');
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    // Query sys_file for file metadata
+    let mappedItems = items;
+    if (items.length > 0) {
+      const fileIds = items.map((i) => i.fileId);
+      const sysFiles = await this.dataSource.query(
+        `SELECT id, filename_download, filename_disk FROM sys_files WHERE id = ANY($1)`,
+        [fileIds],
+      );
+      const sysFileMap = new Map(sysFiles.map((f: any) => [f.id, f]));
+
+      mappedItems = items.map((item) => {
+        const fileMeta = sysFileMap.get(item.fileId) as any;
+        return {
+          ...item,
+          fileName: fileMeta
+            ? fileMeta.filename_download || fileMeta.filename_disk
+            : 'Unknown file',
+        };
+      }) as any;
+    }
+
+    return {
+      items: mappedItems,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async createStatementFile(
+    dto: import('./dto/create-bank-statement-file.dto').CreateBankStatementFileDto,
+  ) {
+    if (!dto.bankAccountId && !dto.cashBookId) {
+      throw new BadRequestException(
+        'Must provide either bankAccountId or cashBookId',
+      );
+    }
+    const file = this.statementFileRepo.create(dto);
+    return this.statementFileRepo.save(file);
+  }
+
+  async deleteStatementFile(id: string) {
+    const file = await this.statementFileRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!file) throw new NotFoundException('File not found');
+
+    file.isDeleted = true;
+    return this.statementFileRepo.save(file);
   }
 }
