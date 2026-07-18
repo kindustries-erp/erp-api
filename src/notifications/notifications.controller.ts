@@ -36,6 +36,12 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(id, userId);
   }
 
+  @Delete('all')
+  removeAll(@Request() req: any) {
+    const userId = req.user.sub;
+    return this.notificationsService.deleteAllForUser(userId);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req: any) {
     const userId = req.user.sub;

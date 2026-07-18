@@ -476,8 +476,43 @@ export class ErpInvoicesCoreController {
 
   @Sse('portal/progress')
   progress(): Observable<MessageEvent> {
-    return this.service.progress$.pipe(
-      map((data) => ({ data: JSON.stringify(data) }) as MessageEvent),
-    );
+    const keepAlive$ = new Observable<MessageEvent>((subscriber) => {
+      // Emit initial event to force 200 OK and establish connection
+      subscriber.next({
+        data: JSON.stringify({
+          message: 'Connected',
+          processId: 'ping',
+          current: 0,
+          total: 0,
+          completed: false,
+        }),
+      } as MessageEvent);
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            message: 'Ping',
+            processId: 'ping',
+            current: 0,
+            total: 0,
+            completed: false,
+          }),
+        } as MessageEvent);
+      }, 15000); // 15s keep-alive
+
+      const subscription = this.service.progress$.subscribe({
+        next: (data) =>
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent),
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
+
+    return keepAlive$;
   }
 }

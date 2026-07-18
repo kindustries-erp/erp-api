@@ -1203,7 +1203,9 @@ export class ErpInvoicesCoreService {
               serialNo,
               invoiceDate: this.parsePortalIsoDate(raw.tdlap),
               direction,
-              status: Number(raw.tthai) === 2 ? 'CANCELLED' : 'CONFIRMED',
+              status: [4, 6].includes(Number(raw.tthai))
+                ? 'CANCELLED'
+                : 'CONFIRMED',
               taxInvoiceStatus,
               taxProcessStatus,
               taxInvoiceType,
