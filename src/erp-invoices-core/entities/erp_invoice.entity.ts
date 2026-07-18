@@ -102,6 +102,22 @@ export class ErpInvoice {
 
   @Column({
     type: 'varchar',
+    length: 255,
+    name: 'buyer_personal_name',
+    nullable: true,
+  })
+  buyerPersonalName: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'buyer_cccd',
+    nullable: true,
+  })
+  buyerCccd: string | null;
+
+  @Column({
+    type: 'varchar',
     length: 64,
     name: 'buyer_tax_code',
     nullable: true,

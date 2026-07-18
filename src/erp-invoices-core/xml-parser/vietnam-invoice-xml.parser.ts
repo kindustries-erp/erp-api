@@ -27,6 +27,8 @@ export interface ParsedVietnamInvoice {
   sellerAddress: string | null;
   sellerBank: string | null;
   buyerName: string | null;
+  buyerPersonalName: string | null;
+  buyerCccd: string | null;
   buyerTaxCode: string | null;
   buyerAddress: string | null;
   description: string | null;
@@ -203,6 +205,11 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     ndhdon?.getElementsByTagName('nmua')[0] ??
     doc.getElementsByTagName('NMua')[0];
   const buyerName = getTextIn(nmua ?? null, 'Ten', 'ten') ?? null;
+  const buyerPersonalName =
+    getTextIn(nmua ?? null, 'HoTen', 'hoten', 'TNNMua', 'tnnmua', 'TenNMua') ??
+    null;
+  const buyerCccd =
+    getTextIn(nmua ?? null, 'CCCD', 'cccd', 'CMND', 'cmnd', 'HoChieu') ?? null;
   const buyerTaxCode = getTextIn(nmua ?? null, 'MST', 'mst') ?? null;
   const buyerAddress = getTextIn(nmua ?? null, 'DChi', 'dchi') ?? null;
 
@@ -287,6 +294,8 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress,
     sellerBank,
     buyerName,
+    buyerPersonalName,
+    buyerCccd,
     buyerTaxCode,
     buyerAddress,
     description,
@@ -474,6 +483,8 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress,
     sellerBank,
     buyerName,
+    buyerPersonalName: null,
+    buyerCccd: null,
     buyerTaxCode,
     buyerAddress,
     description,
@@ -545,6 +556,8 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress: getText(doc, 'seller_address', 'SellerAddress') ?? null,
     sellerBank: getText(doc, 'seller_bank', 'SellerBank') ?? null,
     buyerName: getText(doc, ...BUYER_NAME_TAGS) ?? null,
+    buyerPersonalName: null,
+    buyerCccd: null,
     buyerTaxCode:
       getText(doc, 'buyer_tax_code', 'BuyerTaxCode', 'MaSoThueNMua') ?? null,
     buyerAddress: getText(doc, 'buyer_address', 'BuyerAddress') ?? null,

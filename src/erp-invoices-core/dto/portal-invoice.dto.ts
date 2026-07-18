@@ -16,6 +16,8 @@ export class PortalInvoiceDto {
   @IsString() @IsOptional() nbdchi?: string; // Địa chỉ người bán
   @IsString() @IsNotEmpty() mst: string; // nmmst - MST người mua
   @IsString() @IsOptional() nmten?: string; // Tên người mua
+  @IsString() @IsOptional() nmtnmua?: string; // Tên người mua cá nhân
+  @IsString() @IsOptional() nmcmnd?: string; // CCCD/CMND người mua cá nhân
   @IsString() @IsOptional() nmdchi?: string; // Địa chỉ người mua
   @IsString() @IsNotEmpty() shdon: string;
   @IsString() @IsNotEmpty() khhdon: string;
