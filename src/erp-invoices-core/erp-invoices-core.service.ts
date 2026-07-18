@@ -656,6 +656,22 @@ export class ErpInvoicesCoreService {
           if (conditions.length > 0) {
             qb.andWhere(`(${conditions.join(' OR ')})`);
           }
+        } else if (key === 'taxInvoiceType') {
+          qb.andWhere('inv.tax_invoice_type IN (:...taxInvoiceTypeVals)', {
+            taxInvoiceTypeVals: vals,
+          });
+        } else if (key === 'taxInvoiceStatus') {
+          qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
+            taxInvoiceStatusVals: vals
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v)),
+          });
+        } else if (key === 'taxProcessStatus') {
+          qb.andWhere('inv.tax_process_status IN (:...taxProcessStatusVals)', {
+            taxProcessStatusVals: vals
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v)),
+          });
         }
       });
 
