@@ -57,6 +57,7 @@ import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_acco
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
+import { CoreNotification } from '../notifications/entities/core-notification.entity';
 
 const entities = [
   CoreUser,
@@ -116,6 +117,7 @@ const entities = [
   ErpJournalEntry,
   ErpJournalEntryLine,
   ErpSerialLifecycle,
+  CoreNotification,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

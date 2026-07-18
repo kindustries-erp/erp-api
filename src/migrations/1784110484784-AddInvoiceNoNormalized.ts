@@ -3,10 +3,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class AddInvoiceNoNormalized1784110484784 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "erp_invoices" ADD COLUMN "invoice_no_normalized" VARCHAR(100) GENERATED ALWAYS AS (REGEXP_REPLACE(invoice_no, '([^0-9]*)0+([0-9]+)', '\\1\\2')) STORED`,
+      `ALTER TABLE "erp_invoices" ADD COLUMN IF NOT EXISTS "invoice_no_normalized" VARCHAR(100) GENERATED ALWAYS AS (REGEXP_REPLACE(invoice_no, '([^0-9]*)0+([0-9]+)', '\\1\\2')) STORED`,
     );
     await queryRunner.query(
-      `CREATE INDEX "idx_erp_invoice_no_normalized" ON "erp_invoices" ("invoice_no_normalized", "seller_tax_code", "direction")`,
+      `CREATE INDEX IF NOT EXISTS "idx_erp_invoice_no_normalized" ON "erp_invoices" ("invoice_no_normalized", "seller_tax_code", "direction")`,
     );
   }
 

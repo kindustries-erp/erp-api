@@ -35,6 +35,7 @@ export class PortalInvoiceDto {
 
 export class PortalFetchDto {
   @IsString() @IsOptional() token?: string;
+  @IsString() @IsOptional() cookies?: string;
   @IsString() @IsNotEmpty() dateFrom: string;
   @IsString() @IsNotEmpty() dateTo: string;
   @IsString() @IsOptional() @IsIn(['purchase', 'sold']) type?:
