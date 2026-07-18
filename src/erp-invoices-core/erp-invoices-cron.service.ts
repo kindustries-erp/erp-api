@@ -55,13 +55,17 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Auto-sync started for current month.');
 
     try {
-      const token = await this.erpInvoicesCoreService.getPortalToken();
+      const config = await this.erpInvoicesCoreService.getPortalConfig();
+      const token = config.token;
       if (!token) {
         this.logger.warn('No GDT portal token found. Skipping auto-sync.');
         return;
       }
 
-      const isValid = await this.erpInvoicesCoreService.checkTokenValid(token);
+      const isValid = await this.erpInvoicesCoreService.checkTokenValid(
+        token,
+        config.cookies,
+      );
       if (!isValid) {
         this.logger.warn('GDT portal token is invalid/expired.');
         await this.notifyTokenExpired();
@@ -80,6 +84,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           type: 'purchase',
           dateFrom,
           dateTo,
+          cookies: config.cookies,
         },
         undefined, // no specific user
       );
@@ -93,6 +98,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           type: 'sold',
           dateFrom,
           dateTo,
+          cookies: config.cookies,
         },
         undefined,
       );
@@ -141,6 +147,6 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const date = String(d.getDate()).padStart(2, '0');
-    return `${date}/${m}/${y}`;
+    return `${y}-${m}-${date}`;
   }
 }

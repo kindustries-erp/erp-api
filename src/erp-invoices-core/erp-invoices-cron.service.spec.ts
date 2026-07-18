@@ -10,7 +10,7 @@ describe('ErpInvoicesCronService', () => {
 
   beforeEach(() => {
     erpInvoicesCoreService = {
-      getPortalToken: jest.fn(),
+      getPortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
       syncFromPortal: jest.fn().mockResolvedValue({}),
     };
@@ -47,14 +47,16 @@ describe('ErpInvoicesCronService', () => {
 
   describe('autoSyncCurrentMonth', () => {
     it('should skip sync if token is empty', async () => {
-      erpInvoicesCoreService.getPortalToken.mockResolvedValue('');
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
       await cronService.autoSyncCurrentMonth();
       expect(erpInvoicesCoreService.checkTokenValid).not.toHaveBeenCalled();
       expect(erpInvoicesCoreService.syncFromPortal).not.toHaveBeenCalled();
     });
 
     it('should notify and skip sync if token is invalid', async () => {
-      erpInvoicesCoreService.getPortalToken.mockResolvedValue('invalid-token');
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'invalid-token',
+      });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
 
       await cronService.autoSyncCurrentMonth();
@@ -67,7 +69,10 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should sync purchase and sold invoices sequentially with valid token', async () => {
-      erpInvoicesCoreService.getPortalToken.mockResolvedValue('valid-token');
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'valid-token',
+        cookies: 'valid-cookies',
+      });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(true);
 
       const setTimeoutSpy = jest
@@ -80,12 +85,12 @@ describe('ErpInvoicesCronService', () => {
       await cronService.autoSyncCurrentMonth();
 
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'purchase' }),
+        expect.objectContaining({ type: 'purchase', cookies: 'valid-cookies' }),
         undefined,
       );
 
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'sold' }),
+        expect.objectContaining({ type: 'sold', cookies: 'valid-cookies' }),
         undefined,
       );
 
@@ -93,7 +98,9 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should catch GDT_TOKEN_EXPIRED error during sync and send notifications', async () => {
-      erpInvoicesCoreService.getPortalToken.mockResolvedValue('valid-token');
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'valid-token',
+      });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(true);
       erpInvoicesCoreService.syncFromPortal.mockRejectedValue(
         new Error('GDT_TOKEN_EXPIRED'),

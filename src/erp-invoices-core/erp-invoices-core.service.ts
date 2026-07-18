@@ -224,15 +224,18 @@ export class ErpInvoicesCoreService {
     };
   }
 
-  async getPortalToken(): Promise<string> {
+  async getPortalConfig(): Promise<{ token: string; cookies: string }> {
     const profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
     });
-    return profile?.gdt_portal_token || '';
+    return {
+      token: profile?.gdt_portal_token || '',
+      cookies: profile?.gdt_portal_cookies || '',
+    };
   }
 
-  async savePortalToken(token: string): Promise<void> {
+  async savePortalConfig(token: string, cookies?: string): Promise<void> {
     let profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
@@ -241,9 +244,13 @@ export class ErpInvoicesCoreService {
       profile = this.companyProfileRepo.create({
         company_name: 'Your Company Name',
         gdt_portal_token: token,
+        gdt_portal_cookies: cookies,
       });
     } else {
       profile.gdt_portal_token = token;
+      if (cookies !== undefined) {
+        profile.gdt_portal_cookies = cookies;
+      }
     }
     await this.companyProfileRepo.save(profile);
   }
@@ -1013,8 +1020,13 @@ export class ErpInvoicesCoreService {
    */
   async syncFromPortal(dto: PortalFetchDto, userId?: string) {
     let token = dto.token?.trim();
+    let cookies = dto.cookies?.trim();
     if (!token) {
-      token = await this.getPortalToken();
+      const config = await this.getPortalConfig();
+      token = config.token;
+      if (!cookies && config.cookies) {
+        cookies = config.cookies;
+      }
     }
     if (!token) throw new BadRequestException('token is required');
     if (!dto.dateFrom || !dto.dateTo) {
@@ -1112,8 +1124,14 @@ export class ErpInvoicesCoreService {
                 }
                 isFirstRequest = false;
 
+                const fetchHeaders: Record<string, string> = {
+                  Authorization: `Bearer ${token}`,
+                };
+                if (cookies) {
+                  fetchHeaders['Cookie'] = cookies;
+                }
                 const response = await this.fetchWithRetry(url, {
-                  headers: { Authorization: `Bearer ${token}` },
+                  headers: fetchHeaders,
                 });
                 if (!response.ok)
                   throw new BadRequestException(
@@ -1250,7 +1268,11 @@ export class ErpInvoicesCoreService {
 
         // ── XML background download (fire & forget, rate-limited) ─────────────────
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(backgroundSyncIds, token).catch((e) =>
+          this.downloadXmlsInBackground(
+            backgroundSyncIds,
+            token,
+            cookies,
+          ).catch((e) =>
             this.logger.error('XML background download failed', e),
           );
         }
@@ -1258,6 +1280,11 @@ export class ErpInvoicesCoreService {
         this.logger.log(
           `Background portal sync completed. Fetched: ${rawItems.length}, Imported: ${created}, Skipped: ${skipped}`,
         );
+        if (errors.length > 0) {
+          this.logger.error(
+            `Sync errors (${errors.length}): ${errors.slice(0, 5).join(', ')}`,
+          );
+        }
       } catch (err) {
         this.logger.error('Background portal sync failed', err);
         if (userId) {
@@ -1290,6 +1317,7 @@ export class ErpInvoicesCoreService {
   private async downloadXmlsInBackground(
     invoiceIds: string[],
     token: string,
+    cookies?: string,
   ): Promise<void> {
     const processId = 'sync-progress';
     const BATCH_SIZE = 10;
@@ -1314,7 +1342,7 @@ export class ErpInvoicesCoreService {
 
     for (let i = 0; i < targets.length; i++) {
       const inv = targets[i];
-      await this.downloadAndSaveXml(inv, token).catch((e) =>
+      await this.downloadAndSaveXml(inv, token, cookies).catch((e) =>
         this.logger.error(`Error downloading XML for ${inv.invoiceNo}:`, e),
       );
 
@@ -1350,9 +1378,10 @@ export class ErpInvoicesCoreService {
   private async downloadAndSaveXml(
     invoice: ErpInvoice,
     token: string,
+    cookies?: string,
   ): Promise<void> {
     // 1. Luôn ưu tiên lấy chi tiết từ API JSON trước
-    await this.syncInvoiceDetailFromJson(invoice, token);
+    await this.syncInvoiceDetailFromJson(invoice, token, cookies);
 
     // 2. Nghỉ 2s trước khi tải XML để tránh dồn dập
     await this.sleep(2000);
@@ -1369,20 +1398,26 @@ export class ErpInvoicesCoreService {
       }
 
       let res: Response | null = null;
+      const fetchHeaders: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (cookies) {
+        fetchHeaders['Cookie'] = cookies;
+      }
       for (let i = 0; i < endpoints.length; i++) {
         const ep = endpoints[i];
-        const xmlUrl = new URL(
+        const url = new URL(
           `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/export-xml`,
         );
-        xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
-        xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
-        xmlUrl.searchParams.set('shdon', invoice.invoiceNo);
-        xmlUrl.searchParams.set('khmshdon', '1');
+        url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        url.searchParams.set('khhdon', invoice.serialNo ?? '');
+        url.searchParams.set('shdon', invoice.invoiceNo);
+        url.searchParams.set('khmshdon', '1');
 
         res = await this.fetchWithRetry(
-          xmlUrl.toString(),
+          url.toString(),
           {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: fetchHeaders,
           },
           i === endpoints.length - 1 ? 2 : 0,
         );
@@ -1468,10 +1503,17 @@ export class ErpInvoicesCoreService {
     }
   }
 
-  async reparseXml(id: string, token?: string): Promise<ErpInvoice> {
+  async reparseXml(
+    id: string,
+    token?: string,
+    cookies?: string,
+  ): Promise<ErpInvoice> {
     let activeToken = token?.trim();
+    let activeCookies = cookies?.trim();
     if (!activeToken) {
-      activeToken = await this.getPortalToken();
+      const config = await this.getPortalConfig();
+      activeToken = config.token;
+      if (!activeCookies) activeCookies = config.cookies;
     }
     const invoiceResp = await this.findOne(id);
     let invoice = invoiceResp.data;
@@ -1482,7 +1524,7 @@ export class ErpInvoicesCoreService {
           'Hóa đơn này chưa có file XML đính kèm và không có token portal để tự tải.',
         );
       }
-      await this.downloadAndSaveXml(invoice as any, activeToken);
+      await this.downloadAndSaveXml(invoice as any, activeToken, activeCookies);
       const updatedResp = await this.findOne(id);
       invoice = updatedResp.data;
       if (!invoice.xmlFileKey) {
@@ -1562,10 +1604,17 @@ export class ErpInvoicesCoreService {
     }
   }
 
-  async bulkDownloadXml(token: string | undefined, direction: 'IN' | 'OUT') {
+  async bulkDownloadXml(
+    token: string | undefined,
+    cookies: string | undefined,
+    direction: 'IN' | 'OUT',
+  ) {
     let activeToken = token?.trim();
+    let activeCookies = cookies?.trim();
     if (!activeToken) {
-      activeToken = await this.getPortalToken();
+      const config = await this.getPortalConfig();
+      activeToken = config.token;
+      if (!activeCookies) activeCookies = config.cookies;
     }
     if (!activeToken) throw new BadRequestException('token is required');
     if (!token) throw new BadRequestException('Token portal là bắt buộc.');
@@ -1610,7 +1659,7 @@ export class ErpInvoicesCoreService {
 
       for (const inv of invoices) {
         try {
-          await this.downloadAndSaveXml(inv as any, activeToken);
+          await this.downloadAndSaveXml(inv as any, activeToken, activeCookies);
           current++;
 
           this.progress$.next({
@@ -1650,24 +1699,32 @@ export class ErpInvoicesCoreService {
     };
   }
 
-  async syncDetailFromPortal(id: string, token?: string): Promise<ErpInvoice> {
+  async syncDetailFromPortal(
+    id: string,
+    token?: string,
+    cookies?: string,
+  ): Promise<ErpInvoice> {
     let activeToken = token?.trim();
+    let activeCookies = cookies?.trim();
     if (!activeToken) {
-      activeToken = await this.getPortalToken();
+      const config = await this.getPortalConfig();
+      activeToken = config.token;
+      if (!activeCookies) activeCookies = config.cookies;
     }
     if (!activeToken)
       throw new BadRequestException('Token portal là bắt buộc.');
     const invoiceResp = await this.findOne(id);
     const invoice = invoiceResp.data as any;
 
-    await this.syncInvoiceDetailFromJson(invoice, activeToken);
+    await this.syncInvoiceDetailFromJson(invoice, activeToken, activeCookies);
     return (await this.findOne(id)).data as ErpInvoice;
   }
 
   private async syncInvoiceDetailFromJson(
     invoice: ErpInvoice,
     token: string,
-  ): Promise<void> {
+    cookies?: string,
+  ): Promise<string | undefined> {
     try {
       let endpoints: string[] = [];
       if (invoice.taxInvoiceType === 'CASH_REGISTER') {
@@ -1689,10 +1746,17 @@ export class ErpInvoicesCoreService {
         url.searchParams.set('shdon', invoice.invoiceNo);
         url.searchParams.set('khmshdon', '1');
 
+        const fetchHeaders: Record<string, string> = {
+          Authorization: `Bearer ${token}`,
+        };
+        if (cookies) {
+          fetchHeaders['Cookie'] = cookies;
+        }
+
         res = await this.fetchWithRetry(
           url.toString(),
           {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: fetchHeaders,
           },
           i === endpoints.length - 1 ? 2 : 0,
         );
@@ -1745,10 +1809,13 @@ export class ErpInvoicesCoreService {
       this.logger.log(
         `Invoice details synced from JSON for ${invoice.invoiceNo}`,
       );
+
+      return json.id || json.tgmtt;
     } catch (err) {
       this.logger.warn(
         `syncInvoiceDetailFromJson error for ${invoice.invoiceNo}: ${(err as Error).message}`,
       );
+      return undefined;
     }
   }
 
@@ -1766,9 +1833,17 @@ export class ErpInvoicesCoreService {
           ...options,
           headers: {
             'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
             Accept: 'application/json, text/plain, */*',
             'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            Referer: 'https://hoadondientu.gdt.gov.vn/tra-cuu/tra-cuu-hoa-don',
+            'sec-ch-ua':
+              '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
             ...(options?.headers || {}),
           },
           signal: controller.signal,
@@ -1838,21 +1913,19 @@ export class ErpInvoicesCoreService {
     await this.repository.save(invoice);
   }
 
-  async checkTokenValid(token: string): Promise<boolean> {
+  async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
     if (!token) return false;
     try {
       const url =
         'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase?sort=tdlap%3Adesc&size=1';
-      const res = await fetch(url, {
+      const res = await this.fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: 'application/json, text/plain, */*',
-          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+          ...(cookies ? { Cookie: cookies } : {}),
         },
       });
-      return res.status === 200;
+      // 401/403 means expired. 500 could just be a missing date filter on this query.
+      return res.status !== 401 && res.status !== 403;
     } catch (e) {
       return false;
     }
