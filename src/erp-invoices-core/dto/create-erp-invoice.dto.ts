@@ -161,6 +161,18 @@ export class CreateErpInvoiceDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
+  buyerPersonalName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  buyerCccd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   buyerAddress?: string;
 
   // Tài chính
