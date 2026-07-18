@@ -60,4 +60,8 @@ export class NotificationsService {
   async deleteNotification(id: string, userId: string): Promise<void> {
     await this.repository.delete({ id, userId });
   }
+
+  async deleteAllForUser(userId: string): Promise<void> {
+    await this.repository.delete({ userId });
+  }
 }

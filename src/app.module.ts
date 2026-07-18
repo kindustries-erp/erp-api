@@ -45,7 +45,9 @@ import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    ...(process.env.NODE_ENV === 'production'
+      ? [ScheduleModule.forRoot()]
+      : []),
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
