@@ -41,9 +41,14 @@ import { KgaraApiCoreModule } from './kgara-api-core/kgara-api-core.module';
 import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 
 @Module({
   imports: [
+    ...(process.env.APP_ENV?.endsWith('-production') ||
+    process.env.NODE_ENV === 'production'
+      ? [ScheduleModule.forRoot()]
+      : []),
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
@@ -113,6 +118,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AccountingCoreModule,
     PublicWarrantyModule,
     NotificationsModule,
+    DashboardCoreModule,
   ],
   controllers: [AppController],
   providers: [

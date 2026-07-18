@@ -21,6 +21,16 @@ export class ErpInvoice {
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
 
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'invoice_no_normalized',
+    nullable: true,
+    insert: false,
+    update: false,
+  })
+  invoiceNoNormalized: string | null;
+
   @Column({ type: 'varchar', length: 64, name: 'serial_no', nullable: true })
   serialNo: string | null;
 
@@ -39,6 +49,29 @@ export class ErpInvoice {
 
   @Column({ type: 'varchar', length: 255, name: 'external_id', nullable: true })
   externalId: string | null;
+
+  @Column({ type: 'int', name: 'tax_invoice_status', nullable: true })
+  taxInvoiceStatus: number | null;
+
+  @Column({ type: 'int', name: 'tax_process_status', nullable: true })
+  taxProcessStatus: number | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'tax_invoice_type',
+    nullable: true,
+  })
+  taxInvoiceType: string | null;
+
+  @Column({ type: 'boolean', name: 'is_valid', default: false })
+  isValid: boolean;
+
+  @Column({ type: 'timestamptz', name: 'validated_at', nullable: true })
+  validatedAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'validated_by', nullable: true })
+  validatedBy: string | null;
 
   // --- Bên bán ---
   @Column({ type: 'varchar', length: 255, name: 'seller_name', nullable: true })
@@ -66,6 +99,22 @@ export class ErpInvoice {
   // --- Bên mua ---
   @Column({ type: 'varchar', length: 255, name: 'buyer_name', nullable: true })
   buyerName: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'buyer_personal_name',
+    nullable: true,
+  })
+  buyerPersonalName: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'buyer_cccd',
+    nullable: true,
+  })
+  buyerCccd: string | null;
 
   @Column({
     type: 'varchar',
@@ -196,6 +245,21 @@ export class ErpInvoice {
 
   @Column({ type: 'uuid', name: 'xml_import_id', nullable: true })
   xmlImportId: string | null;
+
+  // --- Hạch toán kế toán ---
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'posting_status',
+    default: 'UNPOSTED',
+  })
+  postingStatus: string;
+
+  @Column({ type: 'date', name: 'posting_date', nullable: true })
+  postingDate: string | null;
+
+  @Column({ type: 'uuid', name: 'journal_entry_id', nullable: true })
+  journalEntryId: string | null;
 
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;

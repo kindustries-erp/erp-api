@@ -30,16 +30,20 @@ import {
   parseVietnamInvoiceXml,
   XmlParseError,
 } from './xml-parser/vietnam-invoice-xml.parser';
+import { normalizeInvoiceNo } from './utils/normalize-invoice-no';
 import AdmZip from 'adm-zip';
 import * as ExcelJS from 'exceljs';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
+import { PostInvoiceDto } from './dto/post-invoice.dto';
 
 export interface ErpInvoiceQuery {
   direction?: string;
   search?: string;
   seller_name?: string;
   buyer_name?: string;
+  partner_tax_code?: string;
   date_from?: string;
   date_to?: string;
   status?: string;
@@ -51,6 +55,7 @@ export interface ErpInvoiceQuery {
   export_type?: 'summary' | 'detailed';
   column_search?: string;
   column_filters?: string;
+  is_valid?: string;
 }
 
 @Injectable()
@@ -73,6 +78,7 @@ export class ErpInvoicesCoreService {
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
   private async loadNetOffAmounts(invoices: ErpInvoice[]) {
@@ -117,8 +123,11 @@ export class ErpInvoicesCoreService {
     }
 
     let selectField = '';
-    if (column === 'invoiceDate') selectField = 'inv.invoice_date';
-    else if (column === 'serialNo') selectField = 'inv.serial_no';
+    let isDateColumn = false;
+    if (column === 'invoiceDate') {
+      selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'serialNo') selectField = 'inv.serial_no';
     else if (column === 'invoiceNo') selectField = 'inv.invoice_no';
     else if (column === 'partner') {
       if (direction === 'IN') selectField = 'inv.seller_name';
@@ -139,8 +148,13 @@ export class ErpInvoicesCoreService {
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
-    qb.andWhere(`${selectField} IS NOT NULL`);
-    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    if (isDateColumn) {
+      qb.andWhere('inv.invoice_date IS NOT NULL');
+      qb.andWhere(`${selectField} != ''`);
+    } else {
+      qb.andWhere(`${selectField} IS NOT NULL`);
+      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    }
 
     if (filtersStr) {
       try {
@@ -150,7 +164,8 @@ export class ErpInvoicesCoreService {
           if (col === column) continue;
 
           let filterField = '';
-          if (col === 'invoiceDate') filterField = 'inv.invoice_date';
+          if (col === 'invoiceDate')
+            filterField = `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`;
           else if (col === 'serialNo') filterField = 'inv.serial_no';
           else if (col === 'invoiceNo') filterField = 'inv.invoice_no';
           else if (col === 'partner') {
@@ -340,6 +355,9 @@ export class ErpInvoicesCoreService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.is_valid) {
+      where.isValid = query.is_valid === 'true' || query.is_valid === '1';
+    }
     let effectiveDateTo = query.date_to;
     if (effectiveDateTo && effectiveDateTo.length === 10) {
       effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
@@ -368,6 +386,7 @@ export class ErpInvoicesCoreService {
       query.search ||
       query.seller_name ||
       query.buyer_name ||
+      query.partner_tax_code ||
       query.tag_id ||
       query.sort_by === 'invoiceNo' ||
       Object.keys(columnSearch).length > 0 ||
@@ -382,6 +401,9 @@ export class ErpInvoicesCoreService {
         })
         .andWhere(query.status ? 'inv.status = :status' : '1=1', {
           status: query.status,
+        })
+        .andWhere(query.is_valid ? 'inv.is_valid = :isValid' : '1=1', {
+          isValid: query.is_valid === 'true' || query.is_valid === '1',
         })
         .andWhere(query.date_from ? 'inv.invoice_date >= :dateFrom' : '1=1', {
           dateFrom: query.date_from,
@@ -422,6 +444,14 @@ export class ErpInvoicesCoreService {
         qb.andWhere('inv.buyer_name ILIKE :bn', {
           bn: `%${query.buyer_name}%`,
         });
+      }
+      if (query.partner_tax_code) {
+        qb.andWhere(
+          '(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)',
+          {
+            ptc: query.partner_tax_code,
+          },
+        );
       }
       if (query.tag_id) {
         qb.andWhere(
@@ -519,13 +549,17 @@ export class ErpInvoicesCoreService {
 
         if (key === 'status') {
           qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+        } else if (key === 'postingStatus') {
+          qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
+            postingStatusVals: vals,
+          });
         } else if (key === 'branchId') {
           qb.andWhere('inv.branch_id IN (:...branchVals)', {
             branchVals: vals,
           });
         } else if (key === 'invoiceDate') {
           qb.andWhere(
-            'CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)',
+            `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
             { invoiceDateVals: vals },
           );
         } else if (key === 'serialNo') {
@@ -568,6 +602,14 @@ export class ErpInvoicesCoreService {
           }
         } else if (key === 'description') {
           qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+        } else if (key === 'isValid') {
+          const validFilter = vals.includes('true') || vals.includes('1');
+          const invalidFilter = vals.includes('false') || vals.includes('0');
+          if (validFilter && !invalidFilter) {
+            qb.andWhere('inv.is_valid = true');
+          } else if (invalidFilter && !validFilter) {
+            qb.andWhere('inv.is_valid = false');
+          }
         } else if (key === 'preVatAmount') {
           qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
             preVatVals: vals,
@@ -592,6 +634,43 @@ export class ErpInvoicesCoreService {
         } else if (key === 'licensePlate') {
           qb.andWhere('inv.license_plate IN (:...plateVals)', {
             plateVals: vals,
+          });
+        } else if (key === 'attachments') {
+          const conditions: string[] = [];
+          if (vals.includes('has_pdf')) {
+            conditions.push(
+              "(inv.pdf_file_key IS NOT NULL OR (inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null'))",
+            );
+          }
+          if (vals.includes('has_xml')) {
+            conditions.push('inv.xml_file_key IS NOT NULL');
+          }
+          if (vals.includes('no_pdf')) {
+            conditions.push(
+              "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null'))",
+            );
+          }
+          if (vals.includes('no_xml')) {
+            conditions.push('inv.xml_file_key IS NULL');
+          }
+          if (conditions.length > 0) {
+            qb.andWhere(`(${conditions.join(' OR ')})`);
+          }
+        } else if (key === 'taxInvoiceType') {
+          qb.andWhere('inv.tax_invoice_type IN (:...taxInvoiceTypeVals)', {
+            taxInvoiceTypeVals: vals,
+          });
+        } else if (key === 'taxInvoiceStatus') {
+          qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
+            taxInvoiceStatusVals: vals
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v)),
+          });
+        } else if (key === 'taxProcessStatus') {
+          qb.andWhere('inv.tax_process_status IN (:...taxProcessStatusVals)', {
+            taxProcessStatusVals: vals
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v)),
           });
         }
       });
@@ -682,6 +761,48 @@ export class ErpInvoicesCoreService {
     return { message: 'Tạo thành công', data: this.toDto(saved) };
   }
 
+  async bulkSetBranch(ids: string[], branchId: string | null) {
+    if (!ids || !ids.length) {
+      return { updated: 0, ids: [] };
+    }
+
+    // Lọc ra các hóa đơn hợp lệ (chưa bị xóa)
+    const existingInvoices = await this.repository.find({
+      where: { id: In(ids), isDeleted: false },
+      select: ['id'],
+    });
+
+    const validIds = existingInvoices.map((inv) => inv.id);
+    if (validIds.length === 0) {
+      return { updated: 0, ids: [] };
+    }
+
+    // Bulk update branchId
+    await this.repository.update({ id: In(validIds) }, { branchId });
+
+    // Sync branch to journal entries for POSTED invoices
+    const postedInvoices = await this.repository.find({
+      where: { id: In(validIds), postingStatus: 'POSTED', isDeleted: false },
+      select: ['id'],
+    });
+
+    if (postedInvoices.length > 0 && branchId) {
+      Promise.all(
+        postedInvoices.map((inv) =>
+          this.accountingCoreService
+            .updateJournalEntryBranch(inv.id, 'INVOICE', branchId)
+            .catch((e) =>
+              this.logger.warn(
+                `UC2 bulk branch sync failed for ${inv.id}: ${e.message}`,
+              ),
+            ),
+        ),
+      ).catch(() => {});
+    }
+
+    return { updated: validIds.length, ids: validIds };
+  }
+
   async update(id: string, dto: UpdateErpInvoiceDto) {
     const existing = await this.repository.findOne({
       where: { id, isDeleted: false },
@@ -698,6 +819,10 @@ export class ErpInvoicesCoreService {
       updatePayload.discountAmount = String(dto.discountAmount);
     if (dto.totalAmount != null)
       updatePayload.totalAmount = String(dto.totalAmount);
+
+    // Capture before merge for branch sync
+    const oldBranchId = existing.branchId;
+    const wasPosted = existing.postingStatus === 'POSTED';
 
     // Merge entity first so that cascade update works
     this.repository.merge(existing, updatePayload);
@@ -725,6 +850,20 @@ export class ErpInvoicesCoreService {
     this.extractInvoiceMetadata(existing);
 
     await this.repository.save(existing);
+
+    // Sync journal entry branch if changed
+    if (
+      wasPosted &&
+      dto.branchId !== undefined &&
+      dto.branchId !== oldBranchId &&
+      dto.branchId
+    ) {
+      this.accountingCoreService
+        .updateJournalEntryBranch(id, 'INVOICE', dto.branchId)
+        .catch((e) =>
+          this.logger.warn(`UC2 branch sync failed for ${id}: ${e.message}`),
+        );
+    }
 
     // Refresh journal entries for any linked bank transactions in case branchId or description changed
     const netOffs = await this.repository.manager.find(
@@ -892,19 +1031,22 @@ export class ErpInvoicesCoreService {
             {
               basePath:
                 'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
-              extraParams: '',
+              ttxlyList: [5, 6],
+              invoiceType: 'STANDARD',
             },
             {
               basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
-              extraParams: ';ttxly==8',
+                'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+              ttxlyList: [8],
+              invoiceType: 'CASH_REGISTER',
             },
           ]
         : [
             {
               basePath:
                 'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
-              extraParams: '',
+              ttxlyList: [],
+              invoiceType: 'STANDARD',
             },
           ];
 
@@ -920,6 +1062,7 @@ export class ErpInvoicesCoreService {
         let totalFromPortal = 0;
         let pagesFetched = 0;
         const maxPages = 50; // max pages per endpoint
+        let isFirstRequest = true;
 
         for (
           let d = new Date(startDate);
@@ -932,61 +1075,74 @@ export class ErpInvoicesCoreService {
           const formattedDate = `${day}/${m}/${y}`;
 
           for (const config of queryConfigs) {
-            let state: string | null = null;
-            let pathPagesFetched = 0;
+            const loopTtxlys =
+              config.ttxlyList.length > 0 ? config.ttxlyList : [null];
 
-            do {
-              const url = new URL(config.basePath);
-              url.searchParams.set('sort', 'tdlap:desc');
-              url.searchParams.set('size', '50');
-              url.searchParams.set(
-                'search',
-                `tdlap=ge=${formattedDate}T00:00:00;tdlap=le=${formattedDate}T23:59:59${config.extraParams}`,
-              );
-              if (state) {
-                url.searchParams.set('state', state);
-              }
+            for (const currentTtxly of loopTtxlys) {
+              let state: string | null = null;
+              let pathPagesFetched = 0;
 
-              this.progress$.next({
-                processId: 'sync-progress',
-                type: 'bulk',
-                total: 100, // Unknown total pages initially
-                current: pagesFetched,
-                message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (ngày ${formattedDate}, trang ${pagesFetched + 1})...`,
-                completed: false,
-              });
+              do {
+                const url = new URL(config.basePath);
+                url.searchParams.set('sort', 'tdlap:desc');
+                url.searchParams.set('size', '50');
 
-              const response = await this.fetchWithRetry(url, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!response.ok)
-                throw new BadRequestException(
-                  `Portal request failed with status ${response.status}`,
-                );
+                let searchStr = `tdlap=ge=${formattedDate}T00:00:00;tdlap=le=${formattedDate}T23:59:59`;
+                if (currentTtxly !== null) {
+                  searchStr += `;ttxly==${currentTtxly}`;
+                }
+                url.searchParams.set('search', searchStr);
 
-              const payload = (await response.json()) as {
-                datas?: any[];
-                total?: number;
-                state?: string;
-              };
+                if (state) {
+                  url.searchParams.set('state', state);
+                }
 
-              if (pathPagesFetched === 0) {
-                totalFromPortal += payload.total ?? 0;
-              }
+                this.progress$.next({
+                  processId: 'sync-progress',
+                  type: 'bulk',
+                  total: 100, // Unknown total pages initially
+                  current: pagesFetched,
+                  message: `Đang lấy danh sách hóa đơn từ cơ quan thuế (ngày ${formattedDate}, trang ${pagesFetched + 1})...`,
+                  completed: false,
+                });
 
-              if (payload.datas && payload.datas.length > 0) {
-                rawItems.push(...payload.datas);
-              }
+                if (!isFirstRequest) {
+                  const delay = (4 + Math.random() * 3) * 1000;
+                  await this.sleep(Math.round(delay));
+                }
+                isFirstRequest = false;
 
-              state = payload.state ?? null;
-              pathPagesFetched++;
-              pagesFetched++;
+                const response = await this.fetchWithRetry(url, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok)
+                  throw new BadRequestException(
+                    `Portal request failed with status ${response.status}`,
+                  );
 
-              if (state && pathPagesFetched < maxPages) {
-                const delay = (2 + Math.random() * 3) * 1000;
-                await this.sleep(Math.round(delay));
-              }
-            } while (state && pathPagesFetched < maxPages);
+                const payload = (await response.json()) as {
+                  datas?: any[];
+                  total?: number;
+                  state?: string;
+                };
+
+                if (pathPagesFetched === 0) {
+                  totalFromPortal += payload.total ?? 0;
+                }
+
+                if (payload.datas && payload.datas.length > 0) {
+                  const mappedDatas = payload.datas.map((d: any) => ({
+                    ...d,
+                    __taxInvoiceType: config.invoiceType,
+                  }));
+                  rawItems.push(...mappedDatas);
+                }
+
+                state = payload.state ?? null;
+                pathPagesFetched++;
+                pagesFetched++;
+              } while (state && pathPagesFetched < maxPages);
+            }
           }
         }
 
@@ -1001,10 +1157,38 @@ export class ErpInvoicesCoreService {
             const invoiceNo = String(raw.shdon ?? '');
             const serialNo = raw.khhdon ?? null;
 
+            const taxInvoiceStatus =
+              raw.tthai !== undefined && raw.tthai !== null
+                ? Number(raw.tthai)
+                : null;
+            const taxProcessStatus =
+              raw.ttxly !== undefined && raw.ttxly !== null
+                ? Number(raw.ttxly)
+                : null;
+            const taxInvoiceType = raw.__taxInvoiceType || 'STANDARD';
+
             const existing = await this.repository.findOne({
               where: { invoiceNo, serialNo, direction, isDeleted: false },
             });
             if (existing) {
+              let updated = false;
+              if (existing.taxInvoiceStatus !== taxInvoiceStatus) {
+                existing.taxInvoiceStatus = taxInvoiceStatus;
+                updated = true;
+              }
+              if (existing.taxProcessStatus !== taxProcessStatus) {
+                existing.taxProcessStatus = taxProcessStatus;
+                updated = true;
+              }
+              if (existing.taxInvoiceType !== taxInvoiceType) {
+                existing.taxInvoiceType = taxInvoiceType;
+                updated = true;
+              }
+
+              if (updated) {
+                await this.repository.save(existing);
+              }
+
               // Self-heal: Nếu hóa đơn cũ thiếu XML hoặc thiếu Diễn giải -> Xếp hàng tải lại
               if (!existing.xmlFileKey || !existing.description) {
                 backgroundSyncIds.push(existing.id);
@@ -1019,13 +1203,20 @@ export class ErpInvoicesCoreService {
               serialNo,
               invoiceDate: this.parsePortalIsoDate(raw.tdlap),
               direction,
-              status: Number(raw.tthai) === 2 ? 'CANCELLED' : 'CONFIRMED',
+              status: [4, 6].includes(Number(raw.tthai))
+                ? 'CANCELLED'
+                : 'CONFIRMED',
+              taxInvoiceStatus,
+              taxProcessStatus,
+              taxInvoiceType,
               sellerTaxCode: raw.nbmst ?? null,
               sellerName: raw.nbten ?? null,
               sellerAddress: raw.nbdchi ?? null,
               buyerTaxCode: raw.nmmst ?? raw.mst ?? null,
               buyerName: raw.nmten ?? null,
               buyerAddress: raw.nmdchi ?? null,
+              buyerPersonalName: raw.nmtnmua ?? null,
+              buyerCccd: raw.nmcmnd ?? null,
               invoiceType: raw.thdon ?? null,
               preVatAmount: String(raw.tgtcthue ?? 0),
               vatRate,
@@ -1121,14 +1312,13 @@ export class ErpInvoicesCoreService {
 
     let current = 0;
 
-    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-      const batch = targets.slice(i, i + BATCH_SIZE);
-
-      await Promise.allSettled(
-        batch.map((inv) => this.downloadAndSaveXml(inv, token)),
+    for (let i = 0; i < targets.length; i++) {
+      const inv = targets[i];
+      await this.downloadAndSaveXml(inv, token).catch((e) =>
+        this.logger.error(`Error downloading XML for ${inv.invoiceNo}:`, e),
       );
 
-      current += batch.length;
+      current++;
       this.progress$.next({
         processId,
         type: 'sync',
@@ -1138,9 +1328,9 @@ export class ErpInvoicesCoreService {
         completed: false,
       });
 
-      // Random sleep 5-10s giữa batch (trừ batch cuối)
-      if (i + BATCH_SIZE < targets.length) {
-        const delay = (5 + Math.random() * 5) * 1000;
+      // Bắt buộc chờ 4-7s giữa MỖI hóa đơn để tránh 429
+      if (i + 1 < targets.length) {
+        const delay = (4 + Math.random() * 3) * 1000;
         await this.sleep(Math.round(delay));
       }
     }
@@ -1164,23 +1354,45 @@ export class ErpInvoicesCoreService {
     // 1. Luôn ưu tiên lấy chi tiết từ API JSON trước
     await this.syncInvoiceDetailFromJson(invoice, token);
 
-    // 2. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
-    try {
-      const xmlUrl = new URL(
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/export-xml',
-      );
-      xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
-      xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
-      xmlUrl.searchParams.set('shdon', invoice.invoiceNo);
-      // khmshdon is not stored in entity; default to '1'
-      xmlUrl.searchParams.set('khmshdon', '1');
+    // 2. Nghỉ 2s trước khi tải XML để tránh dồn dập
+    await this.sleep(2000);
 
-      const res = await this.fetchWithRetry(xmlUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
+    // 3. Tải XML để làm chứng từ (nếu lỗi thì bỏ qua)
+    try {
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
+
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const xmlUrl = new URL(
+          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/export-xml`,
+        );
+        xmlUrl.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        xmlUrl.searchParams.set('khhdon', invoice.serialNo ?? '');
+        xmlUrl.searchParams.set('shdon', invoice.invoiceNo);
+        xmlUrl.searchParams.set('khmshdon', '1');
+
+        res = await this.fetchWithRetry(
+          xmlUrl.toString(),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          i === endpoints.length - 1 ? 2 : 0,
+        );
+
+        if (res.ok) break;
+      }
+
+      if (!res || !res.ok) {
         this.logger.warn(
-          `XML download failed for invoice ${invoice.invoiceNo}: HTTP ${res.status}`,
+          `XML download failed for invoice ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
         );
         return;
       }
@@ -1325,6 +1537,9 @@ export class ErpInvoicesCoreService {
         sellerAddress: parsedXml.sellerAddress ?? undefined,
         buyerName: parsedXml.buyerName ?? undefined,
         buyerAddress: parsedXml.buyerAddress ?? undefined,
+        buyerPersonalName: parsedXml.buyerPersonalName ?? undefined,
+        buyerCccd: parsedXml.buyerCccd ?? undefined,
+        buyerTaxCode: parsedXml.buyerTaxCode ?? undefined,
         description: parsedXml.description ?? undefined,
         notes: newNotes || undefined,
         items: parsedXml.items.map((i) => ({
@@ -1454,20 +1669,40 @@ export class ErpInvoicesCoreService {
     token: string,
   ): Promise<void> {
     try {
-      const url = new URL(
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/detail',
-      );
-      url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
-      url.searchParams.set('khhdon', invoice.serialNo ?? '');
-      url.searchParams.set('shdon', invoice.invoiceNo);
-      url.searchParams.set('khmshdon', '1');
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
 
-      const res = await this.fetchWithRetry(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const url = new URL(
+          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/detail`,
+        );
+        url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        url.searchParams.set('khhdon', invoice.serialNo ?? '');
+        url.searchParams.set('shdon', invoice.invoiceNo);
+        url.searchParams.set('khmshdon', '1');
+
+        res = await this.fetchWithRetry(
+          url.toString(),
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          i === endpoints.length - 1 ? 2 : 0,
+        );
+
+        if (res.ok) break;
+      }
+
+      if (!res || !res.ok) {
         this.logger.warn(
-          `Failed to fetch JSON detail for ${invoice.invoiceNo}: HTTP ${res.status}`,
+          `Failed to fetch JSON detail for ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
         );
         return;
       }
@@ -1500,6 +1735,9 @@ export class ErpInvoicesCoreService {
         sellerAddress: json.nbdchi,
         buyerName: json.nmten,
         buyerAddress: json.nmdchi,
+        buyerPersonalName: json.nmtnmua,
+        buyerCccd: json.nmcmnd,
+        buyerTaxCode: json.mst,
         description: items.length > 0 ? items[0].description : undefined,
         items,
       });
@@ -1524,11 +1762,25 @@ export class ErpInvoicesCoreService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
-        const res = await fetch(url, { ...options, signal: controller.signal });
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: 'application/json, text/plain, */*',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            ...(options?.headers || {}),
+          },
+          signal: controller.signal,
+        });
         clearTimeout(timeoutId);
 
         if (res.ok) {
           return res;
+        }
+
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('GDT_TOKEN_EXPIRED');
         }
 
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
@@ -1559,6 +1811,51 @@ export class ErpInvoicesCoreService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async setInvoiceValid(
+    id: string,
+    isValid: boolean,
+    userId: string,
+  ): Promise<void> {
+    const invoice = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (isValid) {
+      invoice.isValid = true;
+      invoice.validatedAt = new Date();
+      invoice.validatedBy = userId;
+    } else {
+      invoice.isValid = false;
+      invoice.validatedAt = null;
+      invoice.validatedBy = null;
+    }
+
+    await this.repository.save(invoice);
+  }
+
+  async checkTokenValid(token: string): Promise<boolean> {
+    if (!token) return false;
+    try {
+      const url =
+        'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase?sort=tdlap%3Adesc&size=1';
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+      });
+      return res.status === 200;
+    } catch (e) {
+      return false;
+    }
   }
 
   private resolvePortalVatRate(raw: any): string | null {
@@ -1628,12 +1925,13 @@ export class ErpInvoicesCoreService {
         // 1. Parse XML
         const parsed = parseVietnamInvoiceXml(file.buffer.toString('utf-8'));
 
-        // 2. Kiểm tra duplicate: invoice_no + seller_tax_code
+        // 2. Kiểm tra duplicate: invoiceNoNormalized + seller_tax_code
+        const invoiceNoNorm = normalizeInvoiceNo(parsed.invoiceNo);
         const existing = await this.repository.findOne({
           where: {
-            invoiceNo: parsed.invoiceNo,
+            invoiceNoNormalized: invoiceNoNorm || undefined,
             sellerTaxCode: parsed.sellerTaxCode ?? undefined,
-          },
+          } as any, // Typecast to any to avoid TypeORM type inference issues
         });
 
         if (existing) {
@@ -1682,6 +1980,7 @@ export class ErpInvoicesCoreService {
 
         const invoice = this.repository.create({
           invoiceNo: parsed.invoiceNo,
+          invoiceNoNormalized: invoiceNoNorm || undefined,
           serialNo: parsed.serialNo,
           invoiceDate: parsed.invoiceDate,
           direction,
@@ -1691,6 +1990,8 @@ export class ErpInvoicesCoreService {
           sellerAddress: parsed.sellerAddress,
           sellerBank: parsed.sellerBank,
           buyerName: parsed.buyerName,
+          buyerPersonalName: parsed.buyerPersonalName,
+          buyerCccd: parsed.buyerCccd,
           buyerTaxCode: parsed.buyerTaxCode,
           buyerAddress: parsed.buyerAddress,
           description: parsed.description,
@@ -1724,6 +2025,304 @@ export class ErpInvoicesCoreService {
       created,
       skipped,
       errors,
+    };
+  }
+
+  async bulkImportMixed(
+    files: Array<{ filename: string; buffer: Buffer; mimetype: string }>,
+    direction: 'IN' | 'OUT',
+  ): Promise<BulkImportResult> {
+    const importId = crypto.randomUUID();
+    const skipped: BulkImportSkippedItem[] = [];
+    const errors: BulkImportErrorItem[] = [];
+    let created = 0;
+    const pdfAttached: any[] = [];
+    const pdfOrphans: any[] = [];
+
+    // 1. Phân loại files & Giải nén ZIP
+    const xmlEntries: { filename: string; buffer: Buffer }[] = [];
+    const pdfEntries: { filename: string; buffer: Buffer; mimetype: string }[] =
+      [];
+
+    for (const f of files) {
+      const lowerName = f.filename.toLowerCase();
+      if (lowerName.endsWith('.zip') || f.mimetype === 'application/zip') {
+        try {
+          const zip = new AdmZip(f.buffer);
+          const zipEntries = zip.getEntries();
+          for (const entry of zipEntries) {
+            if (entry.isDirectory) continue;
+            const entryName = entry.entryName;
+            const ext = entryName.split('.').pop()?.toLowerCase();
+            if (ext === 'xml') {
+              xmlEntries.push({ filename: entryName, buffer: entry.getData() });
+            } else if (ext === 'pdf') {
+              pdfEntries.push({
+                filename: entryName,
+                buffer: entry.getData(),
+                mimetype: 'application/pdf',
+              });
+            }
+          }
+        } catch (e) {
+          errors.push({
+            filename: f.filename,
+            reason: `Không thể giải nén file ZIP: ${(e as Error).message}`,
+          });
+        }
+      } else if (
+        lowerName.endsWith('.xml') ||
+        f.mimetype === 'application/xml' ||
+        f.mimetype === 'text/xml'
+      ) {
+        xmlEntries.push(f);
+      } else if (
+        lowerName.endsWith('.pdf') ||
+        f.mimetype === 'application/pdf'
+      ) {
+        pdfEntries.push(f);
+      } else {
+        // Skip unknown files
+      }
+    }
+
+    // 2. Build Map cho PDF theo basename
+    // basename: "Inv001" từ "Inv001.pdf"
+    const pdfMap = new Map<
+      string,
+      { filename: string; buffer: Buffer; mimetype: string }
+    >();
+    for (const p of pdfEntries) {
+      const basename = p.filename
+        .substring(0, p.filename.lastIndexOf('.'))
+        .toLowerCase();
+      pdfMap.set(basename, p);
+    }
+
+    // 3. Xử lý XML
+    for (const file of xmlEntries) {
+      try {
+        const parsed = parseVietnamInvoiceXml(file.buffer.toString('utf-8'));
+        const invoiceNoNorm = normalizeInvoiceNo(parsed.invoiceNo);
+
+        let existingInvoice = await this.repository.findOne({
+          where: {
+            invoiceNoNormalized: invoiceNoNorm || undefined,
+            sellerTaxCode: parsed.sellerTaxCode ?? undefined,
+            direction,
+          } as any,
+        });
+
+        const basename = file.filename
+          .substring(0, file.filename.lastIndexOf('.'))
+          .toLowerCase();
+        const matchedPdf = pdfMap.get(basename);
+
+        if (existingInvoice) {
+          skipped.push({
+            filename: file.filename,
+            invoiceNo: parsed.invoiceNo,
+            sellerName: parsed.sellerName,
+            sellerTaxCode: parsed.sellerTaxCode,
+            reason: 'DUPLICATE',
+          });
+
+          // Dù duplicate XML, nếu có PDF đi kèm và hóa đơn chưa có PDF này, attach nó vào (optional)
+          // Ở đây ta xoá PDF khỏi map để không đưa vào orphan
+          if (matchedPdf) {
+            pdfMap.delete(basename);
+          }
+          continue;
+        }
+
+        // Upload XML
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dateStr = parsed.invoiceDate || `${yyyy}-${mm}-01`;
+        const mst =
+          direction === 'IN' ? parsed.sellerTaxCode : parsed.buyerTaxCode;
+        const safeTax = (mst ?? 'unknown').replace(/[^\w]/g, '');
+        const safeSerial = (parsed.serialNo ?? 'unknown').replace(
+          /[^\w-]/g,
+          '_',
+        );
+        const safeNo = parsed.invoiceNo.replace(/[^\w-]/g, '_');
+
+        const fileName = `${dateStr}_${safeTax}_${safeSerial}_${safeNo}`;
+        const xmlKey = `invoices/${direction}/${yyyy}/${mm}/${fileName}.xml`;
+        let xmlUploaded = false;
+        try {
+          await this.r2.uploadBuffer(xmlKey, file.buffer, 'application/xml');
+          xmlUploaded = true;
+        } catch (r2Err) {
+          this.logger.warn(
+            `R2 upload failed for ${file.filename}: ${(r2Err as Error).message}`,
+          );
+        }
+
+        // Tạo record
+        let notes = '';
+        if (parsed.lookupCode || parsed.providerLink) {
+          notes = `[Lookup Info] Code: ${parsed.lookupCode ?? 'N/A'} - Link: ${parsed.providerLink ?? 'N/A'}`;
+        }
+
+        const newInvoiceData: any = {
+          invoiceNo: parsed.invoiceNo,
+          invoiceNoNormalized: invoiceNoNorm || undefined,
+          serialNo: parsed.serialNo,
+          invoiceDate: parsed.invoiceDate,
+          direction,
+          status: 'CONFIRMED',
+          sellerName: parsed.sellerName,
+          sellerTaxCode: parsed.sellerTaxCode,
+          sellerAddress: parsed.sellerAddress,
+          sellerBank: parsed.sellerBank,
+          buyerName: parsed.buyerName,
+          buyerPersonalName: parsed.buyerPersonalName,
+          buyerCccd: parsed.buyerCccd,
+          buyerTaxCode: parsed.buyerTaxCode,
+          buyerAddress: parsed.buyerAddress,
+          description: parsed.description,
+          notes: notes || undefined,
+          preVatAmount: String(parsed.preVatAmount),
+          vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
+          vatAmount: String(parsed.vatAmount),
+          discountAmount: String(parsed.discountAmount),
+          totalAmount: String(parsed.totalAmount),
+          xmlFileKey: xmlUploaded ? xmlKey : null,
+          xmlImportId: importId,
+          pdfFiles: [],
+        };
+        const newInvoice = this.repository.create(
+          newInvoiceData,
+        ) as any as ErpInvoice;
+
+        this.extractInvoiceMetadata(newInvoice);
+
+        // Xử lý PDF đi kèm XML
+        if (matchedPdf) {
+          pdfMap.delete(basename); // Remove from orphans
+
+          const ts = Date.now();
+          const safePdfName = matchedPdf.filename.replace(/[^\w.-]/g, '_');
+          const pdfKey = `invoices/${direction}/${yyyy}/${mm}/${safeNo}_${ts}_0_${safePdfName}`;
+          try {
+            await this.r2.uploadBuffer(
+              pdfKey,
+              matchedPdf.buffer,
+              matchedPdf.mimetype || 'application/pdf',
+            );
+            newInvoice.pdfFileKey = pdfKey;
+            newInvoice.pdfFiles = [
+              {
+                key: pdfKey,
+                filename: matchedPdf.filename,
+                uploadedAt: new Date().toISOString(),
+              },
+            ];
+            pdfAttached.push({
+              filename: matchedPdf.filename,
+              invoiceNo: newInvoice.invoiceNo,
+            });
+          } catch (r2Err) {
+            this.logger.warn(`R2 PDF upload failed for ${matchedPdf.filename}`);
+          }
+        }
+
+        await this.repository.save(newInvoice);
+        created++;
+      } catch (err) {
+        const reason =
+          err instanceof XmlParseError
+            ? err.message
+            : `Lỗi hệ thống: ${(err as Error).message}`;
+        errors.push({ filename: file.filename, reason });
+      }
+    }
+
+    // 4. Xử lý Orphans PDF (cố tìm trong DB)
+    for (const [basename, pdf] of pdfMap.entries()) {
+      // Tìm số hóa đơn và ký hiệu từ tên file.
+      // Dựa trên comment của user: "có thể ky hiệu và số hóa đơn bị đảo, hoặc là dính vào nhau"
+      // Lấy toàn bộ chữ số liên tiếp từ chuỗi, normalize để match invoiceNo
+      const digitsMatch = pdf.filename.match(/(\d{2,})/g);
+      let foundInvoice: any = null;
+
+      if (digitsMatch) {
+        // Thử tìm theo tất cả các cụm số xuất hiện trong tên file
+        for (const strNum of digitsMatch) {
+          const normNo = normalizeInvoiceNo(strNum);
+          if (!normNo) continue;
+
+          // Tìm xem có hóa đơn nào match invoiceNoNormalized không
+          // Để chính xác, chỉ tìm các hóa đơn có hướng (IN/OUT) tương ứng và thuộc đợt này
+          foundInvoice = await this.repository.findOne({
+            where: { invoiceNoNormalized: normNo, direction } as any,
+          });
+
+          if (foundInvoice) break;
+        }
+      }
+
+      if (foundInvoice) {
+        // Upload và attach vào foundInvoice
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const safeNo = foundInvoice.invoiceNo.replace(/[^\w-]/g, '_');
+        const ts = Date.now();
+        const safePdfName = pdf.filename.replace(/[^\w.-]/g, '_');
+        const pdfKey = `invoices/${direction}/${yyyy}/${mm}/${safeNo}_${ts}_orphan_${safePdfName}`;
+
+        try {
+          await this.r2.uploadBuffer(
+            pdfKey,
+            pdf.buffer,
+            pdf.mimetype || 'application/pdf',
+          );
+
+          const currentPdfFiles = Array.isArray(foundInvoice.pdfFiles)
+            ? [...foundInvoice.pdfFiles]
+            : [];
+          currentPdfFiles.push({
+            key: pdfKey,
+            filename: pdf.filename,
+            uploadedAt: new Date().toISOString(),
+          });
+
+          await this.repository.update(foundInvoice.id, {
+            pdfFiles: currentPdfFiles,
+            pdfFileKey: foundInvoice.pdfFileKey || pdfKey, // Set primary pdf nếu chưa có
+          } as any);
+
+          pdfAttached.push({
+            filename: pdf.filename,
+            invoiceNo: foundInvoice.invoiceNo,
+          });
+        } catch (r2Err) {
+          pdfOrphans.push({
+            filename: pdf.filename,
+            reason: 'R2 upload failed',
+          });
+        }
+      } else {
+        pdfOrphans.push({
+          filename: pdf.filename,
+          reason: 'Không tìm thấy hóa đơn khớp',
+        });
+      }
+    }
+
+    return {
+      importId,
+      direction,
+      total: files.length,
+      created,
+      skipped,
+      errors,
+      pdfAttached,
+      pdfOrphans,
     };
   }
 
@@ -1828,6 +2427,13 @@ export class ErpInvoicesCoreService {
     return { success: true, pdfFiles };
   }
 
+  async getPdfContent(invoiceId: string, fileKey: string): Promise<Buffer> {
+    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    if (!invoice)
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+    return this.r2.downloadBuffer(fileKey);
+  }
+
   async getPdfDownloadUrl(invoiceId: string, fileKey: string, inline = false) {
     const invoice = await this.repository.findOne({ where: { id: invoiceId } });
     if (!invoice)
@@ -1836,7 +2442,9 @@ export class ErpInvoicesCoreService {
     const file = Array.isArray(invoice.pdfFiles)
       ? invoice.pdfFiles.find((f) => f.key === fileKey)
       : null;
-    const filename = file ? file.filename : 'document.pdf';
+    const filename = file
+      ? file.filename
+      : fileKey.split('/').pop() || 'document.pdf';
 
     const url = await this.r2.getPresignedDownloadUrl(
       fileKey,
@@ -1884,6 +2492,118 @@ export class ErpInvoicesCoreService {
     }
 
     return zip.toBuffer();
+  }
+
+  async bulkDownloadFilesZip(
+    payload: { query: ErpInvoiceQuery; types: string[] },
+    res: any,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const archiver = require('archiver');
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
+    });
+
+    archive.on('error', (err: any) => {
+      this.logger.error(`Error during zip creation: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(500).send({ error: err.message });
+      }
+    });
+
+    archive.pipe(res);
+
+    const qb = this.repository.createQueryBuilder('inv');
+    qb.where('inv.is_deleted = false');
+
+    if (payload.query.date_from) {
+      qb.andWhere('inv.invoice_date >= :dateFrom', {
+        dateFrom: payload.query.date_from,
+      });
+    }
+    if (payload.query.date_to) {
+      qb.andWhere('inv.invoice_date <= :dateTo', {
+        dateTo: payload.query.date_to,
+      });
+    }
+    if (payload.query.direction) {
+      qb.andWhere('inv.direction = :direction', {
+        direction: payload.query.direction,
+      });
+    }
+    if (payload.query.status) {
+      qb.andWhere('inv.status = :status', { status: payload.query.status });
+    }
+    if (payload.query.search) {
+      qb.andWhere(
+        '(inv.invoice_no ILIKE :search OR inv.document_no ILIKE :search OR inv.seller_name ILIKE :search OR inv.buyer_name ILIKE :search)',
+        { search: `%${payload.query.search}%` },
+      );
+    }
+    // Limit to prevent system overload
+    qb.take(500);
+
+    const invoices = await qb.getMany();
+    let fileCount = 0;
+
+    for (const invoice of invoices) {
+      const partnerName =
+        invoice.direction === 'IN' ? invoice.sellerName : invoice.buyerName;
+      const taxCode =
+        invoice.direction === 'IN'
+          ? invoice.sellerTaxCode
+          : invoice.buyerTaxCode;
+      const sanitizedName = (partnerName || 'KhongTen')
+        .replace(/[\\/:"*?<>|]/g, '-')
+        .substring(0, 50);
+      const sanitizedTaxCode = (taxCode || 'KhongMST').replace(
+        /[\\/:"*?<>|]/g,
+        '-',
+      );
+      const folderName = `${sanitizedTaxCode} - ${sanitizedName}`;
+      const docNo = (invoice.invoiceNo || invoice.id).replace(
+        /[\\/:"*?<>|]/g,
+        '-',
+      );
+
+      if (payload.types.includes('pdf')) {
+        const files: any[] = Array.isArray(invoice.pdfFiles)
+          ? invoice.pdfFiles
+          : [];
+        if (files.length === 0 && invoice.pdfFileKey) {
+          files.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
+        }
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          try {
+            const stream = await this.r2.downloadStream(file.key);
+            const ext = file.filename?.split('.').pop() || 'pdf';
+            const finalName =
+              files.length > 1 ? `${docNo}_${i + 1}.${ext}` : `${docNo}.${ext}`;
+            archive.append(stream, { name: `${folderName}/${finalName}` });
+            fileCount++;
+          } catch (err) {
+            this.logger.error(`Failed to stream PDF ${file.key}`, err);
+          }
+        }
+      }
+
+      if (payload.types.includes('xml') && invoice.xmlFileKey) {
+        try {
+          const stream = await this.r2.downloadStream(invoice.xmlFileKey);
+          archive.append(stream, { name: `${folderName}/${docNo}.xml` });
+          fileCount++;
+        } catch (err) {
+          this.logger.error(`Failed to stream XML ${invoice.xmlFileKey}`, err);
+        }
+      }
+    }
+
+    if (fileCount === 0) {
+      archive.append('No files found or downloaded', { name: 'README.txt' });
+    }
+
+    await archive.finalize();
   }
 
   async deletePdf(invoiceId: string, fileKey: string) {
@@ -2043,12 +2763,19 @@ export class ErpInvoicesCoreService {
 
       if (key === 'status') {
         qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
+      } else if (key === 'postingStatus') {
+        qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
+          postingStatusVals: vals,
+        });
       } else if (key === 'branchId') {
         qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
       } else if (key === 'invoiceDate') {
-        qb.andWhere('CAST(inv.invoice_date AS TEXT) IN (:...invoiceDateVals)', {
-          invoiceDateVals: vals,
-        });
+        qb.andWhere(
+          `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
+          {
+            invoiceDateVals: vals,
+          },
+        );
       } else if (key === 'serialNo') {
         qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
           serialNoVals: vals,
@@ -2327,6 +3054,121 @@ export class ErpInvoicesCoreService {
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any;
   }
+
+  async postInvoice(id: string, dto: PostInvoiceDto) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.isDeleted) throw new BadRequestException('Invoice is deleted');
+    if (invoice.postingStatus === 'POSTED')
+      throw new BadRequestException('Invoice is already posted');
+
+    if (!invoice.branchId) {
+      throw new BadRequestException(
+        'Hóa đơn chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
+      );
+    }
+
+    const totalDebit = dto.lines.reduce((sum, line) => sum + line.debit, 0);
+    const totalCredit = dto.lines.reduce((sum, line) => sum + line.credit, 0);
+
+    const invTotal = parseFloat(invoice.totalAmount);
+    if (
+      Math.abs(totalDebit - invTotal) > 0.01 ||
+      Math.abs(totalCredit - invTotal) > 0.01
+    ) {
+      throw new BadRequestException(
+        'Total debit and credit must equal the invoice total amount',
+      );
+    }
+
+    const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
+
+    const invoiceRef = invoice.serialNo
+      ? `${invoice.invoiceNo}-${invoice.serialNo}`
+      : invoice.invoiceNo;
+
+    const defaultDesc = `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+    const userDesc = dto.description || invoice.description || defaultDesc;
+    const description = `${invoiceRef}_${userDesc}`;
+
+    const documentDate = dto.documentDate
+      ? new Date(dto.documentDate)
+      : new Date(invoice.invoiceDate);
+
+    const journalEntry = await this.accountingCoreService.createJournalEntry({
+      branchId: invoice.branchId,
+      date: new Date(dto.postingDate),
+      documentDate,
+      reference: invoiceRef,
+      description,
+      subjectName:
+        invoice.direction === 'IN'
+          ? invoice.sellerName || undefined
+          : invoice.buyerName || undefined,
+      sourceType: 'INVOICE',
+      sourceId: invoice.id,
+      entryNoPrefix,
+      lines: dto.lines.map((line) => {
+        let lineDesc = line.description || description;
+        if (line.description && !line.description.startsWith(invoiceRef)) {
+          lineDesc = `${invoiceRef}_${line.description}`;
+        }
+        return {
+          accountId: line.accountId,
+          debit: line.debit,
+          credit: line.credit,
+          description: lineDesc,
+        };
+      }),
+    });
+
+    invoice.postingStatus = 'POSTED';
+    invoice.postingDate = dto.postingDate;
+    invoice.journalEntryId = journalEntry.id;
+
+    await this.repository.save(invoice);
+    return invoice;
+  }
+
+  async unpostInvoice(id: string) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.postingStatus !== 'POSTED')
+      throw new BadRequestException('Invoice is not posted');
+
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      invoice.id,
+      'INVOICE',
+    );
+
+    // Xóa các bút toán cấn trừ liên quan
+    const netOffs = await this.repository.manager.find(
+      ErpInvoiceVoucherNetOff,
+      {
+        where: { invoiceId: id },
+      },
+    );
+    if (netOffs && netOffs.length > 0) {
+      await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
+        invoiceId: id,
+      });
+      const uniqueTxnIds = [
+        ...new Set(netOffs.map((n) => n.bankTransactionId)),
+      ];
+      for (const txnId of uniqueTxnIds) {
+        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
+          txnId,
+        );
+      }
+    }
+
+    invoice.postingStatus = 'UNPOSTED';
+    invoice.postingDate = null;
+    invoice.journalEntryId = null;
+
+    await this.repository.save(invoice);
+    return invoice;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2353,4 +3195,6 @@ export interface BulkImportResult {
   created: number;
   skipped: BulkImportSkippedItem[];
   errors: BulkImportErrorItem[];
+  pdfAttached?: any[];
+  pdfOrphans?: any[];
 }

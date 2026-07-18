@@ -1,4 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
@@ -35,5 +36,23 @@ export class InventoryStockCoreController {
       pageSize ? parseInt(pageSize, 10) : 20,
       filters,
     );
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('export/excel')
+  async exportExcel(
+    @Query() query: InventoryStockQueryDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportExcel(query as any);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=inventory_stock.xlsx',
+    );
+    res.send(buffer);
   }
 }

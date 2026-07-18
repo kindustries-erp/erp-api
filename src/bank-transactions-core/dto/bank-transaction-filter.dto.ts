@@ -83,4 +83,24 @@ export class BankTransactionFilterDto {
   @IsEnum(['IN', 'OUT'])
   @IsOptional()
   transactionType?: 'IN' | 'OUT';
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  column_search?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  column_filters?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  correspondentAccount?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  correspondentName?: string;
 }

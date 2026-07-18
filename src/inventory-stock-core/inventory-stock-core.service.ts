@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as ExcelJS from 'exceljs';
 import { Repository, Like, In, Brackets } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -388,5 +389,261 @@ export class InventoryStockCoreService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async exportExcel(
+    query: PaginationDto & {
+      item_type?: string;
+      search?: string;
+      searches?: string;
+      filters?: string;
+    },
+  ): Promise<Buffer> {
+    const data = await this.findAll({
+      ...query,
+      page: 1,
+      pageSize: 1000000,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('LichSuXuatNhapKho');
+
+    worksheet.columns = [
+      { header: 'Mã VT', key: 'item_code', width: 15 },
+      { header: 'Tên VT', key: 'item_name', width: 40 },
+      { header: 'Loại VT', key: 'item_type', width: 20 },
+      { header: 'ĐVT', key: 'unit', width: 15 },
+      {
+        header: 'Tổng Nhập',
+        key: 'received_qty',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tổng Xuất',
+        key: 'issued_qty',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tồn Kho',
+        key: 'on_hand_qty',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Giữ Chỗ',
+        key: 'reserved_qty',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Giá Trị Tồn',
+        key: 'stock_value',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Ngày GD Cuối', key: 'last_transaction_date', width: 20 },
+      { header: 'Trạng thái', key: 'status', width: 15 },
+    ];
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+    });
+
+    worksheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    ];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columns.length },
+    };
+
+    for (const row of data.items) {
+      let lastTxDate = row.last_transaction_date;
+      if (lastTxDate) {
+        try {
+          const d = new Date(lastTxDate);
+          lastTxDate =
+            d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN');
+        } catch (e) {}
+      }
+      worksheet.addRow({
+        item_code: row.item_code,
+        item_name: row.item_name,
+        item_type: row.item_type,
+        unit: row.unit,
+        received_qty: row.received_qty,
+        issued_qty: row.issued_qty,
+        on_hand_qty: row.on_hand_qty,
+        reserved_qty: row.reserved_qty,
+        stock_value: row.stock_value,
+        last_transaction_date: lastTxDate || '',
+        status: row.status,
+      });
+    }
+
+    if (data.items.length > 0) {
+      const itemIds = data.items.map((i) => i.inventory_item_id);
+      const txnsRaw = await this.transactionRepository
+        .createQueryBuilder('txn')
+        .leftJoin('erp_goods_receipts', 'gr', 'gr.id = txn.document_id')
+        .leftJoin('erp_goods_issues', 'gi', 'gi.id = txn.document_id')
+        .select('txn.*')
+        .addSelect('COALESCE(gr.receipt_no, gi.issue_no)', 'document_no')
+        .where('txn.item_id IN (:...itemIds)', { itemIds })
+        .orderBy('txn.transaction_date', 'ASC')
+        .getRawMany();
+
+      const wsTxn = workbook.addWorksheet('LichSuGiaoDich');
+      wsTxn.columns = [
+        { header: 'Mã VT', key: 'item_code', width: 15 },
+        { header: 'Tên VT', key: 'item_name', width: 40 },
+        { header: 'Loại GD', key: 'transaction_type', width: 20 },
+        { header: 'Ngày GD', key: 'transaction_date', width: 20 },
+        { header: 'Số phiếu', key: 'document_no', width: 20 },
+        {
+          header: 'SL Nhập',
+          key: 'qty_in',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'SL Xuất',
+          key: 'qty_out',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Tồn',
+          key: 'balance',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Đơn giá',
+          key: 'unit_cost',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        { header: 'Ghi chú', key: 'notes', width: 30 },
+      ];
+
+      wsTxn.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' },
+        };
+      });
+
+      wsTxn.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+
+      wsTxn.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: wsTxn.columns.length },
+      };
+
+      const itemMap = new Map(data.items.map((i) => [i.inventory_item_id, i]));
+      const balanceMap = new Map<string, number>();
+
+      for (const t of txnsRaw) {
+        const i = itemMap.get(t.item_id || '');
+        let tDate = t.transaction_date;
+        if (tDate) {
+          try {
+            const d = new Date(tDate);
+            tDate =
+              d.toLocaleDateString('vi-VN') +
+              ' ' +
+              d.toLocaleTimeString('vi-VN');
+          } catch (e) {}
+        }
+
+        const qIn = Number(t.qty_in || 0);
+        const qOut = Number(t.qty_out || 0);
+
+        let currentBalance = balanceMap.get(t.item_id) || 0;
+        currentBalance = currentBalance + qIn - qOut;
+        balanceMap.set(t.item_id, currentBalance);
+
+        wsTxn.addRow({
+          item_code: i?.item_code || '',
+          item_name: i?.item_name || '',
+          transaction_type: t.transaction_type,
+          transaction_date: tDate || '',
+          document_no: t.document_no || '',
+          qty_in: qIn,
+          qty_out: qOut,
+          balance: currentBalance,
+          unit_cost: Number(t.unit_cost || 0),
+          notes: t.notes || '',
+        });
+      }
+
+      const wsTongHop = workbook.addWorksheet('TongHopGiaoDich');
+      wsTongHop.columns = [
+        { header: 'Mã VT', key: 'item_code', width: 15 },
+        { header: 'Tên VT', key: 'item_name', width: 40 },
+        {
+          header: 'Tổng Nhập',
+          key: 'total_in',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Tổng Xuất',
+          key: 'total_out',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+        {
+          header: 'Tồn',
+          key: 'balance',
+          width: 15,
+          style: { numFmt: '#,##0' },
+        },
+      ];
+
+      wsTongHop.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' },
+        };
+      });
+
+      wsTongHop.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+
+      for (let i = 0; i < data.items.length; i++) {
+        const item = data.items[i];
+        const rowNumber = i + 2;
+        wsTongHop.addRow({
+          item_code: item.item_code,
+          item_name: item.item_name,
+          total_in: {
+            formula: `SUMIF('LichSuGiaoDich'!A:A, A${rowNumber}, 'LichSuGiaoDich'!F:F)`,
+          },
+          total_out: {
+            formula: `SUMIF('LichSuGiaoDich'!A:A, A${rowNumber}, 'LichSuGiaoDich'!G:G)`,
+          },
+          balance: { formula: `C${rowNumber}-D${rowNumber}` },
+        });
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as any as Buffer;
   }
 }

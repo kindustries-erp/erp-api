@@ -383,6 +383,36 @@ export class CashflowVouchersService {
     }
     if (query.search) parts.push(`search=${encodeURIComponent(query.search)}`);
 
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (vals && vals.length > 0) {
+            parts.push(
+              `filter[${col}][_in]=${vals.map(encodeURIComponent).join(',')}`,
+            );
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (query.column_search) {
+      try {
+        const search = JSON.parse(query.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(search)) {
+          if (val) {
+            parts.push(`filter[${col}][_icontains]=${encodeURIComponent(val)}`);
+          }
+        }
+      } catch (e) {}
+    }
+
     const res = await fetch(
       `${this.directusUrl}/items/${this.collection}?${parts.join('&')}`,
       {

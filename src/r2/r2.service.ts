@@ -66,6 +66,20 @@ export class R2Service {
   }
 
   /**
+   * Download stream từ R2
+   */
+  async downloadStream(key: string): Promise<NodeJS.ReadableStream> {
+    const s3Obj = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+    if (!s3Obj.Body) throw new Error('Empty body');
+    return s3Obj.Body as NodeJS.ReadableStream;
+  }
+
+  /**
    * Tạo pre-signed URL để download (GET) — mặc định 1 giờ
    */
   async getPresignedDownloadUrl(
