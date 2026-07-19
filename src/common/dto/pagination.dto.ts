@@ -54,4 +54,24 @@ export class PaginationDto {
   @IsOptional()
   @IsString()
   tag_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_filters?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sortField?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
 }
