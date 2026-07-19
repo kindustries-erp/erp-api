@@ -3172,13 +3172,10 @@ export class ErpInvoicesCoreService {
     const totalDebit = dto.lines.reduce((sum, line) => sum + line.debit, 0);
     const totalCredit = dto.lines.reduce((sum, line) => sum + line.credit, 0);
 
-    const invTotal = parseFloat(invoice.totalAmount);
-    if (
-      Math.abs(totalDebit - invTotal) > 0.01 ||
-      Math.abs(totalCredit - invTotal) > 0.01
-    ) {
+    // Chỉ validate cân bằng kép (Nợ = Có), không ép bằng totalAmount vì user có thể hạch toán một phần
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
       throw new BadRequestException(
-        'Total debit and credit must equal the invoice total amount',
+        'Hạch toán không cân bằng: Tổng Nợ phải bằng Tổng Có.',
       );
     }
 

@@ -104,8 +104,8 @@ describe('ErpInvoicesCoreService', () => {
       );
     });
 
-    it('throws BadRequestException if total debit != invoice total', async () => {
-      const mockInvoice = {
+    it('throws BadRequestException if total debit != total credit', async () => {
+      const mockInvoice: any = {
         id: 'inv-1',
         totalAmount: '1000',
         postingStatus: 'UNPOSTED',
@@ -116,7 +116,7 @@ describe('ErpInvoicesCoreService', () => {
       await expect(
         service.postInvoice('inv-1', {
           postingDate: '2026-07-17',
-          lines: [{ accountId: '152', debit: 500, credit: 500 }],
+          lines: [{ accountId: '152', debit: 500, credit: 400 }], // Unbalanced!
         }),
       ).rejects.toThrow(BadRequestException);
     });
