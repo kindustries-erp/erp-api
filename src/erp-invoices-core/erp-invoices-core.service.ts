@@ -209,9 +209,12 @@ export class ErpInvoicesCoreService {
     }
 
     if (search) {
-      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
-        search: `%${search}%`,
-      });
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${selectField} AS TEXT)`,
+        search,
+        'search',
+      );
     }
 
     qb.orderBy('value', 'ASC');
