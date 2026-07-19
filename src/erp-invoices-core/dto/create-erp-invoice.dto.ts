@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -236,6 +237,11 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @IsString()
   paymentDocumentNos?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isValid?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

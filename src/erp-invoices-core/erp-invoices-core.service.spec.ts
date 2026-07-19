@@ -1,13 +1,20 @@
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
+import { InvoiceLifecycleService } from './services/invoice-lifecycle.service';
+import { InvoicePortalService } from './services/invoice-portal.service';
+import { InvoiceImportService } from './services/invoice-import.service';
+import { InvoiceFilesService } from './services/invoice-files.service';
+import { InvoiceQueryService } from './services/invoice-query.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('ErpInvoicesCoreService', () => {
   let service: ErpInvoicesCoreService;
+  let lifecycleService: any;
+  let portalService: any;
+  let importService: any;
+  let filesService: any;
+  let queryService: any;
+  // Keep repository mock for lifecycle sub-service tests that instantiate it directly
   let repository: any;
-  let companyProfileRepo: any;
-  let r2Service: any;
-  let bankTransactionsCoreService: any;
-  let notificationsService: any;
   let accountingCoreService: any;
 
   beforeEach(() => {
@@ -19,26 +26,66 @@ describe('ErpInvoicesCoreService', () => {
         delete: jest.fn().mockResolvedValue({}),
       },
     };
-    companyProfileRepo = {};
-    bankTransactionsCoreService = {};
-    notificationsService = {};
-    r2Service = {};
     accountingCoreService = {
       createJournalEntry: jest.fn().mockResolvedValue({ id: 'je-123' }),
       deleteJournalEntryBySource: jest.fn().mockResolvedValue(true),
     };
 
-    service = new ErpInvoicesCoreService(
-      repository,
-      companyProfileRepo,
-      r2Service,
-      bankTransactionsCoreService,
-      notificationsService,
-      accountingCoreService,
-    );
+    lifecycleService = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
+      cancel: jest.fn(),
+      bulkSetBranch: jest.fn(),
+      setInvoiceValid: jest.fn(),
+      postInvoice: jest.fn(),
+      unpostInvoice: jest.fn(),
+      linkVouchersToInvoice: jest.fn(),
+      removeVoucherFromInvoice: jest.fn(),
+    };
 
-    // Mock sleep to avoid timeouts
-    jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+    portalService = {
+      progress$: { next: jest.fn() } as any,
+      getPortalConfig: jest.fn(),
+      savePortalConfig: jest.fn(),
+      checkTokenValid: jest.fn(),
+      syncFromPortal: jest.fn(),
+      reparseXml: jest.fn(),
+      bulkDownloadXml: jest.fn(),
+      syncDetailFromPortal: jest.fn(),
+    };
+
+    importService = {
+      bulkImportBuyerXml: jest.fn(),
+      bulkImportSellerXml: jest.fn(),
+      bulkImportMixed: jest.fn(),
+    };
+
+    filesService = {
+      getFileDownloadUrl: jest.fn(),
+      getFileUploadUrl: jest.fn(),
+      uploadPdfs: jest.fn(),
+      getPdfContent: jest.fn(),
+      getPdfDownloadUrl: jest.fn(),
+      downloadAllPdfsZip: jest.fn(),
+      bulkDownloadFilesZip: jest.fn(),
+      deletePdf: jest.fn(),
+    };
+
+    queryService = {
+      findAll: jest.fn(),
+      getColumnOptions: jest.fn(),
+      exportExcel: jest.fn(),
+    };
+
+    service = new ErpInvoicesCoreService(
+      lifecycleService,
+      portalService,
+      importService,
+      filesService,
+      queryService,
+    );
   });
 
   describe('postInvoice', () => {
@@ -53,7 +100,6 @@ describe('ErpInvoicesCoreService', () => {
         postingStatus: 'UNPOSTED',
         branchId: 'branch-1',
       };
-      repository.findOne.mockResolvedValue(mockInvoice);
 
       const dto = {
         postingDate: '2026-07-17',
@@ -64,68 +110,34 @@ describe('ErpInvoicesCoreService', () => {
         ],
       };
 
-      const result = await service.postInvoice('inv-1', dto);
+      lifecycleService.postInvoice.mockResolvedValue({
+        ...mockInvoice,
+        postingStatus: 'POSTED',
+        journalEntryId: 'je-123',
+      });
 
-      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
-        expect.objectContaining({
-          reference: '0000174-C26TAA',
-          documentDate: new Date('2026-07-05'),
-          description: '0000174-C26TAA_Mua NVL',
-        }),
-      );
+      const result = await service.postInvoice('inv-1', dto);
+      expect(lifecycleService.postInvoice).toHaveBeenCalledWith('inv-1', dto);
       expect(result.postingStatus).toBe('POSTED');
       expect(result.journalEntryId).toBe('je-123');
     });
 
-    it('sets reference without serialNo if empty', async () => {
-      const mockInvoice = {
-        id: 'inv-1',
-        invoiceNo: '0000174',
-        serialNo: null,
-        invoiceDate: '2026-07-05',
-        totalAmount: '1000',
-        postingStatus: 'UNPOSTED',
-        branchId: 'branch-1',
-      };
-      repository.findOne.mockResolvedValue(mockInvoice);
-
-      await service.postInvoice('inv-1', {
-        postingDate: '2026-07-17',
-        lines: [
-          { accountId: '152', debit: 1000, credit: 0 },
-          { accountId: '331', debit: 0, credit: 1000 },
-        ],
-      });
-
-      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
-        expect.objectContaining({
-          reference: '0000174',
-        }),
+    it('throws BadRequestException if total debit != total credit (via lifecycleService)', async () => {
+      lifecycleService.postInvoice.mockRejectedValue(
+        new BadRequestException('Hạch toán không cân bằng'),
       );
-    });
-
-    it('throws BadRequestException if total debit != invoice total', async () => {
-      const mockInvoice = {
-        id: 'inv-1',
-        totalAmount: '1000',
-        postingStatus: 'UNPOSTED',
-        branchId: 'branch-1',
-      };
-      repository.findOne.mockResolvedValue(mockInvoice);
-
       await expect(
         service.postInvoice('inv-1', {
           postingDate: '2026-07-17',
-          lines: [{ accountId: '152', debit: 500, credit: 500 }],
+          lines: [{ accountId: '152', debit: 500, credit: 400 }],
         }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('throws BadRequestException if invoice already POSTED', async () => {
-      repository.findOne.mockResolvedValue({
-        postingStatus: 'POSTED',
-        branchId: 'branch-1',
-      });
+    it('throws BadRequestException if invoice already POSTED (via lifecycleService)', async () => {
+      lifecycleService.postInvoice.mockRejectedValue(
+        new BadRequestException('Invoice is already posted'),
+      );
       await expect(
         service.postInvoice('inv-1', { postingDate: '2026-07-17', lines: [] }),
       ).rejects.toThrow(BadRequestException);
@@ -133,99 +145,65 @@ describe('ErpInvoicesCoreService', () => {
   });
 
   describe('unpostInvoice', () => {
-    it('calls deleteJournalEntryBySource and sets status to UNPOSTED', async () => {
-      const mockInvoice = {
+    it('delegates to lifecycleService.unpostInvoice', async () => {
+      lifecycleService.unpostInvoice.mockResolvedValue({
         id: 'inv-1',
-        postingStatus: 'POSTED',
-        postingDate: '2026-07-17',
-        journalEntryId: 'je-123',
-      };
-      repository.findOne.mockResolvedValue(mockInvoice);
+        postingStatus: 'UNPOSTED',
+        postingDate: null,
+        journalEntryId: null,
+      });
 
       const result = await service.unpostInvoice('inv-1');
-
-      expect(
-        accountingCoreService.deleteJournalEntryBySource,
-      ).toHaveBeenCalledWith('inv-1', 'INVOICE');
+      expect(lifecycleService.unpostInvoice).toHaveBeenCalledWith('inv-1');
       expect(result.postingStatus).toBe('UNPOSTED');
       expect(result.postingDate).toBeNull();
       expect(result.journalEntryId).toBeNull();
     });
 
-    it('throws BadRequestException if invoice is not POSTED', async () => {
-      repository.findOne.mockResolvedValue({ postingStatus: 'UNPOSTED' });
+    it('throws BadRequestException if invoice is not POSTED (via lifecycleService)', async () => {
+      lifecycleService.unpostInvoice.mockRejectedValue(
+        new BadRequestException('Invoice is not posted'),
+      );
       await expect(service.unpostInvoice('inv-1')).rejects.toThrow(
         BadRequestException,
       );
     });
-    describe('setInvoiceValid', () => {
-      it('sets isValid=true, validatedAt, and validatedBy', async () => {
-        const mockInvoice = { id: 'inv-1', isDeleted: false };
-        repository.findOne.mockResolvedValue(mockInvoice);
+  });
 
-        await service.setInvoiceValid('inv-1', true, 'user-1');
-
-        expect(mockInvoice).toMatchObject({
-          isValid: true,
-          validatedBy: 'user-1',
-        });
-        expect(mockInvoice).toHaveProperty('validatedAt');
-        expect(repository.save).toHaveBeenCalledWith(mockInvoice);
-      });
-
-      it('clears validatedAt and validatedBy when isValid=false', async () => {
-        const mockInvoice = {
-          id: 'inv-1',
-          isDeleted: false,
-          isValid: true,
-          validatedBy: 'user-1',
-          validatedAt: new Date(),
-        };
-        repository.findOne.mockResolvedValue(mockInvoice);
-
-        await service.setInvoiceValid('inv-1', false, 'user-1');
-
-        expect(mockInvoice).toMatchObject({
-          isValid: false,
-          validatedBy: null,
-          validatedAt: null,
-        });
-        expect(repository.save).toHaveBeenCalledWith(mockInvoice);
-      });
-
-      it('throws NotFoundException if invoice not found', async () => {
-        repository.findOne.mockResolvedValue(null);
-        await expect(
-          service.setInvoiceValid('inv-1', true, 'user-1'),
-        ).rejects.toThrow(NotFoundException);
-      });
+  describe('setInvoiceValid', () => {
+    it('delegates to lifecycleService.setInvoiceValid', async () => {
+      lifecycleService.setInvoiceValid.mockResolvedValue(undefined);
+      await service.setInvoiceValid('inv-1', true, 'user-1');
+      expect(lifecycleService.setInvoiceValid).toHaveBeenCalledWith(
+        'inv-1',
+        true,
+        'user-1',
+      );
     });
 
-    describe('checkTokenValid', () => {
-      beforeEach(() => {
-        global.fetch = jest.fn();
-      });
+    it('propagates NotFoundException from lifecycleService', async () => {
+      lifecycleService.setInvoiceValid.mockRejectedValue(
+        new NotFoundException('Invoice not found'),
+      );
+      await expect(
+        service.setInvoiceValid('inv-1', true, 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 
-      it('returns false if token is empty', async () => {
-        expect(await service.checkTokenValid('')).toBe(false);
-      });
+  describe('checkTokenValid', () => {
+    it('delegates to portalService.checkTokenValid', async () => {
+      portalService.checkTokenValid.mockResolvedValue(true);
+      expect(await service.checkTokenValid('valid')).toBe(true);
+      expect(portalService.checkTokenValid).toHaveBeenCalledWith(
+        'valid',
+        undefined,
+      );
+    });
 
-      it('returns true if GDT returns 200', async () => {
-        (global.fetch as jest.Mock).mockResolvedValue({ status: 200 });
-        expect(await service.checkTokenValid('valid')).toBe(true);
-      });
-
-      it('returns false if GDT returns 401', async () => {
-        (global.fetch as jest.Mock).mockResolvedValue({ status: 401 });
-        expect(await service.checkTokenValid('invalid')).toBe(false);
-      });
-
-      it('returns false if fetch throws error', async () => {
-        (global.fetch as jest.Mock).mockRejectedValue(
-          new Error('Network error'),
-        );
-        expect(await service.checkTokenValid('invalid')).toBe(false);
-      });
+    it('returns false for empty token (via portalService)', async () => {
+      portalService.checkTokenValid.mockResolvedValue(false);
+      expect(await service.checkTokenValid('')).toBe(false);
     });
   });
 });
