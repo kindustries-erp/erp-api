@@ -132,11 +132,15 @@ export class ErpInvoicesCoreService {
     else if (column === 'partner') {
       if (direction === 'IN') selectField = 'inv.seller_name';
       else if (direction === 'OUT') selectField = 'inv.buyer_name';
-      else selectField = 'COALESCE(inv.seller_name, inv.buyer_name)'; // fallback
+      else
+        selectField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
     } else if (column === 'taxCode') {
       if (direction === 'IN') selectField = 'inv.seller_tax_code';
       else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
-      else selectField = 'COALESCE(inv.seller_tax_code, inv.buyer_tax_code)';
+      else
+        selectField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
     } else if (column === 'description') selectField = 'inv.description';
     else if (column === 'preVatAmount') selectField = 'inv.pre_vat_amount';
     else if (column === 'vatAmount') selectField = 'inv.vat_amount';
@@ -171,12 +175,15 @@ export class ErpInvoicesCoreService {
           else if (col === 'partner') {
             if (direction === 'IN') filterField = 'inv.seller_name';
             else if (direction === 'OUT') filterField = 'inv.buyer_name';
-            else filterField = 'COALESCE(inv.seller_name, inv.buyer_name)';
+            else
+              filterField =
+                "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
           } else if (col === 'taxCode') {
             if (direction === 'IN') filterField = 'inv.seller_tax_code';
             else if (direction === 'OUT') filterField = 'inv.buyer_tax_code';
             else
-              filterField = 'COALESCE(inv.seller_tax_code, inv.buyer_tax_code)';
+              filterField =
+                "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
           } else if (col === 'description') filterField = 'inv.description';
           else if (col === 'preVatAmount') filterField = 'inv.pre_vat_amount';
           else if (col === 'vatAmount') filterField = 'inv.vat_amount';
@@ -588,7 +595,7 @@ export class ErpInvoicesCoreService {
             });
           } else {
             qb.andWhere(
-              'COALESCE(inv.seller_name, inv.buyer_name) IN (:...partnerVals)',
+              "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END) IN (:...partnerVals)",
               { partnerVals: vals },
             );
           }
@@ -603,7 +610,7 @@ export class ErpInvoicesCoreService {
             });
           } else {
             qb.andWhere(
-              'COALESCE(inv.seller_tax_code, inv.buyer_tax_code) IN (:...taxCodeVals)',
+              "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END) IN (:...taxCodeVals)",
               { taxCodeVals: vals },
             );
           }
