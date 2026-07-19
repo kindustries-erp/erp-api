@@ -79,21 +79,23 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
       const dateTo = this.formatDate(now);
 
       this.logger.log(`Syncing IN invoices from ${dateFrom} to ${dateTo}...`);
-      await this.erpInvoicesCoreService.syncFromPortal(
-        {
-          type: 'purchase',
-          dateFrom,
-          dateTo,
-          cookies: config.cookies,
-        },
-        undefined, // no specific user
-      );
+      const purchaseResult: any =
+        await this.erpInvoicesCoreService.syncFromPortal(
+          {
+            type: 'purchase',
+            dateFrom,
+            dateTo,
+            cookies: config.cookies,
+          },
+          undefined, // no specific user
+          true, // waitForCompletion
+        );
 
       // Wait 5 seconds to avoid rate limits
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
       this.logger.log(`Syncing OUT invoices from ${dateFrom} to ${dateTo}...`);
-      await this.erpInvoicesCoreService.syncFromPortal(
+      const soldResult: any = await this.erpInvoicesCoreService.syncFromPortal(
         {
           type: 'sold',
           dateFrom,
@@ -101,9 +103,11 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           cookies: config.cookies,
         },
         undefined,
+        true, // waitForCompletion
       );
 
       this.logger.log('Auto-sync finished successfully.');
+      await this.notifySyncSuccess(purchaseResult, soldResult);
     } catch (e: any) {
       if (e.message === 'GDT_TOKEN_EXPIRED') {
         this.logger.warn('Token expired during sync.');
@@ -140,6 +144,39 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (e) {
       this.logger.error('Failed to send token expiration notifications', e);
+    }
+  }
+
+  private async notifySyncSuccess(purchaseStats: any, soldStats: any) {
+    const totalImported =
+      (purchaseStats?.imported || 0) + (soldStats?.imported || 0);
+    if (totalImported <= 0) return; // Only notify if there are new invoices
+
+    const totalFetched =
+      (purchaseStats?.totalItemsFetched || 0) +
+      (soldStats?.totalItemsFetched || 0);
+
+    try {
+      const perms = await this.permissionRepo.find({
+        where: [{ resource: 'invoices' }, { resource: '*' }],
+      });
+      const roleIds = [...new Set(perms.map((p) => p.roleId))];
+      if (roleIds.length === 0) return;
+
+      const userRoles = await this.userRoleRepo.find({
+        where: { roleId: In(roleIds) },
+      });
+      const userIds = [...new Set(userRoles.map((ur) => ur.userId))];
+
+      for (const userId of userIds) {
+        await this.notificationsService.createForUser(userId, {
+          type: 'INFO',
+          title: 'Đồng bộ hóa đơn thành công',
+          message: `Hệ thống vừa đồng bộ và kiểm tra ${totalFetched} hóa đơn. Có ${totalImported} hóa đơn được thêm mới vào phần mềm.`,
+        });
+      }
+    } catch (e) {
+      this.logger.error('Failed to send sync success notifications', e);
     }
   }
 

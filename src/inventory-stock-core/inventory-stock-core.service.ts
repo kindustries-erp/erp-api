@@ -643,6 +643,165 @@ export class InventoryStockCoreService {
       }
     }
 
+    // === NEW SHEET 1: Danh_Sach_Xe_San_Xuat ===
+    const wsXe = workbook.addWorksheet('DanhSachXe_Audit');
+    wsXe.columns = [
+      { header: 'Lệnh SX', key: 'lenh_sx', width: 20 },
+      { header: 'Ngày Hoàn Thành', key: 'ngay_hoan_thanh', width: 25 },
+      { header: 'Mã Xe', key: 'ma_xe', width: 15 },
+      { header: 'Tên Xe', key: 'ten_xe', width: 35 },
+      { header: 'Mã BOM', key: 'ma_bom', width: 32 },
+      { header: 'Số Serial', key: 'so_serial', width: 20 },
+      { header: 'Số Khung', key: 'so_khung', width: 22 },
+      { header: 'Số Máy', key: 'so_may', width: 22 },
+    ];
+    wsXe.getRow(1).eachCell((c) => {
+      c.font = { bold: true };
+      c.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD6E4F0' },
+      };
+    });
+    wsXe.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }];
+    wsXe.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: 8 },
+    };
+
+    const xeData = await this.itemRepository.manager.query(`
+      SELECT 
+        po.reference_no AS lenh_sx,
+        po.updated_at AS ngay_hoan_thanh,
+        i.sku AS ma_xe,
+        i.item_name AS ten_xe,
+        b.bom_code AS ma_bom,
+        s.serial_no AS so_serial,
+        v.vin_no AS so_khung,
+        v.engine_no AS so_may
+      FROM erp_vehicles v
+      LEFT JOIN erp_inventory_tracking_serials s ON s.vin_id = v.id
+      LEFT JOIN erp_production_orders po ON po.id = s.production_order_id
+      LEFT JOIN erp_inventory_items i ON i.id = COALESCE(po.finished_good_item_id, s.item_id)
+      LEFT JOIN erp_boms b ON b.id::text = (po.output_metadata->>'bomId')
+      ORDER BY po.updated_at DESC NULLS LAST, po.reference_no ASC NULLS LAST, v.vin_no ASC;
+    `);
+
+    for (const r of xeData) {
+      let ngay = r.ngay_hoan_thanh;
+      if (ngay) {
+        try {
+          const d = new Date(ngay);
+          ngay =
+            d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN');
+        } catch (e) {}
+      }
+      wsXe.addRow({ ...r, ngay_hoan_thanh: ngay || '' });
+    }
+
+    // === NEW SHEET 2: Audit_NVL_Theo_Lenh_SX ===
+    const wsNvl = workbook.addWorksheet('VatTu_Audit');
+    wsNvl.columns = [
+      { header: 'Lệnh SX', key: 'lenh_sx', width: 20 },
+      { header: 'Mã Xe', key: 'ma_xe', width: 15 },
+      { header: 'Mã BOM', key: 'ma_bom', width: 32 },
+      {
+        header: 'SL Xe Đã SX',
+        key: 'sl_xe_da_sx',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Mã NVL', key: 'ma_nvl', width: 15 },
+      { header: 'Tên NVL', key: 'ten_nvl', width: 40 },
+      { header: 'ĐVT', key: 'dvt', width: 10 },
+      {
+        header: 'Định Mức / 1 Xe',
+        key: 'dinh_muc',
+        width: 18,
+        style: { numFmt: '#,##0.####' },
+      },
+      {
+        header: 'SL NVL Cần (Định mức × Xe SX)',
+        key: 'sl_nvl_can',
+        width: 30,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'SL NVL Đã Xuất',
+        key: 'sl_nvl_da_xuat',
+        width: 18,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Chênh Lệch',
+        key: 'chenh_lech',
+        width: 15,
+        style: { numFmt: '#,##0.00' },
+      },
+    ];
+    wsNvl.getRow(1).eachCell((c) => {
+      c.font = { bold: true };
+      c.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD6E4F0' },
+      };
+    });
+    wsNvl.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }];
+    wsNvl.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: 11 },
+    };
+
+    const nvlData = await this.itemRepository.manager.query(`
+      SELECT 
+        po.reference_no AS lenh_sx,
+        fg.sku AS ma_xe,
+        b.bom_code AS ma_bom,
+        po.qty_produced AS sl_xe_da_sx,
+        rm.sku AS ma_nvl,
+        rm.item_name AS ten_nvl,
+        u.code AS dvt,
+        CASE WHEN po.qty_produced > 0 THEN ROUND((m.qty_required / po.qty_produced)::numeric, 4) ELSE 0 END AS dinh_muc,
+        m.qty_required AS sl_nvl_can,
+        COALESCE(gi_agg.sl_da_xuat, 0) AS sl_nvl_da_xuat,
+        (COALESCE(gi_agg.sl_da_xuat, 0) - m.qty_required) AS chenh_lech
+      FROM erp_production_order_materials m
+      JOIN erp_production_orders po ON m.production_order_id = po.id
+      JOIN erp_inventory_items fg ON po.finished_good_item_id = fg.id
+      JOIN erp_inventory_items rm ON m.item_id = rm.id
+      LEFT JOIN erp_uoms u ON rm.uom_id = u.id
+      LEFT JOIN erp_boms b ON b.id::text = (po.output_metadata->>'bomId')
+      LEFT JOIN (
+        SELECT gi.production_order_id, gil.item_id, SUM(gil.qty_issued) AS sl_da_xuat
+        FROM erp_goods_issue_lines gil
+        JOIN erp_goods_issues gi ON gi.id = gil.goods_issue_id
+        WHERE gi.status = 'POSTED' AND gi.production_order_id IS NOT NULL
+        GROUP BY gi.production_order_id, gil.item_id
+      ) gi_agg ON gi_agg.production_order_id = po.id AND gi_agg.item_id = m.item_id
+      WHERE (po.status = 'COMPLETED' OR po.qty_produced > 0)
+      ORDER BY po.updated_at DESC, po.reference_no ASC, rm.sku ASC;
+    `);
+
+    for (const r of nvlData) {
+      const row = wsNvl.addRow({
+        ...r,
+        sl_xe_da_sx: Number(r.sl_xe_da_sx),
+        dinh_muc: Number(r.dinh_muc),
+        sl_nvl_can: Number(r.sl_nvl_can),
+        sl_nvl_da_xuat: Number(r.sl_nvl_da_xuat),
+        chenh_lech: Number(r.chenh_lech),
+      });
+      // Tô đỏ dòng có chênh lệch
+      const chenhLech = Number(r.chenh_lech);
+      if (Math.abs(chenhLech) > 0.001) {
+        row.getCell('chenh_lech').font = {
+          bold: true,
+          color: { argb: 'FFCC0000' },
+        };
+      }
+    }
+
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any as Buffer;
   }

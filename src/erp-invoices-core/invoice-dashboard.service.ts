@@ -89,8 +89,16 @@ export class InvoiceDashboardService {
     // For OUT invoices, we are the seller, so the partner is the buyer
     const partnerQuery = `
       SELECT 
-        COALESCE(inv.seller_tax_code, inv.buyer_tax_code) as "taxCode",
-        MAX(COALESCE(inv.seller_name, inv.buyer_name)) as "partnerName",
+        CASE 
+          WHEN inv.direction = 'IN' THEN inv.seller_tax_code
+          WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code
+        END as "taxCode",
+        MAX(
+          CASE 
+            WHEN inv.direction = 'IN' THEN inv.seller_name
+            WHEN inv.direction = 'OUT' THEN inv.buyer_name
+          END
+        ) as "partnerName",
         SUM(CASE WHEN inv.direction = 'IN' THEN CAST(inv.total_amount AS NUMERIC) ELSE 0 END) as "totalInAmount",
         SUM(CASE WHEN inv.direction = 'OUT' THEN CAST(inv.total_amount AS NUMERIC) ELSE 0 END) as "totalOutAmount",
         SUM(CASE WHEN inv.direction = 'IN' THEN COALESCE(netoff.net_off_amount, 0) ELSE 0 END) as "paidAmount",
@@ -105,8 +113,21 @@ export class InvoiceDashboardService {
         ${dateFrom ? `AND inv.invoice_date >= '${dateFrom}'` : ''}
         ${dateTo ? `AND inv.invoice_date <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
         ${branchId ? (branchId === 'null' ? `AND inv.branch_id IS NULL` : `AND inv.branch_id = '${branchId}'`) : ''}
-      GROUP BY COALESCE(inv.seller_tax_code, inv.buyer_tax_code)
-      HAVING COALESCE(inv.seller_tax_code, inv.buyer_tax_code) IS NOT NULL AND COALESCE(inv.seller_tax_code, inv.buyer_tax_code) != ''
+      GROUP BY 
+        CASE 
+          WHEN inv.direction = 'IN' THEN inv.seller_tax_code
+          WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code
+        END
+      HAVING 
+        CASE 
+          WHEN inv.direction = 'IN' THEN inv.seller_tax_code
+          WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code
+        END IS NOT NULL 
+        AND 
+        CASE 
+          WHEN inv.direction = 'IN' THEN inv.seller_tax_code
+          WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code
+        END != ''
     `;
 
     // Wrapping for search and pagination

@@ -12,6 +12,12 @@ import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
 import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryTrackingCustom } from './entities/erp_inventory_tracking_custom.entity';
 import { ErpSerialLifecycle } from './entities/erp_serial_lifecycle.entity';
+import { InventoryItemsQueryService } from './services/inventory-items-query.service';
+import { InventoryItemsLifecycleService } from './services/inventory-items-lifecycle.service';
+import { InventoryMastersService } from './services/inventory-masters.service';
+import { InventoryWarehouseVoucherService } from './services/inventory-warehouse-voucher.service';
+import { InventorySerialService } from './services/inventory-serial.service';
+import { InventoryDashboardService } from './services/inventory-dashboard.service';
 
 @Module({
   imports: [
@@ -29,7 +35,15 @@ import { ErpSerialLifecycle } from './entities/erp_serial_lifecycle.entity';
     ]),
   ],
   controllers: [InventoryItemsController],
-  providers: [InventoryItemsService],
+  providers: [
+    InventoryItemsQueryService,
+    InventoryItemsLifecycleService,
+    InventoryMastersService,
+    InventoryWarehouseVoucherService,
+    InventorySerialService,
+    InventoryDashboardService,
+    InventoryItemsService,
+  ],
   exports: [InventoryItemsService],
 })
 export class InventoryCoreModule {}
