@@ -115,19 +115,6 @@ jobs:
           R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
 
-      - name: Prepare Head DNS
-        env:
-          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
-        run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "sudo tee /etc/resolv.conf >/dev/null <<'EOF'
-          nameserver 1.1.1.1
-          nameserver 8.8.8.8
-          options timeout:2 attempts:2
-          EOF"
-
       - name: Run deploy script
         env:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
