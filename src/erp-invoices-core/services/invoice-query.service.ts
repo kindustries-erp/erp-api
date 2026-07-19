@@ -412,7 +412,7 @@ export class InvoiceQueryService {
       this.logger.error('Failed to parse column_search or column_filters', e);
     }
 
-    this._applyColumnSearchSimple(qb, columnSearch, query.direction);
+    this._applyColumnSearch(qb, columnSearch, query.direction);
     this._applyColumnFiltersExport(qb, columnFilters, query.direction);
 
     let orderColumn = 'inv.invoiceDate';
@@ -737,86 +737,6 @@ export class InvoiceQueryService {
       } else if (key === 'licensePlate') {
         applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
       }
-    });
-  }
-
-  /** Simpler ILIKE version used by exportExcel (no multi-keyword needed) */
-  private _applyColumnSearchSimple(
-    qb: any,
-    columnSearch: Record<string, string>,
-    direction?: string,
-  ) {
-    Object.keys(columnSearch).forEach((key) => {
-      const val = columnSearch[key];
-      if (!val) return;
-      const pat = `%${val}%`;
-
-      if (key === 'invoiceNo')
-        qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
-          invoiceNoSearch: pat,
-        });
-      else if (key === 'serialNo')
-        qb.andWhere('inv.serial_no ILIKE :serialNoSearch', {
-          serialNoSearch: pat,
-        });
-      else if (key === 'partner') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_name ILIKE :partnerSearch', {
-            partnerSearch: pat,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_name ILIKE :partnerSearch', {
-            partnerSearch: pat,
-          });
-        else
-          qb.andWhere(
-            '(inv.seller_name ILIKE :partnerSearch OR inv.buyer_name ILIKE :partnerSearch)',
-            { partnerSearch: pat },
-          );
-      } else if (key === 'taxCode') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_tax_code ILIKE :taxCodeSearch', {
-            taxCodeSearch: pat,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_tax_code ILIKE :taxCodeSearch', {
-            taxCodeSearch: pat,
-          });
-        else
-          qb.andWhere(
-            '(inv.seller_tax_code ILIKE :taxCodeSearch OR inv.buyer_tax_code ILIKE :taxCodeSearch)',
-            { taxCodeSearch: pat },
-          );
-      } else if (key === 'description')
-        qb.andWhere('inv.description ILIKE :descSearch', { descSearch: pat });
-      else if (key === 'preVatAmount')
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
-          { preVatSearch: pat },
-        );
-      else if (key === 'vatAmount')
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
-          { vatSearch: pat },
-        );
-      else if (key === 'discountAmount')
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
-          { discountSearch: pat },
-        );
-      else if (key === 'totalAmount')
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
-          { totalSearch: pat },
-        );
-      else if (key === 'settlementOrder')
-        qb.andWhere('inv.settlement_order ILIKE :settlementSearch', {
-          settlementSearch: pat,
-        });
-      else if (key === 'licensePlate')
-        qb.andWhere('inv.license_plate ILIKE :plateSearch', {
-          plateSearch: pat,
-        });
     });
   }
 
