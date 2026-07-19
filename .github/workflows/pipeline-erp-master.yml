@@ -115,6 +115,24 @@ jobs:
           R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Transfer Image to Head
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+        run: |
+          docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}
+          docker save ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} | \
+            sshpass -e ssh -o StrictHostKeyChecking=no \
+            -p ${{ vars.HEAD_PORT }} \
+            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
+            "docker load"
+
       - name: Run deploy script
         env:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
@@ -124,8 +142,6 @@ jobs:
             ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
             "HOST_PORT=\$(grep -E '^HOST_PORT=' /home/dev/opt/stacks/erp/erp-api-master/.env | cut -d '=' -f2 | tr -d '\r' | tr -d ' ' || true) ; \
              if [ -z \"\$HOST_PORT\" ]; then HOST_PORT=10010; fi ; \
-             echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin ; \
-             docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} || true ; \
              docker rm -f erp-api-master || true ; \
              docker rm -f liouni-erp-core-api || true ; \
              docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
