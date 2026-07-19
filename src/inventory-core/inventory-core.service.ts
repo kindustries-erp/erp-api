@@ -1300,6 +1300,127 @@ export class InventoryItemsService {
     return lifecycle;
   }
 
+  async getSerialLifecycleColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    let selectField = '';
+    let isDateColumn = false;
+
+    if (column === 'expectedDeliveryDate') {
+      selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'deliveryDate') {
+      selectField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'itemName') selectField = 'i.item_name';
+    else if (column === 'serialNo') selectField = 's.serial_no';
+    else if (column === 'vinNo') selectField = 'v.vin_no';
+    else if (column === 'engineNo') selectField = 'v.engine_no';
+    else if (column === 'soNo') selectField = 'so.so_no';
+    else if (column === 'customerName') selectField = 'l.customer_name';
+    else if (column === 'activationDate') {
+      selectField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'dealerName') {
+      selectField = "l.attributes->>'dealer_name'";
+    } else if (column === 'color') {
+      selectField = "s.attributes->>'color'";
+    } else {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    let sql = `
+      SELECT DISTINCT ${selectField} as value
+      FROM erp_serial_lifecycles l
+      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_vehicles v ON s.vin_id = v.id
+      LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (isDateColumn) {
+      sql += ` AND ${selectField} IS NOT NULL AND ${selectField} != ''`;
+    } else {
+      sql += ` AND ${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != ''`;
+    }
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'expectedDeliveryDate')
+            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'deliveryDate')
+            filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'itemName') filterField = 'i.item_name';
+          else if (col === 'serialNo') filterField = 's.serial_no';
+          else if (col === 'vinNo') filterField = 'v.vin_no';
+          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'soNo') filterField = 'so.so_no';
+          else if (col === 'customerName') filterField = 'l.customer_name';
+          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'activationDate')
+            filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
+          else if (col === 'dealerName')
+            filterField = "l.attributes->>'dealer_name'";
+
+          if (filterField) {
+            const placeholders = vals.map(() => `$${paramIdx++}`).join(', ');
+            sql += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+            params.push(...vals);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      const keywords = String(search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter((k) => k);
+      if (keywords.length > 0) {
+        const conditions: string[] = [];
+        for (const kw of keywords) {
+          conditions.push(`CAST(${selectField} AS TEXT) ILIKE $${paramIdx++}`);
+          params.push(`%${kw}%`);
+        }
+        sql += ` AND (${conditions.join(' OR ')})`;
+      }
+    }
+
+    // Count Total
+    const countSql = `SELECT COUNT(*) as cnt FROM (${sql}) as t`;
+    const countRes = await this.serialRepository.manager.query(
+      countSql,
+      params,
+    );
+    const total = parseInt(countRes[0]?.cnt || '0', 10);
+
+    // Get Data
+    sql += ` ORDER BY value ASC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    params.push(pageSize, (page - 1) * pageSize);
+    const results = await this.serialRepository.manager.query(sql, params);
+
+    return {
+      items: results.map((r: any) => String(r.value)).filter(Boolean),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async listSerialLifecycles(query: any) {
     const page = query.page || 1;
     const pageSize = query.pageSize || 50;
@@ -1360,6 +1481,105 @@ export class InventoryItemsService {
     if (query.dealerId) {
       sql += ` AND l.dealer_id = $${paramIdx++}`;
       params.push(query.dealerId);
+    }
+
+    // Dynamic Column Filters
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters);
+        for (const [col, vals] of Object.entries(filters)) {
+          const valsArray = vals as string[];
+          if (!valsArray || valsArray.length === 0) continue;
+
+          let filterField = '';
+          if (col === 'expectedDeliveryDate')
+            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'deliveryDate')
+            filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'itemName') filterField = 'i.item_name';
+          else if (col === 'serialNo') filterField = 's.serial_no';
+          else if (col === 'vinNo') filterField = 'v.vin_no';
+          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'soNo') filterField = 'so.so_no';
+          else if (col === 'customerName') filterField = 'l.customer_name';
+          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'activationDate')
+            filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
+          else if (col === 'dealerName')
+            filterField = "l.attributes->>'dealer_name'";
+          else if (col === 'warrantyActivatedAt') {
+            const conditions: string[] = [];
+            if (valsArray.includes('ACTIVE')) {
+              conditions.push(
+                `(l.warranty_activated_at IS NOT NULL AND (l.warranty_end_date IS NULL OR l.warranty_end_date >= CURRENT_DATE))`,
+              );
+            }
+            if (valsArray.includes('EXPIRED')) {
+              conditions.push(`(l.warranty_end_date < CURRENT_DATE)`);
+            }
+            if (valsArray.includes('NOT_ACTIVATED')) {
+              conditions.push(`(l.warranty_activated_at IS NULL)`);
+            }
+            if (conditions.length > 0) {
+              sql += ` AND (${conditions.join(' OR ')})`;
+            }
+            continue;
+          }
+
+          if (filterField) {
+            const placeholders = valsArray
+              .map(() => `$${paramIdx++}`)
+              .join(', ');
+            sql += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+            params.push(...valsArray);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Dynamic Column Search
+    if (query.column_search) {
+      try {
+        const searchFilters = JSON.parse(query.column_search);
+        for (const [col, val] of Object.entries(searchFilters)) {
+          if (!val) continue;
+
+          let searchField = '';
+          if (col === 'expectedDeliveryDate')
+            searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'deliveryDate')
+            searchField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'itemName') searchField = 'i.item_name';
+          else if (col === 'serialNo') searchField = 's.serial_no';
+          else if (col === 'vinNo') searchField = 'v.vin_no';
+          else if (col === 'engineNo') searchField = 'v.engine_no';
+          else if (col === 'soNo') searchField = 'so.so_no';
+          else if (col === 'customerName') searchField = 'l.customer_name';
+          else if (col === 'color') searchField = "s.attributes->>'color'";
+          else if (col === 'activationDate')
+            searchField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
+          else if (col === 'dealerName')
+            searchField = "l.attributes->>'dealer_name'";
+
+          if (searchField) {
+            // Apply multi keyword filter logic using ';' as separator and OR logic
+            const keywords = (val as string)
+              .split(';')
+              .map((k) => k.trim())
+              .filter((k) => k);
+            if (keywords.length > 0) {
+              const conditions: string[] = [];
+              for (const kw of keywords) {
+                conditions.push(
+                  `CAST(${searchField} AS TEXT) ILIKE $${paramIdx++}`,
+                );
+                params.push(`%${kw}%`);
+              }
+              sql += ` AND (${conditions.join(' OR ')})`;
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     // Count
