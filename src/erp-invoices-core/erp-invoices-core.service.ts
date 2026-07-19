@@ -160,8 +160,12 @@ export class ErpInvoicesCoreService {
     return this.portalService.checkTokenValid(token, cookies);
   }
 
-  syncFromPortal(dto: PortalFetchDto, userId?: string) {
-    return this.portalService.syncFromPortal(dto, userId);
+  syncFromPortal(
+    dto: PortalFetchDto,
+    userId?: string,
+    waitForCompletion = false,
+  ) {
+    return this.portalService.syncFromPortal(dto, userId, waitForCompletion);
   }
 
   reparseXml(id: string, token?: string, cookies?: string) {

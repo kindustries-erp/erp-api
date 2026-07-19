@@ -101,7 +101,11 @@ export class InvoicePortalService {
   // Portal sync
   // ---------------------------------------------------------------------------
 
-  async syncFromPortal(dto: PortalFetchDto, userId?: string) {
+  async syncFromPortal(
+    dto: PortalFetchDto,
+    userId?: string,
+    waitForCompletion = false,
+  ) {
     let token = dto.token?.trim();
     let cookies = dto.cookies?.trim();
     if (!token) {
@@ -146,8 +150,7 @@ export class InvoicePortalService {
     const [toY, toM, toD] = dto.dateTo.split('-').map(Number);
     const endDate = new Date(toY, toM - 1, toD);
 
-    // Fire-and-forget background task
-    (async () => {
+    const task = async () => {
       try {
         const rawItems: any[] = [];
         let totalFromPortal = 0;
@@ -352,6 +355,17 @@ export class InvoicePortalService {
             `Sync errors (${errors.length}): ${errors.slice(0, 5).join(', ')}`,
           );
         }
+
+        return {
+          totalItemsFetched: rawItems.length,
+          totalFromPortal,
+          pagesFetched,
+          imported: created,
+          skipped,
+          direction,
+          errors,
+          xmlDownloadQueued: backgroundSyncIds.length,
+        };
       } catch (err) {
         this.logger.error('Background portal sync failed', err);
         if (userId) {
@@ -361,8 +375,16 @@ export class InvoicePortalService {
             type: 'ERROR',
           });
         }
+        throw err;
       }
-    })();
+    };
+
+    if (waitForCompletion) {
+      return await task();
+    }
+
+    // Fire-and-forget
+    task().catch(() => {});
 
     return {
       totalItemsFetched: 0,

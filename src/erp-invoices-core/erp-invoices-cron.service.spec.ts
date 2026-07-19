@@ -87,11 +87,13 @@ describe('ErpInvoicesCronService', () => {
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'purchase', cookies: 'valid-cookies' }),
         undefined,
+        true,
       );
 
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'sold', cookies: 'valid-cookies' }),
         undefined,
+        true,
       );
 
       setTimeoutSpy.mockRestore();
