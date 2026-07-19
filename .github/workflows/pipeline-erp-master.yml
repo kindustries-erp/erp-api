@@ -115,6 +115,15 @@ jobs:
           R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
 
+      - name: Configure Docker DNS
+        env:
+          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            -p ${{ vars.HEAD_PORT }} \
+            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
+            "printf '%s\n' \"\$SSHPASS\" | sudo -S bash -c 'mkdir -p /etc/docker && echo \"{\\\"dns\\\": [\\\"8.8.8.8\\\", \\\"1.1.1.1\\\"]}\" > /tmp/daemon.json && if ! cmp -s /tmp/daemon.json /etc/docker/daemon.json; then cp /tmp/daemon.json /etc/docker/daemon.json && systemctl restart docker; fi'"
+
       - name: Run deploy script
         env:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
