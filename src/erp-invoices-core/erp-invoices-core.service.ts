@@ -13,6 +13,10 @@ import {
   IsNull,
   In,
 } from 'typeorm';
+import {
+  applyMultiKeywordFilter,
+  applyMultiKeywordMultiFieldFilter,
+} from '../common/utils/query-builder.util';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
@@ -482,75 +486,89 @@ export class ErpInvoicesCoreService {
         if (!val) return;
 
         if (key === 'invoiceNo') {
-          qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
-            invoiceNoSearch: `%${val}%`,
-          });
+          applyMultiKeywordFilter(qb, 'inv.invoice_no', val, 'invoiceNoSearch');
         } else if (key === 'serialNo') {
-          qb.andWhere('inv.serial_no ILIKE :serialNoSearch', {
-            serialNoSearch: `%${val}%`,
-          });
+          applyMultiKeywordFilter(qb, 'inv.serial_no', val, 'serialNoSearch');
         } else if (key === 'partner') {
           if (query.direction === 'IN') {
-            qb.andWhere('inv.seller_name ILIKE :partnerSearch', {
-              partnerSearch: `%${val}%`,
-            });
+            applyMultiKeywordFilter(
+              qb,
+              'inv.seller_name',
+              val,
+              'partnerSearch',
+            );
           } else if (query.direction === 'OUT') {
-            qb.andWhere('inv.buyer_name ILIKE :partnerSearch', {
-              partnerSearch: `%${val}%`,
-            });
+            applyMultiKeywordFilter(qb, 'inv.buyer_name', val, 'partnerSearch');
           } else {
-            qb.andWhere(
-              '(inv.seller_name ILIKE :partnerSearch OR inv.buyer_name ILIKE :partnerSearch)',
-              { partnerSearch: `%${val}%` },
+            applyMultiKeywordMultiFieldFilter(
+              qb,
+              ['inv.seller_name', 'inv.buyer_name'],
+              val,
+              'partnerSearch',
             );
           }
         } else if (key === 'taxCode') {
           if (query.direction === 'IN') {
-            qb.andWhere('inv.seller_tax_code ILIKE :taxCodeSearch', {
-              taxCodeSearch: `%${val}%`,
-            });
+            applyMultiKeywordFilter(
+              qb,
+              'inv.seller_tax_code',
+              val,
+              'taxCodeSearch',
+            );
           } else if (query.direction === 'OUT') {
-            qb.andWhere('inv.buyer_tax_code ILIKE :taxCodeSearch', {
-              taxCodeSearch: `%${val}%`,
-            });
+            applyMultiKeywordFilter(
+              qb,
+              'inv.buyer_tax_code',
+              val,
+              'taxCodeSearch',
+            );
           } else {
-            qb.andWhere(
-              '(inv.seller_tax_code ILIKE :taxCodeSearch OR inv.buyer_tax_code ILIKE :taxCodeSearch)',
-              { taxCodeSearch: `%${val}%` },
+            applyMultiKeywordMultiFieldFilter(
+              qb,
+              ['inv.seller_tax_code', 'inv.buyer_tax_code'],
+              val,
+              'taxCodeSearch',
             );
           }
         } else if (key === 'description') {
-          qb.andWhere('inv.description ILIKE :descSearch', {
-            descSearch: `%${val}%`,
-          });
+          applyMultiKeywordFilter(qb, 'inv.description', val, 'descSearch');
         } else if (key === 'preVatAmount') {
-          qb.andWhere(
-            "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
-            { preVatSearch: `%${val}%` },
+          applyMultiKeywordFilter(
+            qb,
+            "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '')",
+            val,
+            'preVatSearch',
           );
         } else if (key === 'vatAmount') {
-          qb.andWhere(
-            "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
-            { vatSearch: `%${val}%` },
+          applyMultiKeywordFilter(
+            qb,
+            "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '')",
+            val,
+            'vatSearch',
           );
         } else if (key === 'discountAmount') {
-          qb.andWhere(
-            "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
-            { discountSearch: `%${val}%` },
+          applyMultiKeywordFilter(
+            qb,
+            "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '')",
+            val,
+            'discountSearch',
           );
         } else if (key === 'totalAmount') {
-          qb.andWhere(
-            "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
-            { totalSearch: `%${val}%` },
+          applyMultiKeywordFilter(
+            qb,
+            "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '')",
+            val,
+            'totalSearch',
           );
         } else if (key === 'settlementOrder') {
-          qb.andWhere('inv.settlement_order ILIKE :settlementSearch', {
-            settlementSearch: `%${val}%`,
-          });
+          applyMultiKeywordFilter(
+            qb,
+            'inv.settlement_order',
+            val,
+            'settlementSearch',
+          );
         } else if (key === 'licensePlate') {
-          qb.andWhere('inv.license_plate ILIKE :plateSearch', {
-            plateSearch: `%${val}%`,
-          });
+          applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
         }
       });
 
