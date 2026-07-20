@@ -122,6 +122,98 @@ export class InventorySerialService {
       );
     }
 
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters) as Record<
+          string,
+          string[]
+        >;
+        let paramIdx = 0;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          let filterField = '';
+          if (col === 'itemCode') filterField = 'i.sku';
+          else if (col === 'itemName') filterField = 'i.item_name';
+          else if (col === 'serialNo') filterField = 's.serial_no';
+          else if (col === 'vinNo') filterField = 'v.vin_no';
+          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'soNo') filterField = 'so.so_no';
+          else if (col === 'status') filterField = 's.status';
+          else if (col === 'delivery')
+            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'createdAt')
+            filterField =
+              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'dealer_code')
+            filterField = "s.attributes->>'dealer_code'";
+          else if (col === 'dealer_name')
+            filterField = "s.attributes->>'dealer_name'";
+          else if (col === 'trackingPolicyName') filterField = 'tp.name';
+
+          if (filterField) {
+            qb.andWhere(
+              `CAST(${filterField} AS TEXT) IN (:...filter_${paramIdx})`,
+              { [`filter_${paramIdx}`]: vals },
+            );
+            paramIdx++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (query.column_search) {
+      try {
+        const searchFilters = JSON.parse(query.column_search) as Record<
+          string,
+          string
+        >;
+        let paramIdx = 0;
+        for (const [col, val] of Object.entries(searchFilters)) {
+          if (!val) continue;
+          let searchField = '';
+          if (col === 'itemCode') searchField = 'i.sku';
+          else if (col === 'itemName') searchField = 'i.item_name';
+          else if (col === 'serialNo') searchField = 's.serial_no';
+          else if (col === 'vinNo') searchField = 'v.vin_no';
+          else if (col === 'engineNo') searchField = 'v.engine_no';
+          else if (col === 'soNo') searchField = 'so.so_no';
+          else if (col === 'status') searchField = 's.status';
+          else if (col === 'delivery')
+            searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'createdAt')
+            searchField =
+              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+          else if (col === 'color') searchField = "s.attributes->>'color'";
+          else if (col === 'dealer_code')
+            searchField = "s.attributes->>'dealer_code'";
+          else if (col === 'dealer_name')
+            searchField = "s.attributes->>'dealer_name'";
+          else if (col === 'trackingPolicyName') searchField = 'tp.name';
+
+          if (searchField) {
+            const keywords = val
+              .split(';')
+              .map((k) => k.trim())
+              .filter((k) => k);
+            if (keywords.length > 0) {
+              const conditions: string[] = [];
+              const searchParams: Record<string, any> = {};
+              keywords.forEach((kw, i) => {
+                const paramName = `search_${paramIdx}_${i}`;
+                conditions.push(
+                  `CAST(${searchField} AS TEXT) ILIKE :${paramName}`,
+                );
+                searchParams[paramName] = `%${kw}%`;
+              });
+              qb.andWhere(`(${conditions.join(' OR ')})`, searchParams);
+              paramIdx++;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
     // sort
     let sortColumn = 's.created_at';
     let sortDirection: 'ASC' | 'DESC' = 'DESC';
@@ -135,6 +227,12 @@ export class InventorySerialService {
       }
       if (sortField === 'serial_no') sortColumn = 's.serial_no';
       if (sortField === 'created_at') sortColumn = 's.created_at';
+      if (sortField === 'color') sortColumn = "s.attributes->>'color'";
+      if (sortField === 'dealer_code')
+        sortColumn = "s.attributes->>'dealer_code'";
+      if (sortField === 'dealer_name')
+        sortColumn = "s.attributes->>'dealer_name'";
+      if (sortField === 'trackingPolicyName') sortColumn = 'tp.name';
     }
 
     qb.orderBy(sortColumn, sortDirection);
@@ -758,6 +856,134 @@ export class InventorySerialService {
 
     return {
       items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getSerialColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    let selectField = '';
+    let isDateColumn = false;
+
+    if (column === 'itemCode') selectField = 'i.sku';
+    else if (column === 'itemName') selectField = 'i.item_name';
+    else if (column === 'serialNo') selectField = 's.serial_no';
+    else if (column === 'vinNo') selectField = 'v.vin_no';
+    else if (column === 'engineNo') selectField = 'v.engine_no';
+    else if (column === 'soNo') selectField = 'so.so_no';
+    else if (column === 'status') selectField = 's.status';
+    else if (column === 'delivery') {
+      selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'createdAt') {
+      selectField =
+        "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'color') {
+      selectField = "s.attributes->>'color'";
+    } else if (column === 'dealer_code') {
+      selectField = "s.attributes->>'dealer_code'";
+    } else if (column === 'dealer_name') {
+      selectField = "s.attributes->>'dealer_name'";
+    } else if (column === 'trackingPolicyName') {
+      selectField = 'tp.name';
+    } else {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    let sql = `
+      SELECT DISTINCT ${selectField} as value
+      FROM erp_inventory_tracking_serials s
+      LEFT JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id
+      LEFT JOIN erp_vehicles v ON s.vin_id = v.id
+      LEFT JOIN erp_sales_order_lines sol ON s.sales_order_line_id = sol.id
+      LEFT JOIN erp_sales_orders so ON sol.sales_order_id = so.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (isDateColumn) {
+      sql += ` AND ${selectField} IS NOT NULL AND ${selectField} != ''`;
+    } else {
+      sql += ` AND ${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != ''`;
+    }
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'itemCode') filterField = 'i.sku';
+          else if (col === 'itemName') filterField = 'i.item_name';
+          else if (col === 'serialNo') filterField = 's.serial_no';
+          else if (col === 'vinNo') filterField = 'v.vin_no';
+          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'soNo') filterField = 'so.so_no';
+          else if (col === 'status') filterField = 's.status';
+          else if (col === 'delivery')
+            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'createdAt')
+            filterField =
+              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'dealer_code')
+            filterField = "s.attributes->>'dealer_code'";
+          else if (col === 'dealer_name')
+            filterField = "s.attributes->>'dealer_name'";
+          else if (col === 'trackingPolicyName') filterField = 'tp.name';
+
+          if (filterField) {
+            const placeholders = vals.map(() => `$${paramIdx++}`).join(', ');
+            sql += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+            params.push(...vals);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      const keywords = String(search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter((k) => k);
+      if (keywords.length > 0) {
+        const conditions: string[] = [];
+        for (const kw of keywords) {
+          conditions.push(`CAST(${selectField} AS TEXT) ILIKE $${paramIdx++}`);
+          params.push(`%${kw}%`);
+        }
+        sql += ` AND (${conditions.join(' OR ')})`;
+      }
+    }
+
+    // Count Total
+    const countSql = `SELECT COUNT(*) as cnt FROM (${sql}) as t`;
+    const countRes = await this.serialRepository.manager.query(
+      countSql,
+      params,
+    );
+    const total = parseInt(countRes[0]?.cnt || '0', 10);
+
+    // Get Data
+    sql += ` ORDER BY value ASC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    params.push(pageSize, (page - 1) * pageSize);
+    const results = await this.serialRepository.manager.query(sql, params);
+
+    return {
+      items: results.map((r: any) => String(r.value)).filter(Boolean),
       total,
       page,
       pageSize,

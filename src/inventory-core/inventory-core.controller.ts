@@ -196,6 +196,24 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials/column-options')
+  getSerialColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+  ) {
+    return this.service.getSerialColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('serials/:id')
   getSerial(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getSerial(id);
