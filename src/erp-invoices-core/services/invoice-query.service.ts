@@ -425,96 +425,164 @@ export class InvoiceQueryService {
       orderDirection = query.sort_order.toUpperCase() as 'ASC' | 'DESC';
 
     qb.orderBy(orderColumn, orderDirection).addOrderBy('inv.createdAt', 'DESC');
-    const items = await qb.getMany();
+    let items = await qb.getMany();
+    items = await this._loadNetOffAmounts(items);
+
+    const branches = await this.repository.manager.query(
+      'SELECT id, name FROM erp_branches',
+    );
+    const branchMap: Record<string, string> = branches.reduce(
+      (acc: any, curr: any) => {
+        acc[curr.id] = curr.name;
+        return acc;
+      },
+      {},
+    );
+
+    const formatTaxInvoiceStatus = (val?: number | null) => {
+      switch (val) {
+        case 1:
+          return 'Mới';
+        case 2:
+          return 'Thay thế';
+        case 3:
+          return 'Điều chỉnh';
+        case 4:
+          return 'Bị thay thế';
+        case 5:
+          return 'Bị điều chỉnh';
+        case 6:
+          return 'Bị hủy';
+        default:
+          return val?.toString() || '—';
+      }
+    };
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Invoices');
-    const isDetailed = query.export_type === 'detailed';
 
-    if (isDetailed) {
-      worksheet.columns = [
-        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
-        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
-        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
-        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-        { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
-        { header: 'Đơn vị tính', key: 'uom', width: 15 },
-        {
-          header: 'Số lượng',
-          key: 'qty',
-          width: 15,
-          style: { numFmt: '#,##0.###' },
-        },
-        {
-          header: 'Đơn giá',
-          key: 'unitPrice',
-          width: 20,
-          style: { numFmt: '#,##0' },
-        },
-        {
-          header: 'Thành tiền',
-          key: 'totalAmount',
-          width: 20,
-          style: { numFmt: '#,##0' },
-        },
-        {
-          header: 'Thuế suất VAT (%)',
-          key: 'vatRate',
-          width: 15,
-          style: { numFmt: '0%' },
-        },
-        {
-          header: 'Tiền thuế VAT',
-          key: 'vatAmount',
-          width: 20,
-          style: { numFmt: '#,##0' },
-        },
-        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
-      ];
-    } else {
-      worksheet.columns = [
-        { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
-        { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
-        { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-        { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
-        { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-        { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
-        {
-          header: 'Tiền trước VAT',
-          key: 'preVat',
-          width: 20,
-          style: { numFmt: '#,##0' },
-        },
-        { header: 'VAT', key: 'vat', width: 15, style: { numFmt: '#,##0' } },
-        {
-          header: 'Sau VAT',
-          key: 'total',
-          width: 20,
-          style: { numFmt: '#,##0' },
-        },
-        { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-        { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
-        { header: 'Diễn giải', key: 'description', width: 50 },
-      ];
-    }
-
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' },
-      };
-    });
-    worksheet.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    const summarySheet = workbook.addWorksheet('Bảng kê');
+    summarySheet.columns = [
+      { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+      { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+      { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+      { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+      {
+        header: 'Trước thuế GTGT',
+        key: 'preVat',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thuế suất',
+        key: 'vatRate',
+        width: 15,
+        style: { numFmt: '0%' },
+      },
+      {
+        header: 'Thuế GTGT',
+        key: 'vat',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thành tiền',
+        key: 'total',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+      { header: 'Diễn giải', key: 'description', width: 50 },
+      { header: 'Trạng thái', key: 'statusName', width: 20 },
+      {
+        header: 'Còn lại',
+        key: 'remainingAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Chi nhánh', key: 'branchName', width: 25 },
     ];
-    worksheet.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: worksheet.columns.length },
+
+    const detailedSheet = workbook.addWorksheet('Hàng hóa');
+    detailedSheet.columns = [
+      { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
+      { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
+      { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
+      { header: 'MST khách hàng', key: 'taxCode', width: 15 },
+      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
+      {
+        header: 'Số lượng',
+        key: 'qty',
+        width: 15,
+        style: { numFmt: '#,##0.###' },
+      },
+      {
+        header: 'Đơn giá',
+        key: 'unitPrice',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Trước thuế GTGT',
+        key: 'preVatAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thuế suất',
+        key: 'vatRate',
+        width: 15,
+        style: { numFmt: '0%' },
+      },
+      {
+        header: 'Thuế GTGT',
+        key: 'vatAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thành tiền',
+        key: 'totalAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
+      { header: 'Diễn giải', key: 'description', width: 50 },
+      { header: 'Trạng thái', key: 'statusName', width: 20 },
+      {
+        header: 'Còn lại',
+        key: 'remainingAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Chi nhánh', key: 'branchName', width: 25 },
+    ];
+
+    const applyHeaderStyle = (sheet) => {
+      sheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' },
+        };
+      });
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: sheet.columns.length },
+      };
     };
+
+    applyHeaderStyle(summarySheet);
+    applyHeaderStyle(detailedSheet);
 
     for (const inv of items) {
       const partnerName =
@@ -523,68 +591,95 @@ export class InvoiceQueryService {
         query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
       const address =
         query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
+      const branchName = inv.branchId ? branchMap[inv.branchId] : '';
+      const remainingAmount =
+        Number(inv.totalAmount || 0) - Number((inv as any).netOffAmount || 0);
 
-      if (isDetailed) {
-        if (!inv.items || inv.items.length === 0) {
-          worksheet.addRow({
-            invoiceDate: inv.invoiceDate,
-            serialNo: inv.serialNo,
-            invoiceNo: inv.invoiceNo,
-            partnerName,
-            taxCode,
-            itemName: inv.description || '',
-            uom: '',
-            qty: 0,
-            unitPrice: 0,
-            totalAmount: Number(inv.preVatAmount) || 0,
-            vatRate: parseVatRateForDisplay(inv.vatRate),
-            vatAmount: Number(inv.vatAmount) || 0,
-            licensePlate: inv.licensePlate || '',
-            wo: inv.settlementOrder || '',
-          });
-        } else {
-          for (const item of inv.items) {
-            worksheet.addRow({
-              invoiceDate: inv.invoiceDate,
-              serialNo: inv.serialNo,
-              invoiceNo: inv.invoiceNo,
-              partnerName,
-              taxCode,
-              itemName: item.description || '',
-              uom: item.unit || '',
-              qty: Number(item.quantity) || 0,
-              unitPrice: Number(item.unitPrice) || 0,
-              totalAmount: Number(item.preVatAmount) || 0,
-              vatRate: parseVatRateForDisplay(item.vatRate || inv.vatRate),
-              vatAmount: Number(item.vatAmount) || 0,
-              licensePlate: inv.licensePlate || '',
-              wo: inv.settlementOrder || '',
-            });
-          }
-        }
-      } else {
-        const fullDesc = [
-          inv.description,
-          (inv as any).notes,
-          ...(inv.items || []).map((i) => i.description),
-        ]
-          .filter(Boolean)
-          .join(' | ');
+      const fullDesc = [
+        inv.description,
+        (inv as any).notes,
+        ...(inv.items || []).map((i) => i.description),
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
-        worksheet.addRow({
+      const statusName = formatTaxInvoiceStatus(inv.taxInvoiceStatus);
+
+      summarySheet.addRow({
+        invoiceDate: inv.invoiceDate,
+        serialNo: inv.serialNo,
+        invoiceNo: inv.invoiceNo,
+        partnerName,
+        taxCode,
+        address,
+        preVat: Number(inv.preVatAmount) || 0,
+        vatRate: parseVatRateForDisplay(inv.vatRate),
+        vat: Number(inv.vatAmount) || 0,
+        total: Number(inv.totalAmount) || 0,
+        licensePlate: inv.licensePlate || '',
+        wo: inv.settlementOrder || '',
+        description: fullDesc,
+        statusName,
+        remainingAmount,
+        branchName,
+      });
+
+      if (!inv.items || inv.items.length === 0) {
+        detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
           serialNo: inv.serialNo,
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
-          address,
-          preVat: Number(inv.preVatAmount) || 0,
-          vat: Number(inv.vatAmount) || 0,
-          total: Number(inv.totalAmount) || 0,
+          itemName: inv.description || '',
+          uom: '',
+          qty: 0,
+          unitPrice: 0,
+          preVatAmount: Number(inv.preVatAmount) || 0,
+          vatRate: parseVatRateForDisplay(inv.vatRate),
+          vatAmount: Number(inv.vatAmount) || 0,
+          totalAmount: Number(inv.totalAmount) || 0,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
+          statusName,
+          remainingAmount,
+          branchName,
         });
+      } else {
+        for (const item of inv.items) {
+          const itemPreVat = Number(item.preVatAmount) || 0;
+          const itemVatRateRaw = parseVatRateForDisplay(
+            item.vatRate || inv.vatRate,
+          );
+          const itemVatAmount =
+            Number(item.vatAmount) ||
+            Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
+          const itemTotalAmount =
+            Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
+
+          detailedSheet.addRow({
+            invoiceDate: inv.invoiceDate,
+            serialNo: inv.serialNo,
+            invoiceNo: inv.invoiceNo,
+            partnerName,
+            taxCode,
+            itemName: item.description || '',
+            uom: item.unit || '',
+            qty: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            preVatAmount: itemPreVat,
+            vatRate: itemVatRateRaw,
+            vatAmount: itemVatAmount,
+            totalAmount: itemTotalAmount,
+            licensePlate: inv.licensePlate || '',
+            wo: inv.settlementOrder || '',
+            description: fullDesc,
+            statusName,
+            remainingAmount,
+            branchName,
+          });
+        }
       }
     }
 

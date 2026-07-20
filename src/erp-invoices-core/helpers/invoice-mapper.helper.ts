@@ -5,9 +5,10 @@ import { ErpInvoice } from '../entities/erp_invoice.entity';
  * e.g. "0.08" or 8 → 0.08
  */
 export function parseVatRateForDisplay(val: any): number | string {
-  if (!val) return '';
+  if (val == null || val === '') return '';
   const n = parseFloat(val);
-  return isNaN(n) ? val : n / 100;
+  if (isNaN(n)) return val;
+  return Math.abs(n) > 1 ? n / 100 : n;
 }
 
 /**

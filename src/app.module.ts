@@ -42,6 +42,7 @@ import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
+import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
 
 @Module({
   imports: [
@@ -119,6 +120,7 @@ import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
     PublicWarrantyModule,
     NotificationsModule,
     DashboardCoreModule,
+    InventoryAdjustmentsCoreModule,
   ],
   controllers: [AppController],
   providers: [

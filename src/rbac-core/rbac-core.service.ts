@@ -187,6 +187,7 @@ export class RbacCoreService {
       { resource: 'inventory_vouchers', label: 'Chứng từ kho' },
       { resource: 'goods_receipts', label: 'Goods Receipts' },
       { resource: 'goods_issues', label: 'Goods Issues' },
+      { resource: 'inventory_adjustments', label: 'Điều chỉnh kho' },
       { resource: 'bom', label: 'BOM' },
       { resource: 'production', label: 'Production' },
       { resource: 'activity_logs', label: 'Activity Logs' },

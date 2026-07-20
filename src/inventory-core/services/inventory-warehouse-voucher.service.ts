@@ -15,16 +15,19 @@ export class InventoryWarehouseVoucherService {
 
     let receiptWhere = `g.is_deleted = false`;
     let issueWhere = `g.is_deleted = false`;
+    let adjustmentWhere = `g.is_deleted = false`;
 
     if (query.dateFrom) {
       receiptWhere += ` AND g.receipt_date >= $${pIndex}`;
       issueWhere += ` AND g.issue_date >= $${pIndex}`;
+      adjustmentWhere += ` AND g.adjustment_date >= $${pIndex}`;
       params.push(query.dateFrom);
       pIndex++;
     }
     if (query.dateTo) {
       receiptWhere += ` AND g.receipt_date <= $${pIndex}`;
       issueWhere += ` AND g.issue_date <= $${pIndex}`;
+      adjustmentWhere += ` AND g.adjustment_date <= $${pIndex}`;
       params.push(
         query.dateTo.length === 10
           ? `${query.dateTo} 23:59:59.999`
@@ -35,12 +38,15 @@ export class InventoryWarehouseVoucherService {
     if (query.status) {
       receiptWhere += ` AND g.status = $${pIndex}`;
       issueWhere += ` AND g.status = $${pIndex}`;
+      adjustmentWhere += ` AND g.status = $${pIndex}`;
       params.push(query.status);
       pIndex++;
     }
     if (query.partnerId) {
       receiptWhere += ` AND g.supplier_id = $${pIndex}`;
       issueWhere += ` AND g.customer_id = $${pIndex}`;
+      // adjustments typically don't have partnerId, but we need to skip them or match null
+      adjustmentWhere += ` AND 1 = 0`; // If searching by partner, adjustments don't match
       params.push(query.partnerId);
       pIndex++;
     }
@@ -48,6 +54,7 @@ export class InventoryWarehouseVoucherService {
       const s = `%${query.search}%`;
       receiptWhere += ` AND (g.receipt_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
       issueWhere += ` AND (g.issue_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
+      adjustmentWhere += ` AND (g.adjustment_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex})`;
       params.push(s);
       pIndex++;
     }
@@ -57,6 +64,8 @@ export class InventoryWarehouseVoucherService {
       !typeFilter || typeFilter === 'all' || typeFilter === 'receipt';
     const includeIssues =
       !typeFilter || typeFilter === 'all' || typeFilter === 'issue';
+    const includeAdjustments =
+      !typeFilter || typeFilter === 'all' || typeFilter === 'adjustment';
 
     const queries: string[] = [];
 
@@ -84,6 +93,18 @@ export class InventoryWarehouseVoucherService {
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         WHERE ${issueWhere}
+      `);
+    }
+
+    if (includeAdjustments) {
+      queries.push(`
+        SELECT g.id, g.adjustment_no as "voucherNo", g.adjustment_date as "date", 'adjustment' as "type",
+               g.status, g.remarks, NULL as "partnerId", NULL as "partnerName",
+               g.created_at as "createdAt",
+               NULL as "poNo",
+               (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
+        FROM public.erp_inventory_adjustments g
+        WHERE ${adjustmentWhere}
       `);
     }
 
