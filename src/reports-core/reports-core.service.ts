@@ -353,15 +353,24 @@ export class ReportsCoreService {
         const cf = JSON.parse(query.columnFilters);
         for (const [key, vals] of Object.entries(cf)) {
           if (Array.isArray(vals) && vals.length > 0 && sortMap[key]) {
-            const placeholders = vals
-              .map(() => {
-                const ph = `$${paramIndex}`;
+            if (vals[0] === '__ALL_MATCHING__') {
+              const searchStr = vals[1] || '';
+              if (searchStr) {
+                columnFiltersFilter += ` AND ${sortMap[key]}::text ILIKE $${paramIndex}`;
+                params.push(`%${searchStr}%`);
                 paramIndex++;
-                return ph;
-              })
-              .join(', ');
-            columnFiltersFilter += ` AND ${sortMap[key]}::text IN (${placeholders})`;
-            params.push(...vals);
+              }
+            } else {
+              const placeholders = vals
+                .map(() => {
+                  const ph = `$${paramIndex}`;
+                  paramIndex++;
+                  return ph;
+                })
+                .join(', ');
+              columnFiltersFilter += ` AND ${sortMap[key]}::text IN (${placeholders})`;
+              params.push(...vals);
+            }
           }
         }
       } catch (e) {}

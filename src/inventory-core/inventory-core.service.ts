@@ -140,6 +140,22 @@ export class InventoryItemsService {
     return this.inventorySerialService.confirmDelivery(serialId, dto);
   }
 
+  getSerialColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    return this.inventorySerialService.getSerialColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+    );
+  }
+
   getSerialLifecycleColumnOptions(
     column: string,
     search: string,
