@@ -58,6 +58,8 @@ import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.e
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
 import { CoreNotification } from '../notifications/entities/core-notification.entity';
+import { ErpInventoryAdjustment } from '../inventory-adjustments-core/entities/erp_inventory_adjustment.entity';
+import { ErpInventoryAdjustmentLine } from '../inventory-adjustments-core/entities/erp_inventory_adjustment_line.entity';
 
 const entities = [
   CoreUser,
@@ -118,6 +120,8 @@ const entities = [
   ErpJournalEntryLine,
   ErpSerialLifecycle,
   CoreNotification,
+  ErpInventoryAdjustment,
+  ErpInventoryAdjustmentLine,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

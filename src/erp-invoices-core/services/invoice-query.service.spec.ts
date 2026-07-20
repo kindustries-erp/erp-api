@@ -22,6 +22,7 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     } as any;
 
     const service = new InvoiceQueryService(repository);
@@ -52,6 +53,7 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     } as any;
 
     const service = new InvoiceQueryService(repository);
