@@ -100,11 +100,186 @@ export class PurchaseOrdersCoreService {
     });
   }
 
+  async getColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    const qb = this.repository.createQueryBuilder('po');
+    qb.where('po.isDeleted = false');
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr);
+        Object.entries(filters).forEach(([key, values]) => {
+          if (Array.isArray(values) && values.length > 0) {
+            const paramName = `filter_${key}`;
+            if (key === 'poNo')
+              qb.andWhere(`po.poNo IN (:${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'status')
+              qb.andWhere(`po.status IN (:${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'paymentStatus')
+              qb.andWhere(`po.paymentStatus IN (:${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'supplierNameSnapshot')
+              qb.andWhere(`po.supplierNameSnapshot IN (:${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'orderDate')
+              qb.andWhere(
+                `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:${paramName})`,
+                { [paramName]: values },
+              );
+            else if (key === 'expectedDate')
+              qb.andWhere(
+                `TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName})`,
+                { [paramName]: values },
+              );
+            else if (key === 'title')
+              qb.andWhere(`po.title IN (:${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'totalAmount')
+              qb.andWhere(`po.totalAmount IN (:${paramName})`, {
+                [paramName]: values,
+              });
+          }
+        });
+      } catch (e) {}
+    }
+
+    let field = '';
+    let isDate = false;
+    let isNumeric = false;
+
+    switch (column) {
+      case 'poNo':
+        field = 'po.poNo';
+        break;
+      case 'status':
+        field = 'po.status';
+        break;
+      case 'paymentStatus':
+        field = 'po.paymentStatus';
+        break;
+      case 'supplierNameSnapshot':
+        field = 'po.supplierNameSnapshot';
+        break;
+      case 'orderDate':
+        field = 'po.orderDate';
+        isDate = true;
+        break;
+      case 'expectedDate':
+        field = 'po.expectedDate';
+        isDate = true;
+        break;
+      case 'title':
+        field = 'po.title';
+        break;
+      case 'totalAmount':
+        field = 'po.totalAmount';
+        isNumeric = true;
+        break;
+      default:
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const selectExpr = isDate ? `TO_CHAR(${field}, 'YYYY-MM-DD')` : field;
+    qb.select(`DISTINCT ${selectExpr}`, 'val');
+    qb.andWhere(`${field} IS NOT NULL`);
+
+    if (search) {
+      if (isNumeric) {
+        qb.andWhere(`CAST(${field} AS TEXT) ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      } else {
+        qb.andWhere(`${selectExpr} ILIKE :search`, { search: `%${search}%` });
+      }
+    }
+
+    qb.orderBy('val', 'ASC');
+    qb.limit(pageSize);
+    qb.offset((page - 1) * pageSize);
+
+    const raw = await qb.getRawMany();
+    const items = raw.map((r) => {
+      const val = (r as Record<string, unknown>).val;
+      if (typeof val === 'string') return val;
+      if (typeof val === 'number') return val.toString();
+      if (typeof val === 'boolean') return val ? 'true' : 'false';
+      if (val instanceof Date) return val.toISOString();
+      return '';
+    });
+
+    // Get total
+    const countQb = qb.clone();
+    countQb.select(`COUNT(DISTINCT ${selectExpr})`, 'cnt');
+    countQb.orderBy();
+    countQb.limit();
+    countQb.offset();
+    const countRaw = await countQb.getRawOne();
+    const total = parseInt(countRaw?.cnt || '0', 10);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async findAll(query: OperationalQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
     const where: any = { isDeleted: false };
+
+    if (query.column_search) {
+      try {
+        const searches = JSON.parse(query.column_search);
+        Object.entries(searches).forEach(([key, val]) => {
+          if (val) {
+            const strVal = val as string;
+            if (key === 'poNo') where.poNo = ILike(`%${strVal}%`);
+            else if (key === 'supplierNameSnapshot')
+              where.supplierNameSnapshot = ILike(`%${strVal}%`);
+            else if (key === 'status') where.status = ILike(`%${strVal}%`);
+            else if (key === 'paymentStatus')
+              where.paymentStatus = ILike(`%${strVal}%`);
+            else if (key === 'title') where.title = ILike(`%${strVal}%`);
+          }
+        });
+      } catch (e) {}
+    }
+
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters);
+        Object.entries(filters).forEach(([key, values]) => {
+          if (Array.isArray(values) && values.length > 0) {
+            if (key === 'poNo') where.poNo = In(values);
+            else if (key === 'status') where.status = In(values);
+            else if (key === 'paymentStatus') where.paymentStatus = In(values);
+            else if (key === 'supplierNameSnapshot')
+              where.supplierNameSnapshot = In(values);
+            else if (key === 'title') where.title = In(values);
+            // orderDate, expectedDate, totalAmount can be handled dynamically using query builder,
+            // but for simplicity with findAndCount we map exact values.
+            // Note: date fields require special handling if they have time.
+          }
+        });
+      } catch (e) {}
+    }
+
     if (query.status) {
       where.status = query.status;
     }
