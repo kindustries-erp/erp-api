@@ -190,6 +190,26 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('warehouse-vouchers/column-options')
+  getWarehouseVoucherColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.service.getWarehouseVoucherColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      type,
+    );
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('serials')
   listSerials(@Query() query: InventorySerialQueryDto) {
     return this.service.listSerials(query);

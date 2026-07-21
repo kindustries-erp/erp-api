@@ -124,6 +124,24 @@ export class InventoryItemsService {
     return this.inventoryWarehouseVoucherService.listWarehouseVouchers(query);
   }
 
+  getWarehouseVoucherColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    type?: string,
+  ) {
+    return this.inventoryWarehouseVoucherService.getWarehouseVoucherColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+      type,
+    );
+  }
+
   listSerials(query: InventorySerialQueryDto) {
     return this.inventorySerialService.listSerials(query);
   }
