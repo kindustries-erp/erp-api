@@ -28,7 +28,10 @@ import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
-import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import {
+  ConfirmDeliveryDto,
+  ConfirmDeliveriesDto,
+} from './dto/confirm-delivery.dto';
 import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 import { InventoryDashboardQueryDto } from './dto/inventory-dashboard-query.dto';
 
@@ -249,12 +252,9 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'update' })
-  @Patch('serials/:id/confirm-delivery')
-  confirmDelivery(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: ConfirmDeliveryDto,
-  ) {
-    return this.service.confirmDelivery(id, dto);
+  @Post('serials/confirm-delivery-bulk')
+  confirmDeliveries(@Body() dto: ConfirmDeliveriesDto) {
+    return this.service.confirmDeliveries(dto);
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })

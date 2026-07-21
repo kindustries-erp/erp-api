@@ -11,3 +11,9 @@ export class ConfirmDeliveryDto {
   @IsOptional()
   notes?: string;
 }
+
+export class ConfirmDeliveriesDto extends ConfirmDeliveryDto {
+  @ApiProperty()
+  @IsString({ each: true })
+  serialIds: string[];
+}
