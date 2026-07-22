@@ -237,6 +237,22 @@ export class ErpInvoicesCoreController {
   // ---------------------------------------------------------------------------
 
   /**
+   * POST /api/v1/erp-invoices/preview-pdf-match
+   * Lấy trước thông tin hóa đơn sẽ ghép cho các file PDF mồ côi
+   */
+  @Post('preview-pdf-match')
+  async previewPdfMatch(
+    @Body() body: { filenames: string[]; direction: 'IN' | 'OUT' },
+  ) {
+    if (!body.filenames || !Array.isArray(body.filenames)) {
+      throw new BadRequestException(
+        'filenames is required and must be an array',
+      );
+    }
+    return this.service.previewPdfMatch(body.filenames, body.direction || 'IN');
+  }
+
+  /**
    * POST /api/v1/erp-invoices/bulk-import-xml/buyer
    * Import hàng loạt XML hóa đơn đầu vào (direction = IN)
    */

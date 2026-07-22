@@ -11,7 +11,10 @@ import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
-import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import {
+  ConfirmDeliveryDto,
+  ConfirmDeliveriesDto,
+} from './dto/confirm-delivery.dto';
 import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 import { InventoryDashboardQueryDto } from './dto/inventory-dashboard-query.dto';
 import { InventoryItemsQueryService } from './services/inventory-items-query.service';
@@ -124,6 +127,24 @@ export class InventoryItemsService {
     return this.inventoryWarehouseVoucherService.listWarehouseVouchers(query);
   }
 
+  getWarehouseVoucherColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    type?: string,
+  ) {
+    return this.inventoryWarehouseVoucherService.getWarehouseVoucherColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+      type,
+    );
+  }
+
   listSerials(query: InventorySerialQueryDto) {
     return this.inventorySerialService.listSerials(query);
   }
@@ -136,8 +157,8 @@ export class InventoryItemsService {
     return this.inventorySerialService.updateSerial(id, dto);
   }
 
-  confirmDelivery(serialId: string, dto: ConfirmDeliveryDto) {
-    return this.inventorySerialService.confirmDelivery(serialId, dto);
+  confirmDeliveries(dto: ConfirmDeliveriesDto) {
+    return this.inventorySerialService.confirmDeliveries(dto);
   }
 
   getSerialColumnOptions(

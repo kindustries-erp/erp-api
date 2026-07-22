@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { ConfirmDeliveryDto } from '../dto/confirm-delivery.dto';
+import {
+  ConfirmDeliveryDto,
+  ConfirmDeliveriesDto,
+} from '../dto/confirm-delivery.dto';
 import { InventorySerialQueryDto } from '../dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from '../dto/update-inventory-serial.dto';
 import { UpdateSerialLifecycleDto } from '../dto/update-serial-lifecycle.dto';
@@ -389,7 +392,7 @@ export class InventorySerialService {
     return serial;
   }
 
-  async confirmDelivery(serialId: string, dto: ConfirmDeliveryDto) {
+  async confirmDeliveries(dto: ConfirmDeliveriesDto) {
     return this.dataSource.transaction(async (manager) => {
       const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const vehicleRepo = manager.getRepository(ErpVehicle);
@@ -397,70 +400,80 @@ export class InventorySerialService {
       const soRepo = manager.getRepository(ErpSalesOrder);
       const soLineRepo = manager.getRepository(ErpSalesOrderLine);
 
-      const serial = await serialRepo.findOne({ where: { id: serialId } });
-      if (!serial) {
-        throw new NotFoundException(
-          `Tracking serial '${serialId}' không tồn tại`,
-        );
-      }
+      const affectedSoIds = new Set<string>();
+      const results: ErpSerialLifecycle[] = [];
 
-      const lifecycle = await lifecycleRepo.findOne({ where: { serialId } });
-      if (!lifecycle) {
-        throw new NotFoundException(
-          `Lifecycle cho serial '${serialId}' không tồn tại`,
-        );
-      }
-      lifecycle.deliveryDate = dto.deliveryDate;
-      if (dto.notes !== undefined) {
-        lifecycle.notes = dto.notes;
-      }
-      await lifecycleRepo.save(lifecycle);
-
-      serial.status = 'SOLD';
-      await serialRepo.save(serial);
-
-      if (serial.vinId) {
-        const vehicle = await vehicleRepo.findOne({
-          where: { id: serial.vinId },
-        });
-        if (vehicle) {
-          vehicle.status = 'SOLD';
-          await vehicleRepo.save(vehicle);
+      for (const serialId of dto.serialIds) {
+        const serial = await serialRepo.findOne({ where: { id: serialId } });
+        if (!serial) {
+          throw new NotFoundException(
+            `Tracking serial '${serialId}' không tồn tại`,
+          );
         }
-      }
 
-      if (serial.salesOrderLineId) {
-        const soLine = await soLineRepo.findOne({
-          where: { id: serial.salesOrderLineId },
-        });
-        if (soLine?.salesOrderId) {
-          const so = await soRepo.findOne({
-            where: { id: soLine.salesOrderId },
+        const lifecycle = await lifecycleRepo.findOne({ where: { serialId } });
+        if (!lifecycle) {
+          throw new NotFoundException(
+            `Lifecycle cho serial '${serialId}' không tồn tại`,
+          );
+        }
+
+        lifecycle.deliveryDate = dto.deliveryDate;
+        if (dto.notes !== undefined) {
+          lifecycle.notes = dto.notes;
+        }
+        await lifecycleRepo.save(lifecycle);
+        results.push(lifecycle);
+
+        serial.status = 'SOLD';
+        await serialRepo.save(serial);
+
+        if (serial.vinId) {
+          const vehicle = await vehicleRepo.findOne({
+            where: { id: serial.vinId },
           });
-          if (so) {
-            const lines = await soLineRepo.find({
-              where: { salesOrderId: so.id },
-            });
-            const lineIds = lines.map((l) => l.id);
-            if (lineIds.length > 0) {
-              const allSerials = await serialRepo.find({
-                where: { salesOrderLineId: In(lineIds) },
-              });
-              const anyDelivering = allSerials.some(
-                (s) => s.status === 'DELIVERING',
-              );
-              if (anyDelivering) {
-                so.status = 'DELIVERING';
-              } else {
-                so.status = 'DELIVERED';
-              }
-              await soRepo.save(so);
-            }
+          if (vehicle) {
+            vehicle.status = 'SOLD';
+            await vehicleRepo.save(vehicle);
+          }
+        }
+
+        if (serial.salesOrderLineId) {
+          const soLine = await soLineRepo.findOne({
+            where: { id: serial.salesOrderLineId },
+          });
+          if (soLine?.salesOrderId) {
+            affectedSoIds.add(soLine.salesOrderId);
           }
         }
       }
 
-      return lifecycle;
+      // Process SO status updates efficiently after all serials are updated
+      for (const soId of affectedSoIds) {
+        const so = await soRepo.findOne({ where: { id: soId } });
+        if (so) {
+          const lines = await soLineRepo.find({
+            where: { salesOrderId: so.id },
+          });
+          const lineIds = lines.map((l) => l.id);
+          if (lineIds.length > 0) {
+            const allSerials = await serialRepo.find({
+              where: { salesOrderLineId: In(lineIds) },
+            });
+            const anyDelivering = allSerials.some(
+              (s) => s.status === 'DELIVERING',
+            );
+            if (anyDelivering) {
+              so.status = 'DELIVERING';
+            } else {
+              so.status = 'DELIVERED';
+            }
+            await soRepo.save(so);
+          }
+        }
+      }
+
+      return results;
     });
   }
 

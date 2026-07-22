@@ -44,6 +44,24 @@ export class PurchaseOrdersCoreController {
   }
 
   @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @Get('column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10),
+      parseInt(pageSize, 10),
+      filters,
+    );
+  }
+
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
   @Get(':id/receipts')
   getReceipts(@Param('id') id: string) {
     return this.service.getReceiptTimeline(id);

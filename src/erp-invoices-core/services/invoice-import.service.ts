@@ -252,6 +252,10 @@ export class InvoiceImportService {
             pdfAttached.push({
               filename: matchedPdf.filename,
               invoiceNo: newInvoice.invoiceNo,
+              invoiceId: newInvoice.id,
+              serialNo: newInvoice.serialNo ?? null,
+              sellerName: newInvoice.sellerName ?? null,
+              totalAmount: newInvoice.totalAmount ?? null,
             });
           } catch {
             this.logger.warn(`R2 PDF upload failed for ${matchedPdf.filename}`);
@@ -314,6 +318,10 @@ export class InvoiceImportService {
           pdfAttached.push({
             filename: pdf.filename,
             invoiceNo: foundInvoice.invoiceNo,
+            invoiceId: foundInvoice.id,
+            serialNo: foundInvoice.serialNo ?? null,
+            sellerName: foundInvoice.sellerName ?? null,
+            totalAmount: foundInvoice.totalAmount ?? null,
           });
         } catch {
           pdfOrphans.push({
@@ -448,5 +456,48 @@ export class InvoiceImportService {
       skipped,
       errors,
     };
+  }
+  async previewPdfMatch(
+    filenames: string[],
+    direction: 'IN' | 'OUT',
+  ): Promise<
+    Record<
+      string,
+      {
+        id: string;
+        invoiceNo: string;
+        serialNo: string | null;
+        totalAmount: string | null;
+      } | null
+    >
+  > {
+    const result: Record<string, any> = {};
+    for (const filename of filenames) {
+      const digitsMatch = filename.match(/(\d{2,})/g);
+      let foundInvoice: any = null;
+
+      if (digitsMatch) {
+        for (const strNum of digitsMatch) {
+          const normNo = normalizeInvoiceNo(strNum);
+          if (!normNo) continue;
+          foundInvoice = await this.repository.findOne({
+            where: { invoiceNoNormalized: normNo, direction } as any,
+          });
+          if (foundInvoice) break;
+        }
+      }
+
+      if (foundInvoice) {
+        result[filename] = {
+          id: foundInvoice.id,
+          invoiceNo: foundInvoice.invoiceNo,
+          serialNo: foundInvoice.serialNo ?? null,
+          totalAmount: foundInvoice.totalAmount ?? null,
+        };
+      } else {
+        result[filename] = null;
+      }
+    }
+    return result;
   }
 }
