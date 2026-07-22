@@ -23,6 +23,7 @@ import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
@@ -435,9 +436,28 @@ export class SalesOrdersCoreService {
       order: { createdAt: 'DESC' },
     });
 
+    const serialLifecycles = await this.dataSource.query(
+      `
+      SELECT 
+        l.id,
+        l.serial_id as "serialId",
+        l.sales_order_id as "salesOrderId",
+        l.goods_issue_id as "goodsIssueId",
+        l.delivery_date as "deliveryDate",
+        s.serial_no as "serialNo", 
+        v.vin_no as "vinNo", 
+        v.engine_no as "engineNo"
+      FROM erp_serial_lifecycles l
+      LEFT JOIN erp_inventory_tracking_serials s ON s.id = l.serial_id
+      LEFT JOIN erp_vehicles v ON v.id = s.vin_id
+      WHERE l.sales_order_id = $1
+    `,
+      [id],
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, lines: linesWithSerials, goodsIssues },
+      data: { ...data, lines: linesWithSerials, goodsIssues, serialLifecycles },
     };
   }
 
