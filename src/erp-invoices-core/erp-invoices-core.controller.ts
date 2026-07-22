@@ -454,6 +454,26 @@ export class ErpInvoicesCoreController {
     return this.service.bulkDownloadFilesZip(payload, res);
   }
 
+  @Post('bulk-download-selected')
+  async bulkDownloadSelected(
+    @Body() payload: { ids: string[]; types: string[] },
+    @Res() res: Response,
+  ) {
+    if (!payload.types || payload.types.length === 0) {
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất 1 loại file (pdf, xml)',
+      );
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="HoaDon_Selected_${Date.now()}.zip"`,
+    );
+
+    return this.service.bulkDownloadSelectedZip(payload, res);
+  }
+
   @Get(':id/pdfs/:key/content')
   async getPdfContent(
     @Param('id') id: string,

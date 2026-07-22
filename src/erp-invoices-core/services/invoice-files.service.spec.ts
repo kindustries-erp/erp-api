@@ -3,8 +3,19 @@ import { InvoiceFilesService } from './invoice-files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { R2Service } from '../../r2/r2.service';
-import { NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+
+const archiveMocks = {
+  on: jest.fn(),
+  pipe: jest.fn(),
+  append: jest.fn(),
+  finalize: jest.fn().mockResolvedValue(undefined),
+};
+
+jest.mock('archiver', () => {
+  return jest.fn(() => archiveMocks);
+});
 
 describe('InvoiceFilesService', () => {
   let service: InvoiceFilesService;
@@ -14,6 +25,7 @@ describe('InvoiceFilesService', () => {
   beforeEach(async () => {
     repository = {
       findOne: jest.fn(),
+      find: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
       createQueryBuilder: jest.fn(),
@@ -22,8 +34,14 @@ describe('InvoiceFilesService', () => {
     r2Service = {
       deleteObject: jest.fn(),
       downloadBuffer: jest.fn(),
+      downloadStream: jest.fn(),
       uploadBuffer: jest.fn(),
     };
+
+    Object.values(archiveMocks).forEach((mockFn: any) => {
+      if (mockFn?.mockReset) mockFn.mockReset();
+    });
+    archiveMocks.finalize.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -117,6 +135,63 @@ describe('InvoiceFilesService', () => {
       // DB should still be updated
       expect(mockInvoice.pdfFiles).toHaveLength(0);
       expect(repository.save).toHaveBeenCalledWith(mockInvoice);
+    });
+  });
+
+  describe('bulkDownloadSelectedZip', () => {
+    it('should throw when ids are empty', async () => {
+      await expect(
+        service.bulkDownloadSelectedZip({ ids: [], types: ['pdf'] }, {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when ids exceed limit', async () => {
+      const ids = Array.from({ length: 501 }, (_, i) => `id-${i}`);
+      await expect(
+        service.bulkDownloadSelectedZip({ ids, types: ['pdf'] }, {}),
+      ).rejects.toThrow('Tối đa 500 hóa đơn mỗi lần tải');
+    });
+
+    it('should append files and include _FILE_LOI report for missing files', async () => {
+      repository.find.mockResolvedValue([
+        {
+          id: 'inv-1',
+          invoiceNo: '0001',
+          direction: 'IN',
+          sellerName: 'Cty A',
+          sellerTaxCode: '0101',
+          buyerName: 'B',
+          buyerTaxCode: '0202',
+          pdfFiles: [{ key: 'k1', filename: 'hoa_don_1.pdf' }],
+          pdfFileKey: null,
+          xmlFileKey: null,
+        },
+      ]);
+      r2Service.downloadStream.mockResolvedValue('stream-data');
+
+      const res = {
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      };
+
+      await service.bulkDownloadSelectedZip(
+        { ids: ['inv-1'], types: ['pdf', 'xml'] },
+        res,
+      );
+
+      expect(repository.find).toHaveBeenCalled();
+      expect(r2Service.downloadStream).toHaveBeenCalledWith('k1');
+      expect(archiveMocks.append).toHaveBeenCalledWith('stream-data', {
+        name: expect.stringContaining('0001.pdf'),
+      });
+      expect(archiveMocks.append).toHaveBeenCalledWith(
+        expect.stringContaining('không có file XML'),
+        {
+          name: '_FILE_LOI.txt',
+        },
+      );
+      expect(archiveMocks.finalize).toHaveBeenCalled();
     });
   });
 });
