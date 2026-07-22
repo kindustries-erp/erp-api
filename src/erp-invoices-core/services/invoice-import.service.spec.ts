@@ -11,6 +11,7 @@ describe('InvoiceImportService', () => {
   beforeEach(async () => {
     mockRepo = {
       findOne: jest.fn(),
+      find: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -34,13 +35,15 @@ describe('InvoiceImportService', () => {
 
   describe('previewPdfMatch', () => {
     it('should match a PDF filename with invoiceNo using regex digits', async () => {
-      // Setup: first call (26) returns null, second call (1234567) returns invoice
-      mockRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
-        id: 'inv-uuid',
-        invoiceNo: '1234567',
-        serialNo: 'C26MGN',
-        totalAmount: '1000000',
-      });
+      // Setup: first call (26) returns [], second call (1234567) returns [invoice]
+      mockRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          id: 'inv-uuid',
+          invoiceNo: '1234567',
+          serialNo: 'C26MGN',
+          totalAmount: '1000000',
+        },
+      ]);
 
       // Test
       const result = await service.previewPdfMatch(
@@ -49,11 +52,12 @@ describe('InvoiceImportService', () => {
       );
 
       // Assert
-      expect(mockRepo.findOne).toHaveBeenCalledWith({
+      expect(mockRepo.find).toHaveBeenCalledWith({
         where: {
           invoiceNoNormalized: '1234567',
           direction: 'IN',
         },
+        order: { createdAt: 'DESC' },
       });
 
       expect(result).toEqual({
@@ -68,7 +72,7 @@ describe('InvoiceImportService', () => {
 
     it('should return null for unmatched PDFs', async () => {
       // Setup
-      mockRepo.findOne.mockResolvedValue(null);
+      mockRepo.find.mockResolvedValue([]);
 
       // Test
       const result = await service.previewPdfMatch(
@@ -90,7 +94,7 @@ describe('InvoiceImportService', () => {
       );
 
       // Assert
-      expect(mockRepo.findOne).not.toHaveBeenCalled();
+      expect(mockRepo.find).not.toHaveBeenCalled();
       expect(result).toEqual({
         'no_digits_here.pdf': null,
       });
