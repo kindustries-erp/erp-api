@@ -203,6 +203,10 @@ export class ErpInvoicesCoreService {
     return this.importService.bulkImportMixed(files, direction);
   }
 
+  previewPdfMatch(filenames: string[], direction: 'IN' | 'OUT') {
+    return this.importService.previewPdfMatch(filenames, direction);
+  }
+
   // ---------------------------------------------------------------------------
   // Files
   // ---------------------------------------------------------------------------

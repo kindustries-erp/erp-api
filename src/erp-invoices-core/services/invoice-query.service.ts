@@ -70,6 +70,7 @@ export class InvoiceQueryService {
     else if (column === 'licensePlate') selectField = 'inv.license_plate';
     else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
     else if (column === 'branchId') selectField = 'inv.branch_id';
+    else if (column === 'notes') selectField = 'inv.notes';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
@@ -115,6 +116,7 @@ export class InvoiceQueryService {
           else if (col === 'settlementOrder')
             filterField = 'inv.settlement_order';
           else if (col === 'branchId') filterField = 'inv.branch_id';
+          else if (col === 'notes') filterField = 'inv.notes';
 
           if (filterField) {
             qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
@@ -831,6 +833,8 @@ export class InvoiceQueryService {
         );
       } else if (key === 'licensePlate') {
         applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
+      } else if (key === 'notes') {
+        applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
       }
     });
   }
@@ -895,6 +899,8 @@ export class InvoiceQueryService {
           );
       } else if (key === 'description')
         qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+      else if (key === 'notes')
+        qb.andWhere('inv.notes IN (:...notesVals)', { notesVals: vals });
       else if (key === 'isValid') {
         const validFilter = vals.includes('true') || vals.includes('1');
         const invalidFilter = vals.includes('false') || vals.includes('0');
