@@ -28,7 +28,10 @@ import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
 import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
-import { ConfirmDeliveryDto } from './dto/confirm-delivery.dto';
+import {
+  ConfirmDeliveryDto,
+  ConfirmDeliveriesDto,
+} from './dto/confirm-delivery.dto';
 import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 import { InventoryDashboardQueryDto } from './dto/inventory-dashboard-query.dto';
 
@@ -190,9 +193,47 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('warehouse-vouchers/column-options')
+  getWarehouseVoucherColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.service.getWarehouseVoucherColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      type,
+    );
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('serials')
   listSerials(@Query() query: InventorySerialQueryDto) {
     return this.service.listSerials(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('serials/column-options')
+  getSerialColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+  ) {
+    return this.service.getSerialColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
@@ -211,12 +252,27 @@ export class InventoryItemsController {
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'update' })
-  @Patch('serials/:id/confirm-delivery')
-  confirmDelivery(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: ConfirmDeliveryDto,
+  @Post('serials/confirm-delivery-bulk')
+  confirmDeliveries(@Body() dto: ConfirmDeliveriesDto) {
+    return this.service.confirmDeliveries(dto);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get('serial-lifecycles/column-options')
+  getSerialLifecycleColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
   ) {
-    return this.service.confirmDelivery(id, dto);
+    return this.service.getSerialLifecycleColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })

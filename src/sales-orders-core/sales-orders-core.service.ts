@@ -4,7 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  DeepPartial,
+  ILike,
+  In,
+  Repository,
+  Brackets,
+} from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpSalesOrder } from './entities/erp_sales_order.entity';
@@ -16,6 +23,7 @@ import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
@@ -183,61 +191,174 @@ export class SalesOrdersCoreService {
     });
   }
 
-  async findAll(query: PaginationDto) {
+  async findAll(query: any) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
-    const order = resolveSortOrder(query.sort, {
-      defaultOrder: { createdAt: 'DESC' },
-    });
 
-    const notFullyIssued = (query as any).notFullyIssued === 'true';
-    const statusFilter = (query as any).status;
+    const qb = this.repository
+      .createQueryBuilder('so')
+      .leftJoinAndSelect('so.lines', 'lines')
+      .leftJoin('erp_business_partners', 'bp', 'so.customer_id = bp.id')
+      .where('so.is_deleted = false');
 
-    const baseWhere: any = {
-      ...(query.search ? { soNo: ILike(`%${query.search}%`) } : {}),
-      isDeleted: false,
-    };
+    const notFullyIssued =
+      query.notFullyIssued === 'true' || query.notFullyIssued === true;
+    const statusFilter = query.status;
 
     if (notFullyIssued) {
-      baseWhere.status = In(['RESERVED', 'PARTIAL_DELIVERED']);
+      qb.andWhere('so.status IN (:...statuses)', {
+        statuses: ['RESERVED', 'PARTIAL_DELIVERED'],
+      });
     } else if (statusFilter) {
-      baseWhere.status = statusFilter;
+      qb.andWhere('so.status = :statusFilter', { statusFilter });
     }
 
-    const tagId = (query as any).tag_id as string | undefined;
-
+    const tagId = query.tag_id;
     if (tagId) {
-      const taggedRows = await this.dataSource.query(
-        `SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_sales_order' AND tag_id = $1`,
-        [tagId],
+      qb.innerJoin(
+        'sys_entity_tags',
+        'tag',
+        "tag.entity_id = so.id AND tag.entity_type = 'erp_sales_order' AND tag.tag_id = :tagId",
+        { tagId },
       );
-      const taggedIds = taggedRows.map((r: any) => r.entity_id) as string[];
-      if (taggedIds.length === 0) {
-        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    if (query.search) {
+      const keywords = String(query.search)
+        .split(';')
+        .map((k: string) => k.trim())
+        .filter((k: string) => k);
+      if (keywords.length > 0) {
+        qb.andWhere(
+          new Brackets((sqb) => {
+            keywords.forEach((kw: string, i: number) => {
+              const p = { [`kw${i}`]: `%${kw}%` };
+              sqb.orWhere(`so.so_no ILIKE :kw${i}`, p);
+              sqb.orWhere(`so.remarks ILIKE :kw${i}`, p);
+              sqb.orWhere(`bp.name ILIKE :kw${i}`, p);
+              sqb.orWhere(`bp.code ILIKE :kw${i}`, p);
+            });
+          }),
+        );
       }
-      const [items, total] = await this.repository.findAndCount({
-        where: [{ ...baseWhere, id: In(taggedIds) }],
-        relations: ['lines'],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        order,
+    }
+
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters);
+        for (const [col, vals] of Object.entries(filters)) {
+          if (Array.isArray(vals) && vals.length > 0) {
+            if (col === 'soNo')
+              qb.andWhere('so.so_no IN (:...soNos)', { soNos: vals });
+            else if (col === 'status')
+              qb.andWhere('so.status IN (:...cStatuses)', { cStatuses: vals });
+            else if (col === 'remarks')
+              qb.andWhere('so.remarks IN (:...remarks)', { remarks: vals });
+            else if (col === 'customerName')
+              qb.andWhere('bp.name IN (:...customerNames)', {
+                customerNames: vals,
+              });
+            else if (col === 'orderDate')
+              qb.andWhere(
+                "TO_CHAR(so.order_date, 'YYYY-MM-DD') IN (:...orderDates)",
+                { orderDates: vals },
+              );
+            else if (col === 'expectedDeliveryDate')
+              qb.andWhere(
+                "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') IN (:...expDates)",
+                { expDates: vals },
+              );
+            else if (col === 'totalQty') {
+              qb.andWhere(
+                (sqb) => {
+                  const subQuery = sqb
+                    .subQuery()
+                    .select('l.sales_order_id')
+                    .from('erp_sales_order_lines', 'l')
+                    .groupBy('l.sales_order_id')
+                    .having('SUM(l.qty_ordered) IN (:...totalQtys)')
+                    .getQuery();
+                  return `so.id IN ${subQuery}`;
+                },
+                { totalQtys: vals.map((v) => Number(v)) },
+              );
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (query.column_search) {
+      try {
+        const searches = JSON.parse(query.column_search) as Record<
+          string,
+          string
+        >;
+        let idx = 0;
+        for (const [col, val] of Object.entries(searches)) {
+          if (!val) continue;
+          const kws = String(val)
+            .split(';')
+            .map((k) => k.trim())
+            .filter((k) => k);
+          if (kws.length === 0) continue;
+
+          qb.andWhere(
+            new Brackets((sqb) => {
+              kws.forEach((kw) => {
+                const p = { [`csw${idx}`]: `%${kw}%` };
+                if (col === 'soNo') sqb.orWhere(`so.so_no ILIKE :csw${idx}`, p);
+                else if (col === 'status')
+                  sqb.orWhere(`so.status ILIKE :csw${idx}`, p);
+                else if (col === 'remarks')
+                  sqb.orWhere(`so.remarks ILIKE :csw${idx}`, p);
+                else if (col === 'customerName')
+                  sqb.orWhere(
+                    `bp.name ILIKE :csw${idx} OR bp.code ILIKE :csw${idx}`,
+                    p,
+                  );
+                else if (col === 'orderDate')
+                  sqb.orWhere(
+                    "TO_CHAR(so.order_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
+                    p,
+                  );
+                else if (col === 'expectedDeliveryDate')
+                  sqb.orWhere(
+                    "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
+                    p,
+                  );
+                idx++;
+              });
+            }),
+          );
+        }
+      } catch (e) {}
+    }
+
+    if (query.sortField && query.sortOrder) {
+      const dir = query.sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+      if (query.sortField === 'soNo') qb.orderBy('so.so_no', dir);
+      else if (query.sortField === 'orderDate')
+        qb.orderBy('so.order_date', dir);
+      else if (query.sortField === 'expectedDeliveryDate')
+        qb.orderBy('so.expected_delivery_date', dir);
+      else if (query.sortField === 'status') qb.orderBy('so.status', dir);
+      else if (query.sortField === 'remarks') qb.orderBy('so.remarks', dir);
+      else if (query.sortField === 'customerName') qb.orderBy('bp.name', dir);
+    } else {
+      const order = resolveSortOrder(query.sort, {
+        defaultOrder: { createdAt: 'DESC' },
       });
-      return this.enrichCustomerNames({
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.ceil(total / pageSize),
+      Object.entries(order).forEach(([key, val]) => {
+        qb.addOrderBy(`so.${key}`, val as any);
       });
     }
 
-    const [items, total] = await this.repository.findAndCount({
-      where: [baseWhere],
-      relations: ['lines'],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order,
-    });
+    const [items, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
     return this.enrichCustomerNames({
       items,
       total,
@@ -315,9 +436,28 @@ export class SalesOrdersCoreService {
       order: { createdAt: 'DESC' },
     });
 
+    const serialLifecycles = await this.dataSource.query(
+      `
+      SELECT 
+        l.id,
+        l.serial_id as "serialId",
+        l.sales_order_id as "salesOrderId",
+        l.goods_issue_id as "goodsIssueId",
+        l.delivery_date as "deliveryDate",
+        s.serial_no as "serialNo", 
+        v.vin_no as "vinNo", 
+        v.engine_no as "engineNo"
+      FROM erp_serial_lifecycles l
+      LEFT JOIN erp_inventory_tracking_serials s ON s.id = l.serial_id
+      LEFT JOIN erp_vehicles v ON v.id = s.vin_id
+      WHERE l.sales_order_id = $1
+    `,
+      [id],
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, lines: linesWithSerials, goodsIssues },
+      data: { ...data, lines: linesWithSerials, goodsIssues, serialLifecycles },
     };
   }
 
@@ -1025,5 +1165,146 @@ export class SalesOrdersCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any as Buffer;
+  }
+
+  async getSalesOrdersColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    let selectField = '';
+    let isDateColumn = false;
+    let isTotalQty = column === 'totalQty';
+
+    if (column === 'orderDate' || column === 'expectedDeliveryDate') {
+      selectField =
+        column === 'orderDate'
+          ? "TO_CHAR(so.order_date, 'YYYY-MM-DD')"
+          : "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'soNo') selectField = 'so.so_no';
+    else if (column === 'customerName') selectField = 'bp.name';
+    else if (column === 'status') selectField = 'so.status';
+    else if (column === 'remarks') selectField = 'so.remarks';
+    else if (column === 'totalQty') selectField = 'totalQty';
+    else {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    let params: any[] = [];
+    let paramIdx = 1;
+    let filterConditions = '';
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'orderDate')
+            filterField = "TO_CHAR(so.order_date, 'YYYY-MM-DD')";
+          else if (col === 'expectedDeliveryDate')
+            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'soNo') filterField = 'so.so_no';
+          else if (col === 'customerName') filterField = 'bp.name';
+          else if (col === 'status') filterField = 'so.status';
+          else if (col === 'remarks') filterField = 'so.remarks';
+          else if (col === 'totalQty') {
+            const placeholders = vals
+              .map((v) => Number(v))
+              .map(() => `$${paramIdx++}`)
+              .join(', ');
+            // We use a subquery to filter by totalQty
+            filterConditions += ` AND so.id IN (SELECT sales_order_id FROM erp_sales_order_lines GROUP BY sales_order_id HAVING SUM(qty_ordered) IN (${placeholders}))`;
+            params.push(...vals.map((v) => Number(v)));
+            continue;
+          }
+
+          if (filterField) {
+            const placeholders = vals.map(() => `$${paramIdx++}`).join(', ');
+            filterConditions += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+            params.push(...vals);
+          }
+        }
+      } catch (e) {}
+    }
+
+    let sql = '';
+    if (isTotalQty) {
+      sql = `
+        WITH totals AS (
+          SELECT SUM(l.qty_ordered) as total_qty
+          FROM erp_sales_orders so
+          LEFT JOIN erp_sales_order_lines l ON so.id = l.sales_order_id
+          LEFT JOIN erp_business_partners bp ON so.customer_id = bp.id
+          WHERE so.is_deleted = false ${filterConditions}
+          GROUP BY so.id
+        )
+        SELECT CAST(total_qty AS TEXT) as value
+        FROM totals
+        WHERE total_qty IS NOT NULL
+      `;
+    } else {
+      sql = `
+        SELECT DISTINCT ${selectField} as value
+        FROM erp_sales_orders so
+        LEFT JOIN erp_business_partners bp ON so.customer_id = bp.id
+        WHERE so.is_deleted = false ${filterConditions}
+      `;
+      if (isDateColumn) {
+        sql += ` AND ${selectField} IS NOT NULL AND ${selectField} != ''`;
+      } else {
+        sql += ` AND ${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != ''`;
+      }
+    }
+
+    if (search) {
+      const keywords = String(search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter((k) => k);
+      if (keywords.length > 0) {
+        const conditions: string[] = [];
+        for (const kw of keywords) {
+          if (isTotalQty) {
+            conditions.push(`CAST(total_qty AS TEXT) ILIKE $${paramIdx++}`);
+          } else {
+            conditions.push(
+              `CAST(${selectField} AS TEXT) ILIKE $${paramIdx++}`,
+            );
+          }
+          params.push(`%${kw}%`);
+        }
+        sql += ` AND (${conditions.join(' OR ')})`;
+      }
+    }
+
+    if (isTotalQty) {
+      sql += ` GROUP BY total_qty ORDER BY total_qty ASC NULLS LAST`;
+    } else {
+      sql += ` ORDER BY ${selectField} ASC NULLS LAST`;
+    }
+
+    const countSql = `SELECT COUNT(*) as total FROM (${sql}) as subquery`;
+    const totalResult = await this.dataSource.query(countSql, params);
+    const total = parseInt(totalResult[0]?.total || '0', 10);
+
+    sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+    params.push(pageSize, (page - 1) * pageSize);
+
+    const itemsResult = await this.dataSource.query(sql, params);
+    const items = itemsResult.map((r: any) => r.value);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 }

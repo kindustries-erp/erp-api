@@ -257,6 +257,7 @@ export class ReportsCoreService {
     search?: string;
     sortBy?: string;
     sortDir?: string;
+    sorts?: string;
     columnSearch?: string;
     columnFilters?: string;
     page?: number;
@@ -299,9 +300,37 @@ export class ReportsCoreService {
     };
 
     let orderByClause = 'ORDER BY "month" DESC, "itemCode" ASC';
-    if (query.sortBy && sortMap[query.sortBy]) {
+
+    if (query.sorts) {
+      try {
+        const parsedSorts: string[] = JSON.parse(query.sorts);
+        const orderParts: string[] = [];
+        for (const sortItem of parsedSorts) {
+          const isDesc = sortItem.startsWith('-');
+          const field = isDesc ? sortItem.substring(1) : sortItem;
+          const dir = isDesc ? 'DESC' : 'ASC';
+
+          if (sortMap[field]) {
+            if (field === 'marginPct') {
+              orderParts.push(
+                `(CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END) ${dir}`,
+              );
+            } else {
+              orderParts.push(`${sortMap[field]} ${dir}`);
+            }
+          }
+        }
+        if (orderParts.length > 0) {
+          orderByClause = `ORDER BY ${orderParts.join(', ')}`;
+        }
+      } catch (e) {}
+    } else if (query.sortBy && sortMap[query.sortBy]) {
       const dir = query.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      orderByClause = `ORDER BY ${sortMap[query.sortBy]} ${dir}`;
+      if (query.sortBy === 'marginPct') {
+        orderByClause = `ORDER BY (CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END) ${dir}`;
+      } else {
+        orderByClause = `ORDER BY ${sortMap[query.sortBy]} ${dir}`;
+      }
     }
 
     let columnSearchFilter = '';
@@ -324,15 +353,24 @@ export class ReportsCoreService {
         const cf = JSON.parse(query.columnFilters);
         for (const [key, vals] of Object.entries(cf)) {
           if (Array.isArray(vals) && vals.length > 0 && sortMap[key]) {
-            const placeholders = vals
-              .map(() => {
-                const ph = `$${paramIndex}`;
+            if (vals[0] === '__ALL_MATCHING__') {
+              const searchStr = vals[1] || '';
+              if (searchStr) {
+                columnFiltersFilter += ` AND ${sortMap[key]}::text ILIKE $${paramIndex}`;
+                params.push(`%${searchStr}%`);
                 paramIndex++;
-                return ph;
-              })
-              .join(', ');
-            columnFiltersFilter += ` AND ${sortMap[key]}::text IN (${placeholders})`;
-            params.push(...vals);
+              }
+            } else {
+              const placeholders = vals
+                .map(() => {
+                  const ph = `$${paramIndex}`;
+                  paramIndex++;
+                  return ph;
+                })
+                .join(', ');
+              columnFiltersFilter += ` AND ${sortMap[key]}::text IN (${placeholders})`;
+              params.push(...vals);
+            }
           }
         }
       } catch (e) {}
@@ -372,23 +410,43 @@ export class ReportsCoreService {
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
       ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          MAX(item_name) AS item_name,
+          month,
+          SUM(qty) AS total_qty,
+          ROUND(AVG(unit_price)) AS avg_price,
+          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          ROUND(AVG(unit_price)) AS avg_price,
+          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
       base_data AS (
         SELECT 
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
-          COALESCE(SUM(b.qty), 0) AS "qtyBought",
-          COALESCE(SUM(s.qty), 0) AS "qtySold",
-          COALESCE(ROUND(AVG(b.unit_price)), 0) AS "avgBuyPrice",
-          COALESCE(ROUND(AVG(s.unit_price)), 0) AS "avgSellPrice",
-          ARRAY_AGG(DISTINCT b.invoice_id) AS "buyInvoiceIds",
-          ARRAY_AGG(DISTINCT s.invoice_id) FILTER (WHERE s.invoice_id IS NOT NULL) AS "sellInvoiceIds"
-        FROM buy_codes b
-        LEFT JOIN sell_codes s ON s.item_code = b.item_code AND s.month = b.month
+          COALESCE(b.total_qty, 0) AS "qtyBought",
+          COALESCE(s.total_qty, 0) AS "qtySold",
+          COALESCE(b.avg_price, 0) AS "avgBuyPrice",
+          COALESCE(s.avg_price, 0) AS "avgSellPrice",
+          b.invoice_ids AS "buyInvoiceIds",
+          s.invoice_ids AS "sellInvoiceIds"
+        FROM buy_agg b
+        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
         WHERE 1=1
           ${dateFilter}
           ${searchFilter}
-        GROUP BY b.item_code, b.item_name, b.month
       ),
       filtered_data AS (
         SELECT *, COUNT(*) OVER() AS "totalCount"
@@ -488,11 +546,28 @@ export class ReportsCoreService {
           ii.unit_price::numeric AS unit_price,
           (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
           COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          ii.vat_amount::numeric AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + ii.vat_amount::numeric AS total_amount,
+          COALESCE(
+            NULLIF(ii.vat_amount::numeric, 0), 
+            CASE 
+              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+              ELSE 0 
+            END, 
+            0
+          ) AS vat_amount,
+          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+            NULLIF(ii.vat_amount::numeric, 0), 
+            CASE 
+              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+              ELSE 0 
+            END, 
+            0
+          ) AS total_amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
           i.license_plate,
-          i.settlement_order
+          i.settlement_order,
+          ii.description
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -517,11 +592,28 @@ export class ReportsCoreService {
           ii.unit_price::numeric AS unit_price,
           (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
           COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          ii.vat_amount::numeric AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + ii.vat_amount::numeric AS total_amount,
+          COALESCE(
+            NULLIF(ii.vat_amount::numeric, 0), 
+            CASE 
+              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+              ELSE 0 
+            END, 
+            0
+          ) AS vat_amount,
+          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+            NULLIF(ii.vat_amount::numeric, 0), 
+            CASE 
+              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+              ELSE 0 
+            END, 
+            0
+          ) AS total_amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
           i.license_plate,
-          i.settlement_order
+          i.settlement_order,
+          ii.description
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -549,6 +641,7 @@ export class ReportsCoreService {
         c.total_amount AS "totalAmount",
         c.license_plate AS "licensePlate",
         c.settlement_order AS "settlementOrder",
+        c.description,
         TO_CHAR(c.month, 'YYYY-MM') AS "month"
       FROM (
         SELECT * FROM buy_codes
@@ -572,13 +665,89 @@ export class ReportsCoreService {
     dateFrom?: string;
     dateTo?: string;
     search?: string;
+    sorts?: string;
+    columnSearch?: string;
+    columnFilters?: string;
   }) {
-    const rawData = await this.getVinfastPartsTrackingDetails(query);
+    // 1. Fetch overview data
+    const overviewDataResp = await this.getVinfastPartsTracking({
+      ...query,
+      page: 1,
+      limit: 1000000,
+    });
+    const overviewData = overviewDataResp.data;
+    const overviewItemCodes = new Set(overviewData.map((d: any) => d.itemCode));
+
+    // 2. Fetch details data and filter by overview items
+    let rawData = await this.getVinfastPartsTrackingDetails({
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      search: query.search,
+    });
+    rawData = rawData.filter((row: any) => overviewItemCodes.has(row.itemCode));
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Bảng kê phụ tùng');
 
-    sheet.columns = [
+    // --- SHEET 1: TỔNG QUAN ---
+    const sheet1 = workbook.addWorksheet('Tổng quan');
+    sheet1.columns = [
+      { header: 'Tháng', key: 'month', width: 12 },
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
+      { header: 'SL mua (VINFAST)', key: 'qtyBought', width: 15 },
+      { header: 'Giá mua TB', key: 'avgBuyPrice', width: 15 },
+      { header: 'SL bán ra', key: 'qtySold', width: 15 },
+      { header: 'Giá bán TB', key: 'avgSellPrice', width: 15 },
+      { header: 'Biên LN', key: 'margin', width: 15 },
+      { header: 'Biên LN (%)', key: 'marginPct', width: 15 },
+    ];
+    sheet1.getRow(1).font = { bold: true };
+    sheet1.getRow(1).alignment = { horizontal: 'center' };
+    sheet1.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' },
+    };
+    sheet1.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    ];
+    sheet1.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: 9 },
+    };
+
+    overviewData.forEach((row: any) => {
+      sheet1.addRow({
+        month: row.month,
+        itemCode: row.itemCode,
+        itemName: row.itemName,
+        qtyBought: row.qtyBought,
+        avgBuyPrice: row.avgBuyPrice,
+        qtySold: row.qtySold,
+        avgSellPrice: row.avgSellPrice,
+        margin: row.margin,
+        marginPct: row.marginPct,
+      });
+    });
+
+    sheet1.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        [
+          'qtyBought',
+          'avgBuyPrice',
+          'qtySold',
+          'avgSellPrice',
+          'margin',
+        ].forEach((key) => {
+          const cell = row.getCell(key);
+          cell.numFmt = '#,##0';
+        });
+      }
+    });
+
+    // --- SHEET 2: CHI TIẾT ---
+    const sheet2 = workbook.addWorksheet('Chi tiết');
+    sheet2.columns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 15 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
@@ -586,47 +755,49 @@ export class ReportsCoreService {
       { header: 'Ngày hóa đơn', key: 'invoiceDate', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-      { header: 'Trạng thái', key: 'status', width: 15 },
       { header: 'Tên đối tác', key: 'partnerName', width: 40 },
       { header: 'Mã số thuế', key: 'taxCode', width: 15 },
       { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
       { header: 'Đơn giá', key: 'unitPrice', width: 20 },
-      { header: 'Tiền trước thuế', key: 'preVatAmount', width: 20 },
+      { header: 'Trước thuế GTGT', key: 'preVatAmount', width: 20 },
       {
-        header: 'Thuế suất VAT (%)',
+        header: 'Thuế suất',
         key: 'vatRate',
         width: 15,
         style: { numFmt: '0%' },
       },
-      { header: 'Tiền thuế VAT', key: 'vatAmount', width: 20 },
+      { header: 'Thuế GTGT', key: 'vatAmount', width: 20 },
       { header: 'Thành tiền', key: 'totalAmount', width: 20 },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-      { header: 'Lệnh sửa chữa', key: 'settlementOrder', width: 20 },
+      { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 20 },
+      { header: 'Diễn giải', key: 'description', width: 40 },
+      { header: 'Trạng thái', key: 'status', width: 15 },
     ];
 
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).alignment = { horizontal: 'center' };
-    sheet.getRow(1).fill = {
+    sheet2.getRow(1).font = { bold: true };
+    sheet2.getRow(1).alignment = { horizontal: 'center' };
+    sheet2.getRow(1).fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FFE0E0E0' },
     };
-
-    sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }];
-    sheet.autoFilter = {
+    sheet2.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+    ];
+    sheet2.autoFilter = {
       from: { row: 1, column: 1 },
-      to: { row: 1, column: 19 },
+      to: { row: 1, column: 20 },
     };
 
     const parseVat = (val: any) => {
       if (!val) return '';
       const n = parseFloat(val);
-      return isNaN(n) ? val : n / 100;
+      return isNaN(n) ? val : n;
     };
 
     rawData.forEach((row: any) => {
-      sheet.addRow({
+      sheet2.addRow({
         month: row.month,
         itemCode: row.itemCode,
         itemName: row.itemName,
@@ -634,7 +805,6 @@ export class ReportsCoreService {
         invoiceDate: row.invoiceDate,
         serialNo: row.serialNo,
         invoiceNo: row.invoiceNo,
-        status: row.status,
         partnerName: row.partnerName,
         taxCode: row.taxCode,
         unit: row.unit,
@@ -646,6 +816,8 @@ export class ReportsCoreService {
         totalAmount: parseFloat(row.totalAmount || '0'),
         licensePlate: row.licensePlate,
         settlementOrder: row.settlementOrder,
+        description: row.description,
+        status: row.status,
       });
     });
 
@@ -656,7 +828,7 @@ export class ReportsCoreService {
       'vatAmount',
       'totalAmount',
     ];
-    sheet.eachRow((row, rowNumber) => {
+    sheet2.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
         numColumns.forEach((key) => {
           const cell = row.getCell(key);

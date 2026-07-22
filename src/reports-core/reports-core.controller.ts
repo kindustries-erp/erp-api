@@ -39,6 +39,7 @@ export class ReportsCoreController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('sorts') sorts?: string,
     @Query('column_search') columnSearch?: string,
     @Query('column_filters') columnFilters?: string,
     @Query('page') page: string = '1',
@@ -50,6 +51,7 @@ export class ReportsCoreController {
       search,
       sortBy,
       sortDir,
+      sorts,
       columnSearch,
       columnFilters,
       page: parseInt(page, 10),
@@ -98,6 +100,9 @@ export class ReportsCoreController {
     @Query('dateFrom') dateFrom: string,
     @Query('dateTo') dateTo: string,
     @Query('search') search: string,
+    @Query('sorts') sorts: string,
+    @Query('column_search') columnSearch: string,
+    @Query('column_filters') columnFilters: string,
     @Res() res: Response,
   ) {
     const buffer =
@@ -105,6 +110,9 @@ export class ReportsCoreController {
         dateFrom,
         dateTo,
         search,
+        sorts,
+        columnSearch,
+        columnFilters,
       });
     res.setHeader(
       'Content-Type',

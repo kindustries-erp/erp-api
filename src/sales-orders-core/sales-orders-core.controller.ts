@@ -44,6 +44,24 @@ export class SalesOrdersCoreController {
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get('column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('filtersStr') filtersStr?: string,
+  ) {
+    return this.service.getSalesOrdersColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextSoNo(date);

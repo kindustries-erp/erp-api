@@ -78,7 +78,7 @@ function getTextIn(parent: Element | null, ...tags: string[]): string | null {
 
 function toNum(val: string | null | undefined): number {
   if (!val) return 0;
-  const cleaned = val.replace(/[,\s]/g, '');
+  const cleaned = val.replace(/[,\s%]/g, '');
   const n = Number(cleaned);
   return isNaN(n) ? 0 : n;
 }
@@ -236,11 +236,13 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     getTextIn(ttoan ?? null, 'TgTChietKhau', 'tgtchietkhau') ?? null;
 
   // Items array
-  const items: ParsedVietnamInvoiceItem[] = [];
   const hhdvus =
     ndhdon?.getElementsByTagName('HHDVu') ?? doc.getElementsByTagName('HHDVu');
+
+  const parsedItems: (ParsedVietnamInvoiceItem & { _stt: number })[] = [];
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
+    const stt = toNum(getTextIn(el, 'STT', 'stt')) || i + 1;
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
     const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
     const quantity = getTextIn(el, 'SLuong', 'sluong')
@@ -262,7 +264,8 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     }
     const discount = toNum(getTextIn(el, 'STCKhau', 'stckhau'));
     const total = preVat + vatAmt - discount;
-    items.push({
+    parsedItems.push({
+      _stt: stt,
       description: desc,
       unit,
       quantity,
@@ -274,6 +277,11 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
       totalAmount: total,
     });
   }
+
+  parsedItems.sort((a, b) => a._stt - b._stt);
+  const items: ParsedVietnamInvoiceItem[] = parsedItems.map(
+    ({ _stt, ...rest }) => rest,
+  );
   const description = items[0]?.description ?? null;
 
   // vatRate: chuẩn TT78 lưu dạng % (8, 10, ...) hoặc decimal (0.1)

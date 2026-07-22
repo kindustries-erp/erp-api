@@ -211,25 +211,46 @@ export class ErpInvoicesCoreController {
    * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
    */
   @Post('portal/bulk-download-xml')
-  bulkDownloadXml(@Body() body: { token: string; direction: 'IN' | 'OUT' }) {
-    return this.service.bulkDownloadXml(body.token, body.direction);
+  bulkDownloadXml(
+    @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
+  ) {
+    return this.service.bulkDownloadXml(
+      body.token,
+      body.cookies,
+      body.direction,
+    );
   }
 
   @Get('portal/token')
   async getPortalToken() {
-    const token = await this.service.getPortalToken();
-    return { token };
+    return await this.service.getPortalConfig();
   }
 
   @Post('portal/token')
-  async savePortalToken(@Body() body: { token: string }) {
-    await this.service.savePortalToken(body.token);
-    return { message: 'Token saved successfully' };
+  async savePortalToken(@Body() body: { token: string; cookies?: string }) {
+    await this.service.savePortalConfig(body.token, body.cookies);
+    return { message: 'Config saved successfully' };
   }
 
   // ---------------------------------------------------------------------------
   // Bulk XML import
   // ---------------------------------------------------------------------------
+
+  /**
+   * POST /api/v1/erp-invoices/preview-pdf-match
+   * Lấy trước thông tin hóa đơn sẽ ghép cho các file PDF mồ côi
+   */
+  @Post('preview-pdf-match')
+  async previewPdfMatch(
+    @Body() body: { filenames: string[]; direction: 'IN' | 'OUT' },
+  ) {
+    if (!body.filenames || !Array.isArray(body.filenames)) {
+      throw new BadRequestException(
+        'filenames is required and must be an array',
+      );
+    }
+    return this.service.previewPdfMatch(body.filenames, body.direction || 'IN');
+  }
 
   /**
    * POST /api/v1/erp-invoices/bulk-import-xml/buyer
