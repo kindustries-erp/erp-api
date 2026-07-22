@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -161,6 +162,18 @@ export class CreateErpInvoiceDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
+  buyerPersonalName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  buyerCccd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   buyerAddress?: string;
 
   // Tài chính
@@ -224,6 +237,11 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @IsString()
   paymentDocumentNos?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isValid?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

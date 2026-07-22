@@ -4,7 +4,10 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import type { ErpSalesOrder } from './erp_sales_order.entity';
 
 @Entity({ name: 'erp_sales_order_lines' })
 export class ErpSalesOrderLine {
@@ -13,6 +16,10 @@ export class ErpSalesOrderLine {
 
   @Column({ type: 'uuid', name: 'sales_order_id' })
   salesOrderId: string;
+
+  @ManyToOne('ErpSalesOrder', 'lines')
+  @JoinColumn({ name: 'sales_order_id' })
+  salesOrder?: ErpSalesOrder;
 
   @Column({ type: 'int', name: 'line_no' })
   lineNo: number;

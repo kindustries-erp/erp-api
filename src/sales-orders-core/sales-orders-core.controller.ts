@@ -9,8 +9,11 @@ import {
   Post,
   Query,
   UseGuards,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -38,6 +41,24 @@ export class SalesOrdersCoreController {
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get('column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('filtersStr') filtersStr?: string,
+  ) {
+    return this.service.getSalesOrdersColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
   }
 
   @RequirePermissions({ resource: 'sales_orders', action: 'read' })
@@ -95,5 +116,20 @@ export class SalesOrdersCoreController {
   @Post(':id/cancel')
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
+  }
+
+  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @Get(':id/export/xlsx')
+  async exportXlsx(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const buffer = await this.service.exportXlsx(id);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="DonBanHang_${id.split('-')[0]}.xlsx"`,
+    });
+    return new StreamableFile(buffer);
   }
 }

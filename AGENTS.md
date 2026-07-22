@@ -1,34 +1,20 @@
-# Liouni ERP API Agent Bootstrap
+# ERP API Agent Entry
 
-Entry point for `liouni-erp-api`.
+This file is the repo-root bridge for agents.
 
 ## Read order
-1. `.agents/README.md`
-2. `.agents/context/current-truth.md`
-3. `.agents/context/working-contract.md`
-4. `.agents/tasks/current-lane.md`
-5. `docs/ai/technical-instructions.md`
-6. `README.md`
-7. Relevant `docs/tasks/*`
 
-## Execution contract
-- no code without a task file
-- update checklists in real time
-- record lessons learned for blockers/wrong turns
-- use `bun` / `bunx` unless Bun incompatibility is proven
-- before commit/push, `cd /opt/repos/liouni-erp-core/liouni-erp-api`
-- push with `github-industries`
-- reuse existing components/modules/services/DTOs/helpers/utils/functions first
-- extend/adapt before duplicating
+1. `.agents/context/current-truth.md`
+2. `.agents/context/working-contract.md`
+3. `.agents/tasks/current-lane.md`
+4. `.agents/skills/liouni-erp-api-current-truth/SKILL.md`
+5. `.agents/rules/liouni-erp-api.md`
+6. `.agents/rules/ai-instructions/technical-instructions.md`
 
-## References
-- `docs/ai/technical-instructions.md`
-- `docs/tasks/_template.md`
-- `docs/lessons-learned/_template.md`
+## Mandatory alignment
 
-## Tests
-- pre-commit runs `bunx jest --forceExit`
-- fix source, not tests
-- tests live in `*.spec.ts`
-- run all: `bunx jest --forceExit`
-- run one area: `bunx jest --testPathPatterns=<module>`
+- Reuse existing `.agents` skills, rules, and task artifacts before creating new ones.
+- Follow gate order: DB -> API -> UI -> QC.
+- Use Bun/Bunx only.
+- No code without a task file under `.agents/tasks/`.
+- Before push, run required checks defined by husky hooks.

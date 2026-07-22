@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpInvoice } from './erp_invoice.entity';
+import type { ErpInvoice } from './erp_invoice.entity';
 
 @Entity({ name: 'erp_invoice_items' })
 export class ErpInvoiceItem {
@@ -17,11 +17,11 @@ export class ErpInvoiceItem {
   @Column({ type: 'uuid', name: 'invoice_id' })
   invoiceId: string;
 
-  @ManyToOne(() => ErpInvoice, (invoice) => invoice.items, {
+  @ManyToOne('ErpInvoice', (invoice: any) => invoice.items, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'invoice_id' })
-  invoice: ErpInvoice;
+  invoice: import('typeorm').Relation<ErpInvoice>;
 
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;

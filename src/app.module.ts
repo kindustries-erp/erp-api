@@ -1,3 +1,4 @@
+import { ReportsCoreModule } from './reports-core/reports-core.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -39,9 +40,17 @@ import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transa
 import { KgaraApiCoreModule } from './kgara-api-core/kgara-api-core.module';
 import { AccountingCoreModule } from './accounting-core/accounting-core.module';
 import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
+import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
 
 @Module({
   imports: [
+    ...(process.env.APP_ENV?.endsWith('-production') ||
+    process.env.NODE_ENV === 'production'
+      ? [ScheduleModule.forRoot()]
+      : []),
+    ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
@@ -109,6 +118,9 @@ import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
     KgaraApiCoreModule,
     AccountingCoreModule,
     PublicWarrantyModule,
+    NotificationsModule,
+    DashboardCoreModule,
+    InventoryAdjustmentsCoreModule,
   ],
   controllers: [AppController],
   providers: [

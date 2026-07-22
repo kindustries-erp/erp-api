@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -56,9 +57,13 @@ import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_acco
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
+import { CoreNotification } from '../notifications/entities/core-notification.entity';
+import { ErpInventoryAdjustment } from '../inventory-adjustments-core/entities/erp_inventory_adjustment.entity';
+import { ErpInventoryAdjustmentLine } from '../inventory-adjustments-core/entities/erp_inventory_adjustment_line.entity';
 
 const entities = [
   CoreUser,
+  CoreRefreshToken,
   CoreRole,
   CorePermission,
   CoreUserRole,
@@ -114,6 +119,9 @@ const entities = [
   ErpJournalEntry,
   ErpJournalEntryLine,
   ErpSerialLifecycle,
+  CoreNotification,
+  ErpInventoryAdjustment,
+  ErpInventoryAdjustmentLine,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -123,6 +131,7 @@ export default new DataSource(
     ? {
         type: 'postgres',
         url: databaseUrl,
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,
@@ -135,6 +144,7 @@ export default new DataSource(
         username: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_DATABASE || 'erp_core',
+        schema: 'public',
         entities,
         migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
         synchronize: false,

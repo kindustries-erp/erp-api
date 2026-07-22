@@ -374,9 +374,44 @@ export class CashflowVouchersService {
     parts.push('filter[is_active][_eq]=true');
     if (query.date_from)
       parts.push(`filter[voucher_date][_gte]=${query.date_from}`);
-    if (query.date_to)
-      parts.push(`filter[voucher_date][_lte]=${query.date_to}`);
+    if (query.date_to) {
+      const dTo =
+        query.date_to.length === 10
+          ? `${query.date_to} 23:59:59.999`
+          : query.date_to;
+      parts.push(`filter[voucher_date][_lte]=${dTo}`);
+    }
     if (query.search) parts.push(`search=${encodeURIComponent(query.search)}`);
+
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (vals && vals.length > 0) {
+            parts.push(
+              `filter[${col}][_in]=${vals.map(encodeURIComponent).join(',')}`,
+            );
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (query.column_search) {
+      try {
+        const search = JSON.parse(query.column_search) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(search)) {
+          if (val) {
+            parts.push(`filter[${col}][_icontains]=${encodeURIComponent(val)}`);
+          }
+        }
+      } catch (e) {}
+    }
 
     const res = await fetch(
       `${this.directusUrl}/items/${this.collection}?${parts.join('&')}`,

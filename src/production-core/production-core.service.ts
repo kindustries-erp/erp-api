@@ -136,15 +136,20 @@ export class ProductionCoreService {
         fgId: query.finishedGoodItemId,
       });
     }
-    if (query.dateFrom && query.dateTo) {
+    let effectiveDateTo = query.dateTo;
+    if (effectiveDateTo && effectiveDateTo.length === 10) {
+      effectiveDateTo = `${effectiveDateTo} 23:59:59.999`;
+    }
+
+    if (query.dateFrom && effectiveDateTo) {
       qb.andWhere('po.plannedStartDate BETWEEN :from AND :to', {
         from: query.dateFrom,
-        to: query.dateTo,
+        to: effectiveDateTo,
       });
     } else if (query.dateFrom) {
       qb.andWhere('po.plannedStartDate >= :from', { from: query.dateFrom });
-    } else if (query.dateTo) {
-      qb.andWhere('po.plannedStartDate <= :to', { to: query.dateTo });
+    } else if (effectiveDateTo) {
+      qb.andWhere('po.plannedStartDate <= :to', { to: effectiveDateTo });
     }
 
     for (const [key, dir] of Object.entries(order)) {
@@ -170,11 +175,26 @@ export class ProductionCoreService {
       inventoryItems.map((item) => [item.id, item.itemName]),
     );
 
+    const bomIds = Array.from(
+      new Set(items.map((item) => item.outputMetadata?.bomId).filter(Boolean)),
+    ) as string[];
+    const bomVersionMap = new Map<string, string>();
+    if (bomIds.length) {
+      const boms = await this.dataSource.query(
+        `SELECT id, bom_name, version FROM erp_boms WHERE id = ANY($1)`,
+        [bomIds],
+      );
+      boms.forEach((b: any) =>
+        bomVersionMap.set(b.id, `${b.bom_name} (v${b.version ?? '?'})`),
+      );
+    }
+
     return {
       items: items.map((item) => ({
         ...item,
         finishedGoodItemName:
           itemNameMap.get(item.finishedGoodItemId ?? '') ?? null,
+        bomVersion: bomVersionMap.get(item.outputMetadata?.bomId ?? '') ?? null,
         qtyProduced: item.qtyProduced,
       })),
       total,
@@ -564,7 +584,7 @@ export class ProductionCoreService {
 
     // Load produced identifiers (vehicles / serials) linked to this production order
     const producedVehicles = await this.dataSource.query(
-      `SELECT v.id, v.vin_no AS "vinNo", v.engine_no AS "engineNo", v.notes, v.created_at AS "createdAt", s.attributes
+      `SELECT v.id, v.vin_no AS "vinNo", v.engine_no AS "engineNo", v.notes, v.created_at AS "createdAt", s.attributes, s.serial_no AS "serialNo"
        FROM public.erp_vehicles v
        LEFT JOIN public.erp_inventory_tracking_serials s ON s.vin_id = v.id
        WHERE v.production_order_id = $1::uuid

@@ -53,6 +53,11 @@ export class CreateBankAccountDto {
   @IsString()
   @IsOptional()
   periodDate?: string;
+
+  @ApiProperty()
+  @IsUUID()
+  @IsNotEmpty()
+  accountingAccountId: string;
 }
 
 export class UpdateBankAccountDto {
@@ -95,4 +100,9 @@ export class UpdateBankAccountDto {
   @IsString()
   @IsOptional()
   periodDate?: string;
+
+  @ApiProperty()
+  @IsUUID()
+  @IsNotEmpty()
+  accountingAccountId: string;
 }

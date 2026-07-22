@@ -27,6 +27,8 @@ export interface ParsedVietnamInvoice {
   sellerAddress: string | null;
   sellerBank: string | null;
   buyerName: string | null;
+  buyerPersonalName: string | null;
+  buyerCccd: string | null;
   buyerTaxCode: string | null;
   buyerAddress: string | null;
   description: string | null;
@@ -76,7 +78,7 @@ function getTextIn(parent: Element | null, ...tags: string[]): string | null {
 
 function toNum(val: string | null | undefined): number {
   if (!val) return 0;
-  const cleaned = val.replace(/[,\s]/g, '');
+  const cleaned = val.replace(/[,\s%]/g, '');
   const n = Number(cleaned);
   return isNaN(n) ? 0 : n;
 }
@@ -203,6 +205,11 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     ndhdon?.getElementsByTagName('nmua')[0] ??
     doc.getElementsByTagName('NMua')[0];
   const buyerName = getTextIn(nmua ?? null, 'Ten', 'ten') ?? null;
+  const buyerPersonalName =
+    getTextIn(nmua ?? null, 'HoTen', 'hoten', 'TNNMua', 'tnnmua', 'TenNMua') ??
+    null;
+  const buyerCccd =
+    getTextIn(nmua ?? null, 'CCCD', 'cccd', 'CMND', 'cmnd', 'HoChieu') ?? null;
   const buyerTaxCode = getTextIn(nmua ?? null, 'MST', 'mst') ?? null;
   const buyerAddress = getTextIn(nmua ?? null, 'DChi', 'dchi') ?? null;
 
@@ -229,11 +236,13 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     getTextIn(ttoan ?? null, 'TgTChietKhau', 'tgtchietkhau') ?? null;
 
   // Items array
-  const items: ParsedVietnamInvoiceItem[] = [];
   const hhdvus =
     ndhdon?.getElementsByTagName('HHDVu') ?? doc.getElementsByTagName('HHDVu');
+
+  const parsedItems: (ParsedVietnamInvoiceItem & { _stt: number })[] = [];
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
+    const stt = toNum(getTextIn(el, 'STT', 'stt')) || i + 1;
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
     const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
     const quantity = getTextIn(el, 'SLuong', 'sluong')
@@ -249,10 +258,14 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
       const n = toNum(vatRateRawEl);
       itemVatRate = n > 1 ? n / 100 : n;
     }
-    const vatAmt = toNum(getTextIn(el, 'TThue', 'tthue'));
+    let vatAmt = toNum(getTextIn(el, 'TThue', 'tthue'));
+    if (!vatAmt && itemVatRate) {
+      vatAmt = Math.round(preVat * itemVatRate);
+    }
     const discount = toNum(getTextIn(el, 'STCKhau', 'stckhau'));
     const total = preVat + vatAmt - discount;
-    items.push({
+    parsedItems.push({
+      _stt: stt,
       description: desc,
       unit,
       quantity,
@@ -264,6 +277,11 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
       totalAmount: total,
     });
   }
+
+  parsedItems.sort((a, b) => a._stt - b._stt);
+  const items: ParsedVietnamInvoiceItem[] = parsedItems.map(
+    ({ _stt, ...rest }) => rest,
+  );
   const description = items[0]?.description ?? null;
 
   // vatRate: chuẩn TT78 lưu dạng % (8, 10, ...) hoặc decimal (0.1)
@@ -284,6 +302,8 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress,
     sellerBank,
     buyerName,
+    buyerPersonalName,
+    buyerCccd,
     buyerTaxCode,
     buyerAddress,
     description,
@@ -436,7 +456,10 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
       const n = toNum(vRateRaw);
       vRate = n > 1 ? n / 100 : n;
     }
-    const vAmt = toNum(getTextIn(line, 'VATAmount', 'TaxAmount'));
+    let vAmt = toNum(getTextIn(line, 'VATAmount', 'TaxAmount'));
+    if (!vAmt && vRate) {
+      vAmt = Math.round(preVat * vRate);
+    }
     const disc = toNum(getTextIn(line, 'DiscountAmount'));
     items.push({
       description: desc,
@@ -468,6 +491,8 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress,
     sellerBank,
     buyerName,
+    buyerPersonalName: null,
+    buyerCccd: null,
     buyerTaxCode,
     buyerAddress,
     description,
@@ -539,6 +564,8 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     sellerAddress: getText(doc, 'seller_address', 'SellerAddress') ?? null,
     sellerBank: getText(doc, 'seller_bank', 'SellerBank') ?? null,
     buyerName: getText(doc, ...BUYER_NAME_TAGS) ?? null,
+    buyerPersonalName: null,
+    buyerCccd: null,
     buyerTaxCode:
       getText(doc, 'buyer_tax_code', 'BuyerTaxCode', 'MaSoThueNMua') ?? null,
     buyerAddress: getText(doc, 'buyer_address', 'BuyerAddress') ?? null,
@@ -606,7 +633,13 @@ export function parseVietnamInvoiceXml(
   for (const [name, fn] of strategies) {
     try {
       const result = fn(doc);
-      if (result) return result;
+      if (result) {
+        if (result.invoiceNo) {
+          result.invoiceNo = result.invoiceNo.replace(/^0+/, '');
+          if (result.invoiceNo === '') result.invoiceNo = '0';
+        }
+        return result;
+      }
     } catch {
       // Strategy lỗi → thử tiếp
     }

@@ -66,16 +66,33 @@ export class R2Service {
   }
 
   /**
+   * Download stream từ R2
+   */
+  async downloadStream(key: string): Promise<NodeJS.ReadableStream> {
+    const s3Obj = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+    if (!s3Obj.Body) throw new Error('Empty body');
+    return s3Obj.Body as NodeJS.ReadableStream;
+  }
+
+  /**
    * Tạo pre-signed URL để download (GET) — mặc định 1 giờ
    */
   async getPresignedDownloadUrl(
     key: string,
     expiresInSeconds = 3600,
     filename?: string,
+    inline = false,
   ): Promise<string> {
     const input: any = { Bucket: this.bucket, Key: key };
     if (filename) {
-      input.ResponseContentDisposition = `attachment; filename="${filename}"`;
+      input.ResponseContentDisposition = `${inline ? 'inline' : 'attachment'}; filename="${filename}"`;
+    } else if (inline) {
+      input.ResponseContentDisposition = 'inline';
     }
     const cmd = new GetObjectCommand(input);
     return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });

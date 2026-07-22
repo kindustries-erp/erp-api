@@ -32,6 +32,9 @@ export class ErpJournalEntry {
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
+  @Column({ type: 'date', name: 'document_date', nullable: true })
+  documentDate: Date | null;
+
   @Column({
     type: 'varchar',
     length: 255,
