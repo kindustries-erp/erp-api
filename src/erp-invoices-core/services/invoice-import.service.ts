@@ -275,19 +275,10 @@ export class InvoiceImportService {
 
     // 4. Orphan PDFs — try to match to existing invoices by number
     for (const [, pdf] of pdfMap.entries()) {
-      const digitsMatch = pdf.filename.match(/(\d{2,})/g);
-      let foundInvoice: any = null;
-
-      if (digitsMatch) {
-        for (const strNum of digitsMatch) {
-          const normNo = normalizeInvoiceNo(strNum);
-          if (!normNo) continue;
-          foundInvoice = await this.repository.findOne({
-            where: { invoiceNoNormalized: normNo, direction } as any,
-          });
-          if (foundInvoice) break;
-        }
-      }
+      const foundInvoice = await this.findInvoiceForOrphanPdf(
+        pdf.filename,
+        direction,
+      );
 
       if (foundInvoice) {
         const now = new Date();
@@ -473,19 +464,10 @@ export class InvoiceImportService {
   > {
     const result: Record<string, any> = {};
     for (const filename of filenames) {
-      const digitsMatch = filename.match(/(\d{2,})/g);
-      let foundInvoice: any = null;
-
-      if (digitsMatch) {
-        for (const strNum of digitsMatch) {
-          const normNo = normalizeInvoiceNo(strNum);
-          if (!normNo) continue;
-          foundInvoice = await this.repository.findOne({
-            where: { invoiceNoNormalized: normNo, direction } as any,
-          });
-          if (foundInvoice) break;
-        }
-      }
+      const foundInvoice = await this.findInvoiceForOrphanPdf(
+        filename,
+        direction,
+      );
 
       if (foundInvoice) {
         result[filename] = {
@@ -499,5 +481,41 @@ export class InvoiceImportService {
       }
     }
     return result;
+  }
+
+  private async findInvoiceForOrphanPdf(
+    filename: string,
+    direction: 'IN' | 'OUT',
+  ) {
+    const digitsMatch = filename.match(/(\d{2,})/g);
+    const serialMatch = filename.match(/[a-zA-Z0-9]{5,8}/g);
+
+    if (digitsMatch) {
+      for (const strNum of digitsMatch) {
+        const normNo = normalizeInvoiceNo(strNum);
+        if (!normNo) continue;
+        const candidates = await this.repository.find({
+          where: { invoiceNoNormalized: normNo, direction } as any,
+          order: { createdAt: 'DESC' },
+        });
+
+        if (candidates.length > 0) {
+          if (candidates.length === 1) {
+            return candidates[0];
+          } else {
+            if (serialMatch) {
+              const matchedBySerial = candidates.find((c) => {
+                if (!c.serialNo) return false;
+                const cSerial = c.serialNo.toLowerCase();
+                return serialMatch.some((sm) => sm.toLowerCase() === cSerial);
+              });
+              if (matchedBySerial) return matchedBySerial;
+            }
+            return candidates[0];
+          }
+        }
+      }
+    }
+    return null;
   }
 }
