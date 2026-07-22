@@ -457,4 +457,47 @@ export class InvoiceImportService {
       errors,
     };
   }
+  async previewPdfMatch(
+    filenames: string[],
+    direction: 'IN' | 'OUT',
+  ): Promise<
+    Record<
+      string,
+      {
+        id: string;
+        invoiceNo: string;
+        serialNo: string | null;
+        totalAmount: string | null;
+      } | null
+    >
+  > {
+    const result: Record<string, any> = {};
+    for (const filename of filenames) {
+      const digitsMatch = filename.match(/(\d{2,})/g);
+      let foundInvoice: any = null;
+
+      if (digitsMatch) {
+        for (const strNum of digitsMatch) {
+          const normNo = normalizeInvoiceNo(strNum);
+          if (!normNo) continue;
+          foundInvoice = await this.repository.findOne({
+            where: { invoiceNoNormalized: normNo, direction } as any,
+          });
+          if (foundInvoice) break;
+        }
+      }
+
+      if (foundInvoice) {
+        result[filename] = {
+          id: foundInvoice.id,
+          invoiceNo: foundInvoice.invoiceNo,
+          serialNo: foundInvoice.serialNo ?? null,
+          totalAmount: foundInvoice.totalAmount ?? null,
+        };
+      } else {
+        result[filename] = null;
+      }
+    }
+    return result;
+  }
 }
