@@ -197,8 +197,13 @@ export class InvoiceFilesService {
     let pdfFiles = Array.isArray(invoice.pdfFiles) ? [...invoice.pdfFiles] : [];
     pdfFiles = pdfFiles.filter((f) => f.key !== fileKey);
 
+    if (invoice.pdfFileKey === fileKey) {
+      invoice.pdfFileKey = null;
+    }
+
+    invoice.pdfFiles = pdfFiles;
     await this.r2.deleteObject(fileKey).catch(() => {});
-    await this.repository.update(invoiceId, { pdfFiles } as any);
+    await this.repository.save(invoice);
     return { success: true, pdfFiles };
   }
 

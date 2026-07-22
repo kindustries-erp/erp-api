@@ -252,6 +252,10 @@ export class InvoiceImportService {
             pdfAttached.push({
               filename: matchedPdf.filename,
               invoiceNo: newInvoice.invoiceNo,
+              invoiceId: newInvoice.id,
+              serialNo: newInvoice.serialNo ?? null,
+              sellerName: newInvoice.sellerName ?? null,
+              totalAmount: newInvoice.totalAmount ?? null,
             });
           } catch {
             this.logger.warn(`R2 PDF upload failed for ${matchedPdf.filename}`);
@@ -314,6 +318,10 @@ export class InvoiceImportService {
           pdfAttached.push({
             filename: pdf.filename,
             invoiceNo: foundInvoice.invoiceNo,
+            invoiceId: foundInvoice.id,
+            serialNo: foundInvoice.serialNo ?? null,
+            sellerName: foundInvoice.sellerName ?? null,
+            totalAmount: foundInvoice.totalAmount ?? null,
           });
         } catch {
           pdfOrphans.push({
