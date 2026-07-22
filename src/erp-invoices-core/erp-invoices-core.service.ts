@@ -245,6 +245,13 @@ export class ErpInvoicesCoreService {
     return this.filesService.bulkDownloadFilesZip(payload, res);
   }
 
+  bulkDownloadSelectedZip(
+    payload: { ids: string[]; types: string[] },
+    res: any,
+  ) {
+    return this.filesService.bulkDownloadSelectedZip(payload, res);
+  }
+
   deletePdf(invoiceId: string, fileKey: string) {
     return this.filesService.deletePdf(invoiceId, fileKey);
   }

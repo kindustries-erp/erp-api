@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import AdmZip from 'adm-zip';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
@@ -15,6 +15,8 @@ import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 @Injectable()
 export class InvoiceFilesService {
   private readonly logger = new Logger(InvoiceFilesService.name);
+  private readonly BULK_DOWNLOAD_LIMIT = 500;
+  private readonly BULK_DOWNLOAD_CONCURRENCY = 10;
 
   constructor(
     @InjectRepository(ErpInvoice)
@@ -211,13 +213,147 @@ export class InvoiceFilesService {
   // Bulk ZIP download
   // ---------------------------------------------------------------------------
 
+  private chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private sanitizeZipPart(val: string | null | undefined, fallback: string) {
+    return (val || fallback).replace(/[\\/:"*?<>|]/g, '-');
+  }
+
+  private normalizeTypes(types: string[]): Array<'pdf' | 'xml'> {
+    const normalized = (types || [])
+      .map((t) => (t || '').toLowerCase())
+      .filter((t): t is 'pdf' | 'xml' => t === 'pdf' || t === 'xml');
+
+    if (normalized.length === 0) {
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất 1 loại file (pdf, xml)',
+      );
+    }
+
+    return Array.from(new Set(normalized));
+  }
+
+  private buildDownloadTasks(
+    invoices: ErpInvoice[],
+    types: Array<'pdf' | 'xml'>,
+  ): {
+    tasks: Array<{ key: string; name: string; invoiceNo: string }>;
+    missing: string[];
+  } {
+    const tasks: Array<{ key: string; name: string; invoiceNo: string }> = [];
+    const missing: string[] = [];
+
+    for (const invoice of invoices) {
+      const invoiceNo = invoice.invoiceNo || invoice.id;
+      const partnerName =
+        invoice.direction === 'IN' ? invoice.sellerName : invoice.buyerName;
+      const taxCode =
+        invoice.direction === 'IN'
+          ? invoice.sellerTaxCode
+          : invoice.buyerTaxCode;
+      const sanitizedName = this.sanitizeZipPart(
+        partnerName,
+        'KhongTen',
+      ).substring(0, 50);
+      const sanitizedTaxCode = this.sanitizeZipPart(taxCode, 'KhongMST');
+      const folderName = `${sanitizedTaxCode} - ${sanitizedName}`;
+      const docNo = this.sanitizeZipPart(invoiceNo, invoice.id);
+
+      if (types.includes('pdf')) {
+        const pdfList: any[] = Array.isArray(invoice.pdfFiles)
+          ? [...invoice.pdfFiles]
+          : [];
+        if (pdfList.length === 0 && invoice.pdfFileKey) {
+          pdfList.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
+        }
+
+        if (pdfList.length === 0) {
+          missing.push(`${invoiceNo} - không có file PDF`);
+        } else {
+          for (let i = 0; i < pdfList.length; i++) {
+            const file = pdfList[i];
+            const ext = file.filename?.split('.').pop() || 'pdf';
+            const finalName =
+              pdfList.length > 1
+                ? `${docNo}_${i + 1}.${ext}`
+                : `${docNo}.${ext}`;
+            tasks.push({
+              key: file.key,
+              name: `${folderName}/${finalName}`,
+              invoiceNo,
+            });
+          }
+        }
+      }
+
+      if (types.includes('xml')) {
+        if (!invoice.xmlFileKey) {
+          missing.push(`${invoiceNo} - không có file XML`);
+        } else {
+          tasks.push({
+            key: invoice.xmlFileKey,
+            name: `${folderName}/${docNo}.xml`,
+            invoiceNo,
+          });
+        }
+      }
+    }
+
+    return { tasks, missing };
+  }
+
+  private async appendTasksToArchive(
+    archive: any,
+    tasks: Array<{ key: string; name: string; invoiceNo: string }>,
+    failedFiles: string[],
+  ) {
+    let fileCount = 0;
+    const chunks = this.chunkArray(tasks, this.BULK_DOWNLOAD_CONCURRENCY);
+
+    for (const chunk of chunks) {
+      const results = await Promise.all(
+        chunk.map(async (task) => {
+          try {
+            const stream = await this.r2.downloadStream(task.key);
+            archive.append(stream, { name: task.name });
+            return 1;
+          } catch (err: any) {
+            const reason = err?.message || 'Unknown error';
+            failedFiles.push(`${task.invoiceNo} - ${reason}`);
+            this.logger.error(`Failed to stream file ${task.key}`, err);
+            return 0;
+          }
+        }),
+      );
+      fileCount += results.reduce((sum, n) => sum + n, 0);
+    }
+
+    return fileCount;
+  }
+
+  private appendFailedReport(archive: any, failedFiles: string[]) {
+    if (failedFiles.length === 0) return;
+    const report = [
+      'Danh sach file loi khi tai ZIP:',
+      '',
+      ...failedFiles.map((line, idx) => `${idx + 1}. ${line}`),
+    ].join('\n');
+    archive.append(report, { name: '_FILE_LOI.txt' });
+  }
+
   async bulkDownloadFilesZip(
     payload: { query: ErpInvoiceQuery; types: string[] },
     res: any,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const archiver = require('archiver');
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: 0 } });
 
     archive.on('error', (err: any) => {
       this.logger.error(`Error during zip creation: ${err.message}`);
@@ -253,69 +389,78 @@ export class InvoiceFilesService {
         { search: `%${payload.query.search}%` },
       );
     }
-    qb.take(500);
+    qb.take(this.BULK_DOWNLOAD_LIMIT);
 
     const invoices = await qb.getMany();
-    let fileCount = 0;
-
-    for (const invoice of invoices) {
-      const partnerName =
-        invoice.direction === 'IN' ? invoice.sellerName : invoice.buyerName;
-      const taxCode =
-        invoice.direction === 'IN'
-          ? invoice.sellerTaxCode
-          : invoice.buyerTaxCode;
-      const sanitizedName = (partnerName || 'KhongTen')
-        .replace(/[\\/:"*?<>|]/g, '-')
-        .substring(0, 50);
-      const sanitizedTaxCode = (taxCode || 'KhongMST').replace(
-        /[\\/:"*?<>|]/g,
-        '-',
-      );
-      const folderName = `${sanitizedTaxCode} - ${sanitizedName}`;
-      const docNo = (invoice.invoiceNo || invoice.id).replace(
-        /[\\/:"*?<>|]/g,
-        '-',
-      );
-
-      if (payload.types.includes('pdf')) {
-        const pdfList: any[] = Array.isArray(invoice.pdfFiles)
-          ? invoice.pdfFiles
-          : [];
-        if (pdfList.length === 0 && invoice.pdfFileKey) {
-          pdfList.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
-        }
-        for (let i = 0; i < pdfList.length; i++) {
-          const file = pdfList[i];
-          try {
-            const stream = await this.r2.downloadStream(file.key);
-            const ext = file.filename?.split('.').pop() || 'pdf';
-            const finalName =
-              pdfList.length > 1
-                ? `${docNo}_${i + 1}.${ext}`
-                : `${docNo}.${ext}`;
-            archive.append(stream, { name: `${folderName}/${finalName}` });
-            fileCount++;
-          } catch (err) {
-            this.logger.error(`Failed to stream PDF ${file.key}`, err);
-          }
-        }
-      }
-
-      if (payload.types.includes('xml') && invoice.xmlFileKey) {
-        try {
-          const stream = await this.r2.downloadStream(invoice.xmlFileKey);
-          archive.append(stream, { name: `${folderName}/${docNo}.xml` });
-          fileCount++;
-        } catch (err) {
-          this.logger.error(`Failed to stream XML ${invoice.xmlFileKey}`, err);
-        }
-      }
-    }
+    const types = this.normalizeTypes(payload.types);
+    const { tasks, missing } = this.buildDownloadTasks(invoices, types);
+    const failedFiles = [...missing];
+    const fileCount = await this.appendTasksToArchive(
+      archive,
+      tasks,
+      failedFiles,
+    );
 
     if (fileCount === 0) {
       archive.append('No files found or downloaded', { name: 'README.txt' });
     }
+
+    this.appendFailedReport(archive, failedFiles);
+
+    await archive.finalize();
+  }
+
+  async bulkDownloadSelectedZip(
+    payload: { ids: string[]; types: string[] },
+    res: any,
+  ) {
+    if (!payload.ids || payload.ids.length === 0) {
+      throw new BadRequestException('Không có hóa đơn nào được chọn');
+    }
+    if (payload.ids.length > this.BULK_DOWNLOAD_LIMIT) {
+      throw new BadRequestException(
+        `Tối đa ${this.BULK_DOWNLOAD_LIMIT} hóa đơn mỗi lần tải`,
+      );
+    }
+
+    const types = this.normalizeTypes(payload.types);
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const archiver = require('archiver');
+    const archive = archiver('zip', { zlib: { level: 0 } });
+
+    archive.on('error', (err: any) => {
+      this.logger.error(`Error during zip creation: ${err.message}`);
+      if (!res.headersSent) res.status(500).send({ error: err.message });
+    });
+
+    archive.pipe(res);
+
+    const invoices = await this.repository.find({
+      where: {
+        id: In(payload.ids),
+        isDeleted: false,
+      },
+    });
+
+    const indexById = new Map(payload.ids.map((id, idx) => [id, idx]));
+    invoices.sort(
+      (a, b) => (indexById.get(a.id) ?? 0) - (indexById.get(b.id) ?? 0),
+    );
+
+    const { tasks, missing } = this.buildDownloadTasks(invoices, types);
+    const failedFiles = [...missing];
+    const fileCount = await this.appendTasksToArchive(
+      archive,
+      tasks,
+      failedFiles,
+    );
+
+    if (fileCount === 0) {
+      archive.append('No files found or downloaded', { name: 'README.txt' });
+    }
+
+    this.appendFailedReport(archive, failedFiles);
 
     await archive.finalize();
   }
