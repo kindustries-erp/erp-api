@@ -232,6 +232,24 @@ export class InvoiceLifecycleService {
     return { updated: validIds.length, ids: validIds };
   }
 
+  async bulkSetNotes(ids: string[], notes: string) {
+    if (!ids || !ids.length) return { updated: 0, ids: [] };
+
+    const existingInvoices = await this.repository.find({
+      where: { id: In(ids), isDeleted: false },
+      select: ['id'],
+    });
+    const validIds = existingInvoices.map((inv) => inv.id);
+    if (validIds.length === 0) return { updated: 0, ids: [] };
+
+    await this.repository.update(
+      { id: In(validIds) },
+      { notes: notes || null },
+    );
+
+    return { updated: validIds.length, ids: validIds };
+  }
+
   // ---------------------------------------------------------------------------
   // Validation
   // ---------------------------------------------------------------------------
