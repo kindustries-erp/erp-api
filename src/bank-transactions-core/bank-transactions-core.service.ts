@@ -1334,7 +1334,8 @@ export class BankTransactionsCoreService {
         if (row.direction === 'OUT' && arAccountId)
           counterpartAccountId = arAccountId;
 
-        const branchId = row.branch_id || txn.branchId;
+        // Keep bank/cash journal entries aligned with statement branch.
+        const branchId = txn.branchId;
 
         const key = `${subject || ''}_${counterpartAccountId}_${branchId}`;
         if (!groupMap.has(key)) {

@@ -121,6 +121,10 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.bulkSetBranch(ids, branchId);
   }
 
+  bulkSetNotes(ids: string[], notes: string) {
+    return this.lifecycleService.bulkSetNotes(ids, notes);
+  }
+
   setInvoiceValid(id: string, isValid: boolean, userId: string) {
     return this.lifecycleService.setInvoiceValid(id, isValid, userId);
   }
