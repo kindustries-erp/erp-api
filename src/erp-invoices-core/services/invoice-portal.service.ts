@@ -32,6 +32,9 @@ export type PortalProgressEvent = {
 @Injectable()
 export class InvoicePortalService {
   private readonly logger = new Logger(InvoicePortalService.name);
+  private static readonly GDT_API_BASE_URL =
+    'https://hoadondientu.gdt.gov.vn/api';
+  private static readonly GDT_PROFILE_URL = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/profile`;
 
   public readonly progress$ = new Subject<PortalProgressEvent>();
 
@@ -83,8 +86,7 @@ export class InvoicePortalService {
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
     if (!token) return false;
     try {
-      const url =
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase?sort=tdlap%3Adesc&size=1';
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase?sort=tdlap%3Adesc&size=1`;
       const res = await fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -114,6 +116,7 @@ export class InvoicePortalService {
       if (!cookies && config.cookies) cookies = config.cookies;
     }
     if (!token) throw new BadRequestException('token is required');
+    await this.validatePortalTaxpayer(token, cookies);
     if (!dto.dateFrom || !dto.dateTo)
       throw new BadRequestException('dateFrom and dateTo are required');
 
@@ -124,22 +127,19 @@ export class InvoicePortalService {
       type === 'purchase'
         ? [
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase`,
               ttxlyList: [5, 6],
               invoiceType: 'STANDARD',
             },
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/sco-query/invoices/purchase`,
               ttxlyList: [8],
               invoiceType: 'CASH_REGISTER',
             },
           ]
         : [
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/sold`,
               ttxlyList: [],
               invoiceType: 'STANDARD',
             },
@@ -684,7 +684,7 @@ export class InvoicePortalService {
       for (let i = 0; i < endpoints.length; i++) {
         const ep = endpoints[i];
         const url = new URL(
-          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/export-xml`,
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/export-xml`,
         );
         url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         url.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -781,7 +781,7 @@ export class InvoicePortalService {
       for (let i = 0; i < endpoints.length; i++) {
         const ep = endpoints[i];
         const url = new URL(
-          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/detail`,
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/detail`,
         );
         url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         url.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -847,6 +847,95 @@ export class InvoicePortalService {
         `syncInvoiceDetailFromJson error for ${invoice.invoiceNo}: ${(err as Error).message}`,
       );
       return undefined;
+    }
+  }
+
+  private normalizeTaxCode(value?: string | null): string | null {
+    if (!value) return null;
+    const normalized = String(value)
+      .replace(/[^0-9A-Za-z]/g, '')
+      .toUpperCase();
+    return normalized || null;
+  }
+
+  private collectProfileTaxCodes(profile: any): string[] {
+    const bag = new Set<string>();
+    const add = (val?: string | null) => {
+      const normalized = this.normalizeTaxCode(val);
+      if (normalized) bag.add(normalized);
+    };
+
+    add(profile?.username);
+    add(profile?.id);
+    add(profile?.groupId);
+    add(profile?.tinInfoTT86?.mst);
+    add(profile?.tinInfoTT86?.mstUTien);
+
+    const groupIds = profile?.groupIds;
+    if (typeof groupIds === 'string') {
+      groupIds
+        .split(/[;,\s]+/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+        .forEach((s: string) => add(s));
+    }
+
+    if (Array.isArray(groupIds)) {
+      groupIds.forEach((s: any) => add(String(s ?? '')));
+    }
+
+    if (Array.isArray(profile?.tinInfoTT86?.dsMst)) {
+      profile.tinInfoTT86.dsMst.forEach((s: any) => add(String(s ?? '')));
+    }
+
+    return [...bag];
+  }
+
+  private async validatePortalTaxpayer(
+    token: string,
+    cookies?: string,
+  ): Promise<void> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+
+    const expectedTaxCode = this.normalizeTaxCode(profile?.tax_code);
+    if (!expectedTaxCode) {
+      throw new BadRequestException('GDT_COMPANY_TAX_CODE_NOT_CONFIGURED');
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    };
+    if (cookies) headers.Cookie = cookies;
+
+    const response = await fetchWithRetry(
+      InvoicePortalService.GDT_PROFILE_URL,
+      {
+        headers,
+      },
+    );
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('GDT_TOKEN_EXPIRED');
+      }
+      throw new BadRequestException('GDT_PROFILE_FETCH_FAILED');
+    }
+
+    const taxpayerProfile = await response.json();
+    const actualTaxCodes = this.collectProfileTaxCodes(taxpayerProfile);
+
+    if (actualTaxCodes.length === 0) {
+      throw new BadRequestException('GDT_PROFILE_MISSING_TAX_CODE');
+    }
+
+    if (!actualTaxCodes.includes(expectedTaxCode)) {
+      this.logger.warn(
+        `GDT taxpayer mismatch. expected=${expectedTaxCode} actual=${actualTaxCodes.join(',')}`,
+      );
+      throw new BadRequestException('GDT_TAXPAYER_MISMATCH');
     }
   }
 }

@@ -705,10 +705,6 @@ export class SinvoiceService {
               apiPath: 'query/invoices/purchase',
               searchStr: baseSearchStr,
             },
-            {
-              apiPath: 'sco-query/invoices/purchase',
-              searchStr: `${baseSearchStr};ttxly==8`,
-            },
           ]
         : [
             {

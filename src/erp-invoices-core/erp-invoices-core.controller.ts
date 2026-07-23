@@ -180,7 +180,8 @@ export class ErpInvoicesCoreController {
     try {
       return await this.service.syncFromPortal(dto, req.user?.sub);
     } catch (e: any) {
-      if (e.message === 'GDT_TOKEN_EXPIRED') {
+      const message = e?.response?.message ?? e?.message;
+      if (message === 'GDT_TOKEN_EXPIRED') {
         if (req.user?.sub) {
           await this.notificationsService.createForUser(req.user.sub, {
             type: 'ERROR',
@@ -190,6 +191,24 @@ export class ErpInvoicesCoreController {
           });
         }
         throw new BadRequestException('GDT_TOKEN_EXPIRED');
+      }
+      if (
+        message === 'GDT_TAXPAYER_MISMATCH' ||
+        message === 'GDT_COMPANY_TAX_CODE_NOT_CONFIGURED' ||
+        message === 'GDT_PROFILE_FETCH_FAILED' ||
+        message === 'GDT_PROFILE_MISSING_TAX_CODE'
+      ) {
+        if (req.user?.sub) {
+          await this.notificationsService.createForUser(req.user.sub, {
+            type: 'ERROR',
+            title: 'Không thể đồng bộ hóa đơn từ GDT',
+            message:
+              message === 'GDT_TAXPAYER_MISMATCH'
+                ? 'Token GDT không khớp mã số thuế công ty đang cấu hình trong hệ thống.'
+                : 'Xác thực hồ sơ người nộp thuế thất bại. Vui lòng kiểm tra cấu hình token/cookie và MST công ty.',
+          });
+        }
+        throw new BadRequestException(message);
       }
       throw e;
     }
