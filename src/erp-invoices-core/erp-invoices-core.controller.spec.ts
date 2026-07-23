@@ -6,6 +6,8 @@ describe('ErpInvoicesCoreController', () => {
   let controller: ErpInvoicesCoreController;
   const service = {
     syncFromPortal: jest.fn(),
+    linkVouchersToInvoice: jest.fn(),
+    removeVoucherFromInvoice: jest.fn(),
   } as any;
   const notificationsService = {
     createForUser: jest.fn(),
@@ -66,5 +68,37 @@ describe('ErpInvoicesCoreController', () => {
         title: 'Token GDT hết hạn',
       }),
     );
+  });
+
+  it('delegates linkVouchers endpoint to service.linkVouchersToInvoice', async () => {
+    const payload = [
+      { bankTransactionId: 'txn-1', netOffAmount: 100 },
+      { bankTransactionId: 'txn-2', netOffAmount: 50 },
+    ];
+    service.linkVouchersToInvoice.mockResolvedValue({
+      message: 'Đã liên kết phiếu thành công',
+    });
+
+    const result = await controller.linkVouchers('inv-1', payload);
+
+    expect(service.linkVouchersToInvoice).toHaveBeenCalledWith(
+      'inv-1',
+      payload,
+    );
+    expect(result).toEqual({ message: 'Đã liên kết phiếu thành công' });
+  });
+
+  it('delegates removeVoucherLink endpoint to service.removeVoucherFromInvoice', async () => {
+    service.removeVoucherFromInvoice.mockResolvedValue({
+      message: 'Đã xóa liên kết phiếu thành công',
+    });
+
+    const result = await controller.removeVoucherLink('inv-1', 'txn-1');
+
+    expect(service.removeVoucherFromInvoice).toHaveBeenCalledWith(
+      'inv-1',
+      'txn-1',
+    );
+    expect(result).toEqual({ message: 'Đã xóa liên kết phiếu thành công' });
   });
 });

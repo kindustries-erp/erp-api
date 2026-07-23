@@ -766,6 +766,35 @@ export class InventorySerialService {
         for (const [col, val] of Object.entries(searchFilters)) {
           if (!val) continue;
 
+          if (
+            col === 'expectedDeliveryDate' ||
+            col === 'deliveryDate' ||
+            col === 'activationDate'
+          ) {
+            if (typeof val !== 'string') continue;
+            const rawKw = val;
+            if (rawKw.includes('|')) {
+              const [from, to] = rawKw.split('|');
+              const dbField =
+                col === 'expectedDeliveryDate'
+                  ? 'so.expected_delivery_date'
+                  : col === 'deliveryDate'
+                    ? 'l.delivery_date'
+                    : 'l.warranty_activated_at';
+              if (from && to) {
+                sql += ` AND ${dbField} >= $${paramIdx++} AND ${dbField} <= $${paramIdx++}`;
+                params.push(from, to + ' 23:59:59');
+              } else if (from) {
+                sql += ` AND ${dbField} >= $${paramIdx++}`;
+                params.push(from);
+              } else if (to) {
+                sql += ` AND ${dbField} <= $${paramIdx++}`;
+                params.push(to + ' 23:59:59');
+              }
+              continue;
+            }
+          }
+
           let searchField = '';
           if (col === 'expectedDeliveryDate')
             searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";

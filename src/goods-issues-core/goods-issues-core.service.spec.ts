@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { DataSource } from 'typeorm';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
@@ -473,5 +474,171 @@ describe('GoodsIssuesCoreService stock and reserve invariants', () => {
       Number(balance.qtyOnHand) - Number(balance.qtyReserved);
     expect(Number(balance.qtyReserved)).toBeGreaterThanOrEqual(0);
     expect(availableQty).toBe(8);
+  });
+
+  it('postIssue should throw when available qty is insufficient for non SO/MO line', async () => {
+    const issue = {
+      id: 'gi4',
+      issueNo: 'GI-004',
+      issueDate: new Date('2026-07-04'),
+      status: 'DRAFT',
+      salesOrderId: null,
+      remarks: null,
+      createdBy: 'u1',
+    } as any;
+    const line = {
+      id: 'gil4',
+      lineNo: 1,
+      goodsIssueId: 'gi4',
+      itemId: 'item1',
+      qtyIssued: '7.000',
+      unitCost: '2.000',
+      salesOrderLineId: null,
+      productionOrderMaterialId: null,
+      serialId: null,
+      vehicleId: null,
+    } as any;
+    const balance = {
+      itemId: 'item1',
+      warehouseCode: 'WH1',
+      qtyOnHand: '10.000',
+      qtyReserved: '4.000',
+      inventoryValue: '20.000',
+      avgUnitCost: '2.000',
+    } as any;
+
+    const issueRepo = {
+      findOneBy: jest.fn().mockResolvedValue(issue),
+      save: jest.fn(async (x: any) => x),
+    };
+    const lineRepo = {
+      find: jest.fn().mockResolvedValue([line]),
+    };
+    const txnRepo = {
+      create: jest.fn((x: any) => x),
+      save: jest.fn(async (x: any) => x),
+    };
+    const balanceRepo = {
+      findOne: jest.fn().mockResolvedValue(balance),
+      save: jest.fn(async (x: any) => x),
+    };
+    const soRepo = { findOneBy: jest.fn(), save: jest.fn() };
+    const soLineRepo = {
+      findOneBy: jest.fn(),
+      save: jest.fn(),
+      find: jest.fn(),
+    };
+    const moRepo = { findOneBy: jest.fn(), save: jest.fn() };
+    const moMatRepo = {
+      findOneBy: jest.fn(),
+      save: jest.fn(),
+      find: jest.fn(),
+    };
+    const serialRepo = { findOneBy: jest.fn(), save: jest.fn() };
+    const vehicleRepo = { findOneBy: jest.fn(), save: jest.fn() };
+    const itemRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'item1', itemType: { code: 'FG' } }),
+    };
+
+    const repoMap = new Map<any, any>([
+      [ErpGoodsIssue, issueRepo],
+      [ErpGoodsIssueLine, lineRepo],
+      [ErpInventoryTransaction, txnRepo],
+      [ErpInventoryBalance, balanceRepo],
+      [ErpSalesOrder, soRepo],
+      [ErpSalesOrderLine, soLineRepo],
+      [ErpProductionOrder, moRepo],
+      [ErpProductionOrderMaterial, moMatRepo],
+      [ErpInventoryTrackingSerial, serialRepo],
+      [ErpVehicle, vehicleRepo],
+      [ErpInventoryItem, itemRepo],
+    ]);
+
+    const manager = makeManager(repoMap);
+    const { service } = makeServiceWithManager(manager);
+
+    await expect(
+      service.postIssue('gi4', { warehouseCode: 'WH1' }),
+    ).rejects.toThrow('Tồn khả dụng không đủ cho dòng 1');
+    expect(issue.status).toBe('DRAFT');
+    expect(txnRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('postIssue should throw when serial item does not match line item', async () => {
+    const issue = {
+      id: 'gi5',
+      issueNo: 'GI-005',
+      issueDate: new Date('2026-07-05'),
+      status: 'DRAFT',
+      salesOrderId: null,
+      remarks: null,
+      createdBy: 'u1',
+    } as any;
+    const line = {
+      id: 'gil5',
+      lineNo: 1,
+      goodsIssueId: 'gi5',
+      itemId: 'item1',
+      qtyIssued: '1.000',
+      unitCost: '2.000',
+      salesOrderLineId: null,
+      productionOrderMaterialId: null,
+      serialId: 'ser5',
+      vehicleId: null,
+    } as any;
+
+    const issueRepo = {
+      findOneBy: jest.fn().mockResolvedValue(issue),
+      save: jest.fn(async (x: any) => x),
+    };
+    const lineRepo = {
+      find: jest.fn().mockResolvedValue([line]),
+    };
+    const txnRepo = {
+      create: jest.fn((x: any) => x),
+      save: jest.fn(async (x: any) => x),
+    };
+    const serialRepo = {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'ser5', itemId: 'item2', vinId: null }),
+      save: jest.fn(),
+    };
+    const itemRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'item1', itemType: { code: 'FG' } }),
+    };
+
+    const repoMap = new Map<any, any>([
+      [ErpGoodsIssue, issueRepo],
+      [ErpGoodsIssueLine, lineRepo],
+      [ErpInventoryTransaction, txnRepo],
+      [ErpInventoryBalance, { findOne: jest.fn(), save: jest.fn() }],
+      [ErpSalesOrder, { findOneBy: jest.fn(), save: jest.fn() }],
+      [
+        ErpSalesOrderLine,
+        { findOneBy: jest.fn(), save: jest.fn(), find: jest.fn() },
+      ],
+      [ErpProductionOrder, { findOneBy: jest.fn(), save: jest.fn() }],
+      [
+        ErpProductionOrderMaterial,
+        { findOneBy: jest.fn(), save: jest.fn(), find: jest.fn() },
+      ],
+      [ErpInventoryTrackingSerial, serialRepo],
+      [ErpVehicle, { findOneBy: jest.fn(), save: jest.fn() }],
+      [ErpInventoryItem, itemRepo],
+    ]);
+
+    const manager = makeManager(repoMap);
+    const { service } = makeServiceWithManager(manager);
+
+    await expect(
+      service.postIssue('gi5', { warehouseCode: 'WH1' }),
+    ).rejects.toThrow('Serial không khớp mặt hàng ở dòng 1');
+    expect(issue.status).toBe('DRAFT');
+    expect(txnRepo.save).not.toHaveBeenCalled();
   });
 });

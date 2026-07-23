@@ -835,6 +835,32 @@ export class InvoiceQueryService {
         applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
       } else if (key === 'notes') {
         applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
+      } else if (key === 'invoiceDate') {
+        const rawKw = String(val);
+        if (rawKw.includes('|')) {
+          const [from, to] = rawKw.split('|');
+          if (from && to) {
+            qb.andWhere(
+              `inv.invoice_date >= :from_invDate AND inv.invoice_date <= :to_invDate`,
+              { from_invDate: from, to_invDate: to + ' 23:59:59' },
+            );
+          } else if (from) {
+            qb.andWhere(`inv.invoice_date >= :from_invDate`, {
+              from_invDate: from,
+            });
+          } else if (to) {
+            qb.andWhere(`inv.invoice_date <= :to_invDate`, {
+              to_invDate: to + ' 23:59:59',
+            });
+          }
+        } else {
+          applyMultiKeywordFilter(
+            qb,
+            "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')",
+            val,
+            'invoiceDateSearch',
+          );
+        }
       }
     });
   }

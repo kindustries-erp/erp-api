@@ -126,6 +126,12 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch('bulk-set-notes')
+  bulkSetNotes(@Body() body: { ids: string[]; notes: string }) {
+    return this.service.bulkSetNotes(body.ids, body.notes);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
