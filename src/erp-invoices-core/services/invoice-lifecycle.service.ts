@@ -18,6 +18,7 @@ import { toInvoiceDto } from '../helpers/invoice-mapper.helper';
 import { R2Service } from '../../r2/r2.service';
 import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-transactions-core.service';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
+import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -232,6 +233,24 @@ export class InvoiceLifecycleService {
     return { updated: validIds.length, ids: validIds };
   }
 
+  async bulkSetNotes(ids: string[], notes: string) {
+    if (!ids || !ids.length) return { updated: 0, ids: [] };
+
+    const existingInvoices = await this.repository.find({
+      where: { id: In(ids), isDeleted: false },
+      select: ['id'],
+    });
+    const validIds = existingInvoices.map((inv) => inv.id);
+    if (validIds.length === 0) return { updated: 0, ids: [] };
+
+    await this.repository.update(
+      { id: In(validIds) },
+      { notes: notes || null },
+    );
+
+    return { updated: validIds.length, ids: validIds };
+  }
+
   // ---------------------------------------------------------------------------
   // Validation
   // ---------------------------------------------------------------------------
@@ -381,6 +400,35 @@ export class InvoiceLifecycleService {
     });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+
+    // Auto-set invoice branch from statement branch only when invoice has no branch.
+    // If payload contains mixed branches (or invalid/missing branch data), skip auto-set.
+    if (!invoice.branchId && payload.length > 0) {
+      const uniqueTxnIds = [
+        ...new Set(payload.map((p) => p.bankTransactionId)),
+      ];
+      const linkedTransactions = await this.repository.manager.find(
+        ErpBankTransaction,
+        {
+          where: { id: In(uniqueTxnIds), isDeleted: false },
+          select: ['id', 'branchId'],
+        },
+      );
+
+      const hasAllTransactions =
+        linkedTransactions.length === uniqueTxnIds.length;
+      const hasAllBranches = linkedTransactions.every((t) => !!t.branchId);
+
+      if (hasAllTransactions && hasAllBranches) {
+        const uniqueBranches = [
+          ...new Set(linkedTransactions.map((t) => t.branchId)),
+        ];
+        if (uniqueBranches.length === 1) {
+          invoice.branchId = uniqueBranches[0];
+          await this.repository.save(invoice);
+        }
+      }
+    }
 
     const netOffEntities = payload.map((p) =>
       this.repository.manager.create(ErpInvoiceVoucherNetOff, {

@@ -121,6 +121,10 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.bulkSetBranch(ids, branchId);
   }
 
+  bulkSetNotes(ids: string[], notes: string) {
+    return this.lifecycleService.bulkSetNotes(ids, notes);
+  }
+
   setInvoiceValid(id: string, isValid: boolean, userId: string) {
     return this.lifecycleService.setInvoiceValid(id, isValid, userId);
   }
@@ -243,6 +247,13 @@ export class ErpInvoicesCoreService {
     res: any,
   ) {
     return this.filesService.bulkDownloadFilesZip(payload, res);
+  }
+
+  bulkDownloadSelectedZip(
+    payload: { ids: string[]; types: string[] },
+    res: any,
+  ) {
+    return this.filesService.bulkDownloadSelectedZip(payload, res);
   }
 
   deletePdf(invoiceId: string, fileKey: string) {

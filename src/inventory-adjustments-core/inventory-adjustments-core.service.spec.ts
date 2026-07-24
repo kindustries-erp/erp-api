@@ -285,6 +285,29 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     );
   });
 
+  it('cancelAdjustment: already CANCELLED — should throw BadRequestException', async () => {
+    const adj = makeAdj({ status: 'CANCELLED' });
+    const line = makeLine();
+    const balance = makeBalance();
+
+    const { adjRepo, lineRepo, txnRepo, balanceRepo } = makeRepos(
+      adj,
+      [line],
+      balance,
+    );
+    const repoMap = new Map<any, any>([
+      [ErpInventoryAdjustment, adjRepo],
+      [ErpInventoryAdjustmentLine, lineRepo],
+      [ErpInventoryTransaction, txnRepo],
+      [ErpInventoryBalance, balanceRepo],
+    ]);
+
+    const { service } = makeServiceWithManager(makeManager(repoMap));
+    await expect(service.cancelAdjustment('adj1')).rejects.toThrow(
+      'Phiếu điều chỉnh đã bị hủy trước đó',
+    );
+  });
+
   // ─── generateDailyAdjustmentNo tests ─────────────────────────────────────
 
   it('generateDailyAdjustmentNo: first voucher of the day — should return DC-YYYYMMDD-01', async () => {
