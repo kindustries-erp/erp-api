@@ -168,6 +168,12 @@ export class InventoryStockCoreService {
             'issuedQty_sort',
           );
           sortField = '"issuedQty_sort"';
+        } else if (field === 'adjusted_qty') {
+          qb.addSelect(
+            `(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in - txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)`,
+            'adjustedQty_sort',
+          );
+          sortField = '"adjustedQty_sort"';
         }
 
         if (sortField) {
@@ -240,12 +246,17 @@ export class InventoryStockCoreService {
       .select('txn.itemId', 'itemId')
       .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
       .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn - txn.qtyOut ELSE 0 END), 0)",
+        'adjustedQty',
+      )
       .where('txn.itemId IN (:...itemIds)', { itemIds })
       .groupBy('txn.itemId')
       .getRawMany<{
         itemId: string;
         receivedQty: string;
         issuedQty: string;
+        adjustedQty: string;
       }>();
     const txnMap = new Map(transactionSums.map((row) => [row.itemId, row]));
 
@@ -261,6 +272,7 @@ export class InventoryStockCoreService {
         unit: item.uom?.name ?? '',
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
+        adjusted_qty: Number(txn?.adjustedQty || 0),
         on_hand_qty: Number(b?.qtyOnHand || 0),
         reserved_qty: Number(b?.qtyReserved || 0),
         stock_value: Number(b?.inventoryValue || 0),
@@ -298,13 +310,15 @@ export class InventoryStockCoreService {
     else if (column === 'unit') selectField = 'uom.name';
     else if (column === 'on_hand_qty') selectField = 'b.qtyOnHand';
     else if (column === 'reserved_qty') selectField = 'b.qtyReserved';
-    else if (column === 'received_qty') {
+    else if (column === 'received_qty')
       selectField =
         '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
-    } else if (column === 'issued_qty') {
+    else if (column === 'issued_qty')
       selectField =
         '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
-    } else if (column === 'last') selectField = 'b.updatedAt';
+    else if (column === 'adjusted_qty')
+      selectField = `(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in - txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)`;
+    else if (column === 'last') selectField = 'b.updatedAt';
     else return { items: [], total: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
