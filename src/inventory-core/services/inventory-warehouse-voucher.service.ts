@@ -111,7 +111,7 @@ export class InventoryWarehouseVoucherService {
           } else if (key === 'qtyAdjustment') {
             receiptWhere += ` AND 1 = 0`;
             issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text ILIKE $${pIndex}`;
+            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text ILIKE $${pIndex}`;
             params.push(s);
             pIndex++;
           } else if (key === 'status') {
@@ -186,7 +186,7 @@ export class InventoryWarehouseVoucherService {
           } else if (key === 'qtyAdjustment') {
             receiptWhere += ` AND 1 = 0`;
             issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
+            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
             params.push(values.map((v) => String(v)));
             pIndex++;
           }
@@ -239,7 +239,7 @@ export class InventoryWarehouseVoucherService {
                g.status, g.remarks, NULL as "partnerId", NULL as "partnerName",
                g.created_at as "createdAt",
                NULL as "poNo",
-               (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
+               (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
         FROM public.erp_inventory_adjustments g
         WHERE ${adjustmentWhere}
       `);
@@ -376,7 +376,7 @@ export class InventoryWarehouseVoucherService {
           } else if (key === 'qtyAdjustment') {
             receiptWhere += ` AND 1 = 0`;
             issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
+            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
             params.push(values.map((v) => String(v)));
             pIndex++;
           }
@@ -448,7 +448,7 @@ export class InventoryWarehouseVoucherService {
     } else if (column === 'qtyIssue' && includeIssues) {
       selectExpr = `SELECT (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text as val FROM public.erp_goods_issues g WHERE ${issueWhere}`;
     } else if (column === 'qtyAdjustment' && includeAdjustments) {
-      selectExpr = `SELECT (SELECT COALESCE(SUM(ABS(qty_adjusted)), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text as val FROM public.erp_inventory_adjustments g WHERE ${adjustmentWhere}`;
+      selectExpr = `SELECT (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text as val FROM public.erp_inventory_adjustments g WHERE ${adjustmentWhere}`;
     }
 
     if (!selectExpr.trim()) {

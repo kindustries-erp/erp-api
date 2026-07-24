@@ -124,18 +124,25 @@ describe('Inventory voucher posting chain integration', () => {
           }) ?? null
         );
       }),
+      find: jest.fn(async () => {
+        return balances;
+      }),
       save: jest.fn(async (x: any) => {
-        if (!x.itemId) return x;
-        const idx = balances.findIndex(
-          (b) =>
-            b.itemId === x.itemId &&
-            String(b.warehouseCode || '') === String(x.warehouseCode || ''),
-        );
-        if (idx >= 0) {
-          balances[idx] = { ...balances[idx], ...x };
-          return balances[idx];
+        const items = Array.isArray(x) ? x : [x];
+        for (const item of items) {
+          if (!item.itemId) continue;
+          const idx = balances.findIndex(
+            (b) =>
+              b.itemId === item.itemId &&
+              String(b.warehouseCode || '') ===
+                String(item.warehouseCode || ''),
+          );
+          if (idx >= 0) {
+            balances[idx] = { ...balances[idx], ...item };
+          } else {
+            balances.push(item);
+          }
         }
-        balances.push(x);
         return x;
       }),
     };
@@ -143,7 +150,8 @@ describe('Inventory voucher posting chain integration', () => {
     const txnRepo = {
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => {
-        transactions.push(x);
+        const items = Array.isArray(x) ? x : [x];
+        transactions.push(...items);
         return x;
       }),
     };

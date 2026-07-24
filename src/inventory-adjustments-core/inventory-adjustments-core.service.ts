@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, ILike, Repository } from 'typeorm';
+import { DataSource, DeepPartial, ILike, Repository, In } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpInventoryAdjustment } from './entities/erp_inventory_adjustment.entity';
@@ -79,20 +79,19 @@ export class InventoryAdjustmentsCoreService {
         status: 'DRAFT',
       };
       const data = await headerRepo.save(headerPayload);
-      const savedLines: ErpInventoryAdjustmentLine[] = [];
+      const linesPayload: DeepPartial<ErpInventoryAdjustmentLine>[] = [];
       let lineNo = 1;
       for (const line of lines) {
-        const linePayload: DeepPartial<ErpInventoryAdjustmentLine> = {
+        linesPayload.push({
           adjustmentId: data.id,
           lineNo: lineNo++,
           itemId: line.itemId ?? null,
           qtyAdjusted: line.qtyAdjusted?.toString() ?? '0.000',
           typeAdjust: line.typeAdjust ?? null,
           unitCost: line.unitCost?.toString() ?? null,
-        };
-        const saved = await lineRepo.save(linePayload);
-        savedLines.push(saved);
+        });
       }
+      const savedLines = await lineRepo.save(linesPayload);
       return {
         message: 'Tạo phiếu điều chỉnh thành công',
         data: { ...data, lines: savedLines },
@@ -160,17 +159,20 @@ export class InventoryAdjustmentsCoreService {
       await this.dataSource.transaction(async (manager) => {
         const lineRepo = manager.getRepository(ErpInventoryAdjustmentLine);
         await lineRepo.delete({ adjustmentId: id });
+        const linesPayload: DeepPartial<ErpInventoryAdjustmentLine>[] = [];
         let lineNo = 1;
         for (const line of lines) {
-          const linePayload: DeepPartial<ErpInventoryAdjustmentLine> = {
+          linesPayload.push({
             adjustmentId: id,
             lineNo: lineNo++,
             itemId: line.itemId ?? null,
             qtyAdjusted: line.qtyAdjusted?.toString() ?? '0.000',
             typeAdjust: line.typeAdjust ?? null,
             unitCost: line.unitCost?.toString() ?? null,
-          };
-          await lineRepo.save(linePayload);
+          });
+        }
+        if (linesPayload.length > 0) {
+          await lineRepo.save(linesPayload);
         }
       });
     }
@@ -199,20 +201,39 @@ export class InventoryAdjustmentsCoreService {
         throw new BadRequestException('Phiếu điều chỉnh trống');
       }
 
+      const itemIds = [
+        ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
+      ] as string[];
+
+      const balanceWhere: any = {
+        itemId: In(itemIds),
+      };
+      if (dto.warehouseCode) {
+        balanceWhere.warehouseCode = dto.warehouseCode;
+      }
+      // Note: If warehouseCode is allowed to be null in DB, TypeORM In/IsNull handling might be needed,
+      // but assuming it's either provided or we fetch all relevant.
+      const existingBalances = await balanceRepo.find({ where: balanceWhere });
+      const balanceMap = new Map<string, ErpInventoryBalance>();
+      for (const b of existingBalances) {
+        if (b.itemId) balanceMap.set(b.itemId, b);
+      }
+
+      const txnsToSave: DeepPartial<ErpInventoryTransaction>[] = [];
+      const balancesToSave = new Map<
+        string,
+        DeepPartial<ErpInventoryBalance>
+      >();
+
       for (const line of lines) {
         const qty = Number(line.qtyAdjusted || 0);
-        if (qty === 0) continue; // nothing to adjust
+        if (qty === 0 || !line.itemId) continue; // nothing to adjust
 
         const isIncrease = qty > 0;
         const unitCost = Number(line.unitCost || 0);
 
-        const balanceWhere: any = {
-          itemId: line.itemId ?? undefined,
-          warehouseCode: dto.warehouseCode ?? undefined,
-        };
-        let balance = (await balanceRepo.findOne({
-          where: balanceWhere,
-        })) as ErpInventoryBalance | null;
+        let balance =
+          balancesToSave.get(line.itemId) || balanceMap.get(line.itemId);
 
         const currentQty = Number(balance?.qtyOnHand || 0);
         const currentValue = Number(balance?.inventoryValue || 0);
@@ -222,21 +243,19 @@ export class InventoryAdjustmentsCoreService {
         const nextValue = Math.max(0, currentValue + adjValue);
         const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
 
-        await txnRepo.save(
-          txnRepo.create({
-            transactionType: 'ADJUSTMENT',
-            documentType: 'INVENTORY_ADJUSTMENT',
-            documentId: adj.id,
-            itemId: line.itemId ?? null,
-            warehouseCode: dto.warehouseCode ?? null,
-            qtyIn: isIncrease ? qty.toFixed(3) : '0.000',
-            qtyOut: !isIncrease ? Math.abs(qty).toFixed(3) : '0.000',
-            unitCost: unitCost.toFixed(3),
-            transactionDate: adj.adjustmentDate,
-            notes: adj.remarks ?? null,
-            createdBy: dto.createdBy ?? adj.createdBy ?? null,
-          } as any),
-        );
+        txnsToSave.push({
+          transactionType: 'ADJUSTMENT',
+          documentType: 'INVENTORY_ADJUSTMENT',
+          documentId: adj.id,
+          itemId: line.itemId,
+          warehouseCode: dto.warehouseCode ?? null,
+          qtyIn: isIncrease ? qty.toFixed(3) : '0.000',
+          qtyOut: !isIncrease ? Math.abs(qty).toFixed(3) : '0.000',
+          unitCost: unitCost.toFixed(3),
+          transactionDate: adj.adjustmentDate,
+          notes: adj.remarks ?? null,
+          createdBy: dto.createdBy ?? adj.createdBy ?? null,
+        } as any);
 
         if (!balance) {
           if (!isIncrease) {
@@ -244,20 +263,28 @@ export class InventoryAdjustmentsCoreService {
               `Không thể giảm số lượng kho cho sản phẩm ở dòng ${line.lineNo} vì chưa có tồn kho.`,
             );
           }
-          const balancePayload: DeepPartial<ErpInventoryBalance> = {
-            itemId: line.itemId ?? null,
+          balancesToSave.set(line.itemId, {
+            itemId: line.itemId,
             warehouseCode: dto.warehouseCode ?? null,
             qtyOnHand: nextQty.toFixed(3),
             avgUnitCost: nextAvgUnitCost.toFixed(3),
             inventoryValue: nextValue.toFixed(3),
-          };
-          balance = await balanceRepo.save(balancePayload);
+          });
         } else {
-          balance.qtyOnHand = nextQty.toFixed(3);
-          balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
-          balance.inventoryValue = nextValue.toFixed(3);
-          balance = await balanceRepo.save(balance);
+          balancesToSave.set(line.itemId, {
+            ...balance,
+            qtyOnHand: nextQty.toFixed(3),
+            avgUnitCost: nextAvgUnitCost.toFixed(3),
+            inventoryValue: nextValue.toFixed(3),
+          });
         }
+      }
+
+      if (txnsToSave.length > 0) {
+        await txnRepo.save(txnsToSave);
+      }
+      if (balancesToSave.size > 0) {
+        await balanceRepo.save(Array.from(balancesToSave.values()));
       }
 
       adj.status = 'POSTED';
@@ -296,46 +323,69 @@ export class InventoryAdjustmentsCoreService {
         order: { lineNo: 'ASC' },
       });
 
+      const itemIds = [
+        ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
+      ] as string[];
+      const existingBalances = await balanceRepo.find({
+        where: { itemId: In(itemIds) },
+      });
+      const balanceMap = new Map<string, ErpInventoryBalance>();
+      for (const b of existingBalances) {
+        if (b.itemId) balanceMap.set(b.itemId, b);
+      }
+
+      const txnsToSave: DeepPartial<ErpInventoryTransaction>[] = [];
+      const balancesToSave = new Map<
+        string,
+        DeepPartial<ErpInventoryBalance>
+      >();
+
       for (const line of lines) {
         const qty = Number(line.qtyAdjusted || 0);
-        if (qty === 0) continue;
+        if (qty === 0 || !line.itemId) continue;
 
         const isIncrease = qty > 0;
         const unitCost = Number(line.unitCost || 0);
 
-        await txnRepo.save(
-          txnRepo.create({
-            transactionType: 'ADJUSTMENT_CANCEL',
-            documentType: 'INVENTORY_ADJUSTMENT',
-            documentId: adj.id,
-            itemId: line.itemId ?? null,
-            warehouseCode: null, // Depending on if we tracked it, but generally we just revert balance
-            qtyIn: !isIncrease ? Math.abs(qty).toFixed(3) : '0.000',
-            qtyOut: isIncrease ? qty.toFixed(3) : '0.000',
-            unitCost: unitCost.toFixed(3),
-            transactionDate: adj.adjustmentDate,
-            notes: `Hủy phiếu điều chỉnh ${adj.adjustmentNo}`,
-            createdBy: null,
-          } as any),
-        );
+        txnsToSave.push({
+          transactionType: 'ADJUSTMENT_CANCEL',
+          documentType: 'INVENTORY_ADJUSTMENT',
+          documentId: adj.id,
+          itemId: line.itemId,
+          warehouseCode: null, // Depending on if we tracked it, but generally we just revert balance
+          qtyIn: !isIncrease ? Math.abs(qty).toFixed(3) : '0.000',
+          qtyOut: isIncrease ? qty.toFixed(3) : '0.000',
+          unitCost: unitCost.toFixed(3),
+          transactionDate: adj.adjustmentDate,
+          notes: `Hủy phiếu điều chỉnh ${adj.adjustmentNo}`,
+          createdBy: null,
+        } as any);
 
-        const balance = await balanceRepo.findOne({
-          where: { itemId: line.itemId ?? undefined },
-        });
+        let balance =
+          balancesToSave.get(line.itemId) || balanceMap.get(line.itemId);
         if (balance) {
           const revertedQty = Math.max(0, Number(balance.qtyOnHand) - qty);
           const revertedValue = Math.max(
             0,
             Number(balance.inventoryValue) - qty * unitCost,
           );
-          balance.qtyOnHand = revertedQty.toFixed(3);
-          balance.inventoryValue = revertedValue.toFixed(3);
-          balance.avgUnitCost =
-            revertedQty > 0
-              ? (revertedValue / revertedQty).toFixed(3)
-              : '0.000';
-          await balanceRepo.save(balance);
+          balancesToSave.set(line.itemId, {
+            ...balance,
+            qtyOnHand: revertedQty.toFixed(3),
+            inventoryValue: revertedValue.toFixed(3),
+            avgUnitCost:
+              revertedQty > 0
+                ? (revertedValue / revertedQty).toFixed(3)
+                : '0.000',
+          });
         }
+      }
+
+      if (txnsToSave.length > 0) {
+        await txnRepo.save(txnsToSave);
+      }
+      if (balancesToSave.size > 0) {
+        await balanceRepo.save(Array.from(balancesToSave.values()));
       }
 
       adj.status = 'CANCELLED';
