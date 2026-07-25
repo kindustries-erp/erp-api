@@ -251,6 +251,36 @@ export class ReportsCoreService {
     };
   }
 
+  /**
+   * Item code precedence for VINFAST IN lines:
+   * 1) keyword exceptions, 2) regex-based detection, 3) legacy "code - name" fallback.
+   */
+  private buildVinfastInItemCodeSql(descriptionExpr: string) {
+    const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
+    return `
+      CASE
+        WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%' THEN 'EEP73110011AP'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%' THEN 'BAT21001011'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%' THEN 'EEP73110011ALL'
+        WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)')
+        WHEN ${descriptionExpr} LIKE '% - %'
+          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 1))
+        ELSE NULL
+      END
+    `;
+  }
+
+  private buildVinfastInItemNameSql(descriptionExpr: string) {
+    return `
+      CASE
+        WHEN ${descriptionExpr} LIKE '% - %'
+          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 2))
+        ELSE TRIM(COALESCE(${descriptionExpr}, ''))
+      END
+    `;
+  }
+
   async getVinfastPartsTracking(query: {
     dateFrom?: string;
     dateTo?: string;
@@ -379,13 +409,15 @@ export class ReportsCoreService {
     const limit = query.limit || 50;
     const page = query.page || 1;
     const offset = (page - 1) * limit;
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
 
     const sql = `
       WITH buy_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -394,7 +426,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 
@@ -528,6 +561,9 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+
     const sql = `
       WITH buy_codes AS (
         SELECT 
@@ -539,8 +575,8 @@ export class ReportsCoreService {
           i.seller_tax_code AS tax_code,
           TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.unit,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
@@ -573,7 +609,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 
@@ -893,12 +930,15 @@ export class ReportsCoreService {
       params.push(`%${query.search}%`);
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+
     const sql = `
       WITH buy_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -907,7 +947,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 

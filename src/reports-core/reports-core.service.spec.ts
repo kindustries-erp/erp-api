@@ -74,4 +74,97 @@ describe('ReportsCoreService', () => {
     expect(result.trend).toEqual([{ month: '2026-07', qty: 2400 }]);
     expect(result.topSuppliers[0].supplierName).toBe('Supplier A');
   });
+
+  it('builds VINFAST IN item code SQL with exception and fallback precedence', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTracking({ page: 1, limit: 10 });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
+    expect(sql).toContain("'EEP73110011AP'");
+    expect(sql).toContain('HV_BATTERY_41.9KWH');
+    expect(sql).toContain("'BAT21001011'");
+    expect(sql).toContain('HV_BATTERY_PACK');
+    expect(sql).toContain("'EEP73110011ALL'");
+    expect(sql).toContain(
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+    );
+    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+  });
+
+  it('keeps exception precedence before regex and fallback in overview SQL', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTracking({ page: 1, limit: 10 });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    const vf5Idx = sql.indexOf('VF5_HV_BATTERY_PACK_38_KWH');
+    const hv419Idx = sql.indexOf('HV_BATTERY_41.9KWH');
+    const hvPackIdx = sql.indexOf('HV_BATTERY_PACK');
+    const regexIdx = sql.indexOf(
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+    );
+    const fallbackIdx = sql.indexOf(
+      "TRIM(SPLIT_PART(ii.description, ' - ', 1))",
+    );
+
+    expect(vf5Idx).toBeGreaterThan(-1);
+    expect(hv419Idx).toBeGreaterThan(-1);
+    expect(hvPackIdx).toBeGreaterThan(-1);
+    expect(regexIdx).toBeGreaterThan(-1);
+    expect(fallbackIdx).toBeGreaterThan(-1);
+
+    expect(vf5Idx).toBeLessThan(regexIdx);
+    expect(hv419Idx).toBeLessThan(regexIdx);
+    expect(hvPackIdx).toBeLessThan(regexIdx);
+    expect(regexIdx).toBeLessThan(fallbackIdx);
+    expect(vf5Idx).toBeLessThan(hvPackIdx);
+  });
+
+  it('applies the same IN detection rules in details SQL', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTrackingDetails({});
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain("'IN' as direction");
+    expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
+    expect(sql).toContain("'EEP73110011AP'");
+    expect(sql).toContain('HV_BATTERY_41.9KWH');
+    expect(sql).toContain("'BAT21001011'");
+    expect(sql).toContain('HV_BATTERY_PACK');
+    expect(sql).toContain("'EEP73110011ALL'");
+    expect(sql).toContain(
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+    );
+    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+    expect(sql).toContain('AND (\n      CASE');
+    expect(sql).toContain(') IS NOT NULL');
+  });
+
+  it('applies the same IN detection rules in column-options SQL', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsColumnOptions({
+      columnKey: 'itemCode',
+      search: '',
+      page: 1,
+      limit: 20,
+      filtersStr: '{}',
+    });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain('WITH buy_codes AS');
+    expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
+    expect(sql).toContain("'EEP73110011AP'");
+    expect(sql).toContain('HV_BATTERY_41.9KWH');
+    expect(sql).toContain("'BAT21001011'");
+    expect(sql).toContain('HV_BATTERY_PACK');
+    expect(sql).toContain("'EEP73110011ALL'");
+    expect(sql).toContain(
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+    );
+    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+  });
 });
