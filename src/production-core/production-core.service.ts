@@ -1484,9 +1484,12 @@ export class ProductionCoreService {
         identifiers.forEach((identifier, index) => {
           const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
-          if (!vinNo || !engineNo) {
+          const serialNo = identifier.serialNo?.trim();
+          const colorCode = identifier.attributes?.colorCode?.trim();
+
+          if (!vinNo || !engineNo || !serialNo || !colorCode) {
             throw new BadRequestException(
-              `Thiếu VIN hoặc số máy tại mã định danh ${index + 1}`,
+              `Thiếu Số seri, Số VIN, Số máy, hoặc Mã màu tại mã định danh ${index + 1}`,
             );
           }
           const vinKey = vinNo.toUpperCase();
@@ -1609,7 +1612,7 @@ export class ProductionCoreService {
           await serialRepo.save(
             serialRepo.create({
               itemId: order.finishedGoodItemId,
-              serialNo: identifier.engineNo,
+              serialNo: identifier.serialNo?.trim() || identifier.engineNo,
               status: 'IN_STOCK',
               vinId: vehicle.id,
               receiptLineId: savedGrLine.id,

@@ -44,6 +44,10 @@ export class InventorySerialService {
         'so.id as so_id',
         'so.so_no as so_no',
         'so.expected_delivery_date as so_delivery_date',
+        'sl.delivery_date as l_delivery_date',
+        'gi.id as gi_id',
+        'gi.issue_date as gi_issue_date',
+        'gi.issue_no as gi_issue_no',
         'i.id as i_id',
         'i.sku as i_sku',
         'i.item_name as i_item_name',
@@ -62,7 +66,9 @@ export class InventorySerialService {
         'sol',
         's.sales_order_line_id = sol.id',
       )
-      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id');
+      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id')
+      .leftJoin('erp_serial_lifecycles', 'sl', 'sl.serial_id = s.id')
+      .leftJoin('erp_goods_issues', 'gi', 'sl.goods_issue_id = gi.id');
 
     if (query.ids) {
       const idsArr = Array.isArray(query.ids)
@@ -143,7 +149,10 @@ export class InventorySerialService {
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'status') filterField = 's.status';
           else if (col === 'delivery')
-            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+            filterField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueDate')
+            filterField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo') filterField = 'gi.issue_no';
           else if (col === 'createdAt')
             filterField =
               "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
@@ -183,7 +192,10 @@ export class InventorySerialService {
           else if (col === 'soNo') searchField = 'so.so_no';
           else if (col === 'status') searchField = 's.status';
           else if (col === 'delivery')
-            searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+            searchField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueDate')
+            searchField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo') searchField = 'gi.issue_no';
           else if (col === 'createdAt')
             searchField =
               "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
@@ -236,6 +248,9 @@ export class InventorySerialService {
       if (sortField === 'dealer_name')
         sortColumn = "s.attributes->>'dealer_name'";
       if (sortField === 'trackingPolicyName') sortColumn = 'tp.name';
+      if (sortField === 'delivery') sortColumn = 'sl.delivery_date';
+      if (sortField === 'goodsIssueDate') sortColumn = 'gi.issue_date';
+      if (sortField === 'goodsIssueNo') sortColumn = 'gi.issue_no';
     }
 
     qb.orderBy(sortColumn, sortDirection);
@@ -296,9 +311,14 @@ export class InventorySerialService {
         trackingPolicyName: raw.tp_name,
       },
       lifecycle: {
-        deliveryDate: raw.so_delivery_date
-          ? fixTimezone(raw.so_delivery_date)
+        deliveryDate: raw.l_delivery_date
+          ? fixTimezone(raw.l_delivery_date)
           : null,
+        goodsIssueDate: raw.gi_issue_date
+          ? fixTimezone(raw.gi_issue_date)
+          : null,
+        goodsIssueNo: raw.gi_issue_no || null,
+        goodsIssueId: raw.gi_id || null,
       },
     }));
 

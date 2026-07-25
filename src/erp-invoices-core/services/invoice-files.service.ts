@@ -347,13 +347,39 @@ export class InvoiceFilesService {
     archive.append(report, { name: '_FILE_LOI.txt' });
   }
 
+  private createZipArchive() {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const archiverModule = require('archiver');
+    const directCandidates = [
+      archiverModule,
+      archiverModule?.default,
+      archiverModule?.create,
+      archiverModule?.archiver,
+      archiverModule?.default?.default,
+    ];
+    const directFactory = directCandidates.find(
+      (candidate) => typeof candidate === 'function',
+    );
+    const valueFactory =
+      !directFactory && archiverModule && typeof archiverModule === 'object'
+        ? Object.values(archiverModule).find(
+            (candidate) => typeof candidate === 'function',
+          )
+        : null;
+    const archiverFactory = directFactory || valueFactory;
+
+    if (!archiverFactory) {
+      throw new Error('Archiver module factory not found');
+    }
+
+    return archiverFactory('zip', { zlib: { level: 0 } });
+  }
+
   async bulkDownloadFilesZip(
     payload: { query: ErpInvoiceQuery; types: string[] },
     res: any,
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const archiver = require('archiver');
-    const archive = archiver('zip', { zlib: { level: 0 } });
+    const archive = this.createZipArchive();
 
     archive.on('error', (err: any) => {
       this.logger.error(`Error during zip creation: ${err.message}`);
@@ -425,9 +451,7 @@ export class InvoiceFilesService {
 
     const types = this.normalizeTypes(payload.types);
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const archiver = require('archiver');
-    const archive = archiver('zip', { zlib: { level: 0 } });
+    const archive = this.createZipArchive();
 
     archive.on('error', (err: any) => {
       this.logger.error(`Error during zip creation: ${err.message}`);

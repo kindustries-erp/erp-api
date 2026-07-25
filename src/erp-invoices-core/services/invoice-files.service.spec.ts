@@ -63,6 +63,7 @@ describe('InvoiceFilesService', () => {
     }).compile();
 
     service = module.get<InvoiceFilesService>(InvoiceFilesService);
+    (service as any).createZipArchive = jest.fn(() => archiveMocks);
   });
 
   describe('deletePdf', () => {
