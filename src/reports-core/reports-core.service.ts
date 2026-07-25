@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
 
 @Injectable()
 export class ReportsCoreService {
+  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.map(
+    (code) => `'${code.replace(/'/g, "''")}'`,
+  ).join(', ');
+
   constructor(private readonly dataSource: DataSource) {}
 
   async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
@@ -251,6 +256,46 @@ export class ReportsCoreService {
     };
   }
 
+  /**
+   * Item code precedence for VINFAST IN lines:
+   * 1) keyword exceptions, 2) regex-based detection, 3) legacy "code - name" fallback.
+   */
+  private buildVinfastInItemCodeSql(descriptionExpr: string) {
+    const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
+    return `
+      CASE
+        WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%' THEN 'EEP73110011AP'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%' THEN 'BAT21001011'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%' THEN 'EEP73110011ALL'
+        WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)')
+        WHEN ${descriptionExpr} LIKE '% - %'
+          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 1))
+        ELSE NULL
+      END
+    `;
+  }
+
+  private buildVinfastInItemNameSql(descriptionExpr: string) {
+    return `
+      CASE
+        WHEN ${descriptionExpr} LIKE '% - %'
+          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 2))
+        ELSE TRIM(COALESCE(${descriptionExpr}, ''))
+      END
+    `;
+  }
+
+  private buildVinfastVehicleTypeSql(itemCodeExpr: string) {
+    const normalizedItemCode = `UPPER(TRIM(COALESCE(${itemCodeExpr}, '')))`;
+    return `
+      CASE
+        WHEN ${normalizedItemCode} IN (${this.vinfastCarPartCodesSql}) THEN 'CAR'
+        ELSE 'MOTORBIKE'
+      END
+    `;
+  }
+
   async getVinfastPartsTracking(query: {
     dateFrom?: string;
     dateTo?: string;
@@ -290,6 +335,7 @@ export class ReportsCoreService {
       itemCode: '"itemCode"',
       month: '"month"',
       itemName: '"itemName"',
+      vehicleType: '"vehicleType"',
       qtyBought: '"qtyBought"',
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
@@ -379,13 +425,16 @@ export class ReportsCoreService {
     const limit = query.limit || 50;
     const page = query.page || 1;
     const offset = (page - 1) * limit;
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
 
     const sql = `
       WITH buy_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -394,7 +443,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 
@@ -435,6 +485,7 @@ export class ReportsCoreService {
         SELECT 
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
+          ${vehicleTypeSql} AS "vehicleType",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
           COALESCE(b.total_qty, 0) AS "qtyBought",
           COALESCE(s.total_qty, 0) AS "qtySold",
@@ -472,12 +523,15 @@ export class ReportsCoreService {
       const qtySold = parseFloat(row.qtySold || '0');
       const avgBuyPrice = parseFloat(row.avgBuyPrice || '0');
       const avgSellPrice = parseFloat(row.avgSellPrice || '0');
-      const margin = avgSellPrice - avgBuyPrice;
-      const marginPct = avgBuyPrice > 0 ? (margin / avgBuyPrice) * 100 : 0;
+      const hasSoldQty = qtySold > 0;
+      const margin = hasSoldQty ? avgSellPrice - avgBuyPrice : null;
+      const marginPct =
+        hasSoldQty && avgBuyPrice > 0 ? (margin! / avgBuyPrice) * 100 : null;
 
       return {
         itemCode: row.itemCode,
         itemName: row.itemName,
+        vehicleType: row.vehicleType,
         month: row.month,
         buyInvoiceIds: row.buyInvoiceIds,
         sellInvoiceIds: row.sellInvoiceIds,
@@ -486,7 +540,7 @@ export class ReportsCoreService {
         avgBuyPrice,
         avgSellPrice,
         margin,
-        marginPct: marginPct.toFixed(1) + '%',
+        marginPct: marginPct == null ? '' : marginPct.toFixed(1) + '%',
       };
     });
 
@@ -528,6 +582,10 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('c.item_code');
+
     const sql = `
       WITH buy_codes AS (
         SELECT 
@@ -539,8 +597,8 @@ export class ReportsCoreService {
           i.seller_tax_code AS tax_code,
           TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.unit,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
@@ -573,7 +631,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 
@@ -632,6 +691,7 @@ export class ReportsCoreService {
         c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
         b.item_name AS "itemName",
+        ${vehicleTypeSql} AS "vehicleType",
         c.unit,
         c.qty,
         c.unit_price AS "unitPrice",
@@ -688,12 +748,11 @@ export class ReportsCoreService {
 
     const workbook = new ExcelJS.Workbook();
 
-    // --- SHEET 1: TỔNG QUAN ---
-    const sheet1 = workbook.addWorksheet('Tổng quan');
-    sheet1.columns = [
+    const overviewColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
       { header: 'SL mua (VINFAST)', key: 'qtyBought', width: 15 },
       { header: 'Giá mua TB', key: 'avgBuyPrice', width: 15 },
       { header: 'SL bán ra', key: 'qtySold', width: 15 },
@@ -701,62 +760,18 @@ export class ReportsCoreService {
       { header: 'Biên LN', key: 'margin', width: 15 },
       { header: 'Biên LN (%)', key: 'marginPct', width: 15 },
     ];
-    sheet1.getRow(1).font = { bold: true };
-    sheet1.getRow(1).alignment = { horizontal: 'center' };
-    sheet1.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
-    };
-    sheet1.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-    ];
-    sheet1.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: 9 },
-    };
 
-    overviewData.forEach((row: any) => {
-      sheet1.addRow({
-        month: row.month,
-        itemCode: row.itemCode,
-        itemName: row.itemName,
-        qtyBought: row.qtyBought,
-        avgBuyPrice: row.avgBuyPrice,
-        qtySold: row.qtySold,
-        avgSellPrice: row.avgSellPrice,
-        margin: row.margin,
-        marginPct: row.marginPct,
-      });
-    });
-
-    sheet1.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        [
-          'qtyBought',
-          'avgBuyPrice',
-          'qtySold',
-          'avgSellPrice',
-          'margin',
-        ].forEach((key) => {
-          const cell = row.getCell(key);
-          cell.numFmt = '#,##0';
-        });
-      }
-    });
-
-    // --- SHEET 2: CHI TIẾT ---
-    const sheet2 = workbook.addWorksheet('Chi tiết');
-    sheet2.columns = [
+    const detailColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 15 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
-      { header: 'Phân loại', key: 'direction', width: 12 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
       { header: 'Ngày hóa đơn', key: 'invoiceDate', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đối tác', key: 'partnerName', width: 40 },
       { header: 'Mã số thuế', key: 'taxCode', width: 15 },
+      { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
       { header: 'Đơn giá', key: 'unitPrice', width: 20 },
@@ -771,23 +786,110 @@ export class ReportsCoreService {
       { header: 'Thành tiền', key: 'totalAmount', width: 20 },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 20 },
-      { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Trạng thái', key: 'status', width: 15 },
     ];
 
-    sheet2.getRow(1).font = { bold: true };
-    sheet2.getRow(1).alignment = { horizontal: 'center' };
-    sheet2.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
+    const setupSheetHeader = (
+      sheet: ExcelJS.Worksheet,
+      filterColumnCount: number,
+    ) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: filterColumnCount },
+      };
     };
-    sheet2.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-    ];
-    sheet2.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: 20 },
+
+    const createOverviewSheet = (sheetName: string, rows: any[]) => {
+      const sheet = workbook.addWorksheet(sheetName);
+      sheet.columns = overviewColumns as any;
+      setupSheetHeader(sheet, 10);
+
+      rows.forEach((row: any) => {
+        sheet.addRow({
+          month: row.month,
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          qtyBought: row.qtyBought,
+          avgBuyPrice: row.avgBuyPrice,
+          qtySold: row.qtySold,
+          avgSellPrice: row.avgSellPrice,
+          margin: row.margin,
+          marginPct: row.marginPct,
+        });
+      });
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          [
+            'qtyBought',
+            'avgBuyPrice',
+            'qtySold',
+            'avgSellPrice',
+            'margin',
+          ].forEach((key) => {
+            const cell = row.getCell(key);
+            cell.numFmt = '#,##0';
+          });
+        }
+      });
+    };
+
+    const createDetailSheet = (sheetName: string, rows: any[]) => {
+      const sheet = workbook.addWorksheet(sheetName);
+      sheet.columns = detailColumns as any;
+      setupSheetHeader(sheet, 20);
+
+      rows.forEach((row: any) => {
+        sheet.addRow({
+          month: row.month,
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          invoiceDate: row.invoiceDate,
+          serialNo: row.serialNo,
+          invoiceNo: row.invoiceNo,
+          partnerName: row.partnerName,
+          taxCode: row.taxCode,
+          description: row.description,
+          unit: row.unit,
+          qty: parseFloat(row.qty || '0'),
+          unitPrice: parseFloat(row.unitPrice || '0'),
+          preVatAmount: parseFloat(row.preVatAmount || '0'),
+          vatRate: parseVat(row.vatRate),
+          vatAmount: parseFloat(row.vatAmount || '0'),
+          totalAmount: parseFloat(row.totalAmount || '0'),
+          licensePlate: row.licensePlate,
+          settlementOrder: row.settlementOrder,
+          status: row.status,
+        });
+      });
+
+      const numColumns = [
+        'qty',
+        'unitPrice',
+        'preVatAmount',
+        'vatAmount',
+        'totalAmount',
+      ];
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          numColumns.forEach((key) => {
+            const cell = row.getCell(key);
+            cell.numFmt = '#,##0';
+          });
+        }
+      });
     };
 
     const parseVat = (val: any) => {
@@ -796,45 +898,28 @@ export class ReportsCoreService {
       return isNaN(n) ? val : n;
     };
 
-    rawData.forEach((row: any) => {
-      sheet2.addRow({
-        month: row.month,
-        itemCode: row.itemCode,
-        itemName: row.itemName,
-        direction: row.direction === 'IN' ? 'Mua vào' : 'Bán ra',
-        invoiceDate: row.invoiceDate,
-        serialNo: row.serialNo,
-        invoiceNo: row.invoiceNo,
-        partnerName: row.partnerName,
-        taxCode: row.taxCode,
-        unit: row.unit,
-        qty: parseFloat(row.qty || '0'),
-        unitPrice: parseFloat(row.unitPrice || '0'),
-        preVatAmount: parseFloat(row.preVatAmount || '0'),
-        vatRate: parseVat(row.vatRate),
-        vatAmount: parseFloat(row.vatAmount || '0'),
-        totalAmount: parseFloat(row.totalAmount || '0'),
-        licensePlate: row.licensePlate,
-        settlementOrder: row.settlementOrder,
-        description: row.description,
-        status: row.status,
-      });
-    });
+    const vehicleTypeSheetPrefix: Record<string, string> = {
+      CAR: 'Ô tô',
+      MOTORBIKE: 'Xe máy',
+    };
 
-    const numColumns = [
-      'qty',
-      'unitPrice',
-      'preVatAmount',
-      'vatAmount',
-      'totalAmount',
-    ];
-    sheet2.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        numColumns.forEach((key) => {
-          const cell = row.getCell(key);
-          cell.numFmt = '#,##0';
-        });
-      }
+    Object.entries(vehicleTypeSheetPrefix).forEach(([vehicleType, prefix]) => {
+      const typeOverviewRows = overviewData.filter(
+        (row: any) => row.vehicleType === vehicleType,
+      );
+      const typeDetailRows = rawData.filter(
+        (row: any) => row.vehicleType === vehicleType,
+      );
+
+      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
+      createDetailSheet(
+        `${prefix} - Mua Vào`,
+        typeDetailRows.filter((row: any) => row.direction === 'IN'),
+      );
+      createDetailSheet(
+        `${prefix} - Bán Ra`,
+        typeDetailRows.filter((row: any) => row.direction === 'OUT'),
+      );
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -853,6 +938,7 @@ export class ReportsCoreService {
       itemCode: '"itemCode"',
       month: '"month"',
       itemName: '"itemName"',
+      vehicleType: '"vehicleType"',
       qtyBought: '"qtyBought"',
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
@@ -893,12 +979,16 @@ export class ReportsCoreService {
       params.push(`%${query.search}%`);
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
+
     const sql = `
       WITH buy_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -907,7 +997,8 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
       ),
       sell_codes AS (
         SELECT 
@@ -927,6 +1018,7 @@ export class ReportsCoreService {
         SELECT 
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
+          ${vehicleTypeSql} AS "vehicleType",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
           COALESCE(SUM(b.qty), 0) AS "qtyBought",
           COALESCE(SUM(s.qty), 0) AS "qtySold",
