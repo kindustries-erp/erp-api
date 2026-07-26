@@ -211,6 +211,10 @@ export class RbacCoreService {
         resource: 'kgara_integration',
         label: 'Kgara Integration (Garage)',
       },
+      {
+        resource: 'vinfast_parts_reports',
+        label: 'Vinfast Parts Reports (Báo cáo phụ tùng)',
+      },
     ];
   }
 }

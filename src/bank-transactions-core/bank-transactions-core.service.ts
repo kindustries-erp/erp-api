@@ -33,6 +33,7 @@ import {
 } from './dto/create-cash-book-balance.dto';
 import { CreateBankTransactionDto } from './dto/create-bank-transaction.dto';
 import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
+import { PostBankTransactionDto } from './dto/post-bank-transaction.dto';
 
 import { ErpBankStatementFile } from './entities/erp_bank_statement_file.entity';
 
@@ -389,7 +390,203 @@ export class BankTransactionsCoreService {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
     const [mappedTxn] = await this.loadNetOffAmounts([txn]);
-    return mappedTxn;
+    const posting = await this.getTransactionPosting(id);
+    return { ...mappedTxn, ...posting };
+  }
+
+  async getTransactionPosting(id: string) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+
+    const entries = await this.accountingCoreService.getJournalEntriesBySource(
+      txn.id,
+      txn.sourceType,
+    );
+
+    if (entries.length === 0) {
+      return {
+        postingStatus: 'UNPOSTED',
+        journalEntryId: null,
+        postingDate: null,
+        description: txn.accountingDescription || txn.description || null,
+        lines: [],
+        totalDebit: 0,
+        totalCredit: 0,
+        isBalanced: true,
+      };
+    }
+
+    const latest = entries[0];
+    const lineMap = new Map<
+      string,
+      {
+        id: string;
+        accountId: string;
+        debit: number;
+        credit: number;
+        description: string;
+      }
+    >();
+
+    for (const entry of entries) {
+      for (const line of entry.lines || []) {
+        const accountId = line.accountId;
+        const key = accountId || line.id;
+        if (!lineMap.has(key)) {
+          lineMap.set(key, {
+            id: line.id,
+            accountId,
+            debit: 0,
+            credit: 0,
+            description: line.description || entry.description || '',
+          });
+        }
+        const item = lineMap.get(key)!;
+        item.debit += Number(line.debit) || 0;
+        item.credit += Number(line.credit) || 0;
+      }
+    }
+
+    const lines = Array.from(lineMap.values());
+    const totalDebit = lines.reduce((sum, l) => sum + (l.debit || 0), 0);
+    const totalCredit = lines.reduce((sum, l) => sum + (l.credit || 0), 0);
+
+    return {
+      postingStatus: 'POSTED',
+      journalEntryId: entries.length === 1 ? latest.id : null,
+      postingDate: latest.date ? latest.date.toISOString().slice(0, 10) : null,
+      description: latest.description || txn.accountingDescription || null,
+      lines,
+      totalDebit,
+      totalCredit,
+      isBalanced: Math.abs(totalDebit - totalCredit) < 0.01,
+    };
+  }
+
+  async postTransaction(id: string, dto: PostBankTransactionDto) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+      relations: ['bankAccount', 'cashBook'],
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+
+    if (!txn.branchId) {
+      throw new BadRequestException(
+        'Giao dịch chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
+      );
+    }
+
+    if (!dto.lines || dto.lines.length === 0) {
+      throw new BadRequestException('Vui lòng nhập ít nhất 1 dòng hạch toán.');
+    }
+
+    const cleanedLines = dto.lines.map((line) => ({
+      accountId: line.accountId,
+      debit: Number(line.debit || 0),
+      credit: Number(line.credit || 0),
+      description: (line.description || '').trim(),
+    }));
+
+    for (const line of cleanedLines) {
+      if (!line.accountId) {
+        throw new BadRequestException('Thiếu tài khoản hạch toán.');
+      }
+      if (line.debit < 0 || line.credit < 0) {
+        throw new BadRequestException('Giá trị Nợ/Có không hợp lệ.');
+      }
+      if (line.debit > 0 && line.credit > 0) {
+        throw new BadRequestException(
+          'Một dòng hạch toán không thể đồng thời có cả Nợ và Có.',
+        );
+      }
+      if (line.debit <= 0 && line.credit <= 0) {
+        throw new BadRequestException(
+          'Mỗi dòng hạch toán phải có ít nhất một giá trị Nợ hoặc Có lớn hơn 0.',
+        );
+      }
+    }
+
+    const totalDebit = cleanedLines.reduce((sum, line) => sum + line.debit, 0);
+    const totalCredit = cleanedLines.reduce(
+      (sum, line) => sum + line.credit,
+      0,
+    );
+
+    if (Math.abs(totalDebit - totalCredit) >= 0.01) {
+      throw new BadRequestException(
+        'Hạch toán không cân bằng: Tổng Nợ phải bằng Tổng Có.',
+      );
+    }
+
+    const uniqueAccountIds = Array.from(
+      new Set(cleanedLines.map((line) => line.accountId).filter(Boolean)),
+    );
+    const accountRows = await this.dataSource.query(
+      `SELECT id FROM erp_chart_of_accounts WHERE id = ANY($1::uuid[]) AND is_deleted = false`,
+      [uniqueAccountIds],
+    );
+    if (accountRows.length !== uniqueAccountIds.length) {
+      throw new BadRequestException(
+        'Có tài khoản không tồn tại hoặc đã bị xóa. Vui lòng kiểm tra lại.',
+      );
+    }
+
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      txn.id,
+      txn.sourceType,
+    );
+
+    const postingDate = dto.postingDate
+      ? new Date(dto.postingDate)
+      : txn.transDate;
+    const description =
+      dto.description?.trim() ||
+      txn.accountingDescription ||
+      txn.description ||
+      txn.referenceNumber ||
+      '';
+
+    await this.accountingCoreService.createJournalEntry({
+      branchId: txn.branchId,
+      date: postingDate,
+      documentDate: txn.transDate,
+      description,
+      subjectName: txn.correspondentName || undefined,
+      sourceType: txn.sourceType,
+      sourceId: txn.id,
+      reference: txn.referenceNumber,
+      isReceipt: Number(txn.creditAmount || 0) > 0,
+      lines: cleanedLines,
+    });
+
+    if (dto.description !== undefined) {
+      txn.accountingDescription = dto.description?.trim() || null;
+      await this.transactionRepo.save(txn);
+    }
+
+    return this.getTransactionPosting(id);
+  }
+
+  async unpostTransaction(id: string) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${id} not found`);
+    }
+
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      txn.id,
+      txn.sourceType,
+    );
+
+    return this.getTransactionPosting(id);
   }
   private async loadNetOffAmounts(transactions: ErpBankTransaction[]) {
     if (transactions.length === 0) return transactions;
@@ -824,11 +1021,7 @@ export class BankTransactionsCoreService {
     }
 
     const groupField =
-      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
-
-    qb.andWhere(
-      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, '')) IS NOT NULL",
-    );
+      "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''), 'Khác')";
 
     if (filter.column_filters) {
       try {
@@ -848,7 +1041,7 @@ export class BankTransactionsCoreService {
             });
           } else if (col === 'partner') {
             qb.andWhere(
-              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, '')) IN (:...vals_${col})`,
+              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''), 'Khác') IN (:...vals_${col})`,
               {
                 [`vals_${col}`]: vals,
               },
@@ -945,13 +1138,13 @@ export class BankTransactionsCoreService {
       const groupConditions = items
         .map((item) => {
           const escapedId = String(item.groupId).replace(/'/g, "''");
-          return `(COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') = '${escapedId}')`;
+          return `(COALESCE(NULLIF(t2.correspondent_name, ''), NULLIF(t2.correspondent_account, ''), 'Khác') = '${escapedId}')`;
         })
         .join(' OR ');
 
       const subjectQuery = `
         SELECT 
-          COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') as group_id,
+          COALESCE(NULLIF(t2.correspondent_name, ''), NULLIF(t2.correspondent_account, ''), 'Khác') as group_id,
           CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END as subject
         FROM erp_invoice_voucher_netoff netoff
         INNER JOIN erp_invoices inv ON inv.id = netoff.invoice_id

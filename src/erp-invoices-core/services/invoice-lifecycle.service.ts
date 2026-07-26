@@ -136,21 +136,6 @@ export class InvoiceLifecycleService {
         );
     }
 
-    const netOffs = await this.repository.manager.find(
-      ErpInvoiceVoucherNetOff,
-      { where: { invoiceId: id } },
-    );
-    if (netOffs && netOffs.length > 0) {
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
-    }
-
     return this.findOne(id);
   }
 
@@ -370,14 +355,6 @@ export class InvoiceLifecycleService {
       await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
         invoiceId: id,
       });
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
     }
 
     invoice.postingStatus = 'UNPOSTED';
@@ -440,13 +417,6 @@ export class InvoiceLifecycleService {
 
     await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
 
-    const uniqueTxnIds = [...new Set(payload.map((p) => p.bankTransactionId))];
-    for (const txnId of uniqueTxnIds) {
-      await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-        txnId,
-      );
-    }
-
     return { message: 'Đã liên kết phiếu thành công' };
   }
 
@@ -455,9 +425,6 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
-    await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-      voucherId,
-    );
     return { message: 'Đã xóa liên kết phiếu thành công' };
   }
 }

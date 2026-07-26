@@ -36,6 +36,8 @@ export class InvoiceDashboardController {
   @ApiQuery({ name: 'branch_id', required: false })
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'sortOrder', required: false })
+  @ApiQuery({ name: 'column_search', required: false })
+  @ApiQuery({ name: 'column_filters', required: false })
   getDashboardPartners(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -45,6 +47,8 @@ export class InvoiceDashboardController {
     @Query('branch_id') branchId?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
   ) {
     return this.service.getDashboardPartners(
       page ? parseInt(page, 10) : 1,
@@ -55,6 +59,8 @@ export class InvoiceDashboardController {
       branchId,
       sortBy,
       sortOrder,
+      columnSearch,
+      columnFilters,
     );
   }
 

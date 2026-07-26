@@ -31,7 +31,49 @@ export class ReportsCoreController {
     return this.reportsCoreService.getPurchasingDashboard({ dateFrom, dateTo });
   }
 
-  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('vinfast-parts-dashboard')
+  async getVinfastPartsDashboard(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('vehicleType') vehicleType?: string,
+    @Query('groupBy') groupBy?: string,
+    @Query('itemCode') itemCode?: string,
+  ) {
+    return this.reportsCoreService.getVinfastPartsDashboard({
+      dateFrom,
+      dateTo,
+      vehicleType,
+      groupBy,
+      itemCode,
+    });
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('vinfast-parts-dashboard-table')
+  async getVinfastPartsDashboardTable(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('vehicleType') vehicleType?: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '50',
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
+    @Query('sorts') sorts?: string,
+  ) {
+    return this.reportsCoreService.getVinfastPartsDashboardTable({
+      dateFrom,
+      dateTo,
+      vehicleType,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      columnSearch,
+      columnFilters,
+      sorts,
+    });
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
   @Get('vinfast-parts')
   async getVinfastPartsTracking(
     @Query('dateFrom') dateFrom?: string,
@@ -60,7 +102,7 @@ export class ReportsCoreController {
     return result;
   }
 
-  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
   @Get('vinfast-parts/details')
   async getVinfastPartsTrackingDetails(
     @Query('dateFrom') dateFrom?: string,
@@ -76,7 +118,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
   @Get('vinfast-parts/column-options')
   async getVinfastPartsColumnOptions(
     @Query('columnKey') columnKey: string,
@@ -94,7 +136,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
   @Get('vinfast-parts/export/excel')
   async exportVinfastPartsTrackingExcel(
     @Query('dateFrom') dateFrom: string,

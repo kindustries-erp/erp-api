@@ -89,10 +89,12 @@ export class InventoryItemsLifecycleService {
       where: { itemId: id } as never,
     });
     const currentOnHand = Number(balance?.qtyOnHand ?? 0);
-    const txns = await this.txnRepository.find({
-      where: { itemId: id } as never,
-      order: { transactionDate: 'ASC', createdAt: 'ASC' } as never,
-    });
+    const txns = await this.txnRepository
+      .createQueryBuilder('txn')
+      .where('txn.item_id = :itemId', { itemId: id })
+      .orderBy('DATE(txn.transaction_date)', 'ASC')
+      .addOrderBy('txn.created_at', 'ASC')
+      .getMany();
 
     const receiptIds = txns
       .filter((t) => t.documentType === 'GOODS_RECEIPT' && t.documentId)
