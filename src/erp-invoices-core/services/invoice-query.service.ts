@@ -37,10 +37,9 @@ export class InvoiceQueryService {
   ) {
     const qb = this.repository.createQueryBuilder('inv');
 
+    qb.where('inv.is_deleted = false');
     if (direction) {
-      qb.where('inv.direction = :direction', { direction });
-    } else {
-      qb.where('1 = 1');
+      qb.andWhere('inv.direction = :direction', { direction });
     }
 
     let selectField = '';
