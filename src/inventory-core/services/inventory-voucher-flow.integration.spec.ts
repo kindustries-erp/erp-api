@@ -460,6 +460,7 @@ describe('Inventory voucher posting chain integration', () => {
       [ErpVehicle, vehicleRepo],
       [ErpInventoryItem, itemRepo],
       [ErpSerialLifecycle, lifecycleRepo],
+      [ErpBusinessPartner, { findOneBy: jest.fn(), save: jest.fn() }],
     ]);
 
     const manager = makeManager(repoMap);
