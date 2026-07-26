@@ -92,6 +92,30 @@ export class AccountingCoreService {
     );
   }
 
+  async getJournalEntriesBySource(sourceId: string, sourceType: string) {
+    return this.journalEntryRepo
+      .createQueryBuilder('je')
+      .leftJoinAndSelect('je.lines', 'lines')
+      .leftJoinAndSelect('lines.account', 'account')
+      .where('je.sourceId = :sourceId', { sourceId })
+      .andWhere('je.sourceType = :sourceType', { sourceType })
+      .andWhere('je.isDeleted = false')
+      .orderBy('je.date', 'DESC')
+      .addOrderBy('je.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async getLatestJournalEntryBySource(sourceId: string, sourceType: string) {
+    return this.journalEntryRepo
+      .createQueryBuilder('je')
+      .where('je.sourceId = :sourceId', { sourceId })
+      .andWhere('je.sourceType = :sourceType', { sourceType })
+      .andWhere('je.isDeleted = false')
+      .orderBy('je.date', 'DESC')
+      .addOrderBy('je.createdAt', 'DESC')
+      .getOne();
+  }
+
   async createJournalEntry(data: {
     entryNoPrefix?: string;
     entryNo?: string;
