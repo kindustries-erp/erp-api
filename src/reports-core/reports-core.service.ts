@@ -440,6 +440,9 @@ export class ReportsCoreService {
     vehicleType?: string;
     page?: number;
     limit?: number;
+    columnSearch?: string;
+    columnFilters?: string;
+    sorts?: string;
   }) {
     let dateFilter = '';
     const params: any[] = [];
@@ -465,6 +468,79 @@ export class ReportsCoreService {
       vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
       params.push(query.vehicleType);
       paramIndex++;
+    }
+
+    let searchFilter = '';
+    if (query.columnSearch) {
+      try {
+        const cSearch = JSON.parse(query.columnSearch) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          if (col === 'itemCode') {
+            searchFilter += ` AND b.item_code ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          } else if (col === 'itemName') {
+            searchFilter += ` AND b.item_name ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let filtersSql = '';
+    if (query.columnFilters) {
+      try {
+        const cFilters = JSON.parse(query.columnFilters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'itemCode') {
+            filtersSql += ` AND b.item_code = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          } else if (col === 'itemName') {
+            filtersSql += ` AND b.item_name = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let orderSql = 'ORDER BY amount_sold DESC, amount_bought DESC';
+    if (query.sorts) {
+      try {
+        const sortsArr = JSON.parse(query.sorts) as string[];
+        if (sortsArr.length > 0) {
+          const sortFields: string[] = [];
+          for (const s of sortsArr) {
+            const isDesc = s.startsWith('-');
+            const col = s.replace(/^-/, '');
+            let sqlCol = '';
+            if (col === 'itemCode') sqlCol = 'item_code';
+            else if (col === 'itemName') sqlCol = 'item_name';
+            else if (col === 'qtyBought') sqlCol = 'qty_bought';
+            else if (col === 'qtySold') sqlCol = 'qty_sold';
+            else if (col === 'amountBought') sqlCol = 'amount_bought';
+            else if (col === 'amountSold') sqlCol = 'amount_sold';
+            else if (col === 'profit') sqlCol = '(amount_sold - amount_bought)';
+
+            if (sqlCol) {
+              sortFields.push(`${sqlCol} ${isDesc ? 'DESC' : 'ASC'}`);
+            }
+          }
+          if (sortFields.length > 0) {
+            orderSql = `ORDER BY ${sortFields.join(', ')}`;
+          }
+        }
+      } catch (e) {}
     }
 
     const sql = `
@@ -529,11 +605,13 @@ export class ReportsCoreService {
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
+          ${searchFilter}
+          ${filtersSql}
         GROUP BY b.item_code
       )
       SELECT *, COUNT(*) OVER() AS "totalCount"
       FROM base_data
-      ORDER BY amount_sold DESC, amount_bought DESC
+      ${orderSql}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 

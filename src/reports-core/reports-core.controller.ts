@@ -57,6 +57,9 @@ export class ReportsCoreController {
     @Query('vehicleType') vehicleType?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '50',
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
+    @Query('sorts') sorts?: string,
   ) {
     return this.reportsCoreService.getVinfastPartsDashboardTable({
       dateFrom,
@@ -64,6 +67,9 @@ export class ReportsCoreController {
       vehicleType,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
+      columnSearch,
+      columnFilters,
+      sorts,
     });
   }
 

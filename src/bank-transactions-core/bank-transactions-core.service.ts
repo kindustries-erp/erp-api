@@ -1021,11 +1021,7 @@ export class BankTransactionsCoreService {
     }
 
     const groupField =
-      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, ''), 'Khác')";
-
-    qb.andWhere(
-      "COALESCE(NULLIF(txn.correspondentAccount, ''), NULLIF(txn.correspondentName, '')) IS NOT NULL",
-    );
+      "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''), 'Khác')";
 
     if (filter.column_filters) {
       try {
@@ -1045,7 +1041,7 @@ export class BankTransactionsCoreService {
             });
           } else if (col === 'partner') {
             qb.andWhere(
-              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, '')) IN (:...vals_${col})`,
+              `COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''), 'Khác') IN (:...vals_${col})`,
               {
                 [`vals_${col}`]: vals,
               },
@@ -1142,13 +1138,13 @@ export class BankTransactionsCoreService {
       const groupConditions = items
         .map((item) => {
           const escapedId = String(item.groupId).replace(/'/g, "''");
-          return `(COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') = '${escapedId}')`;
+          return `(COALESCE(NULLIF(t2.correspondent_name, ''), NULLIF(t2.correspondent_account, ''), 'Khác') = '${escapedId}')`;
         })
         .join(' OR ');
 
       const subjectQuery = `
         SELECT 
-          COALESCE(NULLIF(t2.correspondent_account, ''), NULLIF(t2.correspondent_name, ''), 'Khác') as group_id,
+          COALESCE(NULLIF(t2.correspondent_name, ''), NULLIF(t2.correspondent_account, ''), 'Khác') as group_id,
           CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END as subject
         FROM erp_invoice_voucher_netoff netoff
         INNER JOIN erp_invoices inv ON inv.id = netoff.invoice_id
