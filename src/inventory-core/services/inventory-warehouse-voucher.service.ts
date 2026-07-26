@@ -252,7 +252,7 @@ export class InventoryWarehouseVoucherService {
     const unionQuery = queries.join(' UNION ALL ');
 
     // Sorting
-    let sortColumn = 'date';
+    let sortColumn = 'DATE("date")';
     let sortDirection = 'DESC';
 
     if (query.sort) {
@@ -265,7 +265,7 @@ export class InventoryWarehouseVoucherService {
       }
 
       const sortMap: Record<string, string> = {
-        date: '"date"',
+        date: 'DATE("date")',
         voucherNo: '"voucherNo"',
         status: 'status',
         poNo: '"poNo"',
@@ -274,6 +274,7 @@ export class InventoryWarehouseVoucherService {
         qtyReceipt: '"totalQty"',
         qtyIssue: '"totalQty"',
         qtyAdjustment: '"totalQty"',
+        createdAt: '"createdAt"',
       };
 
       if (sortMap[sortField]) {

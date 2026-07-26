@@ -21,7 +21,7 @@ import { ErpInventoryTrackingSerial } from '../entities/erp_inventory_tracking_s
 import { ErpVehicle } from '../../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpSerialLifecycle } from '../entities/erp_serial_lifecycle.entity';
-
+import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
 describe('Inventory voucher posting chain integration', () => {
   function makeManager(repoMap: Map<any, any>) {
     return {
@@ -232,6 +232,7 @@ describe('Inventory voucher posting chain integration', () => {
       [ErpInventoryTrackingSerial, { findOneBy: jest.fn(), save: jest.fn() }],
       [ErpVehicle, { findOneBy: jest.fn(), save: jest.fn() }],
       [ErpInventoryItem, itemRepo],
+      [ErpBusinessPartner, { findOneBy: jest.fn() }],
     ]);
 
     const manager = makeManager(repoMap);
@@ -459,6 +460,7 @@ describe('Inventory voucher posting chain integration', () => {
       [ErpVehicle, vehicleRepo],
       [ErpInventoryItem, itemRepo],
       [ErpSerialLifecycle, lifecycleRepo],
+      [ErpBusinessPartner, { findOneBy: jest.fn(), save: jest.fn() }],
     ]);
 
     const manager = makeManager(repoMap);
