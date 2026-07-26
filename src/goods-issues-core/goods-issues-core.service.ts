@@ -475,12 +475,32 @@ export class GoodsIssuesCoreService {
         }
 
         if (serial) {
+          let dealerId = issue.customerId;
+          if (!dealerId && issue.salesOrderId) {
+            const soRepo = manager.getRepository(ErpSalesOrder);
+            const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+            if (so) {
+              dealerId = so.customerId;
+            }
+          }
+
           serial.goodsIssueLineId = line.id;
           if (line.salesOrderLineId) {
             serial.status = 'DELIVERING';
           }
           if (!serial.vinId && vehicle?.id) {
             serial.vinId = vehicle.id;
+          }
+          if (line.salesOrderLineId && dealerId) {
+            const bpRepo = manager.getRepository(ErpBusinessPartner);
+            const dealer = await bpRepo.findOneBy({ id: dealerId });
+            if (dealer) {
+              serial.attributes = {
+                ...(serial.attributes || {}),
+                dealer_code: dealer.code,
+                dealer_name: dealer.name,
+              };
+            }
           }
           await serialRepo.save(serial);
 
@@ -495,14 +515,14 @@ export class GoodsIssuesCoreService {
                   serialId: serial.id,
                   salesOrderId: issue.salesOrderId,
                   goodsIssueId: issue.id,
-                  dealerId: issue.customerId, // Using customerId as dealerId
+                  dealerId: dealerId,
                   status: 'ACTIVE',
                 }),
               );
             } else {
               existingLifecycle.salesOrderId = issue.salesOrderId;
               existingLifecycle.goodsIssueId = issue.id;
-              existingLifecycle.dealerId = issue.customerId;
+              existingLifecycle.dealerId = dealerId;
               existingLifecycle.status = 'ACTIVE';
               await lifecycleRepo.save(existingLifecycle);
             }

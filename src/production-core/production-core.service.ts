@@ -1485,9 +1485,9 @@ export class ProductionCoreService {
           const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
           const serialNo = identifier.serialNo?.trim();
-          const colorCode = identifier.attributes?.colorCode?.trim();
+          const color = identifier.attributes?.color?.trim();
 
-          if (!vinNo || !engineNo || !serialNo || !colorCode) {
+          if (!vinNo || !engineNo || !serialNo || !color) {
             throw new BadRequestException(
               `Thiếu Số seri, Số VIN, Số máy, hoặc Mã màu tại mã định danh ${index + 1}`,
             );
