@@ -296,6 +296,275 @@ export class ReportsCoreService {
     `;
   }
 
+  async getVinfastPartsDashboard(query: {
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+    groupBy?: string;
+    itemCode?: string;
+  }) {
+    let dateFilter = '';
+    const params: any[] = [];
+    let paramIndex = 1;
+    const groupInterval = query.groupBy === 'week' ? 'week' : 'month';
+    const groupFormat = query.groupBy === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
+
+    if (query.dateFrom) {
+      dateFilter += ` AND b.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND b.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    let vehicleFilter = '';
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('b.item_code')} = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    let itemCodeFilter = '';
+    if (query.itemCode) {
+      itemCodeFilter = ` AND b.item_code = $${paramIndex}`;
+      params.push(query.itemCode);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+
+    const sql = `
+      WITH buy_codes AS (
+        SELECT 
+          ${inItemCodeSql} AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code = '0108926276'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+      ),
+      sell_codes AS (
+        SELECT 
+          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+      ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code,
+          b.month,
+          COALESCE(b.total_amount, 0) AS buy_amount,
+          COALESCE(s.total_amount, 0) AS sell_amount
+        FROM buy_agg b
+        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleFilter}
+          ${itemCodeFilter}
+      )
+      SELECT 
+        TO_CHAR(month, '${groupFormat}') AS month,
+        SUM(buy_amount) AS total_buy,
+        SUM(sell_amount) AS total_sell,
+        SUM(sell_amount - buy_amount) AS profit
+      FROM base_data
+      GROUP BY month
+      ORDER BY month ASC
+    `;
+
+    const rawData = await this.dataSource.query(sql, params);
+
+    const summary = {
+      totalBuy: 0,
+      totalSell: 0,
+      profit: 0,
+    };
+    const trend = rawData.map((row: any) => {
+      const buy = Number(row.total_buy || 0);
+      const sell = Number(row.total_sell || 0);
+      const profit = Number(row.profit || 0);
+      summary.totalBuy += buy;
+      summary.totalSell += sell;
+      summary.profit += profit;
+
+      return {
+        month: row.month,
+        totalBuy: buy,
+        totalSell: sell,
+        profit: profit,
+      };
+    });
+
+    return {
+      summary,
+      trend,
+    };
+  }
+
+  async getVinfastPartsDashboardTable(query: {
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    let dateFilter = '';
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (query.dateFrom) {
+      dateFilter += ` AND b.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND b.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
+
+    let vehicleTypeFilter = '';
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    const sql = `
+      WITH buy_codes AS (
+        SELECT 
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code = '0108926276'
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+      ),
+      sell_codes AS (
+        SELECT 
+          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+      ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          MAX(item_name) AS item_name,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code,
+          MAX(b.item_name) AS item_name,
+          ${vehicleTypeSql} AS vehicle_type,
+          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
+          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
+          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
+          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
+        FROM buy_agg b
+        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleTypeFilter}
+        GROUP BY b.item_code
+      )
+      SELECT *, COUNT(*) OVER() AS "totalCount"
+      FROM base_data
+      ORDER BY amount_sold DESC, amount_bought DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const page = query.page || 1;
+    const limit = query.limit || 50;
+    const offset = (page - 1) * limit;
+
+    params.push(limit, offset);
+
+    const rawData = await this.dataSource.query(sql, params);
+    const total = rawData.length > 0 ? parseInt(rawData[0].totalCount, 10) : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items: rawData.map((row: any) => ({
+        itemCode: row.item_code,
+        itemName: row.item_name,
+        vehicleType: row.vehicle_type,
+        qtyBought: Number(row.qty_bought || 0),
+        qtySold: Number(row.qty_sold || 0),
+        amountBought: Number(row.amount_bought || 0),
+        amountSold: Number(row.amount_sold || 0),
+        profit: Number(row.amount_sold || 0) - Number(row.amount_bought || 0),
+      })),
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+  }
+
   async getVinfastPartsTracking(query: {
     dateFrom?: string;
     dateTo?: string;
@@ -590,42 +859,46 @@ export class ReportsCoreService {
       WITH buy_codes AS (
         SELECT 
           'IN' as direction,
-          i.invoice_no,
-          i.serial_no,
-          i.status,
-          i.seller_name AS partner_name,
-          i.seller_tax_code AS tax_code,
-          TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
+          MAX(i.invoice_no) AS invoice_no,
+          MAX(i.serial_no) AS serial_no,
+          MAX(i.status) AS status,
+          MAX(i.seller_name) AS partner_name,
+          MAX(i.seller_tax_code) AS tax_code,
+          MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
           ${inItemCodeSql} AS item_code,
-          ${inItemNameSql} AS item_name,
-          ii.unit,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
-          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          MAX(${inItemNameSql}) AS item_name,
+          MAX(ii.unit) AS unit,
+          COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
+          AVG(ii.unit_price::numeric) AS unit_price,
+          SUM(ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
+          SUM(
+            COALESCE(
+              NULLIF(ii.vat_amount::numeric, 0), 
+              CASE 
+                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                ELSE 0 
+              END, 
+              0
+            )
           ) AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          SUM(
+            (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+              NULLIF(ii.vat_amount::numeric, 0), 
+              CASE 
+                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                ELSE 0 
+              END, 
+              0
+            )
           ) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.license_plate,
-          i.settlement_order,
-          ii.description
+          MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
+          MAX(i.license_plate) AS license_plate,
+          MAX(i.settlement_order) AS settlement_order,
+          MAX(ii.description) AS description
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -633,52 +906,58 @@ export class ReportsCoreService {
           AND i.seller_tax_code = '0108926276'
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+        GROUP BY ii.invoice_id, ${inItemCodeSql}
       ),
       sell_codes AS (
         SELECT 
           'OUT' as direction,
-          i.invoice_no,
-          i.serial_no,
-          i.status,
-          i.buyer_name AS partner_name,
-          i.buyer_tax_code AS tax_code,
-          TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
+          MAX(i.invoice_no) AS invoice_no,
+          MAX(i.serial_no) AS serial_no,
+          MAX(i.status) AS status,
+          MAX(i.buyer_name) AS partner_name,
+          MAX(i.buyer_tax_code) AS tax_code,
+          MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
           TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
           '' AS item_name,
-          ii.unit,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
-          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          MAX(ii.unit) AS unit,
+          COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
+          AVG(ii.unit_price::numeric) AS unit_price,
+          SUM(ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
+          SUM(
+            COALESCE(
+              NULLIF(ii.vat_amount::numeric, 0), 
+              CASE 
+                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                ELSE 0 
+              END, 
+              0
+            )
           ) AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          SUM(
+            (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+              NULLIF(ii.vat_amount::numeric, 0), 
+              CASE 
+                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                ELSE 0 
+              END, 
+              0
+            )
           ) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.license_plate,
-          i.settlement_order,
-          ii.description
+          MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
+          MAX(i.license_plate) AS license_plate,
+          MAX(i.settlement_order) AS settlement_order,
+          MAX(ii.description) AS description
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+        GROUP BY ii.invoice_id, TRIM(SPLIT_PART(ii.description, ' ', 1))
       )
       SELECT 
         c.direction,
@@ -898,10 +1177,28 @@ export class ReportsCoreService {
       return isNaN(n) ? val : n;
     };
 
-    const vehicleTypeSheetPrefix: Record<string, string> = {
-      CAR: 'Ô tô',
-      MOTORBIKE: 'Xe máy',
-    };
+    const parsedFilters = query.columnFilters
+      ? JSON.parse(query.columnFilters)
+      : {};
+    const reqVehicleType = parsedFilters['vehicleType'];
+
+    const vehicleTypeSheetPrefix: Record<string, string> = {};
+    if (
+      reqVehicleType &&
+      reqVehicleType.includes('CAR') &&
+      !reqVehicleType.includes('MOTORBIKE')
+    ) {
+      vehicleTypeSheetPrefix['CAR'] = 'Ô tô';
+    } else if (
+      reqVehicleType &&
+      reqVehicleType.includes('MOTORBIKE') &&
+      !reqVehicleType.includes('CAR')
+    ) {
+      vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
+    } else {
+      vehicleTypeSheetPrefix['CAR'] = 'Ô tô';
+      vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
+    }
 
     Object.entries(vehicleTypeSheetPrefix).forEach(([vehicleType, prefix]) => {
       const typeOverviewRows = overviewData.filter(
