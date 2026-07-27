@@ -2,12 +2,15 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Query,
+  Body,
   Headers,
   UseGuards,
   Param,
   createParamDecorator,
   ExecutionContext,
+  NotFoundException,
 } from '@nestjs/common';
 
 export const BranchId = createParamDecorator(
@@ -26,6 +29,7 @@ import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraReceivable } from './entities/kgara_receivable.entity';
 import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
+import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
@@ -45,6 +49,8 @@ export class KgaraApiCoreController {
     private payableRepo: Repository<KgaraPayable>,
     @InjectRepository(KgaraCaseService)
     private caseServiceRepo: Repository<KgaraCaseService>,
+    @InjectRepository(KgaraCaseLinkedInvoice)
+    private linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
     @InjectRepository(GwSyncRun)
     private syncRunRepo: Repository<GwSyncRun>,
     private syncService: KgaraSyncService,
@@ -97,6 +103,15 @@ export class KgaraApiCoreController {
         total,
       },
     };
+  }
+
+  @Get('cases/:id')
+  async getCaseById(@Param('id') id: string) {
+    const caseData = await this.caseRepo.findOne({ where: { id } });
+    if (!caseData) {
+      throw new NotFoundException(`Case with id ${id} not found`);
+    }
+    return caseData;
   }
 
   @Post('sync/all')
@@ -222,6 +237,29 @@ export class KgaraApiCoreController {
     return { success: true, message: 'Payables synced successfully.' };
   }
 
+  @Get('reports/gross-profit-detail')
+  async getGrossProfitDetail(
+    @BranchId() branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    if (!branchId)
+      return { success: false, message: 'Missing x-kgara-branch-id header' };
+    return this.client.getGrossProfitDetail(branchId, from, to);
+  }
+
+  @Get('reports/gross-profit-detail/journal')
+  async getGrossProfitJournal(
+    @BranchId() branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('vuViecID') vuViecID?: string,
+  ) {
+    if (!branchId)
+      return { success: false, message: 'Missing x-kgara-branch-id header' };
+    return this.client.getGrossProfitJournal(branchId, from, to, vuViecID);
+  }
+
   @Get('dashboard')
   async getDashboard(
     @BranchId() branchId: string,
@@ -271,5 +309,58 @@ export class KgaraApiCoreController {
       order: { requestStartedAt: 'DESC' },
       take: parseInt(take, 10) || 50,
     });
+  }
+
+  @Get('cases/:id/linked-invoices')
+  async getLinkedInvoices(@Param('id') id: string) {
+    return this.linkedInvoiceRepo.query(
+      `SELECT l.*, 
+              i.invoice_no as "invoiceNo", 
+              i.seller_name as "sellerName", 
+              i.buyer_name as "buyerName"
+       FROM kgara_case_linked_invoice l
+       LEFT JOIN erp_invoices i ON l."invoiceId" = i.id
+       WHERE l."caseDbId" = $1
+       ORDER BY l."createdAt" DESC`,
+      [id],
+    );
+  }
+
+  @Post('cases/:id/linked-invoices')
+  async addLinkedInvoice(
+    @Param('id') id: string,
+    @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
+  ) {
+    const link = this.linkedInvoiceRepo.create({
+      caseDbId: id,
+      invoiceId: body.invoiceId,
+      linkType: body.linkType,
+      note: body.note,
+    });
+    return this.linkedInvoiceRepo.save(link);
+  }
+
+  @Get('invoices/:invoiceId/linked-cases')
+  async getLinkedCases(@Param('invoiceId') invoiceId: string) {
+    return this.linkedInvoiceRepo.query(
+      `SELECT l.*, 
+              c.so_chung_tu as "soChungTu",
+              c.bien_so_xe as "bienSoXe",
+              c.khach_hang_name as "khachHangName"
+       FROM kgara_case_linked_invoice l
+       LEFT JOIN kgara_cases c ON l."caseDbId" = c.id
+       WHERE l."invoiceId" = $1
+       ORDER BY l."createdAt" DESC`,
+      [invoiceId],
+    );
+  }
+
+  @Delete('cases/:id/linked-invoices/:linkedId')
+  async removeLinkedInvoice(
+    @Param('id') id: string,
+    @Param('linkedId') linkedId: string,
+  ) {
+    await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+    return { success: true };
   }
 }

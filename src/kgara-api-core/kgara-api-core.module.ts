@@ -9,6 +9,7 @@ import { KgaraReceivable } from './entities/kgara_receivable.entity';
 import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
+import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
@@ -25,6 +26,7 @@ import { KgaraApiCoreController } from './kgara-api-core.controller';
       KgaraPayable,
       KgaraCaseService,
       GwSyncRun,
+      KgaraCaseLinkedInvoice,
     ]),
     ConfigModule,
   ],
