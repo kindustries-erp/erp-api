@@ -78,20 +78,12 @@ export class AddKgaraGrossProfit1780000000000 implements MigrationInterface {
       true,
     );
 
-    await queryRunner.createIndex(
-      'kgara_gross_profit',
-      new TableIndex({
-        name: 'IDX_kgara_gross_profit_hd_phieu',
-        columnNames: ['hd_phieu_dich_vu_id'],
-      }),
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_kgara_gross_profit_hd_phieu" ON "kgara_gross_profit" ("hd_phieu_dich_vu_id")`,
     );
 
-    await queryRunner.createIndex(
-      'kgara_gross_profit',
-      new TableIndex({
-        name: 'IDX_kgara_gross_profit_branch',
-        columnNames: ['branch_external_id'],
-      }),
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_kgara_gross_profit_branch" ON "kgara_gross_profit" ("branch_external_id")`,
     );
 
     // Alter kgara_case_linked_invoice
@@ -104,24 +96,25 @@ export class AddKgaraGrossProfit1780000000000 implements MigrationInterface {
       `ALTER TABLE "kgara_case_linked_invoice" ALTER COLUMN "caseDbId" DROP NOT NULL`,
     );
 
-    await queryRunner.addColumn(
-      'kgara_case_linked_invoice',
-      new TableColumn({
-        name: 'gross_profit_id',
-        type: 'uuid',
-        isNullable: true,
-      }),
+    await queryRunner.query(
+      `ALTER TABLE "kgara_case_linked_invoice" ADD COLUMN IF NOT EXISTS "gross_profit_id" uuid`,
     );
 
-    await queryRunner.createForeignKey(
-      'kgara_case_linked_invoice',
-      new TableForeignKey({
-        columnNames: ['gross_profit_id'],
-        referencedColumnNames: ['id'],
-        referencedTableName: 'kgara_gross_profit',
-        onDelete: 'CASCADE',
-      }),
+    // Check if foreign key exists to avoid poisoning the transaction
+    const fkeyCheck = await queryRunner.query(
+      `SELECT constraint_name FROM information_schema.table_constraints WHERE table_name = 'kgara_case_linked_invoice' AND constraint_name = 'FK_31eda445f8c9f43b88997afe7fa'`,
     );
+    if (fkeyCheck.length === 0) {
+      await queryRunner.createForeignKey(
+        'kgara_case_linked_invoice',
+        new TableForeignKey({
+          columnNames: ['gross_profit_id'],
+          referencedColumnNames: ['id'],
+          referencedTableName: 'kgara_gross_profit',
+          onDelete: 'CASCADE',
+        }),
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
