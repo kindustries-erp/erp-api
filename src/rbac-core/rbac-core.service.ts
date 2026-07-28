@@ -192,6 +192,7 @@ export class RbacCoreService {
       { resource: 'production', label: 'Production' },
       { resource: 'activity_logs', label: 'Activity Logs' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
+      { resource: 'greenway_integration', label: 'Garage / Kgara' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',

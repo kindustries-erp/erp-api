@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   OnModuleInit,
   UnauthorizedException,
@@ -14,6 +16,7 @@ import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 import { RbacCoreService } from '../rbac-core/rbac-core.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 // Refresh token lifetime: 30 days in seconds
 const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
@@ -284,6 +287,74 @@ export class AuthService implements OnModuleInit {
     employeeId?: string;
   }) {
     return this.usersService.registerLocalUser(input);
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('Token không hợp lệ');
+    }
+
+    const normalizedEmail = dto.email?.toLowerCase().trim();
+    if (normalizedEmail && normalizedEmail !== user.email) {
+      const existing = await this.usersService.findByEmail(normalizedEmail);
+      if (existing && existing.id !== user.id) {
+        throw new ConflictException('Email đã tồn tại');
+      }
+      user.email = normalizedEmail;
+    }
+
+    const employee = await this.usersService.getEmployeeSnapshot(
+      user.employeeId,
+    );
+    const hasEmployeeFieldUpdate =
+      dto.full_name !== undefined ||
+      dto.phone !== undefined ||
+      dto.notes !== undefined;
+
+    if (!employee && hasEmployeeFieldUpdate) {
+      throw new BadRequestException(
+        'Tài khoản chưa liên kết hồ sơ nhân viên, chưa thể cập nhật họ tên/số điện thoại/ghi chú.',
+      );
+    }
+
+    if (employee) {
+      if (dto.full_name !== undefined) {
+        const fullName = dto.full_name?.trim() ?? '';
+        if (fullName) {
+          employee.fullName = fullName;
+        }
+      }
+
+      if (dto.phone !== undefined) {
+        const phone = dto.phone?.trim() ?? '';
+        employee.phone = phone || null;
+      }
+
+      if (dto.notes !== undefined) {
+        const notes = dto.notes?.trim() ?? '';
+        employee.notes = notes || null;
+      }
+
+      if (normalizedEmail) {
+        employee.email = normalizedEmail;
+      }
+
+      await this.usersService.saveEmployee(employee);
+    }
+
+    await this.usersService.save(user as any);
+
+    return {
+      message: 'Cập nhật hồ sơ thành công',
+      data: {
+        id: user.id,
+        email: user.email,
+        full_name: employee?.fullName ?? null,
+        phone: employee?.phone ?? null,
+        notes: employee?.notes ?? null,
+      },
+    };
   }
 
   async changePassword(

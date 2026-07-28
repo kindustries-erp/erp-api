@@ -151,6 +151,16 @@ export class KgaraSyncService {
             : c.NgayPhatSinh
               ? new Date(c.NgayPhatSinh)
               : null;
+          gwCase.ngayTiepNhan = c.NgayTiepNhan
+            ? new Date(c.NgayTiepNhan)
+            : null;
+          gwCase.ngayHoanThanhCongViec = c.NgayHoanThanhCongViec
+            ? new Date(c.NgayHoanThanhCongViec)
+            : null;
+          gwCase.ngayGiaoXeFull = c.NgayGiaoXeFull
+            ? new Date(c.NgayGiaoXeFull)
+            : null;
+          gwCase.soKhung = c.SoKhung;
           gwCase.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
 
           gwCase.branchExternalId = branchExternalId;
@@ -240,6 +250,7 @@ export class KgaraSyncService {
           rec.khachHangCode = r.KhachHangCode;
           rec.khachHangName = r.KhachHangName || r.TenKhachHang;
           rec.bienSoXe = r.BienSoXe;
+          rec.soKhung = r.SoKhung;
           rec.tienThanhToan = r.TienThanhToan;
           rec.tienDaThanhToan = r.TienDaThanhToan;
           rec.ngayPhatSinh = r.NgayPhatSinh ? new Date(r.NgayPhatSinh) : null;
@@ -335,6 +346,11 @@ export class KgaraSyncService {
           pay.tenTaiKhoan = p.TenTaiKhoan;
           pay.maSoDoiTac = p.MaSoDoiTac;
           pay.tenDoiTac = p.TenDoiTac;
+          pay.tenTienTe = p.TenTienTe;
+          pay.tenVuViec = p.TenVuViec;
+          pay.ghiChuDoiTac = p.GhiChuDoiTac;
+          pay.maSoNhomDoiTac = p.MaSoNhomDoiTac;
+          pay.tenNhomDoiTac = p.TenNhomDoiTac;
           pay.dkNo = p.DKNo;
           pay.dkCo = p.DKCo;
           pay.psNo = p.PSNo;
@@ -342,6 +358,15 @@ export class KgaraSyncService {
           pay.ckNo = p.CKNo;
           pay.ckCo = p.CKCo;
           pay.tyGiaCk = p.TyGiaCK;
+          pay.dkNTeNo = p.DKNTeNo;
+          pay.dkNTeCo = p.DKNTeCo;
+          pay.psNTeNo = p.PSNTeNo;
+          pay.psNTeCo = p.PSNTeCo;
+          pay.ckNTeNo = p.CKNTeNo;
+          pay.ckNTeCo = p.CKNTeCo;
+          pay.tyGiaDk = p.TyGiaDK;
+          pay.tyGiaPsNo = p.TyGiaPSNo;
+          pay.tyGiaPsCo = p.TyGiaPSCo;
           pay.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
           pay.rawData = p;
 
@@ -419,6 +444,16 @@ export class KgaraSyncService {
         : caseData.NgayPhatSinh
           ? new Date(caseData.NgayPhatSinh)
           : null;
+      gwCase.ngayTiepNhan = caseData.NgayTiepNhan
+        ? new Date(caseData.NgayTiepNhan)
+        : null;
+      gwCase.ngayHoanThanhCongViec = caseData.NgayHoanThanhCongViec
+        ? new Date(caseData.NgayHoanThanhCongViec)
+        : null;
+      gwCase.ngayGiaoXeFull = caseData.NgayGiaoXeFull
+        ? new Date(caseData.NgayGiaoXeFull)
+        : null;
+      gwCase.soKhung = caseData.SoKhung;
       gwCase.dataAsOf = response.dataAsOf ? new Date(response.dataAsOf) : null;
       gwCase.rawData = caseData;
       await this.caseRepo.save(gwCase);
@@ -449,6 +484,14 @@ export class KgaraSyncService {
           srv.tienChuaThue = s.TienChuaThue;
           srv.thueSuat = s.ThueSuat;
           srv.tienCoThue = s.TienCoThue;
+          srv.soGioCongLam = s.SoGioCongLam;
+          srv.tienDichVu = s.TienDichVu;
+          srv.tienPhuTung = s.TienPhuTung;
+          srv.giaVonPhuTung = s.GiaVonPhuTung;
+          srv.tyLeChietKhauCt = s.TyLeChietKhauCt || s.TyLeChietKhauCT;
+          srv.tienChietKhauCt = s.TienChietKhauCt || s.TienChietKhauCT;
+          srv.khoCode = s.KhoCode;
+          srv.tienPhuPhi = s.TienPhuPhi;
 
           srv.rawData = s;
           await this.caseServiceRepo.save(srv);

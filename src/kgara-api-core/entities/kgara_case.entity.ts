@@ -97,6 +97,26 @@ export class KgaraCase {
   @Column({ type: 'timestamp', name: 'ngay_phat_sinh', nullable: true })
   ngayPhatSinh: Date | null;
 
+  /** NgayTiepNhan – case reception date */
+  @Column({ type: 'timestamp', name: 'ngay_tiep_nhan', nullable: true })
+  ngayTiepNhan: Date | null;
+
+  /** NgayHoanThanhCongViec – completion date */
+  @Column({
+    type: 'timestamp',
+    name: 'ngay_hoan_thanh_cong_viec',
+    nullable: true,
+  })
+  ngayHoanThanhCongViec: Date | null;
+
+  /** NgayGiaoXeFull – delivery date */
+  @Column({ type: 'timestamp', name: 'ngay_giao_xe_full', nullable: true })
+  ngayGiaoXeFull: Date | null;
+
+  /** SoKhung – VIN / chassis number */
+  @Column({ type: 'varchar', length: 100, name: 'so_khung', nullable: true })
+  soKhung: string | null;
+
   /** dataAsOf – server-side timestamp from response envelope */
   @Column({
     type: 'timestamp with time zone',

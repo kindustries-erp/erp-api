@@ -52,6 +52,7 @@ import { KgaraCase } from '../kgara-api-core/entities/kgara_case.entity';
 import { KgaraReceivable } from '../kgara-api-core/entities/kgara_receivable.entity';
 import { KgaraPayable } from '../kgara-api-core/entities/kgara_payable.entity';
 import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.entity';
+import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
@@ -114,6 +115,7 @@ const entities = [
   KgaraReceivable,
   KgaraPayable,
   KgaraCaseService,
+  KgaraCaseLinkedInvoice,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,
