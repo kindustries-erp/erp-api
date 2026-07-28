@@ -512,9 +512,10 @@ export class InvoiceImportService {
         where: { invoiceNoNormalized: normNo, direction } as any,
         order: { createdAt: 'DESC' },
       });
-      const exactPicked = this.pickCandidateBySerial(
+      const exactPicked = this.pickBestCandidate(
         exactCandidates,
         serialTokens,
+        candidateNumbers,
       );
       if (exactPicked) return exactPicked;
     }
@@ -536,9 +537,10 @@ export class InvoiceImportService {
           .limit(20)
           .getMany();
 
-        const suffixPicked = this.pickCandidateBySerial(
+        const suffixPicked = this.pickBestCandidate(
           suffixCandidates,
           serialTokens,
+          candidateNumbers,
         );
         if (suffixPicked) return suffixPicked;
       }
@@ -547,20 +549,43 @@ export class InvoiceImportService {
     return null;
   }
 
-  private pickCandidateBySerial(
+  private pickBestCandidate(
     candidates: ErpInvoice[],
     serialTokens: string[],
+    candidateNumbers: string[],
   ): ErpInvoice | null {
     if (!candidates || candidates.length === 0) return null;
-    if (serialTokens.length === 0) return candidates[0];
 
-    const matchedBySerial = candidates.find((candidate) => {
-      if (!candidate.serialNo) return false;
-      const cSerial = candidate.serialNo.toLowerCase();
-      return serialTokens.includes(cSerial);
-    });
+    let bestCandidate = candidates[0];
+    let maxScore = -1;
 
-    return matchedBySerial || candidates[0];
+    for (const candidate of candidates) {
+      let score = 0;
+
+      // 1. Match serial (+5 points)
+      if (candidate.serialNo) {
+        const cSerial = candidate.serialNo.toLowerCase();
+        if (serialTokens.includes(cSerial)) {
+          score += 5;
+        }
+      }
+
+      // 2. Match tax code (+10 points)
+      const taxCode =
+        candidate.direction === 'IN'
+          ? candidate.sellerTaxCode
+          : candidate.buyerTaxCode;
+      if (taxCode && candidateNumbers.includes(taxCode)) {
+        score += 10;
+      }
+
+      if (score > maxScore) {
+        maxScore = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    return bestCandidate;
   }
 
   private extractSerialTokens(baseName: string): string[] {
