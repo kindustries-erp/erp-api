@@ -2,8 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraCase } from './entities/kgara_case.entity';
+import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraReceivable } from './entities/kgara_receivable.entity';
 import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
@@ -18,6 +20,7 @@ describe('KgaraSyncService', () => {
   let payableRepo: any;
   let caseServiceRepo: any;
   let syncRunRepo: any;
+  let grossProfitRepo: any;
 
   beforeEach(async () => {
     clientService = {
@@ -42,12 +45,13 @@ describe('KgaraSyncService', () => {
       },
     });
 
-    branchRepo = mockRepo();
-    caseRepo = mockRepo();
-    receivableRepo = mockRepo();
-    payableRepo = mockRepo();
-    caseServiceRepo = mockRepo();
-    syncRunRepo = mockRepo();
+    branchRepo = mockRepo() as any;
+    caseRepo = mockRepo() as any;
+    receivableRepo = mockRepo() as any;
+    payableRepo = mockRepo() as any;
+    caseServiceRepo = mockRepo() as any;
+    syncRunRepo = mockRepo() as any;
+    grossProfitRepo = mockRepo() as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -79,6 +83,10 @@ describe('KgaraSyncService', () => {
         {
           provide: getRepositoryToken(GwSyncRun),
           useValue: syncRunRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraGrossProfit),
+          useValue: grossProfitRepo,
         },
       ],
     }).compile();
