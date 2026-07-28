@@ -93,6 +93,36 @@ export class KgaraCase {
   })
   tienConPhaiThanhToan: number | null;
 
+  /** DoanhThu – revenue */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'doanh_thu',
+    nullable: true,
+  })
+  doanhThu: number | null;
+
+  /** ChiPhi – total cost */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'chi_phi',
+    nullable: true,
+  })
+  chiPhi: number | null;
+
+  /** LoiNhuan – profit */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'loi_nhuan',
+    nullable: true,
+  })
+  loiNhuan: number | null;
+
   /** NgayPhatSinh – case transaction date */
   @Column({ type: 'timestamp', name: 'ngay_phat_sinh', nullable: true })
   ngayPhatSinh: Date | null;

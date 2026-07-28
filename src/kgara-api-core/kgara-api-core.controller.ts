@@ -11,6 +11,7 @@ import {
   createParamDecorator,
   ExecutionContext,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 
 export const BranchId = createParamDecorator(
@@ -31,13 +32,15 @@ import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
+import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { AuthGuard } from '@nestjs/passport';
 
-@Controller(['kgara', 'greenway'])
-// @UseGuards(AuthGuard('jwt')) // TODO: Enable auth when configuring full global auth
+@Controller('greenway')
 export class KgaraApiCoreController {
+  private readonly logger = new Logger(KgaraApiCoreController.name);
+
   constructor(
     @InjectRepository(KgaraBranch)
     private branchRepo: Repository<KgaraBranch>,
@@ -53,6 +56,8 @@ export class KgaraApiCoreController {
     private linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
     @InjectRepository(GwSyncRun)
     private syncRunRepo: Repository<GwSyncRun>,
+    @InjectRepository(KgaraGrossProfit)
+    private grossProfitRepo: Repository<KgaraGrossProfit>,
     private syncService: KgaraSyncService,
     private client: KgaraClientService,
   ) {}
@@ -68,11 +73,20 @@ export class KgaraApiCoreController {
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
     @Query('q') q: string = '',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     const query = this.caseRepo.createQueryBuilder('case');
 
     if (branchId) {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
+    }
+
+    if (from) {
+      query.andWhere('case.ngayPhatSinh >= :from', { from });
+    }
+    if (to) {
+      query.andWhere('case.ngayPhatSinh <= :to', { to });
     }
 
     if (q) {
@@ -105,11 +119,192 @@ export class KgaraApiCoreController {
     };
   }
 
+  @Get('cases/gross-profit-report')
+  async getGrossProfitReport(
+    @BranchId() branchId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const query = this.grossProfitRepo
+      .createQueryBuilder('gp')
+      .leftJoinAndMapOne(
+        'gp.caseData',
+        KgaraCase,
+        'case',
+        'case.soChungTu = gp.vuViecCode',
+      );
+
+    if (branchId) {
+      query.andWhere('gp.branchExternalId = :branchId', { branchId });
+    }
+
+    if (from) {
+      query.andWhere('gp.reportFrom >= :from', { from });
+    }
+    if (to) {
+      query.andWhere('gp.reportTo <= :to', { to });
+    }
+
+    query.orderBy('gp.updatedAt', 'DESC');
+
+    const results = await query.getMany();
+
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+
+    const items = results.map((gp) => {
+      const rev = Number(gp.doanhThu) || 0;
+      const cost = Number(gp.chiPhi) || 0;
+      const profit = Number(gp.loiNhuan) || 0;
+
+      totalRevenue += rev;
+      totalCost += cost;
+      totalProfit += profit;
+
+      return {
+        id: gp.id,
+        createdAt: gp.createdAt,
+        updatedAt: gp.updatedAt,
+        DoanhThu: rev,
+        ChiPhi: cost,
+        LoiNhuan: profit,
+        VuViecCode: gp.vuViecCode,
+        VuViecName: gp.vuViecName,
+        TenKhachHang: gp.tenKhachHang,
+        VuViecID: gp.hdPhieuDichVuId,
+        caseData: (gp as any).caseData,
+        ...(gp.rawData as object),
+      };
+    });
+
+    return {
+      results: {
+        TongCong: {
+          DoanhThu: totalRevenue,
+          ChiPhi: totalCost,
+          LaiGop: totalProfit,
+        },
+        Groups: [
+          {
+            Items: items,
+          },
+        ],
+      },
+    };
+  }
+
+  @Get('gross-profit/:id/linked-invoices')
+  async getGrossProfitLinkedInvoices(@Param('id') id: string) {
+    return this.linkedInvoiceRepo.find({
+      where: { grossProfitId: id },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  @Post('gross-profit/:id/linked-invoices')
+  async addGrossProfitLinkedInvoice(
+    @Param('id') id: string,
+    @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
+  ) {
+    const link = this.linkedInvoiceRepo.create({
+      grossProfitId: id,
+      invoiceId: body.invoiceId,
+      linkType: body.linkType,
+      note: body.note,
+    });
+    return this.linkedInvoiceRepo.save(link);
+  }
+
+  @Delete('gross-profit/:id/linked-invoices/:linkedId')
+  async removeGrossProfitLinkedInvoice(
+    @Param('id') id: string,
+    @Param('linkedId') linkedId: string,
+  ) {
+    await this.linkedInvoiceRepo.delete({ id: linkedId, grossProfitId: id });
+    return { success: true };
+  }
+
+  @Get('cases/by-code/:code')
+  async getCaseByCode(@Param('code') code: string) {
+    let caseData = await this.caseRepo.findOne({ where: { soChungTu: code } });
+    if (!caseData) {
+      throw new NotFoundException(`Case with code ${code} not found`);
+    }
+
+    if (
+      !caseData.rawData?.ListPhieuDichVuChiTiet &&
+      !caseData.rawData?.HoaDonChiTiet
+    ) {
+      const freshData = await this.client.getCaseDetail(
+        caseData.hdPhieuDichVuId,
+        caseData.branchExternalId!,
+      );
+      if (freshData) {
+        const payload = freshData.data || freshData;
+        caseData.rawData = { ...caseData.rawData, ...payload };
+        await this.caseRepo.save(caseData);
+      }
+    }
+    return caseData;
+  }
+
+  @Get('cases/by-code/:code/gross-profit')
+  async getGrossProfitByCode(@Param('code') code: string) {
+    const grossProfit = await this.grossProfitRepo.findOne({
+      where: { vuViecCode: code },
+    });
+    if (!grossProfit) {
+      throw new NotFoundException(`Gross profit for case ${code} not found`);
+    }
+    const gp = grossProfit;
+    const rev = Number(gp.doanhThu) || 0;
+    const cost = Number(gp.chiPhi) || 0;
+    const profit = Number(gp.loiNhuan) || 0;
+    return {
+      id: gp.id,
+      createdAt: gp.createdAt,
+      updatedAt: gp.updatedAt,
+      DoanhThu: rev,
+      ChiPhi: cost,
+      LoiNhuan: profit,
+      VuViecCode: gp.vuViecCode,
+      VuViecName: gp.vuViecName,
+      TenKhachHang: gp.tenKhachHang,
+      VuViecID: gp.hdPhieuDichVuId,
+      ...(gp.rawData as object),
+    };
+  }
+
   @Get('cases/:id')
   async getCaseById(@Param('id') id: string) {
     const caseData = await this.caseRepo.findOne({ where: { id } });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
+    }
+    return caseData;
+  }
+
+  @Get('cases/external/:externalId')
+  async getCaseByExternalId(
+    @Param('externalId') externalId: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    let caseData = await this.caseRepo.findOne({
+      where: { hdPhieuDichVuId: externalId },
+    });
+
+    if (!caseData && branchId) {
+      await this.syncService.syncCaseDetail(branchId, externalId);
+      caseData = await this.caseRepo.findOne({
+        where: { hdPhieuDichVuId: externalId },
+      });
+    }
+
+    if (!caseData) {
+      throw new NotFoundException(
+        `Case with external id ${externalId} not found`,
+      );
     }
     return caseData;
   }
@@ -203,6 +398,19 @@ export class KgaraApiCoreController {
     }
     await this.syncService.syncCasesForBranch(branchId, from, to);
     return { success: true, message: 'Cases synced successfully.' };
+  }
+
+  @Post('sync/gross-profit')
+  async syncGrossProfit(
+    @BranchId() branchId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    if (!branchId) {
+      return { success: false, message: 'Missing x-kgara-branch-id header' };
+    }
+    await this.syncService.syncGrossProfitForBranch(branchId, from, to);
+    return { success: true, message: 'Gross profit synced successfully.' };
   }
 
   @Post('sync/cases/:id/detail')

@@ -8,6 +8,7 @@ import { KgaraReceivable } from './entities/kgara_receivable.entity';
 import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun, GwSyncStatus } from './entities/kgara_sync_run.entity';
+import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 
 @Injectable()
 export class KgaraSyncService {
@@ -26,6 +27,8 @@ export class KgaraSyncService {
     private caseServiceRepo: Repository<KgaraCaseService>,
     @InjectRepository(GwSyncRun)
     private syncRunRepo: Repository<GwSyncRun>,
+    @InjectRepository(KgaraGrossProfit)
+    private grossProfitRepo: Repository<KgaraGrossProfit>,
     private client: KgaraClientService,
   ) {}
 
@@ -115,6 +118,7 @@ export class KgaraSyncService {
     );
 
     try {
+      const updatedCaseDates = new Set<string>();
       do {
         const response = await this.client.getCases(
           branchExternalId,
@@ -146,6 +150,9 @@ export class KgaraSyncService {
           gwCase.tienCoThue = c.TienCoThue;
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
           gwCase.tienConPhaiThanhToan = c.TienConPhaiThanhToan;
+          if (c.DoanhThu !== undefined) gwCase.doanhThu = c.DoanhThu;
+          if (c.ChiPhi !== undefined) gwCase.chiPhi = c.ChiPhi;
+          if (c.LoiNhuan !== undefined) gwCase.loiNhuan = c.LoiNhuan;
           gwCase.ngayPhatSinh = c.NgayPhatSinhFull
             ? new Date(c.NgayPhatSinhFull)
             : c.NgayPhatSinh
@@ -163,6 +170,14 @@ export class KgaraSyncService {
           gwCase.soKhung = c.SoKhung;
           gwCase.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
 
+          const caseDate =
+            gwCase.ngayHoanThanhCongViec ||
+            gwCase.ngayPhatSinh ||
+            gwCase.ngayTiepNhan;
+          if (caseDate) {
+            updatedCaseDates.add(caseDate.toISOString());
+          }
+
           gwCase.branchExternalId = branchExternalId;
           gwCase.rawData = c;
 
@@ -174,6 +189,88 @@ export class KgaraSyncService {
         }
         page++;
       } while (page <= totalPages);
+
+      // Sync gross profit details to map financial data to cases
+      try {
+        const dateRangesToSync: { from: string; to: string }[] = [];
+
+        if (from && to) {
+          dateRangesToSync.push({
+            from: from.split('T')[0],
+            to: to.split('T')[0],
+          });
+        } else {
+          const now = new Date();
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+          dateRangesToSync.push({
+            from: firstDay.toLocaleDateString('en-CA'),
+            to: lastDay.toLocaleDateString('en-CA'),
+          });
+
+          const monthsToSync = new Set<string>();
+          for (const isoStr of updatedCaseDates) {
+            const d = new Date(isoStr);
+            if (d < firstDay || d > lastDay) {
+              monthsToSync.add(
+                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+              );
+            }
+          }
+
+          for (const yyyyMm of monthsToSync) {
+            const [y, m] = yyyyMm.split('-');
+            const fd = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
+              'en-CA',
+            );
+            const ld = new Date(Number(y), Number(m), 0).toLocaleDateString(
+              'en-CA',
+            );
+            dateRangesToSync.push({ from: fd, to: ld });
+          }
+        }
+
+        for (const range of dateRangesToSync) {
+          const profitResponse = await this.client.getGrossProfitDetail(
+            branchExternalId,
+            range.from,
+            range.to,
+          );
+
+          if (profitResponse?.Groups) {
+            for (const group of profitResponse.Groups) {
+              if (group.Items) {
+                for (const item of group.Items) {
+                  if (item.VuViecID) {
+                    await this.grossProfitRepo.upsert(
+                      {
+                        hdPhieuDichVuId: item.VuViecID,
+                        branchExternalId,
+                        vuViecCode: item.VuViecCode,
+                        vuViecName: item.VuViecName,
+                        tenKhachHang: item.TenKhachHang,
+                        doanhThu: item.DoanhThu,
+                        chiPhi: item.ChiPhi,
+                        loiNhuan: item.LoiNhuan,
+                        reportFrom: range.from,
+                        reportTo: range.to,
+                        rawData: item,
+                      },
+                      ['hdPhieuDichVuId'],
+                    );
+                  }
+                }
+              }
+            }
+          }
+          this.logger.log(
+            `Synced gross profit for branch ${branchExternalId} from ${range.from} to ${range.to}`,
+          );
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to sync gross profit: ${err.message}`);
+      }
 
       await this.closeSyncRun(
         run,
@@ -191,6 +288,75 @@ export class KgaraSyncService {
         error.message,
       );
       throw error;
+    }
+  }
+
+  async syncGrossProfitForBranch(
+    branchExternalId: string,
+    from?: string,
+    to?: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Syncing gross profit ONLY for branch ${branchExternalId}...`,
+    );
+    try {
+      const dateRangesToSync: { from: string; to: string }[] = [];
+      if (from && to) {
+        dateRangesToSync.push({
+          from: from.split('T')[0],
+          to: to.split('T')[0],
+        });
+      } else {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        dateRangesToSync.push({
+          from: firstDay.toLocaleDateString('en-CA'),
+          to: lastDay.toLocaleDateString('en-CA'),
+        });
+      }
+
+      for (const range of dateRangesToSync) {
+        const profitResponse = await this.client.getGrossProfitDetail(
+          branchExternalId,
+          range.from,
+          range.to,
+        );
+
+        const results = profitResponse?.results;
+        if (results?.Groups) {
+          for (const group of results.Groups) {
+            if (group.Items) {
+              for (const item of group.Items) {
+                if (item.VuViecID) {
+                  await this.grossProfitRepo.upsert(
+                    {
+                      hdPhieuDichVuId: item.VuViecID,
+                      branchExternalId,
+                      vuViecCode: item.VuViecCode,
+                      vuViecName: item.VuViecName,
+                      tenKhachHang: item.TenKhachHang,
+                      doanhThu: item.DoanhThu,
+                      chiPhi: item.ChiPhi,
+                      loiNhuan: item.LoiNhuan,
+                      reportFrom: range.from,
+                      reportTo: range.to,
+                      rawData: item,
+                    },
+                    ['hdPhieuDichVuId'],
+                  );
+                }
+              }
+            }
+          }
+        }
+        this.logger.log(
+          `Synced gross profit for branch ${branchExternalId} from ${range.from} to ${range.to}`,
+        );
+      }
+    } catch (err: any) {
+      this.logger.error(`Failed to sync gross profit: ${err.message}`);
+      throw err;
     }
   }
 
