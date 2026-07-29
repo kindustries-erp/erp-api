@@ -1759,7 +1759,17 @@ export class ReportsCoreService {
     setupSheetHeader(overviewSheet, 9);
 
     overviewData.forEach((row: any) => {
-      const r = overviewSheet.addRow(row);
+      const parsedRow = {
+        ...row,
+        invoiceCount: parseInt(row.invoiceCount || '0', 10),
+        totalPreVat: parseFloat(row.totalPreVat || '0'),
+        totalVat: parseFloat(row.totalVat || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        totalNetoff: parseFloat(row.totalNetoff || '0'),
+        remaining: parseFloat(row.remaining || '0'),
+      };
+      const r = overviewSheet.addRow(parsedRow);
+      r.getCell(4).numFmt = '#,##0';
       r.getCell(5).numFmt = '#,##0';
       r.getCell(6).numFmt = '#,##0';
       r.getCell(7).numFmt = '#,##0';
@@ -1803,7 +1813,10 @@ export class ReportsCoreService {
         qty: parseFloat(row.qty || '0'),
         unitPrice: parseFloat(row.unitPrice || '0'),
         preVatAmount: parseFloat(row.preVatAmount || '0'),
-        vatRate: parseFloat(row.vatRate || 0) / 100,
+        vatRate:
+          row.vatRate != null && row.vatRate !== ''
+            ? parseFloat(row.vatRate)
+            : '',
         vatAmount: parseFloat(row.vatAmount || '0'),
         totalAmount: parseFloat(row.totalAmount || '0'),
         netoffAmount:
