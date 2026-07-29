@@ -5,7 +5,11 @@ import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
 
 @Injectable()
 export class ReportsCoreService {
-  private readonly vinfastSellerTaxCodes = ['0108926276', '0318334886'];
+  private readonly vinfastSellerTaxCodes = [
+    '0108926276',
+    '0318334886',
+    '0202357718',
+  ];
   private readonly vinfastSellerTaxCodesSql = this.vinfastSellerTaxCodes
     .map((taxCode) => `'${taxCode.replace(/'/g, "''")}'`)
     .join(', ');

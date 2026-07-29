@@ -82,7 +82,9 @@ describe('ReportsCoreService', () => {
     await service.getVinfastPartsTracking({ page: 1, limit: 10 });
 
     const sql = dataSource.query.mock.calls[0][0] as string;
-    expect(sql).toContain("i.seller_tax_code IN ('0108926276', '0318334886')");
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
     expect(sql).toContain('HV_BATTERY_41.9KWH');
@@ -138,7 +140,9 @@ describe('ReportsCoreService', () => {
     await service.getVinfastPartsTrackingDetails({});
 
     const sql = dataSource.query.mock.calls[0][0] as string;
-    expect(sql).toContain("i.seller_tax_code IN ('0108926276', '0318334886')");
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain("'IN' as direction");
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
@@ -168,7 +172,9 @@ describe('ReportsCoreService', () => {
 
     const sql = dataSource.query.mock.calls[0][0] as string;
     expect(sql).toContain('WITH buy_codes AS');
-    expect(sql).toContain("i.seller_tax_code IN ('0108926276', '0318334886')");
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
     expect(sql).toContain('HV_BATTERY_41.9KWH');
