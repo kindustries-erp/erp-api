@@ -688,6 +688,16 @@ export class InvoiceQueryService {
     return buffer as any;
   }
 
+  async getBulkNetOffs(invoiceIds: string[]) {
+    if (!invoiceIds || invoiceIds.length === 0) return [];
+
+    return this.repository.manager
+      .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
+      .leftJoinAndSelect('netoff.bankTransaction', 'txn')
+      .where('netoff.invoice_id IN (:...invoiceIds)', { invoiceIds })
+      .getMany();
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

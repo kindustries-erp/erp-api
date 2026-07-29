@@ -407,15 +407,29 @@ export class InvoiceLifecycleService {
       }
     }
 
-    const netOffEntities = payload.map((p) =>
-      this.repository.manager.create(ErpInvoiceVoucherNetOff, {
-        invoiceId,
-        bankTransactionId: p.bankTransactionId,
-        netOffAmount: p.netOffAmount ?? 0,
-      }),
-    );
+    for (const p of payload) {
+      const existing = await this.repository.manager.findOne(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId, bankTransactionId: p.bankTransactionId },
+        },
+      );
 
-    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
+      if (existing) {
+        existing.netOffAmount = p.netOffAmount ?? 0;
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, existing);
+      } else {
+        const newNetOff = this.repository.manager.create(
+          ErpInvoiceVoucherNetOff,
+          {
+            invoiceId,
+            bankTransactionId: p.bankTransactionId,
+            netOffAmount: p.netOffAmount ?? 0,
+          },
+        );
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, newNetOff);
+      }
+    }
 
     return { message: 'Đã liên kết phiếu thành công' };
   }
