@@ -1442,4 +1442,245 @@ export class ReportsCoreService {
       totalPages: Math.ceil(total / limit),
     };
   }
+
+  // ---------------------------------------------------------------------------
+  // VINFAST SETTLEMENT ORDERS
+  // ---------------------------------------------------------------------------
+
+  async getSettlementOrders(query: any) {
+    const page = parseInt(query.page || '1', 10);
+    const limit = parseInt(query.limit || '20', 10);
+    const offset = (page - 1) * limit;
+
+    let sortBy = query.sortBy || 'period';
+    let sortDir = (query.sortDir || 'DESC').toUpperCase();
+    if (sortDir !== 'ASC' && sortDir !== 'DESC') sortDir = 'DESC';
+
+    const allowedSorts: Record<string, string> = {
+      period: '"period"',
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+      invoiceCount: '"invoiceCount"',
+      totalPreVat: '"totalPreVat"',
+      totalVat: '"totalVat"',
+      totalAmount: '"totalAmount"',
+      totalNetoff: '"totalNetoff"',
+      remaining: '"remaining"',
+    };
+
+    const orderByStr = allowedSorts[sortBy]
+      ? `${allowedSorts[sortBy]} ${sortDir}`
+      : `"period" DESC, i.settlement_order ASC`;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    if (query.dateFrom) {
+      whereSql += ` AND i.invoice_date >= $${paramIndex++}`;
+      params.push(query.dateFrom);
+    }
+
+    if (query.dateTo) {
+      whereSql += ` AND i.invoice_date <= $${paramIndex++}`;
+      params.push(query.dateTo);
+    }
+
+    // search
+    if (query.search) {
+      whereSql += ` AND (i.settlement_order ILIKE $${paramIndex} OR i.license_plate ILIKE $${paramIndex})`;
+      params.push(`%${query.search}%`);
+      paramIndex++;
+    }
+
+    // column filters
+    try {
+      const filters = JSON.parse(query.columnFilters || '{}');
+      if (filters.period && filters.period.length > 0) {
+        const phs = filters.period.map(() => `$${paramIndex++}`).join(', ');
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') IN (${phs})`;
+        params.push(...filters.period);
+      }
+      if (filters.settlementOrder && filters.settlementOrder.length > 0) {
+        const phs = filters.settlementOrder
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.settlement_order IN (${phs})`;
+        params.push(...filters.settlementOrder);
+      }
+      if (filters.licensePlate && filters.licensePlate.length > 0) {
+        const phs = filters.licensePlate
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.license_plate IN (${phs})`;
+        params.push(...filters.licensePlate);
+      }
+    } catch (e) {}
+
+    // column search
+    try {
+      const colSearch = JSON.parse(query.columnSearch || '{}');
+      if (colSearch.period) {
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.period}%`);
+      }
+      if (colSearch.settlementOrder) {
+        whereSql += ` AND i.settlement_order ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.settlementOrder}%`);
+      }
+      if (colSearch.licensePlate) {
+        whereSql += ` AND i.license_plate ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.licensePlate}%`);
+      }
+    } catch (e) {}
+
+    const countSql = `
+      SELECT COUNT(DISTINCT i.settlement_order || '_' || TO_CHAR(i.invoice_date, 'YYYY-MM')) AS total
+      FROM erp_invoices i
+      WHERE ${whereSql}
+    `;
+
+    const dataSql = `
+      SELECT
+        i.settlement_order AS "settlementOrder",
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.license_plate AS "licensePlate",
+        COUNT(*)::int AS "invoiceCount",
+        SUM(i.pre_vat_amount)::numeric AS "totalPreVat",
+        SUM(i.vat_amount)::numeric AS "totalVat",
+        SUM(i.total_amount)::numeric AS "totalAmount",
+        COALESCE(SUM(n.netoff_sum), 0)::numeric AS "totalNetoff",
+        (SUM(i.total_amount) - COALESCE(SUM(n.netoff_sum), 0))::numeric AS remaining
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      GROUP BY i.settlement_order, period, i.license_plate
+      ORDER BY ${orderByStr}
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    const countRes = await this.dataSource.query(countSql, params);
+    const total = parseInt(countRes[0]?.total || '0', 10);
+
+    params.push(limit, offset);
+    const items = await this.dataSource.query(dataSql, params);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getSettlementOrderDetails(query: any) {
+    const { settlementOrder, period } = query;
+    if (!settlementOrder || !period) {
+      return [];
+    }
+
+    const sql = `
+      SELECT
+        i.id AS "invoiceId", 
+        i.invoice_no AS "invoiceNo", 
+        i.serial_no AS "serialNo", 
+        TO_CHAR(i.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", 
+        i.status,
+        i.buyer_name AS "buyerName", 
+        i.buyer_tax_code AS "buyerTaxCode", 
+        i.license_plate AS "licensePlate",
+        i.pre_vat_amount::numeric AS "preVatAmount", 
+        i.vat_rate AS "vatRate", 
+        i.vat_amount::numeric AS "vatAmount", 
+        i.total_amount::numeric AS "totalAmount",
+        COALESCE(n.netoff_sum, 0)::numeric AS "netoffAmount"
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE i.direction = 'OUT'
+        AND i.is_deleted = false
+        AND i.settlement_order = $1
+        AND TO_CHAR(i.invoice_date, 'YYYY-MM') = $2
+      ORDER BY i.invoice_date ASC, i.invoice_no ASC
+    `;
+
+    return this.dataSource.query(sql, [settlementOrder, period]);
+  }
+
+  async getSettlementOrderColumnOptions(query: any) {
+    const { columnKey, filtersStr, search } = query;
+    const limit = parseInt(query.limit || '20', 10);
+    const page = parseInt(query.page || '1', 10);
+    const offset = (page - 1) * limit;
+
+    const mapColumn: Record<string, string> = {
+      period: `TO_CHAR(i.invoice_date, 'YYYY-MM')`,
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+    };
+
+    const sqlCol = mapColumn[columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    try {
+      const filters = JSON.parse(filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === columnKey) continue;
+        const col = mapColumn[key];
+        if (Array.isArray(vals) && vals.length > 0 && col) {
+          const phs = vals.map(() => `$${paramIndex++}`).join(', ');
+          whereSql += ` AND ${col}::text IN (${phs})`;
+          params.push(...vals);
+        }
+      }
+    } catch (e) {}
+
+    if (search) {
+      whereSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${search}%`);
+    }
+
+    const sql = `
+      WITH filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM erp_invoices i
+        WHERE ${whereSql}
+        AND ${sqlCol} IS NOT NULL
+        AND ${sqlCol}::text <> ''
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    params.push(limit, offset);
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    const items = rows.map((r: any) => ({
+      value: r.value,
+      label: r.value,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 }
