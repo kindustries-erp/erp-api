@@ -1578,6 +1578,264 @@ export class ReportsCoreService {
     };
   }
 
+  async exportSettlementOrdersExcel(query: any) {
+    let sortBy = query.sortBy || 'period';
+    let sortDir = (query.sortDir || 'DESC').toUpperCase();
+    if (sortDir !== 'ASC' && sortDir !== 'DESC') sortDir = 'DESC';
+
+    const allowedSorts: Record<string, string> = {
+      period: '"period"',
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+      invoiceCount: '"invoiceCount"',
+      totalPreVat: '"totalPreVat"',
+      totalVat: '"totalVat"',
+      totalAmount: '"totalAmount"',
+      totalNetoff: '"totalNetoff"',
+      remaining: '"remaining"',
+    };
+
+    const orderByStr = allowedSorts[sortBy]
+      ? `${allowedSorts[sortBy]} ${sortDir}`
+      : `"period" DESC, i.settlement_order ASC`;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    if (query.dateFrom) {
+      whereSql += ` AND i.invoice_date >= $${paramIndex++}`;
+      params.push(query.dateFrom);
+    }
+
+    if (query.dateTo) {
+      whereSql += ` AND i.invoice_date <= $${paramIndex++}`;
+      params.push(query.dateTo);
+    }
+
+    if (query.search) {
+      whereSql += ` AND (i.settlement_order ILIKE $${paramIndex} OR i.license_plate ILIKE $${paramIndex})`;
+      params.push(`%${query.search}%`);
+      paramIndex++;
+    }
+
+    try {
+      const filters = JSON.parse(query.columnFilters || '{}');
+      if (filters.period && filters.period.length > 0) {
+        const phs = filters.period.map(() => `$${paramIndex++}`).join(', ');
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') IN (${phs})`;
+        params.push(...filters.period);
+      }
+      if (filters.settlementOrder && filters.settlementOrder.length > 0) {
+        const phs = filters.settlementOrder
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.settlement_order IN (${phs})`;
+        params.push(...filters.settlementOrder);
+      }
+      if (filters.licensePlate && filters.licensePlate.length > 0) {
+        const phs = filters.licensePlate
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.license_plate IN (${phs})`;
+        params.push(...filters.licensePlate);
+      }
+    } catch (e) {}
+
+    const dataSql = `
+      SELECT
+        i.settlement_order AS "settlementOrder",
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.license_plate AS "licensePlate",
+        COUNT(*)::int AS "invoiceCount",
+        SUM(i.pre_vat_amount)::numeric AS "totalPreVat",
+        SUM(i.vat_amount)::numeric AS "totalVat",
+        SUM(i.total_amount)::numeric AS "totalAmount",
+        COALESCE(SUM(n.netoff_sum), 0)::numeric AS "totalNetoff",
+        (SUM(i.total_amount) - COALESCE(SUM(n.netoff_sum), 0))::numeric AS remaining
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      GROUP BY i.settlement_order, period, i.license_plate
+      ORDER BY ${orderByStr}
+    `;
+
+    const overviewData = await this.dataSource.query(dataSql, params);
+
+    const detailsSql = `
+      SELECT
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.settlement_order AS "settlementOrder",
+        i.license_plate AS "licensePlate",
+        i.id AS "invoiceId", 
+        i.invoice_no AS "invoiceNo", 
+        i.serial_no AS "serialNo", 
+        TO_CHAR(i.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", 
+        i.status,
+        i.buyer_name AS "buyerName", 
+        i.buyer_tax_code AS "buyerTaxCode", 
+        TRIM(SPLIT_PART(ii.description, ' ', 1)) AS "itemCode",
+        ii.description AS "description",
+        ii.unit AS "unit",
+        ii.quantity::numeric AS "qty",
+        ii.unit_price::numeric AS "unitPrice",
+        (ii.quantity::numeric * ii.unit_price::numeric) AS "preVatAmount",
+        COALESCE(ii.vat_rate, i.vat_rate) AS "vatRate",
+        COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "vatAmount",
+        (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "totalAmount",
+        CASE 
+          WHEN ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY ii.id ASC) = 1 
+          THEN COALESCE(n.netoff_sum, 0)::numeric 
+          ELSE NULL 
+        END AS "netoffAmount"
+      FROM erp_invoices i
+      JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      ORDER BY i.invoice_date ASC, i.invoice_no ASC, ii.id ASC
+    `;
+
+    const detailsData = await this.dataSource.query(detailsSql, params);
+
+    const workbook = new ExcelJS.Workbook();
+
+    const setupSheetHeader = (
+      sheet: ExcelJS.Worksheet,
+      filterColumnCount: number,
+    ) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: filterColumnCount },
+      };
+    };
+
+    const overviewSheet = workbook.addWorksheet('Tổng quan');
+    overviewSheet.columns = [
+      { header: 'Kỳ', key: 'period', width: 12 },
+      { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 30 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Số lượng HĐ', key: 'invoiceCount', width: 15 },
+      { header: 'Trước GTGT', key: 'totalPreVat', width: 20 },
+      { header: 'Thuế GTGT', key: 'totalVat', width: 20 },
+      { header: 'Thành tiền', key: 'totalAmount', width: 20 },
+      { header: 'Đã cấn trừ', key: 'totalNetoff', width: 20 },
+      { header: 'Còn lại', key: 'remaining', width: 20 },
+    ];
+
+    setupSheetHeader(overviewSheet, 9);
+
+    overviewData.forEach((row: any) => {
+      const parsedRow = {
+        ...row,
+        invoiceCount: parseInt(row.invoiceCount || '0', 10),
+        totalPreVat: parseFloat(row.totalPreVat || '0'),
+        totalVat: parseFloat(row.totalVat || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        totalNetoff: parseFloat(row.totalNetoff || '0'),
+        remaining: parseFloat(row.remaining || '0'),
+      };
+      const r = overviewSheet.addRow(parsedRow);
+      r.getCell(4).numFmt = '#,##0';
+      r.getCell(5).numFmt = '#,##0';
+      r.getCell(6).numFmt = '#,##0';
+      r.getCell(7).numFmt = '#,##0';
+      r.getCell(8).numFmt = '#,##0';
+      r.getCell(9).numFmt = '#,##0';
+    });
+
+    const detailSheet = workbook.addWorksheet('Chi tiết');
+    detailSheet.columns = [
+      { header: 'Kỳ', key: 'period', width: 12 },
+      { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 30 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu', key: 'serialNo', width: 15 },
+      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
+      { header: 'Trạng thái', key: 'status', width: 15 },
+      { header: 'Khách hàng', key: 'buyerName', width: 40 },
+      { header: 'MST', key: 'buyerTaxCode', width: 15 },
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'description', width: 40 },
+      { header: 'Đơn vị tính', key: 'unit', width: 12 },
+      { header: 'Số lượng', key: 'qty', width: 12 },
+      { header: 'Đơn giá', key: 'unitPrice', width: 20 },
+      { header: 'Trước GTGT', key: 'preVatAmount', width: 20 },
+      {
+        header: 'Thuế suất',
+        key: 'vatRate',
+        width: 10,
+        style: { numFmt: '0%' },
+      },
+      { header: 'Thuế GTGT', key: 'vatAmount', width: 20 },
+      { header: 'Thành tiền', key: 'totalAmount', width: 20 },
+      { header: 'Đã cấn trừ', key: 'netoffAmount', width: 20 },
+    ];
+
+    setupSheetHeader(detailSheet, 19);
+
+    detailsData.forEach((row: any) => {
+      const r = detailSheet.addRow({
+        ...row,
+        qty: parseFloat(row.qty || '0'),
+        unitPrice: parseFloat(row.unitPrice || '0'),
+        preVatAmount: parseFloat(row.preVatAmount || '0'),
+        vatRate:
+          row.vatRate != null && row.vatRate !== ''
+            ? parseFloat(row.vatRate)
+            : '',
+        vatAmount: parseFloat(row.vatAmount || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        netoffAmount:
+          row.netoffAmount != null ? parseFloat(row.netoffAmount || '0') : null,
+      });
+      r.getCell(13).numFmt = '#,##0.##';
+      r.getCell(14).numFmt = '#,##0';
+      r.getCell(15).numFmt = '#,##0';
+      r.getCell(17).numFmt = '#,##0';
+      r.getCell(18).numFmt = '#,##0';
+      if (row.netoffAmount != null) {
+        r.getCell(19).numFmt = '#,##0';
+      }
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as any;
+  }
+
   async getSettlementOrderDetails(query: any) {
     const { settlementOrder, period } = query;
     if (!settlementOrder || !period) {

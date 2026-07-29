@@ -202,6 +202,34 @@ export class ReportsCoreController {
   }
 
   @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('settlement-orders/export/excel')
+  async exportSettlementOrdersExcel(
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+    @Query('search') search: string,
+    @Query('sortBy') sortBy: string,
+    @Query('sortDir') sortDir: string,
+    @Query('columnFilters') columnFilters: string,
+    @Res() res: any,
+  ) {
+    const buffer = await this.reportsCoreService.exportSettlementOrdersExcel({
+      dateFrom,
+      dateTo,
+      search,
+      sortBy,
+      sortDir,
+      columnFilters,
+    });
+    const fileName = `Lenh_Quyet_Toan_VF_${Date.now()}.xlsx`;
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+    });
+    res.send(buffer);
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
   @Get('settlement-orders/details')
   async getSettlementOrderDetails(
     @Query('settlementOrder') settlementOrder: string,
