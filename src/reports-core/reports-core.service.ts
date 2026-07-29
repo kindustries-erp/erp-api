@@ -1678,24 +1678,70 @@ export class ReportsCoreService {
         i.status,
         i.buyer_name AS "buyerName", 
         i.buyer_tax_code AS "buyerTaxCode", 
-        i.pre_vat_amount::numeric AS "preVatAmount", 
-        i.vat_rate AS "vatRate", 
-        i.vat_amount::numeric AS "vatAmount", 
-        i.total_amount::numeric AS "totalAmount",
-        COALESCE(n.netoff_sum, 0)::numeric AS "netoffAmount"
+        TRIM(SPLIT_PART(ii.description, ' ', 1)) AS "itemCode",
+        ii.description AS "description",
+        ii.unit AS "unit",
+        ii.quantity::numeric AS "qty",
+        ii.unit_price::numeric AS "unitPrice",
+        (ii.quantity::numeric * ii.unit_price::numeric) AS "preVatAmount",
+        COALESCE(ii.vat_rate, i.vat_rate) AS "vatRate",
+        COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "vatAmount",
+        (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "totalAmount",
+        CASE 
+          WHEN ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY ii.id ASC) = 1 
+          THEN COALESCE(n.netoff_sum, 0)::numeric 
+          ELSE NULL 
+        END AS "netoffAmount"
       FROM erp_invoices i
+      JOIN erp_invoice_items ii ON ii.invoice_id = i.id
       LEFT JOIN (
         SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) n ON n.invoice_id = i.id
       WHERE ${whereSql}
-      ORDER BY i.invoice_date ASC, i.invoice_no ASC
+      ORDER BY i.invoice_date ASC, i.invoice_no ASC, ii.id ASC
     `;
 
     const detailsData = await this.dataSource.query(detailsSql, params);
 
     const workbook = new ExcelJS.Workbook();
+
+    const setupSheetHeader = (
+      sheet: ExcelJS.Worksheet,
+      filterColumnCount: number,
+    ) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: filterColumnCount },
+      };
+    };
 
     const overviewSheet = workbook.addWorksheet('Tổng quan');
     overviewSheet.columns = [
@@ -1710,8 +1756,7 @@ export class ReportsCoreService {
       { header: 'Còn lại', key: 'remaining', width: 20 },
     ];
 
-    overviewSheet.getRow(1).font = { bold: true };
-    overviewSheet.getRow(1).alignment = { horizontal: 'center' };
+    setupSheetHeader(overviewSheet, 9);
 
     overviewData.forEach((row: any) => {
       const r = overviewSheet.addRow(row);
@@ -1733,6 +1778,11 @@ export class ReportsCoreService {
       { header: 'Trạng thái', key: 'status', width: 15 },
       { header: 'Khách hàng', key: 'buyerName', width: 40 },
       { header: 'MST', key: 'buyerTaxCode', width: 15 },
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'description', width: 40 },
+      { header: 'Đơn vị tính', key: 'unit', width: 12 },
+      { header: 'Số lượng', key: 'qty', width: 12 },
+      { header: 'Đơn giá', key: 'unitPrice', width: 20 },
       { header: 'Trước GTGT', key: 'preVatAmount', width: 20 },
       {
         header: 'Thuế suất',
@@ -1745,18 +1795,28 @@ export class ReportsCoreService {
       { header: 'Đã cấn trừ', key: 'netoffAmount', width: 20 },
     ];
 
-    detailSheet.getRow(1).font = { bold: true };
-    detailSheet.getRow(1).alignment = { horizontal: 'center' };
+    setupSheetHeader(detailSheet, 19);
 
     detailsData.forEach((row: any) => {
       const r = detailSheet.addRow({
         ...row,
+        qty: parseFloat(row.qty || '0'),
+        unitPrice: parseFloat(row.unitPrice || '0'),
+        preVatAmount: parseFloat(row.preVatAmount || '0'),
         vatRate: parseFloat(row.vatRate || 0) / 100,
+        vatAmount: parseFloat(row.vatAmount || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        netoffAmount:
+          row.netoffAmount != null ? parseFloat(row.netoffAmount || '0') : null,
       });
-      r.getCell(10).numFmt = '#,##0';
-      r.getCell(12).numFmt = '#,##0';
-      r.getCell(13).numFmt = '#,##0';
+      r.getCell(13).numFmt = '#,##0.##';
       r.getCell(14).numFmt = '#,##0';
+      r.getCell(15).numFmt = '#,##0';
+      r.getCell(17).numFmt = '#,##0';
+      r.getCell(18).numFmt = '#,##0';
+      if (row.netoffAmount != null) {
+        r.getCell(19).numFmt = '#,##0';
+      }
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
