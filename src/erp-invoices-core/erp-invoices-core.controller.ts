@@ -95,6 +95,12 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('bulk-net-offs')
+  getBulkNetOffs(@Body('ids') ids: string[]) {
+    return this.service.getBulkNetOffs(ids);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {

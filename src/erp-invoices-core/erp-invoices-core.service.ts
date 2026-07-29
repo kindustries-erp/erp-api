@@ -93,6 +93,10 @@ export class ErpInvoicesCoreService {
     return this.queryService.exportExcel(query);
   }
 
+  getBulkNetOffs(invoiceIds: string[]) {
+    return this.queryService.getBulkNetOffs(invoiceIds);
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

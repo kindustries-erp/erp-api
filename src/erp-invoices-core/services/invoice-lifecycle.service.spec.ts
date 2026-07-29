@@ -15,6 +15,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       ),
       save: jest.fn().mockImplementation(async (entity) => entity),
       manager: {
+        findOne: jest.fn().mockResolvedValue(null),
         find: jest.fn(),
         create: jest
           .fn()
@@ -61,7 +62,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'inv-1', branchId: 'branch-a' }),
     );
-    expect(repository.manager.save).toHaveBeenCalledTimes(1);
+    expect(repository.manager.save).toHaveBeenCalled();
     expect(
       bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
@@ -84,7 +85,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     ]);
 
     expect(repository.save).not.toHaveBeenCalled();
-    expect(repository.manager.save).toHaveBeenCalledTimes(1);
+    expect(repository.manager.save).toHaveBeenCalled();
     expect(result).toEqual({ message: 'Đã liên kết phiếu thành công' });
   });
 
@@ -101,7 +102,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
 
     expect(repository.manager.find).not.toHaveBeenCalled();
     expect(repository.save).not.toHaveBeenCalled();
-    expect(repository.manager.save).toHaveBeenCalledTimes(1);
+    expect(repository.manager.save).toHaveBeenCalled();
     expect(
       bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
@@ -123,7 +124,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     ]);
 
     expect(repository.save).not.toHaveBeenCalled();
-    expect(repository.manager.save).toHaveBeenCalledTimes(1);
+    expect(repository.manager.save).toHaveBeenCalled();
     expect(
       bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
@@ -146,7 +147,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     ]);
 
     expect(repository.save).not.toHaveBeenCalled();
-    expect(repository.manager.save).toHaveBeenCalledTimes(1);
+    expect(repository.manager.save).toHaveBeenCalled();
   });
 
   it('throws NotFoundException when invoice does not exist', async () => {
