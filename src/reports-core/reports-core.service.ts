@@ -5,6 +5,11 @@ import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
 
 @Injectable()
 export class ReportsCoreService {
+  private readonly vinfastSellerTaxCodes = ['0108926276', '0318334886'];
+  private readonly vinfastSellerTaxCodesSql = this.vinfastSellerTaxCodes
+    .map((taxCode) => `'${taxCode.replace(/'/g, "''")}'`)
+    .join(', ');
+
   private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.map(
     (code) => `'${code.replace(/'/g, "''")}'`,
   ).join(', ');
@@ -258,7 +263,7 @@ export class ReportsCoreService {
 
   /**
    * Item code precedence for VINFAST IN lines:
-   * 1) keyword exceptions, 2) regex-based detection, 3) legacy "code - name" fallback.
+   * 1) keyword exceptions, 2) strict regex-based detection.
    */
   private buildVinfastInItemCodeSql(descriptionExpr: string) {
     const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
@@ -267,10 +272,8 @@ export class ReportsCoreService {
         WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%' THEN 'EEP73110011AP'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%' THEN 'BAT21001011'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%' THEN 'EEP73110011ALL'
-        WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)') IS NOT NULL
-          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[A-Z0-9]+)')
-        WHEN ${descriptionExpr} LIKE '% - %'
-          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 1))
+        WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
         ELSE NULL
       END
     `;
@@ -347,7 +350,7 @@ export class ReportsCoreService {
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
       ),
@@ -555,7 +558,7 @@ export class ReportsCoreService {
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
       ),
@@ -789,7 +792,7 @@ export class ReportsCoreService {
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
       ),
@@ -981,7 +984,7 @@ export class ReportsCoreService {
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
         GROUP BY ii.invoice_id, ${inItemCodeSql}
@@ -1371,7 +1374,7 @@ export class ReportsCoreService {
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
       ),
