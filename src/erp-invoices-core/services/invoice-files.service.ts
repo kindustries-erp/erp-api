@@ -107,7 +107,7 @@ export class InvoiceFilesService {
       const attachment = await this.attachmentsService.uploadFile(
         file,
         documentType,
-        userId,
+        userId ?? '',
       );
 
       const link = this.linkRepository.create({
