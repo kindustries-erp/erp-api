@@ -62,6 +62,8 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import { CoreNotification } from '../notifications/entities/core-notification.entity';
 import { ErpInventoryAdjustment } from '../inventory-adjustments-core/entities/erp_inventory_adjustment.entity';
 import { ErpInventoryAdjustmentLine } from '../inventory-adjustments-core/entities/erp_inventory_adjustment_line.entity';
+import { SinvoiceDraft } from '../sinvoice/entities/sinvoice-draft.entity';
+import { SinvoiceConfig } from '../sinvoice/entities/sinvoice-config.entity';
 
 const entities = [
   CoreUser,
@@ -126,6 +128,8 @@ const entities = [
   CoreNotification,
   ErpInventoryAdjustment,
   ErpInventoryAdjustmentLine,
+  SinvoiceDraft,
+  SinvoiceConfig,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

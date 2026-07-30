@@ -43,6 +43,7 @@ import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
+import { SinvoiceModule } from './sinvoice/sinvoice.module';
 
 @Module({
   imports: [
@@ -121,6 +122,7 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
     NotificationsModule,
     DashboardCoreModule,
     InventoryAdjustmentsCoreModule,
+    SinvoiceModule,
   ],
   controllers: [AppController],
   providers: [

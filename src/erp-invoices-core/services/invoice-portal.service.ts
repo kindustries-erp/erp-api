@@ -11,12 +11,12 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import {
   fetchWithRetry,
-  sleep,
   resolvePortalVatRate,
   parsePortalIsoDate,
   buildInvoiceR2Key,
   extractXmlFromBuffer,
 } from '../helpers/invoice-gdt.helper';
+import { sleep } from '../../common/utils/delay.util';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 
