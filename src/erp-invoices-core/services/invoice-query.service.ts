@@ -326,6 +326,8 @@ export class InvoiceQueryService {
 
       const searchResults = await qbOrdered
         .leftJoinAndSelect('inv.items', 'items')
+        .leftJoinAndSelect('inv.attachments', 'link')
+        .leftJoinAndSelect('link.attachment', 'attachment')
         .addOrderBy('inv.createdAt', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
@@ -343,7 +345,7 @@ export class InvoiceQueryService {
 
     const [items, total] = await this.repository.findAndCount({
       where,
-      relations: ['items'],
+      relations: ['items', 'attachments', 'attachments.attachment'],
       order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,

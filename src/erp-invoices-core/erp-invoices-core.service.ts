@@ -230,8 +230,18 @@ export class ErpInvoicesCoreService {
   uploadPdfs(
     invoiceId: string,
     files: { filename: string; buffer: Buffer; mimetype: string }[],
+    documentType?: string,
+    userId?: string,
   ) {
-    return this.filesService.uploadPdfs(invoiceId, files);
+    return this.filesService.uploadPdfs(invoiceId, files, documentType, userId);
+  }
+
+  linkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.linkAttachment(invoiceId, attachmentId);
+  }
+
+  unlinkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.unlinkAttachment(invoiceId, attachmentId);
   }
 
   getPdfContent(invoiceId: string, fileKey: string) {

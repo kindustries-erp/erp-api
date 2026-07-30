@@ -159,16 +159,20 @@ jobs:
             '
               HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-greenway-production/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
               if [ -z "$HOST_PORT" ]; then HOST_PORT=10014; fi
-              for i in $(seq 1 20); do
+              echo "🔍 Health check on port $HOST_PORT (waiting 15s for container warm-up...)"
+              sleep 15
+              for i in $(seq 1 30); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$HOST_PORT/api/v1/auth/profile || true)
                 if [ "$code" = "401" ] || [ "$code" = "200" ]; then
-                  echo "✅ API health OK"
+                  echo "✅ API health OK (attempt $i)"
                   docker image prune -af
                   exit 0
                 fi
-                echo "Attempt $i: got $code, retrying..."
-                sleep 3
+                echo "Attempt $i/30: got $code, retrying in 5s..."
+                sleep 5
               done
-              echo "❌ Health check failed"
+              echo "❌ Health check failed after 30 attempts ($(( 15 + 30 * 5 ))s total)"
+              docker logs --tail 50 erp-api-greenway-production || true
               exit 1
             '
+

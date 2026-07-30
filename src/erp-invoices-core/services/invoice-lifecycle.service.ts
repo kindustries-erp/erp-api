@@ -39,7 +39,13 @@ export class InvoiceLifecycleService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id, isDeleted: false },
-      relations: ['items', 'voucherNetOffs', 'voucherNetOffs.bankTransaction'],
+      relations: [
+        'items',
+        'voucherNetOffs',
+        'voucherNetOffs.bankTransaction',
+        'attachments',
+        'attachments.attachment',
+      ],
     });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };

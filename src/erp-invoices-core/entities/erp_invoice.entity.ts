@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { ErpInvoiceItem } from './erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAttachment } from './erp_invoice_attachment.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -278,4 +279,9 @@ export class ErpInvoice {
 
   @OneToMany('ErpInvoiceVoucherNetOff', (netOff: any) => netOff.invoice)
   voucherNetOffs: ErpInvoiceVoucherNetOff[];
+
+  @OneToMany(() => ErpInvoiceAttachment, (attachment) => attachment.invoice, {
+    cascade: true,
+  })
+  attachments: ErpInvoiceAttachment[];
 }

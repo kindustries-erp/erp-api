@@ -658,7 +658,7 @@ export class BankTransactionsCoreService {
     }
     if (filter.search) {
       qb.andWhere(
-        '(txn.description ILIKE :search OR txn.referenceNumber ILIKE :search OR txn.correspondentName ILIKE :search OR txn.correspondentAccount ILIKE :search)',
+        '(txn.correspondentName ILIKE :search OR txn.correspondentAccount ILIKE :search OR txn.description ILIKE :search OR txn.referenceNumber ILIKE :search)',
         { search: `%${filter.search}%` },
       );
     }
@@ -668,17 +668,15 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
-    if (filter.correspondentAccount) {
-      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
-        correspondentAccount: filter.correspondentAccount,
-      });
-    }
     if (filter.correspondentName) {
       qb.andWhere('txn.correspondentName = :correspondentName', {
         correspondentName: filter.correspondentName,
       });
+    } else if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
     }
-
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
         'sys_entity_tags',
@@ -990,7 +988,10 @@ export class BankTransactionsCoreService {
 
     const qb = this.transactionRepo
       .createQueryBuilder('txn')
-      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere(
+        "(NULLIF(txn.correspondentName, '') IS NOT NULL OR NULLIF(txn.correspondentAccount, '') IS NOT NULL)",
+      );
 
     if (filter.startDate) {
       qb.andWhere('txn.transDate >= :startDate', {
@@ -1046,6 +1047,24 @@ export class BankTransactionsCoreService {
                 [`vals_${col}`]: vals,
               },
             );
+          } else if (col === 'totalCredit') {
+            qb.andHaving(
+              `SUM(COALESCE(txn.creditAmount, 0)) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
+          } else if (col === 'totalDebit') {
+            qb.andHaving(
+              `SUM(COALESCE(txn.debitAmount, 0)) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
+          } else if (col === 'transactionCount') {
+            qb.andHaving(`COUNT(txn.id) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           }
         }
       } catch (e) {}
@@ -1089,23 +1108,45 @@ export class BankTransactionsCoreService {
                 [`search_${col}`]: `%${val}%`,
               },
             );
+          } else if (col === 'totalCredit') {
+            qb.andHaving(
+              `CAST(SUM(COALESCE(txn.creditAmount, 0)) AS TEXT) ILIKE :search_${col}`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'totalDebit') {
+            qb.andHaving(
+              `CAST(SUM(COALESCE(txn.debitAmount, 0)) AS TEXT) ILIKE :search_${col}`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'transactionCount') {
+            qb.andHaving(`CAST(COUNT(txn.id) AS TEXT) ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
           }
         }
       } catch (e) {}
     }
-
-    const countQb = qb.clone();
-    const totalRaw = await countQb
-      .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
-      .getRawOne();
-    const total = parseInt(totalRaw?.cnt || '0', 10);
 
     qb.select(groupField, 'groupId')
       .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
       .addSelect('MAX(txn.correspondentName)', 'correspondentName')
       .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
       .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .addSelect('COUNT(txn.id)', 'transactionCount')
       .groupBy(groupField);
+
+    const countQb = qb.clone();
+    countQb.orderBy();
+    const [sql, params] = countQb.getQueryAndParameters();
+    const totalRaw = await this.transactionRepo.manager.query(
+      `SELECT COUNT(*) as cnt FROM (${sql}) AS subquery`,
+      params,
+    );
+    const total = parseInt(totalRaw[0]?.cnt || '0', 10);
 
     if (filter.sortBy) {
       const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -1117,6 +1158,8 @@ export class BankTransactionsCoreService {
         qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
       } else if (filter.sortBy === 'totalDebit') {
         qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
+      } else if (filter.sortBy === 'transactionCount') {
+        qb.orderBy('COUNT(txn.id)', order);
       } else {
         qb.orderBy(
           'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
@@ -1173,6 +1216,10 @@ export class BankTransactionsCoreService {
         correspondentName: item.correspondentName,
         totalCredit: parseFloat(item.totalCredit) || 0,
         totalDebit: parseFloat(item.totalDebit) || 0,
+        transactionCount: parseInt(
+          item.transactioncount || item.transactionCount || '0',
+          10,
+        ),
         invoiceSubject: subjectsMap[item.groupId] || null,
       })),
       total,

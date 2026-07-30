@@ -62,6 +62,12 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import { CoreNotification } from '../notifications/entities/core-notification.entity';
 import { ErpInventoryAdjustment } from '../inventory-adjustments-core/entities/erp_inventory_adjustment.entity';
 import { ErpInventoryAdjustmentLine } from '../inventory-adjustments-core/entities/erp_inventory_adjustment_line.entity';
+import { SinvoiceDraft } from '../sinvoice/entities/sinvoice-draft.entity';
+import { SinvoiceConfig } from '../sinvoice/entities/sinvoice-config.entity';
+import { ErpAttachment } from '../erp-attachments-core/entities/erp_attachment.entity';
+import { ErpInvoiceAttachment } from '../erp-invoices-core/entities/erp_invoice_attachment.entity';
+import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.entity';
+import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
 
 const entities = [
   CoreUser,
@@ -126,6 +132,12 @@ const entities = [
   CoreNotification,
   ErpInventoryAdjustment,
   ErpInventoryAdjustmentLine,
+  SinvoiceDraft,
+  SinvoiceConfig,
+  ErpAttachment,
+  ErpInvoiceAttachment,
+  ErpEmailMessage,
+  ErpEmailAttachment,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -137,7 +149,10 @@ export default new DataSource(
         url: databaseUrl,
         schema: 'public',
         entities,
-        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
         synchronize: false,
         ssl: { rejectUnauthorized: false },
       }
@@ -150,7 +165,10 @@ export default new DataSource(
         database: process.env.DB_DATABASE || 'erp_core',
         schema: 'public',
         entities,
-        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
         synchronize: false,
         ssl:
           process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
