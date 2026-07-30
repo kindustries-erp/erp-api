@@ -45,6 +45,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
 import { SinvoiceModule } from './sinvoice/sinvoice.module';
+import { EmailIngestModule } from './email-ingest/email-ingest.module';
 
 @Module({
   imports: [
@@ -126,6 +127,8 @@ import { SinvoiceModule } from './sinvoice/sinvoice.module';
     NotificationsModule,
     DashboardCoreModule,
     InventoryAdjustmentsCoreModule,
+    SinvoiceModule,
+    EmailIngestModule,
     SinvoiceModule,
   ],
   controllers: [AppController],
