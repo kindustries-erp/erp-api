@@ -66,6 +66,8 @@ import { SinvoiceDraft } from '../sinvoice/entities/sinvoice-draft.entity';
 import { SinvoiceConfig } from '../sinvoice/entities/sinvoice-config.entity';
 import { ErpAttachment } from '../erp-attachments-core/entities/erp_attachment.entity';
 import { ErpInvoiceAttachment } from '../erp-invoices-core/entities/erp_invoice_attachment.entity';
+import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.entity';
+import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
 
 const entities = [
   CoreUser,
@@ -134,6 +136,8 @@ const entities = [
   SinvoiceConfig,
   ErpAttachment,
   ErpInvoiceAttachment,
+  ErpEmailMessage,
+  ErpEmailAttachment,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -141,26 +145,32 @@ const databaseUrl = process.env.DATABASE_URL;
 export default new DataSource(
   databaseUrl
     ? {
-      type: 'postgres',
-      url: databaseUrl,
-      schema: 'public',
-      entities,
-      migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
-      synchronize: false,
-      ssl: { rejectUnauthorized: false },
-    }
+        type: 'postgres',
+        url: databaseUrl,
+        schema: 'public',
+        entities,
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
+        synchronize: false,
+        ssl: { rejectUnauthorized: false },
+      }
     : {
-      type: 'postgres',
-      host: process.env.DB_HOST || '127.0.0.1',
-      port: Number(process.env.DB_PORT || 5432),
-      username: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_DATABASE || 'erp_core',
-      schema: 'public',
-      entities,
-      migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
-      synchronize: false,
-      ssl:
-        process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-    },
+        type: 'postgres',
+        host: process.env.DB_HOST || '127.0.0.1',
+        port: Number(process.env.DB_PORT || 5432),
+        username: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_DATABASE || 'erp_core',
+        schema: 'public',
+        entities,
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
+        synchronize: false,
+        ssl:
+          process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      },
 );

@@ -50,10 +50,10 @@ export class ErpEmailAttachment {
   @ManyToOne(() => ErpEmailMessage, (message) => message.attachments, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'message_id' })
+  @JoinColumn({ name: 'messageId' })
   message: ErpEmailMessage;
 
   @ManyToOne(() => SysFile, { eager: true, onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'sys_file_id' })
+  @JoinColumn({ name: 'sysFileId' })
   sysFile: SysFile;
 }

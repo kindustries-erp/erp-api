@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
 } from 'typeorm';
-import { ErpInvoice } from './erp_invoice.entity';
+import type { ErpInvoice } from './erp_invoice.entity';
 import { ErpAttachment } from '../../erp-attachments-core/entities/erp_attachment.entity';
 
 @Entity({ name: 'erp_invoice_attachments' })
@@ -20,7 +20,7 @@ export class ErpInvoiceAttachment {
   @Column({ type: 'uuid', name: 'attachment_id' })
   attachmentId: string;
 
-  @ManyToOne(() => ErpInvoice, (invoice) => invoice.attachments, {
+  @ManyToOne('ErpInvoice', (invoice: ErpInvoice) => invoice.attachments, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'invoice_id' })

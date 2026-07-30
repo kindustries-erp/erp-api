@@ -27,7 +27,7 @@ export class InvoiceFilesService {
     private readonly linkRepository: Repository<ErpInvoiceAttachment>,
     private readonly r2: R2Service,
     private readonly attachmentsService: ErpAttachmentsCoreService,
-  ) { }
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Pre-signed URLs
@@ -234,7 +234,7 @@ export class InvoiceFilesService {
       invoice.pdfFileKey = null;
     }
 
-    await this.r2.deleteObject(fileKey).catch(() => { });
+    await this.r2.deleteObject(fileKey).catch(() => {});
     await this.repository.save(invoice);
     return { success: true };
   }
@@ -395,8 +395,8 @@ export class InvoiceFilesService {
     const valueFactory =
       !directFactory && archiverModule && typeof archiverModule === 'object'
         ? Object.values(archiverModule).find(
-          (candidate) => typeof candidate === 'function',
-        )
+            (candidate) => typeof candidate === 'function',
+          )
         : null;
     const archiverFactory = directFactory || valueFactory;
 
