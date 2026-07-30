@@ -438,6 +438,8 @@ export class ErpInvoicesCoreController {
   uploadPdfs(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    @Body('documentType') documentType?: string,
+    @Request() req?: any,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Chưa chọn file PDF nào');
@@ -449,7 +451,27 @@ export class ErpInvoicesCoreController {
         buffer: f.buffer,
         mimetype: f.mimetype,
       })),
+      documentType,
+      req?.user?.sub,
     );
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/attachments/link')
+  linkAttachment(
+    @Param('id') id: string,
+    @Body() body: { attachmentId: string },
+  ) {
+    return this.service.linkAttachment(id, body.attachmentId);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Delete(':id/attachments/:attachmentId')
+  unlinkAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.service.unlinkAttachment(id, attachmentId);
   }
 
   @Get(':id/pdfs/zip')

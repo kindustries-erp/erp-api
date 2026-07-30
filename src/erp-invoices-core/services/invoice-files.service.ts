@@ -9,7 +9,9 @@ import { In, Repository } from 'typeorm';
 import AdmZip from 'adm-zip';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
+import { ErpInvoiceAttachment } from '../entities/erp_invoice_attachment.entity';
 import { R2Service } from '../../r2/r2.service';
+import { ErpAttachmentsCoreService } from '../../erp-attachments-core/erp-attachments-core.service';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
 @Injectable()
@@ -21,7 +23,10 @@ export class InvoiceFilesService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpInvoiceAttachment)
+    private readonly linkRepository: Repository<ErpInvoiceAttachment>,
     private readonly r2: R2Service,
+    private readonly attachmentsService: ErpAttachmentsCoreService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -91,38 +96,48 @@ export class InvoiceFilesService {
   async uploadPdfs(
     invoiceId: string,
     files: { filename: string; buffer: Buffer; mimetype: string }[],
+    documentType = 'HOA_DON',
+    userId?: string,
   ) {
     const invoice = await this.repository.findOne({ where: { id: invoiceId } });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
 
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const safeNo = invoice.invoiceNo.replace(/[^\w-]/g, '_');
-
-    let pdfFiles = Array.isArray(invoice.pdfFiles) ? [...invoice.pdfFiles] : [];
-
-    const uploadPromises = files.map(async (file, index) => {
-      const ts = Date.now();
-      const safeFilename = file.filename.replace(/[^\w.-]/g, '_');
-      const key = `invoices/${invoice.direction}/${yyyy}/${mm}/${safeNo}_${ts}_${index}_${safeFilename}`;
-      await this.r2.uploadBuffer(
-        key,
-        file.buffer,
-        file.mimetype || 'application/pdf',
+    const uploadPromises = files.map(async (file) => {
+      const attachment = await this.attachmentsService.uploadFile(
+        file,
+        documentType,
+        userId,
       );
-      return {
-        key,
-        filename: file.filename,
-        uploadedAt: new Date().toISOString(),
-      };
+
+      const link = this.linkRepository.create({
+        invoiceId,
+        attachmentId: attachment.id,
+      });
+      await this.linkRepository.save(link);
+
+      return attachment;
     });
 
-    const newFiles = await Promise.all(uploadPromises);
-    pdfFiles = [...pdfFiles, ...newFiles];
-    await this.repository.update(invoiceId, { pdfFiles } as any);
-    return { success: true, pdfFiles };
+    const newAttachments = await Promise.all(uploadPromises);
+    return { success: true, attachments: newAttachments };
+  }
+
+  async linkAttachment(invoiceId: string, attachmentId: string) {
+    const existing = await this.linkRepository.findOne({
+      where: { invoiceId, attachmentId },
+    });
+    if (existing) {
+      return { success: true, message: 'Already linked' };
+    }
+    const link = this.linkRepository.create({ invoiceId, attachmentId });
+    await this.linkRepository.save(link);
+    return { success: true, message: 'Linked successfully' };
+  }
+
+  async unlinkAttachment(invoiceId: string, attachmentId: string) {
+    await this.linkRepository.delete({ invoiceId, attachmentId });
+    return { success: true, message: 'Unlinked successfully' };
   }
 
   async getPdfContent(invoiceId: string, fileKey: string): Promise<Buffer> {
@@ -133,15 +148,19 @@ export class InvoiceFilesService {
   }
 
   async getPdfDownloadUrl(invoiceId: string, fileKey: string, inline = false) {
-    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    const invoice = await this.repository.findOne({
+      where: { id: invoiceId },
+      relations: ['attachments'],
+    });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
 
-    const file = Array.isArray(invoice.pdfFiles)
-      ? invoice.pdfFiles.find((f) => f.key === fileKey)
-      : null;
+    const link = invoice.attachments?.find(
+      (a) => a.attachment.fileKey === fileKey,
+    );
+    const file = link ? link.attachment : null;
     const filename = file
-      ? file.filename
+      ? file.fileName
       : fileKey.split('/').pop() || 'document.pdf';
 
     const url = await this.r2.getPresignedDownloadUrl(
@@ -154,13 +173,18 @@ export class InvoiceFilesService {
   }
 
   async downloadAllPdfsZip(invoiceId: string): Promise<Buffer> {
-    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    const invoice = await this.repository.findOne({
+      where: { id: invoiceId },
+      relations: ['attachments'],
+    });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
 
-    const files: any[] = Array.isArray(invoice.pdfFiles)
-      ? [...invoice.pdfFiles]
-      : [];
+    const files: any[] =
+      invoice.attachments?.map((link) => ({
+        key: link.attachment.fileKey,
+        filename: link.attachment.fileName,
+      })) || [];
     if (files.length === 0) {
       if (invoice.pdfFileKey) {
         files.push({ key: invoice.pdfFileKey, filename: 'document.pdf' });
@@ -192,21 +216,27 @@ export class InvoiceFilesService {
   }
 
   async deletePdf(invoiceId: string, fileKey: string) {
-    const invoice = await this.repository.findOne({ where: { id: invoiceId } });
+    const invoice = await this.repository.findOne({
+      where: { id: invoiceId },
+      relations: ['attachments'],
+    });
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
 
-    let pdfFiles = Array.isArray(invoice.pdfFiles) ? [...invoice.pdfFiles] : [];
-    pdfFiles = pdfFiles.filter((f) => f.key !== fileKey);
+    const link = invoice.attachments?.find(
+      (l) => l.attachment.fileKey === fileKey,
+    );
+    if (link) {
+      await this.linkRepository.delete({ id: link.id });
+    }
 
     if (invoice.pdfFileKey === fileKey) {
       invoice.pdfFileKey = null;
     }
 
-    invoice.pdfFiles = pdfFiles;
     await this.r2.deleteObject(fileKey).catch(() => {});
     await this.repository.save(invoice);
-    return { success: true, pdfFiles };
+    return { success: true };
   }
 
   // ---------------------------------------------------------------------------
@@ -266,9 +296,11 @@ export class InvoiceFilesService {
       const docNo = this.sanitizeZipPart(invoiceNo, invoice.id);
 
       if (types.includes('pdf')) {
-        const pdfList: any[] = Array.isArray(invoice.pdfFiles)
-          ? [...invoice.pdfFiles]
-          : [];
+        const pdfList: any[] =
+          invoice.attachments?.map((link) => ({
+            key: link.attachment.fileKey,
+            filename: link.attachment.fileName,
+          })) || [];
         if (pdfList.length === 0 && invoice.pdfFileKey) {
           pdfList.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
         }
@@ -388,7 +420,10 @@ export class InvoiceFilesService {
 
     archive.pipe(res);
 
-    const qb = this.repository.createQueryBuilder('inv');
+    const qb = this.repository
+      .createQueryBuilder('inv')
+      .leftJoinAndSelect('inv.attachments', 'link')
+      .leftJoinAndSelect('link.attachment', 'attachment');
     qb.where('inv.is_deleted = false');
 
     if (payload.query.date_from) {
@@ -465,6 +500,7 @@ export class InvoiceFilesService {
         id: In(payload.ids),
         isDeleted: false,
       },
+      relations: ['attachments'],
     });
 
     const indexById = new Map(payload.ids.map((id, idx) => [id, idx]));

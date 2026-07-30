@@ -21,6 +21,8 @@ import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
+import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
+import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { InvoiceQueryService } from './services/invoice-query.service';
       ErpInvoice,
       ErpInvoiceItem,
       ErpInvoiceVoucherNetOff,
+      ErpInvoiceAttachment,
       CompanyProfile,
       CorePermission,
       CoreUserRole,
@@ -36,6 +39,7 @@ import { InvoiceQueryService } from './services/invoice-query.service';
     BankTransactionsCoreModule,
     NotificationsModule,
     AccountingCoreModule,
+    ErpAttachmentsCoreModule,
   ],
   controllers: [ErpInvoicesCoreController, InvoiceDashboardController],
   providers: [

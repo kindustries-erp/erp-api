@@ -31,6 +31,7 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
+import { ErpAttachmentsCoreModule } from './erp-attachments-core/erp-attachments-core.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -95,6 +96,9 @@ import { SinvoiceModule } from './sinvoice/sinvoice.module';
     EmployeesCoreModule,
     BusinessPartnersCoreModule,
     InventoryCoreModule,
+    ErpInvoicesCoreModule,
+    ErpAttachmentsCoreModule,
+    ErpMfgCoreModule,
     BomCoreModule,
     PurchaseRequestsCoreModule,
     PurchaseOrdersCoreModule,
