@@ -236,9 +236,17 @@ export class EmailIngestService {
             sourceProvider: provider,
             subject: parsed.subject || message.envelope?.subject || null,
             fromJson: this.mapAddress(parsed.from?.value),
-            toJson: this.mapAddress(parsed.to?.value),
-            ccJson: this.mapAddress(parsed.cc?.value),
-            bccJson: this.mapAddress(parsed.bcc?.value),
+            toJson: this.mapAddress(
+              Array.isArray(parsed.to) ? parsed.to[0]?.value : parsed.to?.value,
+            ),
+            ccJson: this.mapAddress(
+              Array.isArray(parsed.cc) ? parsed.cc[0]?.value : parsed.cc?.value,
+            ),
+            bccJson: this.mapAddress(
+              Array.isArray(parsed.bcc)
+                ? parsed.bcc[0]?.value
+                : parsed.bcc?.value,
+            ),
             bodyText,
             bodyHtml,
             headersJson: this.headersToJson(parsed),
