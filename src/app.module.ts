@@ -46,6 +46,7 @@ import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
 import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { EmailIngestModule } from './email-ingest/email-ingest.module';
+import { OperatingExpensesCoreModule } from './operating-expenses-core/operating-expenses-core.module';
 
 @Module({
   imports: [
@@ -129,7 +130,7 @@ import { EmailIngestModule } from './email-ingest/email-ingest.module';
     InventoryAdjustmentsCoreModule,
     SinvoiceModule,
     EmailIngestModule,
-    SinvoiceModule,
+    OperatingExpensesCoreModule,
   ],
   controllers: [AppController],
   providers: [
