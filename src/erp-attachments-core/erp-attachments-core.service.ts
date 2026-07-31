@@ -29,34 +29,107 @@ export class ErpAttachmentsCoreService {
       dateTo,
       filtersStr,
     } = query;
-    const skip = (page - 1) * pageSize;
+    const limit = Number(pageSize);
+    const offset = (Number(page) - 1) * limit;
 
-    const qb = this.repo.createQueryBuilder('att');
-    qb.leftJoinAndSelect('att.invoiceLinks', 'invoiceLinks');
-    qb.leftJoinAndSelect('invoiceLinks.invoice', 'invoice');
+    const baseSql = `
+      SELECT
+        a.id::text as id,
+        a.file_name,
+        a.file_key,
+        a.file_size,
+        a.mime_type,
+        a.document_type,
+        a.module,
+        a.created_at,
+        i.invoice_no,
+        i.id as invoice_id,
+        i.direction as invoice_direction
+      FROM erp_attachments a
+      LEFT JOIN erp_invoice_attachments eia ON eia.attachment_id = a.id
+      LEFT JOIN erp_invoices i ON i.id = eia.invoice_id AND i.is_deleted = false
+
+      UNION ALL
+
+      SELECT
+        inv.id::text as id,
+        SPLIT_PART(inv.pdf_file_key, '/', -1) as file_name,
+        inv.pdf_file_key as file_key,
+        0 as file_size,
+        'application/pdf' as mime_type,
+        'HOA_DON' as document_type,
+        'invoices' as module,
+        inv.created_at,
+        inv.invoice_no,
+        inv.id as invoice_id,
+        inv.direction as invoice_direction
+      FROM erp_invoices inv
+      WHERE inv.pdf_file_key IS NOT NULL AND inv.is_deleted = false
+
+      UNION ALL
+
+      SELECT
+        inv.id::text || '_' || (f->>'key') as id,
+        f->>'filename' as file_name,
+        f->>'key' as file_key,
+        0 as file_size,
+        'application/pdf' as mime_type,
+        'HOA_DON' as document_type,
+        'invoices' as module,
+        (f->>'uploadedAt')::timestamp as created_at,
+        inv.invoice_no,
+        inv.id as invoice_id,
+        inv.direction as invoice_direction
+      FROM erp_invoices inv,
+        jsonb_array_elements(inv.pdf_files) f
+      WHERE inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null' AND inv.is_deleted = false
+
+      UNION ALL
+
+      SELECT
+        inv.id::text || '_xml' as id,
+        SPLIT_PART(inv.xml_file_key, '/', -1) as file_name,
+        inv.xml_file_key as file_key,
+        0 as file_size,
+        'application/xml' as mime_type,
+        'HOA_DON' as document_type,
+        'invoices' as module,
+        inv.created_at,
+        inv.invoice_no,
+        inv.id as invoice_id,
+        inv.direction as invoice_direction
+      FROM erp_invoices inv
+      WHERE inv.xml_file_key IS NOT NULL AND inv.is_deleted = false
+    `;
+
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
 
     if (search) {
-      qb.andWhere('att.file_name ILIKE :search', { search: `%${search}%` });
+      whereClauses.push(`file_name ILIKE $${paramIndex++}`);
+      params.push(`%${search}%`);
     }
     if (document_type) {
-      qb.andWhere('att.document_type = :docType', { docType: document_type });
+      whereClauses.push(`document_type = $${paramIndex++}`);
+      params.push(document_type);
     }
     if (dateFrom || dateTo) {
       if (dateFrom && dateTo) {
         const to = new Date(dateTo);
         to.setHours(23, 59, 59, 999);
-        qb.andWhere('att.created_at BETWEEN :dateFrom AND :dateTo', {
-          dateFrom: new Date(dateFrom),
-          dateTo: to,
-        });
+        whereClauses.push(
+          `created_at BETWEEN $${paramIndex++} AND $${paramIndex++}`,
+        );
+        params.push(new Date(dateFrom), to);
       } else if (dateFrom) {
-        qb.andWhere('att.created_at >= :dateFrom', {
-          dateFrom: new Date(dateFrom),
-        });
+        whereClauses.push(`created_at >= $${paramIndex++}`);
+        params.push(new Date(dateFrom));
       } else if (dateTo) {
         const to = new Date(dateTo);
         to.setHours(23, 59, 59, 999);
-        qb.andWhere('att.created_at <= :dateTo', { dateTo: to });
+        whereClauses.push(`created_at <= $${paramIndex++}`);
+        params.push(to);
       }
     }
 
@@ -66,35 +139,69 @@ export class ErpAttachmentsCoreService {
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
           let filterField = '';
-          if (col === 'fileName') filterField = 'att.file_name';
-          else if (col === 'documentType') filterField = 'att.document_type';
-          else if (col === 'module') filterField = 'att.module';
-          else if (col === 'fileSize') filterField = 'att.file_size';
+          if (col === 'fileName') filterField = 'file_name';
+          else if (col === 'documentType') filterField = 'document_type';
+          else if (col === 'module') filterField = 'module';
+          else if (col === 'fileSize') filterField = 'file_size';
           else if (col === 'fileExt')
-            filterField =
-              "UPPER(SUBSTRING(att.file_name FROM '\\.([^\\.]+)$'))";
-          else if (col === 'relatedDocs') filterField = 'invoice.invoice_no';
+            filterField = "UPPER(SUBSTRING(file_name FROM '\\.([^\\.]+)$'))";
+          else if (col === 'relatedDocs') filterField = 'invoice_no';
 
           if (filterField) {
-            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            const placeholders = vals.map(() => `$${paramIndex++}`).join(',');
+            whereClauses.push(
+              `CAST(${filterField} AS TEXT) IN (${placeholders})`,
+            );
+            params.push(...vals);
           }
         }
       } catch {}
     }
 
-    qb.orderBy('att.createdAt', 'DESC');
-    qb.skip(skip).take(pageSize);
+    const whereStr =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    const [data, total] = await qb.getManyAndCount();
+    const countQuery = `SELECT COUNT(*) FROM (${baseSql}) as combined ${whereStr}`;
+    const dataQuery = `SELECT * FROM (${baseSql}) as combined ${whereStr} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+
+    const countResult = await this.repo.manager.query(countQuery, params);
+    const total = parseInt(countResult[0].count, 10);
+
+    const dataResult = await this.repo.manager.query(dataQuery, [
+      ...params,
+      limit,
+      offset,
+    ]);
+
+    const items = dataResult.map((row: any) => ({
+      id: row.id,
+      fileName: row.file_name,
+      fileKey: row.file_key,
+      fileSize: row.file_size,
+      mimeType: row.mime_type,
+      documentType: row.document_type,
+      module: row.module,
+      createdAt: row.created_at,
+      invoiceLinks: row.invoice_id
+        ? [
+            {
+              invoice: {
+                id: row.invoice_id,
+                invoiceNo: row.invoice_no,
+                direction: row.invoice_direction,
+              },
+            },
+          ]
+        : [],
+      _isLegacy: row.id.includes('_'),
+    }));
 
     return {
-      items: data,
+      items,
       total,
       page: Number(page),
-      pageSize: Number(pageSize),
-      totalPages: Math.ceil(total / pageSize),
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 
