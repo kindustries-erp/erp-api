@@ -97,6 +97,10 @@ export class ErpInvoicesCoreService {
     return this.queryService.getBulkNetOffs(invoiceIds);
   }
 
+  getStats(direction?: 'IN' | 'OUT') {
+    return this.queryService.getStats(direction);
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

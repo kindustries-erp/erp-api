@@ -566,10 +566,6 @@ export class OperationalDocumentsService {
     return this.createWithLines('purchase_orders', dto, userToken);
   }
 
-  createExpense(dto: CreateOperatingExpenseDto, userToken: string) {
-    return this.createWithLines('operating_expenses', dto, userToken);
-  }
-
   async updateDocument(
     collection: string,
     id: string,

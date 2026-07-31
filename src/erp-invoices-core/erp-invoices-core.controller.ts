@@ -96,6 +96,13 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('stats')
+  @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
+  getStats(@Query('direction') direction?: 'IN' | 'OUT') {
+    return this.service.getStats(direction);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Post('bulk-net-offs')
   getBulkNetOffs(@Body('ids') ids: string[]) {
     return this.service.getBulkNetOffs(ids);

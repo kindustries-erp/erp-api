@@ -120,36 +120,6 @@ export class OperationalDocumentsController {
     return this.service.postPurchaseReceipt(id, dto, token);
   }
 
-  @Get('operating-expenses')
-  listExpenses(
-    @Query() query: OperationalQueryDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.list('operating_expenses', query, token);
-  }
-
-  @Post('operating-expenses')
-  createExpense(
-    @Body() dto: CreateOperatingExpenseDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createExpense(dto, token);
-  }
-
-  @Get('operating-expenses/:id')
-  getExpense(@Param('id') id: string, @UserToken() token: string) {
-    return this.service.findOne('operating_expenses', id, token);
-  }
-
-  @Patch('operating-expenses/:id')
-  updateExpense(
-    @Param('id') id: string,
-    @Body() dto: CreateOperatingExpenseDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.updateDocument('operating_expenses', id, dto, token);
-  }
-
   @Get('operational-receivables')
   receivables(@Query() query: OperationalQueryDto, @UserToken() token: string) {
     return this.service.getReceivables(query, token);
