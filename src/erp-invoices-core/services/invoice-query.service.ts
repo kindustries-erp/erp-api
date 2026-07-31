@@ -700,6 +700,119 @@ export class InvoiceQueryService {
       .getMany();
   }
 
+  async getStats(direction?: 'IN' | 'OUT') {
+    const today = new Date();
+
+    // 6 months ago start
+    const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+
+    const qb = this.repository.createQueryBuilder('inv');
+    qb.where('inv.is_deleted = false');
+    if (direction) {
+      qb.andWhere('inv.direction = :direction', { direction });
+    }
+    qb.andWhere("inv.status != 'CANCELLED'");
+    qb.andWhere('inv.invoice_date >= :sixMonthsAgo', { sixMonthsAgo });
+
+    qb.select(`DATE_TRUNC('day', inv.invoice_date)`, 'day_date');
+    qb.addSelect(`SUM(inv.total_amount)`, 'total_amount');
+    qb.addSelect(`SUM(inv.pre_vat_amount)`, 'pre_vat_amount');
+    qb.groupBy(`DATE_TRUNC('day', inv.invoice_date)`);
+    qb.orderBy(`DATE_TRUNC('day', inv.invoice_date)`, 'ASC');
+
+    const records = await qb.getRawMany();
+
+    let monthTotal = 0,
+      monthPreVat = 0;
+    let weekTotal = 0,
+      weekPreVat = 0;
+    let dayTotal = 0,
+      dayPreVat = 0;
+
+    const monthChart = Array(6).fill(0);
+    const weekChart = Array(4).fill(0);
+    const dayChart = Array(7).fill(0);
+
+    // Helpers to get start of current periods
+    const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfThisWeek = new Date(today);
+    startOfThisWeek.setDate(
+      today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1),
+    ); // Monday as start of week
+    startOfThisWeek.setHours(0, 0, 0, 0);
+    const startOfToday = new Date(today);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    for (const row of records) {
+      const d = new Date(row.day_date);
+      const total = Number(row.total_amount) || 0;
+      const prevat = Number(row.pre_vat_amount) || 0;
+
+      // Current Day
+      if (d.getTime() === startOfToday.getTime()) {
+        dayTotal += total;
+        dayPreVat += prevat;
+      }
+      // Current Week
+      if (d >= startOfThisWeek) {
+        weekTotal += total;
+        weekPreVat += prevat;
+      }
+      // Current Month
+      if (d >= startOfThisMonth) {
+        monthTotal += total;
+        monthPreVat += prevat;
+      }
+
+      // Day Chart (last 7 days, index 6 is today, 0 is 6 days ago)
+      const daysDiff = Math.floor(
+        (startOfToday.getTime() - d.getTime()) / (1000 * 3600 * 24),
+      );
+      if (daysDiff >= 0 && daysDiff < 7) {
+        dayChart[6 - daysDiff] += total;
+      }
+
+      // Week Chart (last 4 weeks, index 3 is this week, 0 is 3 weeks ago)
+      const weeksDiff = Math.floor(
+        (startOfThisWeek.getTime() - d.getTime()) / (1000 * 3600 * 24 * 7),
+      );
+      // if d < startOfThisWeek, diff will be positive
+      const weekIndex =
+        d >= startOfThisWeek
+          ? 3
+          : 3 -
+            (Math.floor(
+              (startOfThisWeek.getTime() - d.getTime() - 1) /
+                (1000 * 3600 * 24 * 7),
+            ) +
+              1);
+      if (weekIndex >= 0 && weekIndex < 4) {
+        weekChart[weekIndex] += total;
+      }
+
+      // Month Chart (last 6 months, index 5 is this month, 0 is 5 months ago)
+      const monthDiff =
+        (today.getFullYear() - d.getFullYear()) * 12 +
+        today.getMonth() -
+        d.getMonth();
+      if (monthDiff >= 0 && monthDiff < 6) {
+        monthChart[5 - monthDiff] += total;
+      }
+    }
+
+    return {
+      monthTotal,
+      monthPreVat,
+      monthChart,
+      weekTotal,
+      weekPreVat,
+      weekChart,
+      dayTotal,
+      dayPreVat,
+      dayChart,
+    };
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
