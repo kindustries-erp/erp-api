@@ -17,30 +17,31 @@ async function bootstrap() {
   console.log(`Found ${attachments.length} attachments with fileSize 0`);
 
   let count = 0;
-  for (const attachment of attachments) {
-    try {
-      const command = new HeadObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME || 'invoice-bucket', // Wait, R2Service uses a specific bucket, I'll use r2Service directly
-        Key: attachment.fileKey,
-      });
-      // But r2Service doesn't expose s3 directly easily?
-      const client = (r2Service as any).client;
-      const bucket = (r2Service as any).bucket;
-      const response = await client.send(
-        new HeadObjectCommand({ Bucket: bucket, Key: attachment.fileKey }),
-      );
+  const chunkSize = 20;
+  const client = (r2Service as any).client;
+  const bucket = (r2Service as any).bucket;
 
-      if (response.ContentLength) {
-        attachment.fileSize = response.ContentLength;
-        await attachmentRepo.save(attachment);
-        count++;
-        console.log(
-          `Updated ${attachment.fileName} to ${attachment.fileSize} bytes`,
-        );
-      }
-    } catch (e) {
-      console.log(`Failed for ${attachment.fileName}: ${e.message}`);
-    }
+  for (let i = 0; i < attachments.length; i += chunkSize) {
+    const chunk = attachments.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (attachment) => {
+        try {
+          const response = await client.send(
+            new HeadObjectCommand({ Bucket: bucket, Key: attachment.fileKey }),
+          );
+          if (response.ContentLength) {
+            attachment.fileSize = response.ContentLength;
+            await attachmentRepo.save(attachment);
+            count++;
+          }
+        } catch (e) {
+          // console.log(`Failed for ${attachment.fileName}: ${e.message}`);
+        }
+      }),
+    );
+    console.log(
+      `Processed ${Math.min(i + chunkSize, attachments.length)}/${attachments.length} files. Updated: ${count}`,
+    );
   }
 
   console.log(`Successfully updated ${count} attachments`);
