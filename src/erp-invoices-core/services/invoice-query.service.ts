@@ -129,12 +129,19 @@ export class InvoiceQueryService {
     }
 
     if (search) {
-      applyMultiKeywordFilter(
-        qb,
-        `CAST(${selectField} AS TEXT)`,
-        search,
-        'search',
-      );
+      let searchField = `CAST(${selectField} AS TEXT)`;
+      let searchKeyword = search;
+
+      if (
+        ['preVatAmount', 'vatAmount', 'discountAmount', 'totalAmount'].includes(
+          column,
+        )
+      ) {
+        searchField = `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '')`;
+        searchKeyword = search.replace(/[,.]/g, '');
+      }
+
+      applyMultiKeywordFilter(qb, searchField, searchKeyword, 'search');
     }
 
     qb.orderBy('value', 'ASC');
@@ -924,28 +931,28 @@ export class InvoiceQueryService {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'preVatSearch',
         );
       } else if (key === 'vatAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'vatSearch',
         );
       } else if (key === 'discountAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'discountSearch',
         );
       } else if (key === 'totalAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'totalSearch',
         );
       } else if (key === 'settlementOrder') {
