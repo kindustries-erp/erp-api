@@ -12,9 +12,13 @@ import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 
+import { CoreUser } from '../users/entities/core-user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { KgaraApiCoreController } from './kgara-api-core.controller';
 
 @Module({
@@ -29,10 +33,17 @@ import { KgaraApiCoreController } from './kgara-api-core.controller';
       GwSyncRun,
       KgaraCaseLinkedInvoice,
       KgaraGrossProfit,
+      CoreUser,
     ]),
     ConfigModule,
+    NotificationsModule,
   ],
-  providers: [KgaraAuthService, KgaraClientService, KgaraSyncService],
+  providers: [
+    KgaraAuthService,
+    KgaraClientService,
+    KgaraSyncService,
+    KgaraSyncScheduler,
+  ],
   controllers: [KgaraApiCoreController],
   exports: [KgaraSyncService, KgaraClientService],
 })
