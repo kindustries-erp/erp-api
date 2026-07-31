@@ -26,16 +26,33 @@ async function bootstrap() {
   console.log(`Found ${invoices.length} active invoices.`);
 
   let migratedCount = 0;
+  let processed = 0;
 
   for (const invoice of invoices) {
+    processed++;
+    if (processed % 100 === 0)
+      console.log(`Processed ${processed}/${invoices.length} invoices`);
+
     let filesToMigrate: any[] = [];
 
     if (Array.isArray(invoice.pdfFiles) && invoice.pdfFiles.length > 0) {
-      filesToMigrate = invoice.pdfFiles;
+      filesToMigrate = invoice.pdfFiles.map((f: any) => ({
+        ...f,
+        mimeType: 'application/pdf',
+      }));
     } else if (invoice.pdfFileKey) {
       filesToMigrate.push({
         key: invoice.pdfFileKey,
         filename: invoice.pdfFileKey.split('/').pop() || 'document.pdf',
+        mimeType: 'application/pdf',
+      });
+    }
+
+    if (invoice.xmlFileKey) {
+      filesToMigrate.push({
+        key: invoice.xmlFileKey,
+        filename: invoice.xmlFileKey.split('/').pop() || 'document.xml',
+        mimeType: 'application/xml',
       });
     }
 
@@ -53,7 +70,7 @@ async function bootstrap() {
           fileName: file.filename || 'document.pdf',
           fileKey: file.key,
           fileSize: 0,
-          mimeType: 'application/pdf',
+          mimeType: file.mimeType || 'application/octet-stream',
           documentType: DocumentType.HOA_DON,
           createdBy: invoice.createdBy,
         });

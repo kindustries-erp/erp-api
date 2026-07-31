@@ -48,58 +48,6 @@ export class ErpAttachmentsCoreService {
       FROM erp_attachments a
       LEFT JOIN erp_invoice_attachments eia ON eia.attachment_id = a.id
       LEFT JOIN erp_invoices i ON i.id = eia.invoice_id AND i.is_deleted = false
-
-      UNION ALL
-
-      SELECT
-        inv.id::text as id,
-        SPLIT_PART(inv.pdf_file_key, '/', -1) as file_name,
-        inv.pdf_file_key as file_key,
-        0 as file_size,
-        'application/pdf' as mime_type,
-        'HOA_DON' as document_type,
-        'invoices' as module,
-        inv.created_at,
-        inv.invoice_no,
-        inv.id as invoice_id,
-        inv.direction as invoice_direction
-      FROM erp_invoices inv
-      WHERE inv.pdf_file_key IS NOT NULL AND inv.is_deleted = false
-
-      UNION ALL
-
-      SELECT
-        inv.id::text || '_' || (f->>'key') as id,
-        f->>'filename' as file_name,
-        f->>'key' as file_key,
-        0 as file_size,
-        'application/pdf' as mime_type,
-        'HOA_DON' as document_type,
-        'invoices' as module,
-        (f->>'uploadedAt')::timestamp as created_at,
-        inv.invoice_no,
-        inv.id as invoice_id,
-        inv.direction as invoice_direction
-      FROM erp_invoices inv,
-        jsonb_array_elements(inv.pdf_files) f
-      WHERE inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null' AND inv.is_deleted = false
-
-      UNION ALL
-
-      SELECT
-        inv.id::text || '_xml' as id,
-        SPLIT_PART(inv.xml_file_key, '/', -1) as file_name,
-        inv.xml_file_key as file_key,
-        0 as file_size,
-        'application/xml' as mime_type,
-        'HOA_DON' as document_type,
-        'invoices' as module,
-        inv.created_at,
-        inv.invoice_no,
-        inv.id as invoice_id,
-        inv.direction as invoice_direction
-      FROM erp_invoices inv
-      WHERE inv.xml_file_key IS NOT NULL AND inv.is_deleted = false
     `;
 
     const whereClauses: string[] = [];
@@ -220,24 +168,41 @@ export class ErpAttachmentsCoreService {
     pageSize: number = 20,
     filtersStr?: string,
   ) {
-    const qb = this.repo.createQueryBuilder('att');
-    let selectField = '';
+    const baseSql = `
+      SELECT
+        a.id::text as id,
+        a.file_name,
+        a.file_key,
+        a.file_size,
+        a.mime_type,
+        a.document_type,
+        a.module,
+        a.created_at,
+        i.invoice_no,
+        i.id as invoice_id,
+        i.direction as invoice_direction
+      FROM erp_attachments a
+      LEFT JOIN erp_invoice_attachments eia ON eia.attachment_id = a.id
+      LEFT JOIN erp_invoices i ON i.id = eia.invoice_id AND i.is_deleted = false
+    `;
 
-    if (column === 'fileName') selectField = 'att.file_name';
-    else if (column === 'documentType') selectField = 'att.document_type';
-    else if (column === 'module') selectField = 'att.module';
-    else if (column === 'fileSize') selectField = 'att.file_size';
+    let selectField = '';
+    if (column === 'fileName') selectField = 'file_name';
+    else if (column === 'documentType') selectField = 'document_type';
+    else if (column === 'module') selectField = 'module';
+    else if (column === 'fileSize') selectField = 'file_size';
     else if (column === 'fileExt') {
-      selectField = "UPPER(SUBSTRING(att.file_name FROM '\\.([^\\.]+)$'))";
+      selectField = "UPPER(SUBSTRING(file_name FROM '\\.([^\\.]+)$'))";
     } else if (column === 'relatedDocs') {
-      selectField = 'invoice.invoice_no';
-      qb.leftJoin('att.invoiceLinks', 'invoiceLinks');
-      qb.leftJoin('invoiceLinks.invoice', 'invoice');
+      selectField = 'invoice_no';
     } else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
-    qb.select(`DISTINCT ${selectField}`, 'value');
-    qb.andWhere(`${selectField} IS NOT NULL`);
-    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    whereClauses.push(`CAST(${selectField} AS TEXT) IS NOT NULL`);
+    whereClauses.push(`CAST(${selectField} AS TEXT) != ''`);
 
     if (filtersStr) {
       try {
@@ -246,34 +211,43 @@ export class ErpAttachmentsCoreService {
           if (!vals || vals.length === 0) continue;
           if (col === column) continue;
           let filterField = '';
-          if (col === 'fileName') filterField = 'att.file_name';
-          else if (col === 'documentType') filterField = 'att.document_type';
-          else if (col === 'module') filterField = 'att.module';
-          else if (col === 'fileSize') filterField = 'att.file_size';
+          if (col === 'fileName') filterField = 'file_name';
+          else if (col === 'documentType') filterField = 'document_type';
+          else if (col === 'module') filterField = 'module';
+          else if (col === 'fileSize') filterField = 'file_size';
           else if (col === 'fileExt')
-            filterField =
-              "UPPER(SUBSTRING(att.file_name FROM '\\.([^\\.]+)$'))";
-          else if (col === 'relatedDocs') filterField = 'invoice.invoice_no';
+            filterField = "UPPER(SUBSTRING(file_name FROM '\\.([^\\.]+)$'))";
+          else if (col === 'relatedDocs') filterField = 'invoice_no';
 
           if (filterField) {
-            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            const placeholders = vals.map(() => `$${paramIndex++}`).join(',');
+            whereClauses.push(
+              `CAST(${filterField} AS TEXT) IN (${placeholders})`,
+            );
+            params.push(...vals);
           }
         }
       } catch {}
     }
 
     if (search) {
-      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
-        search: `%${search}%`,
-      });
+      whereClauses.push(`CAST(${selectField} AS TEXT) ILIKE $${paramIndex++}`);
+      params.push(`%${search}%`);
     }
 
-    qb.orderBy('value', 'ASC');
+    const whereStr =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    const rawData = await qb.getRawMany();
-    const allItems = rawData.map((row) => ({
+    const query = `
+      SELECT DISTINCT CAST(${selectField} AS TEXT) as value 
+      FROM (${baseSql}) as combined 
+      ${whereStr} 
+      ORDER BY 1 ASC
+    `;
+
+    const rawData = await this.repo.manager.query(query, params);
+
+    const allItems = rawData.map((row: any) => ({
       label: row.value?.toString() || '—',
       value: row.value?.toString() || '—',
     }));
