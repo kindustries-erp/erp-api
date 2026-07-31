@@ -9,6 +9,7 @@ import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun, GwSyncStatus } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
+import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 
 @Injectable()
 export class KgaraSyncService {
@@ -29,6 +30,8 @@ export class KgaraSyncService {
     private syncRunRepo: Repository<GwSyncRun>,
     @InjectRepository(KgaraGrossProfit)
     private grossProfitRepo: Repository<KgaraGrossProfit>,
+    @InjectRepository(KgaraCaseLinkedInvoice)
+    private linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
     private client: KgaraClientService,
   ) {}
 
@@ -101,7 +104,7 @@ export class KgaraSyncService {
     from?: string,
     to?: string,
     updatedSince?: string,
-  ): Promise<void> {
+  ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     this.logger.log(`Syncing cases for branch ${branchExternalId}...`);
     let page = 1;
     let totalPages = 1;
@@ -119,6 +122,7 @@ export class KgaraSyncService {
 
     try {
       const updatedCaseDates = new Set<string>();
+      const syncedIds = new Set<string>();
       do {
         const response = await this.client.getCases(
           branchExternalId,
@@ -140,7 +144,10 @@ export class KgaraSyncService {
             gwCase = new KgaraCase();
             gwCase.hdPhieuDichVuId = c.HdPhieuDichVuID;
           }
-          // Typed mappings
+
+          syncedIds.add(c.HdPhieuDichVuID);
+
+          // Typed mappings - ERP fields are explicitly omitted (not overwritten)
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
@@ -180,6 +187,15 @@ export class KgaraSyncService {
 
           gwCase.branchExternalId = branchExternalId;
           gwCase.rawData = c;
+
+          // Restore case if it was previously soft-deleted
+          if (gwCase.kgaraDeletedAt) {
+            gwCase.kgaraDeletedAt = null;
+            gwCase.kgaraDeleteCount = 0;
+            this.logger.log(
+              `Case ${gwCase.hdPhieuDichVuId} was restored from soft-delete.`,
+            );
+          }
 
           await this.caseRepo.save(gwCase);
           totalRows++;
@@ -280,6 +296,25 @@ export class KgaraSyncService {
         200,
       );
       this.logger.log(`Finished syncing cases for branch ${branchExternalId}.`);
+
+      // 4. Soft-delete detection if full range was provided
+      let deletionResult: {
+        deletedCount: number;
+        withLinkedInvoices: string[];
+      } = {
+        deletedCount: 0,
+        withLinkedInvoices: [],
+      };
+      if (from && to) {
+        deletionResult = await this.detectAndMarkDeletedCases(
+          branchExternalId,
+          from,
+          to,
+          syncedIds,
+        );
+      }
+
+      return deletionResult;
     } catch (error: any) {
       await this.closeSyncRun(
         run,
@@ -597,6 +632,8 @@ export class KgaraSyncService {
         gwCase.hdPhieuDichVuId = caseId;
         gwCase.branchExternalId = branchExternalId;
       }
+
+      // Selective mappings
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
@@ -622,6 +659,14 @@ export class KgaraSyncService {
       gwCase.soKhung = caseData.SoKhung;
       gwCase.dataAsOf = response.dataAsOf ? new Date(response.dataAsOf) : null;
       gwCase.rawData = caseData;
+
+      // Restore case if it was previously soft-deleted
+      if (gwCase.kgaraDeletedAt) {
+        gwCase.kgaraDeletedAt = null;
+        gwCase.kgaraDeleteCount = 0;
+        this.logger.log(`Case ${caseId} was restored from soft-delete.`);
+      }
+
       await this.caseRepo.save(gwCase);
 
       // Sync Case Services (Lines)
@@ -698,5 +743,69 @@ export class KgaraSyncService {
       lastRun.requestStartedAt.getTime() - 10 * 60 * 1000,
     );
     return watermark.toISOString();
+  }
+
+  /**
+   * Helper to detect and mark soft-deleted cases that no longer exist on Kgara.
+   */
+  async detectAndMarkDeletedCases(
+    branchExternalId: string,
+    from: string,
+    to: string,
+    syncedIds: Set<string>,
+  ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
+    this.logger.log(
+      `Running deletion detection for branch ${branchExternalId} from ${from} to ${to}...`,
+    );
+
+    // Find all cases in ERP for this branch and date range
+    const erpCases = await this.caseRepo
+      .createQueryBuilder('case')
+      .where('case.branchExternalId = :branchExternalId', { branchExternalId })
+      .andWhere('case.ngayPhatSinh >= :from', { from })
+      .andWhere('case.ngayPhatSinh <= :to', { to })
+      .andWhere('case.kgaraDeletedAt IS NULL')
+      .getMany();
+
+    const deletedCases = erpCases.filter(
+      (c) => !syncedIds.has(c.hdPhieuDichVuId),
+    );
+
+    if (deletedCases.length === 0) {
+      return { deletedCount: 0, withLinkedInvoices: [] };
+    }
+
+    const casesWithInvoices: string[] = [];
+
+    for (const c of deletedCases) {
+      // Check if case has linked invoices
+      const hasLinks = await this.linkedInvoiceRepo.count({
+        where: { caseDbId: c.id },
+      });
+
+      if (hasLinks > 0) {
+        casesWithInvoices.push(c.hdPhieuDichVuId);
+      }
+
+      c.kgaraDeleteCount += 1;
+
+      // If deleted 2 or more times, mark as definitely deleted
+      if (c.kgaraDeleteCount >= 2) {
+        c.kgaraDeletedAt = new Date();
+      }
+
+      await this.caseRepo.save(c);
+
+      this.logger.warn(
+        `Case ${c.hdPhieuDichVuId} marked as deleted (count: ${c.kgaraDeleteCount}). Has linked invoices: ${hasLinks > 0}`,
+      );
+    }
+
+    // Only count cases that actually reached the kgaraDeletedAt state,
+    // or we can count all soft-delete increments. Let's return the count of newly flagged or confirmed deleted cases.
+    return {
+      deletedCount: deletedCases.length,
+      withLinkedInvoices: casesWithInvoices,
+    };
   }
 }

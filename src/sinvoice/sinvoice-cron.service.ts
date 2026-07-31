@@ -62,16 +62,20 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
 
       this.logger.log('Auto-sync draft finished successfully.');
 
-      // Nếu có hóa đơn mới thì thông báo
-      if (res && res.synced > 0) {
-        await this.notifySyncSuccess(res.synced);
+      // Nếu có thay đổi thực sự thì thông báo
+      if (res && res.changed) {
+        await this.notifySyncSuccess(res.synced, res.added, res.removed);
       }
     } catch (e: any) {
       this.logger.error('Error during draft auto-sync', e);
     }
   }
 
-  private async notifySyncSuccess(syncedCount: number) {
+  private async notifySyncSuccess(
+    syncedCount: number,
+    added: number,
+    removed: number,
+  ) {
     try {
       const perms = await this.permissionRepo.find({
         where: [{ resource: 'invoices' }, { resource: '*' }],
@@ -88,7 +92,7 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
         await this.notificationsService.createForUser(userId, {
           type: 'INFO',
           title: 'Đồng bộ hóa đơn nháp thành công',
-          message: `Hệ thống vừa cập nhật thành công ${syncedCount} hóa đơn nháp mới từ Viettel SInvoice.`,
+          message: `Danh sách hóa đơn nháp Viettel đã cập nhật: +${added} mới, -${removed} đã xoá. Tổng hiện tại: ${syncedCount} nháp.`,
         });
       }
     } catch (e) {

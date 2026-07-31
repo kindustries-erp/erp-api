@@ -164,6 +164,19 @@ export class KgaraCase {
   })
   branchExternalId: string | null;
 
+  // ── ERP Local columns ─────────────────────────────────────────────────────
+
+  @Column({ type: 'varchar', name: 'erp_notes', nullable: true })
+  erpNotes: string | null;
+
+  @Index()
+  @Column({ type: 'timestamptz', name: 'kgara_deleted_at', nullable: true })
+  kgaraDeletedAt: Date | null;
+
+  @Index()
+  @Column({ type: 'integer', name: 'kgara_delete_count', default: 0 })
+  kgaraDeleteCount: number;
+
   @Column({ type: 'jsonb', name: 'raw_data', nullable: true })
   rawData: any;
 

@@ -297,7 +297,12 @@ export class SinvoiceService {
     try {
       config = await this.getConfig();
     } catch {
-      // Config optional for draft creation
+      throw new BadRequestException(
+        'Chưa cấu hình SInvoice. Không thể tạo nháp.',
+      );
+    }
+    if (!config.supplierTaxCode || !config.apiUrl) {
+      throw new BadRequestException('Chưa cấu hình API URL hoặc Mã số thuế.');
     }
 
     const lines = (
@@ -337,35 +342,77 @@ export class SinvoiceService {
 
     const documentNo = dto.documentNo ?? `DRAFT-${Date.now()}`;
 
-    const draft = this.draftRepo.create({
-      documentNo,
-      supplierTaxCode: config?.supplierTaxCode ?? null,
-      buyerName: dto.buyerName ?? 'Khách hàng nháp ERP',
-      buyerTaxCode: dto.buyerTaxCode ?? null,
-      buyerAddress: dto.buyerAddress ?? null,
-      buyerEmail: dto.buyerEmail ?? null,
-      description: dto.description ?? null,
-      currencyCode: dto.currencyCode ?? 'VND',
-      totalAmount: String(totalAmountWithTax),
-      vatAmount: String(totalTaxAmount),
-      status: 'DRAFT',
-      lines,
-      requestPayload: {
-        mode: 'DRAFT_ONLY',
-        supplierTaxCode: config?.supplierTaxCode ?? null,
-        documentNo,
-        warning: 'Không gọi Viettel phát hành. Bản ghi chỉ lưu nội bộ.',
+    const payload = {
+      generalInvoiceInfo: {
+        invoiceType: '01GTKT',
+        templateCode: '',
+        invoiceSeries: '',
+        currencyCode: dto.currencyCode ?? 'VND',
+        adjustmentType: '1',
+        paymentStatus: true,
+        paymentType: 'TM/CK',
+        cusGetInvoiceRight: true,
+        buyerName: dto.buyerName ?? 'Khách hàng',
+        buyerTaxCode: dto.buyerTaxCode ?? '',
+        buyerAddressLine: dto.buyerAddress ?? '',
+        transactionUuid: documentNo,
       },
-      responsePayload: {
-        ok: true,
-        status: 'DRAFT',
-        draftId: documentNo,
-        message: 'Đã lưu hóa đơn nháp nội bộ.',
+      buyerInfo: {
+        buyerName: dto.buyerName ?? 'Khách hàng',
+        buyerLegalName: dto.buyerName ?? 'Khách hàng',
+        buyerTaxCode: dto.buyerTaxCode ?? '',
+        buyerAddressLine: dto.buyerAddress ?? '',
+        buyerEmail: dto.buyerEmail ?? '',
       },
-    });
+      itemInfo: lines.map((line, index) => ({
+        lineNumber: index + 1,
+        itemName: line.itemName,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+        itemTotalAmountWithoutTax: line.amountWithoutTax,
+        taxPercentage: line.taxRate,
+        taxAmount: line.taxAmount,
+        discount: 0,
+        itemTotalAmountWithTax: line.amountWithoutTax + line.taxAmount,
+      })),
+      summarizeInfo: {
+        sumOfTotalLineAmountWithoutTax: totalWithoutTax,
+        totalAmountWithoutTax: totalWithoutTax,
+        totalTaxAmount: totalTaxAmount,
+        totalAmountWithTax: totalAmountWithTax,
+        discountAmount: 0,
+      },
+    };
 
-    const saved = await this.draftRepo.save(draft);
-    return { ok: true, data: saved };
+    try {
+      // Create draft via Viettel API
+      await this.callViettel(
+        `/InvoiceAPI/InvoiceWS/createInvoiceDraft/${config.supplierTaxCode}`,
+        payload,
+      );
+    } catch (e: any) {
+      this.logger.error(`Lỗi tạo nháp Viettel API: ${e.message}`);
+      throw new BadRequestException(
+        `Lỗi khi tạo nháp bên Viettel: ${e.message}`,
+      );
+    }
+
+    try {
+      // Sync from Viettel to mirror DB
+      const syncResult = await this.syncDraftsFromViettel();
+      return {
+        ok: true,
+        synced: syncResult.synced,
+        changed: syncResult.changed,
+      };
+    } catch (e: any) {
+      return {
+        ok: true,
+        synced: 0,
+        changed: false,
+        warning: `Tạo nháp thành công nhưng lỗi đồng bộ: ${e.message}. Vui lòng đồng bộ thủ công.`,
+      };
+    }
   }
 
   async deleteDraft(id: string) {
@@ -467,22 +514,18 @@ export class SinvoiceService {
         );
       }
 
-      let count = 0;
+      let newDraftEntities: SinvoiceDraft[] = [];
 
       for (const draft of drafts) {
         const vId = draft.id ? String(draft.id) : undefined;
         if (!vId) continue;
 
         const docNo = `VIETTEL-${vId}`;
-        let draftEntity = await this.draftRepo.findOne({
-          where: { documentNo: docNo },
-        });
-
         let description = draft.description || draft.listProduct || null;
 
         // Fetch chi tiết hóa đơn nháp để lấy listProduct
         try {
-          await sleep(500); // Delay chống rate-limit
+          await sleep(200); // Delay chống rate-limit
           const detailUrl = `https://vinvoice.viettel.vn/api/${cluster}/services/einvoiceapplication/api/invoice/search-invoice-by-id/${vId}/draft`;
           const detailRes = await fetch(detailUrl, {
             method: 'GET',
@@ -517,18 +560,14 @@ export class SinvoiceService {
                 description = listProductStr;
               }
             }
-          } else {
-            this.logger.warn(
-              `Failed to fetch detail for ${vId}, status ${detailRes.status}`,
-            );
           }
         } catch (e) {
           this.logger.warn(
-            `Lỗi khi lấy chi tiết hóa đơn nháp ${vId}: ${e.message}`,
+            `Lỗi khi lấy chi tiết hóa đơn nháp ${vId}: ${(e as Error).message}`,
           );
         }
 
-        const updateData = {
+        const draftEntity = this.draftRepo.create({
           documentNo: docNo,
           supplierTaxCode: draft.supplierTaxCode || config.supplierTaxCode,
           buyerName:
@@ -546,19 +585,62 @@ export class SinvoiceService {
           vatAmount: String(draft.totalVATAmount || draft.taxAmount || 0),
           status: 'DRAFT',
           responsePayload: draft,
-        };
+        });
 
-        if (!draftEntity) {
-          draftEntity = this.draftRepo.create(updateData);
-        } else {
-          Object.assign(draftEntity, updateData);
-        }
-
-        await this.draftRepo.save(draftEntity);
-        count++;
+        newDraftEntities.push(draftEntity);
       }
 
-      return { ok: true, synced: count };
+      // Calculate fingerprints
+      const currentDrafts = await this.draftRepo.find({
+        where: { documentNo: ILike('VIETTEL-%') },
+      });
+
+      const getFingerprint = (list: SinvoiceDraft[]) =>
+        JSON.stringify(
+          list
+            .map(
+              (d) =>
+                `${d.documentNo}|${d.totalAmount}|${d.buyerName}|${d.description}`,
+            )
+            .sort(),
+        );
+
+      const oldFingerprint = getFingerprint(currentDrafts);
+      const newFingerprint = getFingerprint(newDraftEntities);
+
+      if (oldFingerprint === newFingerprint) {
+        return {
+          ok: true,
+          synced: newDraftEntities.length,
+          changed: false,
+          added: 0,
+          removed: 0,
+        };
+      }
+
+      // Diff
+      const oldIds = new Set(currentDrafts.map((d) => d.documentNo));
+      const newIds = new Set(newDraftEntities.map((d) => d.documentNo));
+      const added = [...newIds].filter((x) => !oldIds.has(x)).length;
+      const removed = [...oldIds].filter((x) => !newIds.has(x)).length;
+
+      // Override DB
+      await this.draftRepo.delete({ documentNo: ILike('VIETTEL-%') });
+      if (newDraftEntities.length > 0) {
+        // chunk insert to avoid parameter limit
+        for (let i = 0; i < newDraftEntities.length; i += 100) {
+          const chunk = newDraftEntities.slice(i, i + 100);
+          await this.draftRepo.save(chunk);
+        }
+      }
+
+      return {
+        ok: true,
+        synced: newDraftEntities.length,
+        changed: true,
+        added,
+        removed,
+      };
     } catch (error: any) {
       this.logger.error('Lỗi syncDraftsFromViettel: ' + error.message);
       throw new BadRequestException(

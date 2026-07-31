@@ -10,6 +10,7 @@ import { KgaraReceivable } from './entities/kgara_receivable.entity';
 import { KgaraPayable } from './entities/kgara_payable.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun, GwSyncStatus } from './entities/kgara_sync_run.entity';
+import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 
 describe('KgaraSyncService', () => {
   let service: KgaraSyncService;
@@ -21,6 +22,7 @@ describe('KgaraSyncService', () => {
   let caseServiceRepo: any;
   let syncRunRepo: any;
   let grossProfitRepo: any;
+  let linkedInvoiceRepo: any;
 
   beforeEach(async () => {
     clientService = {
@@ -52,6 +54,10 @@ describe('KgaraSyncService', () => {
     caseServiceRepo = mockRepo() as any;
     syncRunRepo = mockRepo() as any;
     grossProfitRepo = mockRepo() as any;
+    linkedInvoiceRepo = mockRepo() as any;
+
+    // Add count method to linkedInvoiceRepo
+    linkedInvoiceRepo.count = jest.fn();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -87,6 +93,10 @@ describe('KgaraSyncService', () => {
         {
           provide: getRepositoryToken(KgaraGrossProfit),
           useValue: grossProfitRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraCaseLinkedInvoice),
+          useValue: linkedInvoiceRepo,
         },
       ],
     }).compile();
@@ -183,6 +193,67 @@ describe('KgaraSyncService', () => {
       const lastSaveCall = syncRunRepo.save.mock.calls[1][0];
       expect(lastSaveCall.status).toBe(GwSyncStatus.SUCCESS);
       expect(lastSaveCall.rowCount).toBe(2);
+    });
+
+    it('should detect and soft-delete missing cases when full range is provided', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [{ HdPhieuDichVuID: 'case-1' }],
+        pagination: { totalPages: 1 },
+      });
+      caseRepo.findOne.mockResolvedValue(null);
+
+      // Mock DB state before detection: DB has case-1 and case-2
+      caseRepo.createQueryBuilder = jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          { hdPhieuDichVuId: 'case-1', kgaraDeleteCount: 0 },
+          { hdPhieuDichVuId: 'case-2', kgaraDeleteCount: 0 },
+        ]),
+      });
+
+      // Case-2 has no linked invoices
+      linkedInvoiceRepo.count.mockResolvedValue(0);
+
+      const res = await service.syncCasesForBranch(
+        'br-1',
+        '2026-07-01',
+        '2026-07-31',
+      );
+
+      expect(res).toEqual({ deletedCount: 1, withLinkedInvoices: [] });
+
+      // Check that case-2 was saved with incremented delete count
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-2',
+          kgaraDeleteCount: 1,
+        }),
+      );
+    });
+
+    it('should restore previously soft-deleted cases', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [{ HdPhieuDichVuID: 'case-3' }],
+        pagination: { totalPages: 1 },
+      });
+
+      const mockedCase = {
+        hdPhieuDichVuId: 'case-3',
+        kgaraDeletedAt: new Date(),
+        kgaraDeleteCount: 2,
+      };
+      caseRepo.findOne.mockResolvedValue(mockedCase);
+
+      await service.syncCasesForBranch('br-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-3',
+          kgaraDeletedAt: null,
+          kgaraDeleteCount: 0,
+        }),
+      );
     });
   });
 

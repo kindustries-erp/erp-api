@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Query,
   Body,
   Headers,
@@ -75,11 +76,16 @@ export class KgaraApiCoreController {
     @Query('q') q: string = '',
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('includeDeleted') includeDeleted?: string,
   ) {
     const query = this.caseRepo.createQueryBuilder('case');
 
     if (branchId) {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
+    }
+
+    if (includeDeleted !== 'true') {
+      query.andWhere('case.kgaraDeletedAt IS NULL');
     }
 
     if (from) {
@@ -255,7 +261,15 @@ export class KgaraApiCoreController {
       where: { vuViecCode: code },
     });
     if (!grossProfit) {
-      throw new NotFoundException(`Gross profit for case ${code} not found`);
+      return {
+        id: null,
+        DoanhThu: 0,
+        ChiPhi: 0,
+        LoiNhuan: 0,
+        VuViecCode: code,
+        VuViecName: null,
+        VuViecID: null,
+      };
     }
     const gp = grossProfit;
     const rev = Number(gp.doanhThu) || 0;
@@ -282,6 +296,20 @@ export class KgaraApiCoreController {
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
     }
+    return caseData;
+  }
+
+  @Patch('cases/:id/erp-notes')
+  async updateErpNotes(
+    @Param('id') id: string,
+    @Body() body: { erpNotes: string | null },
+  ) {
+    const caseData = await this.caseRepo.findOne({ where: { id } });
+    if (!caseData) {
+      throw new NotFoundException(`Case with id ${id} not found`);
+    }
+    caseData.erpNotes = body.erpNotes;
+    await this.caseRepo.save(caseData);
     return caseData;
   }
 
@@ -396,8 +424,12 @@ export class KgaraApiCoreController {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    await this.syncService.syncCasesForBranch(branchId, from, to);
-    return { success: true, message: 'Cases synced successfully.' };
+    const result = await this.syncService.syncCasesForBranch(
+      branchId,
+      from,
+      to,
+    );
+    return { success: true, message: 'Cases synced successfully.', ...result };
   }
 
   @Post('sync/gross-profit')

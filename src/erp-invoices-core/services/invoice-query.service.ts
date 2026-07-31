@@ -972,13 +972,13 @@ export class InvoiceQueryService {
         const conditions: string[] = [];
         if (vals.includes('has_pdf'))
           conditions.push(
-            "(inv.pdf_file_key IS NOT NULL OR (inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null') OR EXISTS (SELECT 1 FROM erp_invoice_attachments eia WHERE eia.invoice_id = inv.id))",
+            "(inv.pdf_file_key IS NOT NULL OR (inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null') OR EXISTS (SELECT 1 FROM erp_invoice_attachments eia JOIN erp_attachments ea ON eia.attachment_id = ea.id WHERE eia.invoice_id = inv.id AND ea.mime_type = 'application/pdf'))",
           );
         if (vals.includes('has_xml'))
           conditions.push('inv.xml_file_key IS NOT NULL');
         if (vals.includes('no_pdf'))
           conditions.push(
-            "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null') AND NOT EXISTS (SELECT 1 FROM erp_invoice_attachments eia WHERE eia.invoice_id = inv.id))",
+            "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null') AND NOT EXISTS (SELECT 1 FROM erp_invoice_attachments eia JOIN erp_attachments ea ON eia.attachment_id = ea.id WHERE eia.invoice_id = inv.id AND ea.mime_type = 'application/pdf'))",
           );
         if (vals.includes('no_xml'))
           conditions.push('inv.xml_file_key IS NULL');
