@@ -762,12 +762,16 @@ export class BankTransactionsCoreService {
           string,
           string
         >;
+
+        const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+        const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           let searchField = '';
           if (col === 'account') {
             if (filter.sourceType === 'BANK')
-              searchField = 'bankAccount.bankName'; // Note: ILIKE on relations needs careful join, already joined 'bankAccount' and 'cashBook'
+              searchField = 'bankAccount.bankName';
             else if (filter.sourceType === 'CASH')
               searchField = 'cashBook.name';
             else searchField = 'COALESCE(bankAccount.bankName, cashBook.name)';
@@ -777,6 +781,9 @@ export class BankTransactionsCoreService {
           else if (col === 'thu') searchField = 'txn.creditAmount';
           else if (col === 'chi') searchField = 'txn.debitAmount';
           else if (col === 'balance') searchField = 'txn.balance';
+          else if (col === 'netOffAmount') searchField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            searchField = remainingAmountSubquery;
           else if (col === 'correspondentName')
             searchField = 'txn.correspondentName';
           else if (col === 'correspondentAccount')
@@ -792,6 +799,21 @@ export class BankTransactionsCoreService {
               qb.andWhere(`${searchField} ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
               });
+            } else if (
+              [
+                'thu',
+                'chi',
+                'balance',
+                'netOffAmount',
+                'remainingAmount',
+              ].includes(col)
+            ) {
+              qb.andWhere(
+                `REPLACE(REPLACE(CAST(${searchField} AS TEXT), '.', ''), ',', '') ILIKE :search_${col}`,
+                {
+                  [`search_${col}`]: `%${val.replace(/[,.]/g, '')}%`,
+                },
+              );
             } else {
               qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
