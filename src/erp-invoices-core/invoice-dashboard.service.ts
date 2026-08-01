@@ -38,7 +38,9 @@ export class InvoiceDashboardService {
         'vatOut',
       )
       .where('inv.is_deleted = false')
-      .andWhere("inv.status != 'CANCELLED'");
+      .andWhere(
+        '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+      );
 
     if (dateFrom) {
       qb.andWhere('inv.invoice_date >= :dateFrom', { dateFrom });
@@ -111,7 +113,7 @@ export class InvoiceDashboardService {
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
-      WHERE inv.is_deleted = false AND inv.status != 'CANCELLED'
+      WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         ${dateFrom ? `AND inv.invoice_date >= '${dateFrom}'` : ''}
         ${dateTo ? `AND inv.invoice_date <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
         ${branchId ? (branchId === 'null' ? `AND inv.branch_id IS NULL` : `AND inv.branch_id = '${branchId}'`) : ''}
@@ -240,7 +242,9 @@ export class InvoiceDashboardService {
         'cashIn', // Output invoices mean we receive money (cashIn)
       )
       .where('inv.is_deleted = false')
-      .andWhere("inv.status != 'CANCELLED'")
+      .andWhere(
+        '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+      )
       .andWhere(
         '(inv.seller_tax_code = :taxCode OR inv.buyer_tax_code = :taxCode)',
         { taxCode },
@@ -295,7 +299,7 @@ export class InvoiceDashboardService {
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
-      WHERE inv.is_deleted = false AND inv.status != 'CANCELLED'
+      WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
     `;
 
     const whereConditions: string[] = [];

@@ -772,22 +772,33 @@ export class InvoiceQueryService {
   async getStats(direction?: 'IN' | 'OUT') {
     const today = new Date();
 
-    // 6 months ago start
-    const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    // Compute sixMonthsAgo as YYYY-MM-DD string
+    let smYear = today.getFullYear();
+    let smMonth = today.getMonth() - 5;
+    if (smMonth < 0) {
+      smMonth += 12;
+      smYear -= 1;
+    }
+    const sixMonthsAgoStr = `${smYear}-${String(smMonth + 1).padStart(2, '0')}-01`;
 
     const qb = this.repository.createQueryBuilder('inv');
     qb.where('inv.is_deleted = false');
     if (direction) {
       qb.andWhere('inv.direction = :direction', { direction });
     }
-    qb.andWhere("inv.status != 'CANCELLED'");
-    qb.andWhere('inv.invoice_date >= :sixMonthsAgo', { sixMonthsAgo });
+    qb.andWhere(
+      '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+    );
+    // Use string comparison for exact match based on database Date
+    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :sixMonthsAgo`, {
+      sixMonthsAgo: sixMonthsAgoStr,
+    });
 
-    qb.select(`DATE_TRUNC('day', inv.invoice_date)`, 'day_date');
+    qb.select(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'day_date');
     qb.addSelect(`SUM(inv.total_amount)`, 'total_amount');
     qb.addSelect(`SUM(inv.pre_vat_amount)`, 'pre_vat_amount');
-    qb.groupBy(`DATE_TRUNC('day', inv.invoice_date)`);
-    qb.orderBy(`DATE_TRUNC('day', inv.invoice_date)`, 'ASC');
+    qb.groupBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`);
+    qb.orderBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'ASC');
 
     const records = await qb.getRawMany();
 
@@ -802,70 +813,94 @@ export class InvoiceQueryService {
     const weekChart = Array(4).fill(0);
     const dayChart = Array(7).fill(0);
 
-    // Helpers to get start of current periods
-    const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthPreVatChart = Array(6).fill(0);
+    const weekPreVatChart = Array(4).fill(0);
+    const dayPreVatChart = Array(7).fill(0);
+
+    // Helpers to get start of current periods as YYYY-MM-DD strings
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
+      today.getDate(),
+    )}`;
+
+    const thisMonthStr = `${today.getFullYear()}-${pad(
+      today.getMonth() + 1,
+    )}-01`;
+
     const startOfThisWeek = new Date(today);
     startOfThisWeek.setDate(
       today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1),
-    ); // Monday as start of week
-    startOfThisWeek.setHours(0, 0, 0, 0);
-    const startOfToday = new Date(today);
-    startOfToday.setHours(0, 0, 0, 0);
+    ); // Monday
+    const thisWeekStr = `${startOfThisWeek.getFullYear()}-${pad(
+      startOfThisWeek.getMonth() + 1,
+    )}-${pad(startOfThisWeek.getDate())}`;
+
+    // Helper to calculate diff in days between two YYYY-MM-DD strings
+    const diffDays = (d1Str: string, d2Str: string) => {
+      // Create local mid-day dates to avoid DST/timezone issues when computing diffs
+      const [y1, m1, d1] = d1Str.split('-').map(Number);
+      const [y2, m2, d2] = d2Str.split('-').map(Number);
+      const date1 = new Date(y1, m1 - 1, d1, 12, 0, 0);
+      const date2 = new Date(y2, m2 - 1, d2, 12, 0, 0);
+      return Math.round(
+        (date1.getTime() - date2.getTime()) / (1000 * 3600 * 24),
+      );
+    };
 
     for (const row of records) {
-      const d = new Date(row.day_date);
+      const dStr = row.day_date; // string like '2026-06-01'
       const total = Number(row.total_amount) || 0;
       const prevat = Number(row.pre_vat_amount) || 0;
 
       // Current Day
-      if (d.getTime() === startOfToday.getTime()) {
+      if (dStr === todayStr) {
         dayTotal += total;
         dayPreVat += prevat;
       }
+
       // Current Week
-      if (d >= startOfThisWeek) {
+      if (dStr >= thisWeekStr) {
         weekTotal += total;
         weekPreVat += prevat;
       }
+
       // Current Month
-      if (d >= startOfThisMonth) {
+      if (dStr >= thisMonthStr) {
         monthTotal += total;
         monthPreVat += prevat;
       }
 
       // Day Chart (last 7 days, index 6 is today, 0 is 6 days ago)
-      const daysDiff = Math.floor(
-        (startOfToday.getTime() - d.getTime()) / (1000 * 3600 * 24),
-      );
-      if (daysDiff >= 0 && daysDiff < 7) {
-        dayChart[6 - daysDiff] += total;
+      const dDays = diffDays(todayStr, dStr);
+      if (dDays >= 0 && dDays < 7) {
+        dayChart[6 - dDays] += total;
+        dayPreVatChart[6 - dDays] += prevat;
       }
 
       // Week Chart (last 4 weeks, index 3 is this week, 0 is 3 weeks ago)
-      const weeksDiff = Math.floor(
-        (startOfThisWeek.getTime() - d.getTime()) / (1000 * 3600 * 24 * 7),
-      );
-      // if d < startOfThisWeek, diff will be positive
-      const weekIndex =
-        d >= startOfThisWeek
-          ? 3
-          : 3 -
-            (Math.floor(
-              (startOfThisWeek.getTime() - d.getTime() - 1) /
-                (1000 * 3600 * 24 * 7),
-            ) +
-              1);
+      let weekIndex = 3;
+      if (dStr < thisWeekStr) {
+        const dWeeks = Math.ceil(diffDays(thisWeekStr, dStr) / 7);
+        weekIndex = 3 - dWeeks;
+      }
       if (weekIndex >= 0 && weekIndex < 4) {
         weekChart[weekIndex] += total;
+        weekPreVatChart[weekIndex] += prevat;
       }
 
       // Month Chart (last 6 months, index 5 is this month, 0 is 5 months ago)
-      const monthDiff =
-        (today.getFullYear() - d.getFullYear()) * 12 +
-        today.getMonth() -
-        d.getMonth();
-      if (monthDiff >= 0 && monthDiff < 6) {
-        monthChart[5 - monthDiff] += total;
+      let monthIndex = 5;
+      if (dStr < thisMonthStr) {
+        // compute diff in months
+        const [y1, m1] = thisMonthStr.split('-').map(Number);
+        const [y2, m2] = dStr.split('-').map(Number);
+        const dMonths = (y1 - y2) * 12 + (m1 - m2);
+        monthIndex = 5 - dMonths;
+      }
+      if (monthIndex >= 0 && monthIndex < 6) {
+        monthChart[monthIndex] += total;
+        monthPreVatChart[monthIndex] += prevat;
       }
     }
 
@@ -873,12 +908,15 @@ export class InvoiceQueryService {
       monthTotal,
       monthPreVat,
       monthChart,
+      monthPreVatChart,
       weekTotal,
       weekPreVat,
       weekChart,
+      weekPreVatChart,
       dayTotal,
       dayPreVat,
       dayChart,
+      dayPreVatChart,
     };
   }
 
@@ -1196,13 +1234,24 @@ export class InvoiceQueryService {
         qb.andWhere('inv.tax_invoice_type IN (:...taxInvoiceTypeVals)', {
           taxInvoiceTypeVals: vals,
         });
-      else if (key === 'taxInvoiceStatus')
-        qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
-          taxInvoiceStatusVals: vals
-            .map((v) => parseInt(v, 10))
-            .filter((v) => !isNaN(v)),
-        });
-      else if (key === 'taxProcessStatus')
+      else if (key === 'taxInvoiceStatus') {
+        const numericVals = vals
+          .map((v) => parseInt(v, 10))
+          .filter((v) => !isNaN(v));
+        const includeNull = vals.includes('null') || vals.includes('NULL');
+        if (numericVals.length > 0 && includeNull) {
+          qb.andWhere(
+            '(inv.tax_invoice_status IN (:...taxInvoiceStatusVals) OR inv.tax_invoice_status IS NULL)',
+            { taxInvoiceStatusVals: numericVals },
+          );
+        } else if (numericVals.length > 0) {
+          qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
+            taxInvoiceStatusVals: numericVals,
+          });
+        } else if (includeNull) {
+          qb.andWhere('inv.tax_invoice_status IS NULL');
+        }
+      } else if (key === 'taxProcessStatus')
         qb.andWhere('inv.tax_process_status IN (:...taxProcessStatusVals)', {
           taxProcessStatusVals: vals
             .map((v) => parseInt(v, 10))
