@@ -91,7 +91,11 @@ export class SinvoiceDraft {
   @Column({ type: 'text', name: 'error_message', nullable: true })
   errorMessage: string | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @Column({
+    type: 'timestamp',
+    name: 'created_at',
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })

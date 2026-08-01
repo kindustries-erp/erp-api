@@ -97,6 +97,14 @@ export class ListSinvoiceDraftQueryDto {
   @IsOptional()
   @IsString()
   dateTo?: string;
+
+  @IsOptional()
+  @IsString()
+  sortKey?: string;
+
+  @IsOptional()
+  @IsString()
+  sortDirection?: 'ASC' | 'DESC';
 }
 
 export class SaveSinvoiceConfigDto {
