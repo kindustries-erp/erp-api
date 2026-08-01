@@ -251,6 +251,8 @@ export class InvoiceQueryService {
       query.partner_tax_code ||
       query.tag_id ||
       query.sort_by === 'invoiceNo' ||
+      query.sort_by === 'netOffAmount' ||
+      query.sort_by === 'remainingAmount' ||
       Object.keys(columnSearch).length > 0 ||
       Object.keys(columnFilters).length > 0
     );
@@ -316,6 +318,20 @@ export class InvoiceQueryService {
           `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
           { tagId: query.tag_id },
         );
+
+      const needsNetOffJoin =
+        query.sort_by === 'netOffAmount' ||
+        query.sort_by === 'remainingAmount' ||
+        columnSearch['netOffAmount'] !== undefined ||
+        columnSearch['remainingAmount'] !== undefined;
+
+      if (needsNetOffJoin) {
+        qb.leftJoin(
+          '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+          'netoff_agg',
+          'netoff_agg.invoice_id = inv.id',
+        );
+      }
 
       this._applyColumnSearch(qb, columnSearch, query.direction);
       this._applyColumnFilters(qb, columnFilters, query.direction);
@@ -425,6 +441,20 @@ export class InvoiceQueryService {
     this._applyColumnSearch(qb, columnSearch, query.direction);
     this._applyColumnFiltersExport(qb, columnFilters, query.direction);
 
+    const needsNetOffJoin =
+      query.sort_by === 'netOffAmount' ||
+      query.sort_by === 'remainingAmount' ||
+      columnSearch['netOffAmount'] !== undefined ||
+      columnSearch['remainingAmount'] !== undefined;
+
+    if (needsNetOffJoin) {
+      qb.leftJoin(
+        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        'netoff_agg',
+        'netoff_agg.invoice_id = inv.id',
+      );
+    }
+
     let orderColumn = 'inv.invoiceDate';
     let orderDirection: 'ASC' | 'DESC' = 'DESC';
     if (query.sort_by) {
@@ -507,6 +537,17 @@ export class InvoiceQueryService {
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
       {
+        header: 'Đã cấn trừ',
+        key: 'netOffAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tham chiếu cấn trừ',
+        key: 'netOffReferences',
+        width: 30,
+      },
+      {
         header: 'Còn lại',
         key: 'remainingAmount',
         width: 20,
@@ -564,6 +605,17 @@ export class InvoiceQueryService {
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
+      {
+        header: 'Đã cấn trừ',
+        key: 'netOffAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tham chiếu cấn trừ',
+        key: 'netOffReferences',
+        width: 30,
+      },
       {
         header: 'Còn lại',
         key: 'remainingAmount',
@@ -629,9 +681,12 @@ export class InvoiceQueryService {
         licensePlate: inv.licensePlate || '',
         wo: inv.settlementOrder || '',
         description: fullDesc,
-        statusName,
-        remainingAmount,
-        branchName,
+        statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+        netOffAmount: Number((inv as any).netOffAmount) || 0,
+        netOffReferences: (inv as any).netOffReferences || '',
+        remainingAmount:
+          Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
+        branchName: branchMap[inv.branchId || ''] || '',
       });
 
       if (!inv.items || inv.items.length === 0) {
@@ -652,9 +707,12 @@ export class InvoiceQueryService {
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
-          statusName,
-          remainingAmount,
-          branchName,
+          statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+          netOffAmount: Number((inv as any).netOffAmount) || 0,
+          netOffReferences: (inv as any).netOffReferences || '',
+          remainingAmount:
+            Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
+          branchName: branchMap[inv.branchId || ''] || '',
         });
       } else {
         for (const item of inv.items) {
@@ -685,9 +743,13 @@ export class InvoiceQueryService {
             licensePlate: inv.licensePlate || '',
             wo: inv.settlementOrder || '',
             description: fullDesc,
-            statusName,
-            remainingAmount,
-            branchName,
+            statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+            netOffAmount: Number((inv as any).netOffAmount) || 0,
+            netOffReferences: (inv as any).netOffReferences || '',
+            remainingAmount:
+              Number(inv.totalAmount) -
+              (Number((inv as any).netOffAmount) || 0),
+            branchName: branchMap[inv.branchId || ''] || '',
           });
         }
       }
@@ -831,21 +893,31 @@ export class InvoiceQueryService {
       .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
       .select('netoff.invoice_id', 'invoiceId')
       .addSelect('SUM(netoff.net_off_amount)', 'sum')
+      .addSelect("STRING_AGG(DISTINCT bt.reference_number, ', ')", 'refNos')
+      .leftJoin(
+        'erp_bank_transactions',
+        'bt',
+        'bt.id = netoff.bank_transaction_id',
+      )
       .where('netoff.invoice_id IN (:...ids)', { ids })
       .groupBy('netoff.invoice_id')
       .getRawMany();
 
     const netOffMap = netOffs.reduce(
       (acc, curr) => {
-        acc[curr.invoiceId] = Number(curr.sum) || 0;
+        acc[curr.invoiceId] = {
+          sum: Number(curr.sum) || 0,
+          refNos: curr.refNos || '',
+        };
         return acc;
       },
-      {} as Record<string, number>,
+      {} as Record<string, { sum: number; refNos: string }>,
     );
 
     return invoices.map((i) => ({
       ...i,
-      netOffAmount: String(netOffMap[i.id] || 0),
+      netOffAmount: String(netOffMap[i.id]?.sum || 0),
+      netOffReferences: netOffMap[i.id]?.refNos || '',
     }));
   }
 
@@ -868,6 +940,9 @@ export class InvoiceQueryService {
       licensePlate: 'inv.licensePlate',
       settlementOrder: 'inv.settlementOrder',
       branchId: 'inv.branchId',
+      netOffAmount: 'COALESCE(netoff_agg.net_off_sum, 0)',
+      remainingAmount:
+        '(inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0))',
     };
     if (sortBy === 'partner')
       return direction === 'IN' ? 'inv.sellerName' : 'inv.buyerName';
@@ -954,6 +1029,20 @@ export class InvoiceQueryService {
           "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '')",
           val.replace(/[,.]/g, ''),
           'totalSearch',
+        );
+      } else if (key === 'netOffAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(COALESCE(netoff_agg.net_off_sum, 0) AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'netOffSearch',
+        );
+      } else if (key === 'remainingAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST((inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0)) AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'remainingSearch',
         );
       } else if (key === 'settlementOrder') {
         applyMultiKeywordFilter(
