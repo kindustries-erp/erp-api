@@ -143,6 +143,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.bankAccountId = :id', { id: acc.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...acc,
           openingBalance: openingBalanceAtStart,
@@ -154,6 +162,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -300,6 +310,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.cashBookId = :id', { id: book.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...book,
           openingBalance: openingBalanceAtStart,
@@ -311,6 +329,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -742,12 +762,16 @@ export class BankTransactionsCoreService {
           string,
           string
         >;
+
+        const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+        const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           let searchField = '';
           if (col === 'account') {
             if (filter.sourceType === 'BANK')
-              searchField = 'bankAccount.bankName'; // Note: ILIKE on relations needs careful join, already joined 'bankAccount' and 'cashBook'
+              searchField = 'bankAccount.bankName';
             else if (filter.sourceType === 'CASH')
               searchField = 'cashBook.name';
             else searchField = 'COALESCE(bankAccount.bankName, cashBook.name)';
@@ -757,6 +781,9 @@ export class BankTransactionsCoreService {
           else if (col === 'thu') searchField = 'txn.creditAmount';
           else if (col === 'chi') searchField = 'txn.debitAmount';
           else if (col === 'balance') searchField = 'txn.balance';
+          else if (col === 'netOffAmount') searchField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            searchField = remainingAmountSubquery;
           else if (col === 'correspondentName')
             searchField = 'txn.correspondentName';
           else if (col === 'correspondentAccount')
@@ -772,6 +799,21 @@ export class BankTransactionsCoreService {
               qb.andWhere(`${searchField} ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
               });
+            } else if (
+              [
+                'thu',
+                'chi',
+                'balance',
+                'netOffAmount',
+                'remainingAmount',
+              ].includes(col)
+            ) {
+              qb.andWhere(
+                `REPLACE(REPLACE(CAST(${searchField} AS TEXT), '.', ''), ',', '') ILIKE :search_${col}`,
+                {
+                  [`search_${col}`]: `%${val.replace(/[,.]/g, '')}%`,
+                },
+              );
             } else {
               qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
@@ -1696,12 +1738,14 @@ export class BankTransactionsCoreService {
     }
 
     let bankCode: string | undefined;
+    let expectedAccountNumber: string | undefined;
     if (bankAccountId) {
       const bankAccount = await this.bankAccountRepo.findOne({
         where: { id: bankAccountId },
       });
       if (bankAccount) {
         bankCode = bankAccount.bankCode?.toUpperCase();
+        expectedAccountNumber = bankAccount.accountNumber;
       }
     }
 
@@ -1712,7 +1756,18 @@ export class BankTransactionsCoreService {
       let dtos: CreateBankTransactionDto[] = [];
 
       if (ext === 'csv') {
-        dtos = parseTcbCsv(file.buffer, branchId, bankAccountId, cashBookId);
+        if (bankCode && bankCode !== 'TCB') {
+          throw new BadRequestException(
+            'Định dạng CSV hiện tại chỉ hỗ trợ cho sao kê TCB. Vui lòng sử dụng file excel.',
+          );
+        }
+        dtos = parseTcbCsv(
+          file.buffer,
+          branchId,
+          bankAccountId,
+          cashBookId,
+          expectedAccountNumber,
+        );
       } else if (ext === 'xlsx') {
         if (cashBookId) {
           dtos = await parseCashXlsx(
@@ -1733,6 +1788,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           } else {
             dtos = await parseBidvXlsx(
@@ -1740,6 +1796,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           }
         }

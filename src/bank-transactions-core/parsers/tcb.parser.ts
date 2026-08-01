@@ -7,6 +7,7 @@ export function parseTcbCsv(
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): CreateBankTransactionDto[] {
   // Convert buffer to string, TCB CSV might have different encodings, assuming utf-8 for now
   const fileContent = buffer.toString('utf-8');
@@ -125,6 +126,10 @@ export function parseTcbCsv(
     });
   }
 
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê TCB');
+  }
+
   return transactions;
 }
 
@@ -133,6 +138,7 @@ export async function parseTcbXlsx(
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): Promise<CreateBankTransactionDto[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -142,18 +148,39 @@ export async function parseTcbXlsx(
     throw new Error('File excel không có dữ liệu');
   }
 
+  // Validate TCB specific cells
+  const a1 = String((worksheet.getCell('A1').value as any) || '').toLowerCase();
+  if (
+    !a1.includes('kỹ thương') &&
+    !a1.includes('techcombank') &&
+    !a1.includes('tcb')
+  ) {
+    throw new Error(
+      'File không đúng định dạng sao kê TCB (Thông tin ngân hàng ở ô A1 không khớp)',
+    );
+  }
+
+  if (expectedAccountNumber) {
+    const b9 = String((worksheet.getCell('B9').value as any) || '').trim();
+    if (b9 !== expectedAccountNumber) {
+      throw new Error(
+        `File sao kê không khớp với số tài khoản đích ${expectedAccountNumber} (Số tài khoản trong file: ${b9})`,
+      );
+    }
+  }
+
   const transactions: CreateBankTransactionDto[] = [];
   let startParsing = false;
 
   worksheet.eachRow((row, rowNumber) => {
     if (!startParsing) {
       const rowValues = row.values as any[];
-      const hasDate = rowValues.some(
+      const hasTcbHeader = rowValues.some(
         (v) =>
           String(v).toLowerCase().includes('ngày kh thực hiện') ||
-          String(v).toLowerCase().includes('ngày giao dịch'),
+          String(v).toLowerCase().includes('số bút toán'),
       );
-      if (hasDate) {
+      if (hasTcbHeader) {
         startParsing = true;
       }
       return;
@@ -240,6 +267,10 @@ export async function parseTcbXlsx(
       correspondentBank,
     });
   });
+
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê TCB');
+  }
 
   return transactions;
 }

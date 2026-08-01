@@ -292,9 +292,7 @@ export class InvoicePortalService {
               serialNo,
               invoiceDate: parsePortalIsoDate(raw.tdlap),
               direction,
-              status: [4, 6].includes(Number(raw.tthai))
-                ? 'CANCELLED'
-                : 'CONFIRMED',
+              status: 'CONFIRMED',
               taxInvoiceStatus,
               taxProcessStatus,
               taxInvoiceType,

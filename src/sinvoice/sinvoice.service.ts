@@ -166,6 +166,15 @@ export class SinvoiceService {
           else if (col === 'buyerTaxCode') filterField = 'draft.buyer_tax_code';
           else if (col === 'status') filterField = 'draft.status';
           else if (col === 'totalAmount') filterField = 'draft.total_amount';
+          else if (col === 'vatAmount') filterField = 'draft.vat_amount';
+          else if (col === 'discountAmount')
+            filterField = 'draft.discount_amount';
+          else if (col === 'amountWithoutVAT')
+            filterField =
+              '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+          else if (col === 'vatRate')
+            filterField =
+              "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
 
           if (filterField) {
             qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
@@ -188,7 +197,30 @@ export class SinvoiceService {
       );
     }
 
-    qb.orderBy('draft.createdAt', 'DESC');
+    if (query.sortKey) {
+      let sortKey = query.sortKey;
+      if (sortKey === 'createdAt')
+        sortKey = "(draft.response_payload->>'createdDate')::timestamp";
+      else if (sortKey === 'documentNo') sortKey = 'draft.document_no';
+      else if (sortKey === 'buyerName') sortKey = 'draft.buyer_name';
+      else if (sortKey === 'buyerPersonName')
+        sortKey = "draft.response_payload->>'buyerName'";
+      else if (sortKey === 'buyerTaxCode') sortKey = 'draft.buyer_tax_code';
+      else if (sortKey === 'status') sortKey = 'draft.status';
+      else if (sortKey === 'totalAmount') sortKey = 'draft.total_amount';
+      else if (sortKey === 'vatAmount') sortKey = 'draft.vat_amount';
+      else if (sortKey === 'discountAmount') sortKey = 'draft.discount_amount';
+      else if (sortKey === 'amountWithoutVAT')
+        sortKey =
+          '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+      else sortKey = `draft.${sortKey}`;
+      qb.orderBy(
+        sortKey,
+        query.sortDirection?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
+      );
+    } else {
+      qb.orderBy("(draft.response_payload->>'createdDate')::timestamp", 'DESC');
+    }
     qb.skip(skip).take(pageSize);
 
     const [data, total] = await qb.getManyAndCount();
@@ -217,13 +249,24 @@ export class SinvoiceService {
     let isDateColumn = false;
 
     if (column === 'createdAt') {
-      selectField = "TO_CHAR(draft.created_at, 'YYYY-MM-DD')";
+      selectField =
+        "TO_CHAR((draft.response_payload->>'createdDate')::timestamp, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'documentNo') selectField = 'draft.document_no';
     else if (column === 'buyerName') selectField = 'draft.buyer_name';
+    else if (column === 'buyerPersonName')
+      selectField = "draft.response_payload->>'buyerName'";
     else if (column === 'buyerTaxCode') selectField = 'draft.buyer_tax_code';
     else if (column === 'status') selectField = 'draft.status';
     else if (column === 'totalAmount') selectField = 'draft.total_amount';
+    else if (column === 'vatAmount') selectField = 'draft.vat_amount';
+    else if (column === 'discountAmount') selectField = 'draft.discount_amount';
+    else if (column === 'amountWithoutVAT')
+      selectField =
+        '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+    else if (column === 'vatRate')
+      selectField =
+        "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
@@ -244,12 +287,23 @@ export class SinvoiceService {
 
           let filterField = '';
           if (col === 'createdAt')
-            filterField = `TO_CHAR(draft.created_at, 'YYYY-MM-DD')`;
+            filterField = `TO_CHAR((draft.response_payload->>'createdDate')::timestamp, 'YYYY-MM-DD')`;
           else if (col === 'documentNo') filterField = 'draft.document_no';
           else if (col === 'buyerName') filterField = 'draft.buyer_name';
+          else if (col === 'buyerPersonName')
+            filterField = "draft.response_payload->>'buyerName'";
           else if (col === 'buyerTaxCode') filterField = 'draft.buyer_tax_code';
           else if (col === 'status') filterField = 'draft.status';
           else if (col === 'totalAmount') filterField = 'draft.total_amount';
+          else if (col === 'vatAmount') filterField = 'draft.vat_amount';
+          else if (col === 'discountAmount')
+            filterField = 'draft.discount_amount';
+          else if (col === 'amountWithoutVAT')
+            filterField =
+              '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+          else if (col === 'vatRate')
+            filterField =
+              "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
 
           if (filterField) {
             qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
@@ -467,56 +521,80 @@ export class SinvoiceService {
       // 2. Fetch danh sách nháp
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const searchUrl =
-        `https://vinvoice.viettel.vn/api/${cluster}/services/einvoiceapplication/api/invoice/search-draft-all?page=0&size=50&invoiceStatus.equals=0&invoiceTypeId.notEquals=52&sort=id,desc` +
-        `&createdDate.greaterThanOrEqual=${encodeURIComponent(thirtyDaysAgo.toISOString())}` +
-        `&createdDate.lessThanOrEqual=${encodeURIComponent(now.toISOString())}`;
+      let page = 0;
+      let allDrafts: any[] = [];
 
-      const draftRes = await fetch(searchUrl, {
-        method: 'GET',
-        headers: {
-          accept: 'application/json, text/plain, */*',
-          authorization: `Bearer ${token}`,
-        },
-      });
+      while (true) {
+        const searchUrl =
+          `https://vinvoice.viettel.vn/api/${cluster}/services/einvoiceapplication/api/invoice/search-draft-all?page=${page}&size=300&invoiceStatus.equals=0&invoiceTypeId.notEquals=52&sort=id,desc` +
+          `&createdDate.greaterThanOrEqual=${encodeURIComponent(thirtyDaysAgo.toISOString())}` +
+          `&createdDate.lessThanOrEqual=${encodeURIComponent(now.toISOString())}`;
 
-      if (!draftRes.ok) {
-        const errText = await draftRes.text();
-        this.logger.error(
-          `Viettel draft fetch failed: ${draftRes.status} ${draftRes.statusText} - ${errText}`,
-        );
-        throw new BadRequestException(
-          `Lỗi khi tải danh sách nháp từ Viettel: ${draftRes.status} - ${errText}`,
-        );
-      }
+        const draftRes = await fetch(searchUrl, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json, text/plain, */*',
+            authorization: `Bearer ${token}`,
+          },
+        });
 
-      let rawData: any = await draftRes.json();
-      let drafts: any[] = [];
+        if (!draftRes.ok) {
+          const errText = await draftRes.text();
+          this.logger.error(
+            `Viettel draft fetch failed: ${draftRes.status} ${draftRes.statusText} - ${errText}`,
+          );
+          throw new BadRequestException(
+            `Lỗi khi tải danh sách nháp từ Viettel: ${draftRes.status} - ${errText}`,
+          );
+        }
 
-      if (Array.isArray(rawData)) {
-        drafts = rawData;
-      } else if (
-        rawData &&
-        rawData.data &&
-        Array.isArray(rawData.data.content)
-      ) {
-        drafts = rawData.data.content;
-      } else if (rawData && Array.isArray(rawData.data)) {
-        drafts = rawData.data;
-      } else if (rawData && Array.isArray(rawData.content)) {
-        drafts = rawData.content;
-      } else if (rawData && Array.isArray(rawData.items)) {
-        drafts = rawData.items;
-      } else {
-        throw new BadRequestException(
-          'Định dạng trả về từ Viettel không hợp lệ: ' +
-            JSON.stringify(rawData).substring(0, 200),
-        );
+        const rawData: any = await draftRes.json();
+        let drafts: any[] = [];
+
+        if (Array.isArray(rawData)) {
+          drafts = rawData;
+        } else if (
+          rawData &&
+          rawData.data &&
+          Array.isArray(rawData.data.content)
+        ) {
+          drafts = rawData.data.content;
+        } else if (rawData && Array.isArray(rawData.data)) {
+          drafts = rawData.data;
+        } else if (rawData && Array.isArray(rawData.content)) {
+          drafts = rawData.content;
+        } else if (rawData && Array.isArray(rawData.items)) {
+          drafts = rawData.items;
+        } else {
+          throw new BadRequestException(
+            'Định dạng trả về từ Viettel không hợp lệ: ' +
+              JSON.stringify(rawData).substring(0, 200),
+          );
+        }
+
+        if (drafts.length === 0) {
+          break;
+        }
+
+        allDrafts.push(...drafts);
+
+        const totalElements =
+          rawData?.data?.totalElements || rawData?.totalElements;
+
+        if (totalElements !== undefined) {
+          if (allDrafts.length >= totalElements) {
+            break;
+          }
+        } else if (drafts.length < 300) {
+          break;
+        }
+
+        page++;
       }
 
       let newDraftEntities: SinvoiceDraft[] = [];
 
-      for (const draft of drafts) {
+      for (const draft of allDrafts) {
         const vId = draft.id ? String(draft.id) : undefined;
         if (!vId) continue;
 
@@ -585,6 +663,9 @@ export class SinvoiceService {
           vatAmount: String(draft.totalVATAmount || draft.taxAmount || 0),
           status: 'DRAFT',
           responsePayload: draft,
+          createdAt: draft.createdDate
+            ? new Date(draft.createdDate)
+            : new Date(),
         });
 
         newDraftEntities.push(draftEntity);
