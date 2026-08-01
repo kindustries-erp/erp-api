@@ -143,6 +143,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.bankAccountId = :id', { id: acc.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...acc,
           openingBalance: openingBalanceAtStart,
@@ -154,6 +162,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -300,6 +310,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.cashBookId = :id', { id: book.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...book,
           openingBalance: openingBalanceAtStart,
@@ -311,6 +329,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -1696,12 +1716,14 @@ export class BankTransactionsCoreService {
     }
 
     let bankCode: string | undefined;
+    let expectedAccountNumber: string | undefined;
     if (bankAccountId) {
       const bankAccount = await this.bankAccountRepo.findOne({
         where: { id: bankAccountId },
       });
       if (bankAccount) {
         bankCode = bankAccount.bankCode?.toUpperCase();
+        expectedAccountNumber = bankAccount.accountNumber;
       }
     }
 
@@ -1712,7 +1734,18 @@ export class BankTransactionsCoreService {
       let dtos: CreateBankTransactionDto[] = [];
 
       if (ext === 'csv') {
-        dtos = parseTcbCsv(file.buffer, branchId, bankAccountId, cashBookId);
+        if (bankCode && bankCode !== 'TCB') {
+          throw new BadRequestException(
+            'Định dạng CSV hiện tại chỉ hỗ trợ cho sao kê TCB. Vui lòng sử dụng file excel.',
+          );
+        }
+        dtos = parseTcbCsv(
+          file.buffer,
+          branchId,
+          bankAccountId,
+          cashBookId,
+          expectedAccountNumber,
+        );
       } else if (ext === 'xlsx') {
         if (cashBookId) {
           dtos = await parseCashXlsx(
@@ -1733,6 +1766,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           } else {
             dtos = await parseBidvXlsx(
@@ -1740,6 +1774,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           }
         }

@@ -6,6 +6,7 @@ export async function parseBidvXlsx(
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): Promise<CreateBankTransactionDto[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -13,6 +14,23 @@ export async function parseBidvXlsx(
   const worksheet = workbook.worksheets[0];
   if (!worksheet) {
     throw new Error('File excel không có dữ liệu');
+  }
+
+  // Validate BIDV specific cells
+  const c1 = String((worksheet.getCell('C1').value as any) || '').toLowerCase();
+  if (!c1.includes('bidv') && !c1.includes('đầu tư và phát triển')) {
+    throw new Error(
+      'File không đúng định dạng sao kê BIDV (Thông tin ngân hàng ở ô C1 không khớp)',
+    );
+  }
+
+  if (expectedAccountNumber) {
+    const e12 = String((worksheet.getCell('E12').value as any) || '').trim();
+    if (e12 !== expectedAccountNumber) {
+      throw new Error(
+        `File sao kê không khớp với số tài khoản đích ${expectedAccountNumber} (Số tài khoản trong file: ${e12})`,
+      );
+    }
   }
 
   const transactions: CreateBankTransactionDto[] = [];
@@ -141,6 +159,10 @@ export async function parseBidvXlsx(
       correspondentBank: parseString('corrBank') || undefined,
     });
   });
+
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê BIDV');
+  }
 
   return transactions;
 }
