@@ -23,6 +23,7 @@ import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
 import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
+import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachment
       CompanyProfile,
       CorePermission,
       CoreUserRole,
+      ErpBranch,
     ]),
     R2Module,
     BankTransactionsCoreModule,

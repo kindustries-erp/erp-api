@@ -98,8 +98,14 @@ export class ErpInvoicesCoreController {
   @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('stats')
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
-  getStats(@Query('direction') direction?: 'IN' | 'OUT') {
-    return this.service.getStats(direction);
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  getStats(
+    @Query('direction') direction?: 'IN' | 'OUT',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.service.getStats(direction, dateFrom, dateTo);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })

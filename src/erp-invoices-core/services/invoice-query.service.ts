@@ -769,7 +769,7 @@ export class InvoiceQueryService {
       .getMany();
   }
 
-  async getStats(direction?: 'IN' | 'OUT') {
+  async getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
     const today = new Date();
 
     // Compute sixMonthsAgo as YYYY-MM-DD string
@@ -790,14 +790,23 @@ export class InvoiceQueryService {
       '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
     );
     // Use string comparison for exact match based on database Date
-    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :sixMonthsAgo`, {
-      sixMonthsAgo: sixMonthsAgoStr,
+    let fetchFrom = sixMonthsAgoStr;
+    if (dateFrom && dateFrom < fetchFrom) {
+      fetchFrom = dateFrom;
+    }
+    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :fetchFrom`, {
+      fetchFrom,
     });
 
+    qb.leftJoin('erp_branches', 'b', 'b.id = inv.branch_id');
     qb.select(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'day_date');
+    qb.addSelect(`inv.branch_id`, 'branch_id');
+    qb.addSelect(`b.name`, 'branch_name');
     qb.addSelect(`SUM(inv.total_amount)`, 'total_amount');
     qb.addSelect(`SUM(inv.pre_vat_amount)`, 'pre_vat_amount');
     qb.groupBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`);
+    qb.addGroupBy(`inv.branch_id`);
+    qb.addGroupBy(`b.name`);
     qb.orderBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'ASC');
 
     const records = await qb.getRawMany();
@@ -816,6 +825,32 @@ export class InvoiceQueryService {
     const monthPreVatChart = Array(6).fill(0);
     const weekPreVatChart = Array(4).fill(0);
     const dayPreVatChart = Array(7).fill(0);
+
+    const byBranchMap = new Map<string, any>();
+    const getBranchKey = (name: string | null) => {
+      if (name?.toLowerCase().includes('đào trí')) return 'dao_tri';
+      if (name?.toLowerCase().includes('phổ quang')) return 'pho_quang';
+      return 'other';
+    };
+    const getBranchLabel = (key: string) => {
+      if (key === 'dao_tri') return 'Đào Trí';
+      if (key === 'pho_quang') return 'Phổ Quang';
+      return 'Còn lại';
+    };
+    const getBranchStats = (key: string) => {
+      if (!byBranchMap.has(key)) {
+        byBranchMap.set(key, {
+          branchName: getBranchLabel(key),
+          monthTotal: 0,
+          monthPreVat: 0,
+          weekTotal: 0,
+          weekPreVat: 0,
+          dayTotal: 0,
+          dayPreVat: 0,
+        });
+      }
+      return byBranchMap.get(key)!;
+    };
 
     // Helpers to get start of current periods as YYYY-MM-DD strings
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -852,23 +887,51 @@ export class InvoiceQueryService {
       const dStr = row.day_date; // string like '2026-06-01'
       const total = Number(row.total_amount) || 0;
       const prevat = Number(row.pre_vat_amount) || 0;
+      const branchKey = getBranchKey(row.branch_name);
+      const bStats = getBranchStats(branchKey);
 
-      // Current Day
-      if (dStr === todayStr) {
-        dayTotal += total;
-        dayPreVat += prevat;
-      }
+      // If dateFrom and dateTo are provided, use them for totals instead of current periods
+      if (dateFrom && dateTo) {
+        if (dStr >= dateFrom && dStr <= dateTo) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
 
-      // Current Week
-      if (dStr >= thisWeekStr) {
-        weekTotal += total;
-        weekPreVat += prevat;
-      }
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
 
-      // Current Month
-      if (dStr >= thisMonthStr) {
-        monthTotal += total;
-        monthPreVat += prevat;
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+      } else {
+        // Current Day
+        if (dStr === todayStr) {
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+
+        // Current Week
+        if (dStr >= thisWeekStr) {
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
+        }
+
+        // Current Month
+        if (dStr >= thisMonthStr) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
+        }
       }
 
       // Day Chart (last 7 days, index 6 is today, 0 is 6 days ago)
@@ -904,6 +967,16 @@ export class InvoiceQueryService {
       }
     }
 
+    const byBranch = Array.from(byBranchMap.values());
+    byBranch.sort((a: any, b: any) => {
+      const order: Record<string, number> = {
+        'Đào Trí': 1,
+        'Phổ Quang': 2,
+        'Còn lại': 3,
+      };
+      return (order[a.branchName] || 99) - (order[b.branchName] || 99);
+    });
+
     return {
       monthTotal,
       monthPreVat,
@@ -917,6 +990,7 @@ export class InvoiceQueryService {
       dayPreVat,
       dayChart,
       dayPreVatChart,
+      byBranch,
     };
   }
 
