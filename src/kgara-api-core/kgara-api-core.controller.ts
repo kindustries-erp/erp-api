@@ -25,7 +25,7 @@ export const BranchId = createParamDecorator(
   },
 );
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraReceivable } from './entities/kgara_receivable.entity';
@@ -76,6 +76,7 @@ export class KgaraApiCoreController {
     @Query('q') q: string = '',
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('filtersStr') filtersStr?: string,
     @Query('includeDeleted') includeDeleted?: string,
   ) {
     const query = this.caseRepo.createQueryBuilder('case');
@@ -106,6 +107,8 @@ export class KgaraApiCoreController {
       );
     }
 
+    this.applyCaseListFilters(query, filtersStr);
+
     query.orderBy('case.updatedAt', 'DESC');
 
     const take = parseInt(pageSize, 10) || 20;
@@ -123,6 +126,139 @@ export class KgaraApiCoreController {
         total,
       },
     };
+  }
+
+  @Get('cases/column-options')
+  async getCaseColumnOptions(
+    @BranchId() branchId: string,
+    @Query('column') column: string,
+    @Query('search') search: string = '',
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filtersStr') filtersStr?: string,
+  ) {
+    const selectExpr = this.getCaseColumnSelectExpr(column);
+    if (!selectExpr) {
+      return { items: [], total: 0, page: 1, totalPages: 0 };
+    }
+
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const safePageSize = Math.max(parseInt(pageSize, 10) || 20, 1);
+
+    const query = this.caseRepo
+      .createQueryBuilder('case')
+      .select(`DISTINCT ${selectExpr}`, 'value');
+
+    if (branchId) {
+      query.andWhere('case.branchExternalId = :branchId', { branchId });
+    }
+
+    query.andWhere('case.kgaraDeletedAt IS NULL');
+    query.andWhere(`${selectExpr} IS NOT NULL`);
+    query.andWhere(`CAST(${selectExpr} AS TEXT) != ''`);
+
+    this.applyCaseOptionFilters(query, column, filtersStr);
+
+    if (search) {
+      query.andWhere(`CAST(${selectExpr} AS TEXT) ILIKE :search`, {
+        search: `%${search}%`,
+      });
+    }
+
+    query.orderBy('value', 'ASC');
+
+    const totalRaw = await query
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectExpr})`, 'cnt')
+      .getRawOne();
+
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    const raw = await query
+      .offset((safePage - 1) * safePageSize)
+      .limit(safePageSize)
+      .getRawMany();
+
+    return {
+      items: raw.map((r) => String(r.value)).filter(Boolean),
+      total,
+      page: safePage,
+      totalPages: Math.ceil(total / safePageSize),
+    };
+  }
+
+  private getCaseColumnSelectExpr(column: string): string | null {
+    const mapping: Record<string, string> = {
+      caseCode: '"case"."so_chung_tu"',
+      licensePlate: '"case"."bien_so_xe"',
+      customerCode: '"case"."khach_hang_code"',
+      customerName: '"case"."khach_hang_name"',
+      statusName: '"case"."ten_tinh_trang_dich_vu"',
+      isInsuranceClaim:
+        "CASE WHEN COALESCE((\"case\".\"raw_data\" ->> 'XeLamBaoHiem')::boolean, false) THEN 'yes' ELSE 'no' END",
+      doanhThu: '"case"."doanh_thu"',
+      chiPhi: '"case"."chi_phi"',
+      loiNhuan: '"case"."loi_nhuan"',
+      totalAmount: '"case"."tien_co_thue"',
+      balanceAmount: '"case"."tien_con_phai_thanh_toan"',
+      caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      updatedAt: 'TO_CHAR("case"."updated_at", \'YYYY-MM-DD\')',
+      dataAsOf: 'TO_CHAR("case"."data_as_of", \'YYYY-MM-DD\')',
+      createdAt: 'TO_CHAR("case"."created_at", \'YYYY-MM-DD\')',
+    };
+
+    return mapping[column] || null;
+  }
+
+  private applyCaseOptionFilters(
+    qb: SelectQueryBuilder<KgaraCase>,
+    activeColumn: string,
+    filtersStr?: string,
+  ) {
+    if (!filtersStr) return;
+
+    try {
+      const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+
+      for (const [column, values] of Object.entries(filters)) {
+        if (column === activeColumn) continue;
+        if (!values || values.length === 0) continue;
+
+        const filterExpr = this.getCaseColumnSelectExpr(column);
+        if (!filterExpr) continue;
+
+        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
+          [`vals_${column}`]: values,
+        });
+      }
+    } catch {
+      // ignore malformed filter payloads
+    }
+  }
+
+  private applyCaseListFilters(
+    qb: SelectQueryBuilder<KgaraCase>,
+    filtersStr?: string,
+  ) {
+    if (!filtersStr) return;
+
+    try {
+      const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+
+      for (const [column, values] of Object.entries(filters)) {
+        if (!values || values.length === 0) continue;
+
+        const filterExpr = this.getCaseColumnSelectExpr(column);
+        if (!filterExpr) continue;
+
+        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
+          [`vals_${column}`]: values,
+        });
+      }
+    } catch {
+      // ignore malformed filter payloads
+    }
   }
 
   @Get('cases/gross-profit-report')
