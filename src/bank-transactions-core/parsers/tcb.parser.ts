@@ -1,6 +1,7 @@
 import { parse } from 'csv-parse/sync';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import * as ExcelJS from 'exceljs';
+import { parseVNLocalDate } from './date-parser';
 
 export function parseTcbCsv(
   buffer: Buffer,
@@ -82,39 +83,20 @@ export function parseTcbCsv(
 
     if (!transDateRaw) continue;
 
-    // Convert DD/MM/YYYY or YYYY-MM-DD to proper ISO date string if necessary.
-    // In the sample, it is "YYYY-MM-DD HH:mm:ss" and "YYYY-MM-DD".
-    // new Date(transDateRaw) should work for "2026-05-30" or "2026-05-30 16:44:52"
-    let transDate = new Date(transDateRaw);
-    if (isNaN(transDate.getTime())) {
-      // Try to parse DD/MM/YYYY
-      const parts = transDateRaw.split('/');
-      if (parts.length === 3) {
-        transDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      }
-    }
-
-    let efdDate: Date | undefined;
-    if (efdDateRaw) {
-      efdDate = new Date(efdDateRaw);
-      if (isNaN(efdDate.getTime())) {
-        const parts = efdDateRaw.split('/');
-        if (parts.length === 3) {
-          efdDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        }
-      }
-    }
+    let transDate = parseVNLocalDate(transDateRaw);
+    let efdDate = parseVNLocalDate(efdDateRaw);
 
     transactions.push({
       sourceType: bankAccountId ? 'BANK' : 'CASH',
       branchId,
       bankAccountId,
       cashBookId,
-      transDate: transDate.toISOString(),
-      efdDate:
-        efdDate && !isNaN(efdDate.getTime())
-          ? efdDate.toISOString()
-          : undefined,
+      transDate: efdDate
+        ? efdDate.toISOString()
+        : transDate
+          ? transDate.toISOString()
+          : new Date().toISOString(),
+      efdDate: transDate ? transDate.toISOString() : undefined,
       referenceNumber,
       debitAmount,
       creditAmount,
@@ -220,43 +202,20 @@ export async function parseTcbXlsx(
     if (!transDateRaw) return;
     if (String(transDateRaw).includes('TỔNG PHÁT SINH')) return;
 
-    let transDate = new Date(transDateRaw);
-    if (isNaN(transDate.getTime())) {
-      const parts = String(transDateRaw).trim().split('/');
-      if (parts.length === 3) {
-        transDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      } else {
-        const partsSpace = String(transDateRaw).trim().split(' ')[0].split('/');
-        if (partsSpace.length === 3) {
-          transDate = new Date(
-            `${partsSpace[2]}-${partsSpace[1]}-${partsSpace[0]}`,
-          );
-        }
-      }
-    }
-    if (isNaN(transDate.getTime())) return;
-
-    let efdDate: Date | undefined;
-    if (efdDateRaw) {
-      efdDate = new Date(efdDateRaw);
-      if (isNaN(efdDate.getTime())) {
-        const parts = String(efdDateRaw).trim().split('/');
-        if (parts.length === 3) {
-          efdDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        }
-      }
-    }
+    let transDate = parseVNLocalDate(transDateRaw);
+    let efdDate = parseVNLocalDate(efdDateRaw);
 
     transactions.push({
       sourceType: bankAccountId ? 'BANK' : 'CASH',
       branchId,
       bankAccountId,
       cashBookId,
-      transDate: transDate.toISOString(),
-      efdDate:
-        efdDate && !isNaN(efdDate.getTime())
-          ? efdDate.toISOString()
-          : undefined,
+      transDate: efdDate
+        ? efdDate.toISOString()
+        : transDate
+          ? transDate.toISOString()
+          : new Date().toISOString(),
+      efdDate: transDate ? transDate.toISOString() : undefined,
       referenceNumber,
       debitAmount,
       creditAmount,
