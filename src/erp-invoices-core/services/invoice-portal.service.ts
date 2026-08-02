@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
+import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -18,6 +19,7 @@ import {
 } from '../helpers/invoice-gdt.helper';
 import { sleep } from '../../common/utils/delay.util';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
+import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 
 export type PortalProgressEvent = {
@@ -43,6 +45,8 @@ export class InvoicePortalService {
     private readonly repository: Repository<ErpInvoice>,
     @InjectRepository(CompanyProfile)
     private readonly companyProfileRepo: Repository<CompanyProfile>,
+    @InjectRepository(ErpBranch)
+    private readonly branchRepository: Repository<ErpBranch>,
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
@@ -51,6 +55,50 @@ export class InvoicePortalService {
   // ---------------------------------------------------------------------------
   // Config
   // ---------------------------------------------------------------------------
+
+  private readonly _branchIdCache = new Map<string, string>();
+
+  private async resolveBranchIdForOut(
+    settlementOrder: string | null | undefined,
+  ): Promise<string | null> {
+    const branchCode = resolveOutInvoiceBranchCode(settlementOrder);
+
+    if (this._branchIdCache.has(branchCode)) {
+      return this._branchIdCache.get(branchCode)!;
+    }
+
+    const branch = await this.branchRepository.findOne({
+      where: { code: branchCode, isActive: true },
+      select: ['id'],
+    });
+
+    if (branch) {
+      this._branchIdCache.set(branchCode, branch.id);
+      return branch.id;
+    }
+
+    this.logger.warn(`Branch với code="${branchCode}" không tìm thấy trong DB`);
+    return null;
+  }
+
+  private async resolveHistoricalBranchForIn(
+    sellerTaxCode: string | null,
+  ): Promise<string | null> {
+    if (!sellerTaxCode) return null;
+
+    const prior = await this.repository.findOne({
+      where: {
+        direction: 'IN',
+        sellerTaxCode,
+        branchId: Not(IsNull()),
+        isDeleted: false,
+      },
+      order: { createdAt: 'DESC' },
+      select: ['branchId'],
+    });
+
+    return prior?.branchId ?? null;
+  }
 
   async getPortalConfig(): Promise<{ token: string; cookies: string }> {
     const profile = await this.companyProfileRepo.findOne({
@@ -319,6 +367,25 @@ export class InvoicePortalService {
             const saved = (await this.repository.save(
               invoice,
             )) as unknown as ErpInvoice;
+
+            if (direction === 'OUT') {
+              const branchId = await this.resolveBranchIdForOut(
+                saved.settlementOrder,
+              );
+              if (branchId) {
+                await this.repository.update(saved.id, { branchId });
+              }
+            }
+
+            if (direction === 'IN') {
+              const branchId = await this.resolveHistoricalBranchForIn(
+                saved.sellerTaxCode,
+              );
+              if (branchId) {
+                await this.repository.update(saved.id, { branchId });
+              }
+            }
+
             backgroundSyncIds.push(saved.id);
             created++;
           } catch (err) {
@@ -444,14 +511,6 @@ export class InvoicePortalService {
 
       const parsedXml = parseVietnamInvoiceXml(xmlString);
 
-      let newNotes = invoice.notes || '';
-      if (parsedXml.lookupCode || parsedXml.providerLink) {
-        const infoStr = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
-        if (!newNotes.includes(infoStr)) {
-          newNotes = newNotes ? newNotes + '\n' + infoStr : infoStr;
-        }
-      }
-
       await this.lifecycleService.update(invoice.id, {
         preVatAmount: parsedXml.preVatAmount,
         vatRate: parsedXml.vatRate ?? undefined,
@@ -466,7 +525,6 @@ export class InvoicePortalService {
         buyerCccd: parsedXml.buyerCccd ?? undefined,
         buyerTaxCode: parsedXml.buyerTaxCode ?? undefined,
         description: parsedXml.description ?? undefined,
-        notes: newNotes || undefined,
         items: parsedXml.items.map((i) => ({
           ...i,
           unit: i.unit ?? undefined,
@@ -661,6 +719,25 @@ export class InvoicePortalService {
     cookies?: string,
   ): Promise<void> {
     await this.syncInvoiceDetailFromJson(invoice, token, cookies);
+
+    if (invoice.direction === 'OUT') {
+      const updated = await this.repository.findOne({
+        where: { id: invoice.id },
+        select: ['id', 'settlementOrder', 'branchId'],
+      });
+      if (updated) {
+        const newBranchId = await this.resolveBranchIdForOut(
+          updated.settlementOrder,
+        );
+        if (newBranchId && updated.branchId !== newBranchId) {
+          await this.repository.update(invoice.id, { branchId: newBranchId });
+          this.logger.log(
+            `Branch updated for invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
+          );
+        }
+      }
+    }
+
     await sleep(2000);
 
     try {
@@ -725,26 +802,10 @@ export class InvoicePortalService {
       });
 
       const { xmlString } = extractXmlFromBuffer(xmlBuffer);
-      let notesToAppend = '';
-      if (xmlString) {
-        try {
-          const parsedXml = parseVietnamInvoiceXml(xmlString);
-          if (parsedXml.lookupCode || parsedXml.providerLink) {
-            notesToAppend = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
-          }
-        } catch {
-          // ignore parse errors for notes extraction
-        }
-      }
 
       await this.r2.uploadBuffer(xmlKey, xmlBuffer, contentType);
 
       const updateData: any = { xmlFileKey: xmlKey };
-      if (notesToAppend && !(invoice.notes || '').includes(notesToAppend)) {
-        updateData.notes = invoice.notes
-          ? invoice.notes + '\n' + notesToAppend
-          : notesToAppend;
-      }
 
       await this.repository.update(invoice.id, updateData);
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);

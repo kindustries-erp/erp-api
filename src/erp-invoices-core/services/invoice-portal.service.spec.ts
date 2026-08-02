@@ -33,6 +33,7 @@ describe('InvoicePortalService - taxpayer validation', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     jest.clearAllMocks();
