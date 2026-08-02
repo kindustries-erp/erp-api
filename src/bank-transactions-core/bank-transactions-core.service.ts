@@ -143,6 +143,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.bankAccountId = :id', { id: acc.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...acc,
           openingBalance: openingBalanceAtStart,
@@ -154,6 +162,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -300,6 +310,14 @@ export class BankTransactionsCoreService {
 
         const currentBalance = openingBalanceAtStart + totalCredit - totalDebit;
 
+        const lastTxnInfo = await this.transactionRepo
+          .createQueryBuilder('txn')
+          .select('MAX(txn.createdAt)', 'lastUploadDate')
+          .addSelect('MAX(txn.transDate)', 'lastStatementDate')
+          .where('txn.cashBookId = :id', { id: book.id })
+          .andWhere('txn.isDeleted = false')
+          .getRawOne();
+
         return {
           ...book,
           openingBalance: openingBalanceAtStart,
@@ -311,6 +329,8 @@ export class BankTransactionsCoreService {
             balance && balance.periodDate
               ? new Date(balance.periodDate).toISOString().split('T')[0]
               : null,
+          lastUploadDate: lastTxnInfo?.lastUploadDate || null,
+          lastStatementDate: lastTxnInfo?.lastStatementDate || null,
         };
       }),
     );
@@ -658,7 +678,7 @@ export class BankTransactionsCoreService {
     }
     if (filter.search) {
       qb.andWhere(
-        '(txn.description ILIKE :search OR txn.referenceNumber ILIKE :search OR txn.correspondentName ILIKE :search OR txn.correspondentAccount ILIKE :search)',
+        '(txn.correspondentName ILIKE :search OR txn.correspondentAccount ILIKE :search OR txn.description ILIKE :search OR txn.referenceNumber ILIKE :search)',
         { search: `%${filter.search}%` },
       );
     }
@@ -668,17 +688,15 @@ export class BankTransactionsCoreService {
       qb.andWhere('txn.debitAmount > 0');
     }
 
-    if (filter.correspondentAccount) {
-      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
-        correspondentAccount: filter.correspondentAccount,
-      });
-    }
     if (filter.correspondentName) {
       qb.andWhere('txn.correspondentName = :correspondentName', {
         correspondentName: filter.correspondentName,
       });
+    } else if (filter.correspondentAccount) {
+      qb.andWhere('txn.correspondentAccount = :correspondentAccount', {
+        correspondentAccount: filter.correspondentAccount,
+      });
     }
-
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
         'sys_entity_tags',
@@ -744,12 +762,16 @@ export class BankTransactionsCoreService {
           string,
           string
         >;
+
+        const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
+        const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           let searchField = '';
           if (col === 'account') {
             if (filter.sourceType === 'BANK')
-              searchField = 'bankAccount.bankName'; // Note: ILIKE on relations needs careful join, already joined 'bankAccount' and 'cashBook'
+              searchField = 'bankAccount.bankName';
             else if (filter.sourceType === 'CASH')
               searchField = 'cashBook.name';
             else searchField = 'COALESCE(bankAccount.bankName, cashBook.name)';
@@ -759,6 +781,9 @@ export class BankTransactionsCoreService {
           else if (col === 'thu') searchField = 'txn.creditAmount';
           else if (col === 'chi') searchField = 'txn.debitAmount';
           else if (col === 'balance') searchField = 'txn.balance';
+          else if (col === 'netOffAmount') searchField = netOffSubquery;
+          else if (col === 'remainingAmount')
+            searchField = remainingAmountSubquery;
           else if (col === 'correspondentName')
             searchField = 'txn.correspondentName';
           else if (col === 'correspondentAccount')
@@ -774,6 +799,21 @@ export class BankTransactionsCoreService {
               qb.andWhere(`${searchField} ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
               });
+            } else if (
+              [
+                'thu',
+                'chi',
+                'balance',
+                'netOffAmount',
+                'remainingAmount',
+              ].includes(col)
+            ) {
+              qb.andWhere(
+                `REPLACE(REPLACE(CAST(${searchField} AS TEXT), '.', ''), ',', '') ILIKE :search_${col}`,
+                {
+                  [`search_${col}`]: `%${val.replace(/[,.]/g, '')}%`,
+                },
+              );
             } else {
               qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
                 [`search_${col}`]: `%${val}%`,
@@ -990,7 +1030,10 @@ export class BankTransactionsCoreService {
 
     const qb = this.transactionRepo
       .createQueryBuilder('txn')
-      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
+      .where('txn.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere(
+        "(NULLIF(txn.correspondentName, '') IS NOT NULL OR NULLIF(txn.correspondentAccount, '') IS NOT NULL)",
+      );
 
     if (filter.startDate) {
       qb.andWhere('txn.transDate >= :startDate', {
@@ -1046,6 +1089,24 @@ export class BankTransactionsCoreService {
                 [`vals_${col}`]: vals,
               },
             );
+          } else if (col === 'totalCredit') {
+            qb.andHaving(
+              `SUM(COALESCE(txn.creditAmount, 0)) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
+          } else if (col === 'totalDebit') {
+            qb.andHaving(
+              `SUM(COALESCE(txn.debitAmount, 0)) IN (:...vals_${col})`,
+              {
+                [`vals_${col}`]: vals,
+              },
+            );
+          } else if (col === 'transactionCount') {
+            qb.andHaving(`COUNT(txn.id) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
           }
         }
       } catch (e) {}
@@ -1089,23 +1150,45 @@ export class BankTransactionsCoreService {
                 [`search_${col}`]: `%${val}%`,
               },
             );
+          } else if (col === 'totalCredit') {
+            qb.andHaving(
+              `CAST(SUM(COALESCE(txn.creditAmount, 0)) AS TEXT) ILIKE :search_${col}`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'totalDebit') {
+            qb.andHaving(
+              `CAST(SUM(COALESCE(txn.debitAmount, 0)) AS TEXT) ILIKE :search_${col}`,
+              {
+                [`search_${col}`]: `%${val}%`,
+              },
+            );
+          } else if (col === 'transactionCount') {
+            qb.andHaving(`CAST(COUNT(txn.id) AS TEXT) ILIKE :search_${col}`, {
+              [`search_${col}`]: `%${val}%`,
+            });
           }
         }
       } catch (e) {}
     }
-
-    const countQb = qb.clone();
-    const totalRaw = await countQb
-      .select(`COUNT(DISTINCT ${groupField})`, 'cnt')
-      .getRawOne();
-    const total = parseInt(totalRaw?.cnt || '0', 10);
 
     qb.select(groupField, 'groupId')
       .addSelect('MAX(txn.correspondentAccount)', 'correspondentAccount')
       .addSelect('MAX(txn.correspondentName)', 'correspondentName')
       .addSelect('SUM(COALESCE(txn.creditAmount, 0))', 'totalCredit')
       .addSelect('SUM(COALESCE(txn.debitAmount, 0))', 'totalDebit')
+      .addSelect('COUNT(txn.id)', 'transactionCount')
       .groupBy(groupField);
+
+    const countQb = qb.clone();
+    countQb.orderBy();
+    const [sql, params] = countQb.getQueryAndParameters();
+    const totalRaw = await this.transactionRepo.manager.query(
+      `SELECT COUNT(*) as cnt FROM (${sql}) AS subquery`,
+      params,
+    );
+    const total = parseInt(totalRaw[0]?.cnt || '0', 10);
 
     if (filter.sortBy) {
       const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
@@ -1117,6 +1200,8 @@ export class BankTransactionsCoreService {
         qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
       } else if (filter.sortBy === 'totalDebit') {
         qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
+      } else if (filter.sortBy === 'transactionCount') {
+        qb.orderBy('COUNT(txn.id)', order);
       } else {
         qb.orderBy(
           'SUM(COALESCE(txn.creditAmount, 0)) + SUM(COALESCE(txn.debitAmount, 0))',
@@ -1173,6 +1258,10 @@ export class BankTransactionsCoreService {
         correspondentName: item.correspondentName,
         totalCredit: parseFloat(item.totalCredit) || 0,
         totalDebit: parseFloat(item.totalDebit) || 0,
+        transactionCount: parseInt(
+          item.transactioncount || item.transactionCount || '0',
+          10,
+        ),
         invoiceSubject: subjectsMap[item.groupId] || null,
       })),
       total,
@@ -1649,12 +1738,14 @@ export class BankTransactionsCoreService {
     }
 
     let bankCode: string | undefined;
+    let expectedAccountNumber: string | undefined;
     if (bankAccountId) {
       const bankAccount = await this.bankAccountRepo.findOne({
         where: { id: bankAccountId },
       });
       if (bankAccount) {
         bankCode = bankAccount.bankCode?.toUpperCase();
+        expectedAccountNumber = bankAccount.accountNumber;
       }
     }
 
@@ -1665,7 +1756,18 @@ export class BankTransactionsCoreService {
       let dtos: CreateBankTransactionDto[] = [];
 
       if (ext === 'csv') {
-        dtos = parseTcbCsv(file.buffer, branchId, bankAccountId, cashBookId);
+        if (bankCode && bankCode !== 'TCB') {
+          throw new BadRequestException(
+            'Định dạng CSV hiện tại chỉ hỗ trợ cho sao kê TCB. Vui lòng sử dụng file excel.',
+          );
+        }
+        dtos = parseTcbCsv(
+          file.buffer,
+          branchId,
+          bankAccountId,
+          cashBookId,
+          expectedAccountNumber,
+        );
       } else if (ext === 'xlsx') {
         if (cashBookId) {
           dtos = await parseCashXlsx(
@@ -1686,6 +1788,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           } else {
             dtos = await parseBidvXlsx(
@@ -1693,6 +1796,7 @@ export class BankTransactionsCoreService {
               branchId,
               bankAccountId,
               cashBookId,
+              expectedAccountNumber,
             );
           }
         }
@@ -1755,36 +1859,130 @@ export class BankTransactionsCoreService {
 
     const existingTxns = await existingQb.getMany();
 
-    const existingKeys = new Set(
-      existingTxns.map((t) => {
-        if (t.referenceNumber) return `REF_${t.referenceNumber}`;
-        return `${new Date(t.transDate).toISOString()}_${Number(t.debitAmount || 0)}_${Number(t.creditAmount || 0)}_${(t.description || '').trim()}`;
-      }),
-    );
+    const existingMap = new Map<string, ErpBankTransaction>();
+    for (const t of existingTxns) {
+      const key = t.referenceNumber
+        ? `REF_${t.referenceNumber}`
+        : `${new Date(t.transDate).toISOString()}_${Number(t.debitAmount || 0)}_${Number(t.creditAmount || 0)}_${(t.description || '').trim()}`;
+      existingMap.set(key, t);
+    }
 
-    const newDtos = allDtos.filter((d) => {
+    const newDtos: CreateBankTransactionDto[] = [];
+    const updateEntities: ErpBankTransaction[] = [];
+    let skippedCount = 0;
+
+    const importBatchId = crypto.randomUUID();
+
+    for (const d of allDtos) {
       const key = d.referenceNumber
         ? `REF_${d.referenceNumber}`
         : `${new Date(d.transDate).toISOString()}_${Number(d.debitAmount || 0)}_${Number(d.creditAmount || 0)}_${(d.description || '').trim()}`;
-      return !existingKeys.has(key);
-    });
 
-    if (newDtos.length === 0) {
+      const existing = existingMap.get(key);
+      if (!existing) {
+        newDtos.push(d);
+      } else {
+        let hasChanges = false;
+
+        const dTransStr = new Date(d.transDate).toISOString();
+        const eTransStr = new Date(existing.transDate).toISOString();
+        if (dTransStr !== eTransStr) {
+          existing.transDate = new Date(d.transDate);
+          hasChanges = true;
+        }
+
+        const dEfdStr = d.efdDate ? new Date(d.efdDate).toISOString() : null;
+        const eEfdStr = existing.efdDate
+          ? new Date(existing.efdDate).toISOString()
+          : null;
+        if (dEfdStr !== eEfdStr) {
+          existing.efdDate = d.efdDate ? new Date(d.efdDate) : null;
+          hasChanges = true;
+        }
+
+        if (Number(existing.debitAmount) !== Number(d.debitAmount || 0)) {
+          existing.debitAmount = Number(d.debitAmount || 0);
+          hasChanges = true;
+        }
+        if (Number(existing.creditAmount) !== Number(d.creditAmount || 0)) {
+          existing.creditAmount = Number(d.creditAmount || 0);
+          hasChanges = true;
+        }
+        if (
+          d.balance !== undefined &&
+          Number(existing.balance) !== Number(d.balance)
+        ) {
+          existing.balance = Number(d.balance);
+          hasChanges = true;
+        }
+        if (
+          d.description !== undefined &&
+          existing.description !== d.description
+        ) {
+          existing.description = d.description;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentAccount !== undefined &&
+          existing.correspondentAccount !== d.correspondentAccount
+        ) {
+          existing.correspondentAccount = d.correspondentAccount;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentName !== undefined &&
+          existing.correspondentName !== d.correspondentName
+        ) {
+          existing.correspondentName = d.correspondentName;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentBank !== undefined &&
+          existing.correspondentBank !== d.correspondentBank
+        ) {
+          existing.correspondentBank = d.correspondentBank;
+          hasChanges = true;
+        }
+        if (d.seqNo !== undefined && existing.seqNo !== d.seqNo) {
+          existing.seqNo = d.seqNo;
+          hasChanges = true;
+        }
+        if (d.stt !== undefined && existing.stt !== d.stt) {
+          existing.stt = d.stt;
+          hasChanges = true;
+        }
+
+        if (hasChanges) {
+          updateEntities.push(existing);
+        } else {
+          skippedCount++;
+        }
+      }
+    }
+
+    if (newDtos.length === 0 && updateEntities.length === 0) {
       throw new BadRequestException(
-        'Tất cả giao dịch trong file này đã tồn tại trong hệ thống',
+        'Tất cả giao dịch trong file này đã tồn tại và không có thay đổi nào trong hệ thống',
       );
     }
 
-    const importBatchId = crypto.randomUUID();
     const entities = newDtos.map((dto) =>
       this.transactionRepo.create({ ...dto, importBatchId }),
     );
 
-    await this.transactionRepo.save(entities, { chunk: 100 });
+    if (entities.length > 0) {
+      await this.transactionRepo.save(entities, { chunk: 100 });
+    }
+
+    if (updateEntities.length > 0) {
+      await this.transactionRepo.save(updateEntities, { chunk: 100 });
+    }
 
     return {
       success: true,
       count: entities.length,
+      updatedCount: updateEntities.length,
+      skippedCount: skippedCount,
       importBatchId,
     };
   }

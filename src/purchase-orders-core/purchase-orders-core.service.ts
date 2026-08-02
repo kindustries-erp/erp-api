@@ -667,6 +667,34 @@ export class PurchaseOrdersCoreService {
     };
   }
 
+  async delete(id: string) {
+    const record = await this.repository.findOne({ where: { id } });
+    if (!record) throw new BadRequestException('Không tìm thấy đơn mua hàng');
+
+    // Không cho phép xóa nếu đã có GR hoặc Hóa đơn
+    await this.dependencyService.checkDependencies('purchase_orders', id);
+
+    record.isDeleted = true;
+    await this.repository.save(record);
+    return { message: 'Xóa đơn mua hàng thành công' };
+  }
+
+  async findUnpaid() {
+    return this.repository.find({
+      where: {
+        isDeleted: false,
+        paymentStatus: Not('PAID'),
+        status: Not('CANCELLED'),
+      },
+    });
+  }
+
+  async findRecurring(): Promise<any[]> {
+    // Note: The new ErpPurchaseOrder entity does not have 'autoGenerateNext'
+    // For now we return an empty array. PO recurrence should be handled in future sprints.
+    return [];
+  }
+
   private toCoreDocument(data: any) {
     const lines = Array.isArray(data?.lines)
       ? data.lines.map((line: any) => ({

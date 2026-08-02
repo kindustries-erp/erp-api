@@ -76,12 +76,15 @@ describe('ReportsCoreService', () => {
     expect(result.topSuppliers[0].supplierName).toBe('Supplier A');
   });
 
-  it('builds VINFAST IN item code SQL with exception and fallback precedence', async () => {
+  it('builds VINFAST IN item code SQL with exception and strict regex precedence', async () => {
     dataSource.query.mockResolvedValueOnce([]);
 
     await service.getVinfastPartsTracking({ page: 1, limit: 10 });
 
     const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
     expect(sql).toContain('HV_BATTERY_41.9KWH');
@@ -89,9 +92,9 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain('HV_BATTERY_PACK');
     expect(sql).toContain("'EEP73110011ALL'");
     expect(sql).toContain(
-      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
-    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+    expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
   });
 
   it('injects vehicleType classification SQL from CAR code list', async () => {
@@ -106,7 +109,7 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain("'CHS73060025AB'");
   });
 
-  it('keeps exception precedence before regex and fallback in overview SQL', async () => {
+  it('keeps exception precedence before regex in overview SQL', async () => {
     dataSource.query.mockResolvedValueOnce([]);
 
     await service.getVinfastPartsTracking({ page: 1, limit: 10 });
@@ -116,22 +119,18 @@ describe('ReportsCoreService', () => {
     const hv419Idx = sql.indexOf('HV_BATTERY_41.9KWH');
     const hvPackIdx = sql.indexOf('HV_BATTERY_PACK');
     const regexIdx = sql.indexOf(
-      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
-    );
-    const fallbackIdx = sql.indexOf(
-      "TRIM(SPLIT_PART(ii.description, ' - ', 1))",
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
 
     expect(vf5Idx).toBeGreaterThan(-1);
     expect(hv419Idx).toBeGreaterThan(-1);
     expect(hvPackIdx).toBeGreaterThan(-1);
     expect(regexIdx).toBeGreaterThan(-1);
-    expect(fallbackIdx).toBeGreaterThan(-1);
+    expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
 
     expect(vf5Idx).toBeLessThan(regexIdx);
     expect(hv419Idx).toBeLessThan(regexIdx);
     expect(hvPackIdx).toBeLessThan(regexIdx);
-    expect(regexIdx).toBeLessThan(fallbackIdx);
     expect(vf5Idx).toBeLessThan(hvPackIdx);
   });
 
@@ -141,6 +140,9 @@ describe('ReportsCoreService', () => {
     await service.getVinfastPartsTrackingDetails({});
 
     const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain("'IN' as direction");
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
@@ -149,9 +151,9 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain('HV_BATTERY_PACK');
     expect(sql).toContain("'EEP73110011ALL'");
     expect(sql).toContain(
-      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
-    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+    expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
     expect(sql).toContain('AND (\n      CASE');
     expect(sql).toContain(') IS NOT NULL');
     expect(sql).toContain('AS "vehicleType"');
@@ -170,6 +172,9 @@ describe('ReportsCoreService', () => {
 
     const sql = dataSource.query.mock.calls[0][0] as string;
     expect(sql).toContain('WITH buy_codes AS');
+    expect(sql).toContain(
+      "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
+    );
     expect(sql).toContain('VF5_HV_BATTERY_PACK_38_KWH');
     expect(sql).toContain("'EEP73110011AP'");
     expect(sql).toContain('HV_BATTERY_41.9KWH');
@@ -177,9 +182,9 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain('HV_BATTERY_PACK');
     expect(sql).toContain("'EEP73110011ALL'");
     expect(sql).toContain(
-      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[A-Z0-9]+)')",
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
-    expect(sql).toContain("TRIM(SPLIT_PART(ii.description, ' - ', 1))");
+    expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
   });
 
   it('maps vehicleType from overview query rows', async () => {

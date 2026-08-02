@@ -170,4 +170,92 @@ export class ReportsCoreController {
     );
     res.send(buffer);
   }
+
+  // ---------------------------------------------------------------------------
+  // VINFAST SETTLEMENT ORDERS
+  // ---------------------------------------------------------------------------
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('settlement-orders')
+  async getSettlementOrders(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+    @Query('columnSearch') columnSearch?: string,
+    @Query('columnFilters') columnFilters?: string,
+  ) {
+    return this.reportsCoreService.getSettlementOrders({
+      dateFrom,
+      dateTo,
+      search,
+      page,
+      limit,
+      sortBy,
+      sortDir,
+      columnSearch,
+      columnFilters,
+    });
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('settlement-orders/export/excel')
+  async exportSettlementOrdersExcel(
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+    @Query('search') search: string,
+    @Query('sortBy') sortBy: string,
+    @Query('sortDir') sortDir: string,
+    @Query('columnFilters') columnFilters: string,
+    @Res() res: any,
+  ) {
+    const buffer = await this.reportsCoreService.exportSettlementOrdersExcel({
+      dateFrom,
+      dateTo,
+      search,
+      sortBy,
+      sortDir,
+      columnFilters,
+    });
+    const fileName = `Lenh_Quyet_Toan_VF_${Date.now()}.xlsx`;
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+    });
+    res.send(buffer);
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('settlement-orders/details')
+  async getSettlementOrderDetails(
+    @Query('settlementOrder') settlementOrder: string,
+    @Query('period') period: string,
+  ) {
+    return this.reportsCoreService.getSettlementOrderDetails({
+      settlementOrder,
+      period,
+    });
+  }
+
+  @RequirePermissions({ resource: 'vinfast_parts_reports', action: 'read' })
+  @Get('settlement-orders/column-options')
+  async getSettlementOrderColumnOptions(
+    @Query('columnKey') columnKey: string,
+    @Query('search') search: string = '',
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('filters') filtersStr: string = '{}',
+  ) {
+    return this.reportsCoreService.getSettlementOrderColumnOptions({
+      columnKey,
+      search,
+      page,
+      limit,
+      filtersStr,
+    });
+  }
 }

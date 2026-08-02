@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceFilesService } from './invoice-files.service';
+import { ErpInvoiceAttachment } from '../entities/erp_invoice_attachment.entity';
+import { ErpAttachmentsCoreService } from '../../erp-attachments-core/erp-attachments-core.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { R2Service } from '../../r2/r2.service';
@@ -51,8 +53,23 @@ describe('InvoiceFilesService', () => {
           useValue: repository,
         },
         {
+          provide: getRepositoryToken(ErpInvoiceAttachment),
+          useValue: {
+            create: jest.fn(),
+            save: jest.fn(),
+            findOne: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
           provide: R2Service,
           useValue: r2Service,
+        },
+        {
+          provide: ErpAttachmentsCoreService,
+          useValue: {
+            uploadFile: jest.fn(),
+          },
         },
         {
           provide: ConfigService,
@@ -87,11 +104,8 @@ describe('InvoiceFilesService', () => {
       const result = await service.deletePdf('inv-1', 'sub-key.pdf');
 
       expect(result.success).toBe(true);
-      expect(result.pdfFiles).toHaveLength(1);
-      expect(result.pdfFiles[0].key).toBe('other-key.pdf');
 
       expect(mockInvoice.pdfFileKey).toBe('main-key.pdf'); // should not be changed
-      expect(mockInvoice.pdfFiles).toHaveLength(1);
       expect(r2Service.deleteObject).toHaveBeenCalledWith('sub-key.pdf');
       expect(repository.save).toHaveBeenCalledWith(mockInvoice);
     });
@@ -109,7 +123,6 @@ describe('InvoiceFilesService', () => {
       const result = await service.deletePdf('inv-2', 'main-key.pdf');
 
       expect(result.success).toBe(true);
-      expect(result.pdfFiles).toHaveLength(0);
 
       expect(mockInvoice.pdfFileKey).toBeNull(); // should be nullified
       expect(r2Service.deleteObject).toHaveBeenCalledWith('main-key.pdf');
@@ -134,7 +147,6 @@ describe('InvoiceFilesService', () => {
 
       expect(result.success).toBe(true);
       // DB should still be updated
-      expect(mockInvoice.pdfFiles).toHaveLength(0);
       expect(repository.save).toHaveBeenCalledWith(mockInvoice);
     });
   });
@@ -163,7 +175,9 @@ describe('InvoiceFilesService', () => {
           sellerTaxCode: '0101',
           buyerName: 'B',
           buyerTaxCode: '0202',
-          pdfFiles: [{ key: 'k1', filename: 'hoa_don_1.pdf' }],
+          attachments: [
+            { attachment: { fileKey: 'k1', fileName: 'hoa_don_1.pdf' } },
+          ],
           pdfFileKey: null,
           xmlFileKey: null,
         },

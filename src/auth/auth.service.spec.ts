@@ -19,6 +19,7 @@ describe('AuthService', () => {
     hashPassword: jest.Mock;
     registerLocalUser: jest.Mock;
     getEmployeeSnapshot: jest.Mock;
+    saveEmployee: jest.Mock;
     updateLastLogin: jest.Mock;
     save: jest.Mock;
   };
@@ -34,6 +35,7 @@ describe('AuthService', () => {
       hashPassword: jest.fn().mockReturnValue('new-hashed'),
       registerLocalUser: jest.fn(),
       getEmployeeSnapshot: jest.fn().mockResolvedValue(null),
+      saveEmployee: jest.fn().mockImplementation((e) => Promise.resolve(e)),
       updateLastLogin: jest.fn().mockResolvedValue(undefined),
       save: jest.fn().mockImplementation((u) => Promise.resolve(u)),
     };
@@ -173,6 +175,94 @@ describe('AuthService', () => {
 
       await expect(service.profile('not-exist')).rejects.toThrow(
         UnauthorizedException,
+      );
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('should update user email and linked employee profile', async () => {
+      const mockUser = {
+        id: 'u1',
+        email: 'old@example.com',
+        status: 'ACTIVE',
+        employeeId: 'emp-1',
+      };
+      const mockEmployee = {
+        id: 'emp-1',
+        fullName: 'Old Name',
+        email: 'old@example.com',
+        phone: null,
+        notes: null,
+      };
+
+      usersService.findById.mockResolvedValue(mockUser);
+      usersService.findByEmail.mockResolvedValue(null);
+      usersService.getEmployeeSnapshot.mockResolvedValue(mockEmployee);
+
+      const result = await service.updateProfile('u1', {
+        email: 'new@example.com',
+        full_name: 'New Name',
+        phone: '0909123456',
+        notes: 'updated',
+      });
+
+      expect(usersService.findByEmail).toHaveBeenCalledWith('new@example.com');
+      expect(usersService.saveEmployee).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fullName: 'New Name',
+          email: 'new@example.com',
+          phone: '0909123456',
+          notes: 'updated',
+        }),
+      );
+      expect(usersService.save).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'new@example.com' }),
+      );
+      expect(result).toEqual({
+        message: 'Cập nhật hồ sơ thành công',
+        data: {
+          id: 'u1',
+          email: 'new@example.com',
+          full_name: 'New Name',
+          phone: '0909123456',
+          notes: 'updated',
+        },
+      });
+    });
+
+    it('should throw when new email already exists', async () => {
+      usersService.findById.mockResolvedValue({
+        id: 'u1',
+        email: 'old@example.com',
+        status: 'ACTIVE',
+        employeeId: null,
+      });
+      usersService.findByEmail.mockResolvedValue({
+        id: 'u2',
+        email: 'taken@example.com',
+      });
+
+      await expect(
+        service.updateProfile('u1', { email: 'taken@example.com' }),
+      ).rejects.toThrow('Email đã tồn tại');
+    });
+
+    it('should reject employee fields when account is not linked to employee', async () => {
+      usersService.findById.mockResolvedValue({
+        id: 'u1',
+        email: 'user@example.com',
+        status: 'ACTIVE',
+        employeeId: null,
+      });
+      usersService.getEmployeeSnapshot.mockResolvedValue(null);
+
+      await expect(
+        service.updateProfile('u1', {
+          phone: '0909123456',
+          notes: 'note',
+        }),
+      ).rejects.toThrow(
+        'Tài khoản chưa liên kết hồ sơ nhân viên, chưa thể cập nhật họ tên/số điện thoại/ghi chú.',
       );
     });
   });

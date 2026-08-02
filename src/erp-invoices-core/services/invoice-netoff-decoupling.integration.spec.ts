@@ -44,10 +44,33 @@ function setupFixture() {
     merge: jest.fn((target: any, source: any) => Object.assign(target, source)),
     save: jest.fn(async (entity: any) => entity),
     manager: {
+      findOne: jest.fn(async (entity: any, opts: any) => {
+        if (entity === ErpInvoiceVoucherNetOff) {
+          const { invoiceId, bankTransactionId } = opts?.where || {};
+          return (
+            netOffs.find(
+              (n) =>
+                n.invoiceId === invoiceId &&
+                n.bankTransactionId === bankTransactionId,
+            ) || null
+          );
+        }
+        return null;
+      }),
       create: jest.fn((_entity: any, data: any) => ({ ...data })),
-      save: jest.fn(async (_entity: any, entities: any[]) => {
-        if (Array.isArray(entities)) {
-          netOffs.push(...entities.map((e) => ({ ...e })));
+      save: jest.fn(async (_entity: any, entities: any | any[]) => {
+        const toSave = Array.isArray(entities) ? entities : [entities];
+        for (const e of toSave) {
+          const idx = netOffs.findIndex(
+            (n) =>
+              n.invoiceId === e.invoiceId &&
+              n.bankTransactionId === e.bankTransactionId,
+          );
+          if (idx !== -1) {
+            netOffs[idx] = { ...netOffs[idx], ...e };
+          } else {
+            netOffs.push({ ...e });
+          }
         }
         return entities;
       }),

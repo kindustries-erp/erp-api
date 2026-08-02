@@ -16,4 +16,14 @@ export class DashboardCoreController {
   getOverview(@Query() query: any) {
     return this.dashboardCoreService.getOverview(query);
   }
+
+  @Get('cashflow-forecast')
+  getCashflowForecast(@Query() query: any) {
+    return this.dashboardCoreService.getCashflowForecast(query);
+  }
+
+  @Get('budget-suggestions')
+  getBudgetSuggestions(@Query() query: any) {
+    return this.dashboardCoreService.getBudgetSuggestions(query);
+  }
 }

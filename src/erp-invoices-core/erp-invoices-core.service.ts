@@ -93,6 +93,14 @@ export class ErpInvoicesCoreService {
     return this.queryService.exportExcel(query);
   }
 
+  getBulkNetOffs(invoiceIds: string[]) {
+    return this.queryService.getBulkNetOffs(invoiceIds);
+  }
+
+  getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
+    return this.queryService.getStats(direction, dateFrom, dateTo);
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -226,8 +234,18 @@ export class ErpInvoicesCoreService {
   uploadPdfs(
     invoiceId: string,
     files: { filename: string; buffer: Buffer; mimetype: string }[],
+    documentType?: string,
+    userId?: string,
   ) {
-    return this.filesService.uploadPdfs(invoiceId, files);
+    return this.filesService.uploadPdfs(invoiceId, files, documentType, userId);
+  }
+
+  linkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.linkAttachment(invoiceId, attachmentId);
+  }
+
+  unlinkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.unlinkAttachment(invoiceId, attachmentId);
   }
 
   getPdfContent(invoiceId: string, fileKey: string) {

@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { InvoicePortalService } from './invoice-portal.service';
 import { fetchWithRetry } from '../helpers/invoice-gdt.helper';
+import { sleep } from '../../common/utils/delay.util';
 
 jest.mock('../helpers/invoice-gdt.helper', () => {
   return {
@@ -29,6 +30,7 @@ describe('InvoicePortalService - taxpayer validation', () => {
     service = new InvoicePortalService(
       {} as any,
       companyProfileRepo as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

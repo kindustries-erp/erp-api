@@ -85,9 +85,41 @@ export class KgaraPayable {
   })
   maSoTienTe: string;
 
+  /** TenTienTe */
+  @Column({ type: 'varchar', length: 100, name: 'ten_tien_te', nullable: true })
+  tenTienTe: string | null;
+
   /** MaSoVuViec – Job/Case ID if any (to be part of composite key) */
   @Column({ type: 'varchar', length: 100, name: 'ma_so_vu_viec', default: '' })
   maSoVuViec: string;
+
+  /** TenVuViec */
+  @Column({ type: 'varchar', length: 255, name: 'ten_vu_viec', nullable: true })
+  tenVuViec: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'ghi_chu_doi_tac',
+    nullable: true,
+  })
+  ghiChuDoiTac: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'ma_so_nhom_doi_tac',
+    nullable: true,
+  })
+  maSoNhomDoiTac: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'ten_nhom_doi_tac',
+    nullable: true,
+  })
+  tenNhomDoiTac: string | null;
 
   /** DKNo – Opening debit balance */
   @Column({
@@ -158,6 +190,87 @@ export class KgaraPayable {
     nullable: true,
   })
   tyGiaCk: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'dk_nte_no',
+    nullable: true,
+  })
+  dkNTeNo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'dk_nte_co',
+    nullable: true,
+  })
+  dkNTeCo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'ps_nte_no',
+    nullable: true,
+  })
+  psNTeNo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'ps_nte_co',
+    nullable: true,
+  })
+  psNTeCo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'ck_nte_no',
+    nullable: true,
+  })
+  ckNTeNo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'ck_nte_co',
+    nullable: true,
+  })
+  ckNTeCo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 4,
+    name: 'ty_gia_dk',
+    nullable: true,
+  })
+  tyGiaDk: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 4,
+    name: 'ty_gia_ps_no',
+    nullable: true,
+  })
+  tyGiaPsNo: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 4,
+    name: 'ty_gia_ps_co',
+    nullable: true,
+  })
+  tyGiaPsCo: number | null;
 
   /** Date range "from" used in API query (for snapshot context) */
   @Column({ type: 'date', name: 'period_from', nullable: true })

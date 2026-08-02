@@ -41,5 +41,6 @@ export function toInvoiceDto(invoice: ErpInvoice & { netOffAmount?: string }) {
         }))
       : undefined,
     voucherNetOffs: invoice.voucherNetOffs,
+    attachments: invoice.attachments,
   };
 }

@@ -39,7 +39,13 @@ export class InvoiceLifecycleService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id, isDeleted: false },
-      relations: ['items', 'voucherNetOffs', 'voucherNetOffs.bankTransaction'],
+      relations: [
+        'items',
+        'voucherNetOffs',
+        'voucherNetOffs.bankTransaction',
+        'attachments',
+        'attachments.attachment',
+      ],
     });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
@@ -407,15 +413,29 @@ export class InvoiceLifecycleService {
       }
     }
 
-    const netOffEntities = payload.map((p) =>
-      this.repository.manager.create(ErpInvoiceVoucherNetOff, {
-        invoiceId,
-        bankTransactionId: p.bankTransactionId,
-        netOffAmount: p.netOffAmount ?? 0,
-      }),
-    );
+    for (const p of payload) {
+      const existing = await this.repository.manager.findOne(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId, bankTransactionId: p.bankTransactionId },
+        },
+      );
 
-    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
+      if (existing) {
+        existing.netOffAmount = p.netOffAmount ?? 0;
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, existing);
+      } else {
+        const newNetOff = this.repository.manager.create(
+          ErpInvoiceVoucherNetOff,
+          {
+            invoiceId,
+            bankTransactionId: p.bankTransactionId,
+            netOffAmount: p.netOffAmount ?? 0,
+          },
+        );
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, newNetOff);
+      }
+    }
 
     return { message: 'Đã liên kết phiếu thành công' };
   }

@@ -114,11 +114,38 @@ export class KgaraClientService {
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return {
-          results: { Phieu: { Tong: 0 }, Tien: {}, ChiPhi: {}, LoiNhuan: {} },
+          results: {
+            Phieu: { Tong: 0 },
+            Tien: { TongDoanhThu: 0, TongDaThu: 0, TongConPhaiThu: 0 },
+            ChiPhi: {},
+            LoiNhuan: {},
+          },
         };
       }
       throw error;
     }
+  }
+
+  async getGrossProfitDetail(
+    branchId: string,
+    from: string,
+    to: string,
+  ): Promise<any> {
+    const url = `/api/v1/gr/reports/gross-profit-detail?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    return this.request(url, {}, branchId);
+  }
+
+  async getGrossProfitJournal(
+    branchId: string,
+    from: string,
+    to: string,
+    vuViecID?: string,
+  ): Promise<any> {
+    let url = `/api/v1/gr/reports/gross-profit-detail/journal?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    if (vuViecID) {
+      url += `&vuViecID=${encodeURIComponent(vuViecID)}`;
+    }
+    return this.request(url, {}, branchId);
   }
 
   async getReceivables(
