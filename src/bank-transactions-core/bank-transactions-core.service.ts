@@ -1859,36 +1859,130 @@ export class BankTransactionsCoreService {
 
     const existingTxns = await existingQb.getMany();
 
-    const existingKeys = new Set(
-      existingTxns.map((t) => {
-        if (t.referenceNumber) return `REF_${t.referenceNumber}`;
-        return `${new Date(t.transDate).toISOString()}_${Number(t.debitAmount || 0)}_${Number(t.creditAmount || 0)}_${(t.description || '').trim()}`;
-      }),
-    );
+    const existingMap = new Map<string, ErpBankTransaction>();
+    for (const t of existingTxns) {
+      const key = t.referenceNumber
+        ? `REF_${t.referenceNumber}`
+        : `${new Date(t.transDate).toISOString()}_${Number(t.debitAmount || 0)}_${Number(t.creditAmount || 0)}_${(t.description || '').trim()}`;
+      existingMap.set(key, t);
+    }
 
-    const newDtos = allDtos.filter((d) => {
+    const newDtos: CreateBankTransactionDto[] = [];
+    const updateEntities: ErpBankTransaction[] = [];
+    let skippedCount = 0;
+
+    const importBatchId = crypto.randomUUID();
+
+    for (const d of allDtos) {
       const key = d.referenceNumber
         ? `REF_${d.referenceNumber}`
         : `${new Date(d.transDate).toISOString()}_${Number(d.debitAmount || 0)}_${Number(d.creditAmount || 0)}_${(d.description || '').trim()}`;
-      return !existingKeys.has(key);
-    });
 
-    if (newDtos.length === 0) {
+      const existing = existingMap.get(key);
+      if (!existing) {
+        newDtos.push(d);
+      } else {
+        let hasChanges = false;
+
+        const dTransStr = new Date(d.transDate).toISOString();
+        const eTransStr = new Date(existing.transDate).toISOString();
+        if (dTransStr !== eTransStr) {
+          existing.transDate = new Date(d.transDate);
+          hasChanges = true;
+        }
+
+        const dEfdStr = d.efdDate ? new Date(d.efdDate).toISOString() : null;
+        const eEfdStr = existing.efdDate
+          ? new Date(existing.efdDate).toISOString()
+          : null;
+        if (dEfdStr !== eEfdStr) {
+          existing.efdDate = d.efdDate ? new Date(d.efdDate) : null;
+          hasChanges = true;
+        }
+
+        if (Number(existing.debitAmount) !== Number(d.debitAmount || 0)) {
+          existing.debitAmount = Number(d.debitAmount || 0);
+          hasChanges = true;
+        }
+        if (Number(existing.creditAmount) !== Number(d.creditAmount || 0)) {
+          existing.creditAmount = Number(d.creditAmount || 0);
+          hasChanges = true;
+        }
+        if (
+          d.balance !== undefined &&
+          Number(existing.balance) !== Number(d.balance)
+        ) {
+          existing.balance = Number(d.balance);
+          hasChanges = true;
+        }
+        if (
+          d.description !== undefined &&
+          existing.description !== d.description
+        ) {
+          existing.description = d.description;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentAccount !== undefined &&
+          existing.correspondentAccount !== d.correspondentAccount
+        ) {
+          existing.correspondentAccount = d.correspondentAccount;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentName !== undefined &&
+          existing.correspondentName !== d.correspondentName
+        ) {
+          existing.correspondentName = d.correspondentName;
+          hasChanges = true;
+        }
+        if (
+          d.correspondentBank !== undefined &&
+          existing.correspondentBank !== d.correspondentBank
+        ) {
+          existing.correspondentBank = d.correspondentBank;
+          hasChanges = true;
+        }
+        if (d.seqNo !== undefined && existing.seqNo !== d.seqNo) {
+          existing.seqNo = d.seqNo;
+          hasChanges = true;
+        }
+        if (d.stt !== undefined && existing.stt !== d.stt) {
+          existing.stt = d.stt;
+          hasChanges = true;
+        }
+
+        if (hasChanges) {
+          updateEntities.push(existing);
+        } else {
+          skippedCount++;
+        }
+      }
+    }
+
+    if (newDtos.length === 0 && updateEntities.length === 0) {
       throw new BadRequestException(
-        'Tất cả giao dịch trong file này đã tồn tại trong hệ thống',
+        'Tất cả giao dịch trong file này đã tồn tại và không có thay đổi nào trong hệ thống',
       );
     }
 
-    const importBatchId = crypto.randomUUID();
     const entities = newDtos.map((dto) =>
       this.transactionRepo.create({ ...dto, importBatchId }),
     );
 
-    await this.transactionRepo.save(entities, { chunk: 100 });
+    if (entities.length > 0) {
+      await this.transactionRepo.save(entities, { chunk: 100 });
+    }
+
+    if (updateEntities.length > 0) {
+      await this.transactionRepo.save(updateEntities, { chunk: 100 });
+    }
 
     return {
       success: true,
       count: entities.length,
+      updatedCount: updateEntities.length,
+      skippedCount: skippedCount,
       importBatchId,
     };
   }
