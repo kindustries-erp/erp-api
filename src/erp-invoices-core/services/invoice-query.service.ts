@@ -769,7 +769,7 @@ export class InvoiceQueryService {
       .getMany();
   }
 
-  async getStats(direction?: 'IN' | 'OUT') {
+  async getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
     const today = new Date();
 
     // Compute sixMonthsAgo as YYYY-MM-DD string
@@ -790,8 +790,12 @@ export class InvoiceQueryService {
       '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
     );
     // Use string comparison for exact match based on database Date
-    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :sixMonthsAgo`, {
-      sixMonthsAgo: sixMonthsAgoStr,
+    let fetchFrom = sixMonthsAgoStr;
+    if (dateFrom && dateFrom < fetchFrom) {
+      fetchFrom = dateFrom;
+    }
+    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :fetchFrom`, {
+      fetchFrom,
     });
 
     qb.leftJoin('erp_branches', 'b', 'b.id = inv.branch_id');
@@ -886,28 +890,48 @@ export class InvoiceQueryService {
       const branchKey = getBranchKey(row.branch_name);
       const bStats = getBranchStats(branchKey);
 
-      // Current Day
-      if (dStr === todayStr) {
-        dayTotal += total;
-        dayPreVat += prevat;
-        bStats.dayTotal += total;
-        bStats.dayPreVat += prevat;
-      }
+      // If dateFrom and dateTo are provided, use them for totals instead of current periods
+      if (dateFrom && dateTo) {
+        if (dStr >= dateFrom && dStr <= dateTo) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
 
-      // Current Week
-      if (dStr >= thisWeekStr) {
-        weekTotal += total;
-        weekPreVat += prevat;
-        bStats.weekTotal += total;
-        bStats.weekPreVat += prevat;
-      }
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
 
-      // Current Month
-      if (dStr >= thisMonthStr) {
-        monthTotal += total;
-        monthPreVat += prevat;
-        bStats.monthTotal += total;
-        bStats.monthPreVat += prevat;
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+      } else {
+        // Current Day
+        if (dStr === todayStr) {
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+
+        // Current Week
+        if (dStr >= thisWeekStr) {
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
+        }
+
+        // Current Month
+        if (dStr >= thisMonthStr) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
+        }
       }
 
       // Day Chart (last 7 days, index 6 is today, 0 is 6 days ago)
