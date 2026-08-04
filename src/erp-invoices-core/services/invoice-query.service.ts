@@ -1212,9 +1212,22 @@ export class InvoiceQueryService {
         qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
           postingStatusVals: vals,
         });
-      else if (key === 'branchId')
-        qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
-      else if (key === 'invoiceDate')
+      else if (key === 'branchId') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            '(inv.branch_id IN (:...branchVals) OR inv.branch_id IS NULL)',
+            { branchVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere('(inv.branch_id IS NULL)');
+        } else {
+          qb.andWhere('inv.branch_id IN (:...branchVals)', {
+            branchVals: vals,
+          });
+        }
+      } else if (key === 'invoiceDate')
         qb.andWhere(
           `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
           { invoiceDateVals: vals },
@@ -1237,38 +1250,71 @@ export class InvoiceQueryService {
           });
         }
       } else if (key === 'partner') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_name IN (:...partnerVals)', {
-            partnerVals: vals,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_name IN (:...partnerVals)', {
-            partnerVals: vals,
-          });
-        else
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const fieldMap: any = { IN: 'inv.seller_name', OUT: 'inv.buyer_name' };
+        const field = direction
+          ? fieldMap[direction]
+          : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
+
+        if (hasBlank && realVals.length > 0) {
           qb.andWhere(
-            "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END) IN (:...partnerVals)",
-            { partnerVals: vals },
+            `(${field} IN (:...partnerVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            { partnerVals: realVals },
           );
+        } else if (hasBlank) {
+          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+        } else {
+          qb.andWhere(`${field} IN (:...partnerVals)`, { partnerVals: vals });
+        }
       } else if (key === 'taxCode') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_tax_code IN (:...taxCodeVals)', {
-            taxCodeVals: vals,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_tax_code IN (:...taxCodeVals)', {
-            taxCodeVals: vals,
-          });
-        else
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const fieldMap: any = {
+          IN: 'inv.seller_tax_code',
+          OUT: 'inv.buyer_tax_code',
+        };
+        const field = direction
+          ? fieldMap[direction]
+          : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
+
+        if (hasBlank && realVals.length > 0) {
           qb.andWhere(
-            "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END) IN (:...taxCodeVals)",
-            { taxCodeVals: vals },
+            `(${field} IN (:...taxCodeVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            { taxCodeVals: realVals },
           );
-      } else if (key === 'description')
-        qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
-      else if (key === 'notes')
-        qb.andWhere('inv.notes IN (:...notesVals)', { notesVals: vals });
-      else if (key === 'isValid') {
+        } else if (hasBlank) {
+          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+        } else {
+          qb.andWhere(`${field} IN (:...taxCodeVals)`, { taxCodeVals: vals });
+        }
+      } else if (key === 'description') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(inv.description IN (:...descVals) OR inv.description IS NULL OR inv.description = '')",
+            { descVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(inv.description IS NULL OR inv.description = '')");
+        } else {
+          qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+        }
+      } else if (key === 'notes') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(inv.notes IN (:...notesVals) OR inv.notes IS NULL OR inv.notes = '')",
+            { notesVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(inv.notes IS NULL OR inv.notes = '')");
+        } else {
+          qb.andWhere('inv.notes IN (:...notesVals)', { notesVals: vals });
+        }
+      } else if (key === 'isValid') {
         const validFilter = vals.includes('true') || vals.includes('1');
         const invalidFilter = vals.includes('false') || vals.includes('0');
         if (validFilter && !invalidFilter) qb.andWhere('inv.is_valid = true');
