@@ -1223,11 +1223,20 @@ export class InvoiceQueryService {
         qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
           serialNoVals: vals,
         });
-      else if (key === 'invoiceNo')
-        qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
-          invoiceNoVals: vals,
-        });
-      else if (key === 'partner') {
+      else if (key === 'invoiceNo') {
+        if (vals[0] === '__ALL_MATCHING__') {
+          const searchStr = vals[1] || '';
+          if (searchStr) {
+            qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
+              invoiceNoSearch: `%${searchStr}%`,
+            });
+          }
+        } else {
+          qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
+            invoiceNoVals: vals,
+          });
+        }
+      } else if (key === 'partner') {
         if (direction === 'IN')
           qb.andWhere('inv.seller_name IN (:...partnerVals)', {
             partnerVals: vals,
