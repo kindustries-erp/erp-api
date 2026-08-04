@@ -1473,6 +1473,11 @@ export class ReportsCoreService {
       itemCode: 'item_code',
       itemName: 'item_name',
       vehicleType: 'vehicle_type',
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - amount_bought)',
     };
 
     const sqlCol = mapColumn[query.columnKey];
