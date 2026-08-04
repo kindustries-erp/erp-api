@@ -1274,23 +1274,62 @@ export class InvoiceQueryService {
         if (validFilter && !invalidFilter) qb.andWhere('inv.is_valid = true');
         else if (invalidFilter && !validFilter)
           qb.andWhere('inv.is_valid = false');
-      } else if (key === 'preVatAmount')
-        qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
-          preVatVals: vals,
-        });
-      else if (key === 'vatAmount')
-        qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
-          vatVals: vals,
-        });
-      else if (key === 'discountAmount')
-        qb.andWhere('CAST(inv.discount_amount AS TEXT) IN (:...discountVals)', {
-          discountVals: vals,
-        });
-      else if (key === 'totalAmount')
-        qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
-          totalVals: vals,
-        });
-      else if (key === 'settlementOrder')
+      } else if (key === 'preVatAmount') {
+        if (vals[0] === '__ALL_MATCHING__') {
+          const s = (vals[1] || '').replace(/[,.]/g, '');
+          if (s)
+            qb.andWhere(
+              "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
+              { preVatSearch: `%${s}%` },
+            );
+        } else {
+          qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
+            preVatVals: vals,
+          });
+        }
+      } else if (key === 'vatAmount') {
+        if (vals[0] === '__ALL_MATCHING__') {
+          const s = (vals[1] || '').replace(/[,.]/g, '');
+          if (s)
+            qb.andWhere(
+              "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
+              { vatSearch: `%${s}%` },
+            );
+        } else {
+          qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
+            vatVals: vals,
+          });
+        }
+      } else if (key === 'discountAmount') {
+        if (vals[0] === '__ALL_MATCHING__') {
+          const s = (vals[1] || '').replace(/[,.]/g, '');
+          if (s)
+            qb.andWhere(
+              "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
+              { discountSearch: `%${s}%` },
+            );
+        } else {
+          qb.andWhere(
+            'CAST(inv.discount_amount AS TEXT) IN (:...discountVals)',
+            {
+              discountVals: vals,
+            },
+          );
+        }
+      } else if (key === 'totalAmount') {
+        if (vals[0] === '__ALL_MATCHING__') {
+          const s = (vals[1] || '').replace(/[,.]/g, '');
+          if (s)
+            qb.andWhere(
+              "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
+              { totalSearch: `%${s}%` },
+            );
+        } else {
+          qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
+            totalVals: vals,
+          });
+        }
+      } else if (key === 'settlementOrder')
         qb.andWhere('inv.settlement_order IN (:...settleVals)', {
           settleVals: vals,
         });
