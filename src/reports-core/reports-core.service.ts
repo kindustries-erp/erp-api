@@ -497,7 +497,16 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
+    const numericColMap: Record<string, string> = {
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - amount_bought)',
+    };
+
     let searchFilter = '';
+    let numericSearchFilter = '';
     if (query.columnSearch) {
       try {
         const cSearch = JSON.parse(query.columnSearch) as Record<
@@ -514,12 +523,17 @@ export class ReportsCoreService {
             searchFilter += ` AND b.item_name ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
+          } else if (numericColMap[col]) {
+            numericSearchFilter += ` AND ${numericColMap[col]}::text ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
           }
         }
       } catch (e) {}
     }
 
     let filtersSql = '';
+    let numericFiltersSql = '';
     if (query.columnFilters) {
       try {
         const cFilters = JSON.parse(query.columnFilters) as Record<
@@ -534,6 +548,10 @@ export class ReportsCoreService {
             paramIndex++;
           } else if (col === 'itemName') {
             filtersSql += ` AND b.item_name = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          } else if (numericColMap[col]) {
+            numericFiltersSql += ` AND ${numericColMap[col]}::text = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           }
@@ -639,9 +657,14 @@ export class ReportsCoreService {
           ${searchFilter}
           ${filtersSql}
         GROUP BY b.item_code
+      ),
+      filtered_data AS (
+        SELECT *, COUNT(*) OVER() AS "totalCount"
+        FROM base_data
+        WHERE 1=1 ${numericSearchFilter} ${numericFiltersSql}
       )
-      SELECT *, COUNT(*) OVER() AS "totalCount"
-      FROM base_data
+      SELECT *
+      FROM filtered_data
       ${orderSql}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -1434,6 +1457,171 @@ export class ReportsCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as any;
+  }
+
+  async getVinfastPartsDashboardTableColumnOptions(query: {
+    columnKey: string;
+    search: string;
+    page: number;
+    limit: number;
+    filtersStr: string;
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+  }) {
+    const mapColumn: Record<string, string> = {
+      itemCode: 'item_code',
+      itemName: 'item_name',
+      vehicleType: 'vehicle_type',
+    };
+
+    const sqlCol = mapColumn[query.columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page: query.page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let dateFilter = '';
+    let vehicleTypeFilter = '';
+    let otherFiltersSql = '';
+
+    if (query.dateFrom) {
+      dateFilter += ` AND b.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND b.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'b.from_car_seller',
+    );
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'BOOL_OR(b.from_car_seller)',
+    );
+
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    try {
+      const filters = JSON.parse(query.filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === query.columnKey) continue;
+        if (Array.isArray(vals) && vals.length > 0 && mapColumn[key]) {
+          const placeholders = (vals as string[])
+            .map(() => `$${paramIndex++}`)
+            .join(', ');
+          otherFiltersSql += ` AND ${mapColumn[key]}::text IN (${placeholders})`;
+          params.push(...(vals as string[]));
+        }
+      }
+    } catch (e) {}
+
+    if (query.search) {
+      otherFiltersSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${query.search}%`);
+    }
+
+    const sql = `
+      WITH buy_codes AS (
+        SELECT 
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.seller_tax_code
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      sell_codes AS (
+        SELECT 
+          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          MAX(item_name) AS item_name,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount,
+          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code,
+          MAX(b.item_name) AS item_name,
+          ${vehicleTypeSelectSql} AS vehicle_type
+        FROM buy_agg b
+        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleTypeFilter}
+        GROUP BY b.item_code
+      ),
+      filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM base_data
+        WHERE ${sqlCol} IS NOT NULL AND ${sqlCol}::text != ''
+          ${otherFiltersSql}
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const limit = query.limit || 20;
+    const page = query.page || 1;
+    const offset = (page - 1) * limit;
+    params.push(limit, offset);
+
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    return {
+      items: rows.map((r: any) => ({ value: r.value, label: r.value })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getVinfastPartsColumnOptions(query: {
