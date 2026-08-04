@@ -54,7 +54,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'reference_number',
     nullable: true,
   })
@@ -87,7 +87,7 @@ export class ErpBankTransaction {
   })
   balance: number | null;
 
-  @Column({ type: 'varchar', length: 100, name: 'seq_no', nullable: true })
+  @Column({ type: 'varchar', length: 255, name: 'seq_no', nullable: true })
   seqNo: string | null;
 
   @Column({ type: 'text', name: 'description', nullable: true })
@@ -98,7 +98,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'correspondent_account',
     nullable: true,
   })
@@ -114,7 +114,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'correspondent_bank',
     nullable: true,
   })

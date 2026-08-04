@@ -21,8 +21,10 @@ export function parseTcbCsv(
 
   const transactions: CreateBankTransactionDto[] = [];
   let startParsing = false;
+  let stopParsing = false;
 
   for (const record of records) {
+    if (stopParsing) break;
     if (!startParsing) {
       // Check for header row
       if (
@@ -54,6 +56,17 @@ export function parseTcbCsv(
     const efdDateRaw = record[0]?.trim();
     const transDateRaw = record[1]?.trim();
     const referenceNumber = record[2]?.trim() || undefined;
+
+    const refStr = (referenceNumber || '').toLowerCase();
+    if (
+      !referenceNumber ||
+      refStr.includes('ngày giờ in') ||
+      refStr.includes('phiếu này được in')
+    ) {
+      stopParsing = true;
+      break;
+    }
+
     const correspondentBank = record[3]?.trim() || undefined;
     const correspondentAccount = record[4]?.trim() || undefined;
     const correspondentName = record[5]?.trim() || undefined;
@@ -153,8 +166,10 @@ export async function parseTcbXlsx(
 
   const transactions: CreateBankTransactionDto[] = [];
   let startParsing = false;
+  let stopParsing = false;
 
   worksheet.eachRow((row, rowNumber) => {
+    if (stopParsing) return;
     if (!startParsing) {
       const rowValues = row.values as any[];
       const hasTcbHeader = rowValues.some(
@@ -173,6 +188,17 @@ export async function parseTcbXlsx(
     const efdDateRaw = rowValues[1];
     const transDateRaw = rowValues[2];
     const referenceNumber = rowValues[3]?.toString().trim() || undefined;
+
+    const refStr = (referenceNumber || '').toLowerCase();
+    if (
+      !referenceNumber ||
+      refStr.includes('ngày giờ in') ||
+      refStr.includes('phiếu này được in')
+    ) {
+      stopParsing = true;
+      return;
+    }
+
     const correspondentBank = rowValues[4]?.toString().trim() || undefined;
     const correspondentAccount = rowValues[5]?.toString().trim() || undefined;
     const correspondentName = rowValues[6]?.toString().trim() || undefined;
