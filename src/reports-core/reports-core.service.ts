@@ -479,9 +479,15 @@ export class ReportsCoreService {
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    // Used in WHERE (row-level, before GROUP BY)
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
       'b.item_code',
       'b.from_car_seller',
+    );
+    // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'BOOL_OR(b.from_car_seller)',
     );
 
     let vehicleTypeFilter = '';
@@ -620,7 +626,7 @@ export class ReportsCoreService {
         SELECT 
           b.item_code,
           MAX(b.item_name) AS item_name,
-          ${vehicleTypeSql} AS vehicle_type,
+          ${vehicleTypeSelectSql} AS vehicle_type,
           SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
           SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
           SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
