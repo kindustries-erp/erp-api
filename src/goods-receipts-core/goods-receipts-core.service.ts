@@ -182,7 +182,7 @@ export class GoodsReceiptsCoreService {
     const order = resolveSortOrder(query.sort, {
       allowedFields: ['createdAt', 'receiptDate', 'receiptNo', 'status'],
       columnMap: { created_at: 'createdAt', receipt_date: 'receiptDate' },
-      defaultOrder: { createdAt: 'DESC' },
+      defaultOrder: { receiptDate: 'DESC' },
     });
     const where = query.search
       ? ([{ receiptNo: ILike(`%${query.search}%`), isDeleted: false }] as any)

@@ -11,6 +11,16 @@ import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { format } from 'date-fns';
+import { Subject } from 'rxjs';
+
+export interface SerialProgressEvent {
+  processId: 'serial-generation' | 'ping';
+  pendingLines: number;
+  pendingSerials: number;
+  isRunning: boolean;
+  message?: string;
+  completed: boolean;
+}
 
 @Injectable()
 export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
@@ -18,6 +28,7 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
   private timeoutId: NodeJS.Timeout;
   public isRunning = false;
   private isDestroyed = false;
+  public readonly progress$ = new Subject<SerialProgressEvent>();
 
   constructor(
     @InjectRepository(ErpGoodsReceiptLine)
@@ -38,6 +49,24 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
     }
+    this.progress$.complete();
+  }
+
+  private emitProgress(
+    pendingLines: number,
+    pendingSerials: number,
+    isRunning: boolean,
+    completed: boolean,
+    message?: string,
+  ) {
+    this.progress$.next({
+      processId: 'serial-generation',
+      pendingLines,
+      pendingSerials,
+      isRunning,
+      completed,
+      message,
+    });
   }
 
   private scheduleNextRun(ms = 15000) {
@@ -90,6 +119,23 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
             `Found ${linesToProcess.length} goods receipt lines pending serial generation.`,
           );
 
+          // Calculate total pending serials for this batch to emit initial progress
+          const totalPendingSerials = linesToProcess.reduce(
+            (sum, { line }) => sum + Math.round(Number(line.qtyReceived || 0)),
+            0,
+          );
+
+          this.emitProgress(
+            linesToProcess.length,
+            totalPendingSerials,
+            true,
+            false,
+            `Bắt đầu sinh serial cho ${linesToProcess.length} dòng`,
+          );
+
+          let remainingLines = linesToProcess.length;
+          let remainingSerials = totalPendingSerials;
+
           for (const { line, gr } of linesToProcess) {
             const item = await this.itemRepo.findOne({
               where: { id: line.itemId! },
@@ -116,13 +162,44 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
             // Mark as generated
             line.serialsGenerated = true;
             await this.grLineRepo.save(line);
+
+            remainingLines -= 1;
+            remainingSerials -= Math.round(Number(line.qtyReceived || 0));
+
+            this.emitProgress(
+              remainingLines,
+              remainingSerials,
+              true,
+              false,
+              `Đã xử lý ${line.itemId}`,
+            );
           }
 
           this.logger.log(`Completed background serial generation for batch.`);
         }
       }
+
+      // Emit final state after each run so clients always have fresh snapshot
+      const finalProgress = await this.getProgress();
+      this.emitProgress(
+        finalProgress.pendingLines,
+        finalProgress.pendingSerials,
+        false,
+        finalProgress.pendingLines === 0,
+        finalProgress.pendingLines === 0
+          ? 'Hoàn tất sinh serial'
+          : 'Chờ đợt xử lý tiếp theo',
+      );
     } catch (err) {
       this.logger.error(`Error in background serial generation:`, err);
+      const finalProgress = await this.getProgress();
+      this.emitProgress(
+        finalProgress.pendingLines,
+        finalProgress.pendingSerials,
+        false,
+        false,
+        'Lỗi trong quá trình sinh serial',
+      );
     } finally {
       this.isRunning = false;
     }
