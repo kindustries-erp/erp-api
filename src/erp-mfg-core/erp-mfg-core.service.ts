@@ -10,6 +10,7 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpVehicle } from './entities/erp_vehicle.entity';
+import { ErpProductionOrderSerialAssignment } from '../production-core/entities/erp_production_order_serial_assignment.entity';
 
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -37,6 +38,8 @@ export class ErpMfgCoreService {
     private readonly uomRepository: Repository<ErpUom>,
     @InjectRepository(ErpItemType)
     private readonly itemTypeRepository: Repository<ErpItemType>,
+    @InjectRepository(ErpProductionOrderSerialAssignment)
+    private readonly assignmentRepository: Repository<ErpProductionOrderSerialAssignment>,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -403,6 +406,37 @@ export class ErpMfgCoreService {
       status: v.status,
       notes: v.notes,
       created_at: v.createdAt?.toISOString?.() ?? null,
+    };
+  }
+
+  async getAsBuiltBom(vehicleId: string) {
+    const assignments = await this.assignmentRepository.find({
+      where: { vehicleId },
+      relations: ['bomLine', 'bomLine.componentItem', 'serial', 'checkpoint'],
+      order: { assignedAt: 'ASC' },
+    });
+
+    return {
+      data: assignments.map((a) => ({
+        id: a.id,
+        vehicle_id: a.vehicleId,
+        production_order_id: a.productionOrderId,
+        bom_line_id: a.bomLineId,
+        assigned_at: a.assignedAt,
+        assignment_source: a.assignmentSource,
+        checkpoint_id: a.checkpointId,
+        checkpoint_name: a.checkpoint?.name,
+        worker_id: a.workerId,
+        serial: a.serial
+          ? {
+              id: a.serial.id,
+              serial_no: a.serial.serialNo,
+              item_id: a.serial.itemId,
+              item_name: a.bomLine?.componentItem?.itemName,
+              sku: a.bomLine?.componentItem?.sku,
+            }
+          : null,
+      })),
     };
   }
 }

@@ -90,10 +90,13 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const balanceRepo = {
       findOne: j.fn().mockResolvedValue(balance),
+      find: j.fn().mockResolvedValue([balance]),
+      findBy: j.fn().mockResolvedValue([balance]),
       save: j.fn(async (x: any) => x),
     };
 
@@ -106,6 +109,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       findOneBy: j.fn().mockResolvedValue(poLine),
       save: j.fn(async (x: any) => x),
       find: j.fn().mockResolvedValue([poLine]),
+      findBy: j.fn().mockResolvedValue([poLine]),
     };
 
     const moRepo = {
@@ -140,7 +144,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     expect(poLine.qtyReceived).toBe('8.000');
     expect(po.status).toBe('PARTIAL_RECEIVED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCall = txnRepo.insert.mock.calls[0][0][0];
     expect(txnCall.transactionType).toBe('RECEIPT');
     expect(txnCall.qtyIn).toBe('5.000');
     expect(txnCall.qtyOut).toBe('0.000');
@@ -259,6 +263,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const repoMap = new Map<any, any>([
@@ -269,6 +274,8 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
         ErpInventoryBalance,
         {
           findOne: j.fn().mockResolvedValue(balance),
+          find: j.fn().mockResolvedValue([balance]),
+          findBy: j.fn().mockResolvedValue([balance]),
           save: j.fn(async (x: any) => x),
         },
       ],
@@ -278,7 +285,8 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
         {
           findOneBy: j.fn().mockResolvedValue(poLine),
           save: j.fn(),
-          find: j.fn(),
+          find: j.fn().mockResolvedValue([poLine]),
+          findBy: j.fn().mockResolvedValue([poLine]),
         },
       ],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
@@ -346,10 +354,13 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const balanceRepo = {
       findOne: j.fn().mockResolvedValue(balance),
+      find: j.fn().mockResolvedValue([balance]),
+      findBy: j.fn().mockResolvedValue([balance]),
       save: j.fn(async (x: any) => x),
     };
 
@@ -362,6 +373,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       findOneBy: j.fn().mockResolvedValue(poLine),
       save: j.fn(async (x: any) => x),
       find: j.fn().mockResolvedValue([poLine]),
+      findBy: j.fn().mockResolvedValue([poLine]),
     };
 
     const repoMap = new Map<any, any>([
@@ -391,7 +403,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     expect(poLine.qtyReceived).toBe('3.000');
     expect(po.status).toBe('PARTIAL_RECEIVED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCall = txnRepo.insert.mock.calls[0][0][0];
     expect(txnCall.transactionType).toBe('RECEIPT_CANCEL');
     expect(txnCall.qtyIn).toBe('0.000');
     expect(txnCall.qtyOut).toBe('5.000');
@@ -474,6 +486,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const receiptRepo = {

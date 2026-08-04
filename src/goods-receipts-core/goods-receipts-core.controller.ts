@@ -21,13 +21,17 @@ import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
 import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
 import { PostGoodsReceiptDto } from './dto/post-goods-receipt.dto';
+import { GoodsReceiptsCronService } from './goods-receipts-cron.service';
 
 @ApiTags('erp_goods_receipts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('goods-receipts')
 export class GoodsReceiptsCoreController {
-  constructor(private readonly service: GoodsReceiptsCoreService) {}
+  constructor(
+    private readonly service: GoodsReceiptsCoreService,
+    private readonly cronService: GoodsReceiptsCronService,
+  ) {}
 
   @RequirePermissions({ resource: 'goods_receipts', action: 'create' })
   @Post()
@@ -44,6 +48,11 @@ export class GoodsReceiptsCoreController {
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextReceiptNo(date);
+  }
+
+  @Get('serial-generation/progress')
+  getSerialGenerationProgress() {
+    return this.cronService.getProgress();
   }
 
   @RequirePermissions({ resource: 'goods_receipts', action: 'read' })

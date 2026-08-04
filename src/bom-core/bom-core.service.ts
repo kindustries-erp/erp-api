@@ -148,7 +148,14 @@ export class BomCoreService {
       const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT
+             i.id,
+             i.sku,
+             i.item_name,
+             p.code AS tracking_policy_code
+           FROM public.erp_inventory_items i
+           LEFT JOIN public.erp_tracking_policies p ON p.id = i.tracking_policy_id
+           WHERE i.id = ANY($1::uuid[])`,
           [itemIds],
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
@@ -157,6 +164,12 @@ export class BomCoreService {
             const item = itemMap.get(line.componentItemId) as any;
             (line as any).componentItemCode = item.sku;
             (line as any).componentItemName = `${item.sku} — ${item.item_name}`;
+            // Dòng BOM có cần track serial riêng lẻ không?
+            // true = cần ghi As-Built BOM khi sản xuất (policy SERIAL hoặc CUSTOM)
+            (line as any).requiresSerialTracking = [
+              'SERIAL',
+              'CUSTOM',
+            ].includes(item.tracking_policy_code ?? '');
           }
         }
       }

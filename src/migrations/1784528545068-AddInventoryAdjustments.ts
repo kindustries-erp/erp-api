@@ -5,7 +5,7 @@ export class AddInventoryAdjustments1784528545068 implements MigrationInterface 
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-            CREATE TABLE "erp_inventory_adjustments" (
+            CREATE TABLE IF NOT EXISTS "erp_inventory_adjustments" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "adjustment_no" character varying(50) NOT NULL,
                 "adjustment_date" timestamp NOT NULL,
@@ -22,7 +22,7 @@ export class AddInventoryAdjustments1784528545068 implements MigrationInterface 
         `);
 
     await queryRunner.query(`
-            CREATE TABLE "erp_inventory_adjustment_lines" (
+            CREATE TABLE IF NOT EXISTS "erp_inventory_adjustment_lines" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "adjustment_id" uuid NOT NULL,
                 "item_id" uuid,

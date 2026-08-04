@@ -10,6 +10,7 @@ import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purch
 import { ErpVehicle } from './entities/erp_vehicle.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
+import { ErpProductionOrderSerialAssignment } from '../production-core/entities/erp_production_order_serial_assignment.entity';
 import { ErpMfgCoreController } from './erp-mfg-core.controller';
 import { ErpMfgCoreService } from './erp-mfg-core.service';
 
@@ -26,6 +27,7 @@ import { ErpMfgCoreService } from './erp-mfg-core.service';
       ErpVehicle,
       ErpUom,
       ErpItemType,
+      ErpProductionOrderSerialAssignment,
     ]),
   ],
   controllers: [ErpMfgCoreController],

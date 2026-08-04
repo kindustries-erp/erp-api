@@ -127,4 +127,11 @@ export class ProductionCoreController {
   ) {
     return this.service.completeProduction(id, dto);
   }
+
+  // --- Shop Floor APIs ---
+  @RequirePermissions({ resource: 'production', action: 'update' })
+  @Post('shop-floor/scan')
+  shopFloorScan(@Body() dto: any) {
+    return this.service.handleShopFloorScan(dto);
+  }
 }

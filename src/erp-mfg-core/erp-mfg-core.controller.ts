@@ -46,6 +46,13 @@ export class ErpMfgCoreController {
     return this.service.updateComponent(id, body);
   }
 
+  // --- As-Built BOM for Vehicle ---
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('items/vehicles/:id/as-built-bom')
+  getAsBuiltBom(@Param('id') id: string) {
+    return this.service.getAsBuiltBom(id);
+  }
+
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items/components/:id/stock-summary')
   getComponentStockSummary(@Param('id') id: string) {

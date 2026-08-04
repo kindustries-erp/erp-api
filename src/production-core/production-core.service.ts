@@ -33,6 +33,7 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
+import { ErpProductionOrderSerialAssignment } from './entities/erp_production_order_serial_assignment.entity';
 
 import { ListProductionDto } from './dto/list-production.dto';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
@@ -91,6 +92,8 @@ export class ProductionCoreService {
     private readonly goodsReceiptRepository: Repository<ErpGoodsReceipt>,
     @InjectRepository(ErpGoodsReceiptLine)
     private readonly goodsReceiptLineRepository: Repository<ErpGoodsReceiptLine>,
+    @InjectRepository(ErpProductionOrderSerialAssignment)
+    private readonly serialAssignmentRepository: Repository<ErpProductionOrderSerialAssignment>,
     private readonly companyProfileService: CompanyProfileService,
   ) {}
 
@@ -1595,6 +1598,7 @@ export class ProductionCoreService {
         } as any),
       )) as unknown as ErpGoodsReceiptLine;
 
+      const vehiclesCreatedThisBatch: any[] = [];
       if (trackingPolicy === 'VEHICLE') {
         for (const identifier of identifiers) {
           const vehicle = (await vehicleRepo.save(
@@ -1608,6 +1612,7 @@ export class ProductionCoreService {
               notes: identifier.notes ?? null,
             } as any),
           )) as unknown as ErpVehicle;
+          vehiclesCreatedThisBatch.push(vehicle);
 
           await serialRepo.save(
             serialRepo.create({
@@ -1625,6 +1630,92 @@ export class ProductionCoreService {
           );
         }
       }
+
+      // === FIFO SERIAL ASSIGNMENT (Bước 4: As-Built BOM) ===
+      // Sau khi tạo xong xe thành phẩm, tự động gán serial linh kiện
+      // theo thứ tự FIFO cho từng xe vừa tạo.
+      //
+      // Chỉ chạy khi:
+      //   1. trackingPolicy = VEHICLE (xe thành phẩm)
+      //   2. Lệnh SX có bomId trong outputMetadata
+      //   3. BOM có ít nhất 1 dòng với item policy = SERIAL hoặc CUSTOM
+      if (trackingPolicy === 'VEHICLE') {
+        const bomId = order.outputMetadata?.bomId as string | undefined;
+        if (!bomId) {
+          // Không có BOM → bỏ qua, không block việc hoàn thành SX
+          console.warn(
+            `[As-Built] MO ${order.referenceNo} không có bomId trong outputMetadata — bỏ qua FIFO assignment`,
+          );
+        } else {
+          const assignmentRepo = manager.getRepository(
+            ErpProductionOrderSerialAssignment,
+          );
+          const bomLineRepo = manager.getRepository(ErpBomLine);
+
+          // Lấy toàn bộ BOM lines của lệnh SX này
+          const bomLines = await bomLineRepo.find({ where: { bomId } });
+          const serialItemIds = bomLines
+            .filter((l) => l.componentItemId)
+            .map((l) => l.componentItemId as string);
+
+          // Tìm tracking policy của từng linh kiện trong BOM
+          let serialPolicyItemIds: string[] = [];
+          if (serialItemIds.length > 0) {
+            const policyRows = await manager.query(
+              `SELECT i.id
+               FROM erp_inventory_items i
+               JOIN erp_tracking_policies p ON p.id = i.tracking_policy_id
+               WHERE i.id = ANY($1::uuid[])
+                 AND p.code IN ('SERIAL', 'CUSTOM')`,
+              [serialItemIds],
+            );
+            serialPolicyItemIds = policyRows.map((r: any) => r.id);
+          }
+
+          // Với từng xe vừa tạo trong lần hoàn thành này
+          for (const vehicleCreated of vehiclesCreatedThisBatch) {
+            for (const line of bomLines) {
+              if (!line.componentItemId) continue;
+              if (!serialPolicyItemIds.includes(line.componentItemId)) continue;
+
+              const qty = Math.max(
+                1,
+                Math.round(Number(line.qtyRequired ?? 1)),
+              );
+
+              // FIFO: lấy serial IN_STOCK cũ nhất, chưa bị gán vào xe nào
+              // (vin_id luôn null với SERIAL items theo thiết kế)
+              const availableSerials = await serialRepo.find({
+                where: { itemId: line.componentItemId, status: 'IN_STOCK' },
+                order: { createdAt: 'ASC' }, // Cũ nhất trước
+                take: qty,
+              });
+
+              for (const serial of availableSerials) {
+                // Ghi As-Built BOM record — KHÔNG set vin_id trên serial linh kiện
+                await assignmentRepo.save(
+                  assignmentRepo.create({
+                    productionOrderId: order.id,
+                    vehicleId: vehicleCreated.id,
+                    bomLineId: line.id,
+                    serialId: serial.id,
+                    assignedAt: new Date(),
+                    assignmentSource: 'AUTO_FIFO',
+                    checkpointId: null,
+                    workerId: null,
+                  } as any),
+                );
+
+                // Update status serial linh kiện: IN_STOCK → ASSEMBLED
+                await serialRepo.update(serial.id, {
+                  status: 'ASSEMBLED',
+                } as any);
+              }
+            }
+          }
+        }
+      }
+      // === END FIFO SERIAL ASSIGNMENT ===
 
       if (trackingPolicy === 'SERIAL') {
         for (const identifier of identifiers) {
@@ -2009,5 +2100,20 @@ export class ProductionCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  // --- Shop Floor APIs ---
+  async handleShopFloorScan(dto: any) {
+    // Stub implementation cho giai đoạn 2
+    // Dự kiến logic:
+    // 1. Dựa vào vehicleId, componentItemId (hoặc BOM line)
+    // 2. Scan barcode -> tìm inventory tracking serial
+    // 3. Tạo record ErpProductionOrderSerialAssignment với source='QR_SCAN'/'MANUAL_SCAN'
+    //    và update status serial -> ASSEMBLED.
+
+    // Tạm thời ném lỗi NotImplemented
+    throw new Error(
+      'Tính năng Scan Shop Floor chưa được triển khai (Giai đoạn 2)',
+    );
   }
 }
