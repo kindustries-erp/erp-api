@@ -510,6 +510,7 @@ export class GoodsReceiptsCoreService {
       const poRepo = manager.getRepository(ErpPurchaseOrder);
       const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
       const moRepo = manager.getRepository(ErpProductionOrder);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
 
       const receipt = await this.getReceiptOrThrow(receiptRepo, id);
       if (receipt.status === 'CANCELLED') {
@@ -527,6 +528,29 @@ export class GoodsReceiptsCoreService {
         where: { goodsReceiptId: id },
         order: { lineNo: 'ASC' },
       });
+
+      const receiptLineIds = lines.map((line) => line.id);
+      const receiptSerials =
+        receiptLineIds.length > 0
+          ? await serialRepo.find({
+              where: { receiptLineId: In(receiptLineIds) },
+            })
+          : [];
+
+      const inUseSerials = receiptSerials.filter(
+        (serial) =>
+          serial.status !== 'IN_STOCK' ||
+          !!serial.salesOrderLineId ||
+          !!serial.goodsIssueLineId ||
+          !!serial.vinId ||
+          !!serial.productionOrderId,
+      );
+
+      if (inUseSerials.length > 0) {
+        throw new BadRequestException(
+          'Không thể hủy phiếu nhập vì có serial đã được sử dụng ở nghiệp vụ khác',
+        );
+      }
 
       // ── PRE-FETCH tất cả balances và PO lines ────────────────────────────
       const cancelItemIds = [
@@ -618,6 +642,11 @@ export class GoodsReceiptsCoreService {
           : Promise.resolve(),
         cancelPoLinesToSave.length > 0
           ? poLineRepo.save(cancelPoLinesToSave)
+          : Promise.resolve(),
+        receiptSerials.length > 0
+          ? serialRepo.delete({
+              id: In(receiptSerials.map((serial) => serial.id)),
+            })
           : Promise.resolve(),
       ]);
 
