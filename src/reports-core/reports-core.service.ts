@@ -365,6 +365,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -378,6 +379,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
@@ -578,6 +580,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -591,6 +594,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
@@ -817,6 +821,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -831,6 +836,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
@@ -1013,6 +1019,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
         GROUP BY ii.invoice_id, ${inItemCodeSql}
       ),
       sell_codes AS (
@@ -1064,6 +1071,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
         GROUP BY ii.invoice_id, TRIM(SPLIT_PART(ii.description, ' ', 1))
       )
       SELECT 
@@ -1499,6 +1507,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -1513,6 +1522,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       base_data AS (
         SELECT 

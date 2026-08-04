@@ -111,6 +111,7 @@ describe('ReportsCoreService', () => {
       "BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller",
     );
     expect(sql).toContain('b.from_car_seller');
+    expect(sql).toContain('i.tax_invoice_status != 4');
   });
 
   it('keeps exception precedence before regex in overview SQL', async () => {
@@ -162,6 +163,7 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain(') IS NOT NULL');
     expect(sql).toContain('AS "vehicleType"');
     expect(sql).toContain("c.direction = 'IN' AND c.tax_code = '0318334886'");
+    expect(sql).toContain('i.tax_invoice_status != 4');
   });
 
   it('applies the same IN detection rules in column-options SQL', async () => {
