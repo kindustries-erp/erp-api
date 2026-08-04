@@ -323,7 +323,11 @@ export class InvoiceQueryService {
         query.sort_by === 'netOffAmount' ||
         query.sort_by === 'remainingAmount' ||
         columnSearch['netOffAmount'] !== undefined ||
-        columnSearch['remainingAmount'] !== undefined;
+        columnSearch['remainingAmount'] !== undefined ||
+        (columnFilters['netOffAmount'] &&
+          columnFilters['netOffAmount'].length > 0) ||
+        (columnFilters['remainingAmount'] &&
+          columnFilters['remainingAmount'].length > 0);
 
       if (needsNetOffJoin) {
         qb.leftJoin(
@@ -445,7 +449,11 @@ export class InvoiceQueryService {
       query.sort_by === 'netOffAmount' ||
       query.sort_by === 'remainingAmount' ||
       columnSearch['netOffAmount'] !== undefined ||
-      columnSearch['remainingAmount'] !== undefined;
+      columnSearch['remainingAmount'] !== undefined ||
+      (columnFilters['netOffAmount'] &&
+        columnFilters['netOffAmount'].length > 0) ||
+      (columnFilters['remainingAmount'] &&
+        columnFilters['remainingAmount'].length > 0);
 
     if (needsNetOffJoin) {
       qb.leftJoin(
@@ -1419,12 +1427,27 @@ export class InvoiceQueryService {
         } else if (includeNull) {
           qb.andWhere('inv.tax_invoice_status IS NULL');
         }
-      } else if (key === 'taxProcessStatus')
+      } else if (key === 'taxProcessStatus') {
         qb.andWhere('inv.tax_process_status IN (:...taxProcessStatusVals)', {
           taxProcessStatusVals: vals
             .map((v) => parseInt(v, 10))
             .filter((v) => !isNaN(v)),
         });
+      } else if (key === 'netOffAmount' || key === 'remainingAmount') {
+        const conditions: string[] = [];
+        if (vals.includes('settled_full'))
+          conditions.push(
+            '(COALESCE(netoff_agg.net_off_sum, 0) > 0 AND inv.total_amount <= COALESCE(netoff_agg.net_off_sum, 0))',
+          );
+        if (vals.includes('settled_partial'))
+          conditions.push(
+            '(COALESCE(netoff_agg.net_off_sum, 0) > 0 AND inv.total_amount > COALESCE(netoff_agg.net_off_sum, 0))',
+          );
+        if (vals.includes('unsettled'))
+          conditions.push('(COALESCE(netoff_agg.net_off_sum, 0) = 0)');
+
+        if (conditions.length > 0) qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
     });
   }
 
