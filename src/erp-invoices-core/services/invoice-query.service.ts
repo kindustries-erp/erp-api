@@ -18,6 +18,8 @@ import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 export class InvoiceQueryService {
   private readonly logger = new Logger(InvoiceQueryService.name);
 
+  public static readonly EXPORT_PROGRESS_TOTAL_UNITS = 100;
+
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
@@ -392,7 +394,23 @@ export class InvoiceQueryService {
   // Excel export — replicates findAll filter logic then writes spreadsheet
   // ---------------------------------------------------------------------------
 
-  async exportExcel(query: ErpInvoiceQuery): Promise<Buffer> {
+  async exportExcel(
+    query: ErpInvoiceQuery,
+    options?: {
+      onProgress?: (current: number, total: number, message: string) => void;
+    },
+  ): Promise<Buffer> {
+    const totalUnits = InvoiceQueryService.EXPORT_PROGRESS_TOTAL_UNITS;
+    const emitProgress = (current: number, message: string) => {
+      options?.onProgress?.(
+        Math.max(0, Math.min(totalUnits, current)),
+        totalUnits,
+        message,
+      );
+    };
+
+    emitProgress(5, 'Dang truy van danh sach hoa don...');
+
     const qb = this.repository
       .createQueryBuilder('inv')
       .leftJoinAndSelect('inv.items', 'items')
@@ -474,7 +492,13 @@ export class InvoiceQueryService {
 
     qb.orderBy(orderColumn, orderDirection).addOrderBy('inv.createdAt', 'DESC');
     let items = await qb.getMany();
+    emitProgress(
+      35,
+      `Da tai ${items.length} hoa don, dang tong hop can tru...`,
+    );
+
     items = await this._loadNetOffAmounts(items);
+    emitProgress(45, 'Dang tai du lieu chi nhanh...');
 
     const branches = await this.repository.manager.query(
       'SELECT id, name FROM erp_branches',
@@ -567,12 +591,12 @@ export class InvoiceQueryService {
     const detailedSheet = workbook.addWorksheet('Hàng hóa');
     detailedSheet.columns = [
       { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
       { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
-      { header: 'Đơn vị tính', key: 'uom', width: 15 },
       {
         header: 'Số lượng',
         key: 'qty',
@@ -633,6 +657,43 @@ export class InvoiceQueryService {
       { header: 'Chi nhánh', key: 'branchName', width: 25 },
     ];
 
+    const overviewSheet = workbook.addWorksheet('Tổng quan hàng hóa');
+    overviewSheet.columns = [
+      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 45 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
+      {
+        header: 'Số lượng',
+        key: 'totalQty',
+        width: 18,
+        style: { numFmt: '#,##0.###' },
+      },
+      {
+        header: 'Đơn giá bình quân',
+        key: 'avgUnitPrice',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Trước thuế GTGT',
+        key: 'totalPreVat',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thuế GTGT',
+        key: 'totalVat',
+        width: 18,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thành tiền',
+        key: 'totalAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Số dòng', key: 'lineCount', width: 12 },
+    ];
+
     const applyHeaderStyle = (sheet) => {
       sheet.getRow(1).eachCell((cell) => {
         cell.font = { bold: true };
@@ -653,7 +714,62 @@ export class InvoiceQueryService {
 
     applyHeaderStyle(summarySheet);
     applyHeaderStyle(detailedSheet);
+    applyHeaderStyle(overviewSheet);
 
+    const overviewMap = new Map<
+      string,
+      {
+        itemName: string;
+        uom: string;
+        totalQty: number;
+        totalPreVat: number;
+        totalVat: number;
+        totalAmount: number;
+        totalUnitPriceWeight: number;
+        lineCount: number;
+      }
+    >();
+
+    const accumulateOverview = (payload: {
+      itemName: string;
+      uom: string;
+      qty: number;
+      unitPrice: number;
+      preVatAmount: number;
+      vatAmount: number;
+      totalAmount: number;
+    }) => {
+      const itemName =
+        String(payload.itemName || '').trim() || '(Không có tên)';
+      const uom = String(payload.uom || '').trim();
+      const key = `${itemName.toLowerCase()}__${uom.toLowerCase()}`;
+
+      const current = overviewMap.get(key) || {
+        itemName,
+        uom,
+        totalQty: 0,
+        totalPreVat: 0,
+        totalVat: 0,
+        totalAmount: 0,
+        totalUnitPriceWeight: 0,
+        lineCount: 0,
+      };
+
+      const qty = Number(payload.qty) || 0;
+      const unitPrice = Number(payload.unitPrice) || 0;
+
+      current.totalQty += qty;
+      current.totalPreVat += Number(payload.preVatAmount) || 0;
+      current.totalVat += Number(payload.vatAmount) || 0;
+      current.totalAmount += Number(payload.totalAmount) || 0;
+      current.totalUnitPriceWeight += unitPrice * qty;
+      current.lineCount += 1;
+
+      overviewMap.set(key, current);
+    };
+
+    let processed = 0;
+    const progressDenominator = Math.max(items.length, 1);
     for (const inv of items) {
       const partnerName =
         query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -698,6 +814,10 @@ export class InvoiceQueryService {
       });
 
       if (!inv.items || inv.items.length === 0) {
+        const fallbackPreVat = Number(inv.preVatAmount) || 0;
+        const fallbackVat = Number(inv.vatAmount) || 0;
+        const fallbackTotal = Number(inv.totalAmount) || 0;
+
         detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
           serialNo: inv.serialNo,
@@ -708,10 +828,10 @@ export class InvoiceQueryService {
           uom: '',
           qty: 0,
           unitPrice: 0,
-          preVatAmount: Number(inv.preVatAmount) || 0,
+          preVatAmount: fallbackPreVat,
           vatRate: parseVatRateForDisplay(inv.vatRate),
-          vatAmount: Number(inv.vatAmount) || 0,
-          totalAmount: Number(inv.totalAmount) || 0,
+          vatAmount: fallbackVat,
+          totalAmount: fallbackTotal,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
@@ -721,6 +841,16 @@ export class InvoiceQueryService {
           remainingAmount:
             Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
           branchName: branchMap[inv.branchId || ''] || '',
+        });
+
+        accumulateOverview({
+          itemName: inv.description || '',
+          uom: '',
+          qty: 0,
+          unitPrice: 0,
+          preVatAmount: fallbackPreVat,
+          vatAmount: fallbackVat,
+          totalAmount: fallbackTotal,
         });
       } else {
         for (const item of inv.items) {
@@ -759,11 +889,55 @@ export class InvoiceQueryService {
               (Number((inv as any).netOffAmount) || 0),
             branchName: branchMap[inv.branchId || ''] || '',
           });
+
+          accumulateOverview({
+            itemName: item.description || '',
+            uom: item.unit || '',
+            qty: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            preVatAmount: itemPreVat,
+            vatAmount: itemVatAmount,
+            totalAmount: itemTotalAmount,
+          });
         }
       }
+
+      processed += 1;
+      const rowPhaseProgress =
+        45 + Math.floor((processed / progressDenominator) * 50);
+      emitProgress(
+        rowPhaseProgress,
+        `Dang tao noi dung XLSX (${processed}/${items.length})...`,
+      );
     }
 
+    const overviewRows = Array.from(overviewMap.values()).sort((a, b) =>
+      a.itemName.localeCompare(b.itemName, 'vi'),
+    );
+
+    for (const row of overviewRows) {
+      const avgUnitPrice =
+        row.totalQty > 0
+          ? row.totalUnitPriceWeight / row.totalQty
+          : row.lineCount > 0
+            ? row.totalPreVat / row.lineCount
+            : 0;
+
+      overviewSheet.addRow({
+        itemName: row.itemName,
+        uom: row.uom,
+        totalQty: row.totalQty,
+        avgUnitPrice,
+        totalPreVat: row.totalPreVat,
+        totalVat: row.totalVat,
+        totalAmount: row.totalAmount,
+        lineCount: row.lineCount,
+      });
+    }
+
+    emitProgress(97, 'Dang dong goi file XLSX...');
     const buffer = await workbook.xlsx.writeBuffer();
+    emitProgress(100, 'Da tao xong file XLSX');
     return buffer as any;
   }
 
