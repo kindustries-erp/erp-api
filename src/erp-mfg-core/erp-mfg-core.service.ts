@@ -439,4 +439,18 @@ export class ErpMfgCoreService {
       })),
     };
   }
+
+  async getVehicleBySerial(serialId: string) {
+    const assignment = await this.assignmentRepository.findOne({
+      where: { serialId },
+    });
+    if (!assignment?.vehicleId) return null;
+
+    const vehicle = await this.vehicleRepository.findOne({
+      where: { id: assignment.vehicleId },
+    });
+    if (!vehicle) return null;
+
+    return this.mapVehicle(vehicle);
+  }
 }

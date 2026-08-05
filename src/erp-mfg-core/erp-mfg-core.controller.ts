@@ -94,4 +94,10 @@ export class ErpMfgCoreController {
   createVehicle(@Body() body: any) {
     return this.service.createVehicle(body);
   }
+
+  @RequirePermissions({ resource: 'vehicles', action: 'read' })
+  @Get('items/serials/:serialId/assigned-vehicle')
+  getVehicleBySerial(@Param('serialId') serialId: string) {
+    return this.service.getVehicleBySerial(serialId);
+  }
 }
