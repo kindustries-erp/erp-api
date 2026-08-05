@@ -34,13 +34,21 @@ import {
 } from './dto/confirm-delivery.dto';
 import { UpdateSerialLifecycleDto } from './dto/update-serial-lifecycle.dto';
 import { InventoryDashboardQueryDto } from './dto/inventory-dashboard-query.dto';
+import { InventoryLotService } from './services/inventory-lot.service';
+import { InventoryCustomService } from './services/inventory-custom.service';
+import { InventoryLotQueryDto } from './dto/inventory-lot-query.dto';
+import { InventoryCustomQueryDto } from './dto/inventory-custom-query.dto';
 
 @ApiTags('erp_inventory_items')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('inventory')
 export class InventoryItemsController {
-  constructor(private readonly service: InventoryItemsService) {}
+  constructor(
+    private readonly service: InventoryItemsService,
+    private readonly lotService: InventoryLotService,
+    private readonly customService: InventoryCustomService,
+  ) {}
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('dashboard')
@@ -216,6 +224,18 @@ export class InventoryItemsController {
   @Get('serials')
   listSerials(@Query() query: InventorySerialQueryDto) {
     return this.service.listSerials(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('lots')
+  listLots(@Query() query: InventoryLotQueryDto) {
+    return this.lotService.listLots(query);
+  }
+
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('customs')
+  listCustoms(@Query() query: InventoryCustomQueryDto) {
+    return this.customService.listCustoms(query);
   }
 
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })

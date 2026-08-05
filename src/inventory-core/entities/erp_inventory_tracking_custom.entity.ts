@@ -4,7 +4,10 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { ErpInventoryItem } from './erp_inventory_item.entity';
 
 /**
  * Bảng lưu trữ thông tin tracking cho các mặt hàng có trackingPolicy = CUSTOM.
@@ -21,6 +24,10 @@ export class ErpInventoryTrackingCustom {
 
   @Column({ type: 'uuid', name: 'item_id', nullable: true })
   itemId: string | null;
+
+  @ManyToOne(() => ErpInventoryItem)
+  @JoinColumn({ name: 'item_id' })
+  item: ErpInventoryItem;
 
   @Column({ type: 'varchar', length: 50, name: 'status', default: 'IN_STOCK' })
   status: string;
