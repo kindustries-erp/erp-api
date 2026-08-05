@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import { Subject } from 'rxjs';
 import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
+import {
+  VinfastPartsExportBackgroundService,
+  type VinfastPartsExportHistoryResult,
+  type VinfastPartsExportProgressEvent,
+  type VinfastPartsExportQuery,
+} from './services/vinfast-parts-export-background.service';
 
 @Injectable()
 export class ReportsCoreService {
@@ -18,7 +25,51 @@ export class ReportsCoreService {
     (code) => `'${code.replace(/'/g, "''")}'`,
   ).join(', ');
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly vinfastPartsExportBackgroundService: VinfastPartsExportBackgroundService,
+  ) {}
+
+  get vinfastPartsExportProgress$(): Subject<VinfastPartsExportProgressEvent> {
+    return this.vinfastPartsExportBackgroundService.progress$;
+  }
+
+  startVinfastPartsExportBackground(
+    query: VinfastPartsExportQuery,
+    userId: string,
+  ) {
+    return this.vinfastPartsExportBackgroundService.startBackgroundExport(
+      query,
+      userId,
+      async (onProgress) =>
+        this.exportVinfastPartsTrackingExcel(query, { onProgress }),
+    );
+  }
+
+  getVinfastPartsExportHistory(
+    userId: string,
+    page?: number,
+    pageSize?: number,
+  ): VinfastPartsExportHistoryResult {
+    return this.vinfastPartsExportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getVinfastPartsExportProgressSnapshot(userId: string) {
+    return this.vinfastPartsExportBackgroundService.getJobSnapshotForUser(
+      userId,
+    );
+  }
+
+  getVinfastPartsExportBackgroundFile(jobId: string, userId: string) {
+    return this.vinfastPartsExportBackgroundService.getReadyExportFile(
+      jobId,
+      userId,
+    );
+  }
 
   async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
     const { whereSql, params } = this.buildDateFilter(
@@ -1144,14 +1195,26 @@ export class ReportsCoreService {
     return await this.dataSource.query(sql, params);
   }
 
-  async exportVinfastPartsTrackingExcel(query: {
-    dateFrom?: string;
-    dateTo?: string;
-    search?: string;
-    sorts?: string;
-    columnSearch?: string;
-    columnFilters?: string;
-  }) {
+  async exportVinfastPartsTrackingExcel(
+    query: {
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      sorts?: string;
+      columnSearch?: string;
+      columnFilters?: string;
+    },
+    options?: {
+      onProgress?: (current: number, total: number, message: string) => void;
+    },
+  ) {
+    const onProgress = options?.onProgress;
+    const totalProgressUnits = 100;
+
+    onProgress?.(5, totalProgressUnits, 'Đang tải dữ liệu tổng quan...');
+
     // 1. Fetch overview data
     const overviewDataResp = await this.getVinfastPartsTracking({
       ...query,
@@ -1161,6 +1224,8 @@ export class ReportsCoreService {
     const overviewData = overviewDataResp.data;
     const overviewItemCodes = new Set(overviewData.map((d: any) => d.itemCode));
 
+    onProgress?.(30, totalProgressUnits, 'Đang tải dữ liệu chi tiết...');
+
     // 2. Fetch details data and filter by overview items
     let rawData = await this.getVinfastPartsTrackingDetails({
       dateFrom: query.dateFrom,
@@ -1168,6 +1233,8 @@ export class ReportsCoreService {
       search: query.search,
     });
     rawData = rawData.filter((row: any) => overviewItemCodes.has(row.itemCode));
+
+    onProgress?.(55, totalProgressUnits, 'Đang tạo workbook Excel...');
 
     const workbook = new ExcelJS.Workbook();
 
@@ -1344,6 +1411,12 @@ export class ReportsCoreService {
       vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
     }
 
+    onProgress?.(
+      70,
+      totalProgressUnits,
+      'Đang tổng hợp dữ liệu theo phụ tùng...',
+    );
+
     // ── Tổng hợp phụ tùng (all months combined, no month column) ──────────
     const summaryMap = new Map<
       string,
@@ -1436,6 +1509,8 @@ export class ReportsCoreService {
     });
     // ────────────────────────────────────────────────────────────────────────
 
+    onProgress?.(80, totalProgressUnits, 'Đang tạo các sheet theo loại xe...');
+
     Object.entries(vehicleTypeSheetPrefix).forEach(([vehicleType, prefix]) => {
       const typeOverviewRows = overviewData.filter(
         (row: any) => row.vehicleType === vehicleType,
@@ -1455,8 +1530,16 @@ export class ReportsCoreService {
       );
     });
 
+    onProgress?.(95, totalProgressUnits, 'Đang đóng gói file XLSX...');
+
     const buffer = await workbook.xlsx.writeBuffer();
-    return buffer as any;
+    const normalized = Buffer.isBuffer(buffer)
+      ? buffer
+      : Buffer.from(buffer as ArrayBuffer);
+
+    onProgress?.(100, totalProgressUnits, 'Đã tạo xong file XLSX.');
+
+    return normalized;
   }
 
   async getVinfastPartsDashboardTableColumnOptions(query: {
