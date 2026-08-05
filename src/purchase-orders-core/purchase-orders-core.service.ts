@@ -108,6 +108,7 @@ export class PurchaseOrdersCoreService {
     filtersStr?: string,
   ) {
     const qb = this.repository.createQueryBuilder('po');
+    qb.leftJoin('po.supplier', 'supplier');
     qb.where('po.isDeleted = false');
 
     if (filtersStr) {
@@ -129,7 +130,7 @@ export class PurchaseOrdersCoreService {
                 [paramName]: values,
               });
             else if (key === 'supplierNameSnapshot')
-              qb.andWhere(`po.supplierNameSnapshot IN (:${paramName})`, {
+              qb.andWhere(`supplier.name IN (:${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'orderDate')
@@ -170,7 +171,7 @@ export class PurchaseOrdersCoreService {
         field = 'po.paymentStatus';
         break;
       case 'supplierNameSnapshot':
-        field = 'po.supplierNameSnapshot';
+        field = 'supplier.name';
         break;
       case 'orderDate':
         field = 'po.orderDate';
@@ -182,6 +183,9 @@ export class PurchaseOrdersCoreService {
         break;
       case 'title':
         field = 'po.title';
+        break;
+      case 'remarks':
+        field = 'po.remarks';
         break;
       case 'totalAmount':
         field = 'po.totalAmount';
@@ -251,11 +255,34 @@ export class PurchaseOrdersCoreService {
             const strVal = val as string;
             if (key === 'poNo') where.poNo = ILike(`%${strVal}%`);
             else if (key === 'supplierNameSnapshot')
-              where.supplierNameSnapshot = ILike(`%${strVal}%`);
+              where.supplier = {
+                ...where.supplier,
+                name: ILike(`%${strVal}%`),
+              };
             else if (key === 'status') where.status = ILike(`%${strVal}%`);
             else if (key === 'paymentStatus')
               where.paymentStatus = ILike(`%${strVal}%`);
             else if (key === 'title') where.title = ILike(`%${strVal}%`);
+            else if (key === 'remarks') where.remarks = ILike(`%${strVal}%`);
+            else if (key === 'orderDate' || key === 'expectedDate') {
+              if (strVal.includes('|')) {
+                const [from, to] = strVal.split('|');
+                if (from && to) {
+                  where[key] = Between(
+                    new Date(`${from}T00:00:00.000+07:00`),
+                    new Date(`${to}T23:59:59.999+07:00`),
+                  );
+                } else if (from) {
+                  where[key] = MoreThanOrEqual(
+                    new Date(`${from}T00:00:00.000+07:00`),
+                  );
+                } else if (to) {
+                  where[key] = LessThanOrEqual(
+                    new Date(`${to}T23:59:59.999+07:00`),
+                  );
+                }
+              }
+            }
           }
         });
       } catch (e) {}
@@ -270,8 +297,9 @@ export class PurchaseOrdersCoreService {
             else if (key === 'status') where.status = In(values);
             else if (key === 'paymentStatus') where.paymentStatus = In(values);
             else if (key === 'supplierNameSnapshot')
-              where.supplierNameSnapshot = In(values);
+              where.supplier = { ...where.supplier, name: In(values) };
             else if (key === 'title') where.title = In(values);
+            else if (key === 'remarks') where.remarks = In(values);
             // orderDate, expectedDate, totalAmount can be handled dynamically using query builder,
             // but for simplicity with findAndCount we map exact values.
             // Note: date fields require special handling if they have time.
