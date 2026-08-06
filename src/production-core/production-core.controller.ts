@@ -50,6 +50,24 @@ export class ProductionCoreController {
   }
 
   @RequirePermissions({ resource: 'production', action: 'read' })
+  @Get('orders/column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filters,
+    );
+  }
+
+  @RequirePermissions({ resource: 'production', action: 'read' })
   @Get('explode-preview')
   explodePreview(
     @Query('bomId', new ParseUUIDPipe()) bomId: string,

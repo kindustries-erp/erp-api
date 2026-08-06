@@ -2116,4 +2116,77 @@ export class ProductionCoreService {
       'Tính năng Scan Shop Floor chưa được triển khai (Giai đoạn 2)',
     );
   }
+
+  async getColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filtersStr?: string,
+  ) {
+    const qb = this.productionOrderRepository.createQueryBuilder('po');
+    qb.where('po.isDeleted = :isDeleted', { isDeleted: false });
+
+    let selectField = '';
+
+    if (column === 'reference_no') selectField = 'po.referenceNo';
+    else if (column === 'status') selectField = 'po.status';
+    else if (column === 'planned_start_date')
+      selectField = 'po.plannedStartDate';
+    else if (column === 'planned_end_date') selectField = 'po.plannedEndDate';
+    else if (column === 'qty_produced') selectField = 'po.qtyProduced';
+    else if (column === 'finished_good_item_name') {
+      qb.leftJoin(ErpInventoryItem, 'item', 'item.id = po.finishedGoodItemId');
+      selectField = 'item.itemName';
+    } else if (column === 'bomVersion') {
+      qb.leftJoin(ErpBom, 'b', "b.id::text = (po.outputMetadata->>'bomId')");
+      selectField =
+        "b.bomName || ' (v' || COALESCE(b.version::text, '?') || ')'";
+    } else return { items: [], total: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          if (col === 'status')
+            qb.andWhere(`po.status IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'reference_no')
+            qb.andWhere(`po.referenceNo IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
+        search: `%${search}%`,
+      });
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const raw = await qb.getRawMany();
+    const total = raw.length;
+    const items = raw
+      .slice((page - 1) * pageSize, page * pageSize)
+      .map((r) => String(r.value));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
 }
