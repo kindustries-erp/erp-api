@@ -717,6 +717,25 @@ export class BankTransactionsCoreService {
           const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
           const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
 
+          if (col === 'netOffAmount' || col === 'remainingAmount') {
+            const conditions: string[] = [];
+            const amountSubquery = `GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0))`;
+            if (vals.includes('settled_full'))
+              conditions.push(
+                `(${netOffSubquery} > 0 AND ${amountSubquery} <= ${netOffSubquery})`,
+              );
+            if (vals.includes('settled_partial'))
+              conditions.push(
+                `(${netOffSubquery} > 0 AND ${amountSubquery} > ${netOffSubquery})`,
+              );
+            if (vals.includes('unsettled'))
+              conditions.push(`(${netOffSubquery} = 0)`);
+
+            if (conditions.length > 0)
+              qb.andWhere(`(${conditions.join(' OR ')})`);
+            continue;
+          }
+
           if (col === 'account') {
             if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (filter.sourceType === 'CASH')
@@ -727,9 +746,6 @@ export class BankTransactionsCoreService {
           else if (col === 'description') filterField = 'txn.description';
           else if (col === 'thu') filterField = 'txn.creditAmount';
           else if (col === 'chi') filterField = 'txn.debitAmount';
-          else if (col === 'netOffAmount') filterField = netOffSubquery;
-          else if (col === 'remainingAmount')
-            filterField = remainingAmountSubquery;
           else if (col === 'balance') filterField = 'txn.balance';
           else if (col === 'correspondentName')
             filterField = 'txn.correspondentName';

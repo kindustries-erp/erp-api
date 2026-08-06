@@ -71,10 +71,17 @@ export class AddSoftDeleteToKgaraCases20260731104000 implements MigrationInterfa
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropIndex('kgara_cases', 'idx_kgara_cases_delete_count');
-    await queryRunner.dropIndex('kgara_cases', 'idx_kgara_cases_deleted_at');
-    await queryRunner.dropColumn('kgara_cases', 'kgara_delete_count');
-    await queryRunner.dropColumn('kgara_cases', 'kgara_deleted_at');
-    await queryRunner.dropColumn('kgara_cases', 'erp_notes');
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_kgara_cases_delete_count"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_kgara_cases_deleted_at"`,
+    );
+    await queryRunner.query(`
+      ALTER TABLE "kgara_cases"
+        DROP COLUMN IF EXISTS "kgara_delete_count",
+        DROP COLUMN IF EXISTS "kgara_deleted_at",
+        DROP COLUMN IF EXISTS "erp_notes"
+    `);
   }
 }

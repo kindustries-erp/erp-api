@@ -21,6 +21,7 @@ import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
+import { InvoiceExportBackgroundService } from './services/invoice-export-background.service';
 import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
 import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
@@ -50,6 +51,7 @@ import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
     InvoiceImportService,
     InvoiceFilesService,
     InvoiceQueryService,
+    InvoiceExportBackgroundService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,

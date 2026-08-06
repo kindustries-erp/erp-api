@@ -13,6 +13,7 @@ describe('ErpInvoicesCoreService', () => {
   let importService: any;
   let filesService: any;
   let queryService: any;
+  let exportBackgroundService: any;
   // Keep repository mock for lifecycle sub-service tests that instantiate it directly
   let repository: any;
   let accountingCoreService: any;
@@ -79,12 +80,21 @@ describe('ErpInvoicesCoreService', () => {
       exportExcel: jest.fn(),
     };
 
+    exportBackgroundService = {
+      progress$: { next: jest.fn() } as any,
+      startBackgroundExport: jest.fn(),
+      listHistoryForUser: jest.fn(),
+      getJobSnapshotForUser: jest.fn(),
+      getReadyExportFile: jest.fn(),
+    };
+
     service = new ErpInvoicesCoreService(
       lifecycleService,
       portalService,
       importService,
       filesService,
       queryService,
+      exportBackgroundService,
     );
   });
 

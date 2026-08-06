@@ -6,11 +6,18 @@ describe('ReportsCoreService', () => {
     query: jest.fn(),
   } as any;
 
+  const vinfastPartsExportBackgroundService = {
+    progress$: { subscribe: jest.fn() },
+  } as any;
+
   let service: ReportsCoreService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ReportsCoreService(dataSource);
+    service = new ReportsCoreService(
+      dataSource,
+      vinfastPartsExportBackgroundService,
+    );
   });
 
   it('maps sales dashboard payload from SQL rows', async () => {
@@ -404,7 +411,7 @@ describe('ReportsCoreService', () => {
     });
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as ExcelJS.Buffer);
+    await workbook.xlsx.load(buffer as any);
 
     expect(workbook.getWorksheet('Tổng hợp phụ tùng')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Tổng quan')).toBeDefined();

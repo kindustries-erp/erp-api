@@ -364,7 +364,7 @@ export class GoodsIssuesCoreService {
         const item = line.itemId
           ? await itemRepo.findOne({
               where: { id: line.itemId },
-              relations: ['itemType'],
+              relations: ['itemType', 'trackingPolicy'],
             })
           : null;
         const isService = item?.itemType?.code === 'SERVICE';
@@ -379,6 +379,35 @@ export class GoodsIssuesCoreService {
         const currentValue = Number(balance?.inventoryValue || 0);
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
+
+        if (!isService && item?.trackingPolicy?.code === 'SERIAL') {
+          const inStockCount = await serialRepo.count({
+            where: { itemId: line.itemId!, status: 'IN_STOCK' },
+          });
+
+          if (inStockCount < qty) {
+            const pendingCount = await manager
+              .createQueryBuilder()
+              .select('COUNT(l.id)', 'cnt')
+              .from('erp_goods_receipt_lines', 'l')
+              .innerJoin(
+                'erp_goods_receipts',
+                'gr',
+                'gr.id = l.goods_receipt_id',
+              )
+              .where('l.item_id = :itemId', { itemId: line.itemId })
+              .andWhere('gr.status = :status', { status: 'POSTED' })
+              .andWhere('l.serials_generated = false')
+              .getRawOne();
+
+            if (Number(pendingCount?.cnt || 0) > 0) {
+              throw new BadRequestException(
+                `Hệ thống đang trong quá trình đăng ký mã Serial cho phụ tùng ${item.sku}. Vui lòng đợi vài phút để hoàn tất, sau đó thực hiện lại lệnh xuất kho.`,
+              );
+            }
+            // else let it fall through to normal balance validation or we can throw here
+          }
+        }
 
         if (!isService) {
           if (line.salesOrderLineId) {
