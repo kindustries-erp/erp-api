@@ -6,6 +6,11 @@ import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
+import {
+  InvoiceExportBackgroundService,
+  type InvoiceExportHistoryResult,
+  type InvoiceExportProgressEvent,
+} from './services/invoice-export-background.service';
 import type { PortalProgressEvent } from './services/invoice-portal.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
@@ -55,12 +60,17 @@ export class ErpInvoicesCoreService {
     return this.portalService.progress$;
   }
 
+  get exportProgress$(): Subject<InvoiceExportProgressEvent> {
+    return this.exportBackgroundService.progress$;
+  }
+
   constructor(
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly portalService: InvoicePortalService,
     private readonly importService: InvoiceImportService,
     private readonly filesService: InvoiceFilesService,
     private readonly queryService: InvoiceQueryService,
+    private readonly exportBackgroundService: InvoiceExportBackgroundService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -91,6 +101,30 @@ export class ErpInvoicesCoreService {
 
   exportExcel(query: ErpInvoiceQuery) {
     return this.queryService.exportExcel(query);
+  }
+
+  startExportExcelBackground(query: ErpInvoiceQuery, userId: string) {
+    return this.exportBackgroundService.startBackgroundExport(query, userId);
+  }
+
+  getExportExcelHistory(
+    userId: string,
+    page?: number,
+    pageSize?: number,
+  ): InvoiceExportHistoryResult {
+    return this.exportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getExportExcelProgressSnapshot(userId: string) {
+    return this.exportBackgroundService.getJobSnapshotForUser(userId);
+  }
+
+  getExportExcelBackgroundFile(jobId: string, userId: string) {
+    return this.exportBackgroundService.getReadyExportFile(jobId, userId);
   }
 
   getBulkNetOffs(invoiceIds: string[]) {

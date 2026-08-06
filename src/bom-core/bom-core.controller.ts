@@ -45,6 +45,24 @@ export class BomCoreController {
   }
 
   @RequirePermissions({ resource: 'bom', action: 'read' })
+  @Get('column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filters,
+    );
+  }
+
+  @RequirePermissions({ resource: 'bom', action: 'read' })
   @Get('import/template')
   async downloadImportTemplate(@Res() res: Response) {
     const { buffer, contentType, filename } =

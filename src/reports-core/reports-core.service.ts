@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import { Subject } from 'rxjs';
 import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
+import {
+  VinfastPartsExportBackgroundService,
+  type VinfastPartsExportHistoryResult,
+  type VinfastPartsExportProgressEvent,
+  type VinfastPartsExportQuery,
+} from './services/vinfast-parts-export-background.service';
 
 @Injectable()
 export class ReportsCoreService {
@@ -18,7 +25,51 @@ export class ReportsCoreService {
     (code) => `'${code.replace(/'/g, "''")}'`,
   ).join(', ');
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly vinfastPartsExportBackgroundService: VinfastPartsExportBackgroundService,
+  ) {}
+
+  get vinfastPartsExportProgress$(): Subject<VinfastPartsExportProgressEvent> {
+    return this.vinfastPartsExportBackgroundService.progress$;
+  }
+
+  startVinfastPartsExportBackground(
+    query: VinfastPartsExportQuery,
+    userId: string,
+  ) {
+    return this.vinfastPartsExportBackgroundService.startBackgroundExport(
+      query,
+      userId,
+      async (onProgress) =>
+        this.exportVinfastPartsTrackingExcel(query, { onProgress }),
+    );
+  }
+
+  getVinfastPartsExportHistory(
+    userId: string,
+    page?: number,
+    pageSize?: number,
+  ): VinfastPartsExportHistoryResult {
+    return this.vinfastPartsExportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getVinfastPartsExportProgressSnapshot(userId: string) {
+    return this.vinfastPartsExportBackgroundService.getJobSnapshotForUser(
+      userId,
+    );
+  }
+
+  getVinfastPartsExportBackgroundFile(jobId: string, userId: string) {
+    return this.vinfastPartsExportBackgroundService.getReadyExportFile(
+      jobId,
+      userId,
+    );
+  }
 
   async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
     const { whereSql, params } = this.buildDateFilter(
@@ -293,10 +344,17 @@ export class ReportsCoreService {
     `;
   }
 
-  private buildVinfastVehicleTypeSql(itemCodeExpr: string) {
+  private buildVinfastVehicleTypeSql(
+    itemCodeExpr: string,
+    carSellerBoolExpr?: string,
+  ) {
     const normalizedItemCode = `UPPER(TRIM(COALESCE(${itemCodeExpr}, '')))`;
+    const carSellerWhen = carSellerBoolExpr
+      ? `WHEN ${carSellerBoolExpr} THEN 'CAR'`
+      : '';
     return `
       CASE
+        ${carSellerWhen}
         WHEN ${normalizedItemCode} IN (${this.vinfastCarPartCodesSql}) THEN 'CAR'
         ELSE 'MOTORBIKE'
       END
@@ -329,7 +387,7 @@ export class ReportsCoreService {
 
     let vehicleFilter = '';
     if (query.vehicleType && query.vehicleType !== 'all') {
-      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('b.item_code')} = $${paramIndex}`;
+      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('b.item_code', 'b.from_car_seller')} = $${paramIndex}`;
       params.push(query.vehicleType);
       paramIndex++;
     }
@@ -349,7 +407,8 @@ export class ReportsCoreService {
           ${inItemCodeSql} AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
+          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
+          i.seller_tax_code
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -357,6 +416,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -370,13 +430,15 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -468,7 +530,16 @@ export class ReportsCoreService {
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
+    // Used in WHERE (row-level, before GROUP BY)
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'b.from_car_seller',
+    );
+    // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'BOOL_OR(b.from_car_seller)',
+    );
 
     let vehicleTypeFilter = '';
     if (query.vehicleType && query.vehicleType !== 'all') {
@@ -477,7 +548,16 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
+    const numericColMap: Record<string, string> = {
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - amount_bought)',
+    };
+
     let searchFilter = '';
+    let numericSearchFilter = '';
     if (query.columnSearch) {
       try {
         const cSearch = JSON.parse(query.columnSearch) as Record<
@@ -494,12 +574,17 @@ export class ReportsCoreService {
             searchFilter += ` AND b.item_name ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
+          } else if (numericColMap[col]) {
+            numericSearchFilter += ` AND ${numericColMap[col]}::text ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
           }
         }
       } catch (e) {}
     }
 
     let filtersSql = '';
+    let numericFiltersSql = '';
     if (query.columnFilters) {
       try {
         const cFilters = JSON.parse(query.columnFilters) as Record<
@@ -514,6 +599,10 @@ export class ReportsCoreService {
             paramIndex++;
           } else if (col === 'itemName') {
             filtersSql += ` AND b.item_name = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          } else if (numericColMap[col]) {
+            numericFiltersSql += ` AND ${numericColMap[col]}::text = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           }
@@ -557,7 +646,8 @@ export class ReportsCoreService {
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.seller_tax_code
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -565,6 +655,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -578,6 +669,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
@@ -585,7 +677,8 @@ export class ReportsCoreService {
           MAX(item_name) AS item_name,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -602,7 +695,7 @@ export class ReportsCoreService {
         SELECT 
           b.item_code,
           MAX(b.item_name) AS item_name,
-          ${vehicleTypeSql} AS vehicle_type,
+          ${vehicleTypeSelectSql} AS vehicle_type,
           SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
           SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
           SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
@@ -615,9 +708,14 @@ export class ReportsCoreService {
           ${searchFilter}
           ${filtersSql}
         GROUP BY b.item_code
+      ),
+      filtered_data AS (
+        SELECT *, COUNT(*) OVER() AS "totalCount"
+        FROM base_data
+        WHERE 1=1 ${numericSearchFilter} ${numericFiltersSql}
       )
-      SELECT *, COUNT(*) OVER() AS "totalCount"
-      FROM base_data
+      SELECT *
+      FROM filtered_data
       ${orderSql}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -781,7 +879,10 @@ export class ReportsCoreService {
     const offset = (page - 1) * limit;
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'b.from_car_seller',
+    );
 
     const sql = `
       WITH buy_codes AS (
@@ -791,7 +892,8 @@ export class ReportsCoreService {
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.seller_tax_code
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -799,6 +901,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -813,6 +916,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
         SELECT 
@@ -821,7 +925,8 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           ROUND(AVG(unit_price)) AS avg_price,
-          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
+          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids,
+          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -938,7 +1043,10 @@ export class ReportsCoreService {
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('c.item_code');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'c.item_code',
+      "c.direction = 'IN' AND c.tax_code = '0318334886'",
+    );
 
     const sql = `
       WITH buy_codes AS (
@@ -991,6 +1099,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
         GROUP BY ii.invoice_id, ${inItemCodeSql}
       ),
       sell_codes AS (
@@ -1042,6 +1151,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
         GROUP BY ii.invoice_id, TRIM(SPLIT_PART(ii.description, ' ', 1))
       )
       SELECT 
@@ -1085,14 +1195,26 @@ export class ReportsCoreService {
     return await this.dataSource.query(sql, params);
   }
 
-  async exportVinfastPartsTrackingExcel(query: {
-    dateFrom?: string;
-    dateTo?: string;
-    search?: string;
-    sorts?: string;
-    columnSearch?: string;
-    columnFilters?: string;
-  }) {
+  async exportVinfastPartsTrackingExcel(
+    query: {
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      sorts?: string;
+      columnSearch?: string;
+      columnFilters?: string;
+    },
+    options?: {
+      onProgress?: (current: number, total: number, message: string) => void;
+    },
+  ) {
+    const onProgress = options?.onProgress;
+    const totalProgressUnits = 100;
+
+    onProgress?.(5, totalProgressUnits, 'Đang tải dữ liệu tổng quan...');
+
     // 1. Fetch overview data
     const overviewDataResp = await this.getVinfastPartsTracking({
       ...query,
@@ -1102,6 +1224,8 @@ export class ReportsCoreService {
     const overviewData = overviewDataResp.data;
     const overviewItemCodes = new Set(overviewData.map((d: any) => d.itemCode));
 
+    onProgress?.(30, totalProgressUnits, 'Đang tải dữ liệu chi tiết...');
+
     // 2. Fetch details data and filter by overview items
     let rawData = await this.getVinfastPartsTrackingDetails({
       dateFrom: query.dateFrom,
@@ -1109,6 +1233,8 @@ export class ReportsCoreService {
       search: query.search,
     });
     rawData = rawData.filter((row: any) => overviewItemCodes.has(row.itemCode));
+
+    onProgress?.(55, totalProgressUnits, 'Đang tạo workbook Excel...');
 
     const workbook = new ExcelJS.Workbook();
 
@@ -1285,6 +1411,106 @@ export class ReportsCoreService {
       vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
     }
 
+    onProgress?.(
+      70,
+      totalProgressUnits,
+      'Đang tổng hợp dữ liệu theo phụ tùng...',
+    );
+
+    // ── Tổng hợp phụ tùng (all months combined, no month column) ──────────
+    const summaryMap = new Map<
+      string,
+      {
+        itemCode: string;
+        itemName: string;
+        vehicleType: string;
+        qtyBought: number;
+        qtySold: number;
+        totalBuyAmount: number;
+        totalSellAmount: number;
+      }
+    >();
+    overviewData.forEach((row: any) => {
+      const ex = summaryMap.get(row.itemCode);
+      if (!ex) {
+        summaryMap.set(row.itemCode, {
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          qtyBought: Number(row.qtyBought || 0),
+          qtySold: Number(row.qtySold || 0),
+          totalBuyAmount:
+            Number(row.avgBuyPrice || 0) * Number(row.qtyBought || 0),
+          totalSellAmount:
+            Number(row.avgSellPrice || 0) * Number(row.qtySold || 0),
+        });
+      } else {
+        ex.qtyBought += Number(row.qtyBought || 0);
+        ex.qtySold += Number(row.qtySold || 0);
+        ex.totalBuyAmount +=
+          Number(row.avgBuyPrice || 0) * Number(row.qtyBought || 0);
+        ex.totalSellAmount +=
+          Number(row.avgSellPrice || 0) * Number(row.qtySold || 0);
+      }
+    });
+    const summaryRows = Array.from(summaryMap.values())
+      .map((e) => {
+        const avgBuyPrice =
+          e.qtyBought > 0 ? Math.round(e.totalBuyAmount / e.qtyBought) : 0;
+        const avgSellPrice =
+          e.qtySold > 0 ? Math.round(e.totalSellAmount / e.qtySold) : 0;
+        const hasSold = e.qtySold > 0;
+        const margin = hasSold ? avgSellPrice - avgBuyPrice : null;
+        const marginPct =
+          hasSold && avgBuyPrice > 0
+            ? (((avgSellPrice - avgBuyPrice) / avgBuyPrice) * 100).toFixed(1) +
+              '%'
+            : '';
+        return {
+          itemCode: e.itemCode,
+          itemName: e.itemName,
+          vehicleType: e.vehicleType,
+          qtyBought: e.qtyBought,
+          avgBuyPrice,
+          qtySold: e.qtySold,
+          avgSellPrice,
+          margin,
+          marginPct,
+        };
+      })
+      .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+
+    const summarySheet = workbook.addWorksheet('Tổng hợp phụ tùng');
+    summarySheet.columns = [
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
+      { header: 'Tổng SL mua', key: 'qtyBought', width: 15 },
+      { header: 'Giá mua TB', key: 'avgBuyPrice', width: 15 },
+      { header: 'Tổng SL bán ra', key: 'qtySold', width: 15 },
+      { header: 'Giá bán TB', key: 'avgSellPrice', width: 15 },
+      { header: 'Biên LN', key: 'margin', width: 15 },
+      { header: 'Biên LN (%)', key: 'marginPct', width: 15 },
+    ] as any;
+    setupSheetHeader(summarySheet, 9);
+    summaryRows.forEach((row) => summarySheet.addRow(row));
+    summarySheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        [
+          'qtyBought',
+          'avgBuyPrice',
+          'qtySold',
+          'avgSellPrice',
+          'margin',
+        ].forEach((key) => {
+          row.getCell(key).numFmt = '#,##0';
+        });
+      }
+    });
+    // ────────────────────────────────────────────────────────────────────────
+
+    onProgress?.(80, totalProgressUnits, 'Đang tạo các sheet theo loại xe...');
+
     Object.entries(vehicleTypeSheetPrefix).forEach(([vehicleType, prefix]) => {
       const typeOverviewRows = overviewData.filter(
         (row: any) => row.vehicleType === vehicleType,
@@ -1304,8 +1530,190 @@ export class ReportsCoreService {
       );
     });
 
+    onProgress?.(95, totalProgressUnits, 'Đang đóng gói file XLSX...');
+
     const buffer = await workbook.xlsx.writeBuffer();
-    return buffer as any;
+    const normalized = Buffer.isBuffer(buffer)
+      ? buffer
+      : Buffer.from(buffer as ArrayBuffer);
+
+    onProgress?.(100, totalProgressUnits, 'Đã tạo xong file XLSX.');
+
+    return normalized;
+  }
+
+  async getVinfastPartsDashboardTableColumnOptions(query: {
+    columnKey: string;
+    search: string;
+    page: number;
+    limit: number;
+    filtersStr: string;
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+  }) {
+    const mapColumn: Record<string, string> = {
+      itemCode: 'item_code',
+      itemName: 'item_name',
+      vehicleType: 'vehicle_type',
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - amount_bought)',
+    };
+
+    const sqlCol = mapColumn[query.columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page: query.page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let dateFilter = '';
+    let vehicleTypeFilter = '';
+    let otherFiltersSql = '';
+
+    if (query.dateFrom) {
+      dateFilter += ` AND b.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND b.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'b.from_car_seller',
+    );
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'BOOL_OR(b.from_car_seller)',
+    );
+
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    try {
+      const filters = JSON.parse(query.filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === query.columnKey) continue;
+        if (Array.isArray(vals) && vals.length > 0 && mapColumn[key]) {
+          const placeholders = (vals as string[])
+            .map(() => `$${paramIndex++}`)
+            .join(', ');
+          otherFiltersSql += ` AND ${mapColumn[key]}::text IN (${placeholders})`;
+          params.push(...(vals as string[]));
+        }
+      }
+    } catch (e) {}
+
+    if (query.search) {
+      otherFiltersSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${query.search}%`);
+    }
+
+    const sql = `
+      WITH buy_codes AS (
+        SELECT 
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.seller_tax_code
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      sell_codes AS (
+        SELECT 
+          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          MAX(item_name) AS item_name,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount,
+          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
+      base_data AS (
+        SELECT 
+          b.item_code,
+          MAX(b.item_name) AS item_name,
+          ${vehicleTypeSelectSql} AS vehicle_type,
+          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
+          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
+          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
+          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
+        FROM buy_agg b
+        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleTypeFilter}
+        GROUP BY b.item_code
+      ),
+      filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM base_data
+        WHERE ${sqlCol} IS NOT NULL AND ${sqlCol}::text != ''
+          ${otherFiltersSql}
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const limit = query.limit || 20;
+    const page = query.page || 1;
+    const offset = (page - 1) * limit;
+    params.push(limit, offset);
+
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    return {
+      items: rows.map((r: any) => ({ value: r.value, label: r.value })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getVinfastPartsColumnOptions(query: {
@@ -1363,7 +1771,10 @@ export class ReportsCoreService {
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-    const vehicleTypeSql = this.buildVinfastVehicleTypeSql('b.item_code');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      "BOOL_OR(b.seller_tax_code = '0318334886')",
+    );
 
     const sql = `
       WITH buy_codes AS (
@@ -1373,7 +1784,8 @@ export class ReportsCoreService {
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          i.seller_tax_code
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
         WHERE i.is_deleted = false
@@ -1381,6 +1793,7 @@ export class ReportsCoreService {
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
@@ -1395,6 +1808,7 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       base_data AS (
         SELECT 

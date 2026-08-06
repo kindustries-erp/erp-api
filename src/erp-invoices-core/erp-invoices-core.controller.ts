@@ -18,7 +18,6 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -93,6 +92,113 @@ export class ErpInvoicesCoreController {
     );
     res.setHeader('Content-Disposition', 'attachment; filename=invoices.xlsx');
     res.send(buffer);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('export/excel/background')
+  startExportExcelBackground(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel/background/history')
+  getExportExcelBackgroundHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.getExportExcelHistory(
+      req.user?.sub,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
+  }
+
+  // Compatibility alias for clients using legacy path variant.
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('export/background/excel')
+  startExportExcelBackgroundAlias(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel/background/:jobId/download')
+  async downloadBackgroundExport(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = this.service.getExportExcelBackgroundFile(
+      jobId,
+      req.user?.sub,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Sse('export/excel/progress/stream')
+  exportExcelProgressStream(@Request() req: any): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          current: 0,
+          total: 100,
+          isRunning: false,
+          completed: false,
+          ready: false,
+          failed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const snapshot = this.service.getExportExcelProgressSnapshot(
+        req.user?.sub,
+      );
+      if (snapshot) {
+        subscriber.next({ data: JSON.stringify(snapshot) } as MessageEvent);
+      }
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            current: 0,
+            total: 100,
+            isRunning: false,
+            completed: false,
+            ready: false,
+            failed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000);
+
+      const subscription = this.service.exportProgress$.subscribe({
+        next: (data) => {
+          if (data.userId !== req.user?.sub) return;
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })

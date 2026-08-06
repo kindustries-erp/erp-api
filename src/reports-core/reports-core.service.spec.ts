@@ -6,11 +6,18 @@ describe('ReportsCoreService', () => {
     query: jest.fn(),
   } as any;
 
+  const vinfastPartsExportBackgroundService = {
+    progress$: { subscribe: jest.fn() },
+  } as any;
+
   let service: ReportsCoreService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ReportsCoreService(dataSource);
+    service = new ReportsCoreService(
+      dataSource,
+      vinfastPartsExportBackgroundService,
+    );
   });
 
   it('maps sales dashboard payload from SQL rows', async () => {
@@ -107,6 +114,11 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain("THEN 'CAR'");
     expect(sql).toContain("ELSE 'MOTORBIKE'");
     expect(sql).toContain("'CHS73060025AB'");
+    expect(sql).toContain(
+      "BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller",
+    );
+    expect(sql).toContain('b.from_car_seller');
+    expect(sql).toContain('i.tax_invoice_status != 4');
   });
 
   it('keeps exception precedence before regex in overview SQL', async () => {
@@ -157,6 +169,8 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain('AND (\n      CASE');
     expect(sql).toContain(') IS NOT NULL');
     expect(sql).toContain('AS "vehicleType"');
+    expect(sql).toContain("c.direction = 'IN' AND c.tax_code = '0318334886'");
+    expect(sql).toContain('i.tax_invoice_status != 4');
   });
 
   it('applies the same IN detection rules in column-options SQL', async () => {
@@ -185,6 +199,7 @@ describe('ReportsCoreService', () => {
       "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
     expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
+    expect(sql).toContain("BOOL_OR(b.seller_tax_code = '0318334886')");
   });
 
   it('maps vehicleType from overview query rows', async () => {
@@ -396,14 +411,24 @@ describe('ReportsCoreService', () => {
     });
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as ExcelJS.Buffer);
+    await workbook.xlsx.load(buffer as any);
 
+    expect(workbook.getWorksheet('Tổng hợp phụ tùng')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Tổng quan')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Mua Vào')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Bán Ra')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Tổng quan')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Mua Vào')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Bán Ra')).toBeDefined();
+
+    const summarySheet = workbook.getWorksheet('Tổng hợp phụ tùng')!;
+    // 2 distinct items (CHS73060025AB + MOT123) → header row + 2 data rows
+    expect(summarySheet.rowCount).toBe(3);
+    const summaryHeaders = (summarySheet.getRow(1).values as any[]).slice(1);
+    expect(summaryHeaders).not.toContain('Tháng');
+    expect(summaryHeaders).toContain('Mã phụ tùng');
+    expect(summaryHeaders).toContain('Tổng SL mua');
+    expect(summaryHeaders).toContain('Tổng SL bán ra');
 
     const carBuySheet = workbook.getWorksheet('Ô tô - Mua Vào')!;
     const carSellSheet = workbook.getWorksheet('Ô tô - Bán Ra')!;

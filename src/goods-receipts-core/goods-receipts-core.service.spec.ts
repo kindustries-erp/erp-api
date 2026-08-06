@@ -9,6 +9,7 @@ import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_
 import { ErpPurchaseOrderLine } from '../purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
+import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 
 const j: any = jest;
 
@@ -90,10 +91,13 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const balanceRepo = {
       findOne: j.fn().mockResolvedValue(balance),
+      find: j.fn().mockResolvedValue([balance]),
+      findBy: j.fn().mockResolvedValue([balance]),
       save: j.fn(async (x: any) => x),
     };
 
@@ -106,6 +110,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       findOneBy: j.fn().mockResolvedValue(poLine),
       save: j.fn(async (x: any) => x),
       find: j.fn().mockResolvedValue([poLine]),
+      findBy: j.fn().mockResolvedValue([poLine]),
     };
 
     const moRepo = {
@@ -140,7 +145,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     expect(poLine.qtyReceived).toBe('8.000');
     expect(po.status).toBe('PARTIAL_RECEIVED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCall = txnRepo.insert.mock.calls[0][0][0];
     expect(txnCall.transactionType).toBe('RECEIPT');
     expect(txnCall.qtyIn).toBe('5.000');
     expect(txnCall.qtyOut).toBe('0.000');
@@ -259,6 +264,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const repoMap = new Map<any, any>([
@@ -269,6 +275,8 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
         ErpInventoryBalance,
         {
           findOne: j.fn().mockResolvedValue(balance),
+          find: j.fn().mockResolvedValue([balance]),
+          findBy: j.fn().mockResolvedValue([balance]),
           save: j.fn(async (x: any) => x),
         },
       ],
@@ -278,7 +286,8 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
         {
           findOneBy: j.fn().mockResolvedValue(poLine),
           save: j.fn(),
-          find: j.fn(),
+          find: j.fn().mockResolvedValue([poLine]),
+          findBy: j.fn().mockResolvedValue([poLine]),
         },
       ],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
@@ -346,10 +355,13 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const balanceRepo = {
       findOne: j.fn().mockResolvedValue(balance),
+      find: j.fn().mockResolvedValue([balance]),
+      findBy: j.fn().mockResolvedValue([balance]),
       save: j.fn(async (x: any) => x),
     };
 
@@ -362,6 +374,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       findOneBy: j.fn().mockResolvedValue(poLine),
       save: j.fn(async (x: any) => x),
       find: j.fn().mockResolvedValue([poLine]),
+      findBy: j.fn().mockResolvedValue([poLine]),
     };
 
     const repoMap = new Map<any, any>([
@@ -371,6 +384,22 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       [ErpInventoryBalance, balanceRepo],
       [ErpPurchaseOrder, poRepo],
       [ErpPurchaseOrderLine, poLineRepo],
+      [
+        ErpInventoryTrackingSerial,
+        {
+          find: j.fn().mockResolvedValue([
+            {
+              id: 's-1',
+              status: 'IN_STOCK',
+              salesOrderLineId: null,
+              goodsIssueLineId: null,
+              vinId: null,
+              productionOrderId: null,
+            },
+          ]),
+          delete: j.fn().mockResolvedValue({ affected: 1 }),
+        },
+      ],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpProductionOrderMaterial, { find: j.fn() }],
     ]);
@@ -391,10 +420,13 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     expect(poLine.qtyReceived).toBe('3.000');
     expect(po.status).toBe('PARTIAL_RECEIVED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCall = txnRepo.insert.mock.calls[0][0][0];
     expect(txnCall.transactionType).toBe('RECEIPT_CANCEL');
     expect(txnCall.qtyIn).toBe('0.000');
     expect(txnCall.qtyOut).toBe('5.000');
+
+    const serialRepo = repoMap.get(ErpInventoryTrackingSerial);
+    expect(serialRepo.delete).toHaveBeenCalled();
   });
 
   it('cancelReceipt should throw when receipt is DRAFT', async () => {
@@ -416,6 +448,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       [ErpInventoryBalance, { findOne: j.fn(), save: j.fn() }],
       [ErpPurchaseOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpPurchaseOrderLine, { findOneBy: j.fn(), save: j.fn(), find: j.fn() }],
+      [ErpInventoryTrackingSerial, { find: j.fn(), delete: j.fn() }],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpProductionOrderMaterial, { find: j.fn() }],
     ]);
@@ -446,6 +479,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       [ErpInventoryBalance, { findOne: j.fn(), save: j.fn() }],
       [ErpPurchaseOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpPurchaseOrderLine, { findOneBy: j.fn(), save: j.fn(), find: j.fn() }],
+      [ErpInventoryTrackingSerial, { find: j.fn(), delete: j.fn() }],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpProductionOrderMaterial, { find: j.fn() }],
     ]);
@@ -474,6 +508,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const txnRepo = {
       create: j.fn((x: any) => x),
       save: j.fn(async (x: any) => x),
+      insert: j.fn(async (x: any) => x),
     };
 
     const receiptRepo = {
@@ -488,6 +523,7 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       [ErpInventoryBalance, { findOne: j.fn(), save: j.fn() }],
       [ErpPurchaseOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpPurchaseOrderLine, { findOneBy: j.fn(), save: j.fn(), find: j.fn() }],
+      [ErpInventoryTrackingSerial, { find: j.fn(), delete: j.fn() }],
       [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
       [ErpProductionOrderMaterial, { find: j.fn() }],
     ]);
@@ -502,5 +538,78 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     );
     expect(receipt.status).toBe('POSTED');
     expect(txnRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('cancelReceipt should throw when linked serial is already used', async () => {
+    const receipt = {
+      id: 'gr9',
+      status: 'POSTED',
+      isDeleted: false,
+    } as any;
+
+    const dependencyService = { checkDependencies: j.fn() };
+    const receiptRepo = {
+      findOneBy: j.fn().mockResolvedValue(receipt),
+      save: j.fn(async (x: any) => x),
+    };
+
+    const serialRepo = {
+      find: j.fn().mockResolvedValue([
+        {
+          id: 's-used',
+          status: 'ASSEMBLED',
+          salesOrderLineId: null,
+          goodsIssueLineId: null,
+          vinId: null,
+          productionOrderId: null,
+        },
+      ]),
+      delete: j.fn(),
+    };
+
+    const repoMap = new Map<any, any>([
+      [ErpGoodsReceipt, receiptRepo],
+      [
+        ErpGoodsReceiptLine,
+        {
+          find: j.fn().mockResolvedValue([
+            {
+              id: 'grl9',
+              goodsReceiptId: 'gr9',
+              lineNo: 1,
+              itemId: 'item1',
+              qtyReceived: '1.000',
+              unitCost: '10.000',
+              purchaseOrderLineId: null,
+            },
+          ]),
+        },
+      ],
+      [ErpInventoryTransaction, { insert: j.fn() }],
+      [
+        ErpInventoryBalance,
+        { findBy: j.fn().mockResolvedValue([]), save: j.fn() },
+      ],
+      [ErpPurchaseOrder, { findOneBy: j.fn(), save: j.fn() }],
+      [
+        ErpPurchaseOrderLine,
+        { findBy: j.fn().mockResolvedValue([]), save: j.fn() },
+      ],
+      [ErpInventoryTrackingSerial, serialRepo],
+      [ErpProductionOrder, { findOneBy: j.fn(), save: j.fn() }],
+      [ErpProductionOrderMaterial, { find: j.fn() }],
+    ]);
+
+    const { service } = makeServiceWithManager(
+      makeManager(repoMap),
+      dependencyService,
+    );
+
+    await expect(service.cancelReceipt('gr9')).rejects.toThrow(
+      'Không thể hủy phiếu nhập vì có serial đã được sử dụng ở nghiệp vụ khác',
+    );
+
+    expect(serialRepo.delete).not.toHaveBeenCalled();
+    expect(receipt.status).toBe('POSTED');
   });
 });

@@ -25,7 +25,17 @@ import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_bu
 describe('Inventory voucher posting chain integration', () => {
   function makeManager(repoMap: Map<any, any>) {
     return {
-      getRepository: (entity: any) => repoMap.get(entity),
+      getRepository: (entity: any) => {
+        const repo = repoMap.get(entity);
+        if (repo) {
+          if (!repo.findBy)
+            repo.findBy = jest.fn().mockReturnValue(Promise.resolve([]));
+          if (!repo.find)
+            repo.find = jest.fn().mockReturnValue(Promise.resolve([]));
+          if (!repo.insert) repo.insert = jest.fn(async (x) => x);
+        }
+        return repo;
+      },
     };
   }
 
@@ -113,6 +123,8 @@ describe('Inventory voucher posting chain integration', () => {
     const transactions: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {
@@ -124,9 +136,7 @@ describe('Inventory voucher posting chain integration', () => {
           }) ?? null
         );
       }),
-      find: jest.fn(async () => {
-        return balances;
-      }),
+
       save: jest.fn(async (x: any) => {
         const items = Array.isArray(x) ? x : [x];
         for (const item of items) {
@@ -150,6 +160,11 @@ describe('Inventory voucher posting chain integration', () => {
     const txnRepo = {
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => {
+        const items = Array.isArray(x) ? x : [x];
+        transactions.push(...items);
+        return x;
+      }),
+      insert: jest.fn(async (x: any) => {
         const items = Array.isArray(x) ? x : [x];
         transactions.push(...items);
         return x;
@@ -340,6 +355,8 @@ describe('Inventory voucher posting chain integration', () => {
     const lifecycles: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {
@@ -541,6 +558,8 @@ describe('Inventory voucher posting chain integration', () => {
     const transactions: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {
