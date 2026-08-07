@@ -60,8 +60,12 @@ export class InvoicePortalService {
 
   private async resolveBranchIdForOut(
     settlementOrder: string | null | undefined,
+    buyerTaxCode?: string | null,
   ): Promise<string | null> {
-    const branchCode = resolveOutInvoiceBranchCode(settlementOrder);
+    const branchCode = resolveOutInvoiceBranchCode(
+      settlementOrder,
+      buyerTaxCode,
+    );
 
     if (this._branchIdCache.has(branchCode)) {
       return this._branchIdCache.get(branchCode)!;
@@ -371,6 +375,7 @@ export class InvoicePortalService {
             if (direction === 'OUT') {
               const branchId = await this.resolveBranchIdForOut(
                 saved.settlementOrder,
+                saved.buyerTaxCode,
               );
               if (branchId) {
                 await this.repository.update(saved.id, { branchId });
@@ -728,6 +733,7 @@ export class InvoicePortalService {
       if (updated) {
         const newBranchId = await this.resolveBranchIdForOut(
           updated.settlementOrder,
+          updated.buyerTaxCode,
         );
         if (newBranchId && updated.branchId !== newBranchId) {
           await this.repository.update(invoice.id, { branchId: newBranchId });

@@ -12,6 +12,10 @@ import {
   toInvoiceDto,
   parseVatRateForDisplay,
 } from '../helpers/invoice-mapper.helper';
+import {
+  normalizeOutInvoiceLineDisplay,
+  isDaoTriOutInvoiceTaxCode,
+} from '../helpers/out-invoice-display.helper';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
 @Injectable()
@@ -790,6 +794,15 @@ export class InvoiceQueryService {
         .join(' | ');
 
       const statusName = formatTaxInvoiceStatus(inv.taxInvoiceStatus);
+      const descriptionLineCount = String(inv.description || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean).length;
+      const invoiceLineCount = Math.max(
+        inv.items?.length || 0,
+        descriptionLineCount,
+        1,
+      );
 
       summarySheet.addRow({
         invoiceDate: inv.invoiceDate,
@@ -817,6 +830,21 @@ export class InvoiceQueryService {
         const fallbackPreVat = Number(inv.preVatAmount) || 0;
         const fallbackVat = Number(inv.vatAmount) || 0;
         const fallbackTotal = Number(inv.totalAmount) || 0;
+        const normalizedFallback = normalizeOutInvoiceLineDisplay(
+          {
+            description: inv.description,
+            unit: '',
+            quantity: 0,
+            unitPrice: 0,
+            preVatAmount: fallbackPreVat,
+            vatAmount: fallbackVat,
+            totalAmount: fallbackTotal,
+            discountAmount: Number(inv.discountAmount) || 0,
+          },
+          taxCode,
+          inv.direction,
+          invoiceLineCount,
+        );
 
         detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
@@ -824,14 +852,14 @@ export class InvoiceQueryService {
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
-          itemName: inv.description || '',
-          uom: '',
-          qty: 0,
-          unitPrice: 0,
-          preVatAmount: fallbackPreVat,
+          itemName: normalizedFallback.description || inv.description || '',
+          uom: normalizedFallback.unit || '',
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
           vatRate: parseVatRateForDisplay(inv.vatRate),
-          vatAmount: fallbackVat,
-          totalAmount: fallbackTotal,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
@@ -863,6 +891,21 @@ export class InvoiceQueryService {
             Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
           const itemTotalAmount =
             Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
+          const normalizedItem = normalizeOutInvoiceLineDisplay(
+            {
+              description: item.description || '',
+              unit: item.unit || '',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              preVatAmount: itemPreVat,
+              vatAmount: itemVatAmount,
+              totalAmount: itemTotalAmount,
+              discountAmount: Number(item.discountAmount) || 0,
+            },
+            taxCode,
+            inv.direction,
+            invoiceLineCount,
+          );
 
           detailedSheet.addRow({
             invoiceDate: inv.invoiceDate,
@@ -870,14 +913,14 @@ export class InvoiceQueryService {
             invoiceNo: inv.invoiceNo,
             partnerName,
             taxCode,
-            itemName: item.description || '',
-            uom: item.unit || '',
-            qty: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            preVatAmount: itemPreVat,
+            itemName: normalizedItem.description || item.description || '',
+            uom: normalizedItem.unit || item.unit || '',
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
             vatRate: itemVatRateRaw,
-            vatAmount: itemVatAmount,
-            totalAmount: itemTotalAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
             licensePlate: inv.licensePlate || '',
             wo: inv.settlementOrder || '',
             description: fullDesc,
