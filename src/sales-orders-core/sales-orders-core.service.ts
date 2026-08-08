@@ -207,7 +207,12 @@ export class SalesOrdersCoreService {
 
     if (notFullyIssued) {
       qb.andWhere('so.status IN (:...statuses)', {
-        statuses: ['RESERVED', 'PARTIAL_DELIVERED'],
+        statuses: [
+          'ACTIVE',
+          'PARTIAL_RESERVED',
+          'RESERVED',
+          'PARTIAL_DELIVERED',
+        ],
       });
     } else if (statusFilter) {
       qb.andWhere('so.status = :statusFilter', { statusFilter });

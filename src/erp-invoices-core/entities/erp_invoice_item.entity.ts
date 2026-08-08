@@ -23,6 +23,14 @@ export class ErpInvoiceItem {
   @JoinColumn({ name: 'invoice_id' })
   invoice: import('typeorm').Relation<ErpInvoice>;
 
+  @Column({
+    type: 'varchar',
+    length: 32,
+    name: 'invoice_subcategory',
+    default: 'NORMAL',
+  })
+  invoiceSubcategory: string;
+
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
