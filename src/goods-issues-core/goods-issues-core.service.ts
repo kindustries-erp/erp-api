@@ -232,6 +232,14 @@ export class GoodsIssuesCoreService {
   async update(id: string, dto: UpdateGoodsIssueDto) {
     const existing = await this.getIssueOrThrow(this.repository, id);
     if (existing.status !== 'DRAFT') {
+      const { remarks } = dto as any;
+      if (remarks !== undefined) {
+        await this.repository.update(id, { remarks });
+        await this.dataSource
+          .getRepository(ErpInventoryTransaction)
+          .update({ documentId: id }, { notes: remarks });
+        return { message: 'Cập nhật ghi chú thành công' };
+      }
       throw new BadRequestException(
         'Chỉ được sửa phiếu xuất ở trạng thái nháp',
       );

@@ -240,9 +240,17 @@ export class GoodsReceiptsCoreService {
   async update(id: string, dto: UpdateGoodsReceiptDto) {
     const existing = await this.getReceiptOrThrow(this.repository, id);
     if (existing.status !== 'DRAFT') {
-      throw new BadRequestException(
-        'Chỉ được sửa phiếu nhập ở trạng thái nháp',
-      );
+      const { remarks } = dto as any;
+      if (remarks !== undefined) {
+        await this.repository.update(id, { remarks });
+        await this.dataSource
+          .getRepository(ErpInventoryTransaction)
+          .update(
+            { documentType: 'GOODS_RECEIPT', documentId: id },
+            { notes: remarks },
+          );
+      }
+      return this.findOne(id);
     }
 
     const { lines, ...header } = dto as any;
