@@ -27,6 +27,11 @@ export class CreateErpInvoiceItemDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  invoiceSubcategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   createdAt?: string;
 
   @ApiPropertyOptional()
@@ -60,7 +65,6 @@ export class CreateErpInvoiceItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   preVatAmount?: number;
 
   @ApiPropertyOptional()
@@ -74,21 +78,18 @@ export class CreateErpInvoiceItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   vatAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   discountAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   totalAmount?: number;
 }
 
@@ -198,7 +199,6 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   preVatAmount?: number;
 
   @ApiPropertyOptional()
@@ -212,21 +212,18 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   vatAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   discountAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   totalAmount?: number;
 
   // Liên kết

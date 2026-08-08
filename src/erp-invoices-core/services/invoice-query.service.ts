@@ -1445,6 +1445,14 @@ export class InvoiceQueryService {
       const vals = columnFilters[key];
       if (!vals || vals.length === 0) return;
 
+      if (vals[0] === '__ALL_MATCHING__') {
+        const searchStr = vals[1] || '';
+        if (searchStr) {
+          this._applyColumnSearch(qb, { [key]: searchStr }, direction);
+        }
+        return;
+      }
+
       if (key === 'status')
         qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
       else if (key === 'postingStatus')
@@ -1476,18 +1484,9 @@ export class InvoiceQueryService {
           serialNoVals: vals,
         });
       else if (key === 'invoiceNo') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const searchStr = vals[1] || '';
-          if (searchStr) {
-            qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
-              invoiceNoSearch: `%${searchStr}%`,
-            });
-          }
-        } else {
-          qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
-            invoiceNoVals: vals,
-          });
-        }
+        qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
+          invoiceNoVals: vals,
+        });
       } else if (key === 'partner') {
         const hasBlank = vals.includes('__BLANK__');
         const realVals = vals.filter((v) => v !== '__BLANK__');
@@ -1560,60 +1559,21 @@ export class InvoiceQueryService {
         else if (invalidFilter && !validFilter)
           qb.andWhere('inv.is_valid = false');
       } else if (key === 'preVatAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
-              { preVatSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
-            preVatVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
+          preVatVals: vals,
+        });
       } else if (key === 'vatAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
-              { vatSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
-            vatVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
+          vatVals: vals,
+        });
       } else if (key === 'discountAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
-              { discountSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere(
-            'CAST(inv.discount_amount AS TEXT) IN (:...discountVals)',
-            {
-              discountVals: vals,
-            },
-          );
-        }
+        qb.andWhere('CAST(inv.discount_amount AS TEXT) IN (:...discountVals)', {
+          discountVals: vals,
+        });
       } else if (key === 'totalAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
-              { totalSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
-            totalVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
+          totalVals: vals,
+        });
       } else if (key === 'settlementOrder')
         qb.andWhere('inv.settlement_order IN (:...settleVals)', {
           settleVals: vals,
