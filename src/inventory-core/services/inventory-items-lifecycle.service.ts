@@ -153,6 +153,8 @@ export class InventoryItemsLifecycleService {
       };
     });
 
+    movements.reverse();
+
     return {
       message: 'Lịch sử xuất nhập kho',
       data: {

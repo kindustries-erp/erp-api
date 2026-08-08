@@ -12,6 +12,10 @@ import {
   toInvoiceDto,
   parseVatRateForDisplay,
 } from '../helpers/invoice-mapper.helper';
+import {
+  classifyInvoiceLine,
+  resolveOutInvoiceBranchCode,
+} from '../helpers/out-invoice-display.helper';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
 @Injectable()
@@ -530,6 +534,16 @@ export class InvoiceQueryService {
       }
     };
 
+    const INVOICE_TYPE_MAP: Record<string, string> = {
+      CHIET_KHAU: 'Hóa đơn chiết khấu',
+      DICH_VU_CUU_HO: 'Hóa đơn cứu hộ',
+      HANG_HOA: 'Hàng hóa / Vật tư',
+      DICH_VU: 'Dịch vụ',
+      PHI_THUE: 'Phí & Thuế',
+      CUU_HO: 'Cứu hộ',
+      KHAC: 'Khác',
+    };
+
     const workbook = new ExcelJS.Workbook();
 
     const summarySheet = workbook.addWorksheet('Bảng kê');
@@ -540,6 +554,12 @@ export class InvoiceQueryService {
       { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
       { header: 'MST khách hàng', key: 'taxCode', width: 15 },
       { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+      {
+        header: 'Chiết khấu',
+        key: 'headerDiscountAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
       {
         header: 'Trước thuế GTGT',
         key: 'preVat',
@@ -637,23 +657,7 @@ export class InvoiceQueryService {
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
-      {
-        header: 'Đã cấn trừ',
-        key: 'netOffAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      {
-        header: 'Tham chiếu cấn trừ',
-        key: 'netOffReferences',
-        width: 30,
-      },
-      {
-        header: 'Còn lại',
-        key: 'remainingAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
+      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
       { header: 'Chi nhánh', key: 'branchName', width: 25 },
     ];
 
@@ -790,6 +794,15 @@ export class InvoiceQueryService {
         .join(' | ');
 
       const statusName = formatTaxInvoiceStatus(inv.taxInvoiceStatus);
+      const descriptionLineCount = String(inv.description || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean).length;
+      const invoiceLineCount = Math.max(
+        inv.items?.length || 0,
+        descriptionLineCount,
+        1,
+      );
 
       summarySheet.addRow({
         invoiceDate: inv.invoiceDate,
@@ -798,6 +811,7 @@ export class InvoiceQueryService {
         partnerName,
         taxCode,
         address,
+        headerDiscountAmount: Number(inv.discountAmount) || 0,
         preVat: Number(inv.preVatAmount) || 0,
         vatRate: parseVatRateForDisplay(inv.vatRate),
         vat: Number(inv.vatAmount) || 0,
@@ -817,6 +831,26 @@ export class InvoiceQueryService {
         const fallbackPreVat = Number(inv.preVatAmount) || 0;
         const fallbackVat = Number(inv.vatAmount) || 0;
         const fallbackTotal = Number(inv.totalAmount) || 0;
+        const normalizedFallback = classifyInvoiceLine(
+          {
+            description: inv.description,
+            unit: '',
+            quantity: 0,
+            unitPrice: 0,
+            preVatAmount: fallbackPreVat,
+            vatAmount: fallbackVat,
+            totalAmount: fallbackTotal,
+            discountAmount: Number(inv.discountAmount) || 0,
+          },
+          {
+            buyerTaxCode: taxCode,
+            direction: inv.direction,
+            invoiceLineCount,
+            taxInvoiceStatus: inv.taxInvoiceStatus,
+            headerDiscountAmount: Number(inv.discountAmount) || 0,
+            forReportExport: true,
+          },
+        );
 
         detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
@@ -826,20 +860,22 @@ export class InvoiceQueryService {
           taxCode,
           itemName: inv.description || '',
           uom: '',
-          qty: 0,
-          unitPrice: 0,
-          preVatAmount: fallbackPreVat,
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
           vatRate: parseVatRateForDisplay(inv.vatRate),
-          vatAmount: fallbackVat,
-          totalAmount: fallbackTotal,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
           statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-          netOffAmount: Number((inv as any).netOffAmount) || 0,
-          netOffReferences: (inv as any).netOffReferences || '',
-          remainingAmount:
-            Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
+          invoiceSubcategory:
+            normalizedFallback.invoiceSubcategory === 'DISCOUNT'
+              ? 'Chiết khấu'
+              : normalizedFallback.invoiceSubcategory === 'RESCUE'
+                ? 'Cứu hộ'
+                : 'Thông thường',
           branchName: branchMap[inv.branchId || ''] || '',
         });
 
@@ -863,6 +899,26 @@ export class InvoiceQueryService {
             Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
           const itemTotalAmount =
             Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
+          const normalizedItem = classifyInvoiceLine(
+            {
+              description: item.description || '',
+              unit: item.unit || '',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              preVatAmount: itemPreVat,
+              vatAmount: itemVatAmount,
+              totalAmount: itemTotalAmount,
+              discountAmount: Number(item.discountAmount) || 0,
+            },
+            {
+              buyerTaxCode: taxCode,
+              direction: inv.direction,
+              invoiceLineCount,
+              taxInvoiceStatus: inv.taxInvoiceStatus,
+              headerDiscountAmount: Number(inv.discountAmount) || 0,
+              forReportExport: true,
+            },
+          );
 
           detailedSheet.addRow({
             invoiceDate: inv.invoiceDate,
@@ -872,21 +928,22 @@ export class InvoiceQueryService {
             taxCode,
             itemName: item.description || '',
             uom: item.unit || '',
-            qty: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            preVatAmount: itemPreVat,
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
             vatRate: itemVatRateRaw,
-            vatAmount: itemVatAmount,
-            totalAmount: itemTotalAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
             licensePlate: inv.licensePlate || '',
             wo: inv.settlementOrder || '',
             description: fullDesc,
             statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-            netOffAmount: Number((inv as any).netOffAmount) || 0,
-            netOffReferences: (inv as any).netOffReferences || '',
-            remainingAmount:
-              Number(inv.totalAmount) -
-              (Number((inv as any).netOffAmount) || 0),
+            invoiceSubcategory:
+              normalizedItem.invoiceSubcategory === 'DISCOUNT'
+                ? 'Chiết khấu'
+                : normalizedItem.invoiceSubcategory === 'RESCUE'
+                  ? 'Cứu hộ'
+                  : 'Thông thường',
             branchName: branchMap[inv.branchId || ''] || '',
           });
 
@@ -1388,6 +1445,14 @@ export class InvoiceQueryService {
       const vals = columnFilters[key];
       if (!vals || vals.length === 0) return;
 
+      if (vals[0] === '__ALL_MATCHING__') {
+        const searchStr = vals[1] || '';
+        if (searchStr) {
+          this._applyColumnSearch(qb, { [key]: searchStr }, direction);
+        }
+        return;
+      }
+
       if (key === 'status')
         qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
       else if (key === 'postingStatus')
@@ -1419,18 +1484,9 @@ export class InvoiceQueryService {
           serialNoVals: vals,
         });
       else if (key === 'invoiceNo') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const searchStr = vals[1] || '';
-          if (searchStr) {
-            qb.andWhere('inv.invoice_no ILIKE :invoiceNoSearch', {
-              invoiceNoSearch: `%${searchStr}%`,
-            });
-          }
-        } else {
-          qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
-            invoiceNoVals: vals,
-          });
-        }
+        qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
+          invoiceNoVals: vals,
+        });
       } else if (key === 'partner') {
         const hasBlank = vals.includes('__BLANK__');
         const realVals = vals.filter((v) => v !== '__BLANK__');
@@ -1503,60 +1559,21 @@ export class InvoiceQueryService {
         else if (invalidFilter && !validFilter)
           qb.andWhere('inv.is_valid = false');
       } else if (key === 'preVatAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :preVatSearch",
-              { preVatSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
-            preVatVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
+          preVatVals: vals,
+        });
       } else if (key === 'vatAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :vatSearch",
-              { vatSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
-            vatVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
+          vatVals: vals,
+        });
       } else if (key === 'discountAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :discountSearch",
-              { discountSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere(
-            'CAST(inv.discount_amount AS TEXT) IN (:...discountVals)',
-            {
-              discountVals: vals,
-            },
-          );
-        }
+        qb.andWhere('CAST(inv.discount_amount AS TEXT) IN (:...discountVals)', {
+          discountVals: vals,
+        });
       } else if (key === 'totalAmount') {
-        if (vals[0] === '__ALL_MATCHING__') {
-          const s = (vals[1] || '').replace(/[,.]/g, '');
-          if (s)
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :totalSearch",
-              { totalSearch: `%${s}%` },
-            );
-        } else {
-          qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
-            totalVals: vals,
-          });
-        }
+        qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
+          totalVals: vals,
+        });
       } else if (key === 'settlementOrder')
         qb.andWhere('inv.settlement_order IN (:...settleVals)', {
           settleVals: vals,
