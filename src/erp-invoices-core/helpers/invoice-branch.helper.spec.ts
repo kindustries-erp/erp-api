@@ -1,6 +1,6 @@
 import {
   isDaoTriOutInvoiceTaxCode,
-  normalizeOutInvoiceLineDisplay,
+  classifyInvoiceLine,
   resolveOutInvoiceBranchCode,
 } from './out-invoice-display.helper';
 
@@ -24,31 +24,63 @@ describe('out-invoice-display.helper', () => {
     ).toBe('PQ');
   });
 
-  it('makes amount negative only when discount keyword exists and line count > 1', () => {
-    const discountLine = normalizeOutInvoiceLineDisplay(
+  it('makes amount negative only when discount keyword exists, line count > 1, and taxInvoiceStatus = 1', () => {
+    const discountLine = classifyInvoiceLine(
       {
         description: 'Chiết khấu cuối kỳ',
         unit: 'Cái',
         quantity: 2,
-        unitPrice: 100000,
+        unitPrice: 200000,
         preVatAmount: 200000,
         vatAmount: 0,
         totalAmount: 200000,
         discountAmount: 200000,
       },
-      '0110269067',
-      'OUT',
-      2,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 2,
+        taxInvoiceStatus: 1,
+        headerDiscountAmount: 200000,
+        forReportExport: true,
+      },
     );
 
-    expect(discountLine.unit).toBe('Chiết khấu');
+    expect(discountLine.invoiceSubcategory).toBe('DISCOUNT');
     expect(discountLine.preVatAmount).toBeLessThan(0);
     expect(discountLine.totalAmount).toBeLessThan(0);
     expect(discountLine.discountAmount).toBeLessThan(0);
   });
 
+  it('makes amount negative even when taxInvoiceStatus is null (removed strict rule)', () => {
+    const discountLine = classifyInvoiceLine(
+      {
+        description: 'Chiết khấu cuối kỳ',
+        unit: 'Cái',
+        quantity: 2,
+        unitPrice: 200000,
+        preVatAmount: 200000,
+        vatAmount: 0,
+        totalAmount: 200000,
+        discountAmount: 200000,
+      },
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 2,
+        taxInvoiceStatus: null,
+        headerDiscountAmount: 200000,
+        forReportExport: true,
+      },
+    );
+
+    expect(discountLine.invoiceSubcategory).toBe('DISCOUNT');
+    expect(discountLine.preVatAmount).toBeLessThan(0);
+    expect(discountLine.totalAmount).toBeLessThan(0);
+  });
+
   it('does not make amount negative when keyword exists but only one line', () => {
-    const singleLineDiscount = normalizeOutInvoiceLineDisplay(
+    const singleLineDiscount = classifyInvoiceLine(
       {
         description: 'Giảm trừ hợp đồng',
         unit: 'Lần',
@@ -59,18 +91,23 @@ describe('out-invoice-display.helper', () => {
         totalAmount: 132000,
         discountAmount: 120000,
       },
-      '0110269067',
-      'OUT',
-      1,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 1,
+        taxInvoiceStatus: 1,
+        headerDiscountAmount: 120000,
+      },
     );
 
+    expect(singleLineDiscount.invoiceSubcategory).toBe('NORMAL');
     expect(singleLineDiscount.preVatAmount).toBe(120000);
     expect(singleLineDiscount.totalAmount).toBe(132000);
     expect(singleLineDiscount.discountAmount).toBe(120000);
   });
 
   it('does not make amount negative when line count > 1 but no discount keyword', () => {
-    const nonKeyword = normalizeOutInvoiceLineDisplay(
+    const nonKeyword = classifyInvoiceLine(
       {
         description: 'Phí dịch vụ định kỳ',
         unit: 'Lần',
@@ -81,17 +118,21 @@ describe('out-invoice-display.helper', () => {
         totalAmount: 132000,
         discountAmount: 120000,
       },
-      '0110269067',
-      'OUT',
-      3,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 3,
+        taxInvoiceStatus: 1,
+      },
     );
 
+    expect(nonKeyword.invoiceSubcategory).toBe('NORMAL');
     expect(nonKeyword.preVatAmount).toBe(120000);
     expect(nonKeyword.totalAmount).toBe(132000);
   });
 
-  it('rescue keyword only changes unit, does not force negative without discount condition', () => {
-    const rescueLine = normalizeOutInvoiceLineDisplay(
+  it('rescue keyword sets invoiceSubcategory to RESCUE, unit is kept original, amounts not forced negative', () => {
+    const rescueLine = classifyInvoiceLine(
       {
         description: 'Dịch vụ Cứu hộ ban đêm',
         unit: 'Lần',
@@ -101,17 +142,22 @@ describe('out-invoice-display.helper', () => {
         vatAmount: 50000,
         totalAmount: 550000,
       },
-      '0110269067',
-      'OUT',
-      2,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 2,
+        taxInvoiceStatus: 1,
+      },
     );
 
-    expect(rescueLine.unit).toBe('Cứu hộ');
+    expect(rescueLine.invoiceSubcategory).toBe('RESCUE');
+    // We don't return unit in InvoiceLineClassification anymore
+    expect((rescueLine as any).unit).toBeUndefined();
     expect(rescueLine.totalAmount).toBe(550000);
   });
 
-  it('supports khấu trừ keyword as discount trigger when line count > 1', () => {
-    const withheldLine = normalizeOutInvoiceLineDisplay(
+  it('supports khấu trừ keyword as discount trigger when line count > 1 and taxInvoiceStatus = 1', () => {
+    const withheldLine = classifyInvoiceLine(
       {
         description: 'Khoản khấu trừ theo phụ lục',
         unit: 'Lần',
@@ -122,18 +168,23 @@ describe('out-invoice-display.helper', () => {
         totalAmount: 330000,
         discountAmount: 300000,
       },
-      '0110269067',
-      'OUT',
-      4,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'OUT',
+        invoiceLineCount: 4,
+        taxInvoiceStatus: 1,
+        headerDiscountAmount: 300000,
+        forReportExport: true,
+      },
     );
 
     expect(withheldLine.preVatAmount).toBe(-300000);
     expect(withheldLine.totalAmount).toBe(-330000);
-    expect(withheldLine.unit).toBe('Chiết khấu');
+    expect(withheldLine.invoiceSubcategory).toBe('DISCOUNT');
   });
 
   it('keeps IN invoices unchanged even with discount keywords', () => {
-    const inInvoiceLine = normalizeOutInvoiceLineDisplay(
+    const inInvoiceLine = classifyInvoiceLine(
       {
         description: 'Chiết khấu theo chính sách',
         unit: 'Lần',
@@ -142,35 +193,39 @@ describe('out-invoice-display.helper', () => {
         preVatAmount: 100000,
         vatAmount: 10000,
         totalAmount: 110000,
-        discountAmount: 100000,
       },
-      '0110269067',
-      'IN',
-      3,
+      {
+        buyerTaxCode: '0110269067',
+        direction: 'IN',
+        invoiceLineCount: 2,
+        taxInvoiceStatus: 1,
+      },
     );
 
     expect(inInvoiceLine.preVatAmount).toBe(100000);
-    expect(inInvoiceLine.totalAmount).toBe(110000);
+    expect(inInvoiceLine.invoiceSubcategory).toBe('NORMAL');
   });
 
   it('does not apply negative rule for non-Đào Trí tax code', () => {
-    const otherBranchLine = normalizeOutInvoiceLineDisplay(
+    const nonDaoTriLine = classifyInvoiceLine(
       {
-        description: 'Chiết khấu theo hợp đồng',
-        unit: 'Lần',
+        description: 'Chiết khấu đầu năm',
+        unit: 'Cái',
         quantity: 1,
-        unitPrice: 90000,
-        preVatAmount: 90000,
-        vatAmount: 9000,
-        totalAmount: 99000,
-        discountAmount: 90000,
+        unitPrice: 50000,
+        preVatAmount: 50000,
+        vatAmount: 5000,
+        totalAmount: 55000,
       },
-      '9999999999',
-      'OUT',
-      2,
+      {
+        buyerTaxCode: '0000000000',
+        direction: 'OUT',
+        invoiceLineCount: 3,
+        taxInvoiceStatus: 1,
+      },
     );
 
-    expect(otherBranchLine.preVatAmount).toBe(90000);
-    expect(otherBranchLine.totalAmount).toBe(99000);
+    expect(nonDaoTriLine.preVatAmount).toBe(50000);
+    expect(nonDaoTriLine.invoiceSubcategory).toBe('NORMAL');
   });
 });

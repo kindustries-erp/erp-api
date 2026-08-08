@@ -20,6 +20,7 @@ import {
 import { sleep } from '../../common/utils/delay.util';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
+import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 
 export type PortalProgressEvent = {
@@ -886,6 +887,23 @@ export class InvoicePortalService {
         discountAmount: i.stckhau != null ? Number(i.stckhau) : 0,
       }));
 
+      const invoiceLineCount = items.length;
+
+      const normalizedItems = items.map((item: any) => {
+        const classification = classifyInvoiceLine(item, {
+          buyerTaxCode: invoice.buyerTaxCode,
+          direction: invoice.direction,
+          invoiceLineCount,
+          taxInvoiceStatus: invoice.taxInvoiceStatus,
+          headerDiscountAmount:
+            json.ttcktmai != null ? Number(json.ttcktmai) : 0,
+        });
+        return {
+          ...item,
+          ...classification,
+        };
+      });
+
       await this.lifecycleService.update(invoice.id, {
         preVatAmount: json.tgtcthue != null ? Number(json.tgtcthue) : undefined,
         vatAmount: json.tgtthue != null ? Number(json.tgtthue) : undefined,
@@ -900,7 +918,7 @@ export class InvoicePortalService {
         buyerCccd: json.nmcmnd,
         buyerTaxCode: json.mst,
         description: items.length > 0 ? items[0].description : undefined,
-        items,
+        items: normalizedItems,
       });
 
       this.logger.log(

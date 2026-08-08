@@ -62,9 +62,8 @@ export interface OutInvoiceLineDisplayInput {
   itemTotalAmountWithVat?: number | string | null;
 }
 
-export interface OutInvoiceLineDisplayResult {
-  description: string;
-  unit: string;
+export interface InvoiceLineClassification {
+  invoiceSubcategory: 'NORMAL' | 'DISCOUNT' | 'RESCUE';
   quantity: number;
   unitPrice: number;
   preVatAmount: number;
@@ -73,14 +72,27 @@ export interface OutInvoiceLineDisplayResult {
   discountAmount: number;
 }
 
-export function normalizeOutInvoiceLineDisplay(
+export function classifyInvoiceLine(
   item: OutInvoiceLineDisplayInput,
-  buyerTaxCode?: string | null,
-  direction?: string | null,
-  invoiceLineCount: number = 1,
-): OutInvoiceLineDisplayResult {
+  opts: {
+    buyerTaxCode?: string | null;
+    direction?: string | null;
+    invoiceLineCount?: number;
+    taxInvoiceStatus?: number | null;
+    headerDiscountAmount?: number;
+    forReportExport?: boolean;
+  } = {},
+): InvoiceLineClassification {
+  const {
+    buyerTaxCode,
+    direction,
+    invoiceLineCount = 1,
+    taxInvoiceStatus,
+    headerDiscountAmount = 0,
+    forReportExport = false,
+  } = opts;
+
   const description = normalizeText(item.description || item.unitName || '');
-  const baseUnit = normalizeText(item.unit || item.unitName || '');
   const quantity = toNumber(item.quantity);
   const unitPrice = toNumber(item.unitPrice);
   const discountAmount = toNumber(item.discountAmount);
@@ -93,35 +105,56 @@ export function normalizeOutInvoiceLineDisplay(
   const shouldApplyOutRule = direction !== 'IN';
   const isDaoTri =
     shouldApplyOutRule && isDaoTriOutInvoiceTaxCode(buyerTaxCode);
-  const isRescue = hasRescueKeyword(description);
-  const hasDiscountToken = hasDiscountKeyword(description);
-  const isDiscountLine = isDaoTri && hasDiscountToken && invoiceLineCount > 1;
 
-  let unit = baseUnit;
+  // Note: rescue keyword applies to both IN and OUT
+  const isRescue = hasRescueKeyword(description);
+
+  const headerHasDiscount = headerDiscountAmount > 0;
+
+  // Strict matching amount: abs(unitPrice) == headerDiscountAmount or abs(preVat) == headerDiscountAmount
+  const amountMatchesHeader =
+    Math.round(Math.abs(unitPrice)) === Math.round(headerDiscountAmount) ||
+    Math.round(Math.abs(preVatAmount)) === Math.round(headerDiscountAmount);
+
+  const hasDiscountToken = hasDiscountKeyword(description);
+  const isDiscountCandidate =
+    isDaoTri && hasDiscountToken && invoiceLineCount > 1; // Basic heuristic for subcategory classification
+
+  let invoiceSubcategory: 'NORMAL' | 'DISCOUNT' | 'RESCUE' = 'NORMAL';
   if (isRescue) {
-    unit = 'Cứu hộ';
-  } else if (isDiscountLine) {
-    unit = 'Chiết khấu';
+    invoiceSubcategory = 'RESCUE';
+  } else if (isDiscountCandidate) {
+    invoiceSubcategory = 'DISCOUNT';
   }
 
-  const displayQuantity = isDiscountLine ? 1 : quantity;
-  const displayUnitPrice = isDiscountLine
-    ? Math.abs(preVatAmount || discountAmount || totalAmount)
+  // STRICT negative rule requires ALL conditions
+  // (Removed taxInvoiceStatus === 1 as requested)
+  // ONLY apply when exporting report
+  const shouldApplyNegativeAmount =
+    forReportExport &&
+    invoiceSubcategory === 'DISCOUNT' &&
+    headerHasDiscount &&
+    amountMatchesHeader;
+
+  const displayQuantity = shouldApplyNegativeAmount ? 1 : quantity;
+  const displayUnitPrice = shouldApplyNegativeAmount
+    ? Math.abs(preVatAmount || discountAmount || totalAmount || 0)
     : unitPrice;
-  const displayPreVatAmount = isDiscountLine
-    ? -Math.abs(preVatAmount || discountAmount || totalAmount)
+  const displayPreVatAmount = shouldApplyNegativeAmount
+    ? -(preVatAmount || discountAmount || totalAmount || 0)
     : preVatAmount;
-  const displayVatAmount = isDiscountLine ? -Math.abs(vatAmount) : vatAmount;
-  const displayTotalAmount = isDiscountLine
-    ? -Math.abs(totalAmount || preVatAmount || discountAmount)
+  const displayVatAmount = shouldApplyNegativeAmount
+    ? -(vatAmount || 0)
+    : vatAmount;
+  const displayTotalAmount = shouldApplyNegativeAmount
+    ? -(totalAmount || preVatAmount || discountAmount || 0)
     : totalAmount;
-  const displayDiscountAmount = isDiscountLine
-    ? -Math.abs(discountAmount || preVatAmount || totalAmount)
+  const displayDiscountAmount = shouldApplyNegativeAmount
+    ? -(discountAmount || preVatAmount || totalAmount || 0)
     : discountAmount;
 
   return {
-    description,
-    unit,
+    invoiceSubcategory,
     quantity: displayQuantity,
     unitPrice: displayUnitPrice,
     preVatAmount: displayPreVatAmount,

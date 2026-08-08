@@ -13,8 +13,8 @@ import {
   parseVatRateForDisplay,
 } from '../helpers/invoice-mapper.helper';
 import {
-  normalizeOutInvoiceLineDisplay,
-  isDaoTriOutInvoiceTaxCode,
+  classifyInvoiceLine,
+  resolveOutInvoiceBranchCode,
 } from '../helpers/out-invoice-display.helper';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
@@ -534,6 +534,16 @@ export class InvoiceQueryService {
       }
     };
 
+    const INVOICE_TYPE_MAP: Record<string, string> = {
+      CHIET_KHAU: 'Hóa đơn chiết khấu',
+      DICH_VU_CUU_HO: 'Hóa đơn cứu hộ',
+      HANG_HOA: 'Hàng hóa / Vật tư',
+      DICH_VU: 'Dịch vụ',
+      PHI_THUE: 'Phí & Thuế',
+      CUU_HO: 'Cứu hộ',
+      KHAC: 'Khác',
+    };
+
     const workbook = new ExcelJS.Workbook();
 
     const summarySheet = workbook.addWorksheet('Bảng kê');
@@ -544,6 +554,12 @@ export class InvoiceQueryService {
       { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
       { header: 'MST khách hàng', key: 'taxCode', width: 15 },
       { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+      {
+        header: 'Chiết khấu',
+        key: 'headerDiscountAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
       {
         header: 'Trước thuế GTGT',
         key: 'preVat',
@@ -641,23 +657,7 @@ export class InvoiceQueryService {
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
-      {
-        header: 'Đã cấn trừ',
-        key: 'netOffAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
-      {
-        header: 'Tham chiếu cấn trừ',
-        key: 'netOffReferences',
-        width: 30,
-      },
-      {
-        header: 'Còn lại',
-        key: 'remainingAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
+      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
       { header: 'Chi nhánh', key: 'branchName', width: 25 },
     ];
 
@@ -811,6 +811,7 @@ export class InvoiceQueryService {
         partnerName,
         taxCode,
         address,
+        headerDiscountAmount: Number(inv.discountAmount) || 0,
         preVat: Number(inv.preVatAmount) || 0,
         vatRate: parseVatRateForDisplay(inv.vatRate),
         vat: Number(inv.vatAmount) || 0,
@@ -830,7 +831,7 @@ export class InvoiceQueryService {
         const fallbackPreVat = Number(inv.preVatAmount) || 0;
         const fallbackVat = Number(inv.vatAmount) || 0;
         const fallbackTotal = Number(inv.totalAmount) || 0;
-        const normalizedFallback = normalizeOutInvoiceLineDisplay(
+        const normalizedFallback = classifyInvoiceLine(
           {
             description: inv.description,
             unit: '',
@@ -841,9 +842,14 @@ export class InvoiceQueryService {
             totalAmount: fallbackTotal,
             discountAmount: Number(inv.discountAmount) || 0,
           },
-          taxCode,
-          inv.direction,
-          invoiceLineCount,
+          {
+            buyerTaxCode: taxCode,
+            direction: inv.direction,
+            invoiceLineCount,
+            taxInvoiceStatus: inv.taxInvoiceStatus,
+            headerDiscountAmount: Number(inv.discountAmount) || 0,
+            forReportExport: true,
+          },
         );
 
         detailedSheet.addRow({
@@ -852,8 +858,8 @@ export class InvoiceQueryService {
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
-          itemName: normalizedFallback.description || inv.description || '',
-          uom: normalizedFallback.unit || '',
+          itemName: inv.description || '',
+          uom: '',
           qty: normalizedFallback.quantity,
           unitPrice: normalizedFallback.unitPrice,
           preVatAmount: normalizedFallback.preVatAmount,
@@ -864,10 +870,12 @@ export class InvoiceQueryService {
           wo: inv.settlementOrder || '',
           description: fullDesc,
           statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-          netOffAmount: Number((inv as any).netOffAmount) || 0,
-          netOffReferences: (inv as any).netOffReferences || '',
-          remainingAmount:
-            Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
+          invoiceSubcategory:
+            normalizedFallback.invoiceSubcategory === 'DISCOUNT'
+              ? 'Chiết khấu'
+              : normalizedFallback.invoiceSubcategory === 'RESCUE'
+                ? 'Cứu hộ'
+                : 'Thông thường',
           branchName: branchMap[inv.branchId || ''] || '',
         });
 
@@ -891,7 +899,7 @@ export class InvoiceQueryService {
             Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
           const itemTotalAmount =
             Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
-          const normalizedItem = normalizeOutInvoiceLineDisplay(
+          const normalizedItem = classifyInvoiceLine(
             {
               description: item.description || '',
               unit: item.unit || '',
@@ -902,9 +910,14 @@ export class InvoiceQueryService {
               totalAmount: itemTotalAmount,
               discountAmount: Number(item.discountAmount) || 0,
             },
-            taxCode,
-            inv.direction,
-            invoiceLineCount,
+            {
+              buyerTaxCode: taxCode,
+              direction: inv.direction,
+              invoiceLineCount,
+              taxInvoiceStatus: inv.taxInvoiceStatus,
+              headerDiscountAmount: Number(inv.discountAmount) || 0,
+              forReportExport: true,
+            },
           );
 
           detailedSheet.addRow({
@@ -913,8 +926,8 @@ export class InvoiceQueryService {
             invoiceNo: inv.invoiceNo,
             partnerName,
             taxCode,
-            itemName: normalizedItem.description || item.description || '',
-            uom: normalizedItem.unit || item.unit || '',
+            itemName: item.description || '',
+            uom: item.unit || '',
             qty: normalizedItem.quantity,
             unitPrice: normalizedItem.unitPrice,
             preVatAmount: normalizedItem.preVatAmount,
@@ -925,11 +938,12 @@ export class InvoiceQueryService {
             wo: inv.settlementOrder || '',
             description: fullDesc,
             statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-            netOffAmount: Number((inv as any).netOffAmount) || 0,
-            netOffReferences: (inv as any).netOffReferences || '',
-            remainingAmount:
-              Number(inv.totalAmount) -
-              (Number((inv as any).netOffAmount) || 0),
+            invoiceSubcategory:
+              normalizedItem.invoiceSubcategory === 'DISCOUNT'
+                ? 'Chiết khấu'
+                : normalizedItem.invoiceSubcategory === 'RESCUE'
+                  ? 'Cứu hộ'
+                  : 'Thông thường',
             branchName: branchMap[inv.branchId || ''] || '',
           });
 

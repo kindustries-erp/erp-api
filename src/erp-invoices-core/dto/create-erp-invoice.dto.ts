@@ -135,10 +135,22 @@ export class CreateErpInvoiceDto {
   @MaxLength(64)
   sellerTaxCode?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sellerAddress?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  sellerAddress?: string;
+  @MaxLength(255)
+  invoiceType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  invoiceCategory?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

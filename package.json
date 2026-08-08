@@ -11,6 +11,8 @@
     "audit:inventory": "node -r ts-node/register -r tsconfig-paths/register src/inventory-stock-core/audit-inventory-stock.ts",
     "build": "nest build",
     "seed:admin-full": "node -r ts-node/register -r tsconfig-paths/register src/seed-admin-full.ts",
+    "backfill:out-invoices": "bun run scripts/backfill-out-invoices.ts",
+    "backfill:out-invoices:dry": "DRY_RUN=true bun run scripts/backfill-out-invoices.ts",
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/db/data-source.cli.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start --host 0.0.0.0",
