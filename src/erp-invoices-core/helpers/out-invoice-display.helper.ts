@@ -118,7 +118,11 @@ export function classifyInvoiceLine(
 
   const hasDiscountToken = hasDiscountKeyword(description);
   const isDiscountCandidate =
-    isDaoTri && hasDiscountToken && invoiceLineCount > 1; // Basic heuristic for subcategory classification
+    forReportExport &&
+    hasDiscountToken &&
+    invoiceLineCount > 1 &&
+    headerHasDiscount &&
+    amountMatchesHeader;
 
   let invoiceSubcategory: 'NORMAL' | 'DISCOUNT' | 'RESCUE' = 'NORMAL';
   if (isRescue) {

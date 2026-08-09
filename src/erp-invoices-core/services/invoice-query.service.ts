@@ -882,11 +882,11 @@ export class InvoiceQueryService {
         accumulateOverview({
           itemName: inv.description || '',
           uom: '',
-          qty: 0,
-          unitPrice: 0,
-          preVatAmount: fallbackPreVat,
-          vatAmount: fallbackVat,
-          totalAmount: fallbackTotal,
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
         });
       } else {
         for (const item of inv.items) {
@@ -950,11 +950,11 @@ export class InvoiceQueryService {
           accumulateOverview({
             itemName: item.description || '',
             uom: item.unit || '',
-            qty: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            preVatAmount: itemPreVat,
-            vatAmount: itemVatAmount,
-            totalAmount: itemTotalAmount,
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
           });
         }
       }
