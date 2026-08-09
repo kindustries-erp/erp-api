@@ -760,4 +760,40 @@ export class PurchaseOrdersCoreService {
       lines,
     };
   }
+
+  async getLinkedInvoices(id: string) {
+    const invoiceRepo = this.dataSource.getRepository(ErpInvoice);
+    return invoiceRepo.find({
+      where: { purchaseOrderId: id },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async linkInvoices(id: string, invoiceIds: string[]) {
+    if (!invoiceIds || invoiceIds.length === 0)
+      return { message: 'Thành công' };
+
+    // Ensure PO exists
+    const po = await this.repository.findOneBy({ id });
+    if (!po) throw new BadRequestException('Không tìm thấy PO');
+
+    await this.dataSource.transaction(async (manager) => {
+      const invoiceRepo = manager.getRepository(ErpInvoice);
+      await invoiceRepo.update({ id: In(invoiceIds) }, { purchaseOrderId: id });
+    });
+
+    return { message: 'Liên kết thành công' };
+  }
+
+  async unlinkInvoice(id: string, invoiceId: string) {
+    await this.dataSource.transaction(async (manager) => {
+      const invoiceRepo = manager.getRepository(ErpInvoice);
+      await invoiceRepo.update(
+        { id: invoiceId, purchaseOrderId: id },
+        { purchaseOrderId: null },
+      );
+    });
+
+    return { message: 'Hủy liên kết thành công' };
+  }
 }

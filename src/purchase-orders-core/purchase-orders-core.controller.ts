@@ -96,4 +96,25 @@ export class PurchaseOrdersCoreController {
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }
+
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @Get(':id/invoices')
+  getLinkedInvoices(@Param('id') id: string) {
+    return this.service.getLinkedInvoices(id);
+  }
+
+  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @Post(':id/link-invoices')
+  linkInvoices(@Param('id') id: string, @Body() dto: { invoiceIds: string[] }) {
+    return this.service.linkInvoices(id, dto.invoiceIds);
+  }
+
+  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @Delete(':id/invoices/:invoiceId')
+  unlinkInvoice(
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+  ) {
+    return this.service.unlinkInvoice(id, invoiceId);
+  }
 }

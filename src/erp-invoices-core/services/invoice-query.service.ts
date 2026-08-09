@@ -260,7 +260,8 @@ export class InvoiceQueryService {
       query.sort_by === 'netOffAmount' ||
       query.sort_by === 'remainingAmount' ||
       Object.keys(columnSearch).length > 0 ||
-      Object.keys(columnFilters).length > 0
+      Object.keys(columnFilters).length > 0 ||
+      !!query.unlinked_po_id
     );
 
     if (needsQb) {
@@ -285,6 +286,15 @@ export class InvoiceQueryService {
               ? `${query.date_to} 23:59:59.999`
               : query.date_to,
         });
+
+      if (query.unlinked_po_id) {
+        qb.andWhere(
+          '(inv.purchase_order_id IS NULL OR inv.purchase_order_id = :unlinkedPoId)',
+          {
+            unlinkedPoId: query.unlinked_po_id,
+          },
+        );
+      }
 
       if (query.search) {
         const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
