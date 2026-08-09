@@ -624,23 +624,47 @@ export class PurchaseOrdersCoreService {
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
         const lineRepo = manager.getRepository(ErpPurchaseOrderLine);
-        await lineRepo.delete({ purchaseOrderId: id });
+        const existingLines = await lineRepo.find({
+          where: { purchaseOrderId: id },
+          order: { lineNo: 'ASC' },
+        });
+
         let lineNo = 1;
-        for (const line of lines as any[]) {
-          await lineRepo.save(
-            lineRepo.create({
-              purchaseOrderId: id,
-              lineNo: lineNo++,
-              itemId: line.itemId ?? null,
-              itemCode: line.itemCode ?? null,
-              itemName: line.itemName ?? null,
-              description: line.description ?? null,
-              qtyOrdered: line.qtyOrdered,
-              qtyReceived: line.qtyReceived ?? '0',
-              unitPrice: line.unitPrice ?? null,
-              amount: line.amount ?? null,
-            } as any),
-          );
+        for (const [index, line] of (lines as any[]).entries()) {
+          const existing = existingLines[index];
+          if (existing) {
+            existing.lineNo = lineNo++;
+            existing.itemId = line.itemId ?? null;
+            existing.itemCode = line.itemCode ?? null;
+            existing.itemName = line.itemName ?? null;
+            existing.description = line.description ?? null;
+            existing.qtyOrdered = line.qtyOrdered;
+            existing.unitPrice = line.unitPrice ?? null;
+            existing.amount = line.amount ?? null;
+            await lineRepo.save(existing);
+          } else {
+            await lineRepo.save(
+              lineRepo.create({
+                purchaseOrderId: id,
+                lineNo: lineNo++,
+                itemId: line.itemId ?? null,
+                itemCode: line.itemCode ?? null,
+                itemName: line.itemName ?? null,
+                description: line.description ?? null,
+                qtyOrdered: line.qtyOrdered,
+                qtyReceived: '0',
+                unitPrice: line.unitPrice ?? null,
+                amount: line.amount ?? null,
+              } as any),
+            );
+          }
+        }
+
+        // Remove any leftover lines that were deleted
+        if (lines.length < existingLines.length) {
+          for (let i = lines.length; i < existingLines.length; i++) {
+            await lineRepo.remove(existingLines[i]);
+          }
         }
       });
     }
