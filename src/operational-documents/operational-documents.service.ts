@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  CreateDocumentPaymentLinkDto,
   CreateInventoryItemDto,
   CreateInventoryTransactionDto,
   CreateOperatingExpenseDto,
@@ -35,10 +34,6 @@ const DOCUMENT_COLLECTIONS = [
 ] as const;
 
 const PAYABLE_COLLECTIONS = ['purchase_orders', 'operating_expenses'] as const;
-const PAYMENT_LINK_ALLOWED_VOUCHER_STATUSES = [
-  'APPROVED',
-  'CONFIRMED',
-] as const;
 
 type DocumentCollection = (typeof DOCUMENT_COLLECTIONS)[number];
 type PayableCollection = (typeof PAYABLE_COLLECTIONS)[number];
@@ -210,18 +205,6 @@ export class OperationalDocumentsService {
     const lineCollection = this.lineCollection(collection);
     const fk = this.lineFk(collection);
     const path = `/items/${lineCollection}?filter[${fk}][_eq]=${id}&sort[]=line_no&fields[]=*`;
-    const { data } = await this.request<{ data: any[] }>(path);
-    return data || [];
-  }
-
-  private async findPaymentLinks(documentType: DocumentCollection, id: string) {
-    const path = `/items/document_payment_links?filter[document_type][_eq]=${documentType}&filter[document_id][_eq]=${id}&sort[]=-applied_date&fields[]=*`;
-    const { data } = await this.request<{ data: any[] }>(path);
-    return data || [];
-  }
-
-  private async findPaymentLinksByVoucher(paymentVoucherId: string) {
-    const path = `/items/document_payment_links?filter[payment_voucher_id][_eq]=${paymentVoucherId}&fields[]=id&fields[]=payment_voucher_id&fields[]=applied_amount&fields[]=document_type&fields[]=document_id`;
     const { data } = await this.request<{ data: any[] }>(path);
     return data || [];
   }
@@ -464,8 +447,7 @@ export class OperationalDocumentsService {
     if (!data) return null;
     if (!includeRelations) return data;
     const lines = await this.findLines(collection, id);
-    const payments = await this.findPaymentLinks(collection, id);
-    return { ...data, lines, payments };
+    return { ...data, lines };
   }
 
   private async createWithLines(
@@ -580,165 +562,6 @@ export class OperationalDocumentsService {
     });
     if (Array.isArray(lines)) await this.replaceLines(collection, id, lines);
     return this.findOne(collection, id, userToken);
-  }
-
-  async listPaymentLinks(
-    documentType: DocumentCollection,
-    documentId: string,
-    userToken: string,
-  ) {
-    this.guard(userToken);
-    return {
-      items: await this.findPaymentLinks(documentType, documentId),
-    };
-  }
-
-  async deletePaymentLink(
-    documentType: DocumentCollection,
-    documentId: string,
-    linkId: string,
-    userToken: string,
-  ) {
-    this.guard(userToken);
-    const { data } = await this.request<{ data: any }>(
-      `/items/document_payment_links/${linkId}?fields[]=id&fields[]=document_type&fields[]=document_id`,
-    );
-    if (!data)
-      throw new NotFoundException('Không tìm thấy liên kết thanh toán');
-    if (
-      data.document_type !== documentType ||
-      data.document_id !== documentId
-    ) {
-      throw new BadRequestException('Liên kết không thuộc chứng từ yêu cầu');
-    }
-    await this.request(`/items/document_payment_links/${linkId}`, {
-      method: 'DELETE',
-    });
-    await this.recomputeSettlement(documentType, documentId);
-    return { message: 'Đã gỡ liên kết thanh toán' };
-  }
-
-  async createPaymentLink(
-    dto: CreateDocumentPaymentLinkDto,
-    userToken: string,
-  ) {
-    this.guard(userToken);
-    const documentType = dto.document_type as DocumentCollection;
-    if (!DOCUMENT_COLLECTIONS.includes(documentType)) {
-      throw new BadRequestException('document_type không hợp lệ');
-    }
-
-    const document = await this.loadDocument(
-      documentType,
-      dto.document_id,
-      false,
-    );
-    if (!document)
-      throw new BadRequestException('Không tìm thấy chứng từ nghiệp vụ');
-
-    const voucher = await this.request<{ data: any }>(
-      `/items/payment_vouchers/${dto.payment_voucher_id}?fields[]=id&fields[]=status&fields[]=document_date&fields[]=amount&fields[]=voucher_direction&fields[]=voucher_type&fields[]=counterparty_id`,
-    );
-    if (!voucher.data)
-      throw new BadRequestException('Không tìm thấy phiếu dòng tiền');
-    if (!PAYMENT_LINK_ALLOWED_VOUCHER_STATUSES.includes(voucher.data.status)) {
-      throw new BadRequestException(
-        'Chỉ liên kết phiếu dòng tiền đã duyệt/xác nhận',
-      );
-    }
-
-    const expectedDirection =
-      documentType === 'sales_service_orders' ? 'IN' : 'OUT';
-    if (voucher.data.voucher_direction !== expectedDirection) {
-      throw new BadRequestException(
-        expectedDirection === 'IN'
-          ? 'Chứng từ phải thu chỉ được liên kết phiếu thu'
-          : 'Chứng từ phải trả chỉ được liên kết phiếu chi',
-      );
-    }
-
-    const expectedPartnerId = this.expectedPartnerId(documentType, document);
-    if (!expectedPartnerId) {
-      throw new BadRequestException(
-        'Chứng từ chưa có đối tác để liên kết dòng tiền',
-      );
-    }
-    if (!voucher.data.counterparty_id) {
-      throw new BadRequestException('Phiếu dòng tiền chưa có đối tác');
-    }
-    if (voucher.data.counterparty_id !== expectedPartnerId) {
-      throw new BadRequestException(
-        'Phiếu dòng tiền không cùng đối tác với chứng từ',
-      );
-    }
-
-    const existingLinks = await this.findPaymentLinks(
-      documentType,
-      dto.document_id,
-    );
-    const voucherLinks = await this.findPaymentLinksByVoucher(
-      dto.payment_voucher_id,
-    );
-    const currentSettled = existingLinks.reduce(
-      (sum, link) => sum + Number(link.applied_amount || 0),
-      0,
-    );
-    const documentTotal = Number(document.total_amount || 0);
-    const voucherAmount = Number(voucher.data.amount || 0);
-    const voucherAllocated = voucherLinks.reduce(
-      (sum, link) => sum + Number(link.applied_amount || 0),
-      0,
-    );
-    const remainingDocument = Math.max(documentTotal - currentSettled, 0);
-    const remainingVoucher = Math.max(voucherAmount - voucherAllocated, 0);
-
-    if (dto.applied_amount > remainingDocument) {
-      throw new BadRequestException(
-        'Số tiền cấn trừ vượt số dư còn mở của chứng từ',
-      );
-    }
-    if (dto.applied_amount > remainingVoucher) {
-      throw new BadRequestException(
-        'Số tiền cấn trừ vượt số tiền khả dụng của phiếu dòng tiền',
-      );
-    }
-
-    const { data } = await this.request<{ data: any }>(
-      `/items/document_payment_links`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          ...dto,
-          applied_date:
-            dto.applied_date || this.normalizeDate(voucher.data.document_date),
-        }),
-      },
-    );
-    await this.recomputeSettlement(documentType, dto.document_id);
-    return { message: 'Liên kết thanh toán thành công', data };
-  }
-
-  async recomputeSettlement(
-    documentType: DocumentCollection,
-    documentId: string,
-  ) {
-    const links = await this.findPaymentLinks(documentType, documentId);
-    const settled = links.reduce(
-      (sum, link) => sum + Number(link.applied_amount || 0),
-      0,
-    );
-    const lastPaymentDate = links
-      .map((link) => link.applied_date)
-      .filter(Boolean)
-      .sort()
-      .at(-1);
-    await this.request(`/items/${documentType}/${documentId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        settled_amount: settled,
-        ...(lastPaymentDate ? { last_payment_date: lastPaymentDate } : {}),
-      }),
-    });
   }
 
   async getReceivables(query: OperationalQueryDto, userToken: string) {

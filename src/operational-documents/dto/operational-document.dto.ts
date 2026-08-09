@@ -370,35 +370,9 @@ export class CreateOperatingExpenseDto {
   @IsString()
   notes?: string;
 
-  @IsOptional()
-  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OperationalLineDto)
   lines?: OperationalLineDto[];
-}
-
-export class CreateDocumentPaymentLinkDto {
-  @IsIn(['sales_service_orders', 'purchase_orders', 'operating_expenses'])
-  document_type!: string;
-
-  @IsUUID()
-  document_id!: string;
-
-  @IsUUID()
-  payment_voucher_id!: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.01)
-  applied_amount!: number;
-
-  @IsOptional()
-  @IsDateString()
-  applied_date?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
 }
 
 export class CreateInventoryItemDto {

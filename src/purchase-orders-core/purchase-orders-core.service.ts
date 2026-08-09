@@ -516,34 +516,6 @@ export class PurchaseOrdersCoreService {
       select: ['id', 'receiptNo', 'receiptDate', 'status'],
     });
 
-    // ─ Payment links ───────────────────────────────────────
-    // TODO: Restore when document_payment_links table is confirmed to exist in
-    //       all environments. The query below joins document_payment_links with
-    //       payment_vouchers to get settled vouchers linked to this PO.
-    //
-    // const paymentLinks = await this.dataSource.query(
-    //   `SELECT
-    //      dpl.id               AS "linkId",
-    //      pv.id                AS "voucherId",
-    //      pv.voucher_no        AS "voucherNo",
-    //      dpl.applied_amount   AS "appliedAmount",
-    //      dpl.applied_date     AS "appliedDate",
-    //      pv.status            AS "voucherStatus"
-    //    FROM public.document_payment_links dpl
-    //    JOIN public.payment_vouchers pv ON pv.id = dpl.payment_voucher_id
-    //    WHERE dpl.document_type = 'purchase_orders'
-    //      AND dpl.document_id  = $1`,
-    //   [id],
-    // );
-    const paymentLinks: {
-      linkId: string;
-      voucherId: string;
-      voucherNo: string;
-      appliedAmount: number;
-      appliedDate: string | null;
-      voucherStatus: string;
-    }[] = [];
-
     // ─ Invoices ───────────────────────────────────────────
     const invoiceRepo = this.dataSource.getRepository(ErpInvoice);
     const invoices = await invoiceRepo.find({
@@ -572,7 +544,7 @@ export class PurchaseOrdersCoreService {
           supplierCode: supplierCode,
         },
         goodsReceipts,
-        paymentLinks,
+
         invoices,
       },
     };
