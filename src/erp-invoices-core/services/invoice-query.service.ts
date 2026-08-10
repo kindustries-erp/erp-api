@@ -260,7 +260,8 @@ export class InvoiceQueryService {
       query.sort_by === 'netOffAmount' ||
       query.sort_by === 'remainingAmount' ||
       Object.keys(columnSearch).length > 0 ||
-      Object.keys(columnFilters).length > 0
+      Object.keys(columnFilters).length > 0 ||
+      !!query.unlinked_po_id
     );
 
     if (needsQb) {
@@ -285,6 +286,15 @@ export class InvoiceQueryService {
               ? `${query.date_to} 23:59:59.999`
               : query.date_to,
         });
+
+      if (query.unlinked_po_id) {
+        qb.andWhere(
+          '(inv.purchase_order_id IS NULL OR inv.purchase_order_id = :unlinkedPoId)',
+          {
+            unlinkedPoId: query.unlinked_po_id,
+          },
+        );
+      }
 
       if (query.search) {
         const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
@@ -882,11 +892,11 @@ export class InvoiceQueryService {
         accumulateOverview({
           itemName: inv.description || '',
           uom: '',
-          qty: 0,
-          unitPrice: 0,
-          preVatAmount: fallbackPreVat,
-          vatAmount: fallbackVat,
-          totalAmount: fallbackTotal,
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
         });
       } else {
         for (const item of inv.items) {
@@ -950,11 +960,11 @@ export class InvoiceQueryService {
           accumulateOverview({
             itemName: item.description || '',
             uom: item.unit || '',
-            qty: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            preVatAmount: itemPreVat,
-            vatAmount: itemVatAmount,
-            totalAmount: itemTotalAmount,
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
           });
         }
       }

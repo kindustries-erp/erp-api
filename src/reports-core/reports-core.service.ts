@@ -322,11 +322,20 @@ export class ReportsCoreService {
    */
   private buildVinfastInItemCodeSql(descriptionExpr: string) {
     const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
+    const canonicalExpr = `REGEXP_REPLACE(${normalizedExpr}, '[^A-Z0-9]+', '_', 'g')`;
     return `
       CASE
-        WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%' THEN 'EEP73110011AP'
-        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%' THEN 'BAT21001011'
-        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%' THEN 'EEP73110011ALL'
+        WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
+          OR ${canonicalExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
+          THEN 'EEP73110011AP'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9KWH%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9_KWH%'
+          OR ${canonicalExpr} LIKE '%BAT21001011%'
+          THEN 'BAT21001011'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_PACK%'
+          THEN 'EEP73110011ALL'
         WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)') IS NOT NULL
           THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
         ELSE NULL
@@ -420,7 +429,7 @@ export class ReportsCoreService {
       ),
       sell_codes AS (
         SELECT 
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
@@ -430,6 +439,8 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
@@ -659,7 +670,7 @@ export class ReportsCoreService {
       ),
       sell_codes AS (
         SELECT 
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -669,6 +680,8 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
@@ -906,7 +919,7 @@ export class ReportsCoreService {
       sell_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -916,6 +929,8 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
@@ -1112,7 +1127,7 @@ export class ReportsCoreService {
           MAX(i.buyer_tax_code) AS tax_code,
           MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           '' AS item_name,
           MAX(ii.unit) AS unit,
           COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
@@ -1151,8 +1166,10 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-        GROUP BY ii.invoice_id, TRIM(SPLIT_PART(ii.description, ' ', 1))
+        GROUP BY ii.invoice_id, (${inItemCodeSql})
       )
       SELECT 
         c.direction,
@@ -1641,7 +1658,7 @@ export class ReportsCoreService {
       ),
       sell_codes AS (
         SELECT 
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -1651,6 +1668,8 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       buy_agg AS (
@@ -1798,7 +1817,7 @@ export class ReportsCoreService {
       sell_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -1808,6 +1827,8 @@ export class ReportsCoreService {
           AND i.direction = 'OUT'
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       base_data AS (
@@ -2079,6 +2100,7 @@ export class ReportsCoreService {
     `;
 
     const overviewData = await this.dataSource.query(dataSql, params);
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
 
     const detailsSql = `
       SELECT
@@ -2092,7 +2114,7 @@ export class ReportsCoreService {
         i.status,
         i.buyer_name AS "buyerName", 
         i.buyer_tax_code AS "buyerTaxCode", 
-        TRIM(SPLIT_PART(ii.description, ' ', 1)) AS "itemCode",
+        (${inItemCodeSql}) AS "itemCode",
         ii.description AS "description",
         ii.unit AS "unit",
         ii.quantity::numeric AS "qty",

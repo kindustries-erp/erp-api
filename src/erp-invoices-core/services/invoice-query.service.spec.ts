@@ -210,4 +210,66 @@ describe('InvoiceQueryService', () => {
     expect(firstDataRow[6]).toBe(24000);
     expect(firstDataRow[7]).toBe(324000);
   });
+
+  it('uses normalized discount values in the overview sheet for export reports', async () => {
+    const qb = createQbMock();
+    qb.getMany.mockResolvedValue([
+      {
+        id: 'inv-1',
+        invoiceDate: '2026-07-31',
+        serialNo: 'C26ABC',
+        invoiceNo: '12345',
+        buyerName: 'CÔNG TY TNHH ABC',
+        buyerTaxCode: '0110269067',
+        buyerAddress: 'Q1',
+        preVatAmount: 200000,
+        vatRate: '0',
+        vatAmount: 0,
+        totalAmount: 200000,
+        discountAmount: 200000,
+        direction: 'OUT',
+        description: 'Header line\nSecond line',
+        taxInvoiceStatus: 1,
+        branchId: null,
+        items: [
+          {
+            description: 'Chiết khấu cuối kỳ',
+            unit: 'Lần',
+            quantity: 1,
+            unitPrice: 200000,
+            preVatAmount: 200000,
+            vatRate: '0',
+            vatAmount: 0,
+            totalAmount: 200000,
+            discountAmount: 200000,
+          },
+        ],
+      },
+    ]);
+
+    const repository = createRepositoryMock(qb) as any;
+    const service = new InvoiceQueryService(repository);
+    const buffer = await service.exportExcel({ direction: 'OUT' });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+
+    const overviewSheet = workbook.getWorksheet('Tổng quan hàng hóa');
+    const overviewRows =
+      overviewSheet!.getRows(2, overviewSheet!.rowCount - 1) || [];
+    const discountRow = overviewRows.find((row) => {
+      const cellValue = row.getCell(1).value;
+      const normalizedCellValue =
+        typeof cellValue === 'string'
+          ? cellValue
+          : typeof cellValue === 'number'
+            ? `${cellValue}`
+            : '';
+      return normalizedCellValue.trim() === 'Chiết khấu cuối kỳ';
+    });
+
+    expect(discountRow).toBeDefined();
+    expect(discountRow!.getCell(5).value).toBe(-200000);
+    expect(discountRow!.getCell(7).value).toBe(-200000);
+  });
 });

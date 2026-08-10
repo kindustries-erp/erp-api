@@ -1,1 +1,0 @@
-import { Client } from 'pg'; const c = new Client({connectionString: 'postgresql://neondb_owner:npg_oaS2mVUCGM6P@ep-gentle-forest-a7qe1w16-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'}); c.connect().then(()=>c.query('SELECT id FROM erp_branches LIMIT 1')).then(r=>{console.log('BRANCH:', r.rows); c.end()});
