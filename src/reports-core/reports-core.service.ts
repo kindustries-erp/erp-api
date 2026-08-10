@@ -1166,7 +1166,7 @@ export class ReportsCoreService {
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
           MAX(ii.description) AS description,
-          p.from_car_seller
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
           JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
@@ -1221,7 +1221,7 @@ export class ReportsCoreService {
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
           MAX(ii.description) AS description,
-          p.from_car_seller
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
           JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
