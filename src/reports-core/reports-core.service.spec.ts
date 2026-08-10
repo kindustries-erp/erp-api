@@ -146,6 +146,36 @@ describe('ReportsCoreService', () => {
     expect(vf5Idx).toBeLessThan(hvPackIdx);
   });
 
+  it('uses the VINFAST parser for outgoing item codes instead of splitting the description at the first space', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTracking({ page: 1, limit: 10 });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain(
+      "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
+    );
+    expect(sql).not.toContain(
+      "TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code",
+    );
+  });
+
+  it('normalizes outbound description separators before VINFAST keyword matching', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsDashboardTable({
+      page: 1,
+      limit: 10,
+      vehicleType: 'CAR',
+    });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain(
+      "REGEXP_REPLACE(UPPER(COALESCE(ii.description, '')), '[^A-Z0-9]+', '_', 'g')",
+    );
+    expect(sql).toContain("LIKE '%HV_BATTERY_41_9KWH%'");
+  });
+
   it('applies the same IN detection rules in details SQL', async () => {
     dataSource.query.mockResolvedValueOnce([]);
 
