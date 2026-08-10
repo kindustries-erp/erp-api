@@ -340,7 +340,7 @@ describe('ReportsCoreService', () => {
     expect(result.data[0].marginPct).toBe('');
   });
 
-  it('exports 6 sheets split by vehicle type and detail direction, with description after tax code', async () => {
+  it('exports 11 sheets split by vehicle type, detail direction, and adjustment/replacement status, with description after tax code', async () => {
     jest.spyOn(service, 'getVinfastPartsTracking').mockResolvedValue({
       data: [
         {
@@ -485,10 +485,14 @@ describe('ReportsCoreService', () => {
     expect(workbook.getWorksheet('Tổng hợp phụ tùng')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Tổng quan')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Mua Vào')).toBeDefined();
+    expect(workbook.getWorksheet('Ô tô - Mua Vào - ĐC&TT')).toBeDefined();
     expect(workbook.getWorksheet('Ô tô - Bán Ra')).toBeDefined();
+    expect(workbook.getWorksheet('Ô tô - Bán Ra - ĐC&TT')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Tổng quan')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Mua Vào')).toBeDefined();
+    expect(workbook.getWorksheet('Xe máy - Mua Vào - ĐC&TT')).toBeDefined();
     expect(workbook.getWorksheet('Xe máy - Bán Ra')).toBeDefined();
+    expect(workbook.getWorksheet('Xe máy - Bán Ra - ĐC&TT')).toBeDefined();
 
     const summarySheet = workbook.getWorksheet('Tổng hợp phụ tùng')!;
     // 2 distinct items (CHS73060025AB + MOT123) → header row + 2 data rows
@@ -506,9 +510,11 @@ describe('ReportsCoreService', () => {
 
     const buyHeaders = (carBuySheet.getRow(1).values as any[]).slice(1);
     const taxCodeIndex = buyHeaders.indexOf('Mã số thuế');
+    const gdtStatusIndex = buyHeaders.indexOf('Trạng thái GDT');
     const descIndex = buyHeaders.indexOf('Diễn giải');
     expect(taxCodeIndex).toBeGreaterThan(-1);
-    expect(descIndex).toBe(taxCodeIndex + 1);
+    expect(gdtStatusIndex).toBe(taxCodeIndex + 1);
+    expect(descIndex).toBe(gdtStatusIndex + 1);
 
     expect(carBuySheet.rowCount).toBe(2);
     expect(carSellSheet.rowCount).toBe(2);

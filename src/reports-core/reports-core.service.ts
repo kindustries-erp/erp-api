@@ -320,11 +320,15 @@ export class ReportsCoreService {
    * Item code precedence for VINFAST IN lines:
    * 1) keyword exceptions, 2) strict regex-based detection.
    */
-  private buildPurchasedItemCodesCteSql(inItemCodeSql: string) {
+  private buildPurchasedItemCodesCteSql(
+    inItemCodeSql: string,
+    inItemNameSql: string,
+  ) {
     return `
       purchased_item_codes AS (
         SELECT 
           (${inItemCodeSql}) AS item_code,
+          MAX(${inItemNameSql}) AS original_item_name,
           BOOL_OR(i.seller_tax_code = '0318334886') AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
@@ -427,9 +431,10 @@ export class ReportsCoreService {
     }
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
@@ -684,7 +689,7 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
@@ -706,6 +711,7 @@ export class ReportsCoreService {
       sell_codes AS (
         SELECT 
           (${inItemCodeSql}) AS item_code,
+          p.original_item_name AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
@@ -949,7 +955,7 @@ export class ReportsCoreService {
     );
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           ii.invoice_id,
@@ -973,7 +979,7 @@ export class ReportsCoreService {
         SELECT 
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
-          ${inItemNameSql} AS item_name,
+          p.original_item_name AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
@@ -1122,7 +1128,7 @@ export class ReportsCoreService {
     );
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           'IN' as direction,
@@ -1191,7 +1197,7 @@ export class ReportsCoreService {
           MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
-          MAX(${inItemNameSql}) AS item_name,
+          MAX(p.original_item_name) AS item_name,
           MAX(ii.unit) AS unit,
           COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
           AVG(ii.unit_price::numeric) AS unit_price,
@@ -1318,6 +1324,25 @@ export class ReportsCoreService {
 
     const workbook = new ExcelJS.Workbook();
 
+    const formatTaxInvoiceStatus = (val?: number | null): string => {
+      switch (val) {
+        case 1:
+          return 'Mới';
+        case 2:
+          return 'Thay thế';
+        case 3:
+          return 'Điều chỉnh';
+        case 4:
+          return 'Bị thay thế';
+        case 5:
+          return 'Bị điều chỉnh';
+        case 6:
+          return 'Bị hủy';
+        default:
+          return val?.toString() || '—';
+      }
+    };
+
     const overviewColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
@@ -1341,6 +1366,7 @@ export class ReportsCoreService {
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đối tác', key: 'partnerName', width: 40 },
       { header: 'Mã số thuế', key: 'taxCode', width: 15 },
+      { header: 'Trạng thái GDT', key: 'gdtStatus', width: 20 },
       { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
@@ -1418,7 +1444,7 @@ export class ReportsCoreService {
     const createDetailSheet = (sheetName: string, rows: any[]) => {
       const sheet = workbook.addWorksheet(sheetName);
       sheet.columns = detailColumns as any;
-      setupSheetHeader(sheet, 20);
+      setupSheetHeader(sheet, 21);
 
       rows.forEach((row: any) => {
         sheet.addRow({
@@ -1442,6 +1468,7 @@ export class ReportsCoreService {
           licensePlate: row.licensePlate,
           settlementOrder: row.settlementOrder,
           status: row.status,
+          gdtStatus: formatTaxInvoiceStatus(row.taxInvoiceStatus),
         });
       });
 
@@ -1599,14 +1626,37 @@ export class ReportsCoreService {
         (row: any) => row.vehicleType === vehicleType,
       );
 
-      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
-      createDetailSheet(
-        `${prefix} - Mua Vào`,
-        typeDetailRows.filter((row: any) => row.direction === 'IN'),
+      const normalRows = (rows: any[]) =>
+        rows.filter(
+          (r) => r.taxInvoiceStatus == null || r.taxInvoiceStatus === 1,
+        );
+      const adjustReplaceRows = (rows: any[]) =>
+        rows.filter(
+          (r) =>
+            r.taxInvoiceStatus === 2 ||
+            r.taxInvoiceStatus === 3 ||
+            r.taxInvoiceStatus === 5,
+        );
+
+      const inRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'IN',
       );
+      const outRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'OUT',
+      );
+
+      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
+
+      createDetailSheet(`${prefix} - Mua Vào`, normalRows(inRows));
       createDetailSheet(
-        `${prefix} - Bán Ra`,
-        typeDetailRows.filter((row: any) => row.direction === 'OUT'),
+        `${prefix} - Mua Vào - ĐC&TT`,
+        adjustReplaceRows(inRows),
+      );
+
+      createDetailSheet(`${prefix} - Bán Ra`, normalRows(outRows));
+      createDetailSheet(
+        `${prefix} - Bán Ra - ĐC&TT`,
+        adjustReplaceRows(outRows),
       );
     });
 
@@ -1702,7 +1752,7 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
@@ -1877,7 +1927,7 @@ export class ReportsCoreService {
     );
 
     const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       buy_codes AS (
         SELECT 
           ii.invoice_id,
