@@ -114,9 +114,7 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain("THEN 'CAR'");
     expect(sql).toContain("ELSE 'MOTORBIKE'");
     expect(sql).toContain("'CHS73060025AB'");
-    expect(sql).toContain(
-      "BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller",
-    );
+    expect(sql).toContain('BOOL_OR(from_car_seller) AS from_car_seller');
     expect(sql).toContain('b.from_car_seller');
     expect(sql).toContain('i.tax_invoice_status != 4');
   });
@@ -201,7 +199,7 @@ describe('ReportsCoreService', () => {
     expect(sql).toContain('AND (\n      CASE');
     expect(sql).toContain(') IS NOT NULL');
     expect(sql).toContain('AS "vehicleType"');
-    expect(sql).toContain("c.direction = 'IN' AND c.tax_code = '0318334886'");
+    expect(sql).toContain('c.from_car_seller');
     expect(sql).toContain('i.tax_invoice_status != 4');
   });
 
@@ -217,7 +215,7 @@ describe('ReportsCoreService', () => {
     });
 
     const sql = dataSource.query.mock.calls[0][0] as string;
-    expect(sql).toContain('WITH buy_codes AS');
+    expect(sql).toContain('purchased_item_codes AS');
     expect(sql).toContain(
       "i.seller_tax_code IN ('0108926276', '0318334886', '0202357718')",
     );
@@ -231,7 +229,46 @@ describe('ReportsCoreService', () => {
       "SUBSTRING(UPPER(COALESCE(ii.description, '')) FROM '([A-Z]{3}[0-9][A-Z0-9]*)')",
     );
     expect(sql).not.toContain("SPLIT_PART(ii.description, ' - ', 1)");
-    expect(sql).toContain("BOOL_OR(b.seller_tax_code = '0318334886')");
+    expect(sql).toContain('BOOL_OR(b.from_car_seller)');
+  });
+
+  it('purchased_item_codes CTE has no date filter - tracks all-time purchases', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTracking({
+      page: 1,
+      limit: 10,
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+    });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain('purchased_item_codes AS');
+
+    // Check that the dateFilter is applied to base_data but not purchased_item_codes
+    const purchasedCteIdx = sql.indexOf('purchased_item_codes AS');
+    const baseDataIdx = sql.indexOf('base_data AS');
+    const dateFilterIdx = sql.indexOf('COALESCE(b.month, s.month) >=');
+
+    expect(dateFilterIdx).toBeGreaterThan(baseDataIdx); // date filter should be in base_data, not in CTEs above
+  });
+
+  it('sell_codes filters to only item_codes in purchased_item_codes CTE', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTracking({ page: 1, limit: 10 });
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain('JOIN purchased_item_codes p ON p.item_code = (');
+  });
+
+  it('details does not return OUT rows for item_codes never purchased', async () => {
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await service.getVinfastPartsTrackingDetails({});
+
+    const sql = dataSource.query.mock.calls[0][0] as string;
+    expect(sql).toContain('JOIN purchased_item_codes p ON p.item_code = (');
   });
 
   it('maps vehicleType from overview query rows', async () => {

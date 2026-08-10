@@ -320,6 +320,24 @@ export class ReportsCoreService {
    * Item code precedence for VINFAST IN lines:
    * 1) keyword exceptions, 2) strict regex-based detection.
    */
+  private buildPurchasedItemCodesCteSql(inItemCodeSql: string) {
+    return `
+      purchased_item_codes AS (
+        SELECT 
+          (${inItemCodeSql}) AS item_code,
+          BOOL_OR(i.seller_tax_code = '0318334886') AS from_car_seller
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+        GROUP BY (${inItemCodeSql})
+      ),`;
+  }
+
   private buildVinfastInItemCodeSql(descriptionExpr: string) {
     const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
     const canonicalExpr = `REGEXP_REPLACE(${normalizedExpr}, '[^A-Z0-9]+', '_', 'g')`;
@@ -411,15 +429,17 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -432,11 +452,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
+          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -449,7 +472,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -458,7 +481,8 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
@@ -468,7 +492,7 @@ export class ReportsCoreService {
           COALESCE(b.month, s.month) AS month,
           COALESCE(b.total_amount, 0) AS buy_amount,
           COALESCE(s.total_amount, 0) AS sell_amount,
-          COALESCE(b.from_car_seller, false) AS from_car_seller
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
         FROM buy_agg b
         FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
       ),
@@ -660,16 +684,18 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -682,11 +708,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -700,7 +729,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -709,7 +738,8 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
@@ -722,7 +752,7 @@ export class ReportsCoreService {
           COALESCE(s.total_qty, 0) AS qty_sold,
           COALESCE(b.total_amount, 0) AS amount_bought,
           COALESCE(s.total_amount, 0) AS amount_sold,
-          COALESCE(b.from_car_seller, false) AS from_car_seller
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
         FROM buy_agg b
         FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
       ),
@@ -919,7 +949,8 @@ export class ReportsCoreService {
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           ii.invoice_id,
           ${inItemCodeSql} AS item_code,
@@ -927,9 +958,10 @@ export class ReportsCoreService {
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -944,11 +976,14 @@ export class ReportsCoreService {
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -963,7 +998,7 @@ export class ReportsCoreService {
           SUM(qty) AS total_qty,
           ROUND(AVG(unit_price)) AS avg_price,
           ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -1083,11 +1118,12 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
       'c.item_code',
-      "c.direction = 'IN' AND c.tax_code = '0318334886'",
+      'c.from_car_seller',
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           'IN' as direction,
           MAX(i.invoice_no) AS invoice_no,
@@ -1129,9 +1165,11 @@ export class ReportsCoreService {
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
-          MAX(ii.description) AS description
+          MAX(ii.description) AS description,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1182,11 +1220,14 @@ export class ReportsCoreService {
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
-          MAX(ii.description) AS description
+          MAX(ii.description) AS description,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -1658,16 +1699,18 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1680,11 +1723,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -1698,7 +1744,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -1707,7 +1753,8 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
@@ -1720,7 +1767,7 @@ export class ReportsCoreService {
           COALESCE(s.total_qty, 0) AS qty_sold,
           COALESCE(b.total_amount, 0) AS amount_bought,
           COALESCE(s.total_amount, 0) AS amount_sold,
-          COALESCE(b.from_car_seller, false) AS from_car_seller
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
         FROM buy_agg b
         FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
       ),
@@ -1823,11 +1870,12 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
       'b.item_code',
-      "BOOL_OR(b.seller_tax_code = '0318334886')",
+      'BOOL_OR(b.from_car_seller)',
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql)}
+      buy_codes AS (
         SELECT 
           ii.invoice_id,
           ${inItemCodeSql} AS item_code,
@@ -1835,9 +1883,10 @@ export class ReportsCoreService {
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1851,11 +1900,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
