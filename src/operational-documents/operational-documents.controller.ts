@@ -13,7 +13,6 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DirectusAuthGuard } from '../auth/guards/directus-auth.guard';
 import { UserToken } from '../common/decorators/user-token.decorator';
 import {
-  CreateDocumentPaymentLinkDto,
   CreateInventoryItemDto,
   CreateInventoryTransactionDto,
   CreateOperatingExpenseDto,
@@ -168,37 +167,5 @@ export class OperationalDocumentsController {
     @UserToken() token: string,
   ) {
     return this.service.getInventoryStock(query, token);
-  }
-
-  @Get(':documentType/:id/payment-links')
-  listPaymentLinks(
-    @Param('documentType') documentType: string,
-    @Param('id') id: string,
-    @UserToken() token: string,
-  ) {
-    return this.service.listPaymentLinks(documentType as any, id, token);
-  }
-
-  @Post('document-payment-links')
-  createPaymentLink(
-    @Body() dto: CreateDocumentPaymentLinkDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createPaymentLink(dto, token);
-  }
-
-  @Delete(':documentType/:id/payment-links/:linkId')
-  deletePaymentLink(
-    @Param('documentType') documentType: string,
-    @Param('id') id: string,
-    @Param('linkId') linkId: string,
-    @UserToken() token: string,
-  ) {
-    return this.service.deletePaymentLink(
-      documentType as any,
-      id,
-      linkId,
-      token,
-    );
   }
 }

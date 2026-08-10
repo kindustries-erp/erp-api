@@ -228,4 +228,29 @@ describe('out-invoice-display.helper', () => {
     expect(nonDaoTriLine.preVatAmount).toBe(50000);
     expect(nonDaoTriLine.invoiceSubcategory).toBe('NORMAL');
   });
+
+  it('classifies discount rows for report export even when buyer tax code is not Đào Trí', () => {
+    const nonDaoTriReportLine = classifyInvoiceLine(
+      {
+        description: 'Chiết khấu cuối kỳ',
+        unit: 'Cái',
+        quantity: 1,
+        unitPrice: 50000,
+        preVatAmount: 50000,
+        vatAmount: 5000,
+        totalAmount: 55000,
+        discountAmount: 50000,
+      },
+      {
+        buyerTaxCode: '0000000000',
+        direction: 'OUT',
+        invoiceLineCount: 3,
+        headerDiscountAmount: 50000,
+        forReportExport: true,
+      },
+    );
+
+    expect(nonDaoTriReportLine.invoiceSubcategory).toBe('DISCOUNT');
+    expect(nonDaoTriReportLine.preVatAmount).toBe(-50000);
+  });
 });

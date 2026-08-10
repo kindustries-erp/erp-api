@@ -10,6 +10,13 @@ import { ErpBankAccountBalance } from './entities/erp_bank_account_balance.entit
 import { ErpCashBookBalance } from './entities/erp_cash_book_balance.entity';
 import { ErpBankStatementFile } from './entities/erp_bank_statement_file.entity';
 import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
+import { BankAccountLifecycleService } from './services/bank-account-lifecycle.service';
+import { CashBookLifecycleService } from './services/cash-book-lifecycle.service';
+import { BalanceStatementLifecycleService } from './services/balance-statement-lifecycle.service';
+import { TransactionImportService } from './services/transaction-import.service';
+import { TransactionQueryService } from './services/transaction-query.service';
+import { TransactionAnalyticsService } from './services/transaction-analytics.service';
+import { TransactionAccountingService } from './services/transaction-accounting.service';
 
 @Module({
   imports: [
@@ -25,7 +32,16 @@ import { AccountingCoreModule } from '../accounting-core/accounting-core.module'
     AccountingCoreModule,
   ],
   controllers: [BankTransactionsCoreController],
-  providers: [BankTransactionsCoreService],
+  providers: [
+    BankTransactionsCoreService,
+    BankAccountLifecycleService,
+    CashBookLifecycleService,
+    BalanceStatementLifecycleService,
+    TransactionImportService,
+    TransactionQueryService,
+    TransactionAnalyticsService,
+    TransactionAccountingService,
+  ],
   exports: [BankTransactionsCoreService],
 })
 export class BankTransactionsCoreModule {}
