@@ -384,26 +384,26 @@ export class ReportsCoreService {
     const groupFormat = query.groupBy === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     let vehicleFilter = '';
     if (query.vehicleType && query.vehicleType !== 'all') {
-      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('b.item_code', 'b.from_car_seller')} = $${paramIndex}`;
+      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('c.item_code', 'c.from_car_seller')} = $${paramIndex}`;
       params.push(query.vehicleType);
       paramIndex++;
     }
 
     let itemCodeFilter = '';
     if (query.itemCode) {
-      itemCodeFilter = ` AND b.item_code = $${paramIndex}`;
+      itemCodeFilter = ` AND c.item_code = $${paramIndex}`;
       params.push(query.itemCode);
       paramIndex++;
     }
@@ -462,14 +462,23 @@ export class ReportsCoreService {
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_amount, 0) AS buy_amount,
+          COALESCE(s.total_amount, 0) AS sell_amount,
+          COALESCE(b.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          b.month,
-          COALESCE(b.total_amount, 0) AS buy_amount,
-          COALESCE(s.total_amount, 0) AS sell_amount
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          c.item_code,
+          c.month,
+          c.buy_amount,
+          c.sell_amount
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleFilter}
@@ -529,12 +538,12 @@ export class ReportsCoreService {
     let paramIndex = 1;
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
@@ -543,13 +552,13 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     // Used in WHERE (row-level, before GROUP BY)
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'c.item_code',
+      'c.from_car_seller',
     );
     // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
     const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'BOOL_OR(b.from_car_seller)',
+      'c.item_code',
+      'BOOL_OR(c.from_car_seller)',
     );
 
     let vehicleTypeFilter = '';
@@ -578,11 +587,11 @@ export class ReportsCoreService {
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           if (col === 'itemCode') {
-            searchFilter += ` AND b.item_code ILIKE $${paramIndex}`;
+            searchFilter += ` AND c.item_code ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (col === 'itemName') {
-            searchFilter += ` AND b.item_name ILIKE $${paramIndex}`;
+            searchFilter += ` AND c.item_name ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -605,11 +614,11 @@ export class ReportsCoreService {
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           if (col === 'itemCode') {
-            filtersSql += ` AND b.item_code = ANY($${paramIndex})`;
+            filtersSql += ` AND c.item_code = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (col === 'itemName') {
-            filtersSql += ` AND b.item_name = ANY($${paramIndex})`;
+            filtersSql += ` AND c.item_name = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -704,23 +713,35 @@ export class ReportsCoreService {
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.item_name, '') AS item_name,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_qty, 0) AS qty_bought,
+          COALESCE(s.total_qty, 0) AS qty_sold,
+          COALESCE(b.total_amount, 0) AS amount_bought,
+          COALESCE(s.total_amount, 0) AS amount_sold,
+          COALESCE(b.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          MAX(b.item_name) AS item_name,
+          c.item_code,
+          MAX(c.item_name) AS item_name,
           ${vehicleTypeSelectSql} AS vehicle_type,
-          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
-          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
-          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
-          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          SUM(c.qty_bought) AS qty_bought,
+          SUM(c.qty_sold) AS qty_sold,
+          SUM(c.amount_bought) AS amount_bought,
+          SUM(c.amount_sold) AS amount_sold
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
           ${searchFilter}
           ${filtersSql}
-        GROUP BY b.item_code
+        GROUP BY c.item_code
       ),
       filtered_data AS (
         SELECT *, COUNT(*) OVER() AS "totalCount"
@@ -779,19 +800,19 @@ export class ReportsCoreService {
     let paramIndex = 1;
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND COALESCE(b.month, s.month) >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
 
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND COALESCE(b.month, s.month) <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     if (query.search) {
-      searchFilter = `AND b.item_code ILIKE $${paramIndex}`;
+      searchFilter = `AND COALESCE(b.item_code, s.item_code) ILIKE $${paramIndex}`;
       params.push(`%${query.search}%`);
       paramIndex++;
     }
@@ -893,8 +914,8 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'COALESCE(b.item_code, s.item_code)',
+      'COALESCE(b.from_car_seller, false)',
     );
 
     const sql = `
@@ -920,6 +941,7 @@ export class ReportsCoreService {
         SELECT 
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month
@@ -948,6 +970,7 @@ export class ReportsCoreService {
       sell_agg AS (
         SELECT 
           item_code,
+          MAX(item_name) AS item_name,
           month,
           SUM(qty) AS total_qty,
           ROUND(AVG(unit_price)) AS avg_price,
@@ -957,10 +980,10 @@ export class ReportsCoreService {
       ),
       base_data AS (
         SELECT 
-          b.item_code AS "itemCode",
-          b.item_name AS "itemName",
+          COALESCE(b.item_code, s.item_code) AS "itemCode",
+          COALESCE(b.item_name, s.item_name) AS "itemName",
           ${vehicleTypeSql} AS "vehicleType",
-          TO_CHAR(b.month, 'YYYY-MM') AS "month",
+          TO_CHAR(COALESCE(b.month, s.month), 'YYYY-MM') AS "month",
           COALESCE(b.total_qty, 0) AS "qtyBought",
           COALESCE(s.total_qty, 0) AS "qtySold",
           COALESCE(b.avg_price, 0) AS "avgBuyPrice",
@@ -968,7 +991,7 @@ export class ReportsCoreService {
           b.invoice_ids AS "buyInvoiceIds",
           s.invoice_ids AS "sellInvoiceIds"
         FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
         WHERE 1=1
           ${dateFilter}
           ${searchFilter}
@@ -1128,7 +1151,7 @@ export class ReportsCoreService {
           MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
-          '' AS item_name,
+          MAX(${inItemNameSql}) AS item_name,
           MAX(ii.unit) AS unit,
           COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
           AVG(ii.unit_price::numeric) AS unit_price,
@@ -1181,7 +1204,7 @@ export class ReportsCoreService {
         c.invoice_date AS "invoiceDate",
         c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
-        b.item_name AS "itemName",
+        c.item_name AS "itemName",
         ${vehicleTypeSql} AS "vehicleType",
         c.unit,
         c.qty,
@@ -1199,11 +1222,7 @@ export class ReportsCoreService {
         UNION ALL
         SELECT * FROM sell_codes
       ) c
-      LEFT JOIN (
-        SELECT DISTINCT item_code, item_name, month FROM buy_codes
-      ) b ON b.item_code = c.item_code AND b.month = c.month
       WHERE 1=1
-        AND EXISTS (SELECT 1 FROM buy_codes b2 WHERE b2.item_code = c.item_code AND b2.month = c.month)
         ${dateFilter}
         ${searchFilter}
       ORDER BY c.month DESC, c.item_code ASC, c.direction ASC, c.invoice_date ASC
@@ -1592,12 +1611,12 @@ export class ReportsCoreService {
     let otherFiltersSql = '';
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
@@ -1605,12 +1624,12 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'c.item_code',
+      'c.from_car_seller',
     );
     const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'BOOL_OR(b.from_car_seller)',
+      'c.item_code',
+      'BOOL_OR(c.from_car_seller)',
     );
 
     if (query.vehicleType && query.vehicleType !== 'all') {
@@ -1692,21 +1711,33 @@ export class ReportsCoreService {
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.item_name, '') AS item_name,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_qty, 0) AS qty_bought,
+          COALESCE(s.total_qty, 0) AS qty_sold,
+          COALESCE(b.total_amount, 0) AS amount_bought,
+          COALESCE(s.total_amount, 0) AS amount_sold,
+          COALESCE(b.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          MAX(b.item_name) AS item_name,
+          c.item_code,
+          MAX(c.item_name) AS item_name,
           ${vehicleTypeSelectSql} AS vehicle_type,
-          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
-          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
-          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
-          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          SUM(c.qty_bought) AS qty_bought,
+          SUM(c.qty_sold) AS qty_sold,
+          SUM(c.amount_bought) AS amount_bought,
+          SUM(c.amount_sold) AS amount_sold
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
-        GROUP BY b.item_code
+        GROUP BY c.item_code
       ),
       filtered_data AS (
         SELECT DISTINCT ${sqlCol}::text AS value

@@ -21,4 +21,4 @@ RUN bun install --frozen-lockfile --production
 
 EXPOSE 3000
 
-CMD ["bun", "dist/src/main.js"]
+CMD ["bun", "dist/main.js"]
