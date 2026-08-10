@@ -158,6 +158,8 @@ describe('ReportsCoreService', () => {
     expect(sql).not.toContain(
       "TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code",
     );
+    expect(sql).toContain('FULL OUTER JOIN sell_agg');
+    expect(sql).not.toContain('LEFT JOIN sell_agg');
   });
 
   it('normalizes outbound description separators before VINFAST keyword matching', async () => {
