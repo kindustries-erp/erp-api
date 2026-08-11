@@ -336,16 +336,17 @@ export class VinfastPartsService {
     columnFilters?: string,
   ) {
     const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
-
-    let vehicleTypeFilter = '';
-    if (vehicleType === 'oto') {
-      vehicleTypeFilter = `AND c.sku IN (${carCodesStr})`;
-    } else if (vehicleType === 'xemay') {
-      vehicleTypeFilter = `AND c.sku NOT IN (${carCodesStr})`;
-    }
-
     const params: any[] = [];
     let paramIndex = 1;
+
+    let vehicleTypeFilter = '';
+    if (vehicleType) {
+      if (vehicleType === 'oto' || vehicleType === 'CAR') {
+        vehicleTypeFilter = ` AND c.sku IN (${carCodesStr})`;
+      } else if (vehicleType === 'xemay' || vehicleType === 'MOTORBIKE') {
+        vehicleTypeFilter = ` AND c.sku NOT IN (${carCodesStr})`;
+      }
+    }
 
     let searchFilter = '';
     if (search) {
@@ -355,6 +356,7 @@ export class VinfastPartsService {
     }
 
     let cSearchFilter = '';
+    let havingSearchFilter = '';
     if (columnSearch) {
       try {
         const parsed = JSON.parse(columnSearch);
@@ -369,12 +371,21 @@ export class VinfastPartsService {
             cSearchFilter += ` AND c.name ILIKE $${paramIndex}`;
             params.push(`%${strVal}%`);
             paramIndex++;
+          } else if (col === 'uom') {
+            cSearchFilter += ` AND c.uom ILIKE $${paramIndex}`;
+            params.push(`%${strVal}%`);
+            paramIndex++;
+          } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
+            havingSearchFilter += ` AND CAST("${col}" AS TEXT) ILIKE $${paramIndex}`;
+            params.push(`%${strVal}%`);
+            paramIndex++;
           }
         }
       } catch (e) {}
     }
 
     let cFiltersSql = '';
+    let havingFiltersSql = '';
     if (columnFilters) {
       try {
         const parsed = JSON.parse(columnFilters);
@@ -389,8 +400,11 @@ export class VinfastPartsService {
             cFiltersSql += ` AND c.name = ANY($${paramIndex})`;
             params.push(arr);
             paramIndex++;
+          } else if (col === 'uom') {
+            cFiltersSql += ` AND c.uom = ANY($${paramIndex})`;
+            params.push(arr);
+            paramIndex++;
           } else if (col === 'vehicleType') {
-            // vehicleType filtering from frontend (if it passes 'CAR' or 'MOTORBIKE')
             const isCar = arr.includes('CAR');
             const isMoto = arr.includes('MOTORBIKE');
             if (isCar && !isMoto) {
@@ -398,12 +412,17 @@ export class VinfastPartsService {
             } else if (!isCar && isMoto) {
               cFiltersSql += ` AND c.sku NOT IN (${carCodesStr})`;
             }
+          } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
+            // numeric array filtering might require type casting
+            havingFiltersSql += ` AND CAST("${col}" AS TEXT) = ANY($${paramIndex})`;
+            params.push(arr);
+            paramIndex++;
           }
         }
       } catch (e) {}
     }
 
-    let orderSql = 'ORDER BY "qtyBalance" DESC, c.sku ASC';
+    let orderSql = 'ORDER BY "qtyBalance" DESC, sku ASC';
     if (sorts) {
       try {
         const sortsArr = JSON.parse(sorts) as string[];
@@ -414,9 +433,9 @@ export class VinfastPartsService {
             const col = s.replace(/^-/, '');
             const dir = isDesc ? 'DESC' : 'ASC';
             let sqlCol = '';
-            if (col === 'sku') sqlCol = 'c.sku';
-            else if (col === 'name') sqlCol = 'c.name';
-            else if (col === 'uom') sqlCol = 'c.uom';
+            if (col === 'sku') sqlCol = 'sku';
+            else if (col === 'name') sqlCol = 'name';
+            else if (col === 'uom') sqlCol = 'uom';
             else if (col === 'qtyIn') sqlCol = '"qtyIn"';
             else if (col === 'qtyOut') sqlCol = '"qtyOut"';
             else if (col === 'qtyBalance') sqlCol = '"qtyBalance"';
@@ -432,9 +451,9 @@ export class VinfastPartsService {
       } catch (e) {}
     } else if (sortBy) {
       let sqlCol = '';
-      if (sortBy === 'sku') sqlCol = 'c.sku';
-      else if (sortBy === 'name') sqlCol = 'c.name';
-      else if (sortBy === 'uom') sqlCol = 'c.uom';
+      if (sortBy === 'sku') sqlCol = 'sku';
+      else if (sortBy === 'name') sqlCol = 'name';
+      else if (sortBy === 'uom') sqlCol = 'uom';
       else if (sortBy === 'qtyIn') sqlCol = '"qtyIn"';
       else if (sortBy === 'qtyOut') sqlCol = '"qtyOut"';
       else if (sortBy === 'qtyBalance') sqlCol = '"qtyBalance"';
@@ -445,32 +464,36 @@ export class VinfastPartsService {
 
     const whereClause = `WHERE c.is_service = false ${vehicleTypeFilter} ${searchFilter} ${cSearchFilter} ${cFiltersSql}`;
 
-    const query = `
-      SELECT 
-        c.sku, 
-        c.name, 
-        c.uom, 
-        c.is_service as "isService",
-        CASE WHEN c.sku IN (${carCodesStr}) THEN 'CAR' ELSE 'MOTORBIKE' END as "vehicleType",
-        COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) as "qtyIn",
-        COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
-        (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
-      FROM vinfast_parts_catalog c
-      LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
-      ${whereClause}
-      GROUP BY c.sku, c.name, c.uom, c.is_service
-    `;
-
-    const countQuery = `
-      SELECT COUNT(DISTINCT c.sku) as total
-      FROM vinfast_parts_catalog c
-      ${whereClause}
+    const baseQuery = `
+      WITH StockData AS (
+        SELECT 
+          c.sku, 
+          c.name, 
+          c.uom, 
+          c.is_service as "isService",
+          CASE WHEN c.sku IN (${carCodesStr}) THEN 'CAR' ELSE 'MOTORBIKE' END as "vehicleType",
+          COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) as "qtyIn",
+          COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
+          (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
+        FROM vinfast_parts_catalog c
+        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
+        ${whereClause}
+        GROUP BY c.sku, c.name, c.uom, c.is_service
+      )
     `;
 
     const finalQuery = `
-      ${query}
+      ${baseQuery}
+      SELECT * FROM StockData
+      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
       ${orderSql}
       LIMIT ${limit} OFFSET ${(page - 1) * limit}
+    `;
+
+    const countQuery = `
+      ${baseQuery}
+      SELECT COUNT(*) as total FROM StockData
+      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
     `;
 
     const [items, countResult] = await Promise.all([
@@ -494,12 +517,23 @@ export class VinfastPartsService {
     page: number = 1,
     limit: number = 20,
     filtersStr?: string,
+    vehicleType?: string,
   ) {
     const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
     const params: any[] = [];
     let paramIndex = 1;
 
-    let filterSql = '';
+    let vehicleTypeFilter = '';
+    if (vehicleType) {
+      if (vehicleType === 'oto' || vehicleType === 'CAR') {
+        vehicleTypeFilter = ` AND c.sku IN (${carCodesStr})`;
+      } else if (vehicleType === 'xemay' || vehicleType === 'MOTORBIKE') {
+        vehicleTypeFilter = ` AND c.sku NOT IN (${carCodesStr})`;
+      }
+    }
+
+    let cFiltersSql = '';
+    let havingFiltersSql = '';
     if (filtersStr) {
       try {
         const filters = JSON.parse(filtersStr);
@@ -510,17 +544,25 @@ export class VinfastPartsService {
             const isCar = arr.includes('CAR');
             const isMoto = arr.includes('MOTORBIKE');
             if (isCar && !isMoto) {
-              filterSql += ` AND c.sku IN (${carCodesStr})`;
+              cFiltersSql += ` AND c.sku IN (${carCodesStr})`;
             } else if (!isCar && isMoto) {
-              filterSql += ` AND c.sku NOT IN (${carCodesStr})`;
+              cFiltersSql += ` AND c.sku NOT IN (${carCodesStr})`;
             }
           } else if (col !== columnKey) {
             if (col === 'sku') {
-              filterSql += ` AND c.sku = ANY($${paramIndex})`;
+              cFiltersSql += ` AND c.sku = ANY($${paramIndex})`;
               params.push(arr);
               paramIndex++;
             } else if (col === 'name') {
-              filterSql += ` AND c.name = ANY($${paramIndex})`;
+              cFiltersSql += ` AND c.name = ANY($${paramIndex})`;
+              params.push(arr);
+              paramIndex++;
+            } else if (col === 'uom') {
+              cFiltersSql += ` AND c.uom = ANY($${paramIndex})`;
+              params.push(arr);
+              paramIndex++;
+            } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
+              havingFiltersSql += ` AND CAST("${col}" AS TEXT) = ANY($${paramIndex})`;
               params.push(arr);
               paramIndex++;
             }
@@ -530,6 +572,7 @@ export class VinfastPartsService {
     }
 
     let searchSql = '';
+    let havingSearchSql = '';
     if (search) {
       if (columnKey === 'sku') {
         searchSql = ` AND c.sku ILIKE $${paramIndex}`;
@@ -539,25 +582,56 @@ export class VinfastPartsService {
         searchSql = ` AND c.name ILIKE $${paramIndex}`;
         params.push(`%${search}%`);
         paramIndex++;
+      } else if (columnKey === 'uom') {
+        searchSql = ` AND c.uom ILIKE $${paramIndex}`;
+        params.push(`%${search}%`);
+        paramIndex++;
+      } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(columnKey)) {
+        havingSearchSql = ` AND CAST("${columnKey}" AS TEXT) ILIKE $${paramIndex}`;
+        params.push(`%${search}%`);
+        paramIndex++;
       }
     }
 
-    let selectCol = 'c.sku';
-    if (columnKey === 'name') selectCol = 'c.name';
-    else if (columnKey === 'sku') selectCol = 'c.sku';
+    let selectCol = 'sku';
+    if (columnKey === 'name') selectCol = 'name';
+    else if (columnKey === 'uom') selectCol = 'uom';
+    else if (columnKey === 'sku') selectCol = 'sku';
+    else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(columnKey))
+      selectCol = `"${columnKey}"`;
+
+    const baseQuery = `
+      WITH StockData AS (
+        SELECT 
+          c.sku, 
+          c.name, 
+          c.uom, 
+          c.is_service as "isService",
+          CASE WHEN c.sku IN (${carCodesStr}) THEN 'CAR' ELSE 'MOTORBIKE' END as "vehicleType",
+          COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) as "qtyIn",
+          COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
+          (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
+        FROM vinfast_parts_catalog c
+        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
+        WHERE c.is_service = false ${vehicleTypeFilter} ${cFiltersSql} ${searchSql}
+        GROUP BY c.sku, c.name, c.uom, c.is_service
+      )
+    `;
 
     const query = `
-      SELECT DISTINCT ${selectCol} as value
-      FROM vinfast_parts_catalog c
-      WHERE c.is_service = false ${filterSql} ${searchSql}
+      ${baseQuery}
+      SELECT DISTINCT CAST(${selectCol} AS TEXT) as value
+      FROM StockData
+      WHERE 1=1 ${havingFiltersSql} ${havingSearchSql}
       ORDER BY value ASC
       LIMIT ${limit} OFFSET ${(page - 1) * limit}
     `;
 
     const countQuery = `
-      SELECT COUNT(DISTINCT ${selectCol}) as total
-      FROM vinfast_parts_catalog c
-      WHERE c.is_service = false ${filterSql} ${searchSql}
+      ${baseQuery}
+      SELECT COUNT(DISTINCT CAST(${selectCol} AS TEXT)) as total
+      FROM StockData
+      WHERE 1=1 ${havingFiltersSql} ${havingSearchSql}
     `;
 
     const [items, countResult] = await Promise.all([

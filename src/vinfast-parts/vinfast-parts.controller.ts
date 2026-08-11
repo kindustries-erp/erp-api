@@ -94,6 +94,7 @@ export class VinfastPartsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('filters') filters?: string,
+    @Query('vehicleType') vehicleType?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
@@ -103,6 +104,7 @@ export class VinfastPartsController {
       pageNum,
       limitNum,
       filters,
+      vehicleType,
     );
   }
 
