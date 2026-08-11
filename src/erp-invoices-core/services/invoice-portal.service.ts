@@ -411,13 +411,38 @@ export class InvoicePortalService {
         });
 
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(
-            backgroundSyncIds,
-            token,
-            cookies,
-          ).catch((e) =>
-            this.logger.error('XML background download failed', e),
-          );
+          this.downloadXmlsInBackground(backgroundSyncIds, token, cookies)
+            .then(async () => {
+              if (direction === 'IN') {
+                await this.vinfastPartsService.syncCatalog({
+                  progress$: this.progress$,
+                  dateFrom: dto.dateFrom,
+                  dateTo: dto.dateTo,
+                });
+              }
+              await this.vinfastPartsService.syncLedger({
+                progress$: this.progress$,
+                dateFrom: dto.dateFrom,
+                dateTo: dto.dateTo,
+              });
+            })
+            .catch((e) =>
+              this.logger.error('XML background download failed', e),
+            );
+        } else {
+          // Trigger sync directly if no background XML download needed
+          if (direction === 'IN') {
+            await this.vinfastPartsService.syncCatalog({
+              progress$: this.progress$,
+              dateFrom: dto.dateFrom,
+              dateTo: dto.dateTo,
+            });
+          }
+          await this.vinfastPartsService.syncLedger({
+            progress$: this.progress$,
+            dateFrom: dto.dateFrom,
+            dateTo: dto.dateTo,
+          });
         }
 
         this.logger.log(

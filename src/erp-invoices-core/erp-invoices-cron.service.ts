@@ -172,7 +172,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
         await this.notificationsService.createForUser(userId, {
           type: 'INFO',
           title: 'Đồng bộ hóa đơn thành công',
-          message: `Hệ thống vừa đồng bộ và kiểm tra ${totalFetched} hóa đơn. Có ${totalImported} hóa đơn được thêm mới vào phần mềm.`,
+          message: `Hệ thống vừa đồng bộ và kiểm tra ${totalFetched} hóa đơn. Có ${totalImported} hóa đơn được thêm mới vào phần mềm. Sổ cái phụ tùng FIFO cũng đang được tự động tính toán lại.`,
         });
       }
     } catch (e) {
