@@ -2,9 +2,9 @@
 
 Nhóm endpoint quản lý profile của user đang đăng nhập.
 
-| Method | Endpoint | Mô tả |
-| --- | --- | --- |
-| `GET` | `/api/v1/auth/profile` | Lấy đầy đủ profile + role + permissions |
+| Method  | Endpoint               | Mô tả                                               |
+| ------- | ---------------------- | --------------------------------------------------- |
+| `GET`   | `/api/v1/auth/profile` | Lấy đầy đủ profile + role + permissions             |
 | `PATCH` | `/api/v1/auth/profile` | User tự cập nhật thông tin cá nhân (whitelist cứng) |
 
 ---
@@ -24,8 +24,8 @@ Authorization: Bearer <access_token>
 
 ```json
 {
-  "profile": { },
-  "employee": { },
+  "profile": {},
+  "employee": {},
   "rolePermissions": [],
   "customPermissions": [],
   "effectivePermissions": []
@@ -57,17 +57,17 @@ Thông tin cơ bản của hệ thống user đang đăng nhập.
 }
 ```
 
-| Field | Type | Mô tả |
-| --- | --- | --- |
-| `id` | `string` | hệ thống user UUID |
-| `email` | `string` | Email đăng nhập |
-| `first_name` | `string` | Họ |
-| `last_name` | `string` | Tên |
-| `role` | `object \| null` | Thông tin Role được gán. `null` nếu user chưa có role |
-| `role.id` | `string` | UUID của Role |
-| `role.name` | `string` | Tên Role |
-| `role.icon` | `string` | Icon Material |
-| `role.description` | `string \| null` | Mô tả Role |
+| Field              | Type             | Mô tả                                                 |
+| ------------------ | ---------------- | ----------------------------------------------------- |
+| `id`               | `string`         | hệ thống user UUID                                    |
+| `email`            | `string`         | Email đăng nhập                                       |
+| `first_name`       | `string`         | Họ                                                    |
+| `last_name`        | `string`         | Tên                                                   |
+| `role`             | `object \| null` | Thông tin Role được gán. `null` nếu user chưa có role |
+| `role.id`          | `string`         | UUID của Role                                         |
+| `role.name`        | `string`         | Tên Role                                              |
+| `role.icon`        | `string`         | Icon Material                                         |
+| `role.description` | `string \| null` | Mô tả Role                                            |
 
 ---
 
@@ -127,14 +127,14 @@ Danh sách quyền được định nghĩa **cho Role** của user, group theo c
 }
 ```
 
-| Field | Type | Mô tả |
-| --- | --- | --- |
-| `collection` | `string` | Tên collection trong hệ thống |
-| `actions` | `string[]` | Danh sách action được phép: `read`, `create`, `update`, `delete`, `share` |
-| `details[].action` | `string` | Tên action |
-| `details[].fields` | `string[] \| null` | Các field được phép truy cập. `["*"]` = tất cả |
-| `details[].permissions` | `object \| null` | Row-level filter (hệ thống permission filter) |
-| `details[].validation` | `object \| null` | Validation rule khi write |
+| Field                   | Type               | Mô tả                                                                     |
+| ----------------------- | ------------------ | ------------------------------------------------------------------------- |
+| `collection`            | `string`           | Tên collection trong hệ thống                                             |
+| `actions`               | `string[]`         | Danh sách action được phép: `read`, `create`, `update`, `delete`, `share` |
+| `details[].action`      | `string`           | Tên action                                                                |
+| `details[].fields`      | `string[] \| null` | Các field được phép truy cập. `["*"]` = tất cả                            |
+| `details[].permissions` | `object \| null`   | Row-level filter (hệ thống permission filter)                             |
+| `details[].validation`  | `object \| null`   | Validation rule khi write                                                 |
 
 > Mảng rỗng `[]` nếu Role chưa được cấu hình Policy hoặc user không có Role.
 
@@ -211,20 +211,20 @@ Danh sách quyền được gán **riêng cho cá nhân user** (không phụ thu
 }
 ```
 
-| Field | Type | Mô tả |
-| --- | --- | --- |
-| `collection` | `string` | Tên collection |
-| `actions` | `string[]` | Tất cả actions hiệu lực trên collection này |
-| `details[].source` | `"role" \| "custom"` | Nguồn gốc của quyền này |
+| Field              | Type                 | Mô tả                                       |
+| ------------------ | -------------------- | ------------------------------------------- |
+| `collection`       | `string`             | Tên collection                              |
+| `actions`          | `string[]`           | Tất cả actions hiệu lực trên collection này |
+| `details[].source` | `"role" \| "custom"` | Nguồn gốc của quyền này                     |
 
 ##### Luật merge
 
-| Tình huống | Kết quả |
-| --- | --- |
-| Role có `read`, custom không có `read` | Giữ `read` từ role (`source: "role"`) |
-| Role không có `update`, custom có `update` | Thêm `update` từ custom (`source: "custom"`) |
+| Tình huống                                                                  | Kết quả                                                              |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Role có `read`, custom không có `read`                                      | Giữ `read` từ role (`source: "role"`)                                |
+| Role không có `update`, custom có `update`                                  | Thêm `update` từ custom (`source: "custom"`)                         |
 | Role có `read` với `fields: ["*"]`, custom có `read` với `fields: ["name"]` | **Custom thắng** — `read` với `fields: ["name"]`, `source: "custom"` |
-| Role có `read`, custom có `write` (cùng collection) | Giữ **cả hai** — user có đủ `read` và `write` |
+| Role có `read`, custom có `write` (cùng collection)                         | Giữ **cả hai** — user có đủ `read` và `write`                        |
 
 > Nguyên tắc: key merge là `collection + action`. Cùng key → custom override role. Khác key → cộng dồn.
 
@@ -236,12 +236,14 @@ Danh sách quyền được gán **riêng cho cá nhân user** (không phụ thu
 const { effectivePermissions } = await getProfileApi();
 
 // Kiểm tra nhanh user có quyền read gw_employees không
-const empPerms = effectivePermissions.find(p => p.collection === 'gw_employees');
-const canRead   = empPerms?.actions.includes('read')   ?? false;
+const empPerms = effectivePermissions.find(
+  (p) => p.collection === 'gw_employees',
+);
+const canRead = empPerms?.actions.includes('read') ?? false;
 const canCreate = empPerms?.actions.includes('create') ?? false;
 
 // Lấy fields được phép cho action cụ thể
-const updateDetail = empPerms?.details.find(d => d.action === 'update');
+const updateDetail = empPerms?.details.find((d) => d.action === 'update');
 const allowedFields = updateDetail?.fields ?? [];
 ```
 
@@ -249,10 +251,10 @@ const allowedFields = updateDetail?.fields ?? [];
 
 ### Error Responses
 
-| HTTP | Mô tả |
-| --- | --- |
-| `401 Unauthorized` | Thiếu hoặc sai `access_token` |
-| `500 Internal Server Error` | Lỗi kết nối hệ thống |
+| HTTP                        | Mô tả                         |
+| --------------------------- | ----------------------------- |
+| `401 Unauthorized`          | Thiếu hoặc sai `access_token` |
+| `500 Internal Server Error` | Lỗi kết nối hệ thống          |
 
 ---
 
@@ -297,24 +299,24 @@ Content-Type: application/json
 }
 ```
 
-| Field | Type | Bắt buộc | Giới hạn | Mô tả |
-| --- | --- | --- | --- | --- |
-| `full_name` | `string` | Không | 100 ký tự | Họ và tên |
-| `phone` | `string` | Không | 20 ký tự | Số điện thoại |
-| `notes` | `string` | Không | 1000 ký tự | Ghi chú nội bộ |
+| Field       | Type     | Bắt buộc | Giới hạn   | Mô tả          |
+| ----------- | -------- | -------- | ---------- | -------------- |
+| `full_name` | `string` | Không    | 100 ký tự  | Họ và tên      |
+| `phone`     | `string` | Không    | 20 ký tự   | Số điện thoại  |
+| `notes`     | `string` | Không    | 1000 ký tự | Ghi chú nội bộ |
 
 > Ít nhất 1 field phải có giá trị. Gửi body rỗng sẽ nhận lỗi 500.
 
 ### Các field bị khóa (không thể tự sửa)
 
-| Field | Lý do |
-| --- | --- |
-| `employee_code` | Do HR/Admin cấp phát |
-| `employment_status` | Trạng thái hợp đồng, thuộc HR |
-| `hire_date` | Ngày ký hợp đồng, do HR nhập |
-| `resign_date` | Ngày nghỉ việc, do HR xác nhận |
-| `is_active` | Kích hoạt/khóa tài khoản, thuộc Admin |
-| `email` | Cần sync với hệ thống user — xử lý riêng |
+| Field               | Lý do                                    |
+| ------------------- | ---------------------------------------- |
+| `employee_code`     | Do HR/Admin cấp phát                     |
+| `employment_status` | Trạng thái hợp đồng, thuộc HR            |
+| `hire_date`         | Ngày ký hợp đồng, do HR nhập             |
+| `resign_date`       | Ngày nghỉ việc, do HR xác nhận           |
+| `is_active`         | Kích hoạt/khóa tài khoản, thuộc Admin    |
+| `email`             | Cần sync với hệ thống user — xử lý riêng |
 
 ### Response
 
@@ -332,9 +334,9 @@ Content-Type: application/json
 
 ### PATCH Error Responses
 
-| HTTP | Mô tả |
-| --- | --- |
-| `401 Unauthorized` | Thiếu hoặc sai `access_token` |
+| HTTP                        | Mô tả                                    |
+| --------------------------- | ---------------------------------------- |
+| `401 Unauthorized`          | Thiếu hoặc sai `access_token`            |
 | `500 Internal Server Error` | Không tìm thấy employee hoặc lỗi kết nối |
 
 ### PATCH Ghi chú kỹ thuật

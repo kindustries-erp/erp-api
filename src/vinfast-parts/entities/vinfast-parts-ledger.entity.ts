@@ -25,14 +25,14 @@ export class VinfastPartsLedger {
   @Column({ name: 'invoice_item_id', type: 'uuid' })
   invoiceItemId: string;
 
-  @ManyToOne(() => ErpInvoiceItem)
+  @ManyToOne(() => ErpInvoiceItem, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'invoice_item_id' })
   invoiceItem: ErpInvoiceItem;
 
   @Column({ name: 'invoice_id', type: 'uuid' })
   invoiceId: string;
 
-  @ManyToOne(() => ErpInvoice)
+  @ManyToOne(() => ErpInvoice, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'invoice_id' })
   invoice: ErpInvoice;
 

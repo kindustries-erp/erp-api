@@ -13,12 +13,7 @@ export class VinfastPartsSchema1786406852396 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "erp_invoice_items" ADD "item_code" character varying(32)`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "erp_inventory_tracking_lots" ADD CONSTRAINT "FK_d149543d99924a7d2b9b2285b17" FOREIGN KEY ("item_id") REFERENCES "erp_inventory_items"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "erp_inventory_tracking_customs" ADD CONSTRAINT "FK_f9d14dd930586f622c4aacf45da" FOREIGN KEY ("item_id") REFERENCES "erp_inventory_items"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
-    );
+    // Extraneous FKs removed
     await queryRunner.query(
       `ALTER TABLE "vinfast_parts_ledger" ADD CONSTRAINT "FK_5e3639f167165989d93fbdb0e6e" FOREIGN KEY ("part_sku") REFERENCES "vinfast_parts_catalog"("sku") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );

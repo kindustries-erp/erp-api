@@ -215,10 +215,6 @@ export class ErpInvoicesCoreService {
     return this.portalService.syncFromPortal(dto, userId, waitForCompletion);
   }
 
-  reparseXml(id: string, token?: string, cookies?: string) {
-    return this.portalService.reparseXml(id, token, cookies);
-  }
-
   bulkDownloadXml(
     token: string | undefined,
     cookies: string | undefined,

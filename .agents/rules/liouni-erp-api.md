@@ -25,6 +25,7 @@ When asked to **push code**, you MUST execute the following in order:
 **Git Execution Context**: You MUST perform all Git operations (add, commit, pull, push) exclusively inside the `erp-api` directory. NEVER run git commands from the workspace root. When pulling or pushing, ALWAYS specify the remote `github-industries` (e.g., `git push github-industries erp-master`).
 
 ## Required behavior
+
 - load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
 - read `@.agents/context/current-truth.md` first
 - use repo-local context as default guidance
@@ -55,12 +56,20 @@ When asked to **push code**, you MUST execute the following in order:
 - **Definition of done**: A backend task is not done until task checklist is updated, validation evidence is recorded, and commit/push status is stated clearly.
 
 ## Teamwork guardrails
+
 - Use `must` only for standards already enforced or verified in this repo; use `prefer` for target-direction conventions.
 - When introducing a new module, record registration points explicitly: module file, controller path, `src/app.module.ts`, DTO/validation, and affected Web contract.
 - If response shape or route path changes, call out required Web follow-up in the task artifact before closing.
 - Documentation/process changes must update the canonical file first (`docs/ai/technical-instructions.md`), then keep `.agents` aligned.
 
 ## Anti-drift / anti-patterns
+
 - Do not reference non-existent bootstrap files.
 - Do not let historical docs override repo-local current truth.
 - Do not duplicate business logic in multiple services when a shared domain helper or mapper is enough.
+- Do not report a task DONE from docs alone; verify with code state, build/test evidence, and git state.
+
+## Historical warning
+
+If a file mentions Directus-first flows, Gitea deploys, old dev domains, or `erp-core`, classify it first.
+Only repo-local current-truth docs should drive new implementation by default.

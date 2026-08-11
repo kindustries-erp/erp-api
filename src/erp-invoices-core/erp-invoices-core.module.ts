@@ -26,6 +26,8 @@ import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
 import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
 
+import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -43,6 +45,7 @@ import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
     NotificationsModule,
     AccountingCoreModule,
     ErpAttachmentsCoreModule,
+    VinfastPartsModule,
   ],
   controllers: [ErpInvoicesCoreController, InvoiceDashboardController],
   providers: [

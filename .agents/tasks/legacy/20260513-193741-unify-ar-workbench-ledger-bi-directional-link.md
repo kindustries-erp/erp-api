@@ -1,17 +1,20 @@
 # Task — Unify AR Workbench with Ledger and Enhance Cash/Bank Bi-directional Linking
 
 ## Request Input
+
 - Type: FEATURE | ENHANCE
 - Mục tiêu:
-  1) Gộp AR Workbench và "Sổ công nợ hiện tại" vào 1 flow duy nhất.
-  2) Form tạo hóa đơn (AR document) hỗ trợ link với cash/bank voucher và tự tính remaining amount.
-  3) Form Cash/Bank khi chọn "đối tượng" chỉ show các chứng từ liên quan của đối tượng đó.
-  4) Chế độ auto-link: từ Cash/Bank link sang trang công nợ đối tượng và ngược lại.
+  1. Gộp AR Workbench và "Sổ công nợ hiện tại" vào 1 flow duy nhất.
+  2. Form tạo hóa đơn (AR document) hỗ trợ link với cash/bank voucher và tự tính remaining amount.
+  3. Form Cash/Bank khi chọn "đối tượng" chỉ show các chứng từ liên quan của đối tượng đó.
+  4. Chế độ auto-link: từ Cash/Bank link sang trang công nợ đối tượng và ngược lại.
 
 ## Goal
+
 Hợp nhất trải nghiệm quản lý phải thu, đảm bảo dữ liệu công nợ và thanh toán luôn được liên kết chặt chẽ và dễ dàng truy xuất từ cả hai phía.
 
 ## Scope
+
 - In-scope:
   - UI: Hợp nhất tab/page AR Workbench và Partner Ledger.
   - UI: Nâng cấp form tạo AR Document (Invoice) để có field chọn payment vouchers.
@@ -22,6 +25,7 @@ Hợp nhất trải nghiệm quản lý phải thu, đảm bảo dữ liệu cô
   - Sửa đổi cấu trúc hạch toán kế toán sâu trong core engine (chỉ thay đổi workflow/UI layer).
 
 ## Gate 0 — DB Precheck (bắt buộc)
+
 - Collections/fields liên quan:
   - `ar_documents`: `settled_amount`, `open_amount`, `total_amount`.
   - `cash_bank_related_documents`: `related_id`, `related_type`.
@@ -31,6 +35,7 @@ Hợp nhất trải nghiệm quản lý phải thu, đảm bảo dữ liệu cô
 - Kết quả: `DB_READY`
 
 ## Checklist (cập nhật realtime)
+
 - [x] 1.0 Gate 0 DB Precheck done
 - [x] 2.0 Backend: API filter ar_documents theo counterparty_id đã có sẵn, không đổi API
 - [x] 3.0 UI: Hợp nhất màn hình ArWorkbenchPanel và PartnerLedgerPage
@@ -43,8 +48,10 @@ Hợp nhất trải nghiệm quản lý phải thu, đảm bảo dữ liệu cô
 - [ ] 5.0 Close
 
 ## Risk + Rollback
+
 - Risk: UI gộp quá nhiều thông tin gây rối. Mitigation: Sử dụng tabs/panels rõ ràng trong Workbench.
 - Rollback: Revert các commit UI/API và quay lại các route tách biệt cũ.
 
 ## Sẵn sàng thực thi
+
 Kế hoạch đã sẵn sàng. Chờ user xác nhận để chuyển sang ACT mode.

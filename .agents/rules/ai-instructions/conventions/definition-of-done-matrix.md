@@ -1,6 +1,7 @@
 # Definition of Done Matrix
 
 ## API feature / fix
+
 - Task file có checklist realtime
 - DB precheck rõ `DB_READY`/`DB_GAP_FOUND`
 - DTO/service/module registration xong
@@ -11,6 +12,7 @@
 - Commit/push status stated
 
 ## Docs / process change
+
 - Canonical file update trước
 - `.agents` được sync theo canonical
 - Không còn dead reference

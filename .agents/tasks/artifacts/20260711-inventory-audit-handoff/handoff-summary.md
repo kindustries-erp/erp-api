@@ -13,8 +13,8 @@
 
 ## Top 20 Largest Absolute qty_diff
 
-| phase_key | primary_ref | item_id | qty_diff |
-|---|---|---|---:|
+| phase_key                  | primary_ref    | item_id                              | qty_diff |
+| -------------------------- | -------------- | ------------------------------------ | -------: |
 | production-gi-lines-vs-txn | XK-20260603-51 | 87dc9ea0-dd94-4501-8c03-11bc2e67d684 | -600.000 |
 | production-gi-lines-vs-txn | XK-20260603-52 | 87dc9ea0-dd94-4501-8c03-11bc2e67d684 | -600.000 |
 | production-gi-lines-vs-txn | XK-20260523-51 | 87dc9ea0-dd94-4501-8c03-11bc2e67d684 | -600.000 |

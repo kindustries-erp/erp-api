@@ -10,6 +10,7 @@ import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
+import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import {
   fetchWithRetry,
   resolvePortalVatRate,
@@ -51,6 +52,7 @@ export class InvoicePortalService {
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
+    private readonly vinfastPartsService: VinfastPartsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -474,83 +476,6 @@ export class InvoicePortalService {
   // Single invoice — reparse XML
   // ---------------------------------------------------------------------------
 
-  async reparseXml(
-    id: string,
-    token?: string,
-    cookies?: string,
-  ): Promise<ErpInvoice> {
-    let activeToken = token?.trim();
-    let activeCookies = cookies?.trim();
-    if (!activeToken) {
-      const cfg = await this.getPortalConfig();
-      activeToken = cfg.token;
-      if (!activeCookies) activeCookies = cfg.cookies;
-    }
-    const invoiceResp = await this.lifecycleService.findOne(id);
-    let invoice = invoiceResp.data;
-
-    if (!invoice.xmlFileKey) {
-      if (!activeToken) {
-        throw new BadRequestException(
-          'Hóa đơn này chưa có file XML đính kèm và không có token portal để tự tải.',
-        );
-      }
-      await this.downloadAndSaveXml(invoice as any, activeToken, activeCookies);
-      const updatedResp = await this.lifecycleService.findOne(id);
-      invoice = updatedResp.data;
-      if (!invoice.xmlFileKey) {
-        throw new BadRequestException(
-          'Không thể tải XML từ GDT. Vui lòng kiểm tra lại token hoặc trạng thái hóa đơn.',
-        );
-      }
-    }
-
-    try {
-      const xmlBuffer = await this.r2.downloadBuffer(invoice.xmlFileKey);
-      const { xmlString } = extractXmlFromBuffer(xmlBuffer);
-
-      if (!xmlString) {
-        throw new BadRequestException(
-          'Không tìm thấy nội dung XML hợp lệ trong file đính kèm.',
-        );
-      }
-
-      const parsedXml = parseVietnamInvoiceXml(xmlString);
-
-      await this.lifecycleService.update(invoice.id, {
-        preVatAmount: parsedXml.preVatAmount,
-        vatRate: parsedXml.vatRate ?? undefined,
-        vatAmount: parsedXml.vatAmount,
-        discountAmount: parsedXml.discountAmount,
-        totalAmount: parsedXml.totalAmount,
-        sellerName: parsedXml.sellerName ?? undefined,
-        sellerAddress: parsedXml.sellerAddress ?? undefined,
-        buyerName: parsedXml.buyerName ?? undefined,
-        buyerAddress: parsedXml.buyerAddress ?? undefined,
-        buyerPersonalName: parsedXml.buyerPersonalName ?? undefined,
-        buyerCccd: parsedXml.buyerCccd ?? undefined,
-        buyerTaxCode: parsedXml.buyerTaxCode ?? undefined,
-        description: parsedXml.description ?? undefined,
-        items: parsedXml.items.map((i) => ({
-          ...i,
-          unit: i.unit ?? undefined,
-          quantity: i.quantity ?? undefined,
-          unitPrice: i.unitPrice ?? undefined,
-          vatRate: i.vatRate ?? undefined,
-        })),
-      });
-
-      return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
-    } catch (e) {
-      this.logger.error(
-        `Failed to reparse XML for ${id}: ${(e as Error).message}`,
-      );
-      throw new BadRequestException(
-        `Không thể đồng bộ: ${(e as Error).message}`,
-      );
-    }
-  }
-
   async bulkDownloadXml(
     token: string | undefined,
     cookies: string | undefined,
@@ -656,7 +581,33 @@ export class InvoicePortalService {
 
     const invoiceResp = await this.lifecycleService.findOne(id);
     const invoice = invoiceResp.data as any;
+    const oldStatus = invoice.taxInvoiceStatus;
+
     await this.syncInvoiceDetailFromJson(invoice, activeToken, activeCookies);
+
+    const updatedResp = await this.lifecycleService.findOne(id);
+    const updatedInvoice = updatedResp.data as any;
+
+    if (
+      oldStatus !== updatedInvoice.taxInvoiceStatus ||
+      !updatedInvoice.xmlFileKey
+    ) {
+      this.logger.log(
+        `Invoice ${invoice.invoiceNo} status changed (${oldStatus} -> ${updatedInvoice.taxInvoiceStatus}) or XML missing, re-downloading XML...`,
+      );
+      // Extracted XML download logic instead of calling downloadAndSaveXml (which re-syncs JSON)
+      await this.downloadXmlOnly(updatedInvoice, activeToken, activeCookies);
+    }
+
+    // Trigger Vinfast ledger sync in the background to update any new data
+    this.vinfastPartsService
+      .syncLedger()
+      .catch((e) =>
+        this.logger.error(
+          `Failed to sync Vinfast ledger for ${invoice.invoiceNo}: ${e.message}`,
+        ),
+      );
+
     return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
   }
 
@@ -746,7 +697,14 @@ export class InvoicePortalService {
     }
 
     await sleep(2000);
+    await this.downloadXmlOnly(invoice, token, cookies);
+  }
 
+  async downloadXmlOnly(
+    invoice: ErpInvoice,
+    token: string,
+    cookies?: string,
+  ): Promise<void> {
     try {
       let endpoints: string[] = [];
       if (invoice.taxInvoiceType === 'CASH_REGISTER') {
@@ -818,7 +776,7 @@ export class InvoicePortalService {
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);
     } catch (err) {
       this.logger.warn(
-        `downloadAndSaveXml error for ${invoice.invoiceNo}: ${(err as Error).message}`,
+        `downloadXmlOnly error for ${invoice.invoiceNo}: ${(err as Error).message}`,
       );
     }
   }
@@ -919,6 +877,14 @@ export class InvoicePortalService {
         buyerTaxCode: json.mst,
         description: items.length > 0 ? items[0].description : undefined,
         items: normalizedItems,
+        taxInvoiceStatus:
+          json.tthai !== undefined && json.tthai !== null
+            ? Number(json.tthai)
+            : undefined,
+        taxProcessStatus:
+          json.ttxly !== undefined && json.ttxly !== null
+            ? Number(json.ttxly)
+            : undefined,
       });
 
       this.logger.log(

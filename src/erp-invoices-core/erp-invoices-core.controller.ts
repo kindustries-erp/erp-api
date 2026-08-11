@@ -274,11 +274,6 @@ export class ErpInvoicesCoreController {
     return this.service.cancel(id);
   }
 
-  @Post(':id/reparse-xml')
-  reparseXml(@Param('id') id: string, @Body('token') token?: string) {
-    return this.service.reparseXml(id, token);
-  }
-
   @Post(':id/sync-detail')
   syncDetail(@Param('id') id: string, @Body('token') token: string) {
     return this.service.syncDetailFromPortal(id, token);

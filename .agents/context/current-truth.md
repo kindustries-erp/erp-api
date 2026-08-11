@@ -5,6 +5,7 @@
 - Old dev domains không phải current-truth endpoints mặc định.
 
 ## Repo role
+
 - backend contract
 - auth
 - DTOs

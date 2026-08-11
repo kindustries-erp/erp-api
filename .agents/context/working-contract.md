@@ -1,12 +1,14 @@
 # Working Contract
 
 ## Order
+
 1. DB
 2. API
 3. UI
 4. QC
 
 ## Rules
+
 - inspect before edits
 - MUST use bun/bunx exclusively (do NOT use npm)
 - evidence-first
@@ -23,9 +25,10 @@
 - After `bun run build`, verify `dist/main.js` exists (not `dist/src/main.js`) before declaring build PASS.
 
 ## Read path
-1. `.agents/context/current-truth.md`
-2. `.agents/context/working-contract.md`
-3. `.agents/tasks/current-lane.md`
-4. `AGENTS.md`
-5. `.agents/rules/ai-instructions/technical-instructions.md`
-6. `.agents/tasks/<relevant>.md`
+1. `.agents/README.md`
+2. `.agents/context/current-truth.md`
+3. `.agents/context/working-contract.md`
+4. `.agents/tasks/current-lane.md`
+5. `AGENTS.md`
+6. `.agents/rules/ai-instructions/technical-instructions.md`
+7. `.agents/tasks/<relevant>.md`
