@@ -68,7 +68,8 @@ import { ErpAttachment } from '../erp-attachments-core/entities/erp_attachment.e
 import { ErpInvoiceAttachment } from '../erp-invoices-core/entities/erp_invoice_attachment.entity';
 import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.entity';
 import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
-
+import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-catalog.entity';
+import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 const entities = [
   CoreUser,
   CoreRefreshToken,
@@ -138,6 +139,8 @@ const entities = [
   ErpInvoiceAttachment,
   ErpEmailMessage,
   ErpEmailAttachment,
+  VinfastPartsCatalog,
+  VinfastPartsLedger,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
