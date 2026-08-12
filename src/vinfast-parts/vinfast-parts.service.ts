@@ -8,6 +8,7 @@ import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 
 import { Subject } from 'rxjs';
 import { VINFAST_CAR_PART_CODES } from '../reports-core/vinfast-car-part-codes';
+import { FifoUnitRow } from './dto/fifo-unit-row.dto';
 
 @Injectable()
 export class VinfastPartsService {
@@ -737,5 +738,119 @@ export class VinfastPartsService {
     }
 
     return entries;
+  }
+
+  async getFifoUnitRows(sku: string, page: number = 1, limit: number = 100) {
+    const query = `
+      SELECT 
+        l.id,
+        l.direction,
+        l.qty::numeric as qty,
+        l.unit_cost::numeric as "unitCost",
+        l.pre_vat_amount::numeric as "preVatAmount",
+        l.transaction_date as "transactionDate",
+        l.is_adjustment as "isAdjustment",
+        l.adj_sign as "adjSign",
+        i.id as "invoiceId",
+        i.invoice_no as "invoiceNo",
+        i.invoice_date as "invoiceDate",
+        i.buyer_name as "buyerName",
+        i.seller_name as "sellerName",
+        i.license_plate as "licensePlate"
+      FROM vinfast_parts_ledger l
+      JOIN erp_invoices i ON i.id = l.invoice_id
+      WHERE l.part_sku = $1 AND i.tax_invoice_status IN (1, 3)
+      ORDER BY l.transaction_date ASC, l.created_at ASC
+    `;
+
+    const entries = await this.ledgerRepo.query(query, [sku]);
+
+    const unitRows: FifoUnitRow[] = [];
+    let unitIndexCounter = 1;
+    // We keep a queue of indices pointing to IN units in unitRows
+    const inQueue: number[] = [];
+
+    for (const row of entries) {
+      let qty = Number(row.qty || 0);
+      let amount = Number(row.preVatAmount || 0);
+
+      if (row.isAdjustment && row.adjSign === -1) {
+        qty = -qty;
+        amount = -amount;
+      }
+
+      if (row.direction === 'IN') {
+        if (qty > 0) {
+          const unitCost = Number(row.unitCost || 0);
+          for (let i = 0; i < qty; i++) {
+            unitRows.push({
+              unitIndex: unitIndexCounter++,
+              inLedgerId: row.id,
+              inDate: row.transactionDate,
+              inInvoiceNo: row.invoiceNo,
+              inInvoiceId: row.invoiceId,
+              inUnitCost: unitCost,
+              status: 'IN_STOCK',
+            });
+            inQueue.push(unitRows.length - 1);
+          }
+        } else if (qty < 0) {
+          // Negative IN -> reverse/return. Pop from queue.
+          let qToReverse = Math.abs(qty);
+          while (qToReverse > 0 && inQueue.length > 0) {
+            const rowIndex = inQueue.shift();
+            if (rowIndex !== undefined) {
+              unitRows[rowIndex].status = 'ADJUSTMENT';
+            }
+            qToReverse--;
+          }
+        }
+      } else if (row.direction === 'OUT') {
+        if (qty > 0) {
+          const outPricePerUnit = qty !== 0 ? amount / qty : 0;
+          let qNeeded = qty;
+          while (qNeeded > 0 && inQueue.length > 0) {
+            const rowIndex = inQueue.shift();
+            if (rowIndex !== undefined) {
+              const unitRow = unitRows[rowIndex];
+              unitRow.outLedgerId = row.id;
+              unitRow.outDate = row.transactionDate;
+              unitRow.outInvoiceNo = row.invoiceNo;
+              unitRow.outInvoiceId = row.invoiceId;
+              unitRow.licensePlate = row.licensePlate;
+              unitRow.outPrice = outPricePerUnit;
+              unitRow.cogsFifo = unitRow.inUnitCost;
+              unitRow.profit = outPricePerUnit - unitRow.inUnitCost;
+              unitRow.status = 'SOLD';
+            }
+            qNeeded--;
+          }
+        }
+      }
+    }
+
+    // Filter out ADJUSTMENT if we don't want them in the regular display?
+    // Let's keep them so the unit index is consistent, or maybe remove them.
+    // The user wants to see what's in stock and what's sold.
+    // We'll keep them but UI can show them as adjusted.
+    const validRows = unitRows;
+
+    // Sort by status SOLD first, then chronological (unitIndex ASC)
+    validRows.sort((a, b) => {
+      if (a.status === 'SOLD' && b.status !== 'SOLD') return -1;
+      if (a.status !== 'SOLD' && b.status === 'SOLD') return 1;
+      return a.unitIndex - b.unitIndex;
+    });
+
+    const total = validRows.length;
+    const items = validRows.slice((page - 1) * limit, page * limit);
+
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }

@@ -114,6 +114,20 @@ export class VinfastPartsController {
     return this.vinfastPartsService.getPartLedgerHistory(sku);
   }
 
+  @Get('fifo-rows/:sku')
+  @ApiOperation({ summary: 'Get VinFast parts FIFO unit ledger rows' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getFifoUnitRows(
+    @Param('sku') sku: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 100;
+    return this.vinfastPartsService.getFifoUnitRows(sku, pageNum, limitNum);
+  }
+
   @Sse('sync/progress')
   progress(): Observable<MessageEvent> {
     const keepAlive$ = new Observable<MessageEvent>((subscriber) => {
