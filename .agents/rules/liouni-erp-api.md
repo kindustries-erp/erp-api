@@ -2,12 +2,32 @@
 
 Apply to all work in this repo.
 
+## Git Workflow Mandates
+
+When asked to **commit code**, you MUST execute the following in order:
+1. `bun run build`
+2. `bun run check:ci`
+3. `bun run test`
+4. `git commit`
+
+When asked to **pull code**, you MUST execute the following in order:
+1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
+2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+
+When asked to **push code**, you MUST execute the following in order:
+1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
+2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+3. `bun run build`
+4. `bun run check:ci`
+5. `bun run test`
+6. `git push github-industries erp-master`
+
+**Git Execution Context**: You MUST perform all Git operations (add, commit, pull, push) exclusively inside the `erp-api` directory. NEVER run git commands from the workspace root. When pulling or pushing, ALWAYS specify the remote `github-industries` (e.g., `git push github-industries erp-master`).
+
 ## Required behavior
 - load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
 - read `@.agents/context/current-truth.md` first
 - use repo-local context as default guidance
-- treat Directus as legacy/reference unless the task explicitly says legacy scope
-- treat Gitea as historical only
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010
 - by default, always work on ERP_MASTER_DATABASE_URL unless ERP_KLTOUS_STAGING_DATABASE_URL or ERP_KLTOUS_MASTER_DATABASE_URL is explicitly indicated
@@ -15,7 +35,7 @@ Apply to all work in this repo.
 - inspect current state before edits
 - use evidence-first wording
 - before push/commit, `cd` vào root của repo hiện tại (`./erp-api` từ workspace root)
-- before push/commit, always run `bun run check:ci` and `bun run build`
+- **Strict Git Workflow**: You MUST follow the `Git Workflow Mandates` defined above for all commits and pushes.
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
 - always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
@@ -44,8 +64,3 @@ Apply to all work in this repo.
 - Do not reference non-existent bootstrap files.
 - Do not let historical docs override repo-local current truth.
 - Do not duplicate business logic in multiple services when a shared domain helper or mapper is enough.
-- Do not report a task DONE from docs alone; verify with code state, build/test evidence, and git state.
-
-## Historical warning
-If a file mentions Directus-first flows, Gitea deploys, old dev domains, or `erp-core`, classify it first.
-Only repo-local current-truth docs should drive new implementation by default.

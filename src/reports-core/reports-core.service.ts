@@ -320,6 +320,28 @@ export class ReportsCoreService {
    * Item code precedence for VINFAST IN lines:
    * 1) keyword exceptions, 2) strict regex-based detection.
    */
+  private buildPurchasedItemCodesCteSql(
+    inItemCodeSql: string,
+    inItemNameSql: string,
+  ) {
+    return `
+      purchased_item_codes AS (
+        SELECT 
+          (${inItemCodeSql}) AS item_code,
+          MAX(${inItemNameSql}) AS original_item_name,
+          BOOL_OR(i.seller_tax_code = '0318334886') AS from_car_seller
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+        GROUP BY (${inItemCodeSql})
+      ),`;
+  }
+
   private buildVinfastInItemCodeSql(descriptionExpr: string) {
     const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
     const canonicalExpr = `REGEXP_REPLACE(${normalizedExpr}, '[^A-Z0-9]+', '_', 'g')`;
@@ -384,42 +406,45 @@ export class ReportsCoreService {
     const groupFormat = query.groupBy === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     let vehicleFilter = '';
     if (query.vehicleType && query.vehicleType !== 'all') {
-      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('b.item_code', 'b.from_car_seller')} = $${paramIndex}`;
+      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('c.item_code', 'c.from_car_seller')} = $${paramIndex}`;
       params.push(query.vehicleType);
       paramIndex++;
     }
 
     let itemCodeFilter = '';
     if (query.itemCode) {
-      itemCodeFilter = ` AND b.item_code = $${paramIndex}`;
+      itemCodeFilter = ` AND c.item_code = $${paramIndex}`;
       params.push(query.itemCode);
       paramIndex++;
     }
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -432,11 +457,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month
+          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -449,7 +477,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -458,18 +486,28 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_amount, 0) AS buy_amount,
+          COALESCE(s.total_amount, 0) AS sell_amount,
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          b.month,
-          COALESCE(b.total_amount, 0) AS buy_amount,
-          COALESCE(s.total_amount, 0) AS sell_amount
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          c.item_code,
+          c.month,
+          c.buy_amount,
+          c.sell_amount
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleFilter}
@@ -529,12 +567,12 @@ export class ReportsCoreService {
     let paramIndex = 1;
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
@@ -543,13 +581,13 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     // Used in WHERE (row-level, before GROUP BY)
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'c.item_code',
+      'c.from_car_seller',
     );
     // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
     const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'BOOL_OR(b.from_car_seller)',
+      'c.item_code',
+      'BOOL_OR(c.from_car_seller)',
     );
 
     let vehicleTypeFilter = '';
@@ -578,11 +616,11 @@ export class ReportsCoreService {
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           if (col === 'itemCode') {
-            searchFilter += ` AND b.item_code ILIKE $${paramIndex}`;
+            searchFilter += ` AND c.item_code ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (col === 'itemName') {
-            searchFilter += ` AND b.item_name ILIKE $${paramIndex}`;
+            searchFilter += ` AND c.item_name ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -605,11 +643,11 @@ export class ReportsCoreService {
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           if (col === 'itemCode') {
-            filtersSql += ` AND b.item_code = ANY($${paramIndex})`;
+            filtersSql += ` AND c.item_code = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (col === 'itemName') {
-            filtersSql += ` AND b.item_name = ANY($${paramIndex})`;
+            filtersSql += ` AND c.item_name = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -651,16 +689,18 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -671,13 +711,17 @@ export class ReportsCoreService {
       sell_codes AS (
         SELECT 
           (${inItemCodeSql}) AS item_code,
+          p.original_item_name AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -691,7 +735,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -700,27 +744,40 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.item_name, '') AS item_name,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_qty, 0) AS qty_bought,
+          COALESCE(s.total_qty, 0) AS qty_sold,
+          COALESCE(b.total_amount, 0) AS amount_bought,
+          COALESCE(s.total_amount, 0) AS amount_sold,
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          MAX(b.item_name) AS item_name,
+          c.item_code,
+          MAX(c.item_name) AS item_name,
           ${vehicleTypeSelectSql} AS vehicle_type,
-          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
-          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
-          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
-          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          SUM(c.qty_bought) AS qty_bought,
+          SUM(c.qty_sold) AS qty_sold,
+          SUM(c.amount_bought) AS amount_bought,
+          SUM(c.amount_sold) AS amount_sold
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
           ${searchFilter}
           ${filtersSql}
-        GROUP BY b.item_code
+        GROUP BY c.item_code
       ),
       filtered_data AS (
         SELECT *, COUNT(*) OVER() AS "totalCount"
@@ -779,19 +836,19 @@ export class ReportsCoreService {
     let paramIndex = 1;
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND COALESCE(b.month, s.month) >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
 
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND COALESCE(b.month, s.month) <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     if (query.search) {
-      searchFilter = `AND b.item_code ILIKE $${paramIndex}`;
+      searchFilter = `AND COALESCE(b.item_code, s.item_code) ILIKE $${paramIndex}`;
       params.push(`%${query.search}%`);
       paramIndex++;
     }
@@ -893,12 +950,13 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'COALESCE(b.item_code, s.item_code)',
+      'COALESCE(b.from_car_seller, false)',
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ii.invoice_id,
           ${inItemCodeSql} AS item_code,
@@ -906,9 +964,10 @@ export class ReportsCoreService {
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -920,13 +979,17 @@ export class ReportsCoreService {
         SELECT 
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
+          p.original_item_name AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -941,13 +1004,14 @@ export class ReportsCoreService {
           SUM(qty) AS total_qty,
           ROUND(AVG(unit_price)) AS avg_price,
           ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
       sell_agg AS (
         SELECT 
           item_code,
+          MAX(item_name) AS item_name,
           month,
           SUM(qty) AS total_qty,
           ROUND(AVG(unit_price)) AS avg_price,
@@ -957,10 +1021,10 @@ export class ReportsCoreService {
       ),
       base_data AS (
         SELECT 
-          b.item_code AS "itemCode",
-          b.item_name AS "itemName",
+          COALESCE(b.item_code, s.item_code) AS "itemCode",
+          COALESCE(b.item_name, s.item_name) AS "itemName",
           ${vehicleTypeSql} AS "vehicleType",
-          TO_CHAR(b.month, 'YYYY-MM') AS "month",
+          TO_CHAR(COALESCE(b.month, s.month), 'YYYY-MM') AS "month",
           COALESCE(b.total_qty, 0) AS "qtyBought",
           COALESCE(s.total_qty, 0) AS "qtySold",
           COALESCE(b.avg_price, 0) AS "avgBuyPrice",
@@ -968,7 +1032,7 @@ export class ReportsCoreService {
           b.invoice_ids AS "buyInvoiceIds",
           s.invoice_ids AS "sellInvoiceIds"
         FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
         WHERE 1=1
           ${dateFilter}
           ${searchFilter}
@@ -1060,16 +1124,18 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
       'c.item_code',
-      "c.direction = 'IN' AND c.tax_code = '0318334886'",
+      'c.from_car_seller',
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           'IN' as direction,
           MAX(i.invoice_no) AS invoice_no,
           MAX(i.serial_no) AS serial_no,
           MAX(i.status) AS status,
+          MAX(i.tax_invoice_status) AS tax_invoice_status,
           MAX(i.seller_name) AS partner_name,
           MAX(i.seller_tax_code) AS tax_code,
           MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
@@ -1106,9 +1172,11 @@ export class ReportsCoreService {
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
-          MAX(ii.description) AS description
+          MAX(ii.description) AS description,
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1123,12 +1191,13 @@ export class ReportsCoreService {
           MAX(i.invoice_no) AS invoice_no,
           MAX(i.serial_no) AS serial_no,
           MAX(i.status) AS status,
+          MAX(i.tax_invoice_status) AS tax_invoice_status,
           MAX(i.buyer_name) AS partner_name,
           MAX(i.buyer_tax_code) AS tax_code,
           MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
           (${inItemCodeSql}) AS item_code,
-          '' AS item_name,
+          MAX(p.original_item_name) AS item_name,
           MAX(ii.unit) AS unit,
           COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
           AVG(ii.unit_price::numeric) AS unit_price,
@@ -1159,11 +1228,14 @@ export class ReportsCoreService {
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
           MAX(i.settlement_order) AS settlement_order,
-          MAX(ii.description) AS description
+          MAX(ii.description) AS description,
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -1176,12 +1248,13 @@ export class ReportsCoreService {
         c.invoice_no AS "invoiceNo",
         c.serial_no AS "serialNo",
         c.status,
+        c.tax_invoice_status AS "taxInvoiceStatus",
         c.partner_name AS "partnerName",
         c.tax_code AS "taxCode",
         c.invoice_date AS "invoiceDate",
         c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
-        b.item_name AS "itemName",
+        c.item_name AS "itemName",
         ${vehicleTypeSql} AS "vehicleType",
         c.unit,
         c.qty,
@@ -1199,11 +1272,7 @@ export class ReportsCoreService {
         UNION ALL
         SELECT * FROM sell_codes
       ) c
-      LEFT JOIN (
-        SELECT DISTINCT item_code, item_name, month FROM buy_codes
-      ) b ON b.item_code = c.item_code AND b.month = c.month
       WHERE 1=1
-        AND EXISTS (SELECT 1 FROM buy_codes b2 WHERE b2.item_code = c.item_code AND b2.month = c.month)
         ${dateFilter}
         ${searchFilter}
       ORDER BY c.month DESC, c.item_code ASC, c.direction ASC, c.invoice_date ASC
@@ -1255,6 +1324,25 @@ export class ReportsCoreService {
 
     const workbook = new ExcelJS.Workbook();
 
+    const formatTaxInvoiceStatus = (val?: number | null): string => {
+      switch (val) {
+        case 1:
+          return 'Mới';
+        case 2:
+          return 'Thay thế';
+        case 3:
+          return 'Điều chỉnh';
+        case 4:
+          return 'Bị thay thế';
+        case 5:
+          return 'Bị điều chỉnh';
+        case 6:
+          return 'Bị hủy';
+        default:
+          return val?.toString() || '—';
+      }
+    };
+
     const overviewColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
@@ -1278,6 +1366,7 @@ export class ReportsCoreService {
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đối tác', key: 'partnerName', width: 40 },
       { header: 'Mã số thuế', key: 'taxCode', width: 15 },
+      { header: 'Trạng thái GDT', key: 'gdtStatus', width: 20 },
       { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
@@ -1355,7 +1444,7 @@ export class ReportsCoreService {
     const createDetailSheet = (sheetName: string, rows: any[]) => {
       const sheet = workbook.addWorksheet(sheetName);
       sheet.columns = detailColumns as any;
-      setupSheetHeader(sheet, 20);
+      setupSheetHeader(sheet, 21);
 
       rows.forEach((row: any) => {
         sheet.addRow({
@@ -1379,6 +1468,7 @@ export class ReportsCoreService {
           licensePlate: row.licensePlate,
           settlementOrder: row.settlementOrder,
           status: row.status,
+          gdtStatus: formatTaxInvoiceStatus(row.taxInvoiceStatus),
         });
       });
 
@@ -1536,14 +1626,37 @@ export class ReportsCoreService {
         (row: any) => row.vehicleType === vehicleType,
       );
 
-      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
-      createDetailSheet(
-        `${prefix} - Mua Vào`,
-        typeDetailRows.filter((row: any) => row.direction === 'IN'),
+      const normalRows = (rows: any[]) =>
+        rows.filter(
+          (r) => r.taxInvoiceStatus == null || r.taxInvoiceStatus === 1,
+        );
+      const adjustReplaceRows = (rows: any[]) =>
+        rows.filter(
+          (r) =>
+            r.taxInvoiceStatus === 2 ||
+            r.taxInvoiceStatus === 3 ||
+            r.taxInvoiceStatus === 5,
+        );
+
+      const inRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'IN',
       );
+      const outRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'OUT',
+      );
+
+      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
+
+      createDetailSheet(`${prefix} - Mua Vào`, normalRows(inRows));
       createDetailSheet(
-        `${prefix} - Bán Ra`,
-        typeDetailRows.filter((row: any) => row.direction === 'OUT'),
+        `${prefix} - Mua Vào - ĐC&TT`,
+        adjustReplaceRows(inRows),
+      );
+
+      createDetailSheet(`${prefix} - Bán Ra`, normalRows(outRows));
+      createDetailSheet(
+        `${prefix} - Bán Ra - ĐC&TT`,
+        adjustReplaceRows(outRows),
       );
     });
 
@@ -1592,12 +1705,12 @@ export class ReportsCoreService {
     let otherFiltersSql = '';
 
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND c.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND c.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
@@ -1605,12 +1718,12 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'b.from_car_seller',
+      'c.item_code',
+      'c.from_car_seller',
     );
     const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
-      'b.item_code',
-      'BOOL_OR(b.from_car_seller)',
+      'c.item_code',
+      'BOOL_OR(c.from_car_seller)',
     );
 
     if (query.vehicleType && query.vehicleType !== 'all') {
@@ -1639,16 +1752,18 @@ export class ReportsCoreService {
     }
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ${inItemCodeSql} AS item_code,
           ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1661,11 +1776,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
@@ -1679,7 +1797,7 @@ export class ReportsCoreService {
           month,
           SUM(qty) AS total_qty,
           SUM(amount) AS total_amount,
-          BOOL_OR(seller_tax_code = '0318334886') AS from_car_seller
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM buy_codes
         GROUP BY item_code, month
       ),
@@ -1688,25 +1806,38 @@ export class ReportsCoreService {
           item_code,
           month,
           SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
         FROM sell_codes
         GROUP BY item_code, month
       ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.item_name, '') AS item_name,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_qty, 0) AS qty_bought,
+          COALESCE(s.total_qty, 0) AS qty_sold,
+          COALESCE(b.total_amount, 0) AS amount_bought,
+          COALESCE(s.total_amount, 0) AS amount_sold,
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
       base_data AS (
         SELECT 
-          b.item_code,
-          MAX(b.item_name) AS item_name,
+          c.item_code,
+          MAX(c.item_name) AS item_name,
           ${vehicleTypeSelectSql} AS vehicle_type,
-          SUM(COALESCE(b.total_qty, 0)) AS qty_bought,
-          SUM(COALESCE(s.total_qty, 0)) AS qty_sold,
-          SUM(COALESCE(b.total_amount, 0)) AS amount_bought,
-          SUM(COALESCE(s.total_amount, 0)) AS amount_sold
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          SUM(c.qty_bought) AS qty_bought,
+          SUM(c.qty_sold) AS qty_sold,
+          SUM(c.amount_bought) AS amount_bought,
+          SUM(c.amount_sold) AS amount_sold
+        FROM combined_data c
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
-        GROUP BY b.item_code
+        GROUP BY c.item_code
       ),
       filtered_data AS (
         SELECT DISTINCT ${sqlCol}::text AS value
@@ -1792,11 +1923,12 @@ export class ReportsCoreService {
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
       'b.item_code',
-      "BOOL_OR(b.seller_tax_code = '0318334886')",
+      'BOOL_OR(b.from_car_seller)',
     );
 
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ii.invoice_id,
           ${inItemCodeSql} AS item_code,
@@ -1804,9 +1936,10 @@ export class ReportsCoreService {
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
           DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.seller_tax_code
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
           AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
@@ -1820,11 +1953,14 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
