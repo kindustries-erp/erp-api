@@ -1,3 +1,4 @@
+import * as ExcelJS from 'exceljs';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, Not } from 'typeorm';
@@ -853,5 +854,349 @@ export class VinfastPartsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  async exportStockExcel(options: {
+    vehicleType?: 'oto' | 'xemay' | 'CAR' | 'MOTORBIKE' | string;
+    dateFrom?: string;
+    dateTo?: string;
+    onProgress?: (current: number, total: number, message: string) => void;
+  }): Promise<Buffer> {
+    const { vehicleType, dateFrom, dateTo, onProgress } = options;
+    const totalProgress = 100;
+
+    onProgress?.(5, totalProgress, 'Đang tải dữ liệu tổng quan tồn kho...');
+
+    // 1. Lấy dữ liệu tổng quan tồn kho
+    const overviewData = await this.getPartsStock(
+      vehicleType,
+      1,
+      1000000,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    const skus = overviewData.data.map((d: any) => d.sku);
+
+    if (skus.length === 0) {
+      throw new Error('Không có dữ liệu tồn kho để xuất.');
+    }
+
+    onProgress?.(20, totalProgress, 'Đang tải chi tiết giao dịch (FIFO)...');
+
+    // 2. Tải toàn bộ sổ cái cho các mã sku này
+    const query = `
+      SELECT 
+        l.part_sku as "partSku",
+        l.id,
+        l.direction,
+        l.qty::numeric as qty,
+        l.unit_cost::numeric as "unitCost",
+        l.pre_vat_amount::numeric as "preVatAmount",
+        l.transaction_date as "transactionDate",
+        l.is_adjustment as "isAdjustment",
+        l.adj_sign as "adjSign",
+        l.invoice_id as "invoiceId",
+        i.invoice_no as "invoiceNo",
+        i.invoice_date as "invoiceDate",
+        i.buyer_name as "buyerName",
+        i.seller_name as "sellerName",
+        i.license_plate as "licensePlate",
+        c.name as "partName",
+        c.uom as "unit"
+      FROM vinfast_parts_ledger l
+      JOIN erp_invoices i ON i.id = l.invoice_id
+      LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
+      WHERE l.part_sku = ANY($1) AND i.tax_invoice_status IN (1, 3)
+      ORDER BY l.part_sku ASC, l.transaction_date ASC, l.created_at ASC
+    `;
+
+    const allEntries = await this.ledgerRepo.query(query, [skus]);
+
+    onProgress?.(50, totalProgress, 'Đang tính toán giá vốn FIFO...');
+
+    // Nhóm theo SKU
+    const entriesBySku = new Map<string, any[]>();
+    for (const row of allEntries) {
+      if (!entriesBySku.has(row.partSku)) {
+        entriesBySku.set(row.partSku, []);
+      }
+      entriesBySku.get(row.partSku)?.push(row);
+    }
+
+    const detailInRows: any[] = [];
+    const detailOutRows: any[] = [];
+    const summaryRows = overviewData.data;
+
+    const carCodesStr = VINFAST_CAR_PART_CODES;
+
+    for (const [sku, entries] of entriesBySku.entries()) {
+      const inQueue: { id: string; qty: number; unitCost: number }[] = [];
+
+      for (const row of entries) {
+        let qty = Number(row.qty || 0);
+        let amount = Number(row.preVatAmount || 0);
+
+        if (row.isAdjustment && row.adjSign === -1) {
+          qty = -qty;
+          amount = -amount;
+        }
+
+        if (row.direction === 'IN') {
+          if (qty > 0) {
+            inQueue.push({
+              id: row.id,
+              qty,
+              unitCost: Number(row.unitCost || 0),
+            });
+          } else if (qty < 0) {
+            let qToReverse = Math.abs(qty);
+            while (qToReverse > 0 && inQueue.length > 0) {
+              const batch = inQueue[0];
+              if (batch.qty <= qToReverse) {
+                qToReverse -= batch.qty;
+                inQueue.shift();
+              } else {
+                batch.qty -= qToReverse;
+                qToReverse = 0;
+              }
+            }
+          }
+          row.calculatedCogs = null;
+        } else {
+          let cogsForThisOut = 0;
+          if (qty > 0) {
+            let qNeeded = qty;
+            while (qNeeded > 0) {
+              if (inQueue.length === 0) break;
+              const batch = inQueue[0];
+              if (batch.qty <= qNeeded) {
+                cogsForThisOut += batch.qty * batch.unitCost;
+                qNeeded -= batch.qty;
+                inQueue.shift();
+              } else {
+                cogsForThisOut += qNeeded * batch.unitCost;
+                batch.qty -= qNeeded;
+                qNeeded = 0;
+              }
+            }
+          }
+          row.calculatedCogs = cogsForThisOut;
+          row.calculatedUnitCost = qty !== 0 ? cogsForThisOut / qty : 0;
+        }
+      }
+
+      let includeInFilter = (row: any) => {
+        let ok = true;
+        if (dateFrom && row.transactionDate < new Date(dateFrom)) ok = false;
+        if (dateTo && row.transactionDate > new Date(dateTo + 'T23:59:59.999Z'))
+          ok = false;
+        return ok;
+      };
+
+      for (const row of entries) {
+        if (includeInFilter(row)) {
+          if (row.direction === 'IN') {
+            detailInRows.push(row);
+          } else {
+            detailOutRows.push(row);
+          }
+        }
+      }
+
+      let totalOutCogs = 0;
+      let balanceValue = 0;
+
+      // Tính Cogs của những đơn đã lọc (để báo cáo) hoặc toàn bộ?
+      // Summary sheet thường show toàn bộ lịch sử (stock) nên lấy tất cả COGS
+      for (const row of entries) {
+        if (row.direction === 'OUT' && row.calculatedCogs) {
+          totalOutCogs += row.calculatedCogs;
+        }
+      }
+      for (const q of inQueue) {
+        balanceValue += q.qty * q.unitCost;
+      }
+      const summaryItem = summaryRows.find((s: any) => s.sku === sku);
+      if (summaryItem) {
+        summaryItem.totalOutCogs = totalOutCogs;
+        summaryItem.balanceValue = balanceValue;
+        summaryItem.vehicleTypeStr = carCodesStr.includes(sku as any)
+          ? 'Ô tô'
+          : 'Xe máy';
+      }
+    }
+
+    onProgress?.(70, totalProgress, 'Đang tạo Excel Workbook...');
+
+    const workbook = new ExcelJS.Workbook();
+
+    // Header format function
+    const setupSheetHeader = (sheet: ExcelJS.Worksheet, colCount: number) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: colCount },
+      };
+    };
+
+    // --- SHEET 1: TỔNG HỢP ---
+    const summarySheet = workbook.addWorksheet('Tổng hợp tồn kho');
+    summarySheet.columns = [
+      { header: 'Mã phụ tùng', key: 'sku', width: 20 },
+      { header: 'Tên phụ tùng', key: 'name', width: 40 },
+      { header: 'Loại xe', key: 'vehicleTypeStr', width: 14 },
+      { header: 'ĐVT', key: 'uom', width: 12 },
+      { header: 'Tổng SL nhập', key: 'qtyIn', width: 15 },
+      { header: 'Tổng SL xuất', key: 'qtyOut', width: 15 },
+      { header: 'Giá vốn FIFO xuất', key: 'totalOutCogs', width: 20 },
+      { header: 'Tồn cuối (SL)', key: 'qtyBalance', width: 15 },
+      { header: 'Giá trị tồn cuối FIFO', key: 'balanceValue', width: 20 },
+    ];
+    setupSheetHeader(summarySheet, 9);
+
+    summaryRows.forEach((row: any) => {
+      summarySheet.addRow({
+        sku: row.sku,
+        name: row.name,
+        vehicleTypeStr: row.vehicleTypeStr,
+        uom: row.uom,
+        qtyIn: parseFloat(row.qtyIn || '0'),
+        qtyOut: parseFloat(row.qtyOut || '0'),
+        totalOutCogs: row.totalOutCogs || 0,
+        qtyBalance: parseFloat(row.qtyBalance || '0'),
+        balanceValue: row.balanceValue || 0,
+      });
+    });
+
+    summarySheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        [
+          'qtyIn',
+          'qtyOut',
+          'totalOutCogs',
+          'qtyBalance',
+          'balanceValue',
+        ].forEach((k) => {
+          row.getCell(k).numFmt = '#,##0';
+        });
+      }
+    });
+
+    // --- SHEET 2: CHI TIẾT NHẬP ---
+    const detailInSheet = workbook.addWorksheet('Chi tiết Nhập');
+    detailInSheet.columns = [
+      { header: 'Ngày GD', key: 'transactionDate', width: 15 },
+      { header: 'Mã phụ tùng', key: 'partSku', width: 20 },
+      { header: 'Tên phụ tùng', key: 'partName', width: 40 },
+      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
+      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
+      { header: 'Nhà cung cấp', key: 'sellerName', width: 40 },
+      { header: 'Số lượng nhập', key: 'qty', width: 15 },
+      { header: 'Đơn giá nhập', key: 'unitCost', width: 20 },
+      { header: 'Thành tiền', key: 'preVatAmount', width: 20 },
+      { header: 'Điều chỉnh', key: 'isAdjustment', width: 12 },
+    ];
+    setupSheetHeader(detailInSheet, 10);
+
+    detailInRows.forEach((row: any) => {
+      detailInSheet.addRow({
+        transactionDate: row.transactionDate,
+        partSku: row.partSku,
+        partName: row.partName,
+        invoiceNo: row.invoiceNo,
+        invoiceDate: row.invoiceDate,
+        sellerName: row.sellerName,
+        qty: parseFloat(row.qty || '0'),
+        unitCost: parseFloat(row.unitCost || '0'),
+        preVatAmount: parseFloat(row.preVatAmount || '0'),
+        isAdjustment: row.isAdjustment ? 'Có' : 'Không',
+      });
+    });
+    detailInSheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        ['qty', 'unitCost', 'preVatAmount'].forEach((k) => {
+          row.getCell(k).numFmt = '#,##0';
+        });
+      }
+    });
+
+    // --- SHEET 3: CHI TIẾT XUẤT FIFO ---
+    const detailOutSheet = workbook.addWorksheet('Chi tiết Xuất (FIFO)');
+    detailOutSheet.columns = [
+      { header: 'Ngày GD', key: 'transactionDate', width: 15 },
+      { header: 'Mã phụ tùng', key: 'partSku', width: 20 },
+      { header: 'Tên phụ tùng', key: 'partName', width: 40 },
+      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
+      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
+      { header: 'Khách hàng', key: 'buyerName', width: 40 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Số lượng xuất', key: 'qty', width: 15 },
+      { header: 'Đơn giá bán', key: 'sellPrice', width: 20 },
+      { header: 'Doanh thu', key: 'preVatAmount', width: 20 },
+      { header: 'Giá vốn FIFO (COGS)', key: 'calculatedCogs', width: 20 },
+      { header: 'Lợi nhuận gộp', key: 'profit', width: 20 },
+      { header: 'Biên LN (%)', key: 'marginPct', width: 12 },
+      { header: 'Điều chỉnh', key: 'isAdjustment', width: 12 },
+    ];
+    setupSheetHeader(detailOutSheet, 14);
+
+    detailOutRows.forEach((row: any) => {
+      const qty = parseFloat(row.qty || '0');
+      const preVatAmount = parseFloat(row.preVatAmount || '0');
+      const cogs = row.calculatedCogs || 0;
+      const profit = preVatAmount - cogs;
+      const sellPrice = qty !== 0 ? preVatAmount / qty : 0;
+      const marginPct = preVatAmount > 0 ? (profit / preVatAmount) * 100 : 0;
+
+      detailOutSheet.addRow({
+        transactionDate: row.transactionDate,
+        partSku: row.partSku,
+        partName: row.partName,
+        invoiceNo: row.invoiceNo,
+        invoiceDate: row.invoiceDate,
+        buyerName: row.buyerName,
+        licensePlate: row.licensePlate,
+        qty: qty,
+        sellPrice: sellPrice,
+        preVatAmount: preVatAmount,
+        calculatedCogs: cogs,
+        profit: profit,
+        marginPct: marginPct.toFixed(1) + '%',
+        isAdjustment: row.isAdjustment ? 'Có' : 'Không',
+      });
+    });
+    detailOutSheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        [
+          'qty',
+          'sellPrice',
+          'preVatAmount',
+          'calculatedCogs',
+          'profit',
+        ].forEach((k) => {
+          row.getCell(k).numFmt = '#,##0';
+        });
+      }
+    });
+
+    onProgress?.(95, totalProgress, 'Đang lưu file...');
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.isBuffer(buffer)
+      ? buffer
+      : Buffer.from(buffer as ArrayBuffer);
   }
 }

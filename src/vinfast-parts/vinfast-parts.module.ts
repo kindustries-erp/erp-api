@@ -1,3 +1,4 @@
+import { VinfastPartsStockExportBackgroundService } from './services/vinfast-parts-stock-export-background.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VinfastPartsService } from './vinfast-parts.service';
@@ -17,7 +18,7 @@ import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
     ]),
   ],
   controllers: [VinfastPartsController],
-  providers: [VinfastPartsService],
+  providers: [VinfastPartsService, VinfastPartsStockExportBackgroundService],
   exports: [VinfastPartsService],
 })
 export class VinfastPartsModule {}

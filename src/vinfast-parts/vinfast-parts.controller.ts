@@ -7,15 +7,33 @@ import {
   Get,
   Query,
   Param,
+  UseGuards,
 } from '@nestjs/common';
+import {
+  VinfastPartsStockExportBackgroundService,
+  VinfastPartsStockExportQuery,
+} from './services/vinfast-parts-stock-export-background.service';
+import { Request, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { VinfastPartsService } from './vinfast-parts.service';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Observable } from 'rxjs';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('VinFast Parts')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('vinfast-parts')
 export class VinfastPartsController {
-  constructor(private readonly vinfastPartsService: VinfastPartsService) {}
+  constructor(
+    private readonly vinfastPartsService: VinfastPartsService,
+    private readonly exportService: VinfastPartsStockExportBackgroundService,
+  ) {}
 
   @Post('sync-catalog')
   @ApiOperation({ summary: 'Sync VinFast parts catalog from invoice history' })
@@ -168,5 +186,122 @@ export class VinfastPartsController {
     });
 
     return keepAlive$;
+  }
+
+  @Post('stock/export/excel/background')
+  @ApiOperation({
+    summary: 'Start background export for VinFast parts stock (FIFO)',
+  })
+  startVinfastPartsStockExportBackground(
+    @Body() query: any,
+    @Request() req: any,
+  ) {
+    return this.exportService.startBackgroundExport(
+      query,
+      req.user?.sub,
+      (onProgress) => {
+        return this.vinfastPartsService.exportStockExcel({
+          vehicleType: query.vehicleType,
+          dateFrom: query.dateFrom,
+          dateTo: query.dateTo,
+          onProgress,
+        });
+      },
+    );
+  }
+
+  @Get('stock/export/excel/background/history')
+  @ApiOperation({
+    summary: 'Get history of background export for VinFast parts stock',
+  })
+  getVinfastPartsStockExportBackgroundHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.exportService.listHistoryForUser(
+      req.user?.sub,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
+  }
+
+  @Get('stock/export/excel/background/:jobId/download')
+  @ApiOperation({
+    summary: 'Download completed background export for VinFast parts stock',
+  })
+  async downloadVinfastPartsStockBackgroundExport(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = this.exportService.getReadyExportFile(
+      jobId,
+      req.user?.sub,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Sse('stock/export/excel/progress/stream')
+  @ApiOperation({
+    summary: 'Stream progress of background export for VinFast parts stock',
+  })
+  vinfastPartsStockExportProgressStream(
+    @Request() req: any,
+  ): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          current: 0,
+          total: 100,
+          isRunning: false,
+          completed: false,
+          ready: false,
+          failed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const snapshot = this.exportService.getJobSnapshotForUser(req.user?.sub);
+      if (snapshot) {
+        subscriber.next({ data: JSON.stringify(snapshot) } as MessageEvent);
+      }
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            current: 0,
+            total: 100,
+            isRunning: false,
+            completed: false,
+            ready: false,
+            failed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000);
+
+      const subscription = this.exportService.progress$.subscribe({
+        next: (data) => {
+          if (data.userId !== req.user?.sub) return;
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
   }
 }
