@@ -2,6 +2,22 @@
 
 Apply to all work in this repo.
 
+## Git Workflow Mandates
+
+When asked to **commit code**, you MUST execute the following in order:
+1. `bun run build`
+2. `bun run check:ci`
+3. `bun run test`
+4. `git commit`
+
+When asked to **push code**, you MUST execute the following in order:
+1. `git pull --rebase` (and resolve conflicts if any)
+2. `bun run build`
+3. `bun run check:ci`
+4. `bun run test`
+5. `git commit` (if there are uncommitted changes)
+6. `git push`
+
 ## Required behavior
 - load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
 - read `@.agents/context/current-truth.md` first
@@ -13,7 +29,7 @@ Apply to all work in this repo.
 - inspect current state before edits
 - use evidence-first wording
 - before push/commit, `cd` vào root của repo hiện tại (`./erp-api` từ workspace root)
-- before push/commit, always run `bun run check:ci` and `bun run build`
+- **Strict Git Workflow**: You MUST follow the `Git Workflow Mandates` defined above for all commits and pushes.
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
 - always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch

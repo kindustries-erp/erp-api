@@ -37,7 +37,7 @@ Use this skill only inside this repository.
 - Be evidence-first
 - No code without a task file under `docs/tasks/`
 - Keep task checklist updated in realtime
-- Before commit/push, run `bun run check:ci` and `bun run build`
+- **Strict Git Workflow**: Follow the exact sequence: pull -> build -> check:ci -> test -> commit -> push (see rules for exact trigger definitions).
 - If backend source changed, run `bunx jest --forceExit` or a narrower affected test scope and report the scope used
 - When task docs are stale, verify with code + build/test + git state before correcting status/checklist
 - Query Postgres directly through the active `DATABASE_URL` before changing DTOs, filters, persistence, or business rules
