@@ -81,7 +81,7 @@ Bản ghi nhân viên (`gw_employees`) tương ứng với user, kèm department
     "id": "uuid-employee",
     "full_name": "Nguyen Van A",
     "phone": "0901234567",
-    "directus_user_id": "uuid-hệ thống-user",
+    "user_id": "uuid-hệ thống-user",
     "department_id": {
       "id": "uuid-dept",
       "name": "Phòng Kế toán"
@@ -259,7 +259,7 @@ const allowedFields = updateDetail?.fields ?? [];
 ### Ghi chú kỹ thuật
 
 - **Employee data** được fetch bằng `userToken` — hệ thống tự enforce row-level permission.
-- **Role info, Role permissions, Custom permissions** được fetch bằng `DIRECTUS_ADMIN_TOKEN` — vì user thông thường không có quyền đọc `/roles`, `/access`, `/permissions`.
+- **Role info, Role permissions, Custom permissions** được fetch bằng `SYSTEM_ADMIN_TOKEN` — vì user thông thường không có quyền đọc `/roles`, `/access`, `/permissions`.
 - Role info và Role access record được fetch **song song** (`Promise.all`) để tối ưu latency.
 - Nếu bất kỳ bước phụ nào lỗi (employee, role, custom perms), endpoint vẫn trả về thành công với field tương ứng là `null` hoặc `[]`.
 
@@ -339,7 +339,7 @@ Content-Type: application/json
 
 ### PATCH Ghi chú kỹ thuật
 
-- `employee.id` được resolve tự động từ `directus_user_id` trong token — client không cần biết và không thể thay đổi.
+- `employee.id` được resolve tự động từ `user_id` trong token — client không cần biết và không thể thay đổi.
 - Update dùng `userToken` (không phải admin token) — hệ thống tự enforce row-level permission cho employee record.
-- `email`: cần update đồng thời cả `gw_employees.email` và `directus_users.email` (dùng để login) → chưa implement, cần endpoint riêng `PATCH /auth/profile/email`.
+- `email`: cần update đồng thời cả `gw_employees.email` và `users.email` (dùng để login) → chưa implement, cần endpoint riêng `PATCH /auth/profile/email`.
 - `password`: đã có endpoint riêng `POST /auth/change-password`.

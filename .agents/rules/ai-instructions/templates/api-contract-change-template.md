@@ -33,7 +33,7 @@ Dùng khi đổi:
 
 ## Evidence block mẫu
 ```md
-- Old contract: `GET /api/v1/example -> { items: LegacyItem[] }`
+- Old contract: `GET /api/v1/example -> { items: OldItem[] }`
 - New contract: `GET /api/v1/example -> { data: ExampleDto[], total: number }`
 - Compatibility: additive / breaking
 - Web follow-up: update `src/modules/example/api/exampleApi.ts`

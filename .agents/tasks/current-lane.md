@@ -36,4 +36,4 @@
 - Khi thêm ERP module mới có permission-gated controller, luôn verify cả 3 lớp cùng lúc: `@Controller(path)` trên controller, path trong FE api client, và entry trong `getAvailableResources()`.
 
 ## Historical signal
-Những task cũ về cashflow / AR / voucher / sinvoice / tax-portal / Directus-first flow phải được xem là historical/reference trừ khi user mở lại scope đó.
+Những task cũ về cashflow / AR / voucher / sinvoice / tax-portal phải được xem là historical/reference trừ khi user mở lại scope đó.
