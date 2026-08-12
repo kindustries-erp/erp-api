@@ -664,6 +664,7 @@ export class VinfastPartsService {
         l.transaction_date as "transactionDate",
         l.is_adjustment as "isAdjustment",
         l.adj_sign as "adjSign",
+        l.invoice_id as "invoiceId",
         i.invoice_no as "invoiceNo",
         i.invoice_date as "invoiceDate",
         i.buyer_name as "buyerName",
