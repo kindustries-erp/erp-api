@@ -10,8 +10,12 @@ When asked to **commit code**, you MUST execute the following in order:
 3. `bun run test`
 4. `git commit`
 
+When asked to **pull code**, you MUST execute the following in order:
+1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
+2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+
 When asked to **push code**, you MUST execute the following in order:
-1. `git commit` (if there are uncommitted changes)
+1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
 2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
 3. `bun run build`
 4. `bun run check:ci`
