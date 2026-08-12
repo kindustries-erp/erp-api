@@ -11,12 +11,14 @@ When asked to **commit code**, you MUST execute the following in order:
 4. `git commit`
 
 When asked to **push code**, you MUST execute the following in order:
-1. `git pull --rebase` (and resolve conflicts if any)
-2. `bun run build`
-3. `bun run check:ci`
-4. `bun run test`
-5. `git commit` (if there are uncommitted changes)
-6. `git push`
+1. `git commit` (if there are uncommitted changes)
+2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+3. `bun run build`
+4. `bun run check:ci`
+5. `bun run test`
+6. `git push github-industries erp-master`
+
+**Git Execution Context**: You MUST perform all Git operations (add, commit, pull, push) exclusively inside the `erp-api` directory. NEVER run git commands from the workspace root. When pulling or pushing, ALWAYS specify the remote `github-industries` (e.g., `git push github-industries erp-master`).
 
 ## Required behavior
 - load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
