@@ -604,8 +604,22 @@ export class ReportsCoreService {
       totalCumulativeBuy += m.amountBought;
       totalCumulativeCogs += m.totalCogs;
 
-      if (query.dateFrom && m.month < query.dateFrom) continue;
-      if (query.dateTo && m.month > query.dateTo) continue;
+      let isOutOfRange = false;
+      if (query.dateFrom) {
+        if (m.month.length === 7) {
+          if (m.month < query.dateFrom.substring(0, 7)) isOutOfRange = true;
+        } else {
+          if (m.month < query.dateFrom) isOutOfRange = true;
+        }
+      }
+      if (query.dateTo) {
+        if (m.month.length === 7) {
+          if (m.month > query.dateTo.substring(0, 7)) isOutOfRange = true;
+        } else {
+          if (m.month > query.dateTo) isOutOfRange = true;
+        }
+      }
+      if (isOutOfRange) continue;
 
       if (!trendMap[m.month]) {
         trendMap[m.month] = {
@@ -613,12 +627,15 @@ export class ReportsCoreService {
           revenue: 0,
           cogs: 0,
           grossProfit: 0,
+          inventoryValue: 0,
         };
       }
 
       trendMap[m.month].revenue += m.amountSold;
       trendMap[m.month].cogs += m.totalCogs;
       trendMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+      trendMap[m.month].inventoryValue =
+        totalCumulativeBuy - totalCumulativeCogs;
 
       summary.revenue += m.amountSold;
       summary.cogs += m.totalCogs;
