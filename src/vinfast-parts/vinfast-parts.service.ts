@@ -670,6 +670,8 @@ export class VinfastPartsService {
         i.invoice_date as "invoiceDate",
         i.buyer_name as "buyerName",
         i.seller_name as "sellerName",
+        i.buyer_tax_code as "buyerTaxCode",
+        i.seller_tax_code as "sellerTaxCode",
         i.license_plate as "licensePlate"
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
@@ -894,9 +896,11 @@ export class VinfastPartsService {
     vehicleType?: 'oto' | 'xemay' | 'CAR' | 'MOTORBIKE' | string;
     dateFrom?: string;
     dateTo?: string;
+    columnFilters?: string;
     onProgress?: (current: number, total: number, message: string) => void;
   }): Promise<Buffer> {
-    const { vehicleType, dateFrom, dateTo, onProgress } = options;
+    const { vehicleType, dateFrom, dateTo, columnFilters, onProgress } =
+      options;
     const totalProgress = 100;
 
     onProgress?.(5, totalProgress, 'Đang tải dữ liệu tổng quan tồn kho...');
@@ -911,7 +915,7 @@ export class VinfastPartsService {
       undefined,
       undefined,
       undefined,
-      undefined,
+      columnFilters,
     );
     const skus = overviewData.data.map((d: any) => d.sku);
 
