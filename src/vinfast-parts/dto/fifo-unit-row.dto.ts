@@ -15,6 +15,7 @@ export interface FifoUnitRow {
   outPrice?: number;
   cogsFifo?: number;
   profit?: number;
+  qty?: number;
 
   status: 'IN_STOCK' | 'SOLD' | 'ADJUSTMENT';
 }

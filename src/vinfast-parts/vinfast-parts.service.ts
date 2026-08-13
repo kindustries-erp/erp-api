@@ -784,27 +784,39 @@ export class VinfastPartsService {
       if (row.direction === 'IN') {
         if (qty > 0) {
           const unitCost = Number(row.unitCost || 0);
-          for (let i = 0; i < qty; i++) {
-            unitRows.push({
-              unitIndex: unitIndexCounter++,
-              inLedgerId: row.id,
-              inDate: row.transactionDate,
-              inInvoiceNo: row.invoiceNo,
-              inInvoiceId: row.invoiceId,
-              inUnitCost: unitCost,
-              status: 'IN_STOCK',
-            });
-            inQueue.push(unitRows.length - 1);
-          }
+          unitRows.push({
+            unitIndex: unitIndexCounter++,
+            inLedgerId: row.id,
+            inDate: row.transactionDate,
+            inInvoiceNo: row.invoiceNo,
+            inInvoiceId: row.invoiceId,
+            inUnitCost: unitCost,
+            qty: qty,
+            status: 'IN_STOCK',
+          });
+          inQueue.push(unitRows.length - 1);
         } else if (qty < 0) {
-          // Negative IN -> reverse/return. Pop from queue.
           let qToReverse = Math.abs(qty);
           while (qToReverse > 0 && inQueue.length > 0) {
-            const rowIndex = inQueue.shift();
-            if (rowIndex !== undefined) {
-              unitRows[rowIndex].status = 'ADJUSTMENT';
+            const rowIndex = inQueue[0];
+            const unitRow = unitRows[rowIndex];
+
+            if (unitRow.qty! <= qToReverse + 0.0001) {
+              // tolerance
+              qToReverse -= unitRow.qty!;
+              unitRow.status = 'ADJUSTMENT';
+              inQueue.shift();
+            } else {
+              unitRow.qty =
+                Math.round((unitRow.qty! - qToReverse) * 10000) / 10000;
+              unitRows.push({
+                ...unitRow,
+                qty: qToReverse,
+                unitIndex: unitIndexCounter++,
+                status: 'ADJUSTMENT',
+              });
+              qToReverse = 0;
             }
-            qToReverse--;
           }
         }
       } else if (row.direction === 'OUT') {
@@ -812,9 +824,11 @@ export class VinfastPartsService {
           const outPricePerUnit = qty !== 0 ? amount / qty : 0;
           let qNeeded = qty;
           while (qNeeded > 0 && inQueue.length > 0) {
-            const rowIndex = inQueue.shift();
-            if (rowIndex !== undefined) {
-              const unitRow = unitRows[rowIndex];
+            const rowIndex = inQueue[0];
+            const unitRow = unitRows[rowIndex];
+
+            if (unitRow.qty! <= qNeeded + 0.0001) {
+              qNeeded -= unitRow.qty!;
               unitRow.outLedgerId = row.id;
               unitRow.outDate = row.transactionDate;
               unitRow.outInvoiceNo = row.invoiceNo;
@@ -824,8 +838,28 @@ export class VinfastPartsService {
               unitRow.cogsFifo = unitRow.inUnitCost;
               unitRow.profit = outPricePerUnit - unitRow.inUnitCost;
               unitRow.status = 'SOLD';
+              inQueue.shift();
+            } else {
+              const consumed = Math.round(qNeeded * 10000) / 10000;
+              unitRow.qty =
+                Math.round((unitRow.qty! - consumed) * 10000) / 10000;
+
+              unitRows.push({
+                ...unitRow,
+                qty: consumed,
+                unitIndex: unitIndexCounter++,
+                outLedgerId: row.id,
+                outDate: row.transactionDate,
+                outInvoiceNo: row.invoiceNo,
+                outInvoiceId: row.invoiceId,
+                licensePlate: row.licensePlate,
+                outPrice: outPricePerUnit,
+                cogsFifo: unitRow.inUnitCost,
+                profit: outPricePerUnit - unitRow.inUnitCost,
+                status: 'SOLD',
+              });
+              qNeeded = 0;
             }
-            qNeeded--;
           }
         }
       }

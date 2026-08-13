@@ -112,6 +112,15 @@ export class ReportsCoreService {
       let dateKey = `${year}-${mStr}`;
       if (groupInterval === 'day') {
         dateKey = `${year}-${mStr}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (groupInterval === 'week') {
+        const tempD = new Date(d.getTime());
+        const day = tempD.getDay();
+        const diff = tempD.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(tempD.setDate(diff));
+        const mYear = monday.getFullYear();
+        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+        const mDay = String(monday.getDate()).padStart(2, '0');
+        dateKey = `${mYear}-${mMonth}-${mDay}`;
       } else if (groupInterval === 'year') {
         dateKey = `${year}-01-01`;
       }
@@ -551,172 +560,76 @@ export class ReportsCoreService {
     groupBy?: string;
     itemCode?: string;
   }) {
-    let dateFilter = '';
-    const params: any[] = [];
-    let paramIndex = 1;
-    const groupInterval = query.groupBy === 'week' ? 'week' : 'month';
-    const groupFormat = query.groupBy === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
-
-    if (query.dateFrom) {
-      dateFilter += ` AND c.month >= $${paramIndex}`;
-      params.push(query.dateFrom);
-      paramIndex++;
-    }
-    if (query.dateTo) {
-      dateFilter += ` AND c.month <= $${paramIndex}`;
-      params.push(query.dateTo);
-      paramIndex++;
-    }
-
-    let vehicleFilter = '';
-    if (query.vehicleType && query.vehicleType !== 'all') {
-      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('c.item_code', 'c.from_car_seller')} = $${paramIndex}`;
-      params.push(query.vehicleType);
-      paramIndex++;
-    }
-
-    let itemCodeFilter = '';
-    if (query.itemCode) {
-      itemCodeFilter = ` AND c.item_code = $${paramIndex}`;
-      params.push(query.itemCode);
-      paramIndex++;
-    }
-
-    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
-    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-
-    const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
-      buy_codes AS (
-        SELECT 
-          ${inItemCodeSql} AS item_code,
-          CASE
-            WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
-            WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
-            WHEN i.tax_invoice_status = 3 THEN 0
-            WHEN i.tax_invoice_status = 6 THEN 0
-            ELSE ii.quantity::numeric
-          END AS qty,
-          CASE
-            WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
-            WHEN i.tax_invoice_status = 3 THEN 0
-            WHEN i.tax_invoice_status = 6 THEN 0
-            ELSE ii.pre_vat_amount
-          END AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'IN'
-          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      sell_codes AS (
-        SELECT 
-          (${inItemCodeSql}) AS item_code,
-          CASE
-            WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
-            WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
-            WHEN i.tax_invoice_status = 3 THEN 0
-            WHEN i.tax_invoice_status = 6 THEN 0
-            ELSE ii.quantity::numeric
-          END AS qty,
-          CASE
-            WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
-            WHEN i.tax_invoice_status = 3 THEN 0
-            WHEN i.tax_invoice_status = 6 THEN 0
-            ELSE ii.pre_vat_amount
-          END AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'OUT'
-          
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      buy_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM buy_codes
-        GROUP BY item_code, month
-      ),
-      sell_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM sell_codes
-        GROUP BY item_code, month
-      ),
-      combined_data AS (
-        SELECT
-          COALESCE(b.item_code, s.item_code) AS item_code,
-          COALESCE(b.month, s.month) AS month,
-          COALESCE(b.total_amount, 0) AS buy_amount,
-          COALESCE(s.total_amount, 0) AS sell_amount,
-          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
-        FROM buy_agg b
-        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
-      ),
-      base_data AS (
-        SELECT 
-          c.item_code,
-          c.month,
-          c.buy_amount,
-          c.sell_amount
-        FROM combined_data c
-        WHERE 1=1
-          ${dateFilter}
-          ${vehicleFilter}
-          ${itemCodeFilter}
-      )
-      SELECT 
-        TO_CHAR(month, '${groupFormat}') AS month,
-        SUM(buy_amount) AS total_buy,
-        SUM(sell_amount) AS total_sell,
-        SUM(sell_amount - buy_amount) AS profit
-      FROM base_data
-      GROUP BY month
-      ORDER BY month ASC
-    `;
-
-    const rawData = await this.dataSource.query(sql, params);
+    const groupInterval = ['day', 'week', 'year'].includes(query.groupBy || '')
+      ? query.groupBy
+      : 'month';
+    const fifoMetrics = await this.calculateVinfastFifo(
+      query.dateTo,
+      groupInterval,
+    );
 
     const summary = {
+      revenue: 0,
+      cogs: 0,
+      grossProfit: 0,
+      inventoryValue: 0,
       totalBuy: 0,
-      totalSell: 0,
-      profit: 0,
     };
-    const trend = rawData.map((row: any) => {
-      const buy = Number(row.total_buy || 0);
-      const sell = Number(row.total_sell || 0);
-      const profit = Number(row.profit || 0);
-      summary.totalBuy += buy;
-      summary.totalSell += sell;
-      summary.profit += profit;
 
-      return {
-        month: row.month,
-        totalBuy: buy,
-        totalSell: sell,
-        profit: profit,
-      };
-    });
+    const trendMap: Record<string, any> = {};
+
+    let totalCumulativeBuy = 0;
+    let totalCumulativeCogs = 0;
+
+    for (const m of fifoMetrics) {
+      if (query.itemCode && m.itemCode !== query.itemCode) continue;
+
+      let isCarPart = false;
+      const normalizedCode = m.itemCode ? m.itemCode.toUpperCase().trim() : '';
+      if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
+        isCarPart = true;
+      }
+
+      // If it doesn't match the list, we assume MOTORBIKE unless from_car_seller was checked,
+      // but in FIFO we just rely on the hardcoded SKUs for the dashboard aggregation.
+      const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
+      if (
+        query.vehicleType &&
+        query.vehicleType !== 'all' &&
+        query.vehicleType !== vType
+      ) {
+        continue;
+      }
+
+      totalCumulativeBuy += m.amountBought;
+      totalCumulativeCogs += m.totalCogs;
+
+      if (query.dateFrom && m.month < query.dateFrom) continue;
+      if (query.dateTo && m.month > query.dateTo) continue;
+
+      if (!trendMap[m.month]) {
+        trendMap[m.month] = {
+          month: m.month,
+          revenue: 0,
+          cogs: 0,
+          grossProfit: 0,
+        };
+      }
+
+      trendMap[m.month].revenue += m.amountSold;
+      trendMap[m.month].cogs += m.totalCogs;
+      trendMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+
+      summary.revenue += m.amountSold;
+      summary.cogs += m.totalCogs;
+      summary.grossProfit += m.amountSold - m.totalCogs;
+    }
+
+    summary.inventoryValue = totalCumulativeBuy - totalCumulativeCogs;
+
+    const trend = Object.values(trendMap).sort((a: any, b: any) =>
+      a.month.localeCompare(b.month),
+    );
 
     return {
       summary,
