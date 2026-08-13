@@ -16,6 +16,34 @@ export class VinfastPartsService {
   private readonly logger = new Logger(VinfastPartsService.name);
   public readonly progress$ = new Subject<any>();
 
+  private readonly VINFAST_SELLER_TAX_CODES = [
+    '0108926276',
+    '0318334886',
+    '0202357718',
+  ];
+
+  private resolveVinfastSku(
+    itemCode: string | null,
+    description: string | null,
+  ): string | null {
+    const norm = (description || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+    if (norm.includes('VF5_HV_BATTERY_PACK_38_KWH')) return 'EEP73110011AP';
+    if (
+      norm.includes('HV_BATTERY_41_9KWH') ||
+      norm.includes('HV_BATTERY_41_9_KWH') ||
+      norm.includes('BAT21001011')
+    )
+      return 'BAT21001011';
+    if (norm.includes('HV_BATTERY_PACK')) return 'EEP73110011ALL';
+
+    const upperDesc = (description || '').toUpperCase();
+    const match = upperDesc.match(/([A-Z]{3}[0-9][A-Z0-9]*)/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return itemCode || null;
+  }
+
   constructor(
     @InjectRepository(VinfastPartsCatalog)
     private catalogRepo: Repository<VinfastPartsCatalog>,
@@ -29,8 +57,25 @@ export class VinfastPartsService {
     dateFrom?: string;
     dateTo?: string;
     progress$?: any;
+    clearDb?: boolean;
   }) {
     this.logger.log('Starting VinFast Parts Catalog sync...');
+    if (options?.clearDb) {
+      this.logger.log('Clearing old VinFast ledger and catalog before sync...');
+      await this.ledgerRepo.delete({});
+      await this.catalogRepo.delete({});
+      if (options.progress$) {
+        options.progress$.next({
+          processId: 'vinfast-sync',
+          type: 'clear',
+          total: 0,
+          current: 0,
+          message: 'Đã xóa sạch dữ liệu Danh mục và Sổ cái cũ.',
+          completed: false,
+        });
+      }
+    }
+
     if (options?.progress$) {
       options.progress$.next({
         processId: 'vinfast-sync',
@@ -53,6 +98,9 @@ export class VinfastPartsService {
       .addSelect('MAX(ii.unit)', 'uom')
       .where('ii.itemCode IS NOT NULL')
       .andWhere('i.direction = :direction', { direction: 'IN' })
+      .andWhere('i.sellerTaxCode IN (:...taxCodes)', {
+        taxCodes: this.VINFAST_SELLER_TAX_CODES,
+      })
       .andWhere('i.taxInvoiceStatus != :status', { status: 6 });
 
     if (options?.dateFrom && options?.dateTo) {
@@ -82,7 +130,8 @@ export class VinfastPartsService {
     // Process items in chunks
     for (const item of rawItems) {
       processedCount++;
-      const { sku, raw_description, uom } = item;
+      let { sku, raw_description, uom } = item;
+      sku = this.resolveVinfastSku(sku, raw_description);
       if (!sku) continue;
 
       const existing = await this.catalogRepo.findOne({ where: { sku } });
@@ -169,7 +218,15 @@ export class VinfastPartsService {
     const qb = this.invoiceItemRepo
       .createQueryBuilder('ii')
       .innerJoinAndSelect('ii.invoice', 'i')
-      .where('ii.itemCode IS NOT NULL');
+      .where('ii.itemCode IS NOT NULL')
+      .andWhere(
+        '( (i.direction = :inDir AND i.sellerTaxCode IN (:...taxCodes)) OR i.direction = :outDir )',
+        {
+          inDir: 'IN',
+          outDir: 'OUT',
+          taxCodes: this.VINFAST_SELLER_TAX_CODES,
+        },
+      );
 
     if (options?.dateFrom && options?.dateTo) {
       qb.andWhere('i.invoiceDate >= :dateFrom AND i.invoiceDate <= :dateTo', {
@@ -190,7 +247,7 @@ export class VinfastPartsService {
       const i = ii.invoice;
       if (!i) continue;
 
-      const sku = ii.itemCode;
+      const sku = this.resolveVinfastSku(ii.itemCode, ii.description);
       if (!sku) continue;
 
       processedCount++;

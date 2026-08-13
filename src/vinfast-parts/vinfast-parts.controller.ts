@@ -43,7 +43,9 @@ export class VinfastPartsController {
 
   @Post('sync-ledger')
   @ApiOperation({ summary: 'Sync VinFast parts ledger from invoice history' })
-  async syncLedger(@Body() body: { dateFrom?: string; dateTo?: string }) {
+  async syncLedger(
+    @Body() body: { dateFrom?: string; dateTo?: string; clearDb?: boolean },
+  ) {
     // We pass the service's own progress$ subject so SSE clients can listen to it
     // Run async to not block the request, or we can await it.
     // Let's run it async so the SSE connection can stream.
@@ -52,6 +54,7 @@ export class VinfastPartsController {
         progress$: this.vinfastPartsService.progress$,
         dateFrom: body.dateFrom,
         dateTo: body.dateTo,
+        clearDb: body.clearDb,
       })
       .then(() =>
         this.vinfastPartsService.syncLedger({
