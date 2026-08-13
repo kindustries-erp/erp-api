@@ -961,14 +961,29 @@ export class VinfastPartsService {
       entriesBySku.get(row.partSku)?.push(row);
     }
 
-    const detailInRows: any[] = [];
-    const detailOutRows: any[] = [];
+    const ledgerSections: {
+      sku: string;
+      partName: string;
+      unit: string;
+      openingBalanceQty: number;
+      openingBalanceValue: number;
+      rows: any[];
+      closingBalanceQty: number;
+      closingBalanceValue: number;
+    }[] = [];
     const summaryRows = overviewData.data;
 
     const carCodesStr = VINFAST_CAR_PART_CODES;
 
     for (const [sku, entries] of entriesBySku.entries()) {
       const inQueue: { id: string; qty: number; unitCost: number }[] = [];
+      const ledgerRowsForSku: any[] = [];
+      let openingBalanceQty = 0;
+      let openingBalanceValue = 0;
+      let currentRunningQty = 0;
+      let currentRunningValue = 0;
+      const partName = entries[0]?.partName || '';
+      const unit = entries[0]?.unit || '';
 
       for (const row of entries) {
         let qty = Number(row.qty || 0);
@@ -1002,6 +1017,11 @@ export class VinfastPartsService {
           row.calculatedCogs = null;
         } else {
           let cogsForThisOut = 0;
+          const batchesConsumed: {
+            qty: number;
+            unitCost: number;
+            amount: number;
+          }[] = [];
           if (qty > 0) {
             let qNeeded = qty;
             while (qNeeded > 0) {
@@ -1009,10 +1029,20 @@ export class VinfastPartsService {
               const batch = inQueue[0];
               if (batch.qty <= qNeeded) {
                 cogsForThisOut += batch.qty * batch.unitCost;
+                batchesConsumed.push({
+                  qty: batch.qty,
+                  unitCost: batch.unitCost,
+                  amount: batch.qty * batch.unitCost,
+                });
                 qNeeded -= batch.qty;
                 inQueue.shift();
               } else {
                 cogsForThisOut += qNeeded * batch.unitCost;
+                batchesConsumed.push({
+                  qty: qNeeded,
+                  unitCost: batch.unitCost,
+                  amount: qNeeded * batch.unitCost,
+                });
                 batch.qty -= qNeeded;
                 qNeeded = 0;
               }
@@ -1020,6 +1050,21 @@ export class VinfastPartsService {
           }
           row.calculatedCogs = cogsForThisOut;
           row.calculatedUnitCost = qty !== 0 ? cogsForThisOut / qty : 0;
+          row.batchesConsumed = batchesConsumed;
+        }
+
+        currentRunningQty = 0;
+        currentRunningValue = 0;
+        for (const q of inQueue) {
+          currentRunningQty += q.qty;
+          currentRunningValue += q.qty * q.unitCost;
+        }
+        row.runningBalanceQty = currentRunningQty;
+        row.runningBalanceValue = currentRunningValue;
+
+        if (dateFrom && row.transactionDate < new Date(dateFrom)) {
+          openingBalanceQty = currentRunningQty;
+          openingBalanceValue = currentRunningValue;
         }
       }
 
@@ -1031,15 +1076,27 @@ export class VinfastPartsService {
         return ok;
       };
 
+      let periodClosingBalanceQty = openingBalanceQty;
+      let periodClosingBalanceValue = openingBalanceValue;
+
       for (const row of entries) {
         if (includeInFilter(row)) {
-          if (row.direction === 'IN') {
-            detailInRows.push(row);
-          } else {
-            detailOutRows.push(row);
-          }
+          ledgerRowsForSku.push(row);
+          periodClosingBalanceQty = row.runningBalanceQty;
+          periodClosingBalanceValue = row.runningBalanceValue;
         }
       }
+
+      ledgerSections.push({
+        sku,
+        partName,
+        unit,
+        openingBalanceQty,
+        openingBalanceValue,
+        rows: ledgerRowsForSku,
+        closingBalanceQty: periodClosingBalanceQty,
+        closingBalanceValue: periodClosingBalanceValue,
+      });
 
       let totalOutCogs = 0;
       let balanceValue = 0;
@@ -1095,8 +1152,8 @@ export class VinfastPartsService {
       { header: 'ĐVT', key: 'uom', width: 12 },
       { header: 'Tổng SL nhập', key: 'qtyIn', width: 15 },
       { header: 'Tổng SL xuất', key: 'qtyOut', width: 15 },
-      { header: 'Giá vốn FIFO xuất', key: 'totalOutCogs', width: 20 },
       { header: 'Tồn cuối (SL)', key: 'qtyBalance', width: 15 },
+      { header: 'Giá vốn FIFO xuất', key: 'totalOutCogs', width: 20 },
       { header: 'Giá trị tồn cuối FIFO', key: 'balanceValue', width: 20 },
     ];
     setupSheetHeader(summarySheet, 9);
@@ -1124,107 +1181,228 @@ export class VinfastPartsService {
           'qtyBalance',
           'balanceValue',
         ].forEach((k) => {
-          row.getCell(k).numFmt = '#,##0';
+          row.getCell(k).numFmt = '#,##0.00';
         });
       }
     });
 
-    // --- SHEET 2: CHI TIẾT NHẬP ---
-    const detailInSheet = workbook.addWorksheet('Chi tiết Nhập');
-    detailInSheet.columns = [
-      { header: 'Ngày GD', key: 'transactionDate', width: 15 },
-      { header: 'Mã phụ tùng', key: 'partSku', width: 20 },
-      { header: 'Tên phụ tùng', key: 'partName', width: 40 },
-      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
-      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
-      { header: 'Nhà cung cấp', key: 'sellerName', width: 40 },
-      { header: 'Số lượng nhập', key: 'qty', width: 15 },
-      { header: 'Đơn giá nhập', key: 'unitCost', width: 20 },
-      { header: 'Thành tiền', key: 'preVatAmount', width: 20 },
-      { header: 'Điều chỉnh', key: 'isAdjustment', width: 12 },
+    // --- SHEET 2: XUẤT NHẬP TỒN (STOCK LEDGER) ---
+    const ledgerSheet = workbook.addWorksheet('Xuất Nhập Tồn');
+    ledgerSheet.columns = [
+      { key: 'transactionDate', width: 15 },
+      { key: 'invoiceNo', width: 15 },
+      { key: 'partSku', width: 20 },
+      { key: 'partName', width: 40 },
+      { key: 'unit', width: 10 },
+      { key: 'partnerName', width: 35 },
+      { key: 'qtyIn', width: 15 },
+      { key: 'unitCostIn', width: 18 },
+      { key: 'amountIn', width: 20 },
+      { key: 'qtyOut', width: 15 },
+      { key: 'unitCostOut', width: 18 },
+      { key: 'amountOut', width: 20 },
+      { key: 'runningBalanceQty', width: 15 },
+      { key: 'runningBalanceValue', width: 20 },
+      { key: 'perfQty', width: 15 },
+      { key: 'perfUnitCost', width: 18 },
+      { key: 'perfTotalCost', width: 20 },
+      { key: 'perfSellPrice', width: 18 },
+      { key: 'perfTotalRevenue', width: 20 },
+      { key: 'perfProfit', width: 20 },
+      { key: 'perfMargin', width: 15 },
     ];
-    setupSheetHeader(detailInSheet, 10);
 
-    detailInRows.forEach((row: any) => {
-      detailInSheet.addRow({
-        transactionDate: row.transactionDate,
-        partSku: row.partSku,
-        partName: row.partName,
-        invoiceNo: row.invoiceNo,
-        invoiceDate: row.invoiceDate,
-        sellerName: row.sellerName,
-        qty: parseFloat(row.qty || '0'),
-        unitCost: parseFloat(row.unitCost || '0'),
-        preVatAmount: parseFloat(row.preVatAmount || '0'),
-        isAdjustment: row.isAdjustment ? 'Có' : 'Không',
+    // Double Header
+    const row1 = ledgerSheet.addRow([
+      'Ngày',
+      'Số hóa đơn',
+      'Mã phụ tùng',
+      'Sản phẩm / Hàng hóa',
+      'ĐVT',
+      'Đối tác',
+      'Nhập kho',
+      '',
+      '',
+      'Xuất kho - FIFO',
+      '',
+      '',
+      'Tồn kho',
+      '',
+      'Hiệu quả kinh doanh',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ]);
+    const row2 = ledgerSheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'Số lượng',
+      'Đơn giá',
+      'Thành tiền',
+      'Số lượng',
+      'Đơn giá',
+      'Thành tiền',
+      'Số lượng',
+      'Thành tiền',
+      'Số lượng',
+      'Đơn giá mua',
+      'Giá mua',
+      'Đơn giá bán',
+      'Giá bán',
+      'Lợi nhuận',
+      '% Lợi nhuận',
+    ]);
+
+    // Merging for Header
+    ledgerSheet.mergeCells('A1:A2');
+    ledgerSheet.mergeCells('B1:B2');
+    ledgerSheet.mergeCells('C1:C2');
+    ledgerSheet.mergeCells('D1:D2');
+    ledgerSheet.mergeCells('E1:E2');
+    ledgerSheet.mergeCells('F1:F2');
+    ledgerSheet.mergeCells('G1:I1');
+    ledgerSheet.mergeCells('J1:L1');
+    ledgerSheet.mergeCells('M1:N1');
+    ledgerSheet.mergeCells('O1:U1');
+
+    // Header styling
+    [row1, row2].forEach((r) => {
+      r.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      r.alignment = { horizontal: 'center', vertical: 'middle' };
+      r.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF002B5E' },
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+          left: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+          bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+          right: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+        };
       });
     });
-    detailInSheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        ['qty', 'unitCost', 'preVatAmount'].forEach((k) => {
-          row.getCell(k).numFmt = '#,##0';
+
+    // Freeze pane
+    ledgerSheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 2, activeCell: 'A3' },
+    ];
+
+    for (const section of ledgerSections) {
+      if (
+        section.rows.length === 0 &&
+        section.openingBalanceQty === 0 &&
+        section.closingBalanceQty === 0
+      )
+        continue;
+
+      // Opening balance row
+      if (dateFrom) {
+        const obRow = ledgerSheet.addRow({
+          transactionDate: 'Tồn đầu kỳ',
+          partSku: section.sku,
+          partName: section.partName,
+          unit: section.unit,
+          runningBalanceQty: section.openingBalanceQty,
+          runningBalanceValue: section.openingBalanceValue,
         });
+        obRow.font = { italic: true, bold: true };
+        obRow.getCell('runningBalanceQty').numFmt = '#,##0.00';
+        obRow.getCell('runningBalanceValue').numFmt = '#,##0';
       }
-    });
 
-    // --- SHEET 3: CHI TIẾT XUẤT FIFO ---
-    const detailOutSheet = workbook.addWorksheet('Chi tiết Xuất (FIFO)');
-    detailOutSheet.columns = [
-      { header: 'Ngày GD', key: 'transactionDate', width: 15 },
-      { header: 'Mã phụ tùng', key: 'partSku', width: 20 },
-      { header: 'Tên phụ tùng', key: 'partName', width: 40 },
-      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
-      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
-      { header: 'Khách hàng', key: 'buyerName', width: 40 },
-      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-      { header: 'Số lượng xuất', key: 'qty', width: 15 },
-      { header: 'Đơn giá bán', key: 'sellPrice', width: 20 },
-      { header: 'Doanh thu', key: 'preVatAmount', width: 20 },
-      { header: 'Giá vốn FIFO (COGS)', key: 'calculatedCogs', width: 20 },
-      { header: 'Lợi nhuận gộp', key: 'profit', width: 20 },
-      { header: 'Biên LN (%)', key: 'marginPct', width: 12 },
-      { header: 'Điều chỉnh', key: 'isAdjustment', width: 12 },
-    ];
-    setupSheetHeader(detailOutSheet, 14);
+      // Ledger entries
+      for (const row of section.rows) {
+        const isOut = row.direction === 'OUT';
+        const partnerName = isOut ? row.buyerName : row.sellerName;
+        const isAdjNegative = row.isAdjustment && row.adjSign === -1;
+        const rawQty = parseFloat(row.qty || '0');
+        const displayQty = isAdjNegative ? -rawQty : rawQty;
+        const unitCost = isOut
+          ? parseFloat(row.calculatedUnitCost || '0')
+          : parseFloat(row.unitCost || '0');
+        const amount = isOut
+          ? parseFloat(row.calculatedCogs || '0')
+          : parseFloat(row.preVatAmount || '0');
 
-    detailOutRows.forEach((row: any) => {
-      const qty = parseFloat(row.qty || '0');
-      const preVatAmount = parseFloat(row.preVatAmount || '0');
-      const cogs = row.calculatedCogs || 0;
-      const profit = preVatAmount - cogs;
-      const sellPrice = qty !== 0 ? preVatAmount / qty : 0;
-      const marginPct = preVatAmount > 0 ? (profit / preVatAmount) * 100 : 0;
+        let perfQty: any = '';
+        let perfUnitCost: any = '';
+        let perfTotalCost: any = '';
+        let perfSellPrice: any = '';
+        let perfTotalRevenue: any = '';
+        let perfProfit: any = '';
+        let perfMargin: any = '';
 
-      detailOutSheet.addRow({
-        transactionDate: row.transactionDate,
-        partSku: row.partSku,
-        partName: row.partName,
-        invoiceNo: row.invoiceNo,
-        invoiceDate: row.invoiceDate,
-        buyerName: row.buyerName,
-        licensePlate: row.licensePlate,
-        qty: qty,
-        sellPrice: sellPrice,
-        preVatAmount: preVatAmount,
-        calculatedCogs: cogs,
-        profit: profit,
-        marginPct: marginPct.toFixed(1) + '%',
-        isAdjustment: row.isAdjustment ? 'Có' : 'Không',
-      });
-    });
-    detailOutSheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
+        if (isOut) {
+          const sellAmount = parseFloat(row.preVatAmount || '0');
+          const sellPrice = rawQty !== 0 ? sellAmount / rawQty : 0;
+          const profit = sellAmount - amount;
+          const marginPct = sellAmount > 0 ? profit / sellAmount : 0;
+
+          perfQty = displayQty;
+          perfUnitCost = unitCost;
+          perfTotalCost = amount;
+          perfSellPrice = sellPrice;
+          perfTotalRevenue = sellAmount;
+          perfProfit = profit;
+          perfMargin = marginPct;
+        }
+
+        const entryRow = ledgerSheet.addRow({
+          transactionDate: row.transactionDate,
+          invoiceNo: row.invoiceNo,
+          partSku: row.partSku,
+          partName: row.partName,
+          unit: row.unit,
+          partnerName,
+          qtyIn: isOut ? '' : displayQty,
+          unitCostIn: isOut ? '' : unitCost,
+          amountIn: isOut ? '' : isAdjNegative ? -amount : amount,
+          qtyOut: isOut ? displayQty : '',
+          unitCostOut: isOut ? unitCost : '',
+          amountOut: isOut ? amount : '',
+          runningBalanceQty: row.runningBalanceQty,
+          runningBalanceValue: row.runningBalanceValue,
+          perfQty,
+          perfUnitCost,
+          perfTotalCost,
+          perfSellPrice,
+          perfTotalRevenue,
+          perfProfit,
+          perfMargin,
+        });
+
+        // formatting numbers
         [
-          'qty',
-          'sellPrice',
-          'preVatAmount',
-          'calculatedCogs',
-          'profit',
+          'unitCostIn',
+          'amountIn',
+          'unitCostOut',
+          'amountOut',
+          'runningBalanceValue',
+          'perfUnitCost',
+          'perfTotalCost',
+          'perfSellPrice',
+          'perfTotalRevenue',
+          'perfProfit',
         ].forEach((k) => {
-          row.getCell(k).numFmt = '#,##0';
+          entryRow.getCell(k).numFmt = '#,##0.00';
         });
+        ['qtyIn', 'qtyOut', 'runningBalanceQty', 'perfQty'].forEach((k) => {
+          entryRow.getCell(k).numFmt = '#,##0.00';
+        });
+        if (isOut) {
+          entryRow.getCell('perfMargin').numFmt = '0.0%';
+        }
       }
-    });
+    }
 
     onProgress?.(95, totalProgress, 'Đang lưu file...');
 
