@@ -132,8 +132,22 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
       };
     }
 
+    let skuSuffix = '';
+    if (query.columnFilters) {
+      try {
+        const parsed = JSON.parse(query.columnFilters);
+        if (
+          parsed.sku &&
+          Array.isArray(parsed.sku) &&
+          parsed.sku.length === 1
+        ) {
+          skuSuffix = `_${parsed.sku[0]}`;
+        }
+      } catch (e) {}
+    }
+
     const now = new Date();
-    const fileName = `Bao_cao_phu_tung_VINFAST_${this.formatDateForFileName(now)}.xlsx`;
+    const fileName = `Bao_cao_phu_tung_VINFAST${skuSuffix}_${this.formatDateForFileName(now)}.xlsx`;
 
     const job: VinfastPartsStockExportJob = {
       id: randomUUID(),
