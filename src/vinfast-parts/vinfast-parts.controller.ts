@@ -204,6 +204,7 @@ export class VinfastPartsController {
           vehicleType: query.vehicleType,
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,
+          columnFilters: query.columnFilters,
           onProgress,
         });
       },
