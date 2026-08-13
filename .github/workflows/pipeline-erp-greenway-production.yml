@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-greenway-production
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   ci:
@@ -176,4 +176,3 @@ jobs:
               docker logs --tail 50 erp-api-greenway-production || true
               exit 1
             '
-

@@ -47,6 +47,7 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
 import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { EmailIngestModule } from './email-ingest/email-ingest.module';
 import { OperatingExpensesCoreModule } from './operating-expenses-core/operating-expenses-core.module';
+import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 
 @Module({
   imports: [
@@ -131,6 +132,7 @@ import { OperatingExpensesCoreModule } from './operating-expenses-core/operating
     SinvoiceModule,
     EmailIngestModule,
     OperatingExpensesCoreModule,
+    VinfastPartsModule,
   ],
   controllers: [AppController],
   providers: [

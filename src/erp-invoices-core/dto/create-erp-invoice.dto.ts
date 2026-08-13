@@ -123,6 +123,16 @@ export class CreateErpInvoiceDto {
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  taxInvoiceStatus?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  taxProcessStatus?: number;
+
   // Bên bán
   @ApiPropertyOptional()
   @IsOptional()

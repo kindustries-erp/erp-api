@@ -107,6 +107,7 @@ Facade InventoryItemsService se giu day du method public hien co va delegate 1:1
   - co item, uom, item type, serial, sales order lien quan, goods receipt, goods issue, BOM, production order.
 
 Exit criteria:
+
 - Baseline tests pass tren code cu.
 - Co danh sach contract can giu nguyen.
 
@@ -119,12 +120,14 @@ Exit criteria:
 - Tam thoi giu logic cu trong facade de dam bao build xanh.
 
 Exit criteria:
+
 - Build pass.
 - Khong endpoint nao doi hanh vi.
 
 ### Pha C: Di chuyen logic theo tung khoi chuc nang
 
 Thu tu uu tien de giam rui ro:
+
 1. Masters
 2. Query + Balances
 3. Items lifecycle
@@ -133,11 +136,13 @@ Thu tu uu tien de giam rui ro:
 6. Dashboard
 
 Cho moi khoi:
+
 - Move code nguyen khoi sang subservice, tranh "clean up" cung luc.
 - Facade doi sang delegate method.
 - Chay test baseline ngay sau moi khoi.
 
 Exit criteria:
+
 - Moi khoi xong deu pass test + lint + typecheck.
 
 ### Pha D: Don dep an toan (khong doi hanh vi)
@@ -147,6 +152,7 @@ Exit criteria:
 - Khong doi cau SQL, ten cot alias, ten truong JSON tra ve.
 
 Exit criteria:
+
 - Diff chu yeu la di chuyen code va wiring.
 
 ### Pha E: Kiem thu hoi quy va rollout
@@ -157,6 +163,7 @@ Exit criteria:
   - So sanh response truoc/sau voi cung bo query cho nhom endpoint critical.
 
 Exit criteria:
+
 - Tat ca test pass.
 - Khong co sai lech contract.
 
@@ -208,6 +215,7 @@ Exit criteria:
 ## 10) Work Breakdown chi tiet (bat buoc lam theo task nho)
 
 Nguyen tac:
+
 - Khong move logic khi chua co baseline test cho khoi do.
 - Moi task nho phai co output ro rang va pass check ngay tai cho.
 - Neu task nao fail regression thi rollback task do (khong merge task tiep theo).
@@ -270,10 +278,12 @@ Nguyen tac:
 ## 11) Test strategy dac biet cho logic nhap/xuat va reserve kho
 
 Muc tieu:
+
 - Dam bao refactor inventory-core khong gay regression cho luong nhap/xuat va reserve du logic nam o module lien quan.
 - Xac minh tinh nhat quan giua qtyOnHand, qtyReserved, availableQty va inventory transactions.
 
 Pham vi lien thong bat buoc cover:
+
 - inventory-core (doc/aggregate/display): getBalances, getMovements, warehouse vouchers, dashboard.
 - goods-receipts-core (nhap kho): tang qtyOnHand, tao transaction RECEIPT.
 - goods-issues-core (xuat kho): giam qtyOnHand, consume/reverse reserved, tao transaction ISSUE.
@@ -333,6 +343,7 @@ Pham vi lien thong bat buoc cover:
   - Tao SO -> reserve -> tao GI -> post GI -> kiem tra balances/movements/dashboard -> cancel GI -> unreserve.
 
 Thu tu chay moi dot move logic:
+
 1. Chay tests khoi vua move.
 2. Chay bo cross-module stock-reserve tests.
 3. Chay full suite inventory + goods-issues + goods-receipts + sales-orders.

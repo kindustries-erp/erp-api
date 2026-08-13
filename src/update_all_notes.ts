@@ -24,7 +24,7 @@ async function bootstrap() {
     if (inv.xmlFileKey) {
       try {
         console.log(`Reparsing invoice ${inv.invoiceNo}...`);
-        await invoiceService.reparseXml(inv.id);
+        await invoiceService.syncDetailFromPortal(inv.id);
         successCount++;
       } catch (err) {
         console.error(`Failed for invoice ${inv.invoiceNo}:`, err.message);

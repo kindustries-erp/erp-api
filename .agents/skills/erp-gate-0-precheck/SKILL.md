@@ -6,9 +6,11 @@ description: Gate 0 DB precheck cho ERP: xác minh schema, field, constraint và
 # Kỹ năng Gate 0 DB Precheck (ERP)
 
 ## Mục đích
+
 Ngăn chặn việc đoán mò cấu trúc database. Mọi thay đổi liên quan DTO, service, controller, query, form, filter, hoặc business flow đều phải kiểm tra DB thật trước.
 
 ## Cách thực hiện
+
 Khi bắt đầu task liên quan đến API hoặc UI có đọc/ghi dữ liệu, bạn BẮT BUỘC phải thực hiện Gate 0 theo thứ tự sau:
 
 1. Xác định `DATABASE_URL` đang dùng cho lane hiện tại từ `.env`, stack env, hoặc runtime config phù hợp.
@@ -24,11 +26,13 @@ Khi bắt đầu task liên quan đến API hoặc UI có đọc/ghi dữ liệu
 ## Ví dụ lệnh
 
 Kiểm tra cấu trúc bảng:
+
 ```bash
 psql "$DATABASE_URL" -c "\d users"
 ```
 
 Kiểm tra cột của một bảng:
+
 ```bash
 psql "$DATABASE_URL" -c "
 SELECT column_name, data_type, is_nullable, column_default
@@ -39,6 +43,7 @@ ORDER BY ordinal_position;
 ```
 
 Kiểm tra ràng buộc:
+
 ```bash
 psql "$DATABASE_URL" -c "
 SELECT conname, contype, pg_get_constraintdef(c.oid)
@@ -51,6 +56,7 @@ ORDER BY conname;
 ```
 
 ## Bắt buộc ghi nhận
+
 - bảng nào được đọc/ghi
 - field nào required / optional / computed
 - relation nào ảnh hưởng business flow
@@ -58,6 +64,7 @@ ORDER BY conname;
 - kết luận Gate 0: `DB_READY` hoặc `DB_GAP_FOUND`
 
 ## Cấm
+
 - Cấm viết code API/UI trước khi query DB thật.
 - Cấm suy ra field hoặc enum chỉ từ memory, code cũ, type cũ, hoặc mock data.
 - Cấm kết luận contract dữ liệu khi chưa có evidence từ Postgres runtime.
