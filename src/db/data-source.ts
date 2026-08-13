@@ -52,7 +52,9 @@ import { KgaraCase } from '../kgara-api-core/entities/kgara_case.entity';
 import { KgaraReceivable } from '../kgara-api-core/entities/kgara_receivable.entity';
 import { KgaraPayable } from '../kgara-api-core/entities/kgara_payable.entity';
 import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.entity';
+import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
+import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -60,7 +62,14 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import { CoreNotification } from '../notifications/entities/core-notification.entity';
 import { ErpInventoryAdjustment } from '../inventory-adjustments-core/entities/erp_inventory_adjustment.entity';
 import { ErpInventoryAdjustmentLine } from '../inventory-adjustments-core/entities/erp_inventory_adjustment_line.entity';
-
+import { SinvoiceDraft } from '../sinvoice/entities/sinvoice-draft.entity';
+import { SinvoiceConfig } from '../sinvoice/entities/sinvoice-config.entity';
+import { ErpAttachment } from '../erp-attachments-core/entities/erp_attachment.entity';
+import { ErpInvoiceAttachment } from '../erp-invoices-core/entities/erp_invoice_attachment.entity';
+import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.entity';
+import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
+import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-catalog.entity';
+import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 const entities = [
   CoreUser,
   CoreRefreshToken,
@@ -114,6 +123,8 @@ const entities = [
   KgaraReceivable,
   KgaraPayable,
   KgaraCaseService,
+  KgaraCaseLinkedInvoice,
+  KgaraGrossProfit,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,
@@ -122,6 +133,14 @@ const entities = [
   CoreNotification,
   ErpInventoryAdjustment,
   ErpInventoryAdjustmentLine,
+  SinvoiceDraft,
+  SinvoiceConfig,
+  ErpAttachment,
+  ErpInvoiceAttachment,
+  ErpEmailMessage,
+  ErpEmailAttachment,
+  VinfastPartsCatalog,
+  VinfastPartsLedger,
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -133,7 +152,10 @@ export default new DataSource(
         url: databaseUrl,
         schema: 'public',
         entities,
-        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
         synchronize: false,
         ssl: { rejectUnauthorized: false },
       }
@@ -146,7 +168,10 @@ export default new DataSource(
         database: process.env.DB_DATABASE || 'erp_core',
         schema: 'public',
         entities,
-        migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
+        migrations: [
+          __dirname + '/migrations/**/*{.ts,.js}',
+          __dirname + '/../migrations/**/*{.ts,.js}',
+        ],
         synchronize: false,
         ssl:
           process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,

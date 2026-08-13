@@ -23,6 +23,14 @@ export class ErpInvoiceItem {
   @JoinColumn({ name: 'invoice_id' })
   invoice: import('typeorm').Relation<ErpInvoice>;
 
+  @Column({
+    type: 'varchar',
+    length: 32,
+    name: 'invoice_subcategory',
+    default: 'NORMAL',
+  })
+  invoiceSubcategory: string;
+
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
@@ -91,6 +99,9 @@ export class ErpInvoiceItem {
     default: 0,
   })
   totalAmount: string;
+
+  @Column({ type: 'varchar', length: 32, name: 'item_code', nullable: true })
+  itemCode: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

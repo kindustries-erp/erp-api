@@ -39,6 +39,7 @@ import {
   CreateCashBookBalanceDto,
   UpdateCashBookBalanceDto,
 } from './dto/create-cash-book-balance.dto';
+import { PostBankTransactionDto } from './dto/post-bank-transaction.dto';
 
 @ApiTags('bank-transactions-core')
 @ApiBearerAuth()
@@ -136,6 +137,12 @@ export class BankTransactionsCoreController {
   }
 
   @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('transactions/:id/posting')
+  getTransactionPosting(@Param('id') id: string) {
+    return this.service.getTransactionPosting(id);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
   @Get('transactions')
   getTransactions(@Query() filter: BankTransactionFilterDto) {
     return this.service.getTransactions(filter);
@@ -166,6 +173,21 @@ export class BankTransactionsCoreController {
     @Body() dto: UpdateBankTransactionDto,
   ) {
     return this.service.updateTransaction(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @Post('transactions/:id/post')
+  postTransaction(
+    @Param('id') id: string,
+    @Body() dto: PostBankTransactionDto,
+  ) {
+    return this.service.postTransaction(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @Post('transactions/:id/unpost')
+  unpostTransaction(@Param('id') id: string) {
+    return this.service.unpostTransaction(id);
   }
 
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })

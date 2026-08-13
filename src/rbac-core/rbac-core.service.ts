@@ -191,7 +191,9 @@ export class RbacCoreService {
       { resource: 'bom', label: 'BOM' },
       { resource: 'production', label: 'Production' },
       { resource: 'activity_logs', label: 'Activity Logs' },
+      { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
+      { resource: 'greenway_integration', label: 'Garage / Kgara' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
@@ -210,6 +212,10 @@ export class RbacCoreService {
       {
         resource: 'kgara_integration',
         label: 'Kgara Integration (Garage)',
+      },
+      {
+        resource: 'vinfast_parts_reports',
+        label: 'Vinfast Parts Reports (Báo cáo phụ tùng)',
       },
     ];
   }

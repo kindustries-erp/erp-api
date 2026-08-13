@@ -8,6 +8,7 @@ description: API-specific local-only skill for Liouni ERP. Use when working in t
 Use this skill only inside this repository.
 
 ## Local read order
+
 1. `@.agents/context/current-truth.md`
 2. `@AGENTS.md`
 3. `@docs/api-current-truth-index.md`
@@ -16,6 +17,7 @@ Use this skill only inside this repository.
 6. Relevant file in `@docs/tasks/`
 
 ## Current truth
+
 - Main ERP API lane = branch `erp-master`
 - Database contract = Postgres runtime thật, xác minh qua `DATABASE_URL`
 - API contract phải bám schema, constraint, relation, và runtime config đang dùng thật
@@ -23,6 +25,7 @@ Use this skill only inside this repository.
 - Không suy đoán từ note cũ, mock data, hoặc status task chưa verify lại
 
 ## API responsibilities
+
 - backend contract
 - auth
 - DTOs
@@ -31,13 +34,14 @@ Use this skill only inside this repository.
 - build / test / smoke evidence
 
 ## Working rules
+
 - Follow DB -> API -> UI -> QC
 - Inspect current state before edits
 - Use Bun/Bunx first
 - Be evidence-first
 - No code without a task file under `docs/tasks/`
 - Keep task checklist updated in realtime
-- Before commit/push, run `bun run check:ci` and `bun run build`
+- **Strict Git Workflow**: Follow the exact sequence: pull -> build -> check:ci -> test -> commit -> push (see rules for exact trigger definitions).
 - If backend source changed, run `bunx jest --forceExit` or a narrower affected test scope and report the scope used
 - When task docs are stale, verify with code + build/test + git state before correcting status/checklist
 - Query Postgres directly through the active `DATABASE_URL` before changing DTOs, filters, persistence, or business rules
@@ -46,6 +50,7 @@ Use this skill only inside this repository.
 - **Git Commit & Push Process**: When the user requests to "commit and push", determine whether the changes belong to `liouni-erp-web` or `liouni-erp-api` (or both) and execute Git commands inside the respective repository directory. Do not commit/push from the workspace parent.
 
 ## Team-scale reminders
+
 - Use `must` only for standards already enforced in this repo; use `prefer` for target-direction conventions.
 - Keep domain boundaries clear: controller -> DTO/validation -> service/use-case -> persistence/helper.
 - If a new helper/service is created instead of reusing one, note the reason in the task artifact.

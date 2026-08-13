@@ -108,6 +108,7 @@ export class PurchaseOrdersCoreService {
     filtersStr?: string,
   ) {
     const qb = this.repository.createQueryBuilder('po');
+    qb.leftJoin('po.supplier', 'supplier');
     qb.where('po.isDeleted = false');
 
     if (filtersStr) {
@@ -129,7 +130,7 @@ export class PurchaseOrdersCoreService {
                 [paramName]: values,
               });
             else if (key === 'supplierNameSnapshot')
-              qb.andWhere(`po.supplierNameSnapshot IN (:${paramName})`, {
+              qb.andWhere(`supplier.name IN (:${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'orderDate')
@@ -170,7 +171,7 @@ export class PurchaseOrdersCoreService {
         field = 'po.paymentStatus';
         break;
       case 'supplierNameSnapshot':
-        field = 'po.supplierNameSnapshot';
+        field = 'supplier.name';
         break;
       case 'orderDate':
         field = 'po.orderDate';
@@ -182,6 +183,9 @@ export class PurchaseOrdersCoreService {
         break;
       case 'title':
         field = 'po.title';
+        break;
+      case 'remarks':
+        field = 'po.remarks';
         break;
       case 'totalAmount':
         field = 'po.totalAmount';
@@ -251,11 +255,34 @@ export class PurchaseOrdersCoreService {
             const strVal = val as string;
             if (key === 'poNo') where.poNo = ILike(`%${strVal}%`);
             else if (key === 'supplierNameSnapshot')
-              where.supplierNameSnapshot = ILike(`%${strVal}%`);
+              where.supplier = {
+                ...where.supplier,
+                name: ILike(`%${strVal}%`),
+              };
             else if (key === 'status') where.status = ILike(`%${strVal}%`);
             else if (key === 'paymentStatus')
               where.paymentStatus = ILike(`%${strVal}%`);
             else if (key === 'title') where.title = ILike(`%${strVal}%`);
+            else if (key === 'remarks') where.remarks = ILike(`%${strVal}%`);
+            else if (key === 'orderDate' || key === 'expectedDate') {
+              if (strVal.includes('|')) {
+                const [from, to] = strVal.split('|');
+                if (from && to) {
+                  where[key] = Between(
+                    new Date(`${from}T00:00:00.000+07:00`),
+                    new Date(`${to}T23:59:59.999+07:00`),
+                  );
+                } else if (from) {
+                  where[key] = MoreThanOrEqual(
+                    new Date(`${from}T00:00:00.000+07:00`),
+                  );
+                } else if (to) {
+                  where[key] = LessThanOrEqual(
+                    new Date(`${to}T23:59:59.999+07:00`),
+                  );
+                }
+              }
+            }
           }
         });
       } catch (e) {}
@@ -270,8 +297,9 @@ export class PurchaseOrdersCoreService {
             else if (key === 'status') where.status = In(values);
             else if (key === 'paymentStatus') where.paymentStatus = In(values);
             else if (key === 'supplierNameSnapshot')
-              where.supplierNameSnapshot = In(values);
+              where.supplier = { ...where.supplier, name: In(values) };
             else if (key === 'title') where.title = In(values);
+            else if (key === 'remarks') where.remarks = In(values);
             // orderDate, expectedDate, totalAmount can be handled dynamically using query builder,
             // but for simplicity with findAndCount we map exact values.
             // Note: date fields require special handling if they have time.
@@ -488,34 +516,6 @@ export class PurchaseOrdersCoreService {
       select: ['id', 'receiptNo', 'receiptDate', 'status'],
     });
 
-    // ─ Payment links ───────────────────────────────────────
-    // TODO: Restore when document_payment_links table is confirmed to exist in
-    //       all environments. The query below joins document_payment_links with
-    //       payment_vouchers to get settled vouchers linked to this PO.
-    //
-    // const paymentLinks = await this.dataSource.query(
-    //   `SELECT
-    //      dpl.id               AS "linkId",
-    //      pv.id                AS "voucherId",
-    //      pv.voucher_no        AS "voucherNo",
-    //      dpl.applied_amount   AS "appliedAmount",
-    //      dpl.applied_date     AS "appliedDate",
-    //      pv.status            AS "voucherStatus"
-    //    FROM public.document_payment_links dpl
-    //    JOIN public.payment_vouchers pv ON pv.id = dpl.payment_voucher_id
-    //    WHERE dpl.document_type = 'purchase_orders'
-    //      AND dpl.document_id  = $1`,
-    //   [id],
-    // );
-    const paymentLinks: {
-      linkId: string;
-      voucherId: string;
-      voucherNo: string;
-      appliedAmount: number;
-      appliedDate: string | null;
-      voucherStatus: string;
-    }[] = [];
-
     // ─ Invoices ───────────────────────────────────────────
     const invoiceRepo = this.dataSource.getRepository(ErpInvoice);
     const invoices = await invoiceRepo.find({
@@ -544,7 +544,7 @@ export class PurchaseOrdersCoreService {
           supplierCode: supplierCode,
         },
         goodsReceipts,
-        paymentLinks,
+
         invoices,
       },
     };
@@ -596,23 +596,47 @@ export class PurchaseOrdersCoreService {
     if (Array.isArray(lines)) {
       await this.dataSource.transaction(async (manager) => {
         const lineRepo = manager.getRepository(ErpPurchaseOrderLine);
-        await lineRepo.delete({ purchaseOrderId: id });
+        const existingLines = await lineRepo.find({
+          where: { purchaseOrderId: id },
+          order: { lineNo: 'ASC' },
+        });
+
         let lineNo = 1;
-        for (const line of lines as any[]) {
-          await lineRepo.save(
-            lineRepo.create({
-              purchaseOrderId: id,
-              lineNo: lineNo++,
-              itemId: line.itemId ?? null,
-              itemCode: line.itemCode ?? null,
-              itemName: line.itemName ?? null,
-              description: line.description ?? null,
-              qtyOrdered: line.qtyOrdered,
-              qtyReceived: line.qtyReceived ?? '0',
-              unitPrice: line.unitPrice ?? null,
-              amount: line.amount ?? null,
-            } as any),
-          );
+        for (const [index, line] of (lines as any[]).entries()) {
+          const existing = existingLines[index];
+          if (existing) {
+            existing.lineNo = lineNo++;
+            existing.itemId = line.itemId ?? null;
+            existing.itemCode = line.itemCode ?? null;
+            existing.itemName = line.itemName ?? null;
+            existing.description = line.description ?? null;
+            existing.qtyOrdered = line.qtyOrdered;
+            existing.unitPrice = line.unitPrice ?? null;
+            existing.amount = line.amount ?? null;
+            await lineRepo.save(existing);
+          } else {
+            await lineRepo.save(
+              lineRepo.create({
+                purchaseOrderId: id,
+                lineNo: lineNo++,
+                itemId: line.itemId ?? null,
+                itemCode: line.itemCode ?? null,
+                itemName: line.itemName ?? null,
+                description: line.description ?? null,
+                qtyOrdered: line.qtyOrdered,
+                qtyReceived: '0',
+                unitPrice: line.unitPrice ?? null,
+                amount: line.amount ?? null,
+              } as any),
+            );
+          }
+        }
+
+        // Remove any leftover lines that were deleted
+        if (lines.length < existingLines.length) {
+          for (let i = lines.length; i < existingLines.length; i++) {
+            await lineRepo.remove(existingLines[i]);
+          }
         }
       });
     }
@@ -667,6 +691,34 @@ export class PurchaseOrdersCoreService {
     };
   }
 
+  async delete(id: string) {
+    const record = await this.repository.findOne({ where: { id } });
+    if (!record) throw new BadRequestException('Không tìm thấy đơn mua hàng');
+
+    // Không cho phép xóa nếu đã có GR hoặc Hóa đơn
+    await this.dependencyService.checkDependencies('purchase_orders', id);
+
+    record.isDeleted = true;
+    await this.repository.save(record);
+    return { message: 'Xóa đơn mua hàng thành công' };
+  }
+
+  async findUnpaid() {
+    return this.repository.find({
+      where: {
+        isDeleted: false,
+        paymentStatus: Not('PAID'),
+        status: Not('CANCELLED'),
+      },
+    });
+  }
+
+  async findRecurring(): Promise<any[]> {
+    // Note: The new ErpPurchaseOrder entity does not have 'autoGenerateNext'
+    // For now we return an empty array. PO recurrence should be handled in future sprints.
+    return [];
+  }
+
   private toCoreDocument(data: any) {
     const lines = Array.isArray(data?.lines)
       ? data.lines.map((line: any) => ({
@@ -707,5 +759,41 @@ export class PurchaseOrdersCoreService {
             : 'NOT_RECEIVED',
       lines,
     };
+  }
+
+  async getLinkedInvoices(id: string) {
+    const invoiceRepo = this.dataSource.getRepository(ErpInvoice);
+    return invoiceRepo.find({
+      where: { purchaseOrderId: id },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async linkInvoices(id: string, invoiceIds: string[]) {
+    if (!invoiceIds || invoiceIds.length === 0)
+      return { message: 'Thành công' };
+
+    // Ensure PO exists
+    const po = await this.repository.findOneBy({ id });
+    if (!po) throw new BadRequestException('Không tìm thấy PO');
+
+    await this.dataSource.transaction(async (manager) => {
+      const invoiceRepo = manager.getRepository(ErpInvoice);
+      await invoiceRepo.update({ id: In(invoiceIds) }, { purchaseOrderId: id });
+    });
+
+    return { message: 'Liên kết thành công' };
+  }
+
+  async unlinkInvoice(id: string, invoiceId: string) {
+    await this.dataSource.transaction(async (manager) => {
+      const invoiceRepo = manager.getRepository(ErpInvoice);
+      await invoiceRepo.update(
+        { id: invoiceId, purchaseOrderId: id },
+        { purchaseOrderId: null },
+      );
+    });
+
+    return { message: 'Hủy liên kết thành công' };
   }
 }

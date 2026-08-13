@@ -487,35 +487,118 @@ export class InvoiceImportService {
     filename: string,
     direction: 'IN' | 'OUT',
   ) {
-    const digitsMatch = filename.match(/(\d{2,})/g);
-    const serialMatch = filename.match(/[a-zA-Z0-9]{5,8}/g);
+    const baseName =
+      filename
+        .split('/')
+        .pop()
+        ?.replace(/\.[^.]+$/, '') ?? filename;
 
-    if (digitsMatch) {
-      for (const strNum of digitsMatch) {
-        const normNo = normalizeInvoiceNo(strNum);
-        if (!normNo) continue;
-        const candidates = await this.repository.find({
-          where: { invoiceNoNormalized: normNo, direction } as any,
-          order: { createdAt: 'DESC' },
-        });
+    const digitsMatch = baseName.match(/(\d{1,})/g);
+    const serialTokens = this.extractSerialTokens(baseName);
 
-        if (candidates.length > 0) {
-          if (candidates.length === 1) {
-            return candidates[0];
-          } else {
-            if (serialMatch) {
-              const matchedBySerial = candidates.find((c) => {
-                if (!c.serialNo) return false;
-                const cSerial = c.serialNo.toLowerCase();
-                return serialMatch.some((sm) => sm.toLowerCase() === cSerial);
-              });
-              if (matchedBySerial) return matchedBySerial;
-            }
-            return candidates[0];
-          }
-        }
+    if (!digitsMatch || digitsMatch.length === 0) return null;
+
+    // Do not assume invoice number position in filename.
+    const candidateNumbers = Array.from(
+      new Set(digitsMatch.map((n) => n.trim())),
+    );
+
+    // Pass 1: exact normalized invoice number match.
+    for (const rawNumber of candidateNumbers) {
+      const normNo = normalizeInvoiceNo(rawNumber);
+      if (!normNo) continue;
+
+      const exactCandidates = await this.repository.find({
+        where: { invoiceNoNormalized: normNo, direction } as any,
+        order: { createdAt: 'DESC' },
+      });
+      const exactPicked = this.pickBestCandidate(
+        exactCandidates,
+        serialTokens,
+        candidateNumbers,
+      );
+      if (exactPicked) return exactPicked;
+    }
+
+    // Pass 2: suffix fallback for prefixed invoice numbers (e.g. AB/1781).
+    for (const rawNumber of candidateNumbers) {
+      const normNo = normalizeInvoiceNo(rawNumber);
+      if (!normNo) continue;
+
+      // Fallback only for length >= 2 to avoid noisy matches like "%1".
+      if (normNo.length >= 2) {
+        const suffixCandidates = await this.repository
+          .createQueryBuilder('inv')
+          .where('inv.direction = :direction', { direction })
+          .andWhere('inv.invoiceNoNormalized LIKE :suffix', {
+            suffix: `%${this.escapeLikeValue(normNo)}`,
+          })
+          .orderBy('inv.createdAt', 'DESC')
+          .limit(20)
+          .getMany();
+
+        const suffixPicked = this.pickBestCandidate(
+          suffixCandidates,
+          serialTokens,
+          candidateNumbers,
+        );
+        if (suffixPicked) return suffixPicked;
       }
     }
+
     return null;
+  }
+
+  private pickBestCandidate(
+    candidates: ErpInvoice[],
+    serialTokens: string[],
+    candidateNumbers: string[],
+  ): ErpInvoice | null {
+    if (!candidates || candidates.length === 0) return null;
+
+    let bestCandidate = candidates[0];
+    let maxScore = -1;
+
+    for (const candidate of candidates) {
+      let score = 0;
+
+      // 1. Match serial (+5 points)
+      if (candidate.serialNo) {
+        const cSerial = candidate.serialNo.toLowerCase();
+        if (serialTokens.includes(cSerial)) {
+          score += 5;
+        }
+      }
+
+      // 2. Match tax code (+10 points)
+      const taxCode =
+        candidate.direction === 'IN'
+          ? candidate.sellerTaxCode
+          : candidate.buyerTaxCode;
+      if (taxCode && candidateNumbers.includes(taxCode)) {
+        score += 10;
+      }
+
+      if (score > maxScore) {
+        maxScore = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    return bestCandidate;
+  }
+
+  private extractSerialTokens(baseName: string): string[] {
+    return baseName
+      .split(/[^a-zA-Z0-9]+/)
+      .map((token) => token.trim().toLowerCase())
+      .filter(
+        (token) =>
+          token.length >= 5 && token.length <= 8 && /[a-z]/.test(token),
+      );
+  }
+
+  private escapeLikeValue(value: string): string {
+    return value.replace(/[\\%_]/g, '\\$&');
   }
 }

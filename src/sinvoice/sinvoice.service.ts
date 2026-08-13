@@ -4,459 +4,754 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { throwDirectusResponseError } from '../common/utils/directus-error.util';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ILike, Repository } from 'typeorm';
 import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
+import {
+  CreateSinvoiceDraftDto,
+  ListSinvoiceDraftQueryDto,
+  SaveSinvoiceConfigDto,
+} from './dto/sinvoice-draft.dto';
+import { SinvoiceConfig } from './entities/sinvoice-config.entity';
+import { SinvoiceDraft } from './entities/sinvoice-draft.entity';
+import { sleep } from '../common/utils/delay.util';
+import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
 
 type FileType = 'PDF' | 'XML' | 'ZIP';
-type InvoiceSource = 'SINVOICE' | 'TAX_PORTAL';
 type InvoiceDirection = 'IN' | 'OUT';
 
-type DraftInvoiceLineInput = {
-  description?: string;
-  itemName?: string;
-  quantity?: number;
-  unitPrice?: number;
-  unit_price?: number;
-  taxRate?: number;
-  tax_rate?: number;
-};
-
-type DraftInvoiceInput = {
-  documentNo?: string;
-  document_no?: string;
-  buyerName?: string;
-  buyer_name?: string;
-  buyerTaxCode?: string;
-  buyer_tax_code?: string;
-  buyerAddress?: string;
-  buyer_address?: string;
-  buyerEmail?: string;
-  buyer_email?: string;
-  description?: string;
-  currencyCode?: string;
-  currency_code?: string;
-  lines?: DraftInvoiceLineInput[];
-};
-
-// Legacy v1 service is intentionally preserved as comment/reference surface only.
-// Active outbound create/sync runtime now proxies `/api/v1/sinvoice/*` to Viettel v2.49 in controller.
-// Keep v1-style helpers/endpoints here only for backward reference, download/cancel support, or explicit rollback analysis.
-// Do not re-activate or extend v1 business flow unless the user explicitly asks for it.
 @Injectable()
 export class SinvoiceService {
   private readonly logger = new Logger(SinvoiceService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    @InjectRepository(SinvoiceConfig)
+    private readonly configRepo: Repository<SinvoiceConfig>,
+    @InjectRepository(SinvoiceDraft)
+    private readonly draftRepo: Repository<SinvoiceDraft>,
+  ) {}
 
-  private get adminToken() {
-    return this.configService.getOrThrow<string>('DIRECTUS_ADMIN_TOKEN');
-  }
+  // ─────────────────────────── SINVOICE CONFIG ────────────────────────────
 
-  private get directusUrl() {
-    return this.configService.getOrThrow<string>('DIRECTUS_URL');
-  }
-
-  private normalizeConfig(raw: any) {
+  private normalizeConfig(row: SinvoiceConfig) {
     return {
-      ...raw,
-      supplierTaxCode: raw.supplierTaxCode ?? raw.supplier_tax_code,
-      apiUrl: raw.apiUrl ?? raw.api_url,
-      appKey: raw.appKey ?? raw.app_key,
+      id: row.id,
+      supplierTaxCode: row.supplierTaxCode,
+      username: row.username,
+      password: row.password,
+      appKey: row.appKey,
+      apiUrl:
+        row.apiUrl ??
+        'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/',
+      environment: row.environment ?? 'production',
+      isActive: row.isActive,
     };
-  }
-
-  private normalizeTaxPortalConfig(raw: any) {
-    return {
-      ...raw,
-      taxCode: raw.taxCode ?? raw.tax_code,
-      providerName: raw.providerName ?? raw.provider_name,
-      apiUrl: raw.apiUrl ?? raw.api_url,
-      gdtJwt: raw.gdtJwt ?? raw.gdt_jwt,
-      gdtCookie: raw.gdtCookie ?? raw.gdt_cookie,
-    };
-  }
-
-  private authHeader(config: any) {
-    return `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`;
-  }
-
-  private async directusRequest<T>(
-    path: string,
-    init?: RequestInit,
-  ): Promise<T> {
-    const requestUrl = `${this.directusUrl}${path}`;
-    const res = await fetch(requestUrl, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${this.adminToken}`,
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-    });
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => '');
-      this.logger.error(
-        `Directus request failed ${res.status}: ${requestUrl} :: ${errorText}`,
-      );
-      throw new BadRequestException(
-        errorText || `Directus request failed: ${path}`,
-      );
-    }
-    if (res.status === 204) return undefined as T;
-    const text = await res.text();
-    if (!text) return undefined as T;
-    return JSON.parse(text) as T;
   }
 
   async getConfig() {
-    const row = await this.getRawConfig();
+    const row = await this.configRepo.findOne({
+      where: { isActive: true },
+      order: { updatedAt: 'DESC' },
+    });
     if (!row)
       throw new BadRequestException('Chưa cấu hình SInvoice trong hệ thống');
     return this.normalizeConfig(row);
   }
 
-  async getRawConfig() {
-    const result = await this.directusRequest<{ data: any }>(
-      '/items/sinvoice_configs',
-    );
-    return result?.data;
-  }
-
   async getConfigEndpoint() {
-    const row = await this.getRawConfig();
-    if (!row || !row.supplier_tax_code) return null;
+    const row = await this.configRepo.findOne({
+      where: { isActive: true },
+      order: { updatedAt: 'DESC' },
+    });
+    if (!row || !row.supplierTaxCode) return null;
     return {
-      supplierTaxCode: row.supplier_tax_code,
+      supplierTaxCode: row.supplierTaxCode,
       username: row.username,
       password: row.password,
-      apiUrl: row.api_url,
+      apiUrl: row.apiUrl,
       environment: row.environment,
     };
   }
 
-  private buildConnectionResult(params: {
-    provider: 'SINVOICE' | 'TAX_PORTAL';
-    ok: boolean;
-    message: string;
-    checkedAt?: string;
-    detail?: any;
-  }) {
-    return {
-      provider: params.provider,
-      ok: params.ok,
-      message: params.message,
-      checkedAt: params.checkedAt ?? new Date().toISOString(),
-      detail: params.detail ?? null,
-    };
-  }
+  async saveConfig(dto: SaveSinvoiceConfigDto) {
+    // Upsert: deactivate all, then upsert the new config
+    await this.configRepo.update({}, { isActive: false });
 
-  private async testSinvoiceConnectionWithConfig(config: any) {
-    if (!config?.apiUrl || !config?.username || !config?.password) {
-      return this.buildConnectionResult({
-        provider: 'SINVOICE',
-        ok: false,
-        message: 'Thiếu thông tin cấu hình Viettel v2.49 để kiểm tra kết nối',
-      });
-    }
-
-    try {
-      const baseUrl = String(config.apiUrl).replace(/\/$/, '');
-      const res = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          username: config.username,
-          password: config.password,
-        }),
-      });
-      const text = await res.text();
-      let detail: any = text;
-      try {
-        detail = text ? JSON.parse(text) : null;
-      } catch {}
-      if (!res.ok) {
-        return this.buildConnectionResult({
-          provider: 'SINVOICE',
-          ok: false,
-          message: `Kết nối Viettel v2.49 thất bại (${res.status})`,
-          detail,
-        });
-      }
-      return this.buildConnectionResult({
-        provider: 'SINVOICE',
-        ok: true,
-        message: 'Đã kết nối thành công tới Viettel v2.49 API',
-        detail: {
-          status: res.status,
-          endpoint: `${baseUrl}/auth/login`,
-        },
-      });
-    } catch (error: any) {
-      return this.buildConnectionResult({
-        provider: 'SINVOICE',
-        ok: false,
-        message: `Không thể kết nối Viettel v2.49 API: ${error?.message ?? 'Unknown error'}`,
-      });
-    }
-  }
-
-  async saveConfig(dto: any) {
-    const data = {
-      supplier_tax_code: dto.supplierTaxCode ?? dto.supplier_tax_code,
-      username: dto.username,
-      password: dto.password,
-      app_key: dto.appKey ?? dto.app_key ?? null,
-      api_url:
+    let existing = await this.configRepo.findOne({ where: {} });
+    if (existing) {
+      existing.supplierTaxCode =
+        dto.supplierTaxCode ?? existing.supplierTaxCode;
+      existing.username = dto.username ?? existing.username;
+      existing.password = dto.password ?? existing.password;
+      existing.appKey = dto.appKey ?? existing.appKey;
+      existing.apiUrl =
         dto.apiUrl ??
-        dto.api_url ??
-        'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/',
-      environment: dto.environment ?? 'production',
-      is_active: true,
-    };
-    const res = await this.directusRequest('/items/sinvoice_configs', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+        existing.apiUrl ??
+        'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/';
+      existing.environment =
+        dto.environment ?? existing.environment ?? 'production';
+      existing.isActive = true;
+      await this.configRepo.save(existing);
+    } else {
+      existing = this.configRepo.create({
+        supplierTaxCode: dto.supplierTaxCode ?? null,
+        username: dto.username ?? null,
+        password: dto.password ?? null,
+        appKey: dto.appKey ?? null,
+        apiUrl:
+          dto.apiUrl ??
+          'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/',
+        environment: dto.environment ?? 'production',
+        isActive: true,
+      });
+      await this.configRepo.save(existing);
+    }
+
     const connection = await this.testSinvoiceConnectionWithConfig({
-      supplierTaxCode: data.supplier_tax_code,
-      username: data.username,
-      password: data.password,
-      apiUrl: data.api_url,
+      supplierTaxCode: existing.supplierTaxCode,
+      username: existing.username,
+      password: existing.password,
+      apiUrl: existing.apiUrl,
     });
-    return { ok: true, data: res, connection };
+
+    return { ok: true, data: this.normalizeConfig(existing), connection };
   }
 
   async resetConfig() {
-    const data = {
-      supplier_tax_code: null,
-      username: null,
-      password: null,
-      app_key: null,
-      api_url: null,
-      environment: null,
-      is_active: false,
-    };
-    await this.directusRequest('/items/sinvoice_configs', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+    await this.configRepo.update({}, { isActive: false });
     return { ok: true };
   }
 
-  async getTaxPortalRawConfig() {
-    const result = await this.directusRequest<{ data: any }>(
-      '/items/tax_portal_configs',
+  // ─────────────────────────── SINVOICE DRAFTS ────────────────────────────
+
+  async listDrafts(query: ListSinvoiceDraftQueryDto) {
+    const page = Math.max(Number(query.page ?? 1) || 1, 1);
+    const pageSize = Math.min(
+      Math.max(Number(query.pageSize ?? 15) || 15, 1),
+      100,
     );
-    return result?.data ?? null;
-  }
+    const skip = (page - 1) * pageSize;
 
-  async getTaxPortalConfig() {
-    const row = await this.getTaxPortalRawConfig();
-    if (
-      !row ||
-      (!row.username && !row.tax_code && !row.api_url && !row.is_active)
-    )
-      return null;
-    return this.normalizeTaxPortalConfig(row);
-  }
+    const qb = this.draftRepo.createQueryBuilder('draft');
 
-  private async testTaxPortalConnectionWithConfig(config: any) {
-    if (!config?.username || !config?.password) {
-      return this.buildConnectionResult({
-        provider: 'TAX_PORTAL',
-        ok: false,
-        message: 'Thiếu thông tin cấu hình cổng thuế để kiểm tra kết nối',
+    if (query.status) {
+      qb.andWhere('draft.status = :status', { status: query.status });
+    }
+
+    if (query.dateFrom) {
+      qb.andWhere('draft.createdAt >= :dateFrom', {
+        dateFrom: new Date(query.dateFrom),
       });
     }
 
-    if (!config?.apiUrl) {
-      return this.buildConnectionResult({
-        provider: 'TAX_PORTAL',
-        ok: true,
-        message:
-          'Đã lưu cấu hình cổng thuế. Chưa có API URL thật nên tạm xác nhận ở mức sẵn sàng đồng bộ stub.',
-        detail: { mode: 'stub-ready' },
+    if (query.dateTo) {
+      qb.andWhere('draft.createdAt <= :dateTo', {
+        dateTo: new Date(query.dateTo),
       });
+    }
+
+    if (query.filtersStr) {
+      try {
+        const filters = JSON.parse(query.filtersStr) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          let filterField = '';
+          if (col === 'createdAt')
+            filterField = `TO_CHAR(draft.created_at, 'YYYY-MM-DD')`;
+          else if (col === 'documentNo') filterField = 'draft.document_no';
+          else if (col === 'buyerName') filterField = 'draft.buyer_name';
+          else if (col === 'buyerTaxCode') filterField = 'draft.buyer_tax_code';
+          else if (col === 'status') filterField = 'draft.status';
+          else if (col === 'totalAmount') filterField = 'draft.total_amount';
+          else if (col === 'vatAmount') filterField = 'draft.vat_amount';
+          else if (col === 'discountAmount')
+            filterField = 'draft.discount_amount';
+          else if (col === 'amountWithoutVAT')
+            filterField =
+              '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+          else if (col === 'vatRate')
+            filterField =
+              "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
+
+          if (filterField) {
+            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (query.search) {
+      const search = query.search;
+      qb.andWhere(
+        '(draft.buyerName ILIKE :search OR draft.documentNo ILIKE :search OR draft.buyerTaxCode ILIKE :search)',
+        {
+          search: `%${search}%`,
+        },
+      );
+    }
+
+    if (query.sortKey) {
+      let sortKey = query.sortKey;
+      if (sortKey === 'createdAt')
+        sortKey = "(draft.response_payload->>'createdDate')::timestamp";
+      else if (sortKey === 'documentNo') sortKey = 'draft.document_no';
+      else if (sortKey === 'buyerName') sortKey = 'draft.buyer_name';
+      else if (sortKey === 'buyerPersonName')
+        sortKey = "draft.response_payload->>'buyerName'";
+      else if (sortKey === 'buyerTaxCode') sortKey = 'draft.buyer_tax_code';
+      else if (sortKey === 'status') sortKey = 'draft.status';
+      else if (sortKey === 'totalAmount') sortKey = 'draft.total_amount';
+      else if (sortKey === 'vatAmount') sortKey = 'draft.vat_amount';
+      else if (sortKey === 'discountAmount') sortKey = 'draft.discount_amount';
+      else if (sortKey === 'amountWithoutVAT')
+        sortKey =
+          '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+      else sortKey = `draft.${sortKey}`;
+      qb.orderBy(
+        sortKey,
+        query.sortDirection?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
+      );
+    } else {
+      qb.orderBy("(draft.response_payload->>'createdDate')::timestamp", 'DESC');
+    }
+    qb.skip(skip).take(pageSize);
+
+    const [data, total] = await qb.getManyAndCount();
+
+    return {
+      data,
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(Math.ceil(total / pageSize), 1),
+      },
+    };
+  }
+
+  async getDraftColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    const qb = this.draftRepo.createQueryBuilder('draft');
+
+    let selectField = '';
+    let isDateColumn = false;
+
+    if (column === 'createdAt') {
+      selectField =
+        "TO_CHAR((draft.response_payload->>'createdDate')::timestamp, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'documentNo') selectField = 'draft.document_no';
+    else if (column === 'buyerName') selectField = 'draft.buyer_name';
+    else if (column === 'buyerPersonName')
+      selectField = "draft.response_payload->>'buyerName'";
+    else if (column === 'buyerTaxCode') selectField = 'draft.buyer_tax_code';
+    else if (column === 'status') selectField = 'draft.status';
+    else if (column === 'totalAmount') selectField = 'draft.total_amount';
+    else if (column === 'vatAmount') selectField = 'draft.vat_amount';
+    else if (column === 'discountAmount') selectField = 'draft.discount_amount';
+    else if (column === 'amountWithoutVAT')
+      selectField =
+        '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+    else if (column === 'vatRate')
+      selectField =
+        "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    if (isDateColumn) {
+      qb.andWhere('draft.created_at IS NOT NULL');
+      qb.andWhere(`${selectField} != ''`);
+    } else {
+      qb.andWhere(`${selectField} IS NOT NULL`);
+      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+    }
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          let filterField = '';
+          if (col === 'createdAt')
+            filterField = `TO_CHAR((draft.response_payload->>'createdDate')::timestamp, 'YYYY-MM-DD')`;
+          else if (col === 'documentNo') filterField = 'draft.document_no';
+          else if (col === 'buyerName') filterField = 'draft.buyer_name';
+          else if (col === 'buyerPersonName')
+            filterField = "draft.response_payload->>'buyerName'";
+          else if (col === 'buyerTaxCode') filterField = 'draft.buyer_tax_code';
+          else if (col === 'status') filterField = 'draft.status';
+          else if (col === 'totalAmount') filterField = 'draft.total_amount';
+          else if (col === 'vatAmount') filterField = 'draft.vat_amount';
+          else if (col === 'discountAmount')
+            filterField = 'draft.discount_amount';
+          else if (col === 'amountWithoutVAT')
+            filterField =
+              '(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0))';
+          else if (col === 'vatRate')
+            filterField =
+              "CONCAT(COALESCE(ROUND((COALESCE(draft.vat_amount, 0) / NULLIF(COALESCE(draft.total_amount, 0) - COALESCE(draft.vat_amount, 0), 0)) * 100), 0), '%')";
+
+          if (filterField) {
+            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          }
+        }
+      } catch {
+        // ignore malformed filters
+      }
+    }
+
+    if (search) {
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${selectField} AS TEXT)`,
+        search,
+        'search',
+      );
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const totalRaw = await qb
+      .clone()
+      .orderBy()
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+    const items = results.map((r) => r.value).filter(Boolean);
+
+    return {
+      items,
+      total,
+      page,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async createDraft(dto: CreateSinvoiceDraftDto) {
+    let config: any = null;
+    try {
+      config = await this.getConfig();
+    } catch {
+      throw new BadRequestException(
+        'Chưa cấu hình SInvoice. Không thể tạo nháp.',
+      );
+    }
+    if (!config.supplierTaxCode || !config.apiUrl) {
+      throw new BadRequestException('Chưa cấu hình API URL hoặc Mã số thuế.');
+    }
+
+    const lines = (
+      dto.lines?.length
+        ? dto.lines
+        : [
+            {
+              description: dto.description ?? 'Hóa đơn nháp ERP',
+              quantity: 1,
+              unitPrice: 0,
+              taxRate: 10,
+            },
+          ]
+    ).map((line, index) => {
+      const quantity = Number(line.quantity ?? 1);
+      const unitPrice = Number(line.unitPrice ?? 0);
+      const taxRate = Number(line.taxRate ?? 0);
+      const amountWithoutTax = quantity * unitPrice;
+      const taxAmount = amountWithoutTax * (taxRate / 100);
+      return {
+        lineNumber: index + 1,
+        itemName: line.description ?? line.itemName ?? `Dòng hàng ${index + 1}`,
+        quantity,
+        unitPrice,
+        taxRate,
+        amountWithoutTax,
+        taxAmount,
+      };
+    });
+
+    const totalWithoutTax = lines.reduce(
+      (sum, l) => sum + l.amountWithoutTax,
+      0,
+    );
+    const totalTaxAmount = lines.reduce((sum, l) => sum + l.taxAmount, 0);
+    const totalAmountWithTax = totalWithoutTax + totalTaxAmount;
+
+    const documentNo = dto.documentNo ?? `DRAFT-${Date.now()}`;
+
+    const payload = {
+      generalInvoiceInfo: {
+        invoiceType: '01GTKT',
+        templateCode: '',
+        invoiceSeries: '',
+        currencyCode: dto.currencyCode ?? 'VND',
+        adjustmentType: '1',
+        paymentStatus: true,
+        paymentType: 'TM/CK',
+        cusGetInvoiceRight: true,
+        buyerName: dto.buyerName ?? 'Khách hàng',
+        buyerTaxCode: dto.buyerTaxCode ?? '',
+        buyerAddressLine: dto.buyerAddress ?? '',
+        transactionUuid: documentNo,
+      },
+      buyerInfo: {
+        buyerName: dto.buyerName ?? 'Khách hàng',
+        buyerLegalName: dto.buyerName ?? 'Khách hàng',
+        buyerTaxCode: dto.buyerTaxCode ?? '',
+        buyerAddressLine: dto.buyerAddress ?? '',
+        buyerEmail: dto.buyerEmail ?? '',
+      },
+      itemInfo: lines.map((line, index) => ({
+        lineNumber: index + 1,
+        itemName: line.itemName,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+        itemTotalAmountWithoutTax: line.amountWithoutTax,
+        taxPercentage: line.taxRate,
+        taxAmount: line.taxAmount,
+        discount: 0,
+        itemTotalAmountWithTax: line.amountWithoutTax + line.taxAmount,
+      })),
+      summarizeInfo: {
+        sumOfTotalLineAmountWithoutTax: totalWithoutTax,
+        totalAmountWithoutTax: totalWithoutTax,
+        totalTaxAmount: totalTaxAmount,
+        totalAmountWithTax: totalAmountWithTax,
+        discountAmount: 0,
+      },
+    };
+
+    try {
+      // Create draft via Viettel API
+      await this.callViettel(
+        `/InvoiceAPI/InvoiceWS/createInvoiceDraft/${config.supplierTaxCode}`,
+        payload,
+      );
+    } catch (e: any) {
+      this.logger.error(`Lỗi tạo nháp Viettel API: ${e.message}`);
+      throw new BadRequestException(
+        `Lỗi khi tạo nháp bên Viettel: ${e.message}`,
+      );
     }
 
     try {
-      const res = await fetch(config.apiUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`,
-          Accept: 'application/json,text/plain,*/*',
-        },
-      });
-      const text = await res.text();
-      let detail: any = text;
-      try {
-        detail = text ? JSON.parse(text) : null;
-      } catch {}
-      if (!res.ok) {
-        return this.buildConnectionResult({
-          provider: 'TAX_PORTAL',
-          ok: false,
-          message: `Kết nối cổng thuế thất bại (${res.status})`,
-          detail,
-        });
-      }
-      return this.buildConnectionResult({
-        provider: 'TAX_PORTAL',
+      // Sync from Viettel to mirror DB
+      const syncResult = await this.syncDraftsFromViettel();
+      return {
         ok: true,
-        message: 'Đã kết nối thành công tới cổng thuế/Viettel integration',
-        detail: { status: res.status },
-      });
-    } catch (error: any) {
-      return this.buildConnectionResult({
-        provider: 'TAX_PORTAL',
-        ok: false,
-        message: `Không thể kết nối cổng thuế: ${error?.message ?? 'Unknown error'}`,
-      });
+        synced: syncResult.synced,
+        changed: syncResult.changed,
+      };
+    } catch (e: any) {
+      return {
+        ok: true,
+        synced: 0,
+        changed: false,
+        warning: `Tạo nháp thành công nhưng lỗi đồng bộ: ${e.message}. Vui lòng đồng bộ thủ công.`,
+      };
     }
   }
 
-  async saveTaxPortalConfig(dto: any) {
-    const data = {
-      tax_code: dto.taxCode ?? dto.tax_code,
-      username: dto.username,
-      password: dto.password,
-      provider_name:
-        dto.providerName ?? dto.provider_name ?? 'VIETTEL_TAX_PORTAL',
-      api_url: dto.apiUrl ?? dto.api_url ?? null,
-      gdt_jwt: dto.gdtJwt ?? dto.gdt_jwt ?? null,
-      gdt_cookie: dto.gdtCookie ?? dto.gdt_cookie ?? null,
-      is_active: dto.isActive ?? dto.is_active ?? true,
-    };
-
-    const res = await this.directusRequest('/items/tax_portal_configs', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-    const connection = await this.testTaxPortalConnectionWithConfig({
-      taxCode: data.tax_code,
-      username: data.username,
-      password: data.password,
-      apiUrl: data.api_url,
-    });
-    return { ok: true, data: res, connection };
+  async deleteDraft(id: string) {
+    const existing = await this.draftRepo.findOne({ where: { id } });
+    if (!existing)
+      throw new BadRequestException(`Không tìm thấy hóa đơn nháp id=${id}`);
+    await this.draftRepo.remove(existing);
+    return { ok: true, id };
   }
 
-  async resetTaxPortalConfig() {
-    await this.directusRequest('/items/tax_portal_configs', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        tax_code: null,
-        username: null,
-        password: null,
-        provider_name: 'VIETTEL_TAX_PORTAL',
-        api_url: null,
-        gdt_jwt: null,
-        gdt_cookie: null,
-        is_active: false,
-      }),
-    });
-    return { ok: true };
+  async syncDraftsFromViettel() {
+    const config = await this.getConfig();
+    if (!config.username || !config.password) {
+      throw new BadRequestException(
+        'Chưa cấu hình username/password cho SInvoice',
+      );
+    }
+
+    try {
+      // 1. Đăng nhập API nội bộ để lấy token
+      const loginRes = await fetch(
+        'https://vinvoice.viettel.vn/api/auth/login',
+        {
+          method: 'POST',
+          headers: {
+            accept: 'application/json, text/plain, */*',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: config.username,
+            password: config.password,
+            rememberMe: true,
+            captcha: '',
+          }),
+        },
+      );
+
+      if (!loginRes.ok) {
+        throw new BadRequestException(
+          'Đăng nhập Viettel thất bại (Web Portal). Có thể bị chặn bởi Captcha hoặc sai mật khẩu.',
+        );
+      }
+
+      const loginData: any = await loginRes.json();
+      const token = loginData.access_token;
+      const cluster = loginData.invoice_cluster || 'cluster3';
+
+      if (!token) {
+        throw new BadRequestException('Không lấy được access_token từ Viettel');
+      }
+
+      // 2. Fetch danh sách nháp
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      let page = 0;
+      let allDrafts: any[] = [];
+
+      while (true) {
+        const searchUrl =
+          `https://vinvoice.viettel.vn/api/${cluster}/services/einvoiceapplication/api/invoice/search-draft-all?page=${page}&size=300&invoiceStatus.equals=0&invoiceTypeId.notEquals=52&sort=id,desc` +
+          `&createdDate.greaterThanOrEqual=${encodeURIComponent(thirtyDaysAgo.toISOString())}` +
+          `&createdDate.lessThanOrEqual=${encodeURIComponent(now.toISOString())}`;
+
+        const draftRes = await fetch(searchUrl, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json, text/plain, */*',
+            authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!draftRes.ok) {
+          const errText = await draftRes.text();
+          this.logger.error(
+            `Viettel draft fetch failed: ${draftRes.status} ${draftRes.statusText} - ${errText}`,
+          );
+          throw new BadRequestException(
+            `Lỗi khi tải danh sách nháp từ Viettel: ${draftRes.status} - ${errText}`,
+          );
+        }
+
+        const rawData: any = await draftRes.json();
+        let drafts: any[] = [];
+
+        if (Array.isArray(rawData)) {
+          drafts = rawData;
+        } else if (
+          rawData &&
+          rawData.data &&
+          Array.isArray(rawData.data.content)
+        ) {
+          drafts = rawData.data.content;
+        } else if (rawData && Array.isArray(rawData.data)) {
+          drafts = rawData.data;
+        } else if (rawData && Array.isArray(rawData.content)) {
+          drafts = rawData.content;
+        } else if (rawData && Array.isArray(rawData.items)) {
+          drafts = rawData.items;
+        } else {
+          throw new BadRequestException(
+            'Định dạng trả về từ Viettel không hợp lệ: ' +
+              JSON.stringify(rawData).substring(0, 200),
+          );
+        }
+
+        if (drafts.length === 0) {
+          break;
+        }
+
+        allDrafts.push(...drafts);
+
+        const totalElements =
+          rawData?.data?.totalElements || rawData?.totalElements;
+
+        if (totalElements !== undefined) {
+          if (allDrafts.length >= totalElements) {
+            break;
+          }
+        } else if (drafts.length < 300) {
+          break;
+        }
+
+        page++;
+      }
+
+      let newDraftEntities: SinvoiceDraft[] = [];
+
+      for (const draft of allDrafts) {
+        const vId = draft.id ? String(draft.id) : undefined;
+        if (!vId) continue;
+
+        const docNo = `VIETTEL-${vId}`;
+        let description = draft.description || draft.listProduct || null;
+
+        // Fetch chi tiết hóa đơn nháp để lấy listProduct
+        try {
+          await sleep(200); // Delay chống rate-limit
+          const detailUrl = `https://vinvoice.viettel.vn/api/${cluster}/services/einvoiceapplication/api/invoice/search-invoice-by-id/${vId}/draft`;
+          const detailRes = await fetch(detailUrl, {
+            method: 'GET',
+            headers: {
+              accept: 'application/json, text/plain, */*',
+              authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (detailRes.ok) {
+            const detailData: any = await detailRes.json();
+            const listProductData =
+              detailData?.data?.invoice?.listProduct ||
+              detailData?.data?.listProduct ||
+              detailData?.listProduct;
+            const listProductStr =
+              typeof listProductData === 'string'
+                ? listProductData
+                : JSON.stringify(listProductData);
+
+            if (listProductStr && listProductStr !== 'undefined') {
+              draft.listProduct = listProductStr; // Lưu lại vào responsePayload
+              try {
+                const parsed = JSON.parse(listProductStr);
+                if (parsed && Array.isArray(parsed.itemInfo)) {
+                  description = parsed.itemInfo
+                    .map((i: any) => i.itemName)
+                    .filter(Boolean)
+                    .join('\\n');
+                }
+              } catch (e) {
+                description = listProductStr;
+              }
+            }
+          }
+        } catch (e) {
+          this.logger.warn(
+            `Lỗi khi lấy chi tiết hóa đơn nháp ${vId}: ${(e as Error).message}`,
+          );
+        }
+
+        const draftEntity = this.draftRepo.create({
+          documentNo: docNo,
+          supplierTaxCode: draft.supplierTaxCode || config.supplierTaxCode,
+          buyerName:
+            draft.buyerUnitName ||
+            draft.buyerName ||
+            draft.buyerLegalName ||
+            'Khách hàng',
+          buyerTaxCode: draft.buyerTaxCode || '',
+          buyerAddress: draft.buyerAddressLine || draft.buyerAddress || null,
+          buyerEmail: draft.buyerEmail || null,
+          description,
+          totalAmount: String(
+            draft.totalAmountWithVAT || draft.totalAmount || draft.total || 0,
+          ),
+          vatAmount: String(draft.totalVATAmount || draft.taxAmount || 0),
+          status: 'DRAFT',
+          responsePayload: draft,
+          createdAt: draft.createdDate
+            ? new Date(draft.createdDate)
+            : new Date(),
+        });
+
+        newDraftEntities.push(draftEntity);
+      }
+
+      // Calculate fingerprints
+      const currentDrafts = await this.draftRepo.find({
+        where: { documentNo: ILike('VIETTEL-%') },
+      });
+
+      const getFingerprint = (list: SinvoiceDraft[]) =>
+        JSON.stringify(
+          list
+            .map(
+              (d) =>
+                `${d.documentNo}|${d.totalAmount}|${d.buyerName}|${d.description}`,
+            )
+            .sort(),
+        );
+
+      const oldFingerprint = getFingerprint(currentDrafts);
+      const newFingerprint = getFingerprint(newDraftEntities);
+
+      if (oldFingerprint === newFingerprint) {
+        return {
+          ok: true,
+          synced: newDraftEntities.length,
+          changed: false,
+          added: 0,
+          removed: 0,
+        };
+      }
+
+      // Diff
+      const oldIds = new Set(currentDrafts.map((d) => d.documentNo));
+      const newIds = new Set(newDraftEntities.map((d) => d.documentNo));
+      const added = [...newIds].filter((x) => !oldIds.has(x)).length;
+      const removed = [...oldIds].filter((x) => !newIds.has(x)).length;
+
+      // Override DB
+      await this.draftRepo.delete({ documentNo: ILike('VIETTEL-%') });
+      if (newDraftEntities.length > 0) {
+        // chunk insert to avoid parameter limit
+        for (let i = 0; i < newDraftEntities.length; i += 100) {
+          const chunk = newDraftEntities.slice(i, i + 100);
+          await this.draftRepo.save(chunk);
+        }
+      }
+
+      return {
+        ok: true,
+        synced: newDraftEntities.length,
+        changed: true,
+        added,
+        removed,
+      };
+    } catch (error: any) {
+      this.logger.error('Lỗi syncDraftsFromViettel: ' + error.message);
+      throw new BadRequestException(
+        error.message || 'Lỗi không xác định khi đồng bộ từ Viettel',
+      );
+    }
   }
+
+  // ─────────────────────────── HEALTH ─────────────────────────────────────
 
   async health() {
-    const config = await this.getConfig();
-    const taxPortalConfig = await this.getTaxPortalConfig();
+    let config: any = null;
+    try {
+      config = await this.getConfig();
+    } catch {
+      return { ok: false, message: 'Chưa cấu hình SInvoice' };
+    }
     return {
       ok: true,
       environment: config.environment ?? 'demo',
       supplierTaxCode: config.supplierTaxCode,
       apiUrl: config.apiUrl,
       username: config.username,
-      taxPortalConfigured: Boolean(taxPortalConfig?.username),
-      taxPortalApiUrl: taxPortalConfig?.apiUrl ?? null,
-      taxPortalTaxCode: taxPortalConfig?.taxCode ?? null,
     };
   }
 
-  async listLocalInvoices(query: any = {}) {
-    const page = Math.max(Number(query.page ?? 1) || 1, 1);
-    const pageSize = Math.min(
-      Math.max(Number(query.pageSize ?? 15) || 15, 1),
-      100,
-    );
-    const offset = (page - 1) * pageSize;
+  // ─────────────────────────── VIETTEL API HELPERS ─────────────────────────
 
-    const andFilters: Record<string, any>[] = [];
-    if (query.source) andFilters.push({ source: { _eq: query.source } });
-    if (query.direction)
-      andFilters.push({ direction: { _eq: query.direction } });
-
-    if (query.startDate) {
-      andFilters.push({
-        invoice_date: { _gte: new Date(query.startDate).toISOString() },
-      });
-    }
-    if (query.endDate) {
-      const endDate = new Date(query.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      andFilters.push({ invoice_date: { _lte: endDate.toISOString() } });
-    }
-
-    if (query.search) {
-      const keyword = String(query.search).trim();
-      const searchFields = [
-        'document_no',
-        'invoice_no',
-        'seller_name',
-        'buyer_name',
-        'buyer_tax_code',
-        'seller_tax_code',
-      ];
-      andFilters.push({
-        _or: searchFields.map((field) => ({
-          [field]: { _icontains: keyword },
-        })),
-      });
-    }
-
-    const filterObject = andFilters.length > 0 ? { _and: andFilters } : null;
-    const filterQuery = filterObject
-      ? `&filter=${encodeURIComponent(JSON.stringify(filterObject))}`
-      : '';
-
-    const result = await this.directusRequest<{
-      data: any[];
-      meta?: { filter_count?: number };
-    }>(
-      `/items/einvoices?sort[]=-invoice_date&sort[]=-created_at&limit=${pageSize}&offset=${offset}&meta=filter_count${filterQuery}`,
-    );
-
-    const aggregateQuery = filterObject
-      ? `&filter=${encodeURIComponent(JSON.stringify(filterObject))}`
-      : '';
-    const totalsResult = await this.directusRequest<{
-      data: Array<{ sum: { total_amount: number; vat_amount: number } }>;
-    }>(
-      `/items/einvoices?aggregate=${encodeURIComponent(JSON.stringify({ sum: ['total_amount', 'vat_amount'] }))}${aggregateQuery}`,
-    );
-
-    const items = result.data ?? [];
-    const totalCount = Number(result.meta?.filter_count ?? items.length ?? 0);
-    const totals = totalsResult.data?.[0]?.sum ?? {
-      total_amount: 0,
-      vat_amount: 0,
-    };
-
-    return {
-      data: items,
-      meta: {
-        page,
-        pageSize,
-        total: totalCount,
-        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
-        sum_total_amount: Number(totals.total_amount || 0),
-        sum_vat_amount: Number(totals.vat_amount || 0),
-      },
-    };
+  private authHeader(config: any) {
+    return `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`;
   }
 
   private async callViettel(endpoint: string, body: any, expectJson = true) {
@@ -488,466 +783,72 @@ export class SinvoiceService {
     return payload;
   }
 
-  private buildTaxPortalStubInvoices(
-    direction: InvoiceDirection,
-    cfg: any,
-    startDate?: string,
-    endDate?: string,
-  ) {
-    const now = new Date().toISOString();
-    const prefix = direction === 'IN' ? 'TIN' : 'TOUT';
-    const partnerName =
-      direction === 'IN' ? 'Nhà cung cấp mẫu từ CQT' : 'Khách hàng mẫu từ CQT';
-    return [
-      {
-        external_invoice_id: `${prefix}-${Date.now()}`,
-        document_no: `${prefix}-${Date.now().toString().slice(-6)}`,
-        invoice_no: `${direction === 'IN' ? 'MV' : 'BR'}-${Date.now().toString().slice(-5)}`,
-        invoice_date: now,
-        source: 'TAX_PORTAL',
-        direction,
-        tax_status: 'SYNCED_STUB',
-        status: 'SYNCED',
-        seller_name: direction === 'IN' ? partnerName : 'Công ty Liouni',
-        seller_tax_code:
-          direction === 'IN' ? '0312345678' : (cfg?.taxCode ?? null),
-        seller_address: 'Việt Nam',
-        buyer_name: direction === 'OUT' ? partnerName : 'Công ty Liouni',
-        buyer_tax_code:
-          direction === 'OUT' ? '0309876543' : (cfg?.taxCode ?? null),
-        buyer_address: 'Việt Nam',
-        total_amount: direction === 'IN' ? 2200000 : 3300000,
-        vat_amount: direction === 'IN' ? 200000 : 300000,
-        request_payload: { startDate, endDate, direction },
-        response_payload: { note: 'Stub data chờ tích hợp endpoint CQT thật' },
-        synced_at: now,
-      },
-    ];
+  private buildConnectionResult(params: {
+    provider: 'SINVOICE' | 'TAX_PORTAL';
+    ok: boolean;
+    message: string;
+    checkedAt?: string;
+    detail?: any;
+  }) {
+    return {
+      provider: params.provider,
+      ok: params.ok,
+      message: params.message,
+      checkedAt: params.checkedAt ?? new Date().toISOString(),
+      detail: params.detail ?? null,
+    };
   }
 
-  private async sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private normalizeTaxPortalPageSize(query: TaxPortalSyncQueryDto) {
-    const requested = Number(query.pageSize ?? query.size ?? 15);
-    return [15, 30, 50].includes(requested) ? requested : 15;
-  }
-
-  private normalizeTaxPortalDateRange(query: TaxPortalSyncQueryDto) {
-    const now = new Date();
-    const normalizedEnd = query.endDate ? new Date(query.endDate) : now;
-    const normalizedStart = query.startDate
-      ? new Date(query.startDate)
-      : new Date(normalizedEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    if (
-      Number.isNaN(normalizedStart.getTime()) ||
-      Number.isNaN(normalizedEnd.getTime())
-    ) {
-      throw new BadRequestException('startDate/endDate không hợp lệ');
-    }
-
-    if (normalizedStart > normalizedEnd) {
-      throw new BadRequestException('startDate không được lớn hơn endDate');
-    }
-
-    normalizedStart.setHours(0, 0, 0, 0);
-    normalizedEnd.setHours(23, 59, 59, 999);
-
-    return { startDate: normalizedStart, endDate: normalizedEnd };
-  }
-
-  private splitDateRangeIntoMonthlyChunks(startDate: Date, endDate: Date) {
-    const chunks: { start: Date; end: Date }[] = [];
-    let currentStart = new Date(startDate);
-
-    while (currentStart <= endDate) {
-      // End of current month
-      const currentEnd = new Date(
-        currentStart.getFullYear(),
-        currentStart.getMonth() + 1,
-        0,
-      );
-
-      const chunkEnd = currentEnd > endDate ? new Date(endDate) : currentEnd;
-
-      // Set to end of day
-      chunkEnd.setHours(23, 59, 59, 999);
-
-      chunks.push({
-        start: new Date(currentStart),
-        end: chunkEnd,
+  private async testSinvoiceConnectionWithConfig(config: any) {
+    if (!config?.apiUrl || !config?.username || !config?.password) {
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: false,
+        message: 'Thiếu thông tin cấu hình Viettel v2.49 để kiểm tra kết nối',
       });
-
-      // Move to first day of next month
-      currentStart = new Date(
-        currentStart.getFullYear(),
-        currentStart.getMonth() + 1,
-        1,
-      );
-      currentStart.setHours(0, 0, 0, 0);
     }
-
-    return chunks;
-  }
-
-  /**
-   * Sync invoices from GDT (General Department of Taxation) portal.
-   * Logic restored from V1 legacy flow as requested by user.
-   */
-  async syncTaxPortal(query: TaxPortalSyncQueryDto = {}) {
-    const config = await this.getTaxPortalConfig();
-    if (!config?.gdtJwt || !config?.gdtCookie) {
-      throw new BadRequestException(
-        'Chưa cấu hình Token và Cookie Tổng cục Thuế trên giao diện',
-      );
-    }
-
-    const direction = (query.direction ?? 'OUT') as InvoiceDirection;
-    if (!['IN', 'OUT'].includes(direction)) {
-      throw new BadRequestException('direction phải là IN hoặc OUT');
-    }
-
-    // Normalize Tax Portal PageSize (Accounting Guardrail: 15, 30, 50)
-    let size = this.normalizeTaxPortalPageSize(query);
-
-    const { startDate, endDate } = this.normalizeTaxPortalDateRange(query);
-    const chunks = this.splitDateRangeIntoMonthlyChunks(startDate, endDate);
-
-    this.logger.log(
-      `Syncing Tax Portal in ${chunks.length} chunks for ${direction} (size=${size})`,
-    );
-
-    const allInvoices: any[] = [];
-    const invoiceNos: string[] = [];
-
-    // Run the long sync process in the background
-    (async () => {
+    try {
+      const baseUrl = String(config.apiUrl).replace(/\/$/, '');
+      const res = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          username: config.username,
+          password: config.password,
+        }),
+      });
+      const text = await res.text();
+      let detail: any = text;
       try {
-        for (let i = 0; i < chunks.length; i++) {
-          const chunk = chunks[i];
-
-          if (i > 0) {
-            const delay = Math.floor(Math.random() * (5000 - 3000 + 1)) + 3000;
-            this.logger.log(
-              `Throttling: Sleeping ${delay}ms before next GDT chunk...`,
-            );
-            await this.sleep(delay);
-          }
-
-          const chunkInvoices = await this.fetchFromGdtApi(
-            direction,
-            config,
-            chunk.start,
-            chunk.end,
-            size,
-          );
-
-          for (const invoice of chunkInvoices) {
-            const persisted = await this.upsertExternalEinvoice(invoice);
-            const persistedData = (persisted as any)?.data;
-            if (persistedData) {
-              allInvoices.push(persistedData);
-              if (invoiceNos.length < 10) {
-                invoiceNos.push(
-                  persistedData.invoice_no || persistedData.document_no,
-                );
-              }
-            }
-          }
-        }
-        this.logger.log(
-          `Background sync completed for ${direction}. Synced ${allInvoices.length} invoices.`,
-        );
-      } catch (error) {
-        this.logger.error(`Background sync failed for ${direction}`, error);
-      }
-    })();
-
-    return {
-      ok: true,
-      source: 'TAX_PORTAL' as InvoiceSource,
-      direction,
-      pageSize: size,
-      requested_range: {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      },
-      chunk_count: chunks.length,
-      count: 0,
-      synced_at: new Date().toISOString(),
-      invoice_nos: [],
-      note: `Tiến trình đồng bộ đang chạy ngầm. Vui lòng tải lại trang sau ít phút để xem kết quả.`,
-    };
-  }
-
-  private async fetchFromGdtApi(
-    direction: InvoiceDirection,
-    config: any,
-    start: Date,
-    end: Date,
-    pageSize: number,
-  ) {
-    const formatDate = (d: Date) => {
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    };
-
-    const baseSearchStr = `tdlap=ge=${formatDate(start)}T00:00:00;tdlap=le=${formatDate(end)}T23:59:59`;
-
-    const fetchConfigs =
-      direction === 'IN'
-        ? [
-            {
-              apiPath: 'query/invoices/purchase',
-              searchStr: baseSearchStr,
-            },
-            {
-              apiPath: 'sco-query/invoices/purchase',
-              searchStr: `${baseSearchStr};ttxly==8`,
-            },
-          ]
-        : [
-            {
-              apiPath: 'query/invoices/sold',
-              searchStr: baseSearchStr,
-            },
-          ];
-
-    let allRawItems: any[] = [];
-    const maxPages = 50;
-
-    let token = config.gdtJwt;
-    if (token && !token.startsWith('Bearer ')) {
-      token = `Bearer ${token}`;
-    }
-
-    const headers: Record<string, string> = {
-      Authorization: token,
-      Accept: 'application/json, text/plain, */*',
-      'Accept-Language': 'vi',
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 OPR/130.0.0.0',
-      'Content-Type': 'application/json',
-      Action: encodeURIComponent(
-        direction === 'IN'
-          ? 'Tìm kiếm (hóa đơn mua vào)'
-          : 'Tìm kiếm (hóa đơn bán ra)',
-      ),
-      Referer: 'https://hoadondientu.gdt.gov.vn/tra-cuu/tra-cuu-hoa-don',
-    };
-    if (config.gdtCookie) {
-      headers['Cookie'] = config.gdtCookie;
-    }
-
-    for (const fetchConfig of fetchConfigs) {
-      let state: string | null = null;
-      let pagesFetched = 0;
-
-      do {
-        let currentUrl = `https://hoadondientu.gdt.gov.vn/api/${fetchConfig.apiPath}?sort=tdlap:desc&size=${pageSize}&search=${encodeURIComponent(fetchConfig.searchStr)}`;
-        if (state) {
-          currentUrl += `&state=${state}`;
-        }
-
-        this.logger.log(`Fetching from GDT: ${currentUrl}`);
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
-
-          const res = await fetch(currentUrl, {
-            method: 'GET',
-            headers,
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (!res.ok) {
-            if (res.status === 401) {
-              throw new Error(
-                'Token Tổng cục Thuế đã hết hạn hoặc không hợp lệ. Vui lòng cập nhật lại trên UI.',
-              );
-            }
-            throw new Error(`Lỗi HTTP ${res.status}: ${await res.text()}`);
-          }
-
-          const data: any = await res.json();
-          if (!data || !Array.isArray(data.datas)) {
-            this.logger.warn(
-              `Unexpected GDT response: ${JSON.stringify(data).slice(0, 200)}`,
-            );
-            break;
-          }
-
-          allRawItems.push(...data.datas);
-          state = data.state ?? null;
-          pagesFetched++;
-
-          if (state && pagesFetched < maxPages) {
-            const delay = (2 + Math.random() * 3) * 1000;
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.round(delay)),
-            );
-          }
-        } catch (err: any) {
-          this.logger.error(`fetchFromGdtApi failed: ${err.message}`);
-          throw new InternalServerErrorException(
-            err.message ?? 'Lỗi khi gọi API Tổng cục Thuế',
-          );
-        }
-      } while (state && pagesFetched < maxPages);
-    }
-
-    return allRawItems.map((item: any) =>
-      this.mapGdtInvoiceToErp(item, direction, config),
-    );
-  }
-
-  private mapGdtInvoiceToErp(raw: any, direction: InvoiceDirection, cfg: any) {
-    const now = new Date().toISOString();
-
-    // Parse tdlap (usually something like "2024-05-15T..." or timestamp)
-    let invoiceDate = now;
-    if (raw.tdlap) {
-      try {
-        const d = new Date(raw.tdlap);
-        if (!isNaN(d.getTime())) invoiceDate = d.toISOString();
+        detail = text ? JSON.parse(text) : null;
       } catch {}
+      if (!res.ok) {
+        return this.buildConnectionResult({
+          provider: 'SINVOICE',
+          ok: false,
+          message: `Kết nối Viettel v2.49 thất bại (${res.status})`,
+          detail,
+        });
+      }
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: true,
+        message: 'Đã kết nối thành công tới Viettel v2.49 API',
+        detail: { status: res.status, endpoint: `${baseUrl}/auth/login` },
+      });
+    } catch (error: any) {
+      return this.buildConnectionResult({
+        provider: 'SINVOICE',
+        ok: false,
+        message: `Không thể kết nối Viettel v2.49 API: ${error?.message ?? 'Unknown error'}`,
+      });
     }
-
-    // Usually GDT has nbmst (Người bán), nbten, nmmst (Người mua), nmten
-    const sellerTaxCode =
-      raw.nbmst ?? (direction === 'IN' ? null : cfg.taxCode);
-    const sellerName =
-      raw.nbten ?? (direction === 'IN' ? 'Người bán' : 'Công ty Liouni');
-    const buyerTaxCode =
-      raw.nmmst ?? (direction === 'OUT' ? null : cfg.taxCode);
-    const buyerName =
-      raw.nmten ?? (direction === 'OUT' ? 'Khách hàng' : 'Công ty Liouni');
-
-    // Mẫu số, Ký hiệu, Số HĐ
-    const khhdon = raw.khmshdon ?? raw.khhd ?? '';
-    const khmshdon = raw.khhdon ?? raw.khms ?? '';
-    const soHdon = raw.shdon ?? '';
-
-    const invoiceNo = soHdon
-      ? soHdon.toString().padStart(7, '0')
-      : `GDT-${Date.now().toString().slice(-6)}`;
-    const docNo = `${khmshdon}${khhdon}-${invoiceNo}`.replace(/^-/, '');
-
-    const totalAmount = Number(raw.tgtcthue ?? raw.tgtttbso ?? 0);
-    const vatAmount = Number(raw.tgtthue ?? 0);
-
-    return {
-      external_invoice_id:
-        raw.id ?? `GDT-${raw.khmshdon}-${raw.shdon}-${direction}`,
-      document_no: docNo || `GDT-${Date.now().toString().slice(-6)}`,
-      invoice_no: invoiceNo,
-      invoice_date: invoiceDate,
-      source: 'TAX_PORTAL',
-      direction,
-      tax_status:
-        raw.ttxly === 5
-          ? 'Đã cấp mã CQT'
-          : raw.ttxly === 6
-            ? 'Hóa đơn thay thế'
-            : `Trạng thái: ${raw.ttxly}`,
-      status: 'SYNCED',
-      seller_name: sellerName,
-      seller_tax_code: sellerTaxCode,
-      seller_address: raw.nbdchi ?? '',
-      buyer_name: buyerName,
-      buyer_tax_code: buyerTaxCode,
-      buyer_address: raw.nmdchi ?? '',
-      total_amount: totalAmount,
-      vat_amount: vatAmount,
-      request_payload: {},
-      response_payload: raw,
-      synced_at: now,
-    };
   }
 
-  private normalizeDraftLine(line: DraftInvoiceLineInput, index: number) {
-    const quantity = Number(line.quantity ?? 1);
-    const unitPrice = Number(line.unitPrice ?? line.unit_price ?? 0);
-    const taxRate = Number(line.taxRate ?? line.tax_rate ?? 0);
-    const amountWithoutTax = quantity * unitPrice;
-    const taxAmount = amountWithoutTax * (taxRate / 100);
-    return {
-      lineNumber: index + 1,
-      itemName: line.description ?? line.itemName ?? `Dòng hàng ${index + 1}`,
-      quantity,
-      unitPrice,
-      taxRate,
-      amountWithoutTax,
-      taxAmount,
-    };
-  }
-
-  private buildDraftInvoicePayload(input?: DraftInvoiceInput) {
-    const config = input ?? {};
-    const lines = (
-      config.lines?.length
-        ? config.lines
-        : [
-            {
-              description: config.description ?? 'Hóa đơn nháp ERP',
-              quantity: 1,
-              unitPrice: 0,
-              taxRate: 10,
-            },
-          ]
-    ).map((line, index) => this.normalizeDraftLine(line, index));
-    const totalWithoutTax = lines.reduce(
-      (sum, line) => sum + line.amountWithoutTax,
-      0,
-    );
-    const totalTaxAmount = lines.reduce((sum, line) => sum + line.taxAmount, 0);
-    const totalAmountWithTax = totalWithoutTax + totalTaxAmount;
-
-    return {
-      documentNo:
-        config.documentNo ?? config.document_no ?? `DRAFT-${Date.now()}`,
-      buyerName: config.buyerName ?? config.buyer_name ?? 'Khách hàng nháp ERP',
-      buyerTaxCode: config.buyerTaxCode ?? config.buyer_tax_code ?? null,
-      buyerAddress: config.buyerAddress ?? config.buyer_address ?? null,
-      buyerEmail: config.buyerEmail ?? config.buyer_email ?? null,
-      currencyCode: config.currencyCode ?? config.currency_code ?? 'VND',
-      description: config.description ?? 'Chỉ lưu nháp, không phát hành',
-      lines,
-      totals: {
-        totalWithoutTax,
-        totalTaxAmount,
-        totalAmountWithTax,
-      },
-    };
-  }
-
-  async createInvoice(invoiceData?: any) {
-    const config = await this.getConfig();
-    const draft = this.buildDraftInvoicePayload(invoiceData);
-    const requestPayload = {
-      mode: 'DRAFT_ONLY',
-      supplierTaxCode: config.supplierTaxCode,
-      draft,
-      warning:
-        'Không gọi Viettel phát hành. Bản ghi này chỉ được lưu nội bộ để user kiểm tra trước khi có flow phát hành riêng.',
-    };
-    const responsePayload = {
-      ok: true,
-      mode: 'DRAFT_ONLY',
-      status: 'DRAFT',
-      provider: 'SINVOICE',
-      draftId: draft.documentNo,
-      message:
-        'Đã lưu hóa đơn nháp nội bộ. Tính năng ký/phát hành đang bị ẩn để tránh phát hành nhầm.',
-    };
-    await this.persistEinvoice(requestPayload, responsePayload, 'DRAFT');
-    return { ok: true, request: requestPayload, response: responsePayload };
-  }
+  // ──────────────────────── DOWNLOAD / CANCEL ──────────────────────────────
 
   async cancelInvoice() {
     throw new BadRequestException(
@@ -978,200 +879,46 @@ export class SinvoiceService {
     return this.callViettel(endpoint, payload);
   }
 
-  async getInvoices(query: any = {}) {
-    const config = await this.getConfig();
-    const now = new Date();
-    const start =
-      query.startDate ?? new Date(now.getTime() - 30 * 86400000).toISOString();
-    const end = query.endDate ?? now.toISOString();
-    const payload = {
-      getInvoiceInput: {
-        startDate: start,
-        endDate: end,
-        invoiceType: query.invoiceType ?? '',
-        rowPerPage: Number(query.rowPerPage ?? 20),
-        pageNum: Number(query.pageNum ?? 1),
-        templateCode: query.templateCode ?? '',
-        contractNo: query.contractNo ?? '',
-        contractId: query.contractId ?? '',
-        buyerTaxCode: query.buyerTaxCode ?? '',
-        invoiceSeri: query.invoiceSeri ?? '',
-      },
-    };
-    return this.callViettel(
-      `/InvoiceUtilsWS/getInvoices/${config.supplierTaxCode}`,
-      payload,
-    );
-  }
-
   async fullDemoFlow() {
     throw new BadRequestException(
-      'Demo flow đã bị tắt. Hệ thống hiện chỉ cho phép lưu hóa đơn nháp nội bộ để tránh phát hành nhầm.',
+      'Demo flow đã bị tắt. Hệ thống hiện chỉ cho phép lưu hóa đơn nháp nội bộ.',
     );
   }
 
-  private async upsertExternalEinvoice(invoice: any) {
-    const externalId = invoice.external_invoice_id;
-    const existing = externalId
-      ? await this.directusRequest<{ data: any[] }>(
-          `/items/einvoices?limit=1&filter={"external_invoice_id":{"_eq":"${externalId}"}}`,
-        )
-      : { data: [] };
+  // ──────────────────────── TAX PORTAL (GDT) ───────────────────────────────
 
-    const data = {
-      document_no: invoice.document_no,
-      supplier_tax_code:
-        invoice.supplier_tax_code ??
-        invoice.seller_tax_code ??
-        invoice.buyer_tax_code ??
-        null,
-      invoice_no: invoice.invoice_no ?? null,
-      invoice_date: invoice.invoice_date ?? null,
-      buyer_name: invoice.buyer_name ?? null,
-      buyer_tax_code: invoice.buyer_tax_code ?? null,
-      buyer_address: invoice.buyer_address ?? null,
-      seller_name: invoice.seller_name ?? null,
-      seller_tax_code: invoice.seller_tax_code ?? null,
-      seller_address: invoice.seller_address ?? null,
-      total_amount: Number(invoice.total_amount ?? 0),
-      vat_amount: Number(invoice.vat_amount ?? 0),
-      status: invoice.status ?? 'SYNCED',
-      source: invoice.source ?? 'TAX_PORTAL',
-      direction: invoice.direction ?? null,
-      tax_status: invoice.tax_status ?? null,
-      external_invoice_id: externalId ?? null,
-      synced_at: invoice.synced_at ?? new Date().toISOString(),
-      request_payload: invoice.request_payload ?? null,
-      response_payload: invoice.response_payload ?? null,
-      error_message: invoice.error_message ?? null,
-    };
-
-    if (existing.data?.[0]?.id) {
-      return this.directusRequest(`/items/einvoices/${existing.data[0].id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
-    }
-
-    return this.directusRequest('/items/einvoices', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  private async persistEinvoice(
-    requestPayload: any,
-    responsePayload: any,
-    status: string,
-  ) {
-    const config = await this.getConfig();
-    const draft = requestPayload?.draft ?? null;
-    const data = {
-      source: 'SINVOICE' as InvoiceSource,
-      direction: 'OUT' as InvoiceDirection,
-      supplier_tax_code: config.supplierTaxCode,
-      document_no:
-        draft?.documentNo ??
-        requestPayload?.generalInvoiceInfo?.invoiceNo ??
-        `DEMO-${Date.now()}`,
-      invoice_no:
-        status === 'DRAFT'
-          ? null
-          : (responsePayload?.result?.invoiceNo ??
-            responsePayload?.invoiceNo ??
-            null),
-      pattern: requestPayload?.generalInvoiceInfo?.templateCode ?? null,
-      invoice_series: requestPayload?.generalInvoiceInfo?.invoiceSeries ?? null,
-      buyer_name:
-        draft?.buyerName ??
-        requestPayload?.buyerInfo?.buyerName ??
-        requestPayload?.buyerInfo?.buyerLegalName ??
-        null,
-      buyer_tax_code:
-        draft?.buyerTaxCode ?? requestPayload?.buyerInfo?.buyerTaxCode ?? null,
-      buyer_address:
-        draft?.buyerAddress ??
-        requestPayload?.buyerInfo?.buyerAddressLine ??
-        null,
-      seller_name: 'Công ty Liouni',
-      seller_tax_code: config.supplierTaxCode,
-      total_amount: Number(
-        draft?.totals?.totalAmountWithTax ??
-          requestPayload?.summarizeInfo?.totalAmountWithTax ??
-          0,
-      ),
-      vat_amount: Number(
-        draft?.totals?.totalTaxAmount ??
-          requestPayload?.summarizeInfo?.totalTaxAmount ??
-          0,
-      ),
-      status,
-      tax_status:
-        status === 'DRAFT'
-          ? 'LOCAL_DRAFT_ONLY'
-          : (responsePayload?.result?.status ?? null),
-      viettel_transaction_id:
-        status === 'DRAFT'
-          ? null
-          : (responsePayload?.result?.transactionUuid ??
-            responsePayload?.transactionUuid ??
-            null),
-      request_payload: requestPayload,
-      response_payload: responsePayload,
-      error_message:
-        status === 'ERROR' ? JSON.stringify(responsePayload) : null,
-      synced_at: new Date().toISOString(),
-    };
-    await this.directusRequest('/items/einvoices', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  private buildDemoInvoicePayload(config: any) {
-    const suffix = Date.now().toString().slice(-8);
+  private normalizeTaxPortalConfig(raw: any) {
     return {
-      generalInvoiceInfo: {
-        invoiceType: '01GTKT',
-        templateCode: '01GTKT0/001',
-        invoiceSeries: 'AA/23E',
-        currencyCode: 'VND',
-        adjustmentType: '1',
-        paymentStatus: true,
-        paymentType: 'TM/CK',
-        paymentTypeName: 'Tiền mặt/Chuyển khoản',
-      },
-      sellerInfo: { sellerTaxCode: config.supplierTaxCode },
-      buyerInfo: {
-        buyerName: 'Khách hàng Demo ERP',
-        buyerLegalName: 'Công ty Demo ERP Liouni',
-        buyerTaxCode: '0100109106',
-        buyerAddressLine: 'Hà Nội',
-        buyerPhoneNumber: '0900000000',
-        buyerEmail: 'demo@example.com',
-      },
-      payments: [{ paymentMethodName: 'TM/CK' }],
-      itemInfo: [
-        {
-          lineNumber: 1,
-          itemCode: `DEMO-${suffix}`,
-          itemName: 'Dịch vụ demo tích hợp SInvoice',
-          unitName: 'Lần',
-          unitPrice: 100000,
-          quantity: 1,
-          itemTotalAmountWithoutTax: 100000,
-          taxPercentage: 10,
-          taxAmount: 10000,
-          itemTotalAmountWithTax: 110000,
-        },
-      ],
-      summarizeInfo: {
-        sumOfTotalLineAmountWithoutTax: 100000,
-        totalAmountWithoutTax: 100000,
-        totalTaxAmount: 10000,
-        totalAmountWithTax: 110000,
-        totalAmountWithTaxInWords: 'Một trăm mười nghìn đồng',
-      },
+      ...raw,
+      taxCode: raw.taxCode ?? raw.tax_code,
+      providerName: raw.providerName ?? raw.provider_name,
+      apiUrl: raw.apiUrl ?? raw.api_url,
+      gdtJwt: raw.gdtJwt ?? raw.gdt_jwt,
+      gdtCookie: raw.gdtCookie ?? raw.gdt_cookie,
     };
+  }
+
+  async getTaxPortalConfig(): Promise<any> {
+    // Tax portal config is still stored separately (outside sinvoice scope).
+    // Return null — the controller/viettel-v2 handles this separately.
+    return null;
+  }
+
+  async saveTaxPortalConfig(_dto: any) {
+    throw new BadRequestException(
+      'Cấu hình Tax Portal được quản lý qua module riêng.',
+    );
+  }
+
+  async resetTaxPortalConfig() {
+    throw new BadRequestException(
+      'Cấu hình Tax Portal được quản lý qua module riêng.',
+    );
+  }
+
+  async syncTaxPortal(_query: TaxPortalSyncQueryDto = {}) {
+    throw new BadRequestException(
+      'Đồng bộ Tax Portal được thực hiện qua module riêng.',
+    );
   }
 }

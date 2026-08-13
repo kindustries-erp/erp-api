@@ -12,11 +12,17 @@ import {
   toInvoiceDto,
   parseVatRateForDisplay,
 } from '../helpers/invoice-mapper.helper';
+import {
+  classifyInvoiceLine,
+  resolveOutInvoiceBranchCode,
+} from '../helpers/out-invoice-display.helper';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
 @Injectable()
 export class InvoiceQueryService {
   private readonly logger = new Logger(InvoiceQueryService.name);
+
+  public static readonly EXPORT_PROGRESS_TOTAL_UNITS = 100;
 
   constructor(
     @InjectRepository(ErpInvoice)
@@ -37,10 +43,9 @@ export class InvoiceQueryService {
   ) {
     const qb = this.repository.createQueryBuilder('inv');
 
+    qb.where('inv.is_deleted = false');
     if (direction) {
-      qb.where('inv.direction = :direction', { direction });
-    } else {
-      qb.where('1 = 1');
+      qb.andWhere('inv.direction = :direction', { direction });
     }
 
     let selectField = '';
@@ -130,12 +135,19 @@ export class InvoiceQueryService {
     }
 
     if (search) {
-      applyMultiKeywordFilter(
-        qb,
-        `CAST(${selectField} AS TEXT)`,
-        search,
-        'search',
-      );
+      let searchField = `CAST(${selectField} AS TEXT)`;
+      let searchKeyword = search;
+
+      if (
+        ['preVatAmount', 'vatAmount', 'discountAmount', 'totalAmount'].includes(
+          column,
+        )
+      ) {
+        searchField = `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '')`;
+        searchKeyword = search.replace(/[,.]/g, '');
+      }
+
+      applyMultiKeywordFilter(qb, searchField, searchKeyword, 'search');
     }
 
     qb.orderBy('value', 'ASC');
@@ -245,8 +257,11 @@ export class InvoiceQueryService {
       query.partner_tax_code ||
       query.tag_id ||
       query.sort_by === 'invoiceNo' ||
+      query.sort_by === 'netOffAmount' ||
+      query.sort_by === 'remainingAmount' ||
       Object.keys(columnSearch).length > 0 ||
-      Object.keys(columnFilters).length > 0
+      Object.keys(columnFilters).length > 0 ||
+      !!query.unlinked_po_id
     );
 
     if (needsQb) {
@@ -271,6 +286,15 @@ export class InvoiceQueryService {
               ? `${query.date_to} 23:59:59.999`
               : query.date_to,
         });
+
+      if (query.unlinked_po_id) {
+        qb.andWhere(
+          '(inv.purchase_order_id IS NULL OR inv.purchase_order_id = :unlinkedPoId)',
+          {
+            unlinkedPoId: query.unlinked_po_id,
+          },
+        );
+      }
 
       if (query.search) {
         const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
@@ -311,6 +335,24 @@ export class InvoiceQueryService {
           { tagId: query.tag_id },
         );
 
+      const needsNetOffJoin =
+        query.sort_by === 'netOffAmount' ||
+        query.sort_by === 'remainingAmount' ||
+        columnSearch['netOffAmount'] !== undefined ||
+        columnSearch['remainingAmount'] !== undefined ||
+        (columnFilters['netOffAmount'] &&
+          columnFilters['netOffAmount'].length > 0) ||
+        (columnFilters['remainingAmount'] &&
+          columnFilters['remainingAmount'].length > 0);
+
+      if (needsNetOffJoin) {
+        qb.leftJoin(
+          '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+          'netoff_agg',
+          'netoff_agg.invoice_id = inv.id',
+        );
+      }
+
       this._applyColumnSearch(qb, columnSearch, query.direction);
       this._applyColumnFilters(qb, columnFilters, query.direction);
 
@@ -327,6 +369,8 @@ export class InvoiceQueryService {
 
       const searchResults = await qbOrdered
         .leftJoinAndSelect('inv.items', 'items')
+        .leftJoinAndSelect('inv.attachments', 'link')
+        .leftJoinAndSelect('link.attachment', 'attachment')
         .addOrderBy('inv.createdAt', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
@@ -344,7 +388,7 @@ export class InvoiceQueryService {
 
     const [items, total] = await this.repository.findAndCount({
       where,
-      relations: ['items'],
+      relations: ['items', 'attachments', 'attachments.attachment'],
       order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -364,7 +408,23 @@ export class InvoiceQueryService {
   // Excel export — replicates findAll filter logic then writes spreadsheet
   // ---------------------------------------------------------------------------
 
-  async exportExcel(query: ErpInvoiceQuery): Promise<Buffer> {
+  async exportExcel(
+    query: ErpInvoiceQuery,
+    options?: {
+      onProgress?: (current: number, total: number, message: string) => void;
+    },
+  ): Promise<Buffer> {
+    const totalUnits = InvoiceQueryService.EXPORT_PROGRESS_TOTAL_UNITS;
+    const emitProgress = (current: number, message: string) => {
+      options?.onProgress?.(
+        Math.max(0, Math.min(totalUnits, current)),
+        totalUnits,
+        message,
+      );
+    };
+
+    emitProgress(5, 'Dang truy van danh sach hoa don...');
+
     const qb = this.repository
       .createQueryBuilder('inv')
       .leftJoinAndSelect('inv.items', 'items')
@@ -417,6 +477,24 @@ export class InvoiceQueryService {
     this._applyColumnSearch(qb, columnSearch, query.direction);
     this._applyColumnFiltersExport(qb, columnFilters, query.direction);
 
+    const needsNetOffJoin =
+      query.sort_by === 'netOffAmount' ||
+      query.sort_by === 'remainingAmount' ||
+      columnSearch['netOffAmount'] !== undefined ||
+      columnSearch['remainingAmount'] !== undefined ||
+      (columnFilters['netOffAmount'] &&
+        columnFilters['netOffAmount'].length > 0) ||
+      (columnFilters['remainingAmount'] &&
+        columnFilters['remainingAmount'].length > 0);
+
+    if (needsNetOffJoin) {
+      qb.leftJoin(
+        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        'netoff_agg',
+        'netoff_agg.invoice_id = inv.id',
+      );
+    }
+
     let orderColumn = 'inv.invoiceDate';
     let orderDirection: 'ASC' | 'DESC' = 'DESC';
     if (query.sort_by) {
@@ -428,7 +506,13 @@ export class InvoiceQueryService {
 
     qb.orderBy(orderColumn, orderDirection).addOrderBy('inv.createdAt', 'DESC');
     let items = await qb.getMany();
+    emitProgress(
+      35,
+      `Da tai ${items.length} hoa don, dang tong hop can tru...`,
+    );
+
     items = await this._loadNetOffAmounts(items);
+    emitProgress(45, 'Dang tai du lieu chi nhanh...');
 
     const branches = await this.repository.manager.query(
       'SELECT id, name FROM erp_branches',
@@ -460,6 +544,16 @@ export class InvoiceQueryService {
       }
     };
 
+    const INVOICE_TYPE_MAP: Record<string, string> = {
+      CHIET_KHAU: 'Hóa đơn chiết khấu',
+      DICH_VU_CUU_HO: 'Hóa đơn cứu hộ',
+      HANG_HOA: 'Hàng hóa / Vật tư',
+      DICH_VU: 'Dịch vụ',
+      PHI_THUE: 'Phí & Thuế',
+      CUU_HO: 'Cứu hộ',
+      KHAC: 'Khác',
+    };
+
     const workbook = new ExcelJS.Workbook();
 
     const summarySheet = workbook.addWorksheet('Bảng kê');
@@ -470,6 +564,12 @@ export class InvoiceQueryService {
       { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
       { header: 'MST khách hàng', key: 'taxCode', width: 15 },
       { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+      {
+        header: 'Chiết khấu',
+        key: 'headerDiscountAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
       {
         header: 'Trước thuế GTGT',
         key: 'preVat',
@@ -499,6 +599,17 @@ export class InvoiceQueryService {
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
       {
+        header: 'Đã cấn trừ',
+        key: 'netOffAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tham chiếu cấn trừ',
+        key: 'netOffReferences',
+        width: 30,
+      },
+      {
         header: 'Còn lại',
         key: 'remainingAmount',
         width: 20,
@@ -510,12 +621,12 @@ export class InvoiceQueryService {
     const detailedSheet = workbook.addWorksheet('Hàng hóa');
     detailedSheet.columns = [
       { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
       { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
-      { header: 'Đơn vị tính', key: 'uom', width: 15 },
       {
         header: 'Số lượng',
         key: 'qty',
@@ -556,13 +667,45 @@ export class InvoiceQueryService {
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
+      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
+      { header: 'Chi nhánh', key: 'branchName', width: 25 },
+    ];
+
+    const overviewSheet = workbook.addWorksheet('Tổng quan hàng hóa');
+    overviewSheet.columns = [
+      { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 45 },
+      { header: 'Đơn vị tính', key: 'uom', width: 15 },
       {
-        header: 'Còn lại',
-        key: 'remainingAmount',
+        header: 'Số lượng',
+        key: 'totalQty',
+        width: 18,
+        style: { numFmt: '#,##0.###' },
+      },
+      {
+        header: 'Đơn giá bình quân',
+        key: 'avgUnitPrice',
         width: 20,
         style: { numFmt: '#,##0' },
       },
-      { header: 'Chi nhánh', key: 'branchName', width: 25 },
+      {
+        header: 'Trước thuế GTGT',
+        key: 'totalPreVat',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thuế GTGT',
+        key: 'totalVat',
+        width: 18,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Thành tiền',
+        key: 'totalAmount',
+        width: 20,
+        style: { numFmt: '#,##0' },
+      },
+      { header: 'Số dòng', key: 'lineCount', width: 12 },
     ];
 
     const applyHeaderStyle = (sheet) => {
@@ -585,7 +728,62 @@ export class InvoiceQueryService {
 
     applyHeaderStyle(summarySheet);
     applyHeaderStyle(detailedSheet);
+    applyHeaderStyle(overviewSheet);
 
+    const overviewMap = new Map<
+      string,
+      {
+        itemName: string;
+        uom: string;
+        totalQty: number;
+        totalPreVat: number;
+        totalVat: number;
+        totalAmount: number;
+        totalUnitPriceWeight: number;
+        lineCount: number;
+      }
+    >();
+
+    const accumulateOverview = (payload: {
+      itemName: string;
+      uom: string;
+      qty: number;
+      unitPrice: number;
+      preVatAmount: number;
+      vatAmount: number;
+      totalAmount: number;
+    }) => {
+      const itemName =
+        String(payload.itemName || '').trim() || '(Không có tên)';
+      const uom = String(payload.uom || '').trim();
+      const key = `${itemName.toLowerCase()}__${uom.toLowerCase()}`;
+
+      const current = overviewMap.get(key) || {
+        itemName,
+        uom,
+        totalQty: 0,
+        totalPreVat: 0,
+        totalVat: 0,
+        totalAmount: 0,
+        totalUnitPriceWeight: 0,
+        lineCount: 0,
+      };
+
+      const qty = Number(payload.qty) || 0;
+      const unitPrice = Number(payload.unitPrice) || 0;
+
+      current.totalQty += qty;
+      current.totalPreVat += Number(payload.preVatAmount) || 0;
+      current.totalVat += Number(payload.vatAmount) || 0;
+      current.totalAmount += Number(payload.totalAmount) || 0;
+      current.totalUnitPriceWeight += unitPrice * qty;
+      current.lineCount += 1;
+
+      overviewMap.set(key, current);
+    };
+
+    let processed = 0;
+    const progressDenominator = Math.max(items.length, 1);
     for (const inv of items) {
       const partnerName =
         query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -606,6 +804,15 @@ export class InvoiceQueryService {
         .join(' | ');
 
       const statusName = formatTaxInvoiceStatus(inv.taxInvoiceStatus);
+      const descriptionLineCount = String(inv.description || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean).length;
+      const invoiceLineCount = Math.max(
+        inv.items?.length || 0,
+        descriptionLineCount,
+        1,
+      );
 
       summarySheet.addRow({
         invoiceDate: inv.invoiceDate,
@@ -614,6 +821,7 @@ export class InvoiceQueryService {
         partnerName,
         taxCode,
         address,
+        headerDiscountAmount: Number(inv.discountAmount) || 0,
         preVat: Number(inv.preVatAmount) || 0,
         vatRate: parseVatRateForDisplay(inv.vatRate),
         vat: Number(inv.vatAmount) || 0,
@@ -621,12 +829,39 @@ export class InvoiceQueryService {
         licensePlate: inv.licensePlate || '',
         wo: inv.settlementOrder || '',
         description: fullDesc,
-        statusName,
-        remainingAmount,
-        branchName,
+        statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+        netOffAmount: Number((inv as any).netOffAmount) || 0,
+        netOffReferences: (inv as any).netOffReferences || '',
+        remainingAmount:
+          Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
+        branchName: branchMap[inv.branchId || ''] || '',
       });
 
       if (!inv.items || inv.items.length === 0) {
+        const fallbackPreVat = Number(inv.preVatAmount) || 0;
+        const fallbackVat = Number(inv.vatAmount) || 0;
+        const fallbackTotal = Number(inv.totalAmount) || 0;
+        const normalizedFallback = classifyInvoiceLine(
+          {
+            description: inv.description,
+            unit: '',
+            quantity: 0,
+            unitPrice: 0,
+            preVatAmount: fallbackPreVat,
+            vatAmount: fallbackVat,
+            totalAmount: fallbackTotal,
+            discountAmount: Number(inv.discountAmount) || 0,
+          },
+          {
+            buyerTaxCode: taxCode,
+            direction: inv.direction,
+            invoiceLineCount,
+            taxInvoiceStatus: inv.taxInvoiceStatus,
+            headerDiscountAmount: Number(inv.discountAmount) || 0,
+            forReportExport: true,
+          },
+        );
+
         detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
           serialNo: inv.serialNo,
@@ -635,18 +870,33 @@ export class InvoiceQueryService {
           taxCode,
           itemName: inv.description || '',
           uom: '',
-          qty: 0,
-          unitPrice: 0,
-          preVatAmount: Number(inv.preVatAmount) || 0,
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
           vatRate: parseVatRateForDisplay(inv.vatRate),
-          vatAmount: Number(inv.vatAmount) || 0,
-          totalAmount: Number(inv.totalAmount) || 0,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
-          statusName,
-          remainingAmount,
-          branchName,
+          statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+          invoiceSubcategory:
+            normalizedFallback.invoiceSubcategory === 'DISCOUNT'
+              ? 'Chiết khấu'
+              : normalizedFallback.invoiceSubcategory === 'RESCUE'
+                ? 'Cứu hộ'
+                : 'Thông thường',
+          branchName: branchMap[inv.branchId || ''] || '',
+        });
+
+        accumulateOverview({
+          itemName: inv.description || '',
+          uom: '',
+          qty: normalizedFallback.quantity,
+          unitPrice: normalizedFallback.unitPrice,
+          preVatAmount: normalizedFallback.preVatAmount,
+          vatAmount: normalizedFallback.vatAmount,
+          totalAmount: normalizedFallback.totalAmount,
         });
       } else {
         for (const item of inv.items) {
@@ -659,6 +909,26 @@ export class InvoiceQueryService {
             Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
           const itemTotalAmount =
             Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
+          const normalizedItem = classifyInvoiceLine(
+            {
+              description: item.description || '',
+              unit: item.unit || '',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              preVatAmount: itemPreVat,
+              vatAmount: itemVatAmount,
+              totalAmount: itemTotalAmount,
+              discountAmount: Number(item.discountAmount) || 0,
+            },
+            {
+              buyerTaxCode: taxCode,
+              direction: inv.direction,
+              invoiceLineCount,
+              taxInvoiceStatus: inv.taxInvoiceStatus,
+              headerDiscountAmount: Number(inv.discountAmount) || 0,
+              forReportExport: true,
+            },
+          );
 
           detailedSheet.addRow({
             invoiceDate: inv.invoiceDate,
@@ -668,25 +938,309 @@ export class InvoiceQueryService {
             taxCode,
             itemName: item.description || '',
             uom: item.unit || '',
-            qty: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            preVatAmount: itemPreVat,
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
             vatRate: itemVatRateRaw,
-            vatAmount: itemVatAmount,
-            totalAmount: itemTotalAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
             licensePlate: inv.licensePlate || '',
             wo: inv.settlementOrder || '',
             description: fullDesc,
-            statusName,
-            remainingAmount,
-            branchName,
+            statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+            invoiceSubcategory:
+              normalizedItem.invoiceSubcategory === 'DISCOUNT'
+                ? 'Chiết khấu'
+                : normalizedItem.invoiceSubcategory === 'RESCUE'
+                  ? 'Cứu hộ'
+                  : 'Thông thường',
+            branchName: branchMap[inv.branchId || ''] || '',
+          });
+
+          accumulateOverview({
+            itemName: item.description || '',
+            uom: item.unit || '',
+            qty: normalizedItem.quantity,
+            unitPrice: normalizedItem.unitPrice,
+            preVatAmount: normalizedItem.preVatAmount,
+            vatAmount: normalizedItem.vatAmount,
+            totalAmount: normalizedItem.totalAmount,
           });
         }
       }
+
+      processed += 1;
+      const rowPhaseProgress =
+        45 + Math.floor((processed / progressDenominator) * 50);
+      emitProgress(
+        rowPhaseProgress,
+        `Dang tao noi dung XLSX (${processed}/${items.length})...`,
+      );
     }
 
+    const overviewRows = Array.from(overviewMap.values()).sort((a, b) =>
+      a.itemName.localeCompare(b.itemName, 'vi'),
+    );
+
+    for (const row of overviewRows) {
+      const avgUnitPrice =
+        row.totalQty > 0
+          ? row.totalUnitPriceWeight / row.totalQty
+          : row.lineCount > 0
+            ? row.totalPreVat / row.lineCount
+            : 0;
+
+      overviewSheet.addRow({
+        itemName: row.itemName,
+        uom: row.uom,
+        totalQty: row.totalQty,
+        avgUnitPrice,
+        totalPreVat: row.totalPreVat,
+        totalVat: row.totalVat,
+        totalAmount: row.totalAmount,
+        lineCount: row.lineCount,
+      });
+    }
+
+    emitProgress(97, 'Dang dong goi file XLSX...');
     const buffer = await workbook.xlsx.writeBuffer();
+    emitProgress(100, 'Da tao xong file XLSX');
     return buffer as any;
+  }
+
+  async getBulkNetOffs(invoiceIds: string[]) {
+    if (!invoiceIds || invoiceIds.length === 0) return [];
+
+    return this.repository.manager
+      .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
+      .leftJoinAndSelect('netoff.bankTransaction', 'txn')
+      .where('netoff.invoice_id IN (:...invoiceIds)', { invoiceIds })
+      .getMany();
+  }
+
+  async getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
+    const today = new Date();
+
+    // Compute sixMonthsAgo as YYYY-MM-DD string
+    let smYear = today.getFullYear();
+    let smMonth = today.getMonth() - 5;
+    if (smMonth < 0) {
+      smMonth += 12;
+      smYear -= 1;
+    }
+    const sixMonthsAgoStr = `${smYear}-${String(smMonth + 1).padStart(2, '0')}-01`;
+
+    const qb = this.repository.createQueryBuilder('inv');
+    qb.where('inv.is_deleted = false');
+    if (direction) {
+      qb.andWhere('inv.direction = :direction', { direction });
+    }
+    qb.andWhere(
+      '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+    );
+    // Use string comparison for exact match based on database Date
+    let fetchFrom = sixMonthsAgoStr;
+    if (dateFrom && dateFrom < fetchFrom) {
+      fetchFrom = dateFrom;
+    }
+    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :fetchFrom`, {
+      fetchFrom,
+    });
+
+    qb.leftJoin('erp_branches', 'b', 'b.id = inv.branch_id');
+    qb.select(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'day_date');
+    qb.addSelect(`inv.branch_id`, 'branch_id');
+    qb.addSelect(`b.name`, 'branch_name');
+    qb.addSelect(`SUM(inv.total_amount)`, 'total_amount');
+    qb.addSelect(`SUM(inv.pre_vat_amount)`, 'pre_vat_amount');
+    qb.groupBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`);
+    qb.addGroupBy(`inv.branch_id`);
+    qb.addGroupBy(`b.name`);
+    qb.orderBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'ASC');
+
+    const records = await qb.getRawMany();
+
+    let monthTotal = 0,
+      monthPreVat = 0;
+    let weekTotal = 0,
+      weekPreVat = 0;
+    let dayTotal = 0,
+      dayPreVat = 0;
+
+    const monthChart = Array(6).fill(0);
+    const weekChart = Array(4).fill(0);
+    const dayChart = Array(7).fill(0);
+
+    const monthPreVatChart = Array(6).fill(0);
+    const weekPreVatChart = Array(4).fill(0);
+    const dayPreVatChart = Array(7).fill(0);
+
+    const byBranchMap = new Map<string, any>();
+    const getBranchKey = (name: string | null) => {
+      if (name?.toLowerCase().includes('đào trí')) return 'dao_tri';
+      if (name?.toLowerCase().includes('phổ quang')) return 'pho_quang';
+      return 'other';
+    };
+    const getBranchLabel = (key: string) => {
+      if (key === 'dao_tri') return 'Đào Trí';
+      if (key === 'pho_quang') return 'Phổ Quang';
+      return 'Còn lại';
+    };
+    const getBranchStats = (key: string) => {
+      if (!byBranchMap.has(key)) {
+        byBranchMap.set(key, {
+          branchName: getBranchLabel(key),
+          monthTotal: 0,
+          monthPreVat: 0,
+          weekTotal: 0,
+          weekPreVat: 0,
+          dayTotal: 0,
+          dayPreVat: 0,
+        });
+      }
+      return byBranchMap.get(key)!;
+    };
+
+    // Helpers to get start of current periods as YYYY-MM-DD strings
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
+      today.getDate(),
+    )}`;
+
+    const thisMonthStr = `${today.getFullYear()}-${pad(
+      today.getMonth() + 1,
+    )}-01`;
+
+    const startOfThisWeek = new Date(today);
+    startOfThisWeek.setDate(
+      today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1),
+    ); // Monday
+    const thisWeekStr = `${startOfThisWeek.getFullYear()}-${pad(
+      startOfThisWeek.getMonth() + 1,
+    )}-${pad(startOfThisWeek.getDate())}`;
+
+    // Helper to calculate diff in days between two YYYY-MM-DD strings
+    const diffDays = (d1Str: string, d2Str: string) => {
+      // Create local mid-day dates to avoid DST/timezone issues when computing diffs
+      const [y1, m1, d1] = d1Str.split('-').map(Number);
+      const [y2, m2, d2] = d2Str.split('-').map(Number);
+      const date1 = new Date(y1, m1 - 1, d1, 12, 0, 0);
+      const date2 = new Date(y2, m2 - 1, d2, 12, 0, 0);
+      return Math.round(
+        (date1.getTime() - date2.getTime()) / (1000 * 3600 * 24),
+      );
+    };
+
+    for (const row of records) {
+      const dStr = row.day_date; // string like '2026-06-01'
+      const total = Number(row.total_amount) || 0;
+      const prevat = Number(row.pre_vat_amount) || 0;
+      const branchKey = getBranchKey(row.branch_name);
+      const bStats = getBranchStats(branchKey);
+
+      // If dateFrom and dateTo are provided, use them for totals instead of current periods
+      if (dateFrom && dateTo) {
+        if (dStr >= dateFrom && dStr <= dateTo) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
+
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
+
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+      } else {
+        // Current Day
+        if (dStr === todayStr) {
+          dayTotal += total;
+          dayPreVat += prevat;
+          bStats.dayTotal += total;
+          bStats.dayPreVat += prevat;
+        }
+
+        // Current Week
+        if (dStr >= thisWeekStr) {
+          weekTotal += total;
+          weekPreVat += prevat;
+          bStats.weekTotal += total;
+          bStats.weekPreVat += prevat;
+        }
+
+        // Current Month
+        if (dStr >= thisMonthStr) {
+          monthTotal += total;
+          monthPreVat += prevat;
+          bStats.monthTotal += total;
+          bStats.monthPreVat += prevat;
+        }
+      }
+
+      // Day Chart (last 7 days, index 6 is today, 0 is 6 days ago)
+      const dDays = diffDays(todayStr, dStr);
+      if (dDays >= 0 && dDays < 7) {
+        dayChart[6 - dDays] += total;
+        dayPreVatChart[6 - dDays] += prevat;
+      }
+
+      // Week Chart (last 4 weeks, index 3 is this week, 0 is 3 weeks ago)
+      let weekIndex = 3;
+      if (dStr < thisWeekStr) {
+        const dWeeks = Math.ceil(diffDays(thisWeekStr, dStr) / 7);
+        weekIndex = 3 - dWeeks;
+      }
+      if (weekIndex >= 0 && weekIndex < 4) {
+        weekChart[weekIndex] += total;
+        weekPreVatChart[weekIndex] += prevat;
+      }
+
+      // Month Chart (last 6 months, index 5 is this month, 0 is 5 months ago)
+      let monthIndex = 5;
+      if (dStr < thisMonthStr) {
+        // compute diff in months
+        const [y1, m1] = thisMonthStr.split('-').map(Number);
+        const [y2, m2] = dStr.split('-').map(Number);
+        const dMonths = (y1 - y2) * 12 + (m1 - m2);
+        monthIndex = 5 - dMonths;
+      }
+      if (monthIndex >= 0 && monthIndex < 6) {
+        monthChart[monthIndex] += total;
+        monthPreVatChart[monthIndex] += prevat;
+      }
+    }
+
+    const byBranch = Array.from(byBranchMap.values());
+    byBranch.sort((a: any, b: any) => {
+      const order: Record<string, number> = {
+        'Đào Trí': 1,
+        'Phổ Quang': 2,
+        'Còn lại': 3,
+      };
+      return (order[a.branchName] || 99) - (order[b.branchName] || 99);
+    });
+
+    return {
+      monthTotal,
+      monthPreVat,
+      monthChart,
+      monthPreVatChart,
+      weekTotal,
+      weekPreVat,
+      weekChart,
+      weekPreVatChart,
+      dayTotal,
+      dayPreVat,
+      dayChart,
+      dayPreVatChart,
+      byBranch,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -700,21 +1254,31 @@ export class InvoiceQueryService {
       .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
       .select('netoff.invoice_id', 'invoiceId')
       .addSelect('SUM(netoff.net_off_amount)', 'sum')
+      .addSelect("STRING_AGG(DISTINCT bt.reference_number, ', ')", 'refNos')
+      .leftJoin(
+        'erp_bank_transactions',
+        'bt',
+        'bt.id = netoff.bank_transaction_id',
+      )
       .where('netoff.invoice_id IN (:...ids)', { ids })
       .groupBy('netoff.invoice_id')
       .getRawMany();
 
     const netOffMap = netOffs.reduce(
       (acc, curr) => {
-        acc[curr.invoiceId] = Number(curr.sum) || 0;
+        acc[curr.invoiceId] = {
+          sum: Number(curr.sum) || 0,
+          refNos: curr.refNos || '',
+        };
         return acc;
       },
-      {} as Record<string, number>,
+      {} as Record<string, { sum: number; refNos: string }>,
     );
 
     return invoices.map((i) => ({
       ...i,
-      netOffAmount: String(netOffMap[i.id] || 0),
+      netOffAmount: String(netOffMap[i.id]?.sum || 0),
+      netOffReferences: netOffMap[i.id]?.refNos || '',
     }));
   }
 
@@ -737,6 +1301,9 @@ export class InvoiceQueryService {
       licensePlate: 'inv.licensePlate',
       settlementOrder: 'inv.settlementOrder',
       branchId: 'inv.branchId',
+      netOffAmount: 'COALESCE(netoff_agg.net_off_sum, 0)',
+      remainingAmount:
+        '(inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0))',
     };
     if (sortBy === 'partner')
       return direction === 'IN' ? 'inv.sellerName' : 'inv.buyerName';
@@ -800,29 +1367,43 @@ export class InvoiceQueryService {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'preVatSearch',
         );
       } else if (key === 'vatAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'vatSearch',
         );
       } else if (key === 'discountAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'discountSearch',
         );
       } else if (key === 'totalAmount') {
         applyMultiKeywordFilter(
           qb,
           "REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '')",
-          val,
+          val.replace(/[,.]/g, ''),
           'totalSearch',
+        );
+      } else if (key === 'netOffAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(COALESCE(netoff_agg.net_off_sum, 0) AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'netOffSearch',
+        );
+      } else if (key === 'remainingAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST((inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0)) AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'remainingSearch',
         );
       } else if (key === 'settlementOrder') {
         applyMultiKeywordFilter(
@@ -835,6 +1416,32 @@ export class InvoiceQueryService {
         applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
       } else if (key === 'notes') {
         applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
+      } else if (key === 'invoiceDate') {
+        const rawKw = String(val);
+        if (rawKw.includes('|')) {
+          const [from, to] = rawKw.split('|');
+          if (from && to) {
+            qb.andWhere(
+              `inv.invoice_date >= :from_invDate AND inv.invoice_date <= :to_invDate`,
+              { from_invDate: from, to_invDate: to + ' 23:59:59' },
+            );
+          } else if (from) {
+            qb.andWhere(`inv.invoice_date >= :from_invDate`, {
+              from_invDate: from,
+            });
+          } else if (to) {
+            qb.andWhere(`inv.invoice_date <= :to_invDate`, {
+              to_invDate: to + ' 23:59:59',
+            });
+          }
+        } else {
+          applyMultiKeywordFilter(
+            qb,
+            "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')",
+            val,
+            'invoiceDateSearch',
+          );
+        }
       }
     });
   }
@@ -848,15 +1455,36 @@ export class InvoiceQueryService {
       const vals = columnFilters[key];
       if (!vals || vals.length === 0) return;
 
+      if (vals[0] === '__ALL_MATCHING__') {
+        const searchStr = vals[1] || '';
+        if (searchStr) {
+          this._applyColumnSearch(qb, { [key]: searchStr }, direction);
+        }
+        return;
+      }
+
       if (key === 'status')
         qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
       else if (key === 'postingStatus')
         qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
           postingStatusVals: vals,
         });
-      else if (key === 'branchId')
-        qb.andWhere('inv.branch_id IN (:...branchVals)', { branchVals: vals });
-      else if (key === 'invoiceDate')
+      else if (key === 'branchId') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            '(inv.branch_id IN (:...branchVals) OR inv.branch_id IS NULL)',
+            { branchVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere('(inv.branch_id IS NULL)');
+        } else {
+          qb.andWhere('inv.branch_id IN (:...branchVals)', {
+            branchVals: vals,
+          });
+        }
+      } else if (key === 'invoiceDate')
         qb.andWhere(
           `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...invoiceDateVals)`,
           { invoiceDateVals: vals },
@@ -865,65 +1493,98 @@ export class InvoiceQueryService {
         qb.andWhere('inv.serial_no IN (:...serialNoVals)', {
           serialNoVals: vals,
         });
-      else if (key === 'invoiceNo')
+      else if (key === 'invoiceNo') {
         qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
           invoiceNoVals: vals,
         });
-      else if (key === 'partner') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_name IN (:...partnerVals)', {
-            partnerVals: vals,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_name IN (:...partnerVals)', {
-            partnerVals: vals,
-          });
-        else
+      } else if (key === 'partner') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const fieldMap: any = { IN: 'inv.seller_name', OUT: 'inv.buyer_name' };
+        const field = direction
+          ? fieldMap[direction]
+          : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
+
+        if (hasBlank && realVals.length > 0) {
           qb.andWhere(
-            "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END) IN (:...partnerVals)",
-            { partnerVals: vals },
+            `(${field} IN (:...partnerVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            { partnerVals: realVals },
           );
+        } else if (hasBlank) {
+          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+        } else {
+          qb.andWhere(`${field} IN (:...partnerVals)`, { partnerVals: vals });
+        }
       } else if (key === 'taxCode') {
-        if (direction === 'IN')
-          qb.andWhere('inv.seller_tax_code IN (:...taxCodeVals)', {
-            taxCodeVals: vals,
-          });
-        else if (direction === 'OUT')
-          qb.andWhere('inv.buyer_tax_code IN (:...taxCodeVals)', {
-            taxCodeVals: vals,
-          });
-        else
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const fieldMap: any = {
+          IN: 'inv.seller_tax_code',
+          OUT: 'inv.buyer_tax_code',
+        };
+        const field = direction
+          ? fieldMap[direction]
+          : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
+
+        if (hasBlank && realVals.length > 0) {
           qb.andWhere(
-            "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END) IN (:...taxCodeVals)",
-            { taxCodeVals: vals },
+            `(${field} IN (:...taxCodeVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            { taxCodeVals: realVals },
           );
-      } else if (key === 'description')
-        qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
-      else if (key === 'notes')
-        qb.andWhere('inv.notes IN (:...notesVals)', { notesVals: vals });
-      else if (key === 'isValid') {
+        } else if (hasBlank) {
+          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+        } else {
+          qb.andWhere(`${field} IN (:...taxCodeVals)`, { taxCodeVals: vals });
+        }
+      } else if (key === 'description') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(inv.description IN (:...descVals) OR inv.description IS NULL OR inv.description = '')",
+            { descVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(inv.description IS NULL OR inv.description = '')");
+        } else {
+          qb.andWhere('inv.description IN (:...descVals)', { descVals: vals });
+        }
+      } else if (key === 'notes') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(inv.notes IN (:...notesVals) OR inv.notes IS NULL OR inv.notes = '')",
+            { notesVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(inv.notes IS NULL OR inv.notes = '')");
+        } else {
+          qb.andWhere('inv.notes IN (:...notesVals)', { notesVals: vals });
+        }
+      } else if (key === 'isValid') {
         const validFilter = vals.includes('true') || vals.includes('1');
         const invalidFilter = vals.includes('false') || vals.includes('0');
         if (validFilter && !invalidFilter) qb.andWhere('inv.is_valid = true');
         else if (invalidFilter && !validFilter)
           qb.andWhere('inv.is_valid = false');
-      } else if (key === 'preVatAmount')
+      } else if (key === 'preVatAmount') {
         qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
           preVatVals: vals,
         });
-      else if (key === 'vatAmount')
+      } else if (key === 'vatAmount') {
         qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
           vatVals: vals,
         });
-      else if (key === 'discountAmount')
+      } else if (key === 'discountAmount') {
         qb.andWhere('CAST(inv.discount_amount AS TEXT) IN (:...discountVals)', {
           discountVals: vals,
         });
-      else if (key === 'totalAmount')
+      } else if (key === 'totalAmount') {
         qb.andWhere('CAST(inv.total_amount AS TEXT) IN (:...totalVals)', {
           totalVals: vals,
         });
-      else if (key === 'settlementOrder')
+      } else if (key === 'settlementOrder')
         qb.andWhere('inv.settlement_order IN (:...settleVals)', {
           settleVals: vals,
         });
@@ -935,13 +1596,13 @@ export class InvoiceQueryService {
         const conditions: string[] = [];
         if (vals.includes('has_pdf'))
           conditions.push(
-            "(inv.pdf_file_key IS NOT NULL OR (inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null'))",
+            "(inv.pdf_file_key IS NOT NULL OR (inv.pdf_files IS NOT NULL AND inv.pdf_files::text != '[]' AND inv.pdf_files::text != 'null') OR EXISTS (SELECT 1 FROM erp_invoice_attachments eia JOIN erp_attachments ea ON eia.attachment_id = ea.id WHERE eia.invoice_id = inv.id AND ea.mime_type = 'application/pdf'))",
           );
         if (vals.includes('has_xml'))
           conditions.push('inv.xml_file_key IS NOT NULL');
         if (vals.includes('no_pdf'))
           conditions.push(
-            "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null'))",
+            "(inv.pdf_file_key IS NULL AND (inv.pdf_files IS NULL OR inv.pdf_files::text = '[]' OR inv.pdf_files::text = 'null') AND NOT EXISTS (SELECT 1 FROM erp_invoice_attachments eia JOIN erp_attachments ea ON eia.attachment_id = ea.id WHERE eia.invoice_id = inv.id AND ea.mime_type = 'application/pdf'))",
           );
         if (vals.includes('no_xml'))
           conditions.push('inv.xml_file_key IS NULL');
@@ -950,18 +1611,44 @@ export class InvoiceQueryService {
         qb.andWhere('inv.tax_invoice_type IN (:...taxInvoiceTypeVals)', {
           taxInvoiceTypeVals: vals,
         });
-      else if (key === 'taxInvoiceStatus')
-        qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
-          taxInvoiceStatusVals: vals
-            .map((v) => parseInt(v, 10))
-            .filter((v) => !isNaN(v)),
-        });
-      else if (key === 'taxProcessStatus')
+      else if (key === 'taxInvoiceStatus') {
+        const numericVals = vals
+          .map((v) => parseInt(v, 10))
+          .filter((v) => !isNaN(v));
+        const includeNull = vals.includes('null') || vals.includes('NULL');
+        if (numericVals.length > 0 && includeNull) {
+          qb.andWhere(
+            '(inv.tax_invoice_status IN (:...taxInvoiceStatusVals) OR inv.tax_invoice_status IS NULL)',
+            { taxInvoiceStatusVals: numericVals },
+          );
+        } else if (numericVals.length > 0) {
+          qb.andWhere('inv.tax_invoice_status IN (:...taxInvoiceStatusVals)', {
+            taxInvoiceStatusVals: numericVals,
+          });
+        } else if (includeNull) {
+          qb.andWhere('inv.tax_invoice_status IS NULL');
+        }
+      } else if (key === 'taxProcessStatus') {
         qb.andWhere('inv.tax_process_status IN (:...taxProcessStatusVals)', {
           taxProcessStatusVals: vals
             .map((v) => parseInt(v, 10))
             .filter((v) => !isNaN(v)),
         });
+      } else if (key === 'netOffAmount' || key === 'remainingAmount') {
+        const conditions: string[] = [];
+        if (vals.includes('settled_full'))
+          conditions.push(
+            '(COALESCE(netoff_agg.net_off_sum, 0) > 0 AND inv.total_amount <= COALESCE(netoff_agg.net_off_sum, 0))',
+          );
+        if (vals.includes('settled_partial'))
+          conditions.push(
+            '(COALESCE(netoff_agg.net_off_sum, 0) > 0 AND inv.total_amount > COALESCE(netoff_agg.net_off_sum, 0))',
+          );
+        if (vals.includes('unsettled'))
+          conditions.push('(COALESCE(netoff_agg.net_off_sum, 0) = 0)');
+
+        if (conditions.length > 0) qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
     });
   }
 

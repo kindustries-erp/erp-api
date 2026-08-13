@@ -1,10 +1,236 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import { Subject } from 'rxjs';
+import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
+import {
+  VinfastPartsExportBackgroundService,
+  type VinfastPartsExportHistoryResult,
+  type VinfastPartsExportProgressEvent,
+  type VinfastPartsExportQuery,
+} from './services/vinfast-parts-export-background.service';
 
 @Injectable()
 export class ReportsCoreService {
-  constructor(private readonly dataSource: DataSource) {}
+  private readonly vinfastSellerTaxCodes = [
+    '0108926276',
+    '0318334886',
+    '0202357718',
+  ];
+  private readonly vinfastSellerTaxCodesSql = this.vinfastSellerTaxCodes
+    .map((taxCode) => `'${taxCode.replace(/'/g, "''")}'`)
+    .join(', ');
+
+  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.map(
+    (code) => `'${code.replace(/'/g, "''")}'`,
+  ).join(', ');
+
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly vinfastPartsExportBackgroundService: VinfastPartsExportBackgroundService,
+  ) {}
+
+  get vinfastPartsExportProgress$(): Subject<VinfastPartsExportProgressEvent> {
+    return this.vinfastPartsExportBackgroundService.progress$;
+  }
+
+  startVinfastPartsExportBackground(
+    query: VinfastPartsExportQuery,
+    userId: string,
+  ) {
+    return this.vinfastPartsExportBackgroundService.startBackgroundExport(
+      query,
+      userId,
+      async (onProgress) =>
+        this.exportVinfastPartsTrackingExcel(query, { onProgress }),
+    );
+  }
+
+  getVinfastPartsExportHistory(
+    userId: string,
+    page?: number,
+    pageSize?: number,
+  ): VinfastPartsExportHistoryResult {
+    return this.vinfastPartsExportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getVinfastPartsExportProgressSnapshot(userId: string) {
+    return this.vinfastPartsExportBackgroundService.getJobSnapshotForUser(
+      userId,
+    );
+  }
+
+  getVinfastPartsExportBackgroundFile(jobId: string, userId: string) {
+    return this.vinfastPartsExportBackgroundService.getReadyExportFile(
+      jobId,
+      userId,
+    );
+  }
+
+  private async calculateVinfastFifo(
+    dateTo?: string,
+    groupInterval: string = 'month',
+  ) {
+    let dateFilter = '';
+    const params: any[] = [];
+    if (dateTo) {
+      dateFilter = 'AND l.transaction_date <= $1';
+      params.push(dateTo);
+    }
+    const query = `
+      SELECT 
+        l.part_sku,
+        l.direction,
+        l.qty::numeric as qty,
+        l.unit_cost::numeric as unit_cost,
+        l.pre_vat_amount::numeric as pre_vat_amount,
+        l.transaction_date,
+        l.is_adjustment,
+        l.adj_sign,
+        c.name as item_name
+      FROM vinfast_parts_ledger l
+      JOIN erp_invoices i ON i.id = l.invoice_id
+      LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
+      WHERE i.tax_invoice_status IN (1, 3) ${dateFilter}
+      ORDER BY l.transaction_date ASC, l.created_at ASC
+    `;
+    const ledgers = await this.dataSource.query(query, params);
+
+    const skuFifoMap: Record<string, { qty: number; unitCost: number }[]> = {};
+    const monthMetrics: Record<string, any> = {};
+
+    for (const t of ledgers) {
+      const sku = t.part_sku;
+      // Truncate to YYYY-MM
+      const d = new Date(t.transaction_date);
+      const year = d.getFullYear();
+      const mStr = String(d.getMonth() + 1).padStart(2, '0');
+      let dateKey = `${year}-${mStr}`;
+      if (groupInterval === 'day') {
+        dateKey = `${year}-${mStr}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (groupInterval === 'week') {
+        const tempD = new Date(d.getTime());
+        const day = tempD.getDay();
+        const diff = tempD.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(tempD.setDate(diff));
+        const mYear = monday.getFullYear();
+        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+        const mDay = String(monday.getDate()).padStart(2, '0');
+        dateKey = `${mYear}-${mMonth}-${mDay}`;
+      } else if (groupInterval === 'year') {
+        dateKey = `${year}-01-01`;
+      }
+
+      const key = `${sku}_${dateKey}`;
+
+      if (!skuFifoMap[sku]) skuFifoMap[sku] = [];
+      if (!monthMetrics[key]) {
+        monthMetrics[key] = {
+          month: dateKey,
+          itemCode: sku,
+          itemName: t.item_name || '',
+          qtyBought: 0,
+          qtySold: 0,
+          amountBought: 0,
+          amountSold: 0,
+          totalCogs: 0,
+        };
+      }
+
+      const m = monthMetrics[key];
+      let qty = Number(t.qty || 0);
+      let amount = Number(t.pre_vat_amount || 0);
+
+      if (t.is_adjustment && t.adj_sign === -1) {
+        qty = -qty;
+        amount = -amount;
+      }
+
+      if (t.direction === 'IN') {
+        m.qtyBought += qty;
+        m.amountBought += amount;
+        if (qty > 0) {
+          skuFifoMap[sku].push({ qty, unitCost: Number(t.unit_cost || 0) });
+        } else if (qty < 0) {
+          let qToReverse = Math.abs(qty);
+          while (qToReverse > 0 && skuFifoMap[sku].length > 0) {
+            const batch = skuFifoMap[sku][0];
+            if (batch.qty <= qToReverse) {
+              qToReverse -= batch.qty;
+              skuFifoMap[sku].shift();
+            } else {
+              batch.qty -= qToReverse;
+              qToReverse = 0;
+            }
+          }
+        }
+      } else {
+        m.qtySold += qty;
+        m.amountSold += amount;
+        let cogsForThisOut = 0;
+        if (qty > 0) {
+          let qNeeded = qty;
+          while (qNeeded > 0) {
+            if (skuFifoMap[sku].length === 0) {
+              cogsForThisOut += qNeeded * 0;
+              break;
+            }
+            const batch = skuFifoMap[sku][0];
+            if (batch.qty <= qNeeded) {
+              cogsForThisOut += batch.qty * batch.unitCost;
+              qNeeded -= batch.qty;
+              skuFifoMap[sku].shift();
+            } else {
+              cogsForThisOut += qNeeded * batch.unitCost;
+              batch.qty -= qNeeded;
+              qNeeded = 0;
+            }
+          }
+        } else if (qty < 0) {
+          cogsForThisOut = 0;
+        }
+        m.totalCogs += cogsForThisOut;
+      }
+    }
+    return Object.values(monthMetrics);
+  }
+
+  private buildFifoMonthlyValuesSql(metrics: any[], paramStartIndex: number) {
+    if (metrics.length === 0) {
+      return {
+        valuesSql: `(VALUES ('__DUMMY__', '1970-01', 0, 0, 0, 0, 0, ''))`,
+        params: [],
+        nextIndex: paramStartIndex,
+      };
+    }
+    const params: any[] = [];
+    const rows: string[] = [];
+    let idx = paramStartIndex;
+    for (const m of metrics) {
+      rows.push(
+        `($${idx++}, $${idx++}, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++})`,
+      );
+      params.push(
+        m.itemCode,
+        m.month,
+        m.qtyBought,
+        m.qtySold,
+        m.amountBought,
+        m.amountSold,
+        m.totalCogs,
+        m.itemName,
+      );
+    }
+    return {
+      valuesSql: `(VALUES ${rows.join(', ')})`,
+      params,
+      nextIndex: idx,
+    };
+  }
 
   async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
     const { whereSql, params } = this.buildDateFilter(
@@ -251,6 +477,370 @@ export class ReportsCoreService {
     };
   }
 
+  /**
+   * Item code precedence for VINFAST IN lines:
+   * 1) keyword exceptions, 2) strict regex-based detection.
+   */
+  private buildPurchasedItemCodesCteSql(
+    inItemCodeSql: string,
+    inItemNameSql: string,
+  ) {
+    return `
+      purchased_item_codes AS (
+        SELECT 
+          (${inItemCodeSql}) AS item_code,
+          MAX(${inItemNameSql}) AS original_item_name,
+          BOOL_OR(i.seller_tax_code = '0318334886') AS from_car_seller
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+        GROUP BY (${inItemCodeSql})
+      ),`;
+  }
+
+  private buildVinfastInItemCodeSql(descriptionExpr: string) {
+    const normalizedExpr = `UPPER(COALESCE(${descriptionExpr}, ''))`;
+    const canonicalExpr = `REGEXP_REPLACE(${normalizedExpr}, '[^A-Z0-9]+', '_', 'g')`;
+    return `
+      CASE
+        WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
+          OR ${canonicalExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
+          THEN 'EEP73110011AP'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9KWH%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9_KWH%'
+          OR ${canonicalExpr} LIKE '%BAT21001011%'
+          THEN 'BAT21001011'
+        WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%'
+          OR ${canonicalExpr} LIKE '%HV_BATTERY_PACK%'
+          THEN 'EEP73110011ALL'
+        WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
+        ELSE NULL
+      END
+    `;
+  }
+
+  private buildVinfastInItemNameSql(descriptionExpr: string) {
+    return `
+      CASE
+        WHEN ${descriptionExpr} LIKE '% - %'
+          THEN TRIM(SPLIT_PART(${descriptionExpr}, ' - ', 2))
+        ELSE TRIM(COALESCE(${descriptionExpr}, ''))
+      END
+    `;
+  }
+
+  private buildVinfastVehicleTypeSql(
+    itemCodeExpr: string,
+    carSellerBoolExpr?: string,
+  ) {
+    const normalizedItemCode = `UPPER(TRIM(COALESCE(${itemCodeExpr}, '')))`;
+    const carSellerWhen = carSellerBoolExpr
+      ? `WHEN ${carSellerBoolExpr} THEN 'CAR'`
+      : '';
+    return `
+      CASE
+        ${carSellerWhen}
+        WHEN ${normalizedItemCode} IN (${this.vinfastCarPartCodesSql}) THEN 'CAR'
+        ELSE 'MOTORBIKE'
+      END
+    `;
+  }
+
+  async getVinfastPartsDashboard(query: {
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+    groupBy?: string;
+    itemCode?: string;
+  }) {
+    const groupInterval = ['day', 'week', 'year'].includes(query.groupBy || '')
+      ? query.groupBy
+      : 'month';
+    const fifoMetrics = await this.calculateVinfastFifo(
+      query.dateTo,
+      groupInterval,
+    );
+
+    const summary = {
+      revenue: 0,
+      cogs: 0,
+      grossProfit: 0,
+      inventoryValue: 0,
+      totalBuy: 0,
+    };
+
+    const trendMap: Record<string, any> = {};
+
+    let totalCumulativeBuy = 0;
+    let totalCumulativeCogs = 0;
+
+    for (const m of fifoMetrics) {
+      if (query.itemCode && m.itemCode !== query.itemCode) continue;
+
+      let isCarPart = false;
+      const normalizedCode = m.itemCode ? m.itemCode.toUpperCase().trim() : '';
+      if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
+        isCarPart = true;
+      }
+
+      // If it doesn't match the list, we assume MOTORBIKE unless from_car_seller was checked,
+      // but in FIFO we just rely on the hardcoded SKUs for the dashboard aggregation.
+      const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
+      if (
+        query.vehicleType &&
+        query.vehicleType !== 'all' &&
+        query.vehicleType !== vType
+      ) {
+        continue;
+      }
+
+      totalCumulativeBuy += m.amountBought;
+      totalCumulativeCogs += m.totalCogs;
+
+      if (query.dateFrom && m.month < query.dateFrom) continue;
+      if (query.dateTo && m.month > query.dateTo) continue;
+
+      if (!trendMap[m.month]) {
+        trendMap[m.month] = {
+          month: m.month,
+          revenue: 0,
+          cogs: 0,
+          grossProfit: 0,
+        };
+      }
+
+      trendMap[m.month].revenue += m.amountSold;
+      trendMap[m.month].cogs += m.totalCogs;
+      trendMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+
+      summary.revenue += m.amountSold;
+      summary.cogs += m.totalCogs;
+      summary.grossProfit += m.amountSold - m.totalCogs;
+    }
+
+    summary.inventoryValue = totalCumulativeBuy - totalCumulativeCogs;
+
+    const trend = Object.values(trendMap).sort((a: any, b: any) =>
+      a.month.localeCompare(b.month),
+    );
+
+    return {
+      summary,
+      trend,
+    };
+  }
+
+  async getVinfastPartsDashboardTable(query: {
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+    page?: number;
+    limit?: number;
+    columnSearch?: string;
+    columnFilters?: string;
+    sorts?: string;
+  }) {
+    let paramIndex = 1;
+
+    // 1. Calculate FIFO metrics in memory
+    const fifoMetrics = await this.calculateVinfastFifo(query.dateTo, 'month');
+    const { valuesSql, params, nextIndex } = this.buildFifoMonthlyValuesSql(
+      fifoMetrics,
+      paramIndex,
+    );
+    paramIndex = nextIndex;
+
+    let dateFilter = '';
+    if (query.dateFrom) {
+      dateFilter += ` AND v.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND v.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+
+    // Used in WHERE (row-level, before GROUP BY)
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'v.item_code',
+      'p.from_car_seller',
+    );
+    // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'v.item_code',
+      'BOOL_OR(p.from_car_seller)',
+    );
+
+    let vehicleTypeFilter = '';
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    const numericColMap: Record<string, string> = {
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - cogs)',
+    };
+
+    let searchFilter = '';
+    let numericSearchFilter = '';
+    if (query.columnSearch) {
+      try {
+        const cSearch = JSON.parse(query.columnSearch) as Record<
+          string,
+          string
+        >;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          if (col === 'itemCode') {
+            searchFilter += ` AND v.item_code ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          } else if (col === 'itemName') {
+            searchFilter += ` AND v.item_name ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          } else if (numericColMap[col]) {
+            numericSearchFilter += ` AND ${numericColMap[col]}::text ILIKE $${paramIndex}`;
+            params.push(`%${val}%`);
+            paramIndex++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let filtersSql = '';
+    let numericFiltersSql = '';
+    if (query.columnFilters) {
+      try {
+        const cFilters = JSON.parse(query.columnFilters) as Record<
+          string,
+          string[]
+        >;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === 'itemCode') {
+            filtersSql += ` AND v.item_code = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          } else if (col === 'itemName') {
+            filtersSql += ` AND v.item_name = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          } else if (numericColMap[col]) {
+            numericFiltersSql += ` AND ${numericColMap[col]}::text = ANY($${paramIndex})`;
+            params.push(vals);
+            paramIndex++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let orderSql = 'ORDER BY amount_sold DESC, amount_bought DESC';
+    if (query.sorts) {
+      try {
+        const sortsArr = JSON.parse(query.sorts) as string[];
+        if (sortsArr.length > 0) {
+          const sortFields: string[] = [];
+          for (const s of sortsArr) {
+            const isDesc = s.startsWith('-');
+            const col = s.replace(/^-/, '');
+            let sqlCol = '';
+            if (col === 'itemCode') sqlCol = 'item_code';
+            else if (col === 'itemName') sqlCol = 'item_name';
+            else if (col === 'qtyBought') sqlCol = 'qty_bought';
+            else if (col === 'qtySold') sqlCol = 'qty_sold';
+            else if (col === 'amountBought') sqlCol = 'amount_bought';
+            else if (col === 'amountSold') sqlCol = 'amount_sold';
+            else if (col === 'profit') sqlCol = '(amount_sold - cogs)';
+
+            if (sqlCol) {
+              sortFields.push(`${sqlCol} ${isDesc ? 'DESC' : 'ASC'}`);
+            }
+          }
+          if (sortFields.length > 0) {
+            orderSql = `ORDER BY ${sortFields.join(', ')}`;
+          }
+        }
+      } catch (e) {}
+    }
+
+    const sql = `
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      base_data AS (
+        SELECT 
+          v.item_code,
+          MAX(v.item_name) AS item_name,
+          ${vehicleTypeSelectSql} AS vehicle_type,
+          SUM(v.qty_bought) AS qty_bought,
+          SUM(v.qty_sold) AS qty_sold,
+          SUM(v.amount_bought) AS amount_bought,
+          SUM(v.amount_sold) AS amount_sold,
+          SUM(v.cogs) AS cogs
+        FROM ${valuesSql} AS v(item_code, month, qty_bought, qty_sold, amount_bought, amount_sold, cogs, item_name)
+        LEFT JOIN purchased_item_codes p ON p.item_code = v.item_code
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleTypeFilter}
+          ${searchFilter}
+          ${filtersSql}
+        GROUP BY v.item_code
+      ),
+      filtered_data AS (
+        SELECT *, COUNT(*) OVER() AS "totalCount"
+        FROM base_data
+        WHERE 1=1 ${numericSearchFilter} ${numericFiltersSql}
+      )
+      SELECT *
+      FROM filtered_data
+      ${orderSql}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const page = query.page || 1;
+    const limit = query.limit || 50;
+    const offset = (page - 1) * limit;
+
+    params.push(limit, offset);
+
+    const rawData = await this.dataSource.query(sql, params);
+    const total = rawData.length > 0 ? parseInt(rawData[0].totalCount, 10) : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items: rawData.map((row: any) => ({
+        itemCode: row.item_code,
+        itemName: row.item_name,
+        vehicleType: row.vehicle_type,
+        qtyBought: Number(row.qty_bought || 0),
+        qtySold: Number(row.qty_sold || 0),
+        amountBought: Number(row.amount_bought || 0),
+        amountSold: Number(row.amount_sold || 0),
+        profit: Number(row.amount_sold || 0) - Number(row.cogs || 0),
+      })),
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+  }
+
   async getVinfastPartsTracking(query: {
     dateFrom?: string;
     dateTo?: string;
@@ -263,25 +853,33 @@ export class ReportsCoreService {
     page?: number;
     limit?: number;
   }) {
-    let dateFilter = '';
-    let searchFilter = '';
-    const params: any[] = [];
     let paramIndex = 1;
 
+    // 1. Calculate FIFO metrics in memory
+    const fifoMetrics = await this.calculateVinfastFifo(query.dateTo, 'month');
+    const { valuesSql, params, nextIndex } = this.buildFifoMonthlyValuesSql(
+      fifoMetrics,
+      paramIndex,
+    );
+    paramIndex = nextIndex;
+
+    let dateFilter = '';
+    let searchFilter = '';
+
     if (query.dateFrom) {
-      dateFilter += ` AND b.month >= $${paramIndex}`;
+      dateFilter += ` AND v.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
 
     if (query.dateTo) {
-      dateFilter += ` AND b.month <= $${paramIndex}`;
+      dateFilter += ` AND v.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     if (query.search) {
-      searchFilter = `AND b.item_code ILIKE $${paramIndex}`;
+      searchFilter = `AND v.item_code ILIKE $${paramIndex}`;
       params.push(`%${query.search}%`);
       paramIndex++;
     }
@@ -290,13 +888,14 @@ export class ReportsCoreService {
       itemCode: '"itemCode"',
       month: '"month"',
       itemName: '"itemName"',
+      vehicleType: '"vehicleType"',
       qtyBought: '"qtyBought"',
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
       avgSellPrice: '"avgSellPrice"',
-      margin: '("avgSellPrice" - "avgBuyPrice")',
+      margin: '"margin"',
       marginPct:
-        '(TO_CHAR(CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
+        '(TO_CHAR(CASE WHEN "avgCogs" > 0 THEN ("margin" / "avgCogs" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
     };
 
     let orderByClause = 'ORDER BY "month" DESC, "itemCode" ASC';
@@ -327,7 +926,7 @@ export class ReportsCoreService {
     } else if (query.sortBy && sortMap[query.sortBy]) {
       const dir = query.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       if (query.sortBy === 'marginPct') {
-        orderByClause = `ORDER BY (CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END) ${dir}`;
+        orderByClause = `ORDER BY (CASE WHEN "avgCogs" > 0 THEN ("margin" / "avgCogs" * 100.0) ELSE 0.0 END) ${dir}`;
       } else {
         orderByClause = `ORDER BY ${sortMap[query.sortBy]} ${dir}`;
       }
@@ -379,71 +978,31 @@ export class ReportsCoreService {
     const limit = query.limit || 50;
     const page = query.page || 1;
     const offset = (page - 1) * limit;
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'v.item_code',
+      'COALESCE(p.from_car_seller, false)',
+    );
 
     const sql = `
-      WITH buy_codes AS (
-        SELECT 
-          ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-        WHERE i.is_deleted = false
-          AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
-      ),
-      sell_codes AS (
-        SELECT 
-          ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-        WHERE i.is_deleted = false
-          AND i.direction = 'OUT'
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
-      ),
-      buy_agg AS (
-        SELECT 
-          item_code,
-          MAX(item_name) AS item_name,
-          month,
-          SUM(qty) AS total_qty,
-          ROUND(AVG(unit_price)) AS avg_price,
-          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
-        FROM buy_codes
-        GROUP BY item_code, month
-      ),
-      sell_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          ROUND(AVG(unit_price)) AS avg_price,
-          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
-        FROM sell_codes
-        GROUP BY item_code, month
-      ),
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
       base_data AS (
         SELECT 
-          b.item_code AS "itemCode",
-          b.item_name AS "itemName",
-          TO_CHAR(b.month, 'YYYY-MM') AS "month",
-          COALESCE(b.total_qty, 0) AS "qtyBought",
-          COALESCE(s.total_qty, 0) AS "qtySold",
-          COALESCE(b.avg_price, 0) AS "avgBuyPrice",
-          COALESCE(s.avg_price, 0) AS "avgSellPrice",
-          b.invoice_ids AS "buyInvoiceIds",
-          s.invoice_ids AS "sellInvoiceIds"
-        FROM buy_agg b
-        LEFT JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          v.item_code AS "itemCode",
+          v.item_name AS "itemName",
+          ${vehicleTypeSql} AS "vehicleType",
+          v.month AS "month",
+          v.qty_bought AS "qtyBought",
+          v.qty_sold AS "qtySold",
+          CASE WHEN v.qty_bought > 0 THEN ROUND(v.amount_bought / v.qty_bought) ELSE 0 END AS "avgBuyPrice",
+          CASE WHEN v.qty_sold > 0 THEN ROUND(v.amount_sold / v.qty_sold) ELSE 0 END AS "avgSellPrice",
+          CASE WHEN v.qty_sold > 0 THEN ROUND(v.cogs / v.qty_sold) ELSE 0 END AS "avgCogs",
+          CASE WHEN v.qty_sold > 0 THEN ROUND((v.amount_sold - v.cogs) / v.qty_sold) ELSE 0 END AS "margin",
+          '{}'::text[] AS "buyInvoiceIds",
+          '{}'::text[] AS "sellInvoiceIds"
+        FROM ${valuesSql} AS v(item_code, month, qty_bought, qty_sold, amount_bought, amount_sold, cogs, item_name)
+        LEFT JOIN purchased_item_codes p ON p.item_code = v.item_code
         WHERE 1=1
           ${dateFilter}
           ${searchFilter}
@@ -472,12 +1031,16 @@ export class ReportsCoreService {
       const qtySold = parseFloat(row.qtySold || '0');
       const avgBuyPrice = parseFloat(row.avgBuyPrice || '0');
       const avgSellPrice = parseFloat(row.avgSellPrice || '0');
-      const margin = avgSellPrice - avgBuyPrice;
-      const marginPct = avgBuyPrice > 0 ? (margin / avgBuyPrice) * 100 : 0;
+      const avgCogs = parseFloat(row.avgCogs || '0');
+      const hasSoldQty = qtySold > 0;
+      const margin = hasSoldQty ? parseFloat(row.margin || '0') : null;
+      const marginPct =
+        hasSoldQty && avgCogs > 0 ? (margin! / avgCogs) * 100 : null;
 
       return {
         itemCode: row.itemCode,
         itemName: row.itemName,
+        vehicleType: row.vehicleType,
         month: row.month,
         buyInvoiceIds: row.buyInvoiceIds,
         sellInvoiceIds: row.sellInvoiceIds,
@@ -486,7 +1049,7 @@ export class ReportsCoreService {
         avgBuyPrice,
         avgSellPrice,
         margin,
-        marginPct: marginPct.toFixed(1) + '%',
+        marginPct: marginPct == null ? '' : marginPct.toFixed(1) + '%',
       };
     });
 
@@ -528,110 +1091,192 @@ export class ReportsCoreService {
       paramIndex++;
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'c.item_code',
+      'c.from_car_seller',
+    );
+
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           'IN' as direction,
-          i.invoice_no,
-          i.serial_no,
-          i.status,
-          i.seller_name AS partner_name,
-          i.seller_tax_code AS tax_code,
-          TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
+          MAX(i.invoice_no) AS invoice_no,
+          MAX(i.serial_no) AS serial_no,
+          MAX(i.status) AS status,
+          MAX(i.tax_invoice_status) AS tax_invoice_status,
+          MAX(i.seller_name) AS partner_name,
+          MAX(i.seller_tax_code) AS tax_code,
+          MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
-          ii.unit,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
-          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
+          ${inItemCodeSql} AS item_code,
+          MAX(${inItemNameSql}) AS item_name,
+          MAX(ii.unit) AS unit,
+          COALESCE(SUM(
             CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.quantity::numeric
+            END
+          ), 0) AS qty,
+          AVG(
+            CASE
+              WHEN i.tax_invoice_status IN (3, 6) THEN NULL
+              ELSE ii.unit_price::numeric
+            END
+          ) AS unit_price,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric
+            END
+          ) AS pre_vat_amount,
+          MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric + COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.license_plate,
-          i.settlement_order,
-          ii.description
+          MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
+          MAX(i.license_plate) AS license_plate,
+          MAX(i.settlement_order) AS settlement_order,
+          MAX(ii.description) AS description,
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+        GROUP BY ii.invoice_id, ${inItemCodeSql}
       ),
       sell_codes AS (
         SELECT 
           'OUT' as direction,
-          i.invoice_no,
-          i.serial_no,
-          i.status,
-          i.buyer_name AS partner_name,
-          i.buyer_tax_code AS tax_code,
-          TO_CHAR(i.invoice_date, 'YYYY-MM-DD') as invoice_date,
+          MAX(i.invoice_no) AS invoice_no,
+          MAX(i.serial_no) AS serial_no,
+          MAX(i.status) AS status,
+          MAX(i.tax_invoice_status) AS tax_invoice_status,
+          MAX(i.buyer_name) AS partner_name,
+          MAX(i.buyer_tax_code) AS tax_code,
+          MAX(TO_CHAR(i.invoice_date, 'YYYY-MM-DD')) as invoice_date,
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
-          '' AS item_name,
-          ii.unit,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
-          COALESCE(ii.vat_rate, i.vat_rate) AS vat_rate,
-          COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
+          (${inItemCodeSql}) AS item_code,
+          MAX(p.original_item_name) AS item_name,
+          MAX(ii.unit) AS unit,
+          COALESCE(SUM(
             CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.quantity::numeric
+            END
+          ), 0) AS qty,
+          AVG(
+            CASE
+              WHEN i.tax_invoice_status IN (3, 6) THEN NULL
+              ELSE ii.unit_price::numeric
+            END
+          ) AS unit_price,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric
+            END
+          ) AS pre_vat_amount,
+          MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS vat_amount,
-          (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-            NULLIF(ii.vat_amount::numeric, 0), 
-            CASE 
-              WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-              THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-              ELSE 0 
-            END, 
-            0
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric + COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS total_amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          i.license_plate,
-          i.settlement_order,
-          ii.description
+          MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
+          MAX(i.license_plate) AS license_plate,
+          MAX(i.settlement_order) AS settlement_order,
+          MAX(ii.description) AS description,
+          BOOL_OR(p.from_car_seller) AS from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
+          
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+        GROUP BY ii.invoice_id, (${inItemCodeSql})
       )
       SELECT 
         c.direction,
         c.invoice_no AS "invoiceNo",
         c.serial_no AS "serialNo",
         c.status,
+        c.tax_invoice_status AS "taxInvoiceStatus",
         c.partner_name AS "partnerName",
         c.tax_code AS "taxCode",
         c.invoice_date AS "invoiceDate",
         c.invoice_id AS "invoiceId",
         c.item_code AS "itemCode",
-        b.item_name AS "itemName",
+        c.item_name AS "itemName",
+        ${vehicleTypeSql} AS "vehicleType",
         c.unit,
         c.qty,
         c.unit_price AS "unitPrice",
@@ -648,11 +1293,7 @@ export class ReportsCoreService {
         UNION ALL
         SELECT * FROM sell_codes
       ) c
-      LEFT JOIN (
-        SELECT DISTINCT item_code, item_name, month FROM buy_codes
-      ) b ON b.item_code = c.item_code AND b.month = c.month
       WHERE 1=1
-        AND EXISTS (SELECT 1 FROM buy_codes b2 WHERE b2.item_code = c.item_code AND b2.month = c.month)
         ${dateFilter}
         ${searchFilter}
       ORDER BY c.month DESC, c.item_code ASC, c.direction ASC, c.invoice_date ASC
@@ -661,14 +1302,26 @@ export class ReportsCoreService {
     return await this.dataSource.query(sql, params);
   }
 
-  async exportVinfastPartsTrackingExcel(query: {
-    dateFrom?: string;
-    dateTo?: string;
-    search?: string;
-    sorts?: string;
-    columnSearch?: string;
-    columnFilters?: string;
-  }) {
+  async exportVinfastPartsTrackingExcel(
+    query: {
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      sorts?: string;
+      columnSearch?: string;
+      columnFilters?: string;
+    },
+    options?: {
+      onProgress?: (current: number, total: number, message: string) => void;
+    },
+  ) {
+    const onProgress = options?.onProgress;
+    const totalProgressUnits = 100;
+
+    onProgress?.(5, totalProgressUnits, 'Đang tải dữ liệu tổng quan...');
+
     // 1. Fetch overview data
     const overviewDataResp = await this.getVinfastPartsTracking({
       ...query,
@@ -678,6 +1331,8 @@ export class ReportsCoreService {
     const overviewData = overviewDataResp.data;
     const overviewItemCodes = new Set(overviewData.map((d: any) => d.itemCode));
 
+    onProgress?.(30, totalProgressUnits, 'Đang tải dữ liệu chi tiết...');
+
     // 2. Fetch details data and filter by overview items
     let rawData = await this.getVinfastPartsTrackingDetails({
       dateFrom: query.dateFrom,
@@ -686,14 +1341,34 @@ export class ReportsCoreService {
     });
     rawData = rawData.filter((row: any) => overviewItemCodes.has(row.itemCode));
 
+    onProgress?.(55, totalProgressUnits, 'Đang tạo workbook Excel...');
+
     const workbook = new ExcelJS.Workbook();
 
-    // --- SHEET 1: TỔNG QUAN ---
-    const sheet1 = workbook.addWorksheet('Tổng quan');
-    sheet1.columns = [
+    const formatTaxInvoiceStatus = (val?: number | null): string => {
+      switch (val) {
+        case 1:
+          return 'Mới';
+        case 2:
+          return 'Thay thế';
+        case 3:
+          return 'Điều chỉnh';
+        case 4:
+          return 'Bị thay thế';
+        case 5:
+          return 'Bị điều chỉnh';
+        case 6:
+          return 'Bị hủy';
+        default:
+          return val?.toString() || '—';
+      }
+    };
+
+    const overviewColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
       { header: 'SL mua (VINFAST)', key: 'qtyBought', width: 15 },
       { header: 'Giá mua TB', key: 'avgBuyPrice', width: 15 },
       { header: 'SL bán ra', key: 'qtySold', width: 15 },
@@ -701,62 +1376,19 @@ export class ReportsCoreService {
       { header: 'Biên LN', key: 'margin', width: 15 },
       { header: 'Biên LN (%)', key: 'marginPct', width: 15 },
     ];
-    sheet1.getRow(1).font = { bold: true };
-    sheet1.getRow(1).alignment = { horizontal: 'center' };
-    sheet1.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
-    };
-    sheet1.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-    ];
-    sheet1.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: 9 },
-    };
 
-    overviewData.forEach((row: any) => {
-      sheet1.addRow({
-        month: row.month,
-        itemCode: row.itemCode,
-        itemName: row.itemName,
-        qtyBought: row.qtyBought,
-        avgBuyPrice: row.avgBuyPrice,
-        qtySold: row.qtySold,
-        avgSellPrice: row.avgSellPrice,
-        margin: row.margin,
-        marginPct: row.marginPct,
-      });
-    });
-
-    sheet1.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        [
-          'qtyBought',
-          'avgBuyPrice',
-          'qtySold',
-          'avgSellPrice',
-          'margin',
-        ].forEach((key) => {
-          const cell = row.getCell(key);
-          cell.numFmt = '#,##0';
-        });
-      }
-    });
-
-    // --- SHEET 2: CHI TIẾT ---
-    const sheet2 = workbook.addWorksheet('Chi tiết');
-    sheet2.columns = [
+    const detailColumns = [
       { header: 'Tháng', key: 'month', width: 12 },
       { header: 'Mã phụ tùng', key: 'itemCode', width: 15 },
       { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
-      { header: 'Phân loại', key: 'direction', width: 12 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
       { header: 'Ngày hóa đơn', key: 'invoiceDate', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
       { header: 'Tên đối tác', key: 'partnerName', width: 40 },
       { header: 'Mã số thuế', key: 'taxCode', width: 15 },
+      { header: 'Trạng thái GDT', key: 'gdtStatus', width: 20 },
+      { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Đơn vị tính', key: 'unit', width: 12 },
       { header: 'Số lượng', key: 'qty', width: 12 },
       { header: 'Đơn giá', key: 'unitPrice', width: 20 },
@@ -771,23 +1403,111 @@ export class ReportsCoreService {
       { header: 'Thành tiền', key: 'totalAmount', width: 20 },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 20 },
-      { header: 'Diễn giải', key: 'description', width: 40 },
       { header: 'Trạng thái', key: 'status', width: 15 },
     ];
 
-    sheet2.getRow(1).font = { bold: true };
-    sheet2.getRow(1).alignment = { horizontal: 'center' };
-    sheet2.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' },
+    const setupSheetHeader = (
+      sheet: ExcelJS.Worksheet,
+      filterColumnCount: number,
+    ) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: filterColumnCount },
+      };
     };
-    sheet2.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-    ];
-    sheet2.autoFilter = {
-      from: { row: 1, column: 1 },
-      to: { row: 1, column: 20 },
+
+    const createOverviewSheet = (sheetName: string, rows: any[]) => {
+      const sheet = workbook.addWorksheet(sheetName);
+      sheet.columns = overviewColumns as any;
+      setupSheetHeader(sheet, 10);
+
+      rows.forEach((row: any) => {
+        sheet.addRow({
+          month: row.month,
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          qtyBought: row.qtyBought,
+          avgBuyPrice: row.avgBuyPrice,
+          qtySold: row.qtySold,
+          avgSellPrice: row.avgSellPrice,
+          margin: row.margin,
+          marginPct: row.marginPct,
+        });
+      });
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          [
+            'qtyBought',
+            'avgBuyPrice',
+            'qtySold',
+            'avgSellPrice',
+            'margin',
+          ].forEach((key) => {
+            const cell = row.getCell(key);
+            cell.numFmt = '#,##0';
+          });
+        }
+      });
+    };
+
+    const createDetailSheet = (sheetName: string, rows: any[]) => {
+      const sheet = workbook.addWorksheet(sheetName);
+      sheet.columns = detailColumns as any;
+      setupSheetHeader(sheet, 21);
+
+      rows.forEach((row: any) => {
+        sheet.addRow({
+          month: row.month,
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          invoiceDate: row.invoiceDate,
+          serialNo: row.serialNo,
+          invoiceNo: row.invoiceNo,
+          partnerName: row.partnerName,
+          taxCode: row.taxCode,
+          description: row.description,
+          unit: row.unit,
+          qty: parseFloat(row.qty || '0'),
+          unitPrice: parseFloat(row.unitPrice || '0'),
+          preVatAmount: parseFloat(row.preVatAmount || '0'),
+          vatRate: parseVat(row.vatRate),
+          vatAmount: parseFloat(row.vatAmount || '0'),
+          totalAmount: parseFloat(row.totalAmount || '0'),
+          licensePlate: row.licensePlate,
+          settlementOrder: row.settlementOrder,
+          status: row.status,
+          gdtStatus: formatTaxInvoiceStatus(row.taxInvoiceStatus),
+        });
+      });
+
+      const numColumns = [
+        'qty',
+        'unitPrice',
+        'preVatAmount',
+        'vatAmount',
+        'totalAmount',
+      ];
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          numColumns.forEach((key) => {
+            const cell = row.getCell(key);
+            cell.numFmt = '#,##0';
+          });
+        }
+      });
     };
 
     const parseVat = (val: any) => {
@@ -796,49 +1516,375 @@ export class ReportsCoreService {
       return isNaN(n) ? val : n;
     };
 
-    rawData.forEach((row: any) => {
-      sheet2.addRow({
-        month: row.month,
-        itemCode: row.itemCode,
-        itemName: row.itemName,
-        direction: row.direction === 'IN' ? 'Mua vào' : 'Bán ra',
-        invoiceDate: row.invoiceDate,
-        serialNo: row.serialNo,
-        invoiceNo: row.invoiceNo,
-        partnerName: row.partnerName,
-        taxCode: row.taxCode,
-        unit: row.unit,
-        qty: parseFloat(row.qty || '0'),
-        unitPrice: parseFloat(row.unitPrice || '0'),
-        preVatAmount: parseFloat(row.preVatAmount || '0'),
-        vatRate: parseVat(row.vatRate),
-        vatAmount: parseFloat(row.vatAmount || '0'),
-        totalAmount: parseFloat(row.totalAmount || '0'),
-        licensePlate: row.licensePlate,
-        settlementOrder: row.settlementOrder,
-        description: row.description,
-        status: row.status,
-      });
-    });
+    const parsedFilters = query.columnFilters
+      ? JSON.parse(query.columnFilters)
+      : {};
+    const reqVehicleType = parsedFilters['vehicleType'];
 
-    const numColumns = [
-      'qty',
-      'unitPrice',
-      'preVatAmount',
-      'vatAmount',
-      'totalAmount',
-    ];
-    sheet2.eachRow((row, rowNumber) => {
+    const vehicleTypeSheetPrefix: Record<string, string> = {};
+    if (
+      reqVehicleType &&
+      reqVehicleType.includes('CAR') &&
+      !reqVehicleType.includes('MOTORBIKE')
+    ) {
+      vehicleTypeSheetPrefix['CAR'] = 'Ô tô';
+    } else if (
+      reqVehicleType &&
+      reqVehicleType.includes('MOTORBIKE') &&
+      !reqVehicleType.includes('CAR')
+    ) {
+      vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
+    } else {
+      vehicleTypeSheetPrefix['CAR'] = 'Ô tô';
+      vehicleTypeSheetPrefix['MOTORBIKE'] = 'Xe máy';
+    }
+
+    onProgress?.(
+      70,
+      totalProgressUnits,
+      'Đang tổng hợp dữ liệu theo phụ tùng...',
+    );
+
+    // ── Tổng hợp phụ tùng (all months combined, no month column) ──────────
+    const summaryMap = new Map<
+      string,
+      {
+        itemCode: string;
+        itemName: string;
+        vehicleType: string;
+        qtyBought: number;
+        qtySold: number;
+        totalBuyAmount: number;
+        totalSellAmount: number;
+      }
+    >();
+    overviewData.forEach((row: any) => {
+      const ex = summaryMap.get(row.itemCode);
+      if (!ex) {
+        summaryMap.set(row.itemCode, {
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          vehicleType: row.vehicleType,
+          qtyBought: Number(row.qtyBought || 0),
+          qtySold: Number(row.qtySold || 0),
+          totalBuyAmount:
+            Number(row.avgBuyPrice || 0) * Number(row.qtyBought || 0),
+          totalSellAmount:
+            Number(row.avgSellPrice || 0) * Number(row.qtySold || 0),
+        });
+      } else {
+        ex.qtyBought += Number(row.qtyBought || 0);
+        ex.qtySold += Number(row.qtySold || 0);
+        ex.totalBuyAmount +=
+          Number(row.avgBuyPrice || 0) * Number(row.qtyBought || 0);
+        ex.totalSellAmount +=
+          Number(row.avgSellPrice || 0) * Number(row.qtySold || 0);
+      }
+    });
+    const summaryRows = Array.from(summaryMap.values())
+      .map((e) => {
+        const avgBuyPrice =
+          e.qtyBought > 0 ? Math.round(e.totalBuyAmount / e.qtyBought) : 0;
+        const avgSellPrice =
+          e.qtySold > 0 ? Math.round(e.totalSellAmount / e.qtySold) : 0;
+        const hasSold = e.qtySold > 0;
+        const margin = hasSold ? avgSellPrice - avgBuyPrice : null;
+        const marginPct =
+          hasSold && avgBuyPrice > 0
+            ? (((avgSellPrice - avgBuyPrice) / avgBuyPrice) * 100).toFixed(1) +
+              '%'
+            : '';
+        return {
+          itemCode: e.itemCode,
+          itemName: e.itemName,
+          vehicleType: e.vehicleType,
+          qtyBought: e.qtyBought,
+          avgBuyPrice,
+          qtySold: e.qtySold,
+          avgSellPrice,
+          margin,
+          marginPct,
+        };
+      })
+      .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+
+    const summarySheet = workbook.addWorksheet('Tổng hợp phụ tùng');
+    summarySheet.columns = [
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'itemName', width: 40 },
+      { header: 'Loại xe', key: 'vehicleType', width: 14 },
+      { header: 'Tổng SL mua', key: 'qtyBought', width: 15 },
+      { header: 'Giá mua TB', key: 'avgBuyPrice', width: 15 },
+      { header: 'Tổng SL bán ra', key: 'qtySold', width: 15 },
+      { header: 'Giá bán TB', key: 'avgSellPrice', width: 15 },
+      { header: 'Biên LN', key: 'margin', width: 15 },
+      { header: 'Biên LN (%)', key: 'marginPct', width: 15 },
+    ] as any;
+    setupSheetHeader(summarySheet, 9);
+    summaryRows.forEach((row) => summarySheet.addRow(row));
+    summarySheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
-        numColumns.forEach((key) => {
-          const cell = row.getCell(key);
-          cell.numFmt = '#,##0';
+        [
+          'qtyBought',
+          'avgBuyPrice',
+          'qtySold',
+          'avgSellPrice',
+          'margin',
+        ].forEach((key) => {
+          row.getCell(key).numFmt = '#,##0';
         });
       }
     });
+    // ────────────────────────────────────────────────────────────────────────
+
+    onProgress?.(80, totalProgressUnits, 'Đang tạo các sheet theo loại xe...');
+
+    Object.entries(vehicleTypeSheetPrefix).forEach(([vehicleType, prefix]) => {
+      const typeOverviewRows = overviewData.filter(
+        (row: any) => row.vehicleType === vehicleType,
+      );
+      const typeDetailRows = rawData.filter(
+        (row: any) => row.vehicleType === vehicleType,
+      );
+
+      const normalRows = (rows: any[]) =>
+        rows.filter(
+          (r) => r.taxInvoiceStatus == null || r.taxInvoiceStatus === 1,
+        );
+      const adjustReplaceRows = (rows: any[]) =>
+        rows.filter(
+          (r) =>
+            r.taxInvoiceStatus === 2 ||
+            r.taxInvoiceStatus === 3 ||
+            r.taxInvoiceStatus === 5,
+        );
+
+      const inRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'IN',
+      );
+      const outRows = typeDetailRows.filter(
+        (row: any) => row.direction === 'OUT',
+      );
+
+      createOverviewSheet(`${prefix} - Tổng quan`, typeOverviewRows);
+
+      createDetailSheet(`${prefix} - Mua Vào`, normalRows(inRows));
+      createDetailSheet(
+        `${prefix} - Mua Vào - ĐC&TT`,
+        adjustReplaceRows(inRows),
+      );
+
+      createDetailSheet(`${prefix} - Bán Ra`, normalRows(outRows));
+      createDetailSheet(
+        `${prefix} - Bán Ra - ĐC&TT`,
+        adjustReplaceRows(outRows),
+      );
+    });
+
+    onProgress?.(95, totalProgressUnits, 'Đang đóng gói file XLSX...');
 
     const buffer = await workbook.xlsx.writeBuffer();
-    return buffer as any;
+    const normalized = Buffer.isBuffer(buffer)
+      ? buffer
+      : Buffer.from(buffer as ArrayBuffer);
+
+    onProgress?.(100, totalProgressUnits, 'Đã tạo xong file XLSX.');
+
+    return normalized;
+  }
+
+  async getVinfastPartsDashboardTableColumnOptions(query: {
+    columnKey: string;
+    search: string;
+    page: number;
+    limit: number;
+    filtersStr: string;
+    dateFrom?: string;
+    dateTo?: string;
+    vehicleType?: string;
+  }) {
+    const mapColumn: Record<string, string> = {
+      itemCode: 'item_code',
+      itemName: 'item_name',
+      vehicleType: 'vehicle_type',
+      qtyBought: 'qty_bought',
+      qtySold: 'qty_sold',
+      amountBought: 'amount_bought',
+      amountSold: 'amount_sold',
+      profit: '(amount_sold - amount_bought)',
+    };
+
+    const sqlCol = mapColumn[query.columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page: query.page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let dateFilter = '';
+    let vehicleTypeFilter = '';
+    let otherFiltersSql = '';
+
+    if (query.dateFrom) {
+      dateFilter += ` AND c.month >= $${paramIndex}`;
+      params.push(query.dateFrom);
+      paramIndex++;
+    }
+    if (query.dateTo) {
+      dateFilter += ` AND c.month <= $${paramIndex}`;
+      params.push(query.dateTo);
+      paramIndex++;
+    }
+
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'c.item_code',
+      'c.from_car_seller',
+    );
+    const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
+      'c.item_code',
+      'BOOL_OR(c.from_car_seller)',
+    );
+
+    if (query.vehicleType && query.vehicleType !== 'all') {
+      vehicleTypeFilter = ` AND (${vehicleTypeSql}) = $${paramIndex}`;
+      params.push(query.vehicleType);
+      paramIndex++;
+    }
+
+    try {
+      const filters = JSON.parse(query.filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === query.columnKey) continue;
+        if (Array.isArray(vals) && vals.length > 0 && mapColumn[key]) {
+          const placeholders = (vals as string[])
+            .map(() => `$${paramIndex++}`)
+            .join(', ');
+          otherFiltersSql += ` AND ${mapColumn[key]}::text IN (${placeholders})`;
+          params.push(...(vals as string[]));
+        }
+      }
+    } catch (e) {}
+
+    if (query.search) {
+      otherFiltersSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${query.search}%`);
+    }
+
+    const sql = `
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
+        SELECT 
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
+        WHERE i.is_deleted = false
+          AND i.direction = 'IN'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      sell_codes AS (
+        SELECT 
+          (${inItemCodeSql}) AS item_code,
+          ii.quantity::numeric AS qty,
+          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
+        FROM erp_invoices i
+        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
+        WHERE i.is_deleted = false
+          AND i.direction = 'OUT'
+          
+          AND ii.quantity IS NOT NULL
+          AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
+      ),
+      buy_agg AS (
+        SELECT 
+          item_code,
+          MAX(item_name) AS item_name,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
+        FROM buy_codes
+        GROUP BY item_code, month
+      ),
+      sell_agg AS (
+        SELECT 
+          item_code,
+          month,
+          SUM(qty) AS total_qty,
+          SUM(amount) AS total_amount,
+          BOOL_OR(from_car_seller) AS from_car_seller
+        FROM sell_codes
+        GROUP BY item_code, month
+      ),
+      combined_data AS (
+        SELECT
+          COALESCE(b.item_code, s.item_code) AS item_code,
+          COALESCE(b.item_name, '') AS item_name,
+          COALESCE(b.month, s.month) AS month,
+          COALESCE(b.total_qty, 0) AS qty_bought,
+          COALESCE(s.total_qty, 0) AS qty_sold,
+          COALESCE(b.total_amount, 0) AS amount_bought,
+          COALESCE(s.total_amount, 0) AS amount_sold,
+          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
+        FROM buy_agg b
+        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+      ),
+      base_data AS (
+        SELECT 
+          c.item_code,
+          MAX(c.item_name) AS item_name,
+          ${vehicleTypeSelectSql} AS vehicle_type,
+          SUM(c.qty_bought) AS qty_bought,
+          SUM(c.qty_sold) AS qty_sold,
+          SUM(c.amount_bought) AS amount_bought,
+          SUM(c.amount_sold) AS amount_sold
+        FROM combined_data c
+        WHERE 1=1
+          ${dateFilter}
+          ${vehicleTypeFilter}
+        GROUP BY c.item_code
+      ),
+      filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM base_data
+        WHERE ${sqlCol} IS NOT NULL AND ${sqlCol}::text != ''
+          ${otherFiltersSql}
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const limit = query.limit || 20;
+    const page = query.page || 1;
+    const offset = (page - 1) * limit;
+    params.push(limit, offset);
+
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    return {
+      items: rows.map((r: any) => ({ value: r.value, label: r.value })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async getVinfastPartsColumnOptions(query: {
@@ -853,6 +1899,7 @@ export class ReportsCoreService {
       itemCode: '"itemCode"',
       month: '"month"',
       itemName: '"itemName"',
+      vehicleType: '"vehicleType"',
       qtyBought: '"qtyBought"',
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
@@ -893,40 +1940,59 @@ export class ReportsCoreService {
       params.push(`%${query.search}%`);
     }
 
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+    const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
+      'b.item_code',
+      'BOOL_OR(b.from_car_seller)',
+    );
+
     const sql = `
-      WITH buy_codes AS (
+      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
+      buy_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' - ', 1)) AS item_code,
-          TRIM(SPLIT_PART(ii.description, ' - ', 2)) AS item_name,
+          ${inItemCodeSql} AS item_code,
+          ${inItemNameSql} AS item_name,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'IN'
-          AND i.seller_tax_code = '0108926276'
-          AND ii.description LIKE '% - %'
+          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       sell_codes AS (
         SELECT 
           ii.invoice_id,
-          TRIM(SPLIT_PART(ii.description, ' ', 1)) AS item_code,
+          (${inItemCodeSql}) AS item_code,
           ii.quantity::numeric AS qty,
           ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month
+          DATE_TRUNC('month', i.invoice_date::date) AS month,
+          p.from_car_seller
         FROM erp_invoices i
         JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
+          
           AND ii.quantity IS NOT NULL
           AND ii.quantity::numeric > 0
+          AND (${inItemCodeSql}) IS NOT NULL
+          AND (${inItemCodeSql}) <> ''
+          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
       ),
       base_data AS (
         SELECT 
           b.item_code AS "itemCode",
           b.item_name AS "itemName",
+          ${vehicleTypeSql} AS "vehicleType",
           TO_CHAR(b.month, 'YYYY-MM') AS "month",
           COALESCE(SUM(b.qty), 0) AS "qtyBought",
           COALESCE(SUM(s.qty), 0) AS "qtySold",
@@ -954,6 +2020,506 @@ export class ReportsCoreService {
 
     params.push(limit, offset);
 
+    const rows = await this.dataSource.query(sql, params);
+    const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
+    const items = rows.map((r: any) => ({
+      value: r.value,
+      label: r.value,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // VINFAST SETTLEMENT ORDERS
+  // ---------------------------------------------------------------------------
+
+  async getSettlementOrders(query: any) {
+    const page = parseInt(query.page || '1', 10);
+    const limit = parseInt(query.limit || '20', 10);
+    const offset = (page - 1) * limit;
+
+    let sortBy = query.sortBy || 'period';
+    let sortDir = (query.sortDir || 'DESC').toUpperCase();
+    if (sortDir !== 'ASC' && sortDir !== 'DESC') sortDir = 'DESC';
+
+    const allowedSorts: Record<string, string> = {
+      period: '"period"',
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+      invoiceCount: '"invoiceCount"',
+      totalPreVat: '"totalPreVat"',
+      totalVat: '"totalVat"',
+      totalAmount: '"totalAmount"',
+      totalNetoff: '"totalNetoff"',
+      remaining: '"remaining"',
+    };
+
+    const orderByStr = allowedSorts[sortBy]
+      ? `${allowedSorts[sortBy]} ${sortDir}`
+      : `"period" DESC, i.settlement_order ASC`;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    if (query.dateFrom) {
+      whereSql += ` AND i.invoice_date >= $${paramIndex++}`;
+      params.push(query.dateFrom);
+    }
+
+    if (query.dateTo) {
+      whereSql += ` AND i.invoice_date <= $${paramIndex++}`;
+      params.push(query.dateTo);
+    }
+
+    // search
+    if (query.search) {
+      whereSql += ` AND (i.settlement_order ILIKE $${paramIndex} OR i.license_plate ILIKE $${paramIndex})`;
+      params.push(`%${query.search}%`);
+      paramIndex++;
+    }
+
+    // column filters
+    try {
+      const filters = JSON.parse(query.columnFilters || '{}');
+      if (filters.period && filters.period.length > 0) {
+        const phs = filters.period.map(() => `$${paramIndex++}`).join(', ');
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') IN (${phs})`;
+        params.push(...filters.period);
+      }
+      if (filters.settlementOrder && filters.settlementOrder.length > 0) {
+        const phs = filters.settlementOrder
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.settlement_order IN (${phs})`;
+        params.push(...filters.settlementOrder);
+      }
+      if (filters.licensePlate && filters.licensePlate.length > 0) {
+        const phs = filters.licensePlate
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.license_plate IN (${phs})`;
+        params.push(...filters.licensePlate);
+      }
+    } catch (e) {}
+
+    // column search
+    try {
+      const colSearch = JSON.parse(query.columnSearch || '{}');
+      if (colSearch.period) {
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.period}%`);
+      }
+      if (colSearch.settlementOrder) {
+        whereSql += ` AND i.settlement_order ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.settlementOrder}%`);
+      }
+      if (colSearch.licensePlate) {
+        whereSql += ` AND i.license_plate ILIKE $${paramIndex++}`;
+        params.push(`%${colSearch.licensePlate}%`);
+      }
+    } catch (e) {}
+
+    const countSql = `
+      SELECT COUNT(DISTINCT i.settlement_order || '_' || TO_CHAR(i.invoice_date, 'YYYY-MM')) AS total
+      FROM erp_invoices i
+      WHERE ${whereSql}
+    `;
+
+    const dataSql = `
+      SELECT
+        i.settlement_order AS "settlementOrder",
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.license_plate AS "licensePlate",
+        COUNT(*)::int AS "invoiceCount",
+        SUM(i.pre_vat_amount)::numeric AS "totalPreVat",
+        SUM(i.vat_amount)::numeric AS "totalVat",
+        SUM(i.total_amount)::numeric AS "totalAmount",
+        COALESCE(SUM(n.netoff_sum), 0)::numeric AS "totalNetoff",
+        (SUM(i.total_amount) - COALESCE(SUM(n.netoff_sum), 0))::numeric AS remaining
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      GROUP BY i.settlement_order, period, i.license_plate
+      ORDER BY ${orderByStr}
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    const countRes = await this.dataSource.query(countSql, params);
+    const total = parseInt(countRes[0]?.total || '0', 10);
+
+    params.push(limit, offset);
+    const items = await this.dataSource.query(dataSql, params);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async exportSettlementOrdersExcel(query: any) {
+    let sortBy = query.sortBy || 'period';
+    let sortDir = (query.sortDir || 'DESC').toUpperCase();
+    if (sortDir !== 'ASC' && sortDir !== 'DESC') sortDir = 'DESC';
+
+    const allowedSorts: Record<string, string> = {
+      period: '"period"',
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+      invoiceCount: '"invoiceCount"',
+      totalPreVat: '"totalPreVat"',
+      totalVat: '"totalVat"',
+      totalAmount: '"totalAmount"',
+      totalNetoff: '"totalNetoff"',
+      remaining: '"remaining"',
+    };
+
+    const orderByStr = allowedSorts[sortBy]
+      ? `${allowedSorts[sortBy]} ${sortDir}`
+      : `"period" DESC, i.settlement_order ASC`;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    if (query.dateFrom) {
+      whereSql += ` AND i.invoice_date >= $${paramIndex++}`;
+      params.push(query.dateFrom);
+    }
+
+    if (query.dateTo) {
+      whereSql += ` AND i.invoice_date <= $${paramIndex++}`;
+      params.push(query.dateTo);
+    }
+
+    if (query.search) {
+      whereSql += ` AND (i.settlement_order ILIKE $${paramIndex} OR i.license_plate ILIKE $${paramIndex})`;
+      params.push(`%${query.search}%`);
+      paramIndex++;
+    }
+
+    try {
+      const filters = JSON.parse(query.columnFilters || '{}');
+      if (filters.period && filters.period.length > 0) {
+        const phs = filters.period.map(() => `$${paramIndex++}`).join(', ');
+        whereSql += ` AND TO_CHAR(i.invoice_date, 'YYYY-MM') IN (${phs})`;
+        params.push(...filters.period);
+      }
+      if (filters.settlementOrder && filters.settlementOrder.length > 0) {
+        const phs = filters.settlementOrder
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.settlement_order IN (${phs})`;
+        params.push(...filters.settlementOrder);
+      }
+      if (filters.licensePlate && filters.licensePlate.length > 0) {
+        const phs = filters.licensePlate
+          .map(() => `$${paramIndex++}`)
+          .join(', ');
+        whereSql += ` AND i.license_plate IN (${phs})`;
+        params.push(...filters.licensePlate);
+      }
+    } catch (e) {}
+
+    const dataSql = `
+      SELECT
+        i.settlement_order AS "settlementOrder",
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.license_plate AS "licensePlate",
+        COUNT(*)::int AS "invoiceCount",
+        SUM(i.pre_vat_amount)::numeric AS "totalPreVat",
+        SUM(i.vat_amount)::numeric AS "totalVat",
+        SUM(i.total_amount)::numeric AS "totalAmount",
+        COALESCE(SUM(n.netoff_sum), 0)::numeric AS "totalNetoff",
+        (SUM(i.total_amount) - COALESCE(SUM(n.netoff_sum), 0))::numeric AS remaining
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      GROUP BY i.settlement_order, period, i.license_plate
+      ORDER BY ${orderByStr}
+    `;
+
+    const overviewData = await this.dataSource.query(dataSql, params);
+    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
+
+    const detailsSql = `
+      SELECT
+        TO_CHAR(i.invoice_date, 'YYYY-MM') AS period,
+        i.settlement_order AS "settlementOrder",
+        i.license_plate AS "licensePlate",
+        i.id AS "invoiceId", 
+        i.invoice_no AS "invoiceNo", 
+        i.serial_no AS "serialNo", 
+        TO_CHAR(i.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", 
+        i.status,
+        i.buyer_name AS "buyerName", 
+        i.buyer_tax_code AS "buyerTaxCode", 
+        (${inItemCodeSql}) AS "itemCode",
+        ii.description AS "description",
+        ii.unit AS "unit",
+        ii.quantity::numeric AS "qty",
+        ii.unit_price::numeric AS "unitPrice",
+        (ii.quantity::numeric * ii.unit_price::numeric) AS "preVatAmount",
+        COALESCE(ii.vat_rate, i.vat_rate) AS "vatRate",
+        COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "vatAmount",
+        (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
+          NULLIF(ii.vat_amount::numeric, 0),
+          CASE
+            WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+            THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * (COALESCE(ii.vat_rate, i.vat_rate)::numeric))
+            ELSE 0 
+          END,
+          0
+        ) AS "totalAmount",
+        CASE 
+          WHEN ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY ii.id ASC) = 1 
+          THEN COALESCE(n.netoff_sum, 0)::numeric 
+          ELSE NULL 
+        END AS "netoffAmount"
+      FROM erp_invoices i
+      JOIN erp_invoice_items ii ON ii.invoice_id = i.id
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE ${whereSql}
+      ORDER BY i.invoice_date ASC, i.invoice_no ASC, ii.id ASC
+    `;
+
+    const detailsData = await this.dataSource.query(detailsSql, params);
+
+    const workbook = new ExcelJS.Workbook();
+
+    const setupSheetHeader = (
+      sheet: ExcelJS.Worksheet,
+      filterColumnCount: number,
+    ) => {
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).alignment = { horizontal: 'center' };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+      sheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
+      ];
+      sheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: filterColumnCount },
+      };
+    };
+
+    const overviewSheet = workbook.addWorksheet('Tổng quan');
+    overviewSheet.columns = [
+      { header: 'Kỳ', key: 'period', width: 12 },
+      { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 30 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Số lượng HĐ', key: 'invoiceCount', width: 15 },
+      { header: 'Trước GTGT', key: 'totalPreVat', width: 20 },
+      { header: 'Thuế GTGT', key: 'totalVat', width: 20 },
+      { header: 'Thành tiền', key: 'totalAmount', width: 20 },
+      { header: 'Đã cấn trừ', key: 'totalNetoff', width: 20 },
+      { header: 'Còn lại', key: 'remaining', width: 20 },
+    ];
+
+    setupSheetHeader(overviewSheet, 9);
+
+    overviewData.forEach((row: any) => {
+      const parsedRow = {
+        ...row,
+        invoiceCount: parseInt(row.invoiceCount || '0', 10),
+        totalPreVat: parseFloat(row.totalPreVat || '0'),
+        totalVat: parseFloat(row.totalVat || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        totalNetoff: parseFloat(row.totalNetoff || '0'),
+        remaining: parseFloat(row.remaining || '0'),
+      };
+      const r = overviewSheet.addRow(parsedRow);
+      r.getCell(4).numFmt = '#,##0';
+      r.getCell(5).numFmt = '#,##0';
+      r.getCell(6).numFmt = '#,##0';
+      r.getCell(7).numFmt = '#,##0';
+      r.getCell(8).numFmt = '#,##0';
+      r.getCell(9).numFmt = '#,##0';
+    });
+
+    const detailSheet = workbook.addWorksheet('Chi tiết');
+    detailSheet.columns = [
+      { header: 'Kỳ', key: 'period', width: 12 },
+      { header: 'Lệnh quyết toán', key: 'settlementOrder', width: 30 },
+      { header: 'Biển số xe', key: 'licensePlate', width: 15 },
+      { header: 'Ngày HĐ', key: 'invoiceDate', width: 15 },
+      { header: 'Ký hiệu', key: 'serialNo', width: 15 },
+      { header: 'Số HĐ', key: 'invoiceNo', width: 15 },
+      { header: 'Trạng thái', key: 'status', width: 15 },
+      { header: 'Khách hàng', key: 'buyerName', width: 40 },
+      { header: 'MST', key: 'buyerTaxCode', width: 15 },
+      { header: 'Mã phụ tùng', key: 'itemCode', width: 20 },
+      { header: 'Tên phụ tùng', key: 'description', width: 40 },
+      { header: 'Đơn vị tính', key: 'unit', width: 12 },
+      { header: 'Số lượng', key: 'qty', width: 12 },
+      { header: 'Đơn giá', key: 'unitPrice', width: 20 },
+      { header: 'Trước GTGT', key: 'preVatAmount', width: 20 },
+      {
+        header: 'Thuế suất',
+        key: 'vatRate',
+        width: 10,
+        style: { numFmt: '0%' },
+      },
+      { header: 'Thuế GTGT', key: 'vatAmount', width: 20 },
+      { header: 'Thành tiền', key: 'totalAmount', width: 20 },
+      { header: 'Đã cấn trừ', key: 'netoffAmount', width: 20 },
+    ];
+
+    setupSheetHeader(detailSheet, 19);
+
+    detailsData.forEach((row: any) => {
+      const r = detailSheet.addRow({
+        ...row,
+        qty: parseFloat(row.qty || '0'),
+        unitPrice: parseFloat(row.unitPrice || '0'),
+        preVatAmount: parseFloat(row.preVatAmount || '0'),
+        vatRate:
+          row.vatRate != null && row.vatRate !== ''
+            ? parseFloat(row.vatRate)
+            : '',
+        vatAmount: parseFloat(row.vatAmount || '0'),
+        totalAmount: parseFloat(row.totalAmount || '0'),
+        netoffAmount:
+          row.netoffAmount != null ? parseFloat(row.netoffAmount || '0') : null,
+      });
+      r.getCell(13).numFmt = '#,##0.##';
+      r.getCell(14).numFmt = '#,##0';
+      r.getCell(15).numFmt = '#,##0';
+      r.getCell(17).numFmt = '#,##0';
+      r.getCell(18).numFmt = '#,##0';
+      if (row.netoffAmount != null) {
+        r.getCell(19).numFmt = '#,##0';
+      }
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as any;
+  }
+
+  async getSettlementOrderDetails(query: any) {
+    const { settlementOrder, period } = query;
+    if (!settlementOrder || !period) {
+      return [];
+    }
+
+    const sql = `
+      SELECT
+        i.id AS "invoiceId", 
+        i.invoice_no AS "invoiceNo", 
+        i.serial_no AS "serialNo", 
+        TO_CHAR(i.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", 
+        i.status,
+        i.buyer_name AS "buyerName", 
+        i.buyer_tax_code AS "buyerTaxCode", 
+        i.license_plate AS "licensePlate",
+        i.pre_vat_amount::numeric AS "preVatAmount", 
+        i.vat_rate AS "vatRate", 
+        i.vat_amount::numeric AS "vatAmount", 
+        i.total_amount::numeric AS "totalAmount",
+        COALESCE(n.netoff_sum, 0)::numeric AS "netoffAmount"
+      FROM erp_invoices i
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) AS netoff_sum
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) n ON n.invoice_id = i.id
+      WHERE i.direction = 'OUT'
+        AND i.is_deleted = false
+        AND i.settlement_order = $1
+        AND TO_CHAR(i.invoice_date, 'YYYY-MM') = $2
+      ORDER BY i.invoice_date ASC, i.invoice_no ASC
+    `;
+
+    return this.dataSource.query(sql, [settlementOrder, period]);
+  }
+
+  async getSettlementOrderColumnOptions(query: any) {
+    const { columnKey, filtersStr, search } = query;
+    const limit = parseInt(query.limit || '20', 10);
+    const page = parseInt(query.page || '1', 10);
+    const offset = (page - 1) * limit;
+
+    const mapColumn: Record<string, string> = {
+      period: `TO_CHAR(i.invoice_date, 'YYYY-MM')`,
+      settlementOrder: 'i.settlement_order',
+      licensePlate: 'i.license_plate',
+    };
+
+    const sqlCol = mapColumn[columnKey];
+    if (!sqlCol) {
+      return { items: [], total: 0, page, totalPages: 0 };
+    }
+
+    const params: any[] = [];
+    let paramIndex = 1;
+    let whereSql = `i.direction = 'OUT' AND i.is_deleted = false AND i.settlement_order ILIKE '%-WO-%'`;
+
+    try {
+      const filters = JSON.parse(filtersStr || '{}');
+      for (const [key, vals] of Object.entries(filters)) {
+        if (key === columnKey) continue;
+        const col = mapColumn[key];
+        if (Array.isArray(vals) && vals.length > 0 && col) {
+          const phs = vals.map(() => `$${paramIndex++}`).join(', ');
+          whereSql += ` AND ${col}::text IN (${phs})`;
+          params.push(...vals);
+        }
+      }
+    } catch (e) {}
+
+    if (search) {
+      whereSql += ` AND ${sqlCol}::text ILIKE $${paramIndex++}`;
+      params.push(`%${search}%`);
+    }
+
+    const sql = `
+      WITH filtered_data AS (
+        SELECT DISTINCT ${sqlCol}::text AS value
+        FROM erp_invoices i
+        WHERE ${whereSql}
+        AND ${sqlCol} IS NOT NULL
+        AND ${sqlCol}::text <> ''
+      )
+      SELECT value, COUNT(*) OVER() AS total_count
+      FROM filtered_data
+      ORDER BY value ASC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    params.push(limit, offset);
     const rows = await this.dataSource.query(sql, params);
     const total = rows.length > 0 ? parseInt(rows[0].total_count, 10) : 0;
     const items = rows.map((r: any) => ({

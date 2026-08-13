@@ -25,6 +25,9 @@ export class InventorySerialService {
   async listSerials(query: InventorySerialQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date, s.created_at), 'YYYY-MM-DD')";
+    const serialBusinessSortExpr = 'COALESCE(gr.receipt_date, s.created_at)';
 
     const qb = this.serialRepository
       .createQueryBuilder('s')
@@ -41,9 +44,14 @@ export class InventorySerialService {
         's.attributes as s_attributes',
         's.status as s_status',
         's.sales_order_line_id as s_sales_order_line_id',
+        'gr.receipt_date as gr_receipt_date',
         'so.id as so_id',
         'so.so_no as so_no',
         'so.expected_delivery_date as so_delivery_date',
+        'sl.delivery_date as l_delivery_date',
+        'gi.id as gi_id',
+        'gi.issue_date as gi_issue_date',
+        'gi.issue_no as gi_issue_no',
         'i.id as i_id',
         'i.sku as i_sku',
         'i.item_name as i_item_name',
@@ -62,7 +70,11 @@ export class InventorySerialService {
         'sol',
         's.sales_order_line_id = sol.id',
       )
-      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id');
+      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id')
+      .leftJoin('erp_goods_receipt_lines', 'grl', 's.receipt_line_id = grl.id')
+      .leftJoin('erp_goods_receipts', 'gr', 'grl.goods_receipt_id = gr.id')
+      .leftJoin('erp_serial_lifecycles', 'sl', 'sl.serial_id = s.id')
+      .leftJoin('erp_goods_issues', 'gi', 'sl.goods_issue_id = gi.id');
 
     if (query.ids) {
       const idsArr = Array.isArray(query.ids)
@@ -143,10 +155,11 @@ export class InventorySerialService {
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'status') filterField = 's.status';
           else if (col === 'delivery')
-            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            filterField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+            filterField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueDate')
+            filterField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo') filterField = 'gi.issue_no';
+          else if (col === 'createdAt') filterField = serialBusinessDateExpr;
           else if (col === 'color') filterField = "s.attributes->>'color'";
           else if (col === 'dealer_code')
             filterField = "s.attributes->>'dealer_code'";
@@ -183,10 +196,11 @@ export class InventorySerialService {
           else if (col === 'soNo') searchField = 'so.so_no';
           else if (col === 'status') searchField = 's.status';
           else if (col === 'delivery')
-            searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            searchField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+            searchField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueDate')
+            searchField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo') searchField = 'gi.issue_no';
+          else if (col === 'createdAt') searchField = serialBusinessDateExpr;
           else if (col === 'color') searchField = "s.attributes->>'color'";
           else if (col === 'dealer_code')
             searchField = "s.attributes->>'dealer_code'";
@@ -218,7 +232,7 @@ export class InventorySerialService {
     }
 
     // sort
-    let sortColumn = 's.created_at';
+    let sortColumn = serialBusinessSortExpr;
     let sortDirection: 'ASC' | 'DESC' = 'DESC';
     if (query.sort && query.sort.length > 0) {
       let sortField = query.sort[0];
@@ -229,16 +243,19 @@ export class InventorySerialService {
         sortDirection = 'ASC';
       }
       if (sortField === 'serial_no') sortColumn = 's.serial_no';
-      if (sortField === 'created_at') sortColumn = 's.created_at';
+      if (sortField === 'created_at') sortColumn = serialBusinessSortExpr;
       if (sortField === 'color') sortColumn = "s.attributes->>'color'";
       if (sortField === 'dealer_code')
         sortColumn = "s.attributes->>'dealer_code'";
       if (sortField === 'dealer_name')
         sortColumn = "s.attributes->>'dealer_name'";
       if (sortField === 'trackingPolicyName') sortColumn = 'tp.name';
+      if (sortField === 'delivery') sortColumn = 'sl.delivery_date';
+      if (sortField === 'goodsIssueDate') sortColumn = 'gi.issue_date';
+      if (sortField === 'goodsIssueNo') sortColumn = 'gi.issue_no';
     }
 
-    qb.orderBy(sortColumn, sortDirection);
+    qb.orderBy(sortColumn, sortDirection).addOrderBy('s.created_at', 'DESC');
     qb.offset((page - 1) * pageSize).limit(pageSize);
 
     const [itemsRaw, total] = await Promise.all([
@@ -251,7 +268,7 @@ export class InventorySerialService {
         let s = dateOrString;
         if (!s.endsWith('Z') && !s.match(/[+-]\d{2}:\d{2}$/)) {
           if (s.includes(' ')) s = s.replace(' ', 'T');
-          return s + 'Z';
+          return s + '+07:00';
         }
         return s;
       }
@@ -263,7 +280,7 @@ export class InventorySerialService {
         const min = String(dateOrString.getMinutes()).padStart(2, '0');
         const sec = String(dateOrString.getSeconds()).padStart(2, '0');
         const ms = String(dateOrString.getMilliseconds()).padStart(3, '0');
-        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}Z`;
+        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}+07:00`;
       }
       return null;
     };
@@ -284,6 +301,7 @@ export class InventorySerialService {
       salesOrderLineId: raw.s_sales_order_line_id,
       soId: raw.so_id,
       soNo: raw.so_no,
+      receiptDate: fixTimezone(raw.gr_receipt_date),
       createdAt: fixTimezone(raw.s_created_at),
       updatedAt: fixTimezone(raw.s_updated_at),
       item: {
@@ -296,9 +314,14 @@ export class InventorySerialService {
         trackingPolicyName: raw.tp_name,
       },
       lifecycle: {
-        deliveryDate: raw.so_delivery_date
-          ? fixTimezone(raw.so_delivery_date)
+        deliveryDate: raw.l_delivery_date
+          ? fixTimezone(raw.l_delivery_date)
           : null,
+        goodsIssueDate: raw.gi_issue_date
+          ? fixTimezone(raw.gi_issue_date)
+          : null,
+        goodsIssueNo: raw.gi_issue_no || null,
+        goodsIssueId: raw.gi_id || null,
       },
     }));
 
@@ -531,6 +554,8 @@ export class InventorySerialService {
   ) {
     let selectField = '';
     let isDateColumn = false;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date, s.created_at), 'YYYY-MM-DD')";
 
     if (column === 'expectedDeliveryDate') {
       selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
@@ -766,6 +791,35 @@ export class InventorySerialService {
         for (const [col, val] of Object.entries(searchFilters)) {
           if (!val) continue;
 
+          if (
+            col === 'expectedDeliveryDate' ||
+            col === 'deliveryDate' ||
+            col === 'activationDate'
+          ) {
+            if (typeof val !== 'string') continue;
+            const rawKw = val;
+            if (rawKw.includes('|')) {
+              const [from, to] = rawKw.split('|');
+              const dbField =
+                col === 'expectedDeliveryDate'
+                  ? 'so.expected_delivery_date'
+                  : col === 'deliveryDate'
+                    ? 'l.delivery_date'
+                    : 'l.warranty_activated_at';
+              if (from && to) {
+                sql += ` AND ${dbField} >= $${paramIdx++} AND ${dbField} <= $${paramIdx++}`;
+                params.push(from, to + ' 23:59:59');
+              } else if (from) {
+                sql += ` AND ${dbField} >= $${paramIdx++}`;
+                params.push(from);
+              } else if (to) {
+                sql += ` AND ${dbField} <= $${paramIdx++}`;
+                params.push(to + ' 23:59:59');
+              }
+              continue;
+            }
+          }
+
           let searchField = '';
           if (col === 'expectedDeliveryDate')
             searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
@@ -885,6 +939,8 @@ export class InventorySerialService {
   ) {
     let selectField = '';
     let isDateColumn = false;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date AT TIME ZONE 'Asia/Ho_Chi_Minh', s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'YYYY-MM-DD')";
 
     if (column === 'itemCode') selectField = 'i.sku';
     else if (column === 'itemName') selectField = 'i.item_name';
@@ -897,8 +953,7 @@ export class InventorySerialService {
       selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'createdAt') {
-      selectField =
-        "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+      selectField = serialBusinessDateExpr;
       isDateColumn = true;
     } else if (column === 'color') {
       selectField = "s.attributes->>'color'";
@@ -920,6 +975,8 @@ export class InventorySerialService {
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_order_lines sol ON s.sales_order_line_id = sol.id
       LEFT JOIN erp_sales_orders so ON sol.sales_order_id = so.id
+      LEFT JOIN erp_goods_receipt_lines grl ON s.receipt_line_id = grl.id
+      LEFT JOIN erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -948,9 +1005,7 @@ export class InventorySerialService {
           else if (col === 'status') filterField = 's.status';
           else if (col === 'delivery')
             filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            filterField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+          else if (col === 'createdAt') filterField = serialBusinessDateExpr;
           else if (col === 'color') filterField = "s.attributes->>'color'";
           else if (col === 'dealer_code')
             filterField = "s.attributes->>'dealer_code'";

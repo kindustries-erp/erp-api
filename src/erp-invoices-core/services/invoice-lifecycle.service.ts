@@ -18,6 +18,7 @@ import { toInvoiceDto } from '../helpers/invoice-mapper.helper';
 import { R2Service } from '../../r2/r2.service';
 import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-transactions-core.service';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
+import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -38,7 +39,13 @@ export class InvoiceLifecycleService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id, isDeleted: false },
-      relations: ['items', 'voucherNetOffs', 'voucherNetOffs.bankTransaction'],
+      relations: [
+        'items',
+        'voucherNetOffs',
+        'voucherNetOffs.bankTransaction',
+        'attachments',
+        'attachments.attachment',
+      ],
     });
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
@@ -135,21 +142,6 @@ export class InvoiceLifecycleService {
         );
     }
 
-    const netOffs = await this.repository.manager.find(
-      ErpInvoiceVoucherNetOff,
-      { where: { invoiceId: id } },
-    );
-    if (netOffs && netOffs.length > 0) {
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
-    }
-
     return this.findOne(id);
   }
 
@@ -228,6 +220,24 @@ export class InvoiceLifecycleService {
         ),
       ).catch(() => {});
     }
+
+    return { updated: validIds.length, ids: validIds };
+  }
+
+  async bulkSetNotes(ids: string[], notes: string) {
+    if (!ids || !ids.length) return { updated: 0, ids: [] };
+
+    const existingInvoices = await this.repository.find({
+      where: { id: In(ids), isDeleted: false },
+      select: ['id'],
+    });
+    const validIds = existingInvoices.map((inv) => inv.id);
+    if (validIds.length === 0) return { updated: 0, ids: [] };
+
+    await this.repository.update(
+      { id: In(validIds) },
+      { notes: notes || null },
+    );
 
     return { updated: validIds.length, ids: validIds };
   }
@@ -351,14 +361,6 @@ export class InvoiceLifecycleService {
       await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
         invoiceId: id,
       });
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
     }
 
     invoice.postingStatus = 'UNPOSTED';
@@ -382,21 +384,57 @@ export class InvoiceLifecycleService {
     if (!invoice)
       throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
 
-    const netOffEntities = payload.map((p) =>
-      this.repository.manager.create(ErpInvoiceVoucherNetOff, {
-        invoiceId,
-        bankTransactionId: p.bankTransactionId,
-        netOffAmount: p.netOffAmount ?? 0,
-      }),
-    );
-
-    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
-
-    const uniqueTxnIds = [...new Set(payload.map((p) => p.bankTransactionId))];
-    for (const txnId of uniqueTxnIds) {
-      await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-        txnId,
+    // Auto-set invoice branch from statement branch only when invoice has no branch.
+    // If payload contains mixed branches (or invalid/missing branch data), skip auto-set.
+    if (!invoice.branchId && payload.length > 0) {
+      const uniqueTxnIds = [
+        ...new Set(payload.map((p) => p.bankTransactionId)),
+      ];
+      const linkedTransactions = await this.repository.manager.find(
+        ErpBankTransaction,
+        {
+          where: { id: In(uniqueTxnIds), isDeleted: false },
+          select: ['id', 'branchId'],
+        },
       );
+
+      const hasAllTransactions =
+        linkedTransactions.length === uniqueTxnIds.length;
+      const hasAllBranches = linkedTransactions.every((t) => !!t.branchId);
+
+      if (hasAllTransactions && hasAllBranches) {
+        const uniqueBranches = [
+          ...new Set(linkedTransactions.map((t) => t.branchId)),
+        ];
+        if (uniqueBranches.length === 1) {
+          invoice.branchId = uniqueBranches[0];
+          await this.repository.save(invoice);
+        }
+      }
+    }
+
+    for (const p of payload) {
+      const existing = await this.repository.manager.findOne(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId, bankTransactionId: p.bankTransactionId },
+        },
+      );
+
+      if (existing) {
+        existing.netOffAmount = p.netOffAmount ?? 0;
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, existing);
+      } else {
+        const newNetOff = this.repository.manager.create(
+          ErpInvoiceVoucherNetOff,
+          {
+            invoiceId,
+            bankTransactionId: p.bankTransactionId,
+            netOffAmount: p.netOffAmount ?? 0,
+          },
+        );
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, newNetOff);
+      }
     }
 
     return { message: 'Đã liên kết phiếu thành công' };
@@ -407,9 +445,6 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
-    await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-      voucherId,
-    );
     return { message: 'Đã xóa liên kết phiếu thành công' };
   }
 }

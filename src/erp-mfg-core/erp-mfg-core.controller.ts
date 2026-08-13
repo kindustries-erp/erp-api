@@ -46,6 +46,13 @@ export class ErpMfgCoreController {
     return this.service.updateComponent(id, body);
   }
 
+  // --- As-Built BOM for Vehicle ---
+  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @Get('items/vehicles/:id/as-built-bom')
+  getAsBuiltBom(@Param('id') id: string) {
+    return this.service.getAsBuiltBom(id);
+  }
+
   @RequirePermissions({ resource: 'inventory_items', action: 'read' })
   @Get('items/components/:id/stock-summary')
   getComponentStockSummary(@Param('id') id: string) {
@@ -86,5 +93,11 @@ export class ErpMfgCoreController {
   @Post('vehicles')
   createVehicle(@Body() body: any) {
     return this.service.createVehicle(body);
+  }
+
+  @RequirePermissions({ resource: 'vehicles', action: 'read' })
+  @Get('items/serials/:serialId/assigned-vehicle')
+  getVehicleBySerial(@Param('serialId') serialId: string) {
+    return this.service.getVehicleBySerial(serialId);
   }
 }

@@ -1,5 +1,6 @@
 import * as ExcelJS from 'exceljs';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import { parseVNLocalDate } from './date-parser';
 
 export async function parseCashXlsx(
   buffer: Buffer | any,
@@ -118,19 +119,7 @@ export async function parseCashXlsx(
 
     const parseDate = (colKey: string): Date | null => {
       const val = getVal(colKey);
-      if (val instanceof Date) return val;
-      if (typeof val === 'string') {
-        // Try parsing DD/MM/YYYY
-        const parts = val.split(/[/\- ]/);
-        if (parts.length >= 3) {
-          // Assuming DD/MM/YYYY
-          const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          if (!isNaN(d.getTime())) return d;
-        }
-        const d2 = new Date(val);
-        if (!isNaN(d2.getTime())) return d2;
-      }
-      return null;
+      return parseVNLocalDate(val);
     };
 
     const stt = parseNumber('stt');

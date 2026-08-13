@@ -1,23 +1,27 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
+import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
+import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import {
   fetchWithRetry,
-  sleep,
   resolvePortalVatRate,
   parsePortalIsoDate,
   buildInvoiceR2Key,
   extractXmlFromBuffer,
 } from '../helpers/invoice-gdt.helper';
+import { sleep } from '../../common/utils/delay.util';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
+import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
+import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 
 export type PortalProgressEvent = {
@@ -32,6 +36,9 @@ export type PortalProgressEvent = {
 @Injectable()
 export class InvoicePortalService {
   private readonly logger = new Logger(InvoicePortalService.name);
+  private static readonly GDT_API_BASE_URL =
+    'https://hoadondientu.gdt.gov.vn/api';
+  private static readonly GDT_PROFILE_URL = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/profile`;
 
   public readonly progress$ = new Subject<PortalProgressEvent>();
 
@@ -40,14 +47,65 @@ export class InvoicePortalService {
     private readonly repository: Repository<ErpInvoice>,
     @InjectRepository(CompanyProfile)
     private readonly companyProfileRepo: Repository<CompanyProfile>,
+    @InjectRepository(ErpBranch)
+    private readonly branchRepository: Repository<ErpBranch>,
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
+    private readonly vinfastPartsService: VinfastPartsService,
   ) {}
 
   // ---------------------------------------------------------------------------
   // Config
   // ---------------------------------------------------------------------------
+
+  private readonly _branchIdCache = new Map<string, string>();
+
+  private async resolveBranchIdForOut(
+    settlementOrder: string | null | undefined,
+    buyerTaxCode?: string | null,
+  ): Promise<string | null> {
+    const branchCode = resolveOutInvoiceBranchCode(
+      settlementOrder,
+      buyerTaxCode,
+    );
+
+    if (this._branchIdCache.has(branchCode)) {
+      return this._branchIdCache.get(branchCode)!;
+    }
+
+    const branch = await this.branchRepository.findOne({
+      where: { code: branchCode, isActive: true },
+      select: ['id'],
+    });
+
+    if (branch) {
+      this._branchIdCache.set(branchCode, branch.id);
+      return branch.id;
+    }
+
+    this.logger.warn(`Branch với code="${branchCode}" không tìm thấy trong DB`);
+    return null;
+  }
+
+  private async resolveHistoricalBranchForIn(
+    sellerTaxCode: string | null,
+  ): Promise<string | null> {
+    if (!sellerTaxCode) return null;
+
+    const prior = await this.repository.findOne({
+      where: {
+        direction: 'IN',
+        sellerTaxCode,
+        branchId: Not(IsNull()),
+        isDeleted: false,
+      },
+      order: { createdAt: 'DESC' },
+      select: ['branchId'],
+    });
+
+    return prior?.branchId ?? null;
+  }
 
   async getPortalConfig(): Promise<{ token: string; cookies: string }> {
     const profile = await this.companyProfileRepo.findOne({
@@ -83,8 +141,7 @@ export class InvoicePortalService {
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
     if (!token) return false;
     try {
-      const url =
-        'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase?sort=tdlap%3Adesc&size=1';
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase?sort=tdlap%3Adesc&size=1`;
       const res = await fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -114,6 +171,7 @@ export class InvoicePortalService {
       if (!cookies && config.cookies) cookies = config.cookies;
     }
     if (!token) throw new BadRequestException('token is required');
+    await this.validatePortalTaxpayer(token, cookies);
     if (!dto.dateFrom || !dto.dateTo)
       throw new BadRequestException('dateFrom and dateTo are required');
 
@@ -124,22 +182,19 @@ export class InvoicePortalService {
       type === 'purchase'
         ? [
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/purchase',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase`,
               ttxlyList: [5, 6],
               invoiceType: 'STANDARD',
             },
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/sco-query/invoices/purchase',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/sco-query/invoices/purchase`,
               ttxlyList: [8],
               invoiceType: 'CASH_REGISTER',
             },
           ]
         : [
             {
-              basePath:
-                'https://hoadondientu.gdt.gov.vn/api/query/invoices/sold',
+              basePath: `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/sold`,
               ttxlyList: [],
               invoiceType: 'STANDARD',
             },
@@ -292,9 +347,7 @@ export class InvoicePortalService {
               serialNo,
               invoiceDate: parsePortalIsoDate(raw.tdlap),
               direction,
-              status: [4, 6].includes(Number(raw.tthai))
-                ? 'CANCELLED'
-                : 'CONFIRMED',
+              status: 'CONFIRMED',
               taxInvoiceStatus,
               taxProcessStatus,
               taxInvoiceType,
@@ -321,6 +374,26 @@ export class InvoicePortalService {
             const saved = (await this.repository.save(
               invoice,
             )) as unknown as ErpInvoice;
+
+            if (direction === 'OUT') {
+              const branchId = await this.resolveBranchIdForOut(
+                saved.settlementOrder,
+                saved.buyerTaxCode,
+              );
+              if (branchId) {
+                await this.repository.update(saved.id, { branchId });
+              }
+            }
+
+            if (direction === 'IN') {
+              const branchId = await this.resolveHistoricalBranchForIn(
+                saved.sellerTaxCode,
+              );
+              if (branchId) {
+                await this.repository.update(saved.id, { branchId });
+              }
+            }
+
             backgroundSyncIds.push(saved.id);
             created++;
           } catch (err) {
@@ -338,13 +411,38 @@ export class InvoicePortalService {
         });
 
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(
-            backgroundSyncIds,
-            token,
-            cookies,
-          ).catch((e) =>
-            this.logger.error('XML background download failed', e),
-          );
+          this.downloadXmlsInBackground(backgroundSyncIds, token, cookies)
+            .then(async () => {
+              if (direction === 'IN') {
+                await this.vinfastPartsService.syncCatalog({
+                  progress$: this.progress$,
+                  dateFrom: dto.dateFrom,
+                  dateTo: dto.dateTo,
+                });
+              }
+              await this.vinfastPartsService.syncLedger({
+                progress$: this.progress$,
+                dateFrom: dto.dateFrom,
+                dateTo: dto.dateTo,
+              });
+            })
+            .catch((e) =>
+              this.logger.error('XML background download failed', e),
+            );
+        } else {
+          // Trigger sync directly if no background XML download needed
+          if (direction === 'IN') {
+            await this.vinfastPartsService.syncCatalog({
+              progress$: this.progress$,
+              dateFrom: dto.dateFrom,
+              dateTo: dto.dateTo,
+            });
+          }
+          await this.vinfastPartsService.syncLedger({
+            progress$: this.progress$,
+            dateFrom: dto.dateFrom,
+            dateTo: dto.dateTo,
+          });
         }
 
         this.logger.log(
@@ -402,92 +500,6 @@ export class InvoicePortalService {
   // ---------------------------------------------------------------------------
   // Single invoice — reparse XML
   // ---------------------------------------------------------------------------
-
-  async reparseXml(
-    id: string,
-    token?: string,
-    cookies?: string,
-  ): Promise<ErpInvoice> {
-    let activeToken = token?.trim();
-    let activeCookies = cookies?.trim();
-    if (!activeToken) {
-      const cfg = await this.getPortalConfig();
-      activeToken = cfg.token;
-      if (!activeCookies) activeCookies = cfg.cookies;
-    }
-    const invoiceResp = await this.lifecycleService.findOne(id);
-    let invoice = invoiceResp.data;
-
-    if (!invoice.xmlFileKey) {
-      if (!activeToken) {
-        throw new BadRequestException(
-          'Hóa đơn này chưa có file XML đính kèm và không có token portal để tự tải.',
-        );
-      }
-      await this.downloadAndSaveXml(invoice as any, activeToken, activeCookies);
-      const updatedResp = await this.lifecycleService.findOne(id);
-      invoice = updatedResp.data;
-      if (!invoice.xmlFileKey) {
-        throw new BadRequestException(
-          'Không thể tải XML từ GDT. Vui lòng kiểm tra lại token hoặc trạng thái hóa đơn.',
-        );
-      }
-    }
-
-    try {
-      const xmlBuffer = await this.r2.downloadBuffer(invoice.xmlFileKey);
-      const { xmlString } = extractXmlFromBuffer(xmlBuffer);
-
-      if (!xmlString) {
-        throw new BadRequestException(
-          'Không tìm thấy nội dung XML hợp lệ trong file đính kèm.',
-        );
-      }
-
-      const parsedXml = parseVietnamInvoiceXml(xmlString);
-
-      let newNotes = invoice.notes || '';
-      if (parsedXml.lookupCode || parsedXml.providerLink) {
-        const infoStr = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
-        if (!newNotes.includes(infoStr)) {
-          newNotes = newNotes ? newNotes + '\n' + infoStr : infoStr;
-        }
-      }
-
-      await this.lifecycleService.update(invoice.id, {
-        preVatAmount: parsedXml.preVatAmount,
-        vatRate: parsedXml.vatRate ?? undefined,
-        vatAmount: parsedXml.vatAmount,
-        discountAmount: parsedXml.discountAmount,
-        totalAmount: parsedXml.totalAmount,
-        sellerName: parsedXml.sellerName ?? undefined,
-        sellerAddress: parsedXml.sellerAddress ?? undefined,
-        buyerName: parsedXml.buyerName ?? undefined,
-        buyerAddress: parsedXml.buyerAddress ?? undefined,
-        buyerPersonalName: parsedXml.buyerPersonalName ?? undefined,
-        buyerCccd: parsedXml.buyerCccd ?? undefined,
-        buyerTaxCode: parsedXml.buyerTaxCode ?? undefined,
-        description: parsedXml.description ?? undefined,
-        notes: newNotes || undefined,
-        items: parsedXml.items.map((i) => ({
-          ...i,
-          unit: i.unit ?? undefined,
-          quantity: i.quantity ?? undefined,
-          unitPrice: i.unitPrice ?? undefined,
-          vatRate: i.vatRate ?? undefined,
-        })),
-      });
-
-      return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
-    } catch (e) {
-      this.logger.error(
-        `Failed to reparse XML for ${id}: ${(e as Error).message}`,
-      );
-      throw new BadRequestException(
-        `Không thể đồng bộ: ${(e as Error).message}`,
-      );
-    }
-  }
 
   async bulkDownloadXml(
     token: string | undefined,
@@ -594,7 +606,33 @@ export class InvoicePortalService {
 
     const invoiceResp = await this.lifecycleService.findOne(id);
     const invoice = invoiceResp.data as any;
+    const oldStatus = invoice.taxInvoiceStatus;
+
     await this.syncInvoiceDetailFromJson(invoice, activeToken, activeCookies);
+
+    const updatedResp = await this.lifecycleService.findOne(id);
+    const updatedInvoice = updatedResp.data as any;
+
+    if (
+      oldStatus !== updatedInvoice.taxInvoiceStatus ||
+      !updatedInvoice.xmlFileKey
+    ) {
+      this.logger.log(
+        `Invoice ${invoice.invoiceNo} status changed (${oldStatus} -> ${updatedInvoice.taxInvoiceStatus}) or XML missing, re-downloading XML...`,
+      );
+      // Extracted XML download logic instead of calling downloadAndSaveXml (which re-syncs JSON)
+      await this.downloadXmlOnly(updatedInvoice, activeToken, activeCookies);
+    }
+
+    // Trigger Vinfast ledger sync in the background to update any new data
+    this.vinfastPartsService
+      .syncLedger()
+      .catch((e) =>
+        this.logger.error(
+          `Failed to sync Vinfast ledger for ${invoice.invoiceNo}: ${e.message}`,
+        ),
+      );
+
     return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
   }
 
@@ -663,8 +701,35 @@ export class InvoicePortalService {
     cookies?: string,
   ): Promise<void> {
     await this.syncInvoiceDetailFromJson(invoice, token, cookies);
-    await sleep(2000);
 
+    if (invoice.direction === 'OUT') {
+      const updated = await this.repository.findOne({
+        where: { id: invoice.id },
+        select: ['id', 'settlementOrder', 'branchId'],
+      });
+      if (updated) {
+        const newBranchId = await this.resolveBranchIdForOut(
+          updated.settlementOrder,
+          updated.buyerTaxCode,
+        );
+        if (newBranchId && updated.branchId !== newBranchId) {
+          await this.repository.update(invoice.id, { branchId: newBranchId });
+          this.logger.log(
+            `Branch updated for invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
+          );
+        }
+      }
+    }
+
+    await sleep(2000);
+    await this.downloadXmlOnly(invoice, token, cookies);
+  }
+
+  async downloadXmlOnly(
+    invoice: ErpInvoice,
+    token: string,
+    cookies?: string,
+  ): Promise<void> {
     try {
       let endpoints: string[] = [];
       if (invoice.taxInvoiceType === 'CASH_REGISTER') {
@@ -684,7 +749,7 @@ export class InvoicePortalService {
       for (let i = 0; i < endpoints.length; i++) {
         const ep = endpoints[i];
         const url = new URL(
-          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/export-xml`,
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/export-xml`,
         );
         url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         url.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -727,32 +792,16 @@ export class InvoicePortalService {
       });
 
       const { xmlString } = extractXmlFromBuffer(xmlBuffer);
-      let notesToAppend = '';
-      if (xmlString) {
-        try {
-          const parsedXml = parseVietnamInvoiceXml(xmlString);
-          if (parsedXml.lookupCode || parsedXml.providerLink) {
-            notesToAppend = `[Lookup Info] Code: ${parsedXml.lookupCode ?? 'N/A'} - Link: ${parsedXml.providerLink ?? 'N/A'}`;
-          }
-        } catch {
-          // ignore parse errors for notes extraction
-        }
-      }
 
       await this.r2.uploadBuffer(xmlKey, xmlBuffer, contentType);
 
       const updateData: any = { xmlFileKey: xmlKey };
-      if (notesToAppend && !(invoice.notes || '').includes(notesToAppend)) {
-        updateData.notes = invoice.notes
-          ? invoice.notes + '\n' + notesToAppend
-          : notesToAppend;
-      }
 
       await this.repository.update(invoice.id, updateData);
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);
     } catch (err) {
       this.logger.warn(
-        `downloadAndSaveXml error for ${invoice.invoiceNo}: ${(err as Error).message}`,
+        `downloadXmlOnly error for ${invoice.invoiceNo}: ${(err as Error).message}`,
       );
     }
   }
@@ -781,7 +830,7 @@ export class InvoicePortalService {
       for (let i = 0; i < endpoints.length; i++) {
         const ep = endpoints[i];
         const url = new URL(
-          `https://hoadondientu.gdt.gov.vn/api/${ep}/invoices/detail`,
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/detail`,
         );
         url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
         url.searchParams.set('khhdon', invoice.serialNo ?? '');
@@ -821,6 +870,23 @@ export class InvoicePortalService {
         discountAmount: i.stckhau != null ? Number(i.stckhau) : 0,
       }));
 
+      const invoiceLineCount = items.length;
+
+      const normalizedItems = items.map((item: any) => {
+        const classification = classifyInvoiceLine(item, {
+          buyerTaxCode: invoice.buyerTaxCode,
+          direction: invoice.direction,
+          invoiceLineCount,
+          taxInvoiceStatus: invoice.taxInvoiceStatus,
+          headerDiscountAmount:
+            json.ttcktmai != null ? Number(json.ttcktmai) : 0,
+        });
+        return {
+          ...item,
+          ...classification,
+        };
+      });
+
       await this.lifecycleService.update(invoice.id, {
         preVatAmount: json.tgtcthue != null ? Number(json.tgtcthue) : undefined,
         vatAmount: json.tgtthue != null ? Number(json.tgtthue) : undefined,
@@ -835,7 +901,15 @@ export class InvoicePortalService {
         buyerCccd: json.nmcmnd,
         buyerTaxCode: json.mst,
         description: items.length > 0 ? items[0].description : undefined,
-        items,
+        items: normalizedItems,
+        taxInvoiceStatus:
+          json.tthai !== undefined && json.tthai !== null
+            ? Number(json.tthai)
+            : undefined,
+        taxProcessStatus:
+          json.ttxly !== undefined && json.ttxly !== null
+            ? Number(json.ttxly)
+            : undefined,
       });
 
       this.logger.log(
@@ -847,6 +921,95 @@ export class InvoicePortalService {
         `syncInvoiceDetailFromJson error for ${invoice.invoiceNo}: ${(err as Error).message}`,
       );
       return undefined;
+    }
+  }
+
+  private normalizeTaxCode(value?: string | null): string | null {
+    if (!value) return null;
+    const normalized = String(value)
+      .replace(/[^0-9A-Za-z]/g, '')
+      .toUpperCase();
+    return normalized || null;
+  }
+
+  private collectProfileTaxCodes(profile: any): string[] {
+    const bag = new Set<string>();
+    const add = (val?: string | null) => {
+      const normalized = this.normalizeTaxCode(val);
+      if (normalized) bag.add(normalized);
+    };
+
+    add(profile?.username);
+    add(profile?.id);
+    add(profile?.groupId);
+    add(profile?.tinInfoTT86?.mst);
+    add(profile?.tinInfoTT86?.mstUTien);
+
+    const groupIds = profile?.groupIds;
+    if (typeof groupIds === 'string') {
+      groupIds
+        .split(/[;,\s]+/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+        .forEach((s: string) => add(s));
+    }
+
+    if (Array.isArray(groupIds)) {
+      groupIds.forEach((s: any) => add(String(s ?? '')));
+    }
+
+    if (Array.isArray(profile?.tinInfoTT86?.dsMst)) {
+      profile.tinInfoTT86.dsMst.forEach((s: any) => add(String(s ?? '')));
+    }
+
+    return [...bag];
+  }
+
+  private async validatePortalTaxpayer(
+    token: string,
+    cookies?: string,
+  ): Promise<void> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+
+    const expectedTaxCode = this.normalizeTaxCode(profile?.tax_code);
+    if (!expectedTaxCode) {
+      throw new BadRequestException('GDT_COMPANY_TAX_CODE_NOT_CONFIGURED');
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    };
+    if (cookies) headers.Cookie = cookies;
+
+    const response = await fetchWithRetry(
+      InvoicePortalService.GDT_PROFILE_URL,
+      {
+        headers,
+      },
+    );
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('GDT_TOKEN_EXPIRED');
+      }
+      throw new BadRequestException('GDT_PROFILE_FETCH_FAILED');
+    }
+
+    const taxpayerProfile = await response.json();
+    const actualTaxCodes = this.collectProfileTaxCodes(taxpayerProfile);
+
+    if (actualTaxCodes.length === 0) {
+      throw new BadRequestException('GDT_PROFILE_MISSING_TAX_CODE');
+    }
+
+    if (!actualTaxCodes.includes(expectedTaxCode)) {
+      this.logger.warn(
+        `GDT taxpayer mismatch. expected=${expectedTaxCode} actual=${actualTaxCodes.join(',')}`,
+      );
+      throw new BadRequestException('GDT_TAXPAYER_MISMATCH');
     }
   }
 }

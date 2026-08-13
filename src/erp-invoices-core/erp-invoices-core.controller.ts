@@ -18,7 +18,6 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -95,6 +94,132 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('export/excel/background')
+  startExportExcelBackground(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel/background/history')
+  getExportExcelBackgroundHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.getExportExcelHistory(
+      req.user?.sub,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
+  }
+
+  // Compatibility alias for clients using legacy path variant.
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('export/background/excel')
+  startExportExcelBackgroundAlias(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('export/excel/background/:jobId/download')
+  async downloadBackgroundExport(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = this.service.getExportExcelBackgroundFile(
+      jobId,
+      req.user?.sub,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Sse('export/excel/progress/stream')
+  exportExcelProgressStream(@Request() req: any): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          current: 0,
+          total: 100,
+          isRunning: false,
+          completed: false,
+          ready: false,
+          failed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const snapshot = this.service.getExportExcelProgressSnapshot(
+        req.user?.sub,
+      );
+      if (snapshot) {
+        subscriber.next({ data: JSON.stringify(snapshot) } as MessageEvent);
+      }
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            current: 0,
+            total: 100,
+            isRunning: false,
+            completed: false,
+            ready: false,
+            failed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000);
+
+      const subscription = this.service.exportProgress$.subscribe({
+        next: (data) => {
+          if (data.userId !== req.user?.sub) return;
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('stats')
+  @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  getStats(
+    @Query('direction') direction?: 'IN' | 'OUT',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.service.getStats(direction, dateFrom, dateTo);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('bulk-net-offs')
+  getBulkNetOffs(@Body('ids') ids: string[]) {
+    return this.service.getBulkNetOffs(ids);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
@@ -126,6 +251,12 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Patch('bulk-set-notes')
+  bulkSetNotes(@Body() body: { ids: string[]; notes: string }) {
+    return this.service.bulkSetNotes(body.ids, body.notes);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
@@ -141,11 +272,6 @@ export class ErpInvoicesCoreController {
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
-  }
-
-  @Post(':id/reparse-xml')
-  reparseXml(@Param('id') id: string, @Body('token') token?: string) {
-    return this.service.reparseXml(id, token);
   }
 
   @Post(':id/sync-detail')
@@ -180,7 +306,8 @@ export class ErpInvoicesCoreController {
     try {
       return await this.service.syncFromPortal(dto, req.user?.sub);
     } catch (e: any) {
-      if (e.message === 'GDT_TOKEN_EXPIRED') {
+      const message = e?.response?.message ?? e?.message;
+      if (message === 'GDT_TOKEN_EXPIRED') {
         if (req.user?.sub) {
           await this.notificationsService.createForUser(req.user.sub, {
             type: 'ERROR',
@@ -190,6 +317,24 @@ export class ErpInvoicesCoreController {
           });
         }
         throw new BadRequestException('GDT_TOKEN_EXPIRED');
+      }
+      if (
+        message === 'GDT_TAXPAYER_MISMATCH' ||
+        message === 'GDT_COMPANY_TAX_CODE_NOT_CONFIGURED' ||
+        message === 'GDT_PROFILE_FETCH_FAILED' ||
+        message === 'GDT_PROFILE_MISSING_TAX_CODE'
+      ) {
+        if (req.user?.sub) {
+          await this.notificationsService.createForUser(req.user.sub, {
+            type: 'ERROR',
+            title: 'Không thể đồng bộ hóa đơn từ GDT',
+            message:
+              message === 'GDT_TAXPAYER_MISMATCH'
+                ? 'Token GDT không khớp mã số thuế công ty đang cấu hình trong hệ thống.'
+                : 'Xác thực hồ sơ người nộp thuế thất bại. Vui lòng kiểm tra cấu hình token/cookie và MST công ty.',
+          });
+        }
+        throw new BadRequestException(message);
       }
       throw e;
     }
@@ -407,6 +552,8 @@ export class ErpInvoicesCoreController {
   uploadPdfs(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    @Body('documentType') documentType?: string,
+    @Request() req?: any,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Chưa chọn file PDF nào');
@@ -418,7 +565,27 @@ export class ErpInvoicesCoreController {
         buffer: f.buffer,
         mimetype: f.mimetype,
       })),
+      documentType,
+      req?.user?.sub,
     );
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/attachments/link')
+  linkAttachment(
+    @Param('id') id: string,
+    @Body() body: { attachmentId: string },
+  ) {
+    return this.service.linkAttachment(id, body.attachmentId);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Delete(':id/attachments/:attachmentId')
+  unlinkAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.service.unlinkAttachment(id, attachmentId);
   }
 
   @Get(':id/pdfs/zip')
@@ -452,6 +619,26 @@ export class ErpInvoicesCoreController {
     );
 
     return this.service.bulkDownloadFilesZip(payload, res);
+  }
+
+  @Post('bulk-download-selected')
+  async bulkDownloadSelected(
+    @Body() payload: { ids: string[]; types: string[] },
+    @Res() res: Response,
+  ) {
+    if (!payload.types || payload.types.length === 0) {
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất 1 loại file (pdf, xml)',
+      );
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="HoaDon_Selected_${Date.now()}.zip"`,
+    );
+
+    return this.service.bulkDownloadSelectedZip(payload, res);
   }
 
   @Get(':id/pdfs/:key/content')

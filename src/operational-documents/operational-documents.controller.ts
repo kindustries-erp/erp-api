@@ -13,7 +13,6 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DirectusAuthGuard } from '../auth/guards/directus-auth.guard';
 import { UserToken } from '../common/decorators/user-token.decorator';
 import {
-  CreateDocumentPaymentLinkDto,
   CreateInventoryItemDto,
   CreateInventoryTransactionDto,
   CreateOperatingExpenseDto,
@@ -120,36 +119,6 @@ export class OperationalDocumentsController {
     return this.service.postPurchaseReceipt(id, dto, token);
   }
 
-  @Get('operating-expenses')
-  listExpenses(
-    @Query() query: OperationalQueryDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.list('operating_expenses', query, token);
-  }
-
-  @Post('operating-expenses')
-  createExpense(
-    @Body() dto: CreateOperatingExpenseDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createExpense(dto, token);
-  }
-
-  @Get('operating-expenses/:id')
-  getExpense(@Param('id') id: string, @UserToken() token: string) {
-    return this.service.findOne('operating_expenses', id, token);
-  }
-
-  @Patch('operating-expenses/:id')
-  updateExpense(
-    @Param('id') id: string,
-    @Body() dto: CreateOperatingExpenseDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.updateDocument('operating_expenses', id, dto, token);
-  }
-
   @Get('operational-receivables')
   receivables(@Query() query: OperationalQueryDto, @UserToken() token: string) {
     return this.service.getReceivables(query, token);
@@ -198,37 +167,5 @@ export class OperationalDocumentsController {
     @UserToken() token: string,
   ) {
     return this.service.getInventoryStock(query, token);
-  }
-
-  @Get(':documentType/:id/payment-links')
-  listPaymentLinks(
-    @Param('documentType') documentType: string,
-    @Param('id') id: string,
-    @UserToken() token: string,
-  ) {
-    return this.service.listPaymentLinks(documentType as any, id, token);
-  }
-
-  @Post('document-payment-links')
-  createPaymentLink(
-    @Body() dto: CreateDocumentPaymentLinkDto,
-    @UserToken() token: string,
-  ) {
-    return this.service.createPaymentLink(dto, token);
-  }
-
-  @Delete(':documentType/:id/payment-links/:linkId')
-  deletePaymentLink(
-    @Param('documentType') documentType: string,
-    @Param('id') id: string,
-    @Param('linkId') linkId: string,
-    @UserToken() token: string,
-  ) {
-    return this.service.deletePaymentLink(
-      documentType as any,
-      id,
-      linkId,
-      token,
-    );
   }
 }

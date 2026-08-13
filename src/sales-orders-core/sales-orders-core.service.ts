@@ -207,7 +207,12 @@ export class SalesOrdersCoreService {
 
     if (notFullyIssued) {
       qb.andWhere('so.status IN (:...statuses)', {
-        statuses: ['RESERVED', 'PARTIAL_DELIVERED'],
+        statuses: [
+          'ACTIVE',
+          'PARTIAL_RESERVED',
+          'RESERVED',
+          'PARTIAL_DELIVERED',
+        ],
       });
     } else if (statusFilter) {
       qb.andWhere('so.status = :statusFilter', { statusFilter });
@@ -317,16 +322,87 @@ export class SalesOrdersCoreService {
                     `bp.name ILIKE :csw${idx} OR bp.code ILIKE :csw${idx}`,
                     p,
                   );
-                else if (col === 'orderDate')
-                  sqb.orWhere(
-                    "TO_CHAR(so.order_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
-                    p,
-                  );
-                else if (col === 'expectedDeliveryDate')
-                  sqb.orWhere(
-                    "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
-                    p,
-                  );
+                else if (col === 'orderDate') {
+                  const rawKw = String(kw);
+                  if (rawKw.includes('|')) {
+                    const [from, to] = rawKw.split('|');
+                    if (from && to)
+                      sqb.orWhere(
+                        `so.order_date >= :from${idx} AND so.order_date <= :to${idx}`,
+                        {
+                          [`from${idx}`]: from,
+                          [`to${idx}`]: to + ' 23:59:59',
+                        },
+                      );
+                    else if (from)
+                      sqb.orWhere(`so.order_date >= :from${idx}`, {
+                        [`from${idx}`]: from,
+                      });
+                    else if (to)
+                      sqb.orWhere(`so.order_date <= :to${idx}`, {
+                        [`to${idx}`]: to + ' 23:59:59',
+                      });
+                  } else {
+                    sqb.orWhere(
+                      "TO_CHAR(so.order_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
+                      p,
+                    );
+                  }
+                } else if (col === 'expectedDeliveryDate') {
+                  const rawKw = String(kw);
+                  if (rawKw.includes('|')) {
+                    const [from, to] = rawKw.split('|');
+                    if (from && to)
+                      sqb.orWhere(
+                        `so.expected_delivery_date >= :from${idx} AND so.expected_delivery_date <= :to${idx}`,
+                        {
+                          [`from${idx}`]: from,
+                          [`to${idx}`]: to + ' 23:59:59',
+                        },
+                      );
+                    else if (from)
+                      sqb.orWhere(`so.expected_delivery_date >= :from${idx}`, {
+                        [`from${idx}`]: from,
+                      });
+                    else if (to)
+                      sqb.orWhere(`so.expected_delivery_date <= :to${idx}`, {
+                        [`to${idx}`]: to + ' 23:59:59',
+                      });
+                  } else {
+                    sqb.orWhere(
+                      "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') ILIKE :csw${idx}",
+                      p,
+                    );
+                  }
+                } else if (col === 'deliveredDate') {
+                  const rawKw = String(kw);
+                  if (rawKw.includes('|')) {
+                    const [from, to] = rawKw.split('|');
+                    if (from && to)
+                      sqb.orWhere(
+                        `EXISTS (SELECT 1 FROM erp_serial_lifecycles l2 WHERE l2.sales_order_id = so.id AND l2.delivery_date >= :from${idx} AND l2.delivery_date <= :to${idx})`,
+                        {
+                          [`from${idx}`]: from,
+                          [`to${idx}`]: to + ' 23:59:59',
+                        },
+                      );
+                    else if (from)
+                      sqb.orWhere(
+                        `EXISTS (SELECT 1 FROM erp_serial_lifecycles l2 WHERE l2.sales_order_id = so.id AND l2.delivery_date >= :from${idx})`,
+                        { [`from${idx}`]: from },
+                      );
+                    else if (to)
+                      sqb.orWhere(
+                        `EXISTS (SELECT 1 FROM erp_serial_lifecycles l2 WHERE l2.sales_order_id = so.id AND l2.delivery_date <= :to${idx})`,
+                        { [`to${idx}`]: to + ' 23:59:59' },
+                      );
+                  } else {
+                    sqb.orWhere(
+                      `EXISTS (SELECT 1 FROM erp_serial_lifecycles l2 WHERE l2.sales_order_id = so.id AND TO_CHAR(l2.delivery_date, 'YYYY-MM-DD') ILIKE :csw${idx})`,
+                      p,
+                    );
+                  }
+                }
                 idx++;
               });
             }),
@@ -359,13 +435,15 @@ export class SalesOrdersCoreService {
       .take(pageSize)
       .getManyAndCount();
 
-    return this.enrichCustomerNames({
-      items,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
-    });
+    return this.enrichDeliveryDates(
+      await this.enrichCustomerNames({
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      }),
+    );
   }
 
   private async enrichCustomerNames(result: any) {
@@ -383,6 +461,29 @@ export class SalesOrdersCoreService {
           if (item.customerId) {
             item.customerName = partnerMap.get(item.customerId);
           }
+        }
+      }
+    }
+    return result;
+  }
+
+  private async enrichDeliveryDates(result: any) {
+    if (result.items.length > 0) {
+      const soIds = result.items.map((i: any) => i.id);
+      const lifecycleDates = await this.dataSource.query(
+        `SELECT sales_order_id, MAX(delivery_date) as max_date
+         FROM erp_serial_lifecycles
+         WHERE sales_order_id = ANY($1)
+         GROUP BY sales_order_id`,
+        [soIds],
+      );
+      const lifecycleMap = new Map(
+        lifecycleDates.map((r: any) => [r.sales_order_id, r.max_date]),
+      );
+      for (const item of result.items) {
+        const d = lifecycleMap.get(item.id);
+        if (d) {
+          item.deliveredDate = d;
         }
       }
     }

@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-greenway-production
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   ci:
@@ -129,11 +129,12 @@ jobs:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
         run: |
           docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}
-          docker save ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} | \
-            sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "docker load"
+          echo "Saving and compressing image..."
+          docker save ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} | gzip > image.tar.gz
+          echo "Transferring image..."
+          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ vars.HEAD_PORT }} image.tar.gz ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }}:/tmp/api-image.tar.gz
+          echo "Loading image on Head..."
+          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ vars.HEAD_PORT }} ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} "docker load -i /tmp/api-image.tar.gz && rm /tmp/api-image.tar.gz"
 
       - name: Run deploy script
         env:
@@ -147,7 +148,7 @@ jobs:
              docker rm -f erp-api-greenway-production || true ; \
              docker rm -f liouni-erp-core-api-greenway || true ; \
              docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-greenway-production --restart always --env-file /home/dev/opt/stacks/erp/erp-api-greenway-production/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+             docker run -d --name erp-api-greenway-production --restart always --pull never --env-file /home/dev/opt/stacks/erp/erp-api-greenway-production/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         env:
@@ -159,16 +160,19 @@ jobs:
             '
               HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-greenway-production/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
               if [ -z "$HOST_PORT" ]; then HOST_PORT=10014; fi
-              for i in $(seq 1 20); do
+              echo "🔍 Health check on port $HOST_PORT (waiting 15s for container warm-up...)"
+              sleep 15
+              for i in $(seq 1 30); do
                 code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$HOST_PORT/api/v1/auth/profile || true)
                 if [ "$code" = "401" ] || [ "$code" = "200" ]; then
-                  echo "✅ API health OK"
+                  echo "✅ API health OK (attempt $i)"
                   docker image prune -af
                   exit 0
                 fi
-                echo "Attempt $i: got $code, retrying..."
-                sleep 3
+                echo "Attempt $i/30: got $code, retrying in 5s..."
+                sleep 5
               done
-              echo "❌ Health check failed"
+              echo "❌ Health check failed after 30 attempts ($(( 15 + 30 * 5 ))s total)"
+              docker logs --tail 50 erp-api-greenway-production || true
               exit 1
             '

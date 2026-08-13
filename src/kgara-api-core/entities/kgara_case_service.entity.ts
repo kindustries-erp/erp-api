@@ -122,6 +122,72 @@ export class KgaraCaseService {
   })
   tienCoThue: number | null;
 
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'so_gio_cong_lam',
+    nullable: true,
+  })
+  soGioCongLam: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'tien_dich_vu',
+    nullable: true,
+  })
+  tienDichVu: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'tien_phu_tung',
+    nullable: true,
+  })
+  tienPhuTung: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'gia_von_phu_tung',
+    nullable: true,
+  })
+  giaVonPhuTung: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'ty_le_chiet_khau_ct',
+    nullable: true,
+  })
+  tyLeChietKhauCt: number | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'tien_chiet_khau_ct',
+    nullable: true,
+  })
+  tienChietKhauCt: number | null;
+
+  @Column({ type: 'varchar', length: 100, name: 'kho_code', nullable: true })
+  khoCode: string | null;
+
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'tien_phu_phi',
+    nullable: true,
+  })
+  tienPhuPhi: number | null;
+
   @Column({ type: 'jsonb', name: 'raw_data', nullable: true })
   rawData: any;
 

@@ -232,6 +232,14 @@ export class GoodsIssuesCoreService {
   async update(id: string, dto: UpdateGoodsIssueDto) {
     const existing = await this.getIssueOrThrow(this.repository, id);
     if (existing.status !== 'DRAFT') {
+      const { remarks } = dto as any;
+      if (remarks !== undefined) {
+        await this.repository.update(id, { remarks });
+        await this.dataSource
+          .getRepository(ErpInventoryTransaction)
+          .update({ documentId: id }, { notes: remarks });
+        return { message: 'Cập nhật ghi chú thành công' };
+      }
       throw new BadRequestException(
         'Chỉ được sửa phiếu xuất ở trạng thái nháp',
       );
@@ -364,7 +372,7 @@ export class GoodsIssuesCoreService {
         const item = line.itemId
           ? await itemRepo.findOne({
               where: { id: line.itemId },
-              relations: ['itemType'],
+              relations: ['itemType', 'trackingPolicy'],
             })
           : null;
         const isService = item?.itemType?.code === 'SERVICE';
@@ -379,6 +387,35 @@ export class GoodsIssuesCoreService {
         const currentValue = Number(balance?.inventoryValue || 0);
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
+
+        if (!isService && item?.trackingPolicy?.code === 'SERIAL') {
+          const inStockCount = await serialRepo.count({
+            where: { itemId: line.itemId!, status: 'IN_STOCK' },
+          });
+
+          if (inStockCount < qty) {
+            const pendingCount = await manager
+              .createQueryBuilder()
+              .select('COUNT(l.id)', 'cnt')
+              .from('erp_goods_receipt_lines', 'l')
+              .innerJoin(
+                'erp_goods_receipts',
+                'gr',
+                'gr.id = l.goods_receipt_id',
+              )
+              .where('l.item_id = :itemId', { itemId: line.itemId })
+              .andWhere('gr.status = :status', { status: 'POSTED' })
+              .andWhere('l.serials_generated = false')
+              .getRawOne();
+
+            if (Number(pendingCount?.cnt || 0) > 0) {
+              throw new BadRequestException(
+                `Hệ thống đang trong quá trình đăng ký mã Serial cho phụ tùng ${item.sku}. Vui lòng đợi vài phút để hoàn tất, sau đó thực hiện lại lệnh xuất kho.`,
+              );
+            }
+            // else let it fall through to normal balance validation or we can throw here
+          }
+        }
 
         if (!isService) {
           if (line.salesOrderLineId) {
@@ -475,12 +512,32 @@ export class GoodsIssuesCoreService {
         }
 
         if (serial) {
+          let dealerId = issue.customerId;
+          if (!dealerId && issue.salesOrderId) {
+            const soRepo = manager.getRepository(ErpSalesOrder);
+            const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+            if (so) {
+              dealerId = so.customerId;
+            }
+          }
+
           serial.goodsIssueLineId = line.id;
           if (line.salesOrderLineId) {
             serial.status = 'DELIVERING';
           }
           if (!serial.vinId && vehicle?.id) {
             serial.vinId = vehicle.id;
+          }
+          if (line.salesOrderLineId && dealerId) {
+            const bpRepo = manager.getRepository(ErpBusinessPartner);
+            const dealer = await bpRepo.findOneBy({ id: dealerId });
+            if (dealer) {
+              serial.attributes = {
+                ...(serial.attributes || {}),
+                dealer_code: dealer.code,
+                dealer_name: dealer.name,
+              };
+            }
           }
           await serialRepo.save(serial);
 
@@ -495,14 +552,14 @@ export class GoodsIssuesCoreService {
                   serialId: serial.id,
                   salesOrderId: issue.salesOrderId,
                   goodsIssueId: issue.id,
-                  dealerId: issue.customerId, // Using customerId as dealerId
+                  dealerId: dealerId,
                   status: 'ACTIVE',
                 }),
               );
             } else {
               existingLifecycle.salesOrderId = issue.salesOrderId;
               existingLifecycle.goodsIssueId = issue.id;
-              existingLifecycle.dealerId = issue.customerId;
+              existingLifecycle.dealerId = dealerId;
               existingLifecycle.status = 'ACTIVE';
               await lifecycleRepo.save(existingLifecycle);
             }

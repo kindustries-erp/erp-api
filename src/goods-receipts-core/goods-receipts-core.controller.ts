@@ -10,9 +10,12 @@ import {
   Query,
   UseGuards,
   Res,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { Observable } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -21,13 +24,17 @@ import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
 import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
 import { PostGoodsReceiptDto } from './dto/post-goods-receipt.dto';
+import { GoodsReceiptsCronService } from './goods-receipts-cron.service';
 
 @ApiTags('erp_goods_receipts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('goods-receipts')
 export class GoodsReceiptsCoreController {
-  constructor(private readonly service: GoodsReceiptsCoreService) {}
+  constructor(
+    private readonly service: GoodsReceiptsCoreService,
+    private readonly cronService: GoodsReceiptsCronService,
+  ) {}
 
   @RequirePermissions({ resource: 'goods_receipts', action: 'create' })
   @Post()
@@ -44,6 +51,53 @@ export class GoodsReceiptsCoreController {
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextReceiptNo(date);
+  }
+
+  @Get('serial-generation/progress')
+  getSerialGenerationProgress() {
+    return this.cronService.getProgress();
+  }
+
+  @Sse('serial-generation/progress/stream')
+  serialGenerationProgressStream(): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      // Emit initial connection event to force 200 OK and establish connection
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          pendingLines: 0,
+          pendingSerials: 0,
+          isRunning: false,
+          completed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            pendingLines: 0,
+            pendingSerials: 0,
+            isRunning: false,
+            completed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000); // 15s keep-alive
+
+      const subscription = this.cronService.progress$.subscribe({
+        next: (data) =>
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent),
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
   }
 
   @RequirePermissions({ resource: 'goods_receipts', action: 'read' })

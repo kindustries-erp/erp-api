@@ -93,9 +93,59 @@ export class KgaraCase {
   })
   tienConPhaiThanhToan: number | null;
 
+  /** DoanhThu – revenue */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'doanh_thu',
+    nullable: true,
+  })
+  doanhThu: number | null;
+
+  /** ChiPhi – total cost */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'chi_phi',
+    nullable: true,
+  })
+  chiPhi: number | null;
+
+  /** LoiNhuan – profit */
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    name: 'loi_nhuan',
+    nullable: true,
+  })
+  loiNhuan: number | null;
+
   /** NgayPhatSinh – case transaction date */
   @Column({ type: 'timestamp', name: 'ngay_phat_sinh', nullable: true })
   ngayPhatSinh: Date | null;
+
+  /** NgayTiepNhan – case reception date */
+  @Column({ type: 'timestamp', name: 'ngay_tiep_nhan', nullable: true })
+  ngayTiepNhan: Date | null;
+
+  /** NgayHoanThanhCongViec – completion date */
+  @Column({
+    type: 'timestamp',
+    name: 'ngay_hoan_thanh_cong_viec',
+    nullable: true,
+  })
+  ngayHoanThanhCongViec: Date | null;
+
+  /** NgayGiaoXeFull – delivery date */
+  @Column({ type: 'timestamp', name: 'ngay_giao_xe_full', nullable: true })
+  ngayGiaoXeFull: Date | null;
+
+  /** SoKhung – VIN / chassis number */
+  @Column({ type: 'varchar', length: 100, name: 'so_khung', nullable: true })
+  soKhung: string | null;
 
   /** dataAsOf – server-side timestamp from response envelope */
   @Column({
@@ -113,6 +163,19 @@ export class KgaraCase {
     nullable: true,
   })
   branchExternalId: string | null;
+
+  // ── ERP Local columns ─────────────────────────────────────────────────────
+
+  @Column({ type: 'varchar', name: 'erp_notes', nullable: true })
+  erpNotes: string | null;
+
+  @Index()
+  @Column({ type: 'timestamptz', name: 'kgara_deleted_at', nullable: true })
+  kgaraDeletedAt: Date | null;
+
+  @Index()
+  @Column({ type: 'integer', name: 'kgara_delete_count', default: 0 })
+  kgaraDeleteCount: number;
 
   @Column({ type: 'jsonb', name: 'raw_data', nullable: true })
   rawData: any;

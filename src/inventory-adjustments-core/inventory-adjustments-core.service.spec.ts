@@ -81,7 +81,16 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     };
     const balanceRepo = {
       findOne: jest.fn().mockResolvedValue(balance),
-      save: jest.fn(async (x: any) => x),
+      find: jest.fn().mockResolvedValue(balance ? [balance] : []),
+      save: jest.fn(async (x: any) => {
+        const items = Array.isArray(x) ? x : [x];
+        for (const item of items) {
+          if (balance && item.itemId === balance.itemId) {
+            Object.assign(balance, item);
+          }
+        }
+        return x;
+      }),
     };
     return { adjRepo, lineRepo, txnRepo, balanceRepo };
   }
@@ -115,7 +124,8 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     expect(Number(balance.inventoryValue)).toBe(150);
     expect(adj.status).toBe('POSTED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCallArg = txnRepo.save.mock.calls[0][0];
+    const txnCall = Array.isArray(txnCallArg) ? txnCallArg[0] : txnCallArg;
     expect(txnCall.transactionType).toBe('ADJUSTMENT');
     expect(txnCall.qtyIn).toBe('5.000');
     expect(txnCall.qtyOut).toBe('0.000');
@@ -152,7 +162,8 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     expect(Number(balance.qtyOnHand)).toBe(7);
     expect(adj.status).toBe('POSTED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCallArg = txnRepo.save.mock.calls[0][0];
+    const txnCall = Array.isArray(txnCallArg) ? txnCallArg[0] : txnCallArg;
     expect(txnCall.qtyOut).toBe('3.000');
     expect(txnCall.qtyIn).toBe('0.000');
   });
@@ -255,7 +266,8 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     expect(Number(balance.qtyOnHand)).toBe(10);
     expect(adj.status).toBe('CANCELLED');
 
-    const txnCall = txnRepo.save.mock.calls[0][0];
+    const txnCallArg = txnRepo.save.mock.calls[0][0];
+    const txnCall = Array.isArray(txnCallArg) ? txnCallArg[0] : txnCallArg;
     expect(txnCall.transactionType).toBe('ADJUSTMENT_CANCEL');
     // Reverting an increase means qtyOut
     expect(txnCall.qtyOut).toBe('5.000');
@@ -282,6 +294,29 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     const { service } = makeServiceWithManager(makeManager(repoMap));
     await expect(service.cancelAdjustment('adj1')).rejects.toThrow(
       'Chỉ có thể hủy phiếu điều chỉnh đã ghi sổ (POSTED)',
+    );
+  });
+
+  it('cancelAdjustment: already CANCELLED — should throw BadRequestException', async () => {
+    const adj = makeAdj({ status: 'CANCELLED' });
+    const line = makeLine();
+    const balance = makeBalance();
+
+    const { adjRepo, lineRepo, txnRepo, balanceRepo } = makeRepos(
+      adj,
+      [line],
+      balance,
+    );
+    const repoMap = new Map<any, any>([
+      [ErpInventoryAdjustment, adjRepo],
+      [ErpInventoryAdjustmentLine, lineRepo],
+      [ErpInventoryTransaction, txnRepo],
+      [ErpInventoryBalance, balanceRepo],
+    ]);
+
+    const { service } = makeServiceWithManager(makeManager(repoMap));
+    await expect(service.cancelAdjustment('adj1')).rejects.toThrow(
+      'Phiếu điều chỉnh đã bị hủy trước đó',
     );
   });
 
