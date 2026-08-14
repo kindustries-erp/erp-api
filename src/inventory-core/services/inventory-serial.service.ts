@@ -564,9 +564,13 @@ export class InventorySerialService {
       selectField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'itemName') selectField = 'i.item_name';
-    else if (column === 'serialNo') selectField = 's.serial_no';
-    else if (column === 'vinNo') selectField = 'v.vin_no';
-    else if (column === 'engineNo') selectField = 'v.engine_no';
+    else if (column === 'serialNo')
+      selectField =
+        "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+    else if (column === 'vinNo')
+      selectField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+    else if (column === 'engineNo')
+      selectField = "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
     else if (column === 'soNo') selectField = 'so.so_no';
     else if (column === 'customerName') selectField = 'l.customer_name';
     else if (column === 'activationDate') {
@@ -583,8 +587,8 @@ export class InventorySerialService {
     let sql = `
       SELECT DISTINCT ${selectField} as value
       FROM erp_serial_lifecycles l
-      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
-      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      LEFT JOIN erp_inventory_items i ON s.item_id = i.id
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
       WHERE 1=1
@@ -611,9 +615,14 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'serialNo')
+            filterField =
+              "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            filterField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
           else if (col === 'color') filterField = "s.attributes->>'color'";
@@ -677,13 +686,13 @@ export class InventorySerialService {
       SELECT 
         l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
         l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id, l.attributes,
-        s.id as serial_id, s.serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
+        s.id as serial_id, COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin')) as serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
         i.sku, i.item_name,
-        v.vin_no, v.engine_no,
+        COALESCE(v.vin_no, l.attributes->>'ghost_vin') as vin_no, COALESCE(v.engine_no, l.attributes->>'ghost_engine') as engine_no,
         so.so_no, so.expected_delivery_date as expected_delivery_date
       FROM erp_serial_lifecycles l
-      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
-      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      LEFT JOIN erp_inventory_items i ON s.item_id = i.id
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
       WHERE 1=1
@@ -708,8 +717,8 @@ export class InventorySerialService {
 
     if (query.search) {
       sql += ` AND (
-        s.serial_no ILIKE $${paramIdx} OR 
-        v.vin_no ILIKE $${paramIdx} OR 
+        COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin')) ILIKE $${paramIdx} OR 
+        COALESCE(v.vin_no, l.attributes->>'ghost_vin') ILIKE $${paramIdx} OR 
         l.customer_name ILIKE $${paramIdx} OR 
         l.customer_phone ILIKE $${paramIdx}
       )`;
@@ -744,9 +753,14 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'serialNo')
+            filterField =
+              "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            filterField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
           else if (col === 'color') filterField = "s.attributes->>'color'";

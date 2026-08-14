@@ -574,12 +574,22 @@ export class ReportsCoreService {
       grossProfit: 0,
       inventoryValue: 0,
       totalBuy: 0,
+      byVehicleType: {
+        CAR: { revenue: 0, cogs: 0, grossProfit: 0, inventoryValue: 0 },
+        MOTORBIKE: { revenue: 0, cogs: 0, grossProfit: 0, inventoryValue: 0 },
+      },
     };
 
     const trendMap: Record<string, any> = {};
+    const chartDataMap: Record<string, any> = {};
 
     let totalCumulativeBuy = 0;
     let totalCumulativeCogs = 0;
+
+    let totalCumulativeBuyCar = 0;
+    let totalCumulativeCogsCar = 0;
+    let totalCumulativeBuyMotorbike = 0;
+    let totalCumulativeCogsMotorbike = 0;
 
     for (const m of fifoMetrics) {
       if (query.itemCode && m.itemCode !== query.itemCode) continue;
@@ -589,20 +599,38 @@ export class ReportsCoreService {
       if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
         isCarPart = true;
       }
-
-      // If it doesn't match the list, we assume MOTORBIKE unless from_car_seller was checked,
-      // but in FIFO we just rely on the hardcoded SKUs for the dashboard aggregation.
       const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
-      if (
-        query.vehicleType &&
-        query.vehicleType !== 'all' &&
-        query.vehicleType !== vType
-      ) {
-        continue;
+
+      if (vType === 'CAR') {
+        totalCumulativeBuyCar += m.amountBought;
+        totalCumulativeCogsCar += m.totalCogs;
+      } else {
+        totalCumulativeBuyMotorbike += m.amountBought;
+        totalCumulativeCogsMotorbike += m.totalCogs;
       }
 
-      totalCumulativeBuy += m.amountBought;
-      totalCumulativeCogs += m.totalCogs;
+      if (
+        !query.vehicleType ||
+        query.vehicleType === 'all' ||
+        query.vehicleType === vType
+      ) {
+        if (!chartDataMap[m.month]) {
+          chartDataMap[m.month] = {
+            revenue: 0,
+            cogs: 0,
+            grossProfit: 0,
+            inventoryValue: 0,
+          };
+        }
+        chartDataMap[m.month].revenue += m.amountSold;
+        chartDataMap[m.month].cogs += m.totalCogs;
+        chartDataMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+
+        totalCumulativeBuy += m.amountBought;
+        totalCumulativeCogs += m.totalCogs;
+        chartDataMap[m.month].inventoryValue =
+          totalCumulativeBuy - totalCumulativeCogs;
+      }
 
       let isOutOfRange = false;
       if (query.dateFrom) {
@@ -620,6 +648,25 @@ export class ReportsCoreService {
         }
       }
       if (isOutOfRange) continue;
+
+      if (vType === 'CAR') {
+        summary.byVehicleType.CAR.revenue += m.amountSold;
+        summary.byVehicleType.CAR.cogs += m.totalCogs;
+        summary.byVehicleType.CAR.grossProfit += m.amountSold - m.totalCogs;
+      } else {
+        summary.byVehicleType.MOTORBIKE.revenue += m.amountSold;
+        summary.byVehicleType.MOTORBIKE.cogs += m.totalCogs;
+        summary.byVehicleType.MOTORBIKE.grossProfit +=
+          m.amountSold - m.totalCogs;
+      }
+
+      if (
+        query.vehicleType &&
+        query.vehicleType !== 'all' &&
+        query.vehicleType !== vType
+      ) {
+        continue;
+      }
 
       if (!trendMap[m.month]) {
         trendMap[m.month] = {
@@ -643,14 +690,51 @@ export class ReportsCoreService {
     }
 
     summary.inventoryValue = totalCumulativeBuy - totalCumulativeCogs;
+    summary.byVehicleType.CAR.inventoryValue =
+      totalCumulativeBuyCar - totalCumulativeCogsCar;
+    summary.byVehicleType.MOTORBIKE.inventoryValue =
+      totalCumulativeBuyMotorbike - totalCumulativeCogsMotorbike;
 
     const trend = Object.values(trendMap).sort((a: any, b: any) =>
       a.month.localeCompare(b.month),
     );
 
+    const today = new Date(query.dateTo || new Date());
+    const targetKeys: string[] = [];
+    if (groupInterval === 'week') {
+      for (let i = 3; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(
+          d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1) - i * 7,
+        );
+        targetKeys.push(d.toISOString().substring(0, 10));
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        targetKeys.push(
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        );
+      }
+    }
+
+    let lastInv = 0;
+    const charts = {
+      revenue: targetKeys.map((k) => chartDataMap[k]?.revenue || 0),
+      cogs: targetKeys.map((k) => chartDataMap[k]?.cogs || 0),
+      grossProfit: targetKeys.map((k) => chartDataMap[k]?.grossProfit || 0),
+      inventoryValue: targetKeys.map((k) => {
+        if (chartDataMap[k]) {
+          lastInv = chartDataMap[k].inventoryValue;
+        }
+        return lastInv;
+      }),
+    };
+
     return {
       summary,
       trend,
+      charts,
     };
   }
 

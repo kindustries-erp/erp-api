@@ -63,7 +63,7 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Auto-sync draft finished successfully.');
 
       // Nếu có thay đổi thực sự thì thông báo
-      if (res && res.changed) {
+      if (res && res.changed && (res.added > 0 || res.removed > 0)) {
         await this.notifySyncSuccess(res.synced, res.added, res.removed);
       }
     } catch (e: any) {
