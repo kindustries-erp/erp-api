@@ -24,6 +24,7 @@ import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 import { solveGdtSvgCaptcha } from '../helpers/gdt-captcha-solver.helper';
+import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -112,6 +113,24 @@ export class InvoicePortalService {
     token: string;
     cookies: string;
     username: string;
+    hasPassword: boolean;
+  }> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    return {
+      token: profile?.gdt_portal_token || '',
+      cookies: profile?.gdt_portal_cookies || '',
+      username: profile?.gdt_portal_username || profile?.tax_code || '',
+      hasPassword: Boolean(profile?.gdt_portal_password),
+    };
+  }
+
+  async getInternalPortalConfig(): Promise<{
+    token: string;
+    cookies: string;
+    username: string;
     password?: string;
   }> {
     const profile = await this.companyProfileRepo.findOne({
@@ -122,7 +141,7 @@ export class InvoicePortalService {
       token: profile?.gdt_portal_token || '',
       cookies: profile?.gdt_portal_cookies || '',
       username: profile?.gdt_portal_username || profile?.tax_code || '',
-      password: profile?.gdt_portal_password || '',
+      password: safeDecrypt(profile?.gdt_portal_password) || undefined,
     };
   }
 
@@ -136,13 +155,21 @@ export class InvoicePortalService {
       where: {},
       order: { created_at: 'ASC' },
     });
+
+    const encryptedPassword =
+      password !== undefined
+        ? password
+          ? encryptText(password)
+          : ''
+        : undefined;
+
     if (!profile) {
       profile = this.companyProfileRepo.create({
         company_name: 'Your Company Name',
         gdt_portal_token: token,
         gdt_portal_cookies: cookies,
         gdt_portal_username: username,
-        gdt_portal_password: password,
+        gdt_portal_password: encryptedPassword,
       });
     } else {
       profile.gdt_portal_token = token;
@@ -152,11 +179,69 @@ export class InvoicePortalService {
       if (username !== undefined) {
         profile.gdt_portal_username = username;
       }
-      if (password !== undefined) {
-        profile.gdt_portal_password = password;
+      if (encryptedPassword !== undefined) {
+        profile.gdt_portal_password = encryptedPassword;
       }
     }
     await this.companyProfileRepo.save(profile);
+  }
+
+  async autoReloginWithRetry(
+    maxRetries = 3,
+    retryDelayMs = 60000,
+  ): Promise<{ token: string; cookies?: string } | null> {
+    const config = await this.getInternalPortalConfig();
+    if (!config.username || !config.password) {
+      this.logger.warn(
+        'Không thể tự động đăng nhập Cổng Thuế: Chưa lưu tên đăng nhập hoặc mật khẩu trong hệ thống',
+      );
+      return null;
+    }
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      this.logger.log(
+        `Bắt đầu tự động đăng nhập lại Cổng Thuế GDT (lần ${attempt}/${maxRetries})...`,
+      );
+      try {
+        const captcha = await this.getCaptcha();
+        if (!captcha?.text || !captcha?.key) {
+          throw new Error('Không thể lấy hoặc giải mã Captcha');
+        }
+
+        const loginRes = await this.loginWithCaptcha({
+          username: config.username,
+          password: config.password,
+          cvalue: captcha.text,
+          ckey: captcha.key,
+        });
+
+        if (loginRes?.success && loginRes?.token) {
+          this.logger.log(
+            `Tự động đăng nhập Cổng Thuế thành công ở lần ${attempt}!`,
+          );
+          const freshConfig = await this.getInternalPortalConfig();
+          return {
+            token: loginRes.token || freshConfig.token,
+            cookies: freshConfig.cookies || undefined,
+          };
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
+        );
+        if (attempt < maxRetries) {
+          this.logger.log(
+            `Chờ ${Math.round(retryDelayMs / 1000)}s trước khi thử lại đăng nhập...`,
+          );
+          await sleep(retryDelayMs);
+        }
+      }
+    }
+
+    this.logger.error(
+      `Tất cả ${maxRetries} lần tự động đăng nhập lại Cổng Thuế đều thất bại.`,
+    );
+    return null;
   }
 
   async getCaptcha(): Promise<{ content: string; key: string; text: string }> {
@@ -327,12 +412,43 @@ export class InvoicePortalService {
     let token = dto.token?.trim();
     let cookies = dto.cookies?.trim();
     if (!token) {
-      const config = await this.getPortalConfig();
+      const config = await this.getInternalPortalConfig();
       token = config.token;
       if (!cookies && config.cookies) cookies = config.cookies;
     }
-    if (!token) throw new BadRequestException('token is required');
-    await this.validatePortalTaxpayer(token, cookies);
+    if (!token) {
+      this.logger.log(
+        'Chưa có token Portal. Đang thử tự động đăng nhập Cổng Thuế...',
+      );
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        token = reAuth.token;
+        cookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('token is required');
+      }
+    }
+
+    try {
+      await this.validatePortalTaxpayer(token, cookies);
+    } catch (err: any) {
+      const errMsg = err?.message || err?.response?.message;
+      if (errMsg === 'GDT_TOKEN_EXPIRED') {
+        this.logger.warn(
+          'Token GDT hết hạn khi xác thực hồ sơ. Đang tự động đăng nhập lại...',
+        );
+        const reAuth = await this.autoReloginWithRetry();
+        if (!reAuth) {
+          throw new BadRequestException('GDT_TOKEN_EXPIRED');
+        }
+        token = reAuth.token;
+        cookies = reAuth.cookies;
+        await this.validatePortalTaxpayer(token, cookies);
+      } else {
+        throw err;
+      }
+    }
+
     if (!dto.dateFrom || !dto.dateTo)
       throw new BadRequestException('dateFrom and dateTo are required');
 
@@ -422,9 +538,27 @@ export class InvoicePortalService {
                 };
                 if (cookies) fetchHeaders['Cookie'] = cookies;
 
-                const response = await fetchWithRetry(url, {
+                let response = await fetchWithRetry(url, {
                   headers: fetchHeaders,
                 });
+                if (
+                  !response.ok &&
+                  (response.status === 401 || response.status === 403)
+                ) {
+                  this.logger.warn(
+                    `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
+                  );
+                  const reAuth = await this.autoReloginWithRetry();
+                  if (reAuth) {
+                    token = reAuth.token;
+                    cookies = reAuth.cookies;
+                    fetchHeaders.Authorization = `Bearer ${token}`;
+                    if (cookies) fetchHeaders['Cookie'] = cookies;
+                    response = await fetchWithRetry(url, {
+                      headers: fetchHeaders,
+                    });
+                  }
+                }
                 if (!response.ok)
                   throw new BadRequestException(
                     `Portal request failed with status ${response.status}`,
@@ -572,7 +706,7 @@ export class InvoicePortalService {
         });
 
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(backgroundSyncIds, token, cookies)
+          this.downloadXmlsInBackground(backgroundSyncIds, token!, cookies)
             .then(async () => {
               if (direction === 'IN') {
                 await this.vinfastPartsService.syncCatalog({
@@ -670,12 +804,19 @@ export class InvoicePortalService {
     let activeToken = token?.trim();
     let activeCookies = cookies?.trim();
     if (!activeToken) {
-      const cfg = await this.getPortalConfig();
+      const cfg = await this.getInternalPortalConfig();
       activeToken = cfg.token;
       if (!activeCookies) activeCookies = cfg.cookies;
     }
-    if (!activeToken) throw new BadRequestException('token is required');
-    if (!token) throw new BadRequestException('Token portal là bắt buộc.');
+    if (!activeToken) {
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        activeToken = reAuth.token;
+        activeCookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('Token portal là bắt buộc.');
+      }
+    }
 
     const invoices = await this.repository.find({
       where: [
@@ -758,12 +899,19 @@ export class InvoicePortalService {
     let activeToken = token?.trim();
     let activeCookies = cookies?.trim();
     if (!activeToken) {
-      const cfg = await this.getPortalConfig();
+      const cfg = await this.getInternalPortalConfig();
       activeToken = cfg.token;
       if (!activeCookies) activeCookies = cfg.cookies;
     }
-    if (!activeToken)
-      throw new BadRequestException('Token portal là bắt buộc.');
+    if (!activeToken) {
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        activeToken = reAuth.token;
+        activeCookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('Token portal là bắt buộc.');
+      }
+    }
 
     const invoiceResp = await this.lifecycleService.findOne(id);
     const invoice = invoiceResp.data as any;
