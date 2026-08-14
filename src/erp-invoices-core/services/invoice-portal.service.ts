@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
@@ -630,8 +630,22 @@ export class InvoicePortalService {
                 updated = true;
               }
               if (updated) await this.repository.save(existing);
-              if (!existing.xmlFileKey || !existing.description)
+
+              const isAdjustmentOrReplacement =
+                taxInvoiceStatus === 2 ||
+                taxInvoiceStatus === 3 ||
+                existing.taxInvoiceStatus === 2 ||
+                existing.taxInvoiceStatus === 3;
+              const isMissingRelated =
+                isAdjustmentOrReplacement && !existing.relatedInvoiceNo;
+
+              if (
+                !existing.xmlFileKey ||
+                !existing.description ||
+                isMissingRelated
+              ) {
                 backgroundSyncIds.push(existing.id);
+              }
               skipped++;
               continue;
             }
@@ -827,6 +841,13 @@ export class InvoicePortalService {
           description: IsNull(),
           isDeleted: false,
         },
+        {
+          source: 'PORTAL',
+          direction,
+          taxInvoiceStatus: In([2, 3]),
+          relatedInvoiceNo: IsNull(),
+          isDeleted: false,
+        },
       ],
     });
 
@@ -933,6 +954,28 @@ export class InvoicePortalService {
       await this.downloadXmlOnly(updatedInvoice, activeToken, activeCookies);
     }
 
+    // Tra cứu và cập nhật HĐ gốc nếu hóa đơn là điều chỉnh (2) hoặc thay thế (3)
+    const latestStatus = updatedInvoice.taxInvoiceStatus;
+    if (latestStatus === 2 || latestStatus === 3) {
+      const relativeInfo = await this.fetchRelativeInvoice(
+        updatedInvoice,
+        activeToken,
+        activeCookies,
+      );
+      if (relativeInfo?.shdgoc) {
+        await this.repository.update(updatedInvoice.id, {
+          relatedInvoiceNo: relativeInfo.shdgoc,
+          relatedSerialNo: relativeInfo.khhdgoc ?? null,
+        });
+        await this.syncRelatedInvoiceStatus(
+          relativeInfo,
+          updatedInvoice,
+          activeToken,
+          activeCookies,
+        );
+      }
+    }
+
     // Trigger Vinfast ledger sync in the background to update any new data
     this.vinfastPartsService
       .syncLedger()
@@ -957,7 +1000,11 @@ export class InvoicePortalService {
     const processId = 'sync-progress';
     const invoices = await this.repository.findByIds(invoiceIds);
     const targets = invoices.filter(
-      (inv) => !inv.xmlFileKey || !inv.description,
+      (inv) =>
+        !inv.xmlFileKey ||
+        !inv.description ||
+        ((inv.taxInvoiceStatus === 2 || inv.taxInvoiceStatus === 3) &&
+          !inv.relatedInvoiceNo),
     );
 
     const total = targets.length;
@@ -1032,6 +1079,182 @@ export class InvoicePortalService {
 
     await sleep(2000);
     await this.downloadXmlOnly(invoice, token, cookies);
+
+    // Xử lý hóa đơn điều chỉnh (tthai = 2) hoặc thay thế (tthai = 3)
+    const latestInvoice =
+      (await this.repository.findOne({
+        where: { id: invoice.id },
+      })) ?? invoice;
+
+    const status = latestInvoice.taxInvoiceStatus;
+    if (status === 2 || status === 3) {
+      const relativeInfo = await this.fetchRelativeInvoice(
+        latestInvoice,
+        token,
+        cookies,
+      );
+      if (relativeInfo?.shdgoc) {
+        await this.repository.update(latestInvoice.id, {
+          relatedInvoiceNo: relativeInfo.shdgoc,
+          relatedSerialNo: relativeInfo.khhdgoc ?? null,
+        });
+        await this.syncRelatedInvoiceStatus(
+          relativeInfo,
+          latestInvoice,
+          token,
+          cookies,
+        );
+      }
+    }
+  }
+
+  /**
+   * Fetch relative invoice information from GDT Portal (/relative API).
+   * Only triggers when invoice status indicates adjustment (2) or replacement (3).
+   * Supports both query and sco-query endpoints.
+   */
+  async fetchRelativeInvoice(
+    invoice: ErpInvoice,
+    token: string,
+    cookies?: string,
+  ): Promise<{
+    shdgoc: string;
+    khhdgoc: string | null;
+    khmshdgoc?: number | null;
+    lhdgoc?: number | null;
+    nbmst?: string | null;
+  } | null> {
+    const status = invoice.taxInvoiceStatus;
+    if (status !== 2 && status !== 3) {
+      return null;
+    }
+
+    try {
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
+
+      const fetchHeaders: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (cookies) fetchHeaders['Cookie'] = cookies;
+
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const url = new URL(
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/relative`,
+        );
+        url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        url.searchParams.set('khmshdon', '1');
+        url.searchParams.set('khhdon', invoice.serialNo ?? '');
+        url.searchParams.set('shdon', invoice.invoiceNo);
+
+        res = await fetchWithRetry(
+          url.toString(),
+          { headers: fetchHeaders },
+          i === endpoints.length - 1 ? 2 : 0,
+        );
+        if (res.ok) break;
+      }
+
+      if (!res || !res.ok) {
+        this.logger.warn(
+          `Failed to fetch relative invoice for ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
+        );
+        return null;
+      }
+
+      const json = await res.json();
+      if (!json || json.shdgoc == null || String(json.shdgoc).trim() === '') {
+        return null;
+      }
+
+      return {
+        shdgoc: String(json.shdgoc).trim(),
+        khhdgoc: json.khhdgoc ? String(json.khhdgoc).trim() : null,
+        khmshdgoc: json.khmshdgoc != null ? Number(json.khmshdgoc) : null,
+        lhdgoc: json.lhdgoc != null ? Number(json.lhdgoc) : null,
+        nbmst: json.nbmst ? String(json.nbmst).trim() : invoice.sellerTaxCode,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `fetchRelativeInvoice error for ${invoice.invoiceNo}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Sync related original invoice status in DB and re-download its latest XML/ZIP.
+   * If original invoice is found:
+   * - If current invoice is replacement (tthai === 3) -> original taxInvoiceStatus = 5 (replaced)
+   * - If current invoice is adjustment (tthai === 2) -> original taxInvoiceStatus = 4 (adjusted)
+   * - Re-download latest XML/ZIP from GDT portal to R2 for the original invoice.
+   * If not found in DB: log warning and skip.
+   */
+  async syncRelatedInvoiceStatus(
+    relativeInfo: {
+      shdgoc: string;
+      khhdgoc?: string | null;
+      nbmst?: string | null;
+    },
+    currentInvoice: ErpInvoice,
+    token?: string,
+    cookies?: string,
+  ): Promise<void> {
+    try {
+      const whereClause: any = {
+        invoiceNo: String(relativeInfo.shdgoc),
+        direction: currentInvoice.direction,
+        isDeleted: false,
+      };
+
+      if (relativeInfo.khhdgoc) {
+        whereClause.serialNo = relativeInfo.khhdgoc;
+      }
+
+      // For IN invoices, match sellerTaxCode to avoid ambiguity across different vendors
+      if (currentInvoice.direction === 'IN' && relativeInfo.nbmst) {
+        whereClause.sellerTaxCode = relativeInfo.nbmst;
+      }
+
+      const original = await this.repository.findOne({ where: whereClause });
+      if (original) {
+        // tthai = 3 (current is replacement) -> original becomes 5 (replaced)
+        // tthai = 2 (current is adjustment) -> original becomes 4 (adjusted)
+        const newStatus = currentInvoice.taxInvoiceStatus === 3 ? 5 : 4;
+        await this.repository.update(original.id, {
+          taxInvoiceStatus: newStatus,
+        });
+        this.logger.log(
+          `Updated related original invoice ${original.invoiceNo} (serial: ${original.serialNo}) status from ${original.taxInvoiceStatus} -> ${newStatus}`,
+        );
+
+        // Tải lại file XML/ZIP mới nhất của HĐ gốc lên R2
+        if (token) {
+          original.taxInvoiceStatus = newStatus;
+          await this.downloadXmlOnly(original, token, cookies).catch((err) =>
+            this.logger.warn(
+              `Không thể tải lại XML cho HĐ gốc ${original.invoiceNo}: ${(err as Error).message}`,
+            ),
+          );
+        }
+      } else {
+        this.logger.warn(
+          `Related original invoice shdgoc=${relativeInfo.shdgoc} khhdgoc=${relativeInfo.khhdgoc ?? 'N/A'} not found in DB (direction: ${currentInvoice.direction}), skipping status update.`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `syncRelatedInvoiceStatus error for shdgoc ${relativeInfo.shdgoc}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async downloadXmlOnly(
