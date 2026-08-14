@@ -1,5 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 import { InvoicePortalService } from './invoice-portal.service';
 import { fetchWithRetry } from '../helpers/invoice-gdt.helper';
 import { sleep } from '../../common/utils/delay.util';
@@ -171,5 +178,111 @@ describe('InvoicePortalService - taxpayer validation', () => {
         'user-1',
       ),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  describe('Captcha and Login', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('getCaptcha returns content and key on success', async () => {
+      (global as any).fetch = jest.fn().mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: 'base64imagecontent',
+          key: 'captcha-key-123',
+        }),
+      }));
+
+      const result = await service.getCaptcha();
+      expect(result).toEqual({
+        content: 'base64imagecontent',
+        key: 'captcha-key-123',
+        text: '',
+      });
+    });
+
+    it('getCaptcha throws BadRequestException when GDT returns error', async () => {
+      (global as any).fetch = jest.fn().mockImplementation(async () => ({
+        ok: false,
+        status: 500,
+      }));
+
+      await expect(service.getCaptcha()).rejects.toThrow(BadRequestException);
+    });
+
+    it('loginWithCaptcha validates required fields', async () => {
+      await expect(
+        service.loginWithCaptcha({
+          username: '',
+          cvalue: 'ABC',
+          ckey: 'key',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('loginWithCaptcha authenticates, extracts token & cookies, and saves config', async () => {
+      companyProfileRepo.findOne.mockResolvedValue({
+        company_name: 'Test Co',
+        gdt_portal_token: '',
+      });
+      companyProfileRepo.save = jest.fn();
+
+      (global as any).fetch = jest.fn().mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => {
+            if (name.toLowerCase() === 'set-cookie') {
+              return 'TS0114b13e=abcdef; Path=/; Domain=.gdt.gov.vn';
+            }
+            return null;
+          },
+        },
+        json: async () => ({
+          token: 'jwt-token-12345',
+        }),
+      }));
+
+      const result = await service.loginWithCaptcha({
+        username: '0318334886-003',
+        password: 'Password!123',
+        cvalue: 'VMRBXR',
+        ckey: '6a7ee9b2fed74d6863e9238d',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBe('jwt-token-12345');
+      expect(companyProfileRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gdt_portal_token: 'jwt-token-12345',
+          gdt_portal_cookies: 'TS0114b13e=abcdef',
+          gdt_portal_username: '0318334886-003',
+          gdt_portal_password: 'Password!123',
+        }),
+      );
+    });
+
+    it('loginWithCaptcha throws when authentication fails', async () => {
+      (global as any).fetch = jest.fn().mockImplementation(async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          message: 'Mã xác thực không chính xác',
+        }),
+      }));
+
+      await expect(
+        service.loginWithCaptcha({
+          username: '0318334886-003',
+          password: 'Password!123',
+          cvalue: 'WRONG',
+          ckey: 'key',
+        }),
+      ).rejects.toThrow('Mã xác thực không chính xác');
+    });
   });
 });

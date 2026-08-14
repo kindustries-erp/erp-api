@@ -5,34 +5,34 @@ export class LedgerCascade1786414442074 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "erp_invoices" DROP CONSTRAINT "fk_erp_invoices_journal_entry"`,
+      `ALTER TABLE "erp_invoices" DROP CONSTRAINT IF EXISTS "fk_erp_invoices_journal_entry"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_inventory_adjustment_lines" DROP CONSTRAINT "FK_adjustment_lines_adjustment"`,
+      `ALTER TABLE "erp_inventory_adjustment_lines" DROP CONSTRAINT IF EXISTS "FK_adjustment_lines_adjustment"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_email_attachments" DROP CONSTRAINT "FK_erp_email_attachments_message"`,
+      `ALTER TABLE "erp_email_attachments" DROP CONSTRAINT IF EXISTS "FK_erp_email_attachments_message"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_email_attachments" DROP CONSTRAINT "FK_erp_email_attachments_sys_file"`,
+      `ALTER TABLE "erp_email_attachments" DROP CONSTRAINT IF EXISTS "FK_erp_email_attachments_sys_file"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "vinfast_parts_ledger" DROP CONSTRAINT "FK_82867af4c8456519a4bfcb536a9"`,
+      `ALTER TABLE "vinfast_parts_ledger" DROP CONSTRAINT IF EXISTS "FK_82867af4c8456519a4bfcb536a9"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "vinfast_parts_ledger" DROP CONSTRAINT "FK_aff5a0ae2e1992a54a34a4cf679"`,
+      `ALTER TABLE "vinfast_parts_ledger" DROP CONSTRAINT IF EXISTS "FK_aff5a0ae2e1992a54a34a4cf679"`,
     );
     await queryRunner.query(
-      `DROP INDEX "public"."idx_erp_invoice_no_normalized"`,
+      `DROP INDEX IF EXISTS "public"."idx_erp_invoice_no_normalized"`,
     );
     await queryRunner.query(
-      `DROP INDEX "public"."IDX_kgara_gross_profit_branch"`,
+      `DROP INDEX IF EXISTS "public"."IDX_kgara_gross_profit_branch"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "kgara_case_linked_invoice" DROP CONSTRAINT "UQ_kgara_case_linked_invoice"`,
+      `ALTER TABLE "kgara_case_linked_invoice" DROP CONSTRAINT IF EXISTS "UQ_kgara_case_linked_invoice"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "erp_invoice_items" DROP COLUMN "invoice_category"`,
+      `ALTER TABLE "erp_invoice_items" DROP COLUMN IF EXISTS "invoice_category"`,
     );
     await queryRunner.query(
       `ALTER TABLE "erp_invoices" RENAME COLUMN "invoice_no_normalized" TO "TEMP_OLD_invoice_no_normalized"`,

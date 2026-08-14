@@ -23,6 +23,7 @@ import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
+import { solveGdtSvgCaptcha } from '../helpers/gdt-captcha-solver.helper';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -107,7 +108,12 @@ export class InvoicePortalService {
     return prior?.branchId ?? null;
   }
 
-  async getPortalConfig(): Promise<{ token: string; cookies: string }> {
+  async getPortalConfig(): Promise<{
+    token: string;
+    cookies: string;
+    username: string;
+    password?: string;
+  }> {
     const profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
@@ -115,10 +121,17 @@ export class InvoicePortalService {
     return {
       token: profile?.gdt_portal_token || '',
       cookies: profile?.gdt_portal_cookies || '',
+      username: profile?.gdt_portal_username || profile?.tax_code || '',
+      password: profile?.gdt_portal_password || '',
     };
   }
 
-  async savePortalConfig(token: string, cookies?: string): Promise<void> {
+  async savePortalConfig(
+    token: string,
+    cookies?: string,
+    username?: string,
+    password?: string,
+  ): Promise<void> {
     let profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
@@ -128,14 +141,162 @@ export class InvoicePortalService {
         company_name: 'Your Company Name',
         gdt_portal_token: token,
         gdt_portal_cookies: cookies,
+        gdt_portal_username: username,
+        gdt_portal_password: password,
       });
     } else {
       profile.gdt_portal_token = token;
       if (cookies !== undefined) {
         profile.gdt_portal_cookies = cookies;
       }
+      if (username !== undefined) {
+        profile.gdt_portal_username = username;
+      }
+      if (password !== undefined) {
+        profile.gdt_portal_password = password;
+      }
     }
     await this.companyProfileRepo.save(profile);
+  }
+
+  async getCaptcha(): Promise<{ content: string; key: string; text: string }> {
+    try {
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/captcha`;
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          Referer: 'https://hoadondientu.gdt.gov.vn/',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+          'sec-ch-ua':
+            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+        },
+      });
+
+      if (!res.ok) {
+        throw new BadRequestException(
+          `Không thể tải mã Captcha từ Cổng thuế (HTTP ${res.status})`,
+        );
+      }
+
+      const data = (await res.json()) as { content?: string; key?: string };
+      if (!data || !data.key) {
+        throw new BadRequestException('Phản hồi Captcha không hợp lệ');
+      }
+
+      const content = data.content || '';
+      const text = solveGdtSvgCaptcha(content);
+
+      return {
+        content,
+        key: data.key,
+        text,
+      };
+    } catch (err: any) {
+      this.logger.error('Lỗi khi lấy captcha từ GDT', err);
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err.message || 'Không thể kết nối đến máy chủ Cổng thuế để lấy Captcha',
+      );
+    }
+  }
+
+  async loginWithCaptcha(dto: {
+    username: string;
+    password?: string;
+    cvalue: string;
+    ckey: string;
+  }): Promise<{ success: boolean; token: string; message: string }> {
+    const { username, password, cvalue, ckey } = dto;
+    if (!username || !cvalue || !ckey) {
+      throw new BadRequestException(
+        'Tài khoản, mã Captcha và captcha key là bắt buộc',
+      );
+    }
+
+    try {
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/authenticate`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+          Referer: 'https://hoadondientu.gdt.gov.vn/',
+          'End-Point': '/',
+          Action: '',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+          'sec-ch-ua':
+            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+        },
+        body: JSON.stringify({
+          username,
+          password: password || '',
+          cvalue,
+          ckey,
+        }),
+      });
+
+      if (!res.ok) {
+        let errMessage = 'Đăng nhập thất bại';
+        try {
+          const errData = await res.json();
+          errMessage =
+            errData?.message ||
+            errData?.error ||
+            errData?.description ||
+            `Đăng nhập thất bại (HTTP ${res.status})`;
+        } catch {
+          errMessage = `Đăng nhập thất bại (HTTP ${res.status})`;
+        }
+        throw new BadRequestException(errMessage);
+      }
+
+      // Extract token from response
+      const data = (await res.json()) as any;
+      const token =
+        data?.token ||
+        data?.appToken ||
+        data?.accessToken ||
+        data?.jwt ||
+        data?.data?.token ||
+        (typeof data === 'string' ? data : '');
+
+      if (!token) {
+        throw new BadRequestException(
+          'Không tìm thấy token trong phản hồi từ Cổng thuế',
+        );
+      }
+
+      // Extract cookies from response headers if present
+      let cookies: string | undefined = undefined;
+      const rawCookies = res.headers.get('set-cookie');
+      if (rawCookies) {
+        cookies = rawCookies
+          .split(',')
+          .map((c) => c.split(';')[0].trim())
+          .join('; ');
+      }
+
+      // Save token and credentials
+      await this.savePortalConfig(token, cookies, username, password);
+
+      return {
+        success: true,
+        token,
+        message: 'Đăng nhập Cổng Thuế thành công!',
+      };
+    } catch (err: any) {
+      this.logger.error('Lỗi khi đăng nhập GDT portal', err);
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err.message || 'Không thể kết nối đến máy chủ Cổng thuế',
+      );
+    }
   }
 
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {

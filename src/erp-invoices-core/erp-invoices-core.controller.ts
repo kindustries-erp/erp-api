@@ -29,6 +29,7 @@ import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -366,14 +367,37 @@ export class ErpInvoicesCoreController {
     );
   }
 
+  @Get('portal/captcha')
+  async getPortalCaptcha() {
+    return await this.service.getPortalCaptcha();
+  }
+
+  @Post('portal/login')
+  async loginPortal(@Body() dto: PortalLoginDto) {
+    return await this.service.loginPortalWithCaptcha(dto);
+  }
+
   @Get('portal/token')
   async getPortalToken() {
     return await this.service.getPortalConfig();
   }
 
   @Post('portal/token')
-  async savePortalToken(@Body() body: { token: string; cookies?: string }) {
-    await this.service.savePortalConfig(body.token, body.cookies);
+  async savePortalToken(
+    @Body()
+    body: {
+      token: string;
+      cookies?: string;
+      username?: string;
+      password?: string;
+    },
+  ) {
+    await this.service.savePortalConfig(
+      body.token,
+      body.cookies,
+      body.username,
+      body.password,
+    );
     return { message: 'Config saved successfully' };
   }
 
