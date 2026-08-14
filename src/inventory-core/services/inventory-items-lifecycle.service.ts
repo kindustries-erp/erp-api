@@ -105,6 +105,9 @@ export class InventoryItemsLifecycleService {
     const adjustmentIds = txns
       .filter((t) => t.documentType === 'INVENTORY_ADJUSTMENT' && t.documentId)
       .map((t) => t.documentId);
+    const productionOrderIds = txns
+      .filter((t) => t.documentType === 'PRODUCTION_ORDER' && t.documentId)
+      .map((t) => t.documentId);
 
     const docNoMap: Record<string, string> = {};
 
@@ -130,6 +133,14 @@ export class InventoryItemsLifecycleService {
         [adjustmentIds],
       );
       adjustments.forEach((a) => (docNoMap[a.id] = a.adjustment_no));
+    }
+
+    if (productionOrderIds.length > 0) {
+      const pos = await this.dataSource.query(
+        `SELECT id, po_no FROM public.erp_production_orders WHERE id = ANY($1)`,
+        [productionOrderIds],
+      );
+      pos.forEach((p) => (docNoMap[p.id] = p.po_no));
     }
 
     let running = 0;
