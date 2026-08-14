@@ -3,11 +3,15 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class AddInvoiceCategoryToErpInvoices1786160840952 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "erp_invoices" ADD "invoice_category" varchar(255)`,
+      `ALTER TABLE "erp_invoices" ADD COLUMN IF NOT EXISTS "invoice_category" varchar(255)`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "erp_invoice_items" RENAME COLUMN "invoice_category" TO "invoice_subcategory"`,
-    );
+    try {
+      // await queryRunner.query(
+      //   `ALTER TABLE "erp_invoice_items" RENAME COLUMN "invoice_category" TO "invoice_subcategory"`,
+      // );
+    } catch (e) {
+      console.log('Column already renamed or exists');
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

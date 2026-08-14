@@ -52,7 +52,6 @@ describe('ErpInvoicesCoreService', () => {
       savePortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
       syncFromPortal: jest.fn(),
-      reparseXml: jest.fn(),
       bulkDownloadXml: jest.fn(),
       syncDetailFromPortal: jest.fn(),
     };

@@ -681,7 +681,7 @@ export class SinvoiceService {
           list
             .map(
               (d) =>
-                `${d.documentNo}|${d.totalAmount}|${d.buyerName}|${d.description}`,
+                `${d.documentNo}|${Number(d.totalAmount)}|${d.buyerName?.trim() || ''}|${d.description?.trim() || ''}`,
             )
             .sort(),
         );

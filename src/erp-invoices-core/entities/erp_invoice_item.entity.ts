@@ -100,6 +100,9 @@ export class ErpInvoiceItem {
   })
   totalAmount: string;
 
+  @Column({ type: 'varchar', length: 32, name: 'item_code', nullable: true })
+  itemCode: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

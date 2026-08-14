@@ -71,6 +71,167 @@ export class ReportsCoreService {
     );
   }
 
+  private async calculateVinfastFifo(
+    dateTo?: string,
+    groupInterval: string = 'month',
+  ) {
+    let dateFilter = '';
+    const params: any[] = [];
+    if (dateTo) {
+      dateFilter = 'AND l.transaction_date <= $1';
+      params.push(dateTo);
+    }
+    const query = `
+      SELECT 
+        l.part_sku,
+        l.direction,
+        l.qty::numeric as qty,
+        l.unit_cost::numeric as unit_cost,
+        l.pre_vat_amount::numeric as pre_vat_amount,
+        l.transaction_date,
+        l.is_adjustment,
+        l.adj_sign,
+        c.name as item_name
+      FROM vinfast_parts_ledger l
+      JOIN erp_invoices i ON i.id = l.invoice_id
+      LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
+      WHERE i.tax_invoice_status IN (1, 3) ${dateFilter}
+      ORDER BY l.transaction_date ASC, l.created_at ASC
+    `;
+    const ledgers = await this.dataSource.query(query, params);
+
+    const skuFifoMap: Record<string, { qty: number; unitCost: number }[]> = {};
+    const monthMetrics: Record<string, any> = {};
+
+    for (const t of ledgers) {
+      const sku = t.part_sku;
+      // Truncate to YYYY-MM
+      const d = new Date(t.transaction_date);
+      const year = d.getFullYear();
+      const mStr = String(d.getMonth() + 1).padStart(2, '0');
+      let dateKey = `${year}-${mStr}`;
+      if (groupInterval === 'day') {
+        dateKey = `${year}-${mStr}-${String(d.getDate()).padStart(2, '0')}`;
+      } else if (groupInterval === 'week') {
+        const tempD = new Date(d.getTime());
+        const day = tempD.getDay();
+        const diff = tempD.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(tempD.setDate(diff));
+        const mYear = monday.getFullYear();
+        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+        const mDay = String(monday.getDate()).padStart(2, '0');
+        dateKey = `${mYear}-${mMonth}-${mDay}`;
+      } else if (groupInterval === 'year') {
+        dateKey = `${year}-01-01`;
+      }
+
+      const key = `${sku}_${dateKey}`;
+
+      if (!skuFifoMap[sku]) skuFifoMap[sku] = [];
+      if (!monthMetrics[key]) {
+        monthMetrics[key] = {
+          month: dateKey,
+          itemCode: sku,
+          itemName: t.item_name || '',
+          qtyBought: 0,
+          qtySold: 0,
+          amountBought: 0,
+          amountSold: 0,
+          totalCogs: 0,
+        };
+      }
+
+      const m = monthMetrics[key];
+      let qty = Number(t.qty || 0);
+      let amount = Number(t.pre_vat_amount || 0);
+
+      if (t.is_adjustment && t.adj_sign === -1) {
+        qty = -qty;
+        amount = -amount;
+      }
+
+      if (t.direction === 'IN') {
+        m.qtyBought += qty;
+        m.amountBought += amount;
+        if (qty > 0) {
+          skuFifoMap[sku].push({ qty, unitCost: Number(t.unit_cost || 0) });
+        } else if (qty < 0) {
+          let qToReverse = Math.abs(qty);
+          while (qToReverse > 0 && skuFifoMap[sku].length > 0) {
+            const batch = skuFifoMap[sku][0];
+            if (batch.qty <= qToReverse) {
+              qToReverse -= batch.qty;
+              skuFifoMap[sku].shift();
+            } else {
+              batch.qty -= qToReverse;
+              qToReverse = 0;
+            }
+          }
+        }
+      } else {
+        m.qtySold += qty;
+        m.amountSold += amount;
+        let cogsForThisOut = 0;
+        if (qty > 0) {
+          let qNeeded = qty;
+          while (qNeeded > 0) {
+            if (skuFifoMap[sku].length === 0) {
+              cogsForThisOut += qNeeded * 0;
+              break;
+            }
+            const batch = skuFifoMap[sku][0];
+            if (batch.qty <= qNeeded) {
+              cogsForThisOut += batch.qty * batch.unitCost;
+              qNeeded -= batch.qty;
+              skuFifoMap[sku].shift();
+            } else {
+              cogsForThisOut += qNeeded * batch.unitCost;
+              batch.qty -= qNeeded;
+              qNeeded = 0;
+            }
+          }
+        } else if (qty < 0) {
+          cogsForThisOut = 0;
+        }
+        m.totalCogs += cogsForThisOut;
+      }
+    }
+    return Object.values(monthMetrics);
+  }
+
+  private buildFifoMonthlyValuesSql(metrics: any[], paramStartIndex: number) {
+    if (metrics.length === 0) {
+      return {
+        valuesSql: `(VALUES ('__DUMMY__', '1970-01', 0, 0, 0, 0, 0, ''))`,
+        params: [],
+        nextIndex: paramStartIndex,
+      };
+    }
+    const params: any[] = [];
+    const rows: string[] = [];
+    let idx = paramStartIndex;
+    for (const m of metrics) {
+      rows.push(
+        `($${idx++}, $${idx++}, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++}::numeric, $${idx++})`,
+      );
+      params.push(
+        m.itemCode,
+        m.month,
+        m.qtyBought,
+        m.qtySold,
+        m.amountBought,
+        m.amountSold,
+        m.totalCogs,
+        m.itemName,
+      );
+    }
+    return {
+      valuesSql: `(VALUES ${rows.join(', ')})`,
+      params,
+      nextIndex: idx,
+    };
+  }
+
   async getSalesDashboard(query: { dateFrom?: string; dateTo?: string }) {
     const { whereSql, params } = this.buildDateFilter(
       query.dateFrom,
@@ -399,156 +560,181 @@ export class ReportsCoreService {
     groupBy?: string;
     itemCode?: string;
   }) {
-    let dateFilter = '';
-    const params: any[] = [];
-    let paramIndex = 1;
-    const groupInterval = query.groupBy === 'week' ? 'week' : 'month';
-    const groupFormat = query.groupBy === 'week' ? 'YYYY-MM-DD' : 'YYYY-MM';
-
-    if (query.dateFrom) {
-      dateFilter += ` AND c.month >= $${paramIndex}`;
-      params.push(query.dateFrom);
-      paramIndex++;
-    }
-    if (query.dateTo) {
-      dateFilter += ` AND c.month <= $${paramIndex}`;
-      params.push(query.dateTo);
-      paramIndex++;
-    }
-
-    let vehicleFilter = '';
-    if (query.vehicleType && query.vehicleType !== 'all') {
-      vehicleFilter = ` AND ${this.buildVinfastVehicleTypeSql('c.item_code', 'c.from_car_seller')} = $${paramIndex}`;
-      params.push(query.vehicleType);
-      paramIndex++;
-    }
-
-    let itemCodeFilter = '';
-    if (query.itemCode) {
-      itemCodeFilter = ` AND c.item_code = $${paramIndex}`;
-      params.push(query.itemCode);
-      paramIndex++;
-    }
-
-    const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
-    const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
-
-    const sql = `
-      WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
-      buy_codes AS (
-        SELECT 
-          ${inItemCodeSql} AS item_code,
-          ii.quantity::numeric AS qty,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'IN'
-          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      sell_codes AS (
-        SELECT 
-          (${inItemCodeSql}) AS item_code,
-          ii.quantity::numeric AS qty,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('${groupInterval}', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'OUT'
-          
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      buy_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM buy_codes
-        GROUP BY item_code, month
-      ),
-      sell_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM sell_codes
-        GROUP BY item_code, month
-      ),
-      combined_data AS (
-        SELECT
-          COALESCE(b.item_code, s.item_code) AS item_code,
-          COALESCE(b.month, s.month) AS month,
-          COALESCE(b.total_amount, 0) AS buy_amount,
-          COALESCE(s.total_amount, 0) AS sell_amount,
-          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
-        FROM buy_agg b
-        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
-      ),
-      base_data AS (
-        SELECT 
-          c.item_code,
-          c.month,
-          c.buy_amount,
-          c.sell_amount
-        FROM combined_data c
-        WHERE 1=1
-          ${dateFilter}
-          ${vehicleFilter}
-          ${itemCodeFilter}
-      )
-      SELECT 
-        TO_CHAR(month, '${groupFormat}') AS month,
-        SUM(buy_amount) AS total_buy,
-        SUM(sell_amount) AS total_sell,
-        SUM(sell_amount - buy_amount) AS profit
-      FROM base_data
-      GROUP BY month
-      ORDER BY month ASC
-    `;
-
-    const rawData = await this.dataSource.query(sql, params);
+    const groupInterval = ['day', 'week', 'year'].includes(query.groupBy || '')
+      ? query.groupBy
+      : 'month';
+    const fifoMetrics = await this.calculateVinfastFifo(
+      query.dateTo,
+      groupInterval,
+    );
 
     const summary = {
+      revenue: 0,
+      cogs: 0,
+      grossProfit: 0,
+      inventoryValue: 0,
       totalBuy: 0,
-      totalSell: 0,
-      profit: 0,
+      byVehicleType: {
+        CAR: { revenue: 0, cogs: 0, grossProfit: 0, inventoryValue: 0 },
+        MOTORBIKE: { revenue: 0, cogs: 0, grossProfit: 0, inventoryValue: 0 },
+      },
     };
-    const trend = rawData.map((row: any) => {
-      const buy = Number(row.total_buy || 0);
-      const sell = Number(row.total_sell || 0);
-      const profit = Number(row.profit || 0);
-      summary.totalBuy += buy;
-      summary.totalSell += sell;
-      summary.profit += profit;
 
-      return {
-        month: row.month,
-        totalBuy: buy,
-        totalSell: sell,
-        profit: profit,
-      };
-    });
+    const trendMap: Record<string, any> = {};
+    const chartDataMap: Record<string, any> = {};
+
+    let totalCumulativeBuy = 0;
+    let totalCumulativeCogs = 0;
+
+    let totalCumulativeBuyCar = 0;
+    let totalCumulativeCogsCar = 0;
+    let totalCumulativeBuyMotorbike = 0;
+    let totalCumulativeCogsMotorbike = 0;
+
+    for (const m of fifoMetrics) {
+      if (query.itemCode && m.itemCode !== query.itemCode) continue;
+
+      let isCarPart = false;
+      const normalizedCode = m.itemCode ? m.itemCode.toUpperCase().trim() : '';
+      if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
+        isCarPart = true;
+      }
+      const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
+
+      if (vType === 'CAR') {
+        totalCumulativeBuyCar += m.amountBought;
+        totalCumulativeCogsCar += m.totalCogs;
+      } else {
+        totalCumulativeBuyMotorbike += m.amountBought;
+        totalCumulativeCogsMotorbike += m.totalCogs;
+      }
+
+      if (
+        !query.vehicleType ||
+        query.vehicleType === 'all' ||
+        query.vehicleType === vType
+      ) {
+        if (!chartDataMap[m.month]) {
+          chartDataMap[m.month] = {
+            revenue: 0,
+            cogs: 0,
+            grossProfit: 0,
+            inventoryValue: 0,
+          };
+        }
+        chartDataMap[m.month].revenue += m.amountSold;
+        chartDataMap[m.month].cogs += m.totalCogs;
+        chartDataMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+
+        totalCumulativeBuy += m.amountBought;
+        totalCumulativeCogs += m.totalCogs;
+        chartDataMap[m.month].inventoryValue =
+          totalCumulativeBuy - totalCumulativeCogs;
+      }
+
+      let isOutOfRange = false;
+      if (query.dateFrom) {
+        if (m.month.length === 7) {
+          if (m.month < query.dateFrom.substring(0, 7)) isOutOfRange = true;
+        } else {
+          if (m.month < query.dateFrom) isOutOfRange = true;
+        }
+      }
+      if (query.dateTo) {
+        if (m.month.length === 7) {
+          if (m.month > query.dateTo.substring(0, 7)) isOutOfRange = true;
+        } else {
+          if (m.month > query.dateTo) isOutOfRange = true;
+        }
+      }
+      if (isOutOfRange) continue;
+
+      if (vType === 'CAR') {
+        summary.byVehicleType.CAR.revenue += m.amountSold;
+        summary.byVehicleType.CAR.cogs += m.totalCogs;
+        summary.byVehicleType.CAR.grossProfit += m.amountSold - m.totalCogs;
+      } else {
+        summary.byVehicleType.MOTORBIKE.revenue += m.amountSold;
+        summary.byVehicleType.MOTORBIKE.cogs += m.totalCogs;
+        summary.byVehicleType.MOTORBIKE.grossProfit +=
+          m.amountSold - m.totalCogs;
+      }
+
+      if (
+        query.vehicleType &&
+        query.vehicleType !== 'all' &&
+        query.vehicleType !== vType
+      ) {
+        continue;
+      }
+
+      if (!trendMap[m.month]) {
+        trendMap[m.month] = {
+          month: m.month,
+          revenue: 0,
+          cogs: 0,
+          grossProfit: 0,
+          inventoryValue: 0,
+        };
+      }
+
+      trendMap[m.month].revenue += m.amountSold;
+      trendMap[m.month].cogs += m.totalCogs;
+      trendMap[m.month].grossProfit += m.amountSold - m.totalCogs;
+      trendMap[m.month].inventoryValue =
+        totalCumulativeBuy - totalCumulativeCogs;
+
+      summary.revenue += m.amountSold;
+      summary.cogs += m.totalCogs;
+      summary.grossProfit += m.amountSold - m.totalCogs;
+    }
+
+    summary.inventoryValue = totalCumulativeBuy - totalCumulativeCogs;
+    summary.byVehicleType.CAR.inventoryValue =
+      totalCumulativeBuyCar - totalCumulativeCogsCar;
+    summary.byVehicleType.MOTORBIKE.inventoryValue =
+      totalCumulativeBuyMotorbike - totalCumulativeCogsMotorbike;
+
+    const trend = Object.values(trendMap).sort((a: any, b: any) =>
+      a.month.localeCompare(b.month),
+    );
+
+    const today = new Date(query.dateTo || new Date());
+    const targetKeys: string[] = [];
+    if (groupInterval === 'week') {
+      for (let i = 3; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(
+          d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1) - i * 7,
+        );
+        targetKeys.push(d.toISOString().substring(0, 10));
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        targetKeys.push(
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        );
+      }
+    }
+
+    let lastInv = 0;
+    const charts = {
+      revenue: targetKeys.map((k) => chartDataMap[k]?.revenue || 0),
+      cogs: targetKeys.map((k) => chartDataMap[k]?.cogs || 0),
+      grossProfit: targetKeys.map((k) => chartDataMap[k]?.grossProfit || 0),
+      inventoryValue: targetKeys.map((k) => {
+        if (chartDataMap[k]) {
+          lastInv = chartDataMap[k].inventoryValue;
+        }
+        return lastInv;
+      }),
+    };
 
     return {
       summary,
       trend,
+      charts,
     };
   }
 
@@ -562,32 +748,40 @@ export class ReportsCoreService {
     columnFilters?: string;
     sorts?: string;
   }) {
-    let dateFilter = '';
-    const params: any[] = [];
     let paramIndex = 1;
 
+    // 1. Calculate FIFO metrics in memory
+    const fifoMetrics = await this.calculateVinfastFifo(query.dateTo, 'month');
+    const { valuesSql, params, nextIndex } = this.buildFifoMonthlyValuesSql(
+      fifoMetrics,
+      paramIndex,
+    );
+    paramIndex = nextIndex;
+
+    let dateFilter = '';
     if (query.dateFrom) {
-      dateFilter += ` AND c.month >= $${paramIndex}`;
+      dateFilter += ` AND v.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
     if (query.dateTo) {
-      dateFilter += ` AND c.month <= $${paramIndex}`;
+      dateFilter += ` AND v.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
+
     // Used in WHERE (row-level, before GROUP BY)
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'c.item_code',
-      'c.from_car_seller',
+      'v.item_code',
+      'p.from_car_seller',
     );
     // Used in SELECT (after GROUP BY — from_car_seller must be aggregated)
     const vehicleTypeSelectSql = this.buildVinfastVehicleTypeSql(
-      'c.item_code',
-      'BOOL_OR(c.from_car_seller)',
+      'v.item_code',
+      'BOOL_OR(p.from_car_seller)',
     );
 
     let vehicleTypeFilter = '';
@@ -602,7 +796,7 @@ export class ReportsCoreService {
       qtySold: 'qty_sold',
       amountBought: 'amount_bought',
       amountSold: 'amount_sold',
-      profit: '(amount_sold - amount_bought)',
+      profit: '(amount_sold - cogs)',
     };
 
     let searchFilter = '';
@@ -616,11 +810,11 @@ export class ReportsCoreService {
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           if (col === 'itemCode') {
-            searchFilter += ` AND c.item_code ILIKE $${paramIndex}`;
+            searchFilter += ` AND v.item_code ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (col === 'itemName') {
-            searchFilter += ` AND c.item_name ILIKE $${paramIndex}`;
+            searchFilter += ` AND v.item_name ILIKE $${paramIndex}`;
             params.push(`%${val}%`);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -643,11 +837,11 @@ export class ReportsCoreService {
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           if (col === 'itemCode') {
-            filtersSql += ` AND c.item_code = ANY($${paramIndex})`;
+            filtersSql += ` AND v.item_code = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (col === 'itemName') {
-            filtersSql += ` AND c.item_name = ANY($${paramIndex})`;
+            filtersSql += ` AND v.item_name = ANY($${paramIndex})`;
             params.push(vals);
             paramIndex++;
           } else if (numericColMap[col]) {
@@ -675,7 +869,7 @@ export class ReportsCoreService {
             else if (col === 'qtySold') sqlCol = 'qty_sold';
             else if (col === 'amountBought') sqlCol = 'amount_bought';
             else if (col === 'amountSold') sqlCol = 'amount_sold';
-            else if (col === 'profit') sqlCol = '(amount_sold - amount_bought)';
+            else if (col === 'profit') sqlCol = '(amount_sold - cogs)';
 
             if (sqlCol) {
               sortFields.push(`${sqlCol} ${isDesc ? 'DESC' : 'ASC'}`);
@@ -690,94 +884,24 @@ export class ReportsCoreService {
 
     const sql = `
       WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
-      buy_codes AS (
-        SELECT 
-          ${inItemCodeSql} AS item_code,
-          ${inItemNameSql} AS item_name,
-          ii.quantity::numeric AS qty,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'IN'
-          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      sell_codes AS (
-        SELECT 
-          (${inItemCodeSql}) AS item_code,
-          p.original_item_name AS item_name,
-          ii.quantity::numeric AS qty,
-          (ii.quantity::numeric * ii.unit_price::numeric) AS amount,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'OUT'
-          
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      buy_agg AS (
-        SELECT 
-          item_code,
-          MAX(item_name) AS item_name,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM buy_codes
-        GROUP BY item_code, month
-      ),
-      sell_agg AS (
-        SELECT 
-          item_code,
-          month,
-          SUM(qty) AS total_qty,
-          SUM(amount) AS total_amount,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM sell_codes
-        GROUP BY item_code, month
-      ),
-      combined_data AS (
-        SELECT
-          COALESCE(b.item_code, s.item_code) AS item_code,
-          COALESCE(b.item_name, '') AS item_name,
-          COALESCE(b.month, s.month) AS month,
-          COALESCE(b.total_qty, 0) AS qty_bought,
-          COALESCE(s.total_qty, 0) AS qty_sold,
-          COALESCE(b.total_amount, 0) AS amount_bought,
-          COALESCE(s.total_amount, 0) AS amount_sold,
-          COALESCE(b.from_car_seller, s.from_car_seller, false) AS from_car_seller
-        FROM buy_agg b
-        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
-      ),
       base_data AS (
         SELECT 
-          c.item_code,
-          MAX(c.item_name) AS item_name,
+          v.item_code,
+          MAX(v.item_name) AS item_name,
           ${vehicleTypeSelectSql} AS vehicle_type,
-          SUM(c.qty_bought) AS qty_bought,
-          SUM(c.qty_sold) AS qty_sold,
-          SUM(c.amount_bought) AS amount_bought,
-          SUM(c.amount_sold) AS amount_sold
-        FROM combined_data c
+          SUM(v.qty_bought) AS qty_bought,
+          SUM(v.qty_sold) AS qty_sold,
+          SUM(v.amount_bought) AS amount_bought,
+          SUM(v.amount_sold) AS amount_sold,
+          SUM(v.cogs) AS cogs
+        FROM ${valuesSql} AS v(item_code, month, qty_bought, qty_sold, amount_bought, amount_sold, cogs, item_name)
+        LEFT JOIN purchased_item_codes p ON p.item_code = v.item_code
         WHERE 1=1
           ${dateFilter}
           ${vehicleTypeFilter}
           ${searchFilter}
           ${filtersSql}
-        GROUP BY c.item_code
+        GROUP BY v.item_code
       ),
       filtered_data AS (
         SELECT *, COUNT(*) OVER() AS "totalCount"
@@ -809,7 +933,7 @@ export class ReportsCoreService {
         qtySold: Number(row.qty_sold || 0),
         amountBought: Number(row.amount_bought || 0),
         amountSold: Number(row.amount_sold || 0),
-        profit: Number(row.amount_sold || 0) - Number(row.amount_bought || 0),
+        profit: Number(row.amount_sold || 0) - Number(row.cogs || 0),
       })),
       total,
       page,
@@ -830,25 +954,33 @@ export class ReportsCoreService {
     page?: number;
     limit?: number;
   }) {
-    let dateFilter = '';
-    let searchFilter = '';
-    const params: any[] = [];
     let paramIndex = 1;
 
+    // 1. Calculate FIFO metrics in memory
+    const fifoMetrics = await this.calculateVinfastFifo(query.dateTo, 'month');
+    const { valuesSql, params, nextIndex } = this.buildFifoMonthlyValuesSql(
+      fifoMetrics,
+      paramIndex,
+    );
+    paramIndex = nextIndex;
+
+    let dateFilter = '';
+    let searchFilter = '';
+
     if (query.dateFrom) {
-      dateFilter += ` AND COALESCE(b.month, s.month) >= $${paramIndex}`;
+      dateFilter += ` AND v.month >= $${paramIndex}`;
       params.push(query.dateFrom);
       paramIndex++;
     }
 
     if (query.dateTo) {
-      dateFilter += ` AND COALESCE(b.month, s.month) <= $${paramIndex}`;
+      dateFilter += ` AND v.month <= $${paramIndex}`;
       params.push(query.dateTo);
       paramIndex++;
     }
 
     if (query.search) {
-      searchFilter = `AND COALESCE(b.item_code, s.item_code) ILIKE $${paramIndex}`;
+      searchFilter = `AND v.item_code ILIKE $${paramIndex}`;
       params.push(`%${query.search}%`);
       paramIndex++;
     }
@@ -862,9 +994,9 @@ export class ReportsCoreService {
       qtySold: '"qtySold"',
       avgBuyPrice: '"avgBuyPrice"',
       avgSellPrice: '"avgSellPrice"',
-      margin: '("avgSellPrice" - "avgBuyPrice")',
+      margin: '"margin"',
       marginPct:
-        '(TO_CHAR(CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
+        '(TO_CHAR(CASE WHEN "avgCogs" > 0 THEN ("margin" / "avgCogs" * 100.0) ELSE 0.0 END, \'FM999999990.0\') || \'%\')',
     };
 
     let orderByClause = 'ORDER BY "month" DESC, "itemCode" ASC';
@@ -895,7 +1027,7 @@ export class ReportsCoreService {
     } else if (query.sortBy && sortMap[query.sortBy]) {
       const dir = query.sortDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       if (query.sortBy === 'marginPct') {
-        orderByClause = `ORDER BY (CASE WHEN "avgBuyPrice" > 0 THEN (("avgSellPrice" - "avgBuyPrice") / "avgBuyPrice" * 100.0) ELSE 0.0 END) ${dir}`;
+        orderByClause = `ORDER BY (CASE WHEN "avgCogs" > 0 THEN ("margin" / "avgCogs" * 100.0) ELSE 0.0 END) ${dir}`;
       } else {
         orderByClause = `ORDER BY ${sortMap[query.sortBy]} ${dir}`;
       }
@@ -950,89 +1082,28 @@ export class ReportsCoreService {
     const inItemCodeSql = this.buildVinfastInItemCodeSql('ii.description');
     const inItemNameSql = this.buildVinfastInItemNameSql('ii.description');
     const vehicleTypeSql = this.buildVinfastVehicleTypeSql(
-      'COALESCE(b.item_code, s.item_code)',
-      'COALESCE(b.from_car_seller, false)',
+      'v.item_code',
+      'COALESCE(p.from_car_seller, false)',
     );
 
     const sql = `
       WITH ${this.buildPurchasedItemCodesCteSql(inItemCodeSql, inItemNameSql)}
-      buy_codes AS (
-        SELECT 
-          ii.invoice_id,
-          ${inItemCodeSql} AS item_code,
-          ${inItemNameSql} AS item_name,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'IN'
-          AND i.seller_tax_code IN (${this.vinfastSellerTaxCodesSql})
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      sell_codes AS (
-        SELECT 
-          ii.invoice_id,
-          (${inItemCodeSql}) AS item_code,
-          p.original_item_name AS item_name,
-          ii.quantity::numeric AS qty,
-          ii.unit_price::numeric AS unit_price,
-          DATE_TRUNC('month', i.invoice_date::date) AS month,
-          p.from_car_seller
-        FROM erp_invoices i
-        JOIN erp_invoice_items ii ON ii.invoice_id = i.id
-          JOIN purchased_item_codes p ON p.item_code = (${inItemCodeSql})
-        WHERE i.is_deleted = false
-          AND i.direction = 'OUT'
-          
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
-          AND (${inItemCodeSql}) IS NOT NULL
-          AND (${inItemCodeSql}) <> ''
-          AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
-      ),
-      buy_agg AS (
-        SELECT 
-          item_code,
-          MAX(item_name) AS item_name,
-          month,
-          SUM(qty) AS total_qty,
-          ROUND(AVG(unit_price)) AS avg_price,
-          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids,
-          BOOL_OR(from_car_seller) AS from_car_seller
-        FROM buy_codes
-        GROUP BY item_code, month
-      ),
-      sell_agg AS (
-        SELECT 
-          item_code,
-          MAX(item_name) AS item_name,
-          month,
-          SUM(qty) AS total_qty,
-          ROUND(AVG(unit_price)) AS avg_price,
-          ARRAY_AGG(DISTINCT invoice_id) AS invoice_ids
-        FROM sell_codes
-        GROUP BY item_code, month
-      ),
       base_data AS (
         SELECT 
-          COALESCE(b.item_code, s.item_code) AS "itemCode",
-          COALESCE(b.item_name, s.item_name) AS "itemName",
+          v.item_code AS "itemCode",
+          v.item_name AS "itemName",
           ${vehicleTypeSql} AS "vehicleType",
-          TO_CHAR(COALESCE(b.month, s.month), 'YYYY-MM') AS "month",
-          COALESCE(b.total_qty, 0) AS "qtyBought",
-          COALESCE(s.total_qty, 0) AS "qtySold",
-          COALESCE(b.avg_price, 0) AS "avgBuyPrice",
-          COALESCE(s.avg_price, 0) AS "avgSellPrice",
-          b.invoice_ids AS "buyInvoiceIds",
-          s.invoice_ids AS "sellInvoiceIds"
-        FROM buy_agg b
-        FULL OUTER JOIN sell_agg s ON s.item_code = b.item_code AND s.month = b.month
+          v.month AS "month",
+          v.qty_bought AS "qtyBought",
+          v.qty_sold AS "qtySold",
+          CASE WHEN v.qty_bought > 0 THEN ROUND(v.amount_bought / v.qty_bought) ELSE 0 END AS "avgBuyPrice",
+          CASE WHEN v.qty_sold > 0 THEN ROUND(v.amount_sold / v.qty_sold) ELSE 0 END AS "avgSellPrice",
+          CASE WHEN v.qty_sold > 0 THEN ROUND(v.cogs / v.qty_sold) ELSE 0 END AS "avgCogs",
+          CASE WHEN v.qty_sold > 0 THEN ROUND((v.amount_sold - v.cogs) / v.qty_sold) ELSE 0 END AS "margin",
+          '{}'::text[] AS "buyInvoiceIds",
+          '{}'::text[] AS "sellInvoiceIds"
+        FROM ${valuesSql} AS v(item_code, month, qty_bought, qty_sold, amount_bought, amount_sold, cogs, item_name)
+        LEFT JOIN purchased_item_codes p ON p.item_code = v.item_code
         WHERE 1=1
           ${dateFilter}
           ${searchFilter}
@@ -1061,10 +1132,11 @@ export class ReportsCoreService {
       const qtySold = parseFloat(row.qtySold || '0');
       const avgBuyPrice = parseFloat(row.avgBuyPrice || '0');
       const avgSellPrice = parseFloat(row.avgSellPrice || '0');
+      const avgCogs = parseFloat(row.avgCogs || '0');
       const hasSoldQty = qtySold > 0;
-      const margin = hasSoldQty ? avgSellPrice - avgBuyPrice : null;
+      const margin = hasSoldQty ? parseFloat(row.margin || '0') : null;
       const marginPct =
-        hasSoldQty && avgBuyPrice > 0 ? (margin! / avgBuyPrice) * 100 : null;
+        hasSoldQty && avgCogs > 0 ? (margin! / avgCogs) * 100 : null;
 
       return {
         itemCode: row.itemCode,
@@ -1143,31 +1215,57 @@ export class ReportsCoreService {
           ${inItemCodeSql} AS item_code,
           MAX(${inItemNameSql}) AS item_name,
           MAX(ii.unit) AS unit,
-          COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
-          AVG(ii.unit_price::numeric) AS unit_price,
-          SUM(ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          COALESCE(SUM(
+            CASE 
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.quantity::numeric
+            END
+          ), 0) AS qty,
+          AVG(
+            CASE
+              WHEN i.tax_invoice_status IN (3, 6) THEN NULL
+              ELSE ii.unit_price::numeric
+            END
+          ) AS unit_price,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric
+            END
+          ) AS pre_vat_amount,
           MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
           SUM(
-            COALESCE(
-              NULLIF(ii.vat_amount::numeric, 0), 
-              CASE 
-                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-                ELSE 0 
-              END, 
-              0
-            )
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS vat_amount,
           SUM(
-            (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-              NULLIF(ii.vat_amount::numeric, 0), 
-              CASE 
-                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-                ELSE 0 
-              END, 
-              0
-            )
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric + COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS total_amount,
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
@@ -1199,31 +1297,57 @@ export class ReportsCoreService {
           (${inItemCodeSql}) AS item_code,
           MAX(p.original_item_name) AS item_name,
           MAX(ii.unit) AS unit,
-          COALESCE(SUM(ii.quantity::numeric), 0) AS qty,
-          AVG(ii.unit_price::numeric) AS unit_price,
-          SUM(ii.quantity::numeric * ii.unit_price::numeric) AS pre_vat_amount,
+          COALESCE(SUM(
+            CASE 
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric < 0 THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 AND ii.quantity::numeric > 0 AND (i.description ILIKE '%tăng số lượng%' OR ii.description ILIKE '%tăng số lượng%') THEN ii.quantity::numeric
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.quantity::numeric
+            END
+          ), 0) AS qty,
+          AVG(
+            CASE
+              WHEN i.tax_invoice_status IN (3, 6) THEN NULL
+              ELSE ii.unit_price::numeric
+            END
+          ) AS unit_price,
+          SUM(
+            CASE
+              WHEN i.tax_invoice_status = 3 AND ii.pre_vat_amount IS NOT NULL AND ii.pre_vat_amount != 0 THEN ii.pre_vat_amount
+              WHEN i.tax_invoice_status = 3 THEN 0
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric
+            END
+          ) AS pre_vat_amount,
           MAX(COALESCE(ii.vat_rate, i.vat_rate)) AS vat_rate,
           SUM(
-            COALESCE(
-              NULLIF(ii.vat_amount::numeric, 0), 
-              CASE 
-                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-                ELSE 0 
-              END, 
-              0
-            )
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS vat_amount,
           SUM(
-            (ii.quantity::numeric * ii.unit_price::numeric) + COALESCE(
-              NULLIF(ii.vat_amount::numeric, 0), 
-              CASE 
-                WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
-                THEN ROUND((ii.quantity::numeric * ii.unit_price::numeric) * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
-                ELSE 0 
-              END, 
-              0
-            )
+            CASE
+              WHEN i.tax_invoice_status = 6 THEN 0
+              ELSE ii.pre_vat_amount::numeric + COALESCE(
+                NULLIF(ii.vat_amount::numeric, 0), 
+                CASE 
+                  WHEN COALESCE(ii.vat_rate, i.vat_rate)::numeric > 0 
+                  THEN ROUND(ii.pre_vat_amount::numeric * COALESCE(ii.vat_rate, i.vat_rate)::numeric)
+                  ELSE 0 
+                END, 
+                0
+              )
+            END
           ) AS total_amount,
           MAX(DATE_TRUNC('month', i.invoice_date::date)) AS month,
           MAX(i.license_plate) AS license_plate,
@@ -1236,8 +1360,6 @@ export class ReportsCoreService {
         WHERE i.is_deleted = false
           AND i.direction = 'OUT'
           
-          AND ii.quantity IS NOT NULL
-          AND ii.quantity::numeric > 0
           AND (${inItemCodeSql}) IS NOT NULL
           AND (${inItemCodeSql}) <> ''
           AND (i.tax_invoice_status IS NULL OR i.tax_invoice_status != 4)
