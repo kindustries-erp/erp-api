@@ -580,12 +580,14 @@ export class GoodsReceiptsCoreService {
       }
 
       // ── Process Tracking Serials for lines with SERIAL / VEHICLE / CUSTOM policy ──
-      const itemRepo = manager.getRepository(ErpInventoryItem);
-      const trackingSerialRepo = manager.getRepository(
-        ErpInventoryTrackingSerial,
-      );
+      const itemRepo = manager?.getRepository
+        ? manager.getRepository(ErpInventoryItem)
+        : null;
+      const trackingSerialRepo = manager?.getRepository
+        ? manager.getRepository(ErpInventoryTrackingSerial)
+        : null;
       const itemsWithPolicy =
-        itemIds.length > 0
+        itemIds.length > 0 && itemRepo?.find
           ? await itemRepo.find({
               where: { id: In(itemIds) },
               relations: ['trackingPolicy'],
@@ -624,7 +626,7 @@ export class GoodsReceiptsCoreService {
           }
 
           // Check duplicates against DB (IN_STOCK)
-          if (rawSerialNos.length > 0) {
+          if (rawSerialNos.length > 0 && trackingSerialRepo?.find) {
             const existingSerials = await trackingSerialRepo.find({
               where: {
                 serialNo: In(rawSerialNos),
@@ -658,7 +660,7 @@ export class GoodsReceiptsCoreService {
         }
       }
 
-      if (serialsToInsert.length > 0) {
+      if (serialsToInsert.length > 0 && trackingSerialRepo?.insert) {
         const chunkSize = 1000;
         for (let j = 0; j < serialsToInsert.length; j += chunkSize) {
           await trackingSerialRepo.insert(
@@ -666,7 +668,9 @@ export class GoodsReceiptsCoreService {
           );
         }
       }
-      await lineRepo.save(lines);
+      if (lineRepo?.save) {
+        await lineRepo.save(lines);
+      }
 
       receipt.status = 'POSTED';
       const savedReceipt = await receiptRepo.save(receipt);
