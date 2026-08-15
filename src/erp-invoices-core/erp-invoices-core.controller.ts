@@ -302,6 +302,7 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/sync')
   async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
     try {
@@ -356,6 +357,7 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/bulk-download-xml
    * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
    */
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
     @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
@@ -367,21 +369,25 @@ export class ErpInvoicesCoreController {
     );
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Get('portal/captcha')
   async getPortalCaptcha() {
     return await this.service.getPortalCaptcha();
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/login')
   async loginPortal(@Body() dto: PortalLoginDto) {
     return await this.service.loginPortalWithCaptcha(dto);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Get('portal/token')
   async getPortalToken() {
     return await this.service.getPortalConfig();
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/token')
   async savePortalToken(
     @Body()
