@@ -140,6 +140,77 @@ export class GoodsReceiptsCoreService {
     return { nextNo };
   }
 
+  async validateSerials(dto: { itemId?: string; serials: string[] }) {
+    const rawSerials = (dto.serials || [])
+      .map((s) => s?.trim())
+      .filter(Boolean);
+    const internalDuplicates: string[] = [];
+    const seen = new Set<string>();
+    for (const s of rawSerials) {
+      if (seen.has(s)) {
+        internalDuplicates.push(s);
+      } else {
+        seen.add(s);
+      }
+    }
+
+    let dbDuplicates: string[] = [];
+    if (seen.size > 0) {
+      const serialRepo = this.dataSource.getRepository(
+        ErpInventoryTrackingSerial,
+      );
+      const existing = await serialRepo.find({
+        where: {
+          serialNo: In(Array.from(seen)),
+          status: 'IN_STOCK',
+        },
+      });
+      dbDuplicates = existing.map((e) => e.serialNo);
+    }
+
+    return {
+      valid: internalDuplicates.length === 0 && dbDuplicates.length === 0,
+      internalDuplicates: Array.from(new Set(internalDuplicates)),
+      dbDuplicates: Array.from(new Set(dbDuplicates)),
+    };
+  }
+
+  async generatePreviewSerials(dto: {
+    itemId: string;
+    qty: number;
+    receiptDate?: string;
+  }) {
+    const itemRepo = this.dataSource.getRepository(ErpInventoryItem);
+    const serialRepo = this.dataSource.getRepository(
+      ErpInventoryTrackingSerial,
+    );
+    const item = await itemRepo.findOneBy({ id: dto.itemId });
+    if (!item) throw new NotFoundException('Không tìm thấy item');
+
+    const qty = Math.max(1, Math.min(10000, Math.round(dto.qty || 1)));
+    const dateStr = format(
+      dto.receiptDate ? new Date(dto.receiptDate) : new Date(),
+      'yyMMdd',
+    );
+    const prefix = `SN-${item.sku}${dateStr}`;
+
+    const lastSerial = await serialRepo.findOne({
+      where: { serialNo: Like(`${prefix}%`) },
+      order: { serialNo: 'DESC' },
+    });
+
+    const lastSeq = lastSerial
+      ? parseInt(lastSerial.serialNo.slice(-5), 10) || 0
+      : 0;
+
+    const serials: string[] = [];
+    for (let i = 1; i <= qty; i++) {
+      serials.push(`${prefix}${String(lastSeq + i).padStart(5, '0')}`);
+    }
+
+    return { serials };
+  }
+
   async create(dto: CreateGoodsReceiptDto) {
     const { lines = [], ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
@@ -165,6 +236,7 @@ export class GoodsReceiptsCoreService {
           qtyReceived: line.qtyReceived,
           unitCost: line.unitCost ?? null,
           amount: line.amount ?? null,
+          declaredSerials: line.declaredSerials ?? null,
         };
         const saved = await lineRepo.save(linePayload);
         savedLines.push(saved);
@@ -273,6 +345,7 @@ export class GoodsReceiptsCoreService {
             qtyReceived: line.qtyReceived,
             unitCost: line.unitCost ?? null,
             amount: line.amount ?? null,
+            declaredSerials: line.declaredSerials ?? null,
           };
           await lineRepo.save(linePayload);
         }
@@ -303,6 +376,23 @@ export class GoodsReceiptsCoreService {
       });
       if (lines.length === 0) {
         throw new BadRequestException('Chưa nhập hàng nhập kho');
+      }
+
+      // Merge declared serials from dto.lines if provided in post request
+      if (Array.isArray(dto.lines) && dto.lines.length > 0) {
+        for (const dtoLine of dto.lines) {
+          const lineId = (dtoLine as any).id;
+          const match = lines.find(
+            (l) =>
+              (lineId && l.id === lineId) ||
+              (dtoLine.purchaseOrderLineId &&
+                l.purchaseOrderLineId === dtoLine.purchaseOrderLineId) ||
+              (dtoLine.itemId && l.itemId === dtoLine.itemId),
+          );
+          if (match && dtoLine.declaredSerials !== undefined) {
+            match.declaredSerials = dtoLine.declaredSerials;
+          }
+        }
       }
 
       if (receipt.productionOrderId) {
@@ -488,6 +578,95 @@ export class GoodsReceiptsCoreService {
           await moRepo.save(mo);
         }
       }
+
+      // ── Process Tracking Serials for lines with SERIAL / VEHICLE / CUSTOM policy ──
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+      const trackingSerialRepo = manager.getRepository(
+        ErpInventoryTrackingSerial,
+      );
+      const itemsWithPolicy =
+        itemIds.length > 0
+          ? await itemRepo.find({
+              where: { id: In(itemIds) },
+              relations: ['trackingPolicy'],
+            })
+          : [];
+      const itemPolicyMap = new Map(itemsWithPolicy.map((i) => [i.id, i]));
+
+      const serialsToInsert: DeepPartial<ErpInventoryTrackingSerial>[] = [];
+
+      for (const line of lines) {
+        const item = line.itemId ? itemPolicyMap.get(line.itemId) : null;
+        const trackingCode = item?.trackingPolicy?.code;
+        const qty = Math.round(Number(line.qtyReceived || 0));
+
+        if (
+          trackingCode === 'SERIAL' ||
+          trackingCode === 'VEHICLE' ||
+          trackingCode === 'CUSTOM'
+        ) {
+          const declared = line.declaredSerials || [];
+          if (declared.length < qty) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo} (${item?.sku || 'Item'}): Chưa khai báo đủ số lượng Serial/Tracking (cần ${qty}, đã khai báo ${declared.length}).`,
+            );
+          }
+
+          // Check internal duplicates in line
+          const rawSerialNos = declared
+            .map((d) => d.serialNo?.trim())
+            .filter(Boolean);
+          const uniqueSerialNos = new Set(rawSerialNos);
+          if (uniqueSerialNos.size !== rawSerialNos.length) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo} (${item?.sku}): Có mã Serial/Tracking bị trùng lặp trong danh sách khai báo.`,
+            );
+          }
+
+          // Check duplicates against DB (IN_STOCK)
+          if (rawSerialNos.length > 0) {
+            const existingSerials = await trackingSerialRepo.find({
+              where: {
+                serialNo: In(rawSerialNos),
+                status: 'IN_STOCK',
+              },
+            });
+            if (existingSerials.length > 0) {
+              const dupes = existingSerials.map((s) => s.serialNo).join(', ');
+              throw new BadRequestException(
+                `Dòng ${line.lineNo} (${item?.sku}): Các mã Serial sau đã tồn tại trong kho (IN_STOCK): ${dupes}`,
+              );
+            }
+          }
+
+          for (const d of declared.slice(0, qty)) {
+            serialsToInsert.push({
+              itemId: line.itemId ?? null,
+              serialNo: d.serialNo.trim(),
+              status: 'IN_STOCK',
+              vinId: null,
+              customId: null,
+              receiptLineId: line.id,
+              lotNo: d.lotNo || null,
+              notes: d.notes || null,
+              attributes: d.attributes || null,
+            });
+          }
+          line.serialsGenerated = true;
+        } else {
+          line.serialsGenerated = true;
+        }
+      }
+
+      if (serialsToInsert.length > 0) {
+        const chunkSize = 1000;
+        for (let j = 0; j < serialsToInsert.length; j += chunkSize) {
+          await trackingSerialRepo.insert(
+            serialsToInsert.slice(j, j + chunkSize),
+          );
+        }
+      }
+      await lineRepo.save(lines);
 
       receipt.status = 'POSTED';
       const savedReceipt = await receiptRepo.save(receipt);

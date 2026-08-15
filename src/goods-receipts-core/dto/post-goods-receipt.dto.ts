@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsArray } from 'class-validator';
+import { CreateGoodsReceiptLineDto } from './create-goods-receipt-line.dto';
 
 export class PostGoodsReceiptDto {
   @ApiPropertyOptional()
@@ -11,4 +12,9 @@ export class PostGoodsReceiptDto {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+
+  @ApiPropertyOptional({ type: () => [CreateGoodsReceiptLineDto] })
+  @IsOptional()
+  @IsArray()
+  lines?: CreateGoodsReceiptLineDto[];
 }
