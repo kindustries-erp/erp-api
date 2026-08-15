@@ -120,6 +120,25 @@ export class InventoryWarehouseVoucherService {
             adjustmentWhere += ` AND g.status ILIKE $${pIndex}`;
             params.push(s);
             pIndex++;
+          } else if (key === 'type') {
+            const s_raw = value.trim().toLowerCase();
+            const matchReceipt =
+              'receipt'.includes(s_raw) ||
+              'nhập kho'.includes(s_raw) ||
+              'nhap kho'.includes(s_raw) ||
+              'nhap'.includes(s_raw);
+            const matchIssue =
+              'issue'.includes(s_raw) ||
+              'xuất kho'.includes(s_raw) ||
+              'xuat kho'.includes(s_raw) ||
+              'xuat'.includes(s_raw);
+            const matchAdjustment =
+              'adjustment'.includes(s_raw) ||
+              'điều chỉnh'.includes(s_raw) ||
+              'dieu chinh'.includes(s_raw);
+            if (!matchReceipt) receiptWhere += ' AND 1 = 0';
+            if (!matchIssue) issueWhere += ' AND 1 = 0';
+            if (!matchAdjustment) adjustmentWhere += ' AND 1 = 0';
           }
         }
       } catch (e) {
@@ -140,6 +159,10 @@ export class InventoryWarehouseVoucherService {
             adjustmentWhere += ` AND g.adjustment_no = ANY($${pIndex})`;
             params.push(values);
             pIndex++;
+          } else if (key === 'type') {
+            if (!values.includes('receipt')) receiptWhere += ' AND 1 = 0';
+            if (!values.includes('issue')) issueWhere += ' AND 1 = 0';
+            if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
             receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
             issueWhere += ` AND 1 = 0`;
@@ -267,6 +290,7 @@ export class InventoryWarehouseVoucherService {
       const sortMap: Record<string, string> = {
         date: 'DATE("date")',
         voucherNo: '"voucherNo"',
+        type: '"type"',
         status: 'status',
         poNo: '"poNo"',
         partnerName: '"partnerName"',
@@ -312,6 +336,36 @@ export class InventoryWarehouseVoucherService {
     filtersStr?: string,
     type?: string,
   ) {
+    if (column === 'type') {
+      const allTypes = ['receipt', 'issue', 'adjustment'];
+      const filtered = search
+        ? allTypes.filter((v) => {
+            const s_raw = search.toLowerCase();
+            return (
+              v.includes(s_raw) ||
+              (v === 'receipt' &&
+                ('nhập kho'.includes(s_raw) ||
+                  'nhap kho'.includes(s_raw) ||
+                  'nhap'.includes(s_raw))) ||
+              (v === 'issue' &&
+                ('xuất kho'.includes(s_raw) ||
+                  'xuat kho'.includes(s_raw) ||
+                  'xuat'.includes(s_raw))) ||
+              (v === 'adjustment' &&
+                ('điều chỉnh'.includes(s_raw) ||
+                  'dieu chinh'.includes(s_raw)))
+            );
+          })
+        : allTypes;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: filtered.length,
+        totalPages: 1,
+      };
+    }
+
     const params: any[] = [];
     let pIndex = 1;
 
@@ -332,6 +386,10 @@ export class InventoryWarehouseVoucherService {
             adjustmentWhere += ` AND g.adjustment_no = ANY($${pIndex})`;
             params.push(values);
             pIndex++;
+          } else if (key === 'type') {
+            if (!values.includes('receipt')) receiptWhere += ' AND 1 = 0';
+            if (!values.includes('issue')) issueWhere += ' AND 1 = 0';
+            if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
             receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
             issueWhere += ` AND 1 = 0`;
