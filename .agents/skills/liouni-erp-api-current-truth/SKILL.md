@@ -50,7 +50,7 @@ Use this skill only inside this repository.
 
 Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, DTOs, API, Business Rules, Cross-module) được lưu tại `.agents/skills/modules/<module-name>/SKILL.md`.
 
-- Khi làm việc trên module cụ thể: Đọc trực tiếp skill của module đó (vd: `bom-core` tại `.agents/skills/modules/bom-core/SKILL.md`).
+- Khi làm việc trên module cụ thể: Đọc trực tiếp skill của module đó (vd: `bom-core`, `vinfast-parts-stock`, `vinfast-parts-dashboard` tại `.agents/skills/modules/<module-name>/SKILL.md`).
 - Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
 
 ## Team-scale reminders
