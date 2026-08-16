@@ -25,38 +25,64 @@ Skill này định nghĩa quy trình chuẩn chỉnh và an toàn tuyệt đối
    - Branch chính: `erp-master` (hoặc branch hiện tại đang checkout).
 5. **Luôn Rebase First**:
    - Khi kéo code về phải luôn dùng `git pull --rebase` để lịch sử commit tuyến tính, rõ ràng.
+6. **Đồng bộ Tri thức Module Bắt buộc (Module Knowledge Sync Mandatory)**:
+   - Mọi lần commit code có tác động tới Database Schema, DTOs, API Endpoints, Permissions hoặc Business Logic của một module **BẮT BUỘC** phải rà soát và cập nhật/xóa bớt nội dung tương ứng trong `.agents/skills/modules/<module-name>/SKILL.md` trước khi commit.
 
 ---
 
-## 2. Quy trình Commit Code
+## 2. Quy trình Commit Code (Có Module Knowledge Sync Guard)
 
 Khi người dùng yêu cầu **"commit code"** hoặc khi cần lưu lại thay đổi trước khi pull/push:
 
 ```mermaid
 graph TD
     A["1. cd vào repo con (./erp-api hoặc ./erp-web)"] --> B["2. git status -s & Review diff"]
-    B --> C["3. git add file cụ thể (loại trừ .env, logs)"]
-    C --> D["4. Đặt commit message chuẩn Conventional Commits"]
-    D --> E["5. git commit (pre-commit hook tự động chạy lint-staged)"]
+    B --> C["3. 🛡️ Module Knowledge Sync Guard: Dò quét & cập nhật SKILL.md"]
+    C --> D["4. git add file code + file SKILL.md đã cập nhật"]
+    D --> E["5. Đặt commit message chuẩn Conventional Commits"]
+    E --> F["6. git commit (pre-commit hook tự động chạy lint-staged)"]
 ```
 
-### Các bước thực hiện:
-1. **Xác định repo**: `cd ./erp-api` hoặc `cd ./erp-web`.
-2. **Kiểm tra trạng thái**:
-   ```bash
-   git status -s
-   ```
-3. **Review thay đổi**: `git diff` để đảm bảo chỉ sửa đúng phạm vi task, không sót code rác/debug.
-4. **Stage files**:
-   ```bash
-   git add <danh_sach_file_cu_the>
-   ```
-5. **Commit với format chuẩn (Conventional Commits)**:
-   ```bash
-   git commit -m "<type>(<scope>): <mô tả ngắn gọn>"
-   ```
-   * `type`: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `style`.
-   * *Ví dụ*: `git commit -m "feat(invoice): thêm chức năng xuất hóa đơn PDF"`
+### Các bước thực hiện chi tiết:
+
+#### Bước 1: Xác định repo con
+```bash
+cd ./erp-api # hoặc cd ./erp-web
+```
+
+#### Bước 2: Kiểm tra trạng thái & Review diff
+```bash
+git status -s
+git diff
+```
+Đảm bảo chỉ sửa đúng phạm vi task, không sót code rác/debug, không vô tình thêm `.env` hay file tạm.
+
+#### Bước 3: 🛡️ Module Knowledge Sync Guard (Bắt buộc)
+Trước khi stage file, Agent / Kỹ sư **BẮT BUỘC** thực hiện rà soát tri thức:
+1. **Xác định Domain/Module**: Nhận diện module bị ảnh hưởng từ danh sách file thay đổi (vd: `src/inventory-core/`, `src/bom-core/`, `src/production-core/`, `src/goods-receipts-core/`, v.v.).
+2. **Dò tìm file Skill tương ứng**: Kiểm tra file `.agents/skills/modules/<module-name>/SKILL.md` tại cả `erp-api` và `erp-web`.
+3. **Đối soát 5 Trụ Cột Tri Thức**:
+   - **Database Schema & Entities**: Có thêm/sửa/xóa bảng, cột, kiểu dữ liệu, index, quan hệ quan trọng nào không?
+   - **DTOs & Validation Rules**: Có cập nhật DTO create/update/query, trường bắt buộc hoặc decorator validate không?
+   - **API Endpoints & RBAC**: Có thêm/bớt endpoint, đổi method HTTP, thay đổi Resource/Action trong `@RequirePermissions` không?
+   - **Business Logic & Flows**: Có sửa thuật toán tính toán, quy trình xử lý transaction, khóa bi quan (`pessimistic_write`), luồng duyệt chứng từ không?
+   - **Deprecated / Xóa bớt Tri thức Cũ**: Có trường/hàm/logic cũ nào đã bị loại bỏ cần **xóa bớt khỏi file SKILL.md** để tránh gây nhầm lẫn cho Agent các phiên sau không?
+4. **Cập nhật / Khởi tạo**:
+   - Nếu có thay đổi $\to$ Cập nhật trực tiếp vào file `SKILL.md` của module đó.
+   - Nếu là module mới hoàn toàn chưa có skill $\to$ Sử dụng skill `scan-module-knowledge` để tạo mới và đăng ký vào Current-Truth.
+
+#### Bước 4: Stage files
+```bash
+# Stage cả file mã nguồn và file SKILL.md liên quan đã cập nhật
+git add <danh_sach_file_code> <danh_sach_file_skill_md>
+```
+
+#### Bước 5: Commit với format chuẩn (Conventional Commits)
+```bash
+git commit -m "<type>(<scope>): <mô tả ngắn gọn>"
+```
+* `type`: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `style`.
+* *Ví dụ*: `git commit -m "feat(inventory): thêm cảnh báo tồn kho BOM 5 xe và cập nhật skill"`
 
 ---
 
@@ -100,7 +126,7 @@ graph TD
    * Nếu có conflict (`CONFLICT (content): Merge conflict in ...`):
      1. Kiểm tra danh sách file bị conflict: `git status`
      2. Đọc và chỉnh sửa thủ công từng file bị conflict, giữ lại logic đúng nhất.
-     3. Kiểm tra typecheck sau khi sửa: `bun run type:check`
+     3. Kiểm tra typecheck sau khi sửa: `bun run check:ci`
      4. Đánh dấu đã giải quyết: `git add <file-da-resolve>`
      5. Tiếp tục rebase:
         ```bash
@@ -121,7 +147,7 @@ Khi người dùng yêu cầu **"push code"**, quy trình BẮT BUỘC phải th
 
 ```mermaid
 graph TD
-    S1["Bước 1: Commit toàn bộ local changes"] --> S2["Bước 2: Pull --rebase từ remote"]
+    S1["Bước 1: Review Module Skills & Commit local changes"] --> S2["Bước 2: Pull --rebase từ remote"]
     S2 --> S3{"Có conflict không?"}
     S3 -- Có --> S4["Bước 3: Resolve conflict & rebase --continue"]
     S3 -- Không --> S5["Bước 4: QC Kiểm tra: check:ci & test"]
@@ -138,7 +164,7 @@ cd ./erp-api # hoặc cd ./erp-web
 CURRENT_BRANCH=$(git branch --show-current)
 REMOTE_NAME=$(git remote | grep -w github-industries || echo "origin")
 
-# 2. Commit nếu còn dirty changes
+# 2. Rà soát Module Skills và Commit nếu còn dirty changes
 if [ -n "$(git status -s)" ]; then
   git add <cac_file_thay_doi>
   git commit -m "<type>(<scope>): <mo_ta>"
@@ -163,6 +189,7 @@ git push $REMOTE_NAME $CURRENT_BRANCH
 
 - [ ] Đường dẫn sử dụng là tương đối (`./erp-api` hoặc `./erp-web`), không phụ thuộc workspace root tuyệt đối.
 - [ ] Không có file `.env` hay secret nào bị lọt vào staging/commit.
+- [ ] **Module Knowledge Sync Guard**: Đã rà soát và cập nhật/xóa bớt nội dung trong `SKILL.md` của các module bị ảnh hưởng.
 - [ ] Mọi local changes đều đã được commit an toàn trước khi pull rebase.
 - [ ] `git pull --rebase` đã thành công, không còn trạng thái conflict dở dang.
 - [ ] `bun run check:ci` đã pass sạch lỗi (TypeScript + ESLint + Prettier).
