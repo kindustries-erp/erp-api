@@ -13,6 +13,7 @@ import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
+import { BomConfigModule } from './bom-config/bom-config.module';
 import { PurchaseRequestsCoreModule } from './purchase-requests-core/purchase-requests-core.module';
 import { PurchaseOrdersCoreModule } from './purchase-orders-core/purchase-orders-core.module';
 import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-core.module';
@@ -103,6 +104,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
     ErpAttachmentsCoreModule,
     ErpMfgCoreModule,
     BomCoreModule,
+    BomConfigModule,
     PurchaseRequestsCoreModule,
     PurchaseOrdersCoreModule,
     GoodsReceiptsCoreModule,

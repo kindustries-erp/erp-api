@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { GraphLayoutService } from '../../common/services/graph-layout.service';
@@ -39,10 +43,18 @@ export class InventoryItemsLifecycleService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id },
-      relations: ['uom', 'itemType'],
+      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
     });
     if (!data) throw new NotFoundException('Không tìm thấy item');
-    return { message: 'Lấy thông tin thành công', data };
+    const serialCountRes = await this.dataSource.query(
+      `SELECT COUNT(1) as cnt FROM erp_inventory_tracking_serials WHERE item_id = $1`,
+      [id],
+    );
+    const hasSerials = Number(serialCountRes[0]?.cnt || 0) > 0;
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, hasSerials },
+    };
   }
 
   async update(id: string, dto: UpdateInventoryItemDto) {
@@ -55,8 +67,22 @@ export class InventoryItemsLifecycleService {
     if (dto.sku !== undefined) item.sku = dto.sku;
     if (dto.note !== undefined) item.note = dto.note;
     if (dto.status !== undefined) item.status = dto.status;
-    if (dto.trackingPolicyId !== undefined)
-      item.trackingPolicyId = dto.trackingPolicyId;
+    if (
+      dto.trackingPolicyId !== undefined &&
+      (dto.trackingPolicyId || null) !== (item.trackingPolicyId || null)
+    ) {
+      const serialCountRes = await this.dataSource.query(
+        `SELECT COUNT(1) as cnt FROM erp_inventory_tracking_serials WHERE item_id = $1`,
+        [id],
+      );
+      const serialCount = Number(serialCountRes[0]?.cnt || 0);
+      if (serialCount > 0) {
+        throw new BadRequestException(
+          'Mặt hàng đã phát sinh mã Serial/Tracking trong hệ thống, không thể thay đổi Tracking Policy. Vui lòng tạo mặt hàng mới nếu muốn thay đổi phương thức theo dõi.',
+        );
+      }
+      item.trackingPolicyId = dto.trackingPolicyId || null;
+    }
     if (dto.trackingCategoryId !== undefined)
       item.trackingCategoryId = dto.trackingCategoryId;
     if (dto.attributes !== undefined) item.attributes = dto.attributes;
@@ -105,6 +131,9 @@ export class InventoryItemsLifecycleService {
     const adjustmentIds = txns
       .filter((t) => t.documentType === 'INVENTORY_ADJUSTMENT' && t.documentId)
       .map((t) => t.documentId);
+    const productionOrderIds = txns
+      .filter((t) => t.documentType === 'PRODUCTION_ORDER' && t.documentId)
+      .map((t) => t.documentId);
 
     const docNoMap: Record<string, string> = {};
 
@@ -130,6 +159,14 @@ export class InventoryItemsLifecycleService {
         [adjustmentIds],
       );
       adjustments.forEach((a) => (docNoMap[a.id] = a.adjustment_no));
+    }
+
+    if (productionOrderIds.length > 0) {
+      const pos = await this.dataSource.query(
+        `SELECT id, po_no FROM public.erp_production_orders WHERE id = ANY($1)`,
+        [productionOrderIds],
+      );
+      pos.forEach((p) => (docNoMap[p.id] = p.po_no));
     }
 
     let running = 0;

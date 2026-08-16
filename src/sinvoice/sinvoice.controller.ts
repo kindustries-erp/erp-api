@@ -6,7 +6,12 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { SinvoiceService } from './sinvoice.service';
 import {
   CreateSinvoiceDraftDto,
@@ -15,6 +20,9 @@ import {
 } from './dto/sinvoice-draft.dto';
 import { TaxPortalSyncQueryDto } from './dto/sinvoice.dto';
 
+@ApiTags('sinvoice')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('sinvoice')
 export class SinvoiceController {
   constructor(private readonly sinvoiceService: SinvoiceService) {}
@@ -26,22 +34,26 @@ export class SinvoiceController {
   }
 
   // ─────────────────────── CONFIG ────────────────────────────────────────
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('config')
   async getConfig() {
     return this.sinvoiceService.getConfigEndpoint();
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('config')
   async saveConfig(@Body() body: SaveSinvoiceConfigDto) {
     return this.sinvoiceService.saveConfig(body);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Delete('config')
   async resetConfig() {
     return this.sinvoiceService.resetConfig();
   }
 
   // ─────────────────────── SINVOICE DRAFTS ───────────────────────────────
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('draft/column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -59,32 +71,38 @@ export class SinvoiceController {
     );
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('draft')
   async listDrafts(@Query() query: ListSinvoiceDraftQueryDto) {
     return this.sinvoiceService.listDrafts(query);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post('draft')
   async createDraft(@Body() body: CreateSinvoiceDraftDto) {
     return this.sinvoiceService.createDraft(body);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'delete' })
   @Delete('draft/:id')
   async deleteDraft(@Param('id') id: string) {
     return this.sinvoiceService.deleteDraft(id);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('draft/sync')
   async syncDraftsFromViettel() {
     return this.sinvoiceService.syncDraftsFromViettel();
   }
 
   // ─────────────────────── CANCEL / DOWNLOAD ─────────────────────────────
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('cancel')
   async cancelInvoice(@Body() _body: any) {
     return this.sinvoiceService.cancelInvoice();
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get('download')
   async downloadInvoice(
     @Query('invoiceNo') invoiceNo: string,

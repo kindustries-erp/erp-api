@@ -5,7 +5,6 @@ Source of truth for this repo (`./erp-api`).
 ## Read order
 
 1. `.agents/skills/liouni-erp-api-current-truth/SKILL.md`
-2. `docs/ai/technical-instructions.md`
 
 ## API Specific Agent Mandates
 
@@ -119,7 +118,7 @@ When asked to **push code**, you MUST execute the following in order:
 - always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
-- no code without a task file under `docs/tasks/`
+- manage all task execution, planning, and verification in Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`)
 - keep task checklist updated in realtime
 - if task status in docs drifts from code reality, verify by code + build/test + git state before correcting the artifact
 
@@ -137,7 +136,6 @@ When asked to **push code**, you MUST execute the following in order:
 - Use `must` only for standards already enforced or verified in this repo; use `prefer` for target-direction conventions.
 - When introducing a new module, record registration points explicitly: module file, controller path, `src/app.module.ts`, DTO/validation, and affected Web contract.
 - If response shape or route path changes, call out required Web follow-up in the task artifact before closing.
-- Documentation/process changes must update the canonical file first (`docs/ai/technical-instructions.md`), then keep `.agents` aligned.
 
 ### Anti-drift / anti-patterns
 

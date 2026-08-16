@@ -137,29 +137,8 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
           let remainingSerials = totalPendingSerials;
 
           for (const { line, gr } of linesToProcess) {
-            const item = await this.itemRepo.findOne({
-              where: { id: line.itemId! },
-              relations: ['trackingPolicy'],
-            });
-
-            if (item?.trackingPolicy?.code === 'SERIAL') {
-              const qtyInt = Math.round(Number(line.qtyReceived || 0));
-              if (qtyInt > 0) {
-                const receiptDateStr = gr.receiptDate
-                  ? format(new Date(gr.receiptDate as any), 'yyyy-MM-dd')
-                  : format(new Date(), 'yyyy-MM-dd');
-
-                await this.goodsReceiptsCoreService.generateComponentSerials(
-                  this.grLineRepo.manager,
-                  item,
-                  qtyInt,
-                  line.id,
-                  receiptDateStr,
-                );
-              }
-            }
-
-            // Mark as generated
+            // Serials are now explicitly declared and generated at post-time.
+            // Mark line as generated to clear queue.
             line.serialsGenerated = true;
             await this.grLineRepo.save(line);
 
