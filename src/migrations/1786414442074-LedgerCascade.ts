@@ -34,34 +34,45 @@ export class LedgerCascade1786414442074 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "erp_invoice_items" DROP COLUMN IF EXISTS "invoice_category"`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "erp_invoices" RENAME COLUMN "invoice_no_normalized" TO "TEMP_OLD_invoice_no_normalized"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "erp_invoices" ADD "invoice_no_normalized" character varying(100)`,
-    );
-    await queryRunner.query(
-      `UPDATE "erp_invoices" SET "invoice_no_normalized" = "TEMP_OLD_invoice_no_normalized"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "erp_invoices" DROP COLUMN "TEMP_OLD_invoice_no_normalized"`,
-    );
-    await queryRunner.query(
-      `DELETE FROM "public"."typeorm_metadata" WHERE "type" = $1 AND "name" = $2 AND "database" = $3 AND "schema" = $4 AND "table" = $5`,
-      [
-        'GENERATED_COLUMN',
-        'invoice_no_normalized',
-        'neondb',
-        'public',
-        'erp_invoices',
-      ],
-    );
-    await queryRunner.query(
-      `ALTER TABLE "vinfast_parts_ledger" ADD CONSTRAINT "FK_82867af4c8456519a4bfcb536a9" FOREIGN KEY ("invoice_item_id") REFERENCES "erp_invoice_items"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "vinfast_parts_ledger" ADD CONSTRAINT "FK_aff5a0ae2e1992a54a34a4cf679" FOREIGN KEY ("invoice_id") REFERENCES "erp_invoices"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
-    );
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'erp_invoices' AND column_name = 'invoice_no_normalized' AND is_generated = 'ALWAYS'
+        ) THEN
+          ALTER TABLE "erp_invoices" RENAME COLUMN "invoice_no_normalized" TO "TEMP_OLD_invoice_no_normalized";
+          ALTER TABLE "erp_invoices" ADD "invoice_no_normalized" character varying(100);
+          UPDATE "erp_invoices" SET "invoice_no_normalized" = "TEMP_OLD_invoice_no_normalized";
+          ALTER TABLE "erp_invoices" DROP COLUMN "TEMP_OLD_invoice_no_normalized";
+        ELSIF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'erp_invoices' AND column_name = 'invoice_no_normalized'
+        ) THEN
+          ALTER TABLE "erp_invoices" ADD "invoice_no_normalized" character varying(100);
+        END IF;
+      END $$;
+    `);
+    await queryRunner.query(`
+      DO $$ BEGIN
+        IF to_regclass('public.typeorm_metadata') IS NOT NULL THEN
+          DELETE FROM "public"."typeorm_metadata" WHERE "type" = 'GENERATED_COLUMN' AND "name" = 'invoice_no_normalized' AND "database" = 'neondb' AND "schema" = 'public' AND "table" = 'erp_invoices';
+        END IF;
+      END $$;
+    `);
+    await queryRunner.query(`
+      DO $$ BEGIN
+        ALTER TABLE "vinfast_parts_ledger" ADD CONSTRAINT "FK_82867af4c8456519a4bfcb536a9" FOREIGN KEY ("invoice_item_id") REFERENCES "erp_invoice_items"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await queryRunner.query(`
+      DO $$ BEGIN
+        ALTER TABLE "vinfast_parts_ledger" ADD CONSTRAINT "FK_aff5a0ae2e1992a54a34a4cf679" FOREIGN KEY ("invoice_id") REFERENCES "erp_invoices"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

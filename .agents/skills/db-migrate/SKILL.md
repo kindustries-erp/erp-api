@@ -43,11 +43,13 @@ Dựa vào câu lệnh của User, hãy tự suy luận xem họ đang cần ở
 1. **Luôn Xác Nhận Môi Trường (Env Files):**
    - Không bao giờ được chạy ngầm. Phải hỏi hoặc xác định rõ file `.env.*` làm SOURCE và TARGET (ví dụ: `.env.klotus-production`, `.env.staging`, `.env.local`).
 2. **Không tự gọi TypeORM trực tiếp:**
-
-- Bạn **BẮT BUỘC** phải gọi lệnh thông qua file `.agents/skills/db-migrate/scripts/typeorm-runner.sh` để hệ thống tự handle env, backup và pooler guard.
-
+   - Bạn **BẮT BUỘC** phải gọi lệnh thông qua file `.agents/skills/db-migrate/scripts/typeorm-runner.sh` để hệ thống tự handle env, backup và pooler guard.
 3. **Ưu tiên Bun:**
    - Bất cứ lệnh chạy nào ngoài file runner, nếu cần phải ưu tiên dùng `bun` hoặc `bunx`.
+4. **Dọn dẹp Code & Script thừa sau khi migrate:**
+   - Sau khi hoàn thành quá trình migrate, bạn **BẮT BUỘC** phải dọn dẹp các script tạm, file query SQL thử nghiệm, file test kết nối hoặc bất kỳ code rác nào phát sinh trong quá trình xử lý migrate.
+   - Chỉ giữ lại các file migration chuẩn trong `src/migrations/` và bản backup tự động trong `.agents/skills/db-migrate/backups/`.
+   - Kiểm tra `git status` để đảm bảo workspace sạch sẽ, không để sót file tạm hay thay đổi ngoài ý muốn.
 
 ---
 
@@ -83,6 +85,13 @@ bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync <SOURCE_ENV_FILE> 
 # Ví dụ: bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync .env.klotus-production .env.local
 ```
 
-### Hậu Kiểm
+---
 
-Sau khi script hoàn tất, hãy đọc log output để xác nhận việc generate, migrate hoặc sync đã thành công. Báo cáo lại cho User bằng tiếng Việt gọn gàng, rõ ràng.
+## 4. Hậu Kiểm & Dọn Dẹp (Bắt buộc)
+
+1. **Kiểm tra trạng thái migrate:** Đọc log output để xác nhận việc generate, migrate hoặc sync đã thành công 100% không còn pending.
+2. **Dọn dẹp rác & code tạm:**
+   - Xóa ngay mọi script thử nghiệm, scratch files, file dump tạm thời ngoài thư mục backups.
+   - Revert hoặc dọn dẹp các chỉnh sửa tạm/debug trong source code.
+3. **Báo cáo:** Báo cáo lại cho User bằng tiếng Việt gọn gàng, rõ ràng kèm danh sách thay đổi và trạng thái dọn dẹp.
+
