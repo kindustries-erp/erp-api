@@ -359,8 +359,7 @@ export class InventoryWarehouseVoucherService {
                   'xuat kho'.includes(s_raw) ||
                   'xuat'.includes(s_raw))) ||
               (v === 'adjustment' &&
-                ('điều chỉnh'.includes(s_raw) ||
-                  'dieu chinh'.includes(s_raw)))
+                ('điều chỉnh'.includes(s_raw) || 'dieu chinh'.includes(s_raw)))
             );
           })
         : allTypes;
