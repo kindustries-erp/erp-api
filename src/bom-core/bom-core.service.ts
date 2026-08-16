@@ -27,9 +27,44 @@ export class BomCoreService {
     private readonly lineRepository: Repository<ErpBomLine>,
   ) {}
 
+  private async validateRequiredAttributes(
+    manager: any,
+    categoryId: string,
+    attributes?: Record<string, any>,
+  ) {
+    if (!categoryId) return;
+    const requiredDefs = await manager.query(
+      `SELECT id, name, field_type FROM erp_bom_attribute_defs 
+       WHERE category_id = $1 AND is_required = true AND is_active = true AND is_deleted = false`,
+      [categoryId],
+    );
+    if (!requiredDefs || requiredDefs.length === 0) return;
+
+    for (const def of requiredDefs) {
+      const val = attributes?.[def.id];
+      if (
+        val === undefined ||
+        val === null ||
+        (typeof val === 'string' && val.trim() === '')
+      ) {
+        throw new BadRequestException(
+          `Thuộc tính bắt buộc "${def.name}" chưa được chọn hoặc điền thông tin.`,
+        );
+      }
+    }
+  }
+
   async create(dto: CreateBomDto) {
     const { lines = [], attributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
+      if (header.categoryId) {
+        await this.validateRequiredAttributes(
+          manager,
+          header.categoryId,
+          attributes,
+        );
+      }
+
       const headerRepo = manager.getRepository(ErpBom);
       const lineRepo = manager.getRepository(ErpBomLine);
       const data = await headerRepo.save(
@@ -254,6 +289,18 @@ export class BomCoreService {
 
     const { lines, attributes, ...header } = dto as any;
     await this.dataSource.transaction(async (manager) => {
+      const targetCategoryId =
+        header.categoryId !== undefined
+          ? header.categoryId
+          : existing.categoryId;
+      if (targetCategoryId && attributes !== undefined) {
+        await this.validateRequiredAttributes(
+          manager,
+          targetCategoryId,
+          attributes,
+        );
+      }
+
       const headerRepo = manager.getRepository(ErpBom);
       if (Object.keys(header).length > 0) {
         await headerRepo.update(id, header);

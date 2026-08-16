@@ -211,6 +211,9 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`.
 - Trong `CreateBomDto` & `UpdateBomDto`: `attributes?: Record<string, string>`.
 - Lưu trữ trong bảng `erp_bom_attribute_values`. Khi update, xóa các bản ghi cũ của BOM và chèn lại các giá trị mới.
 - Khai báo kiểu `SELECT`: Bắt buộc cấu hình cặp Key / Value + Label, validate không được trùng key.
+- **Ràng buộc Thuộc tính Bắt buộc (Required Attributes Validation)**:
+  - Frontend (`BomFormDrawer.tsx`): Kiểm tra `activeAttributeDefs` có `isRequired: true`, thông báo lỗi toast nếu người dùng chưa chọn hoặc để trống khi tạo mới/cập nhật.
+  - Backend (`bom-core.service.ts`): Phương thức `validateRequiredAttributes()` chặn lưu và ném `BadRequestException` nếu payload thiếu các trường thuộc tính bắt buộc của danh mục.
 
 ### 5.3. Giao diện Người Dùng Chuẩn Mực (Frontend UX Standards)
 - **Split Button "Tạo mới"**: Nút bên trái bấm mở form tạo BOM trực tiếp; Divider ở giữa; Mũi tên bên phải mở dropdown "Cấu hình BOM".
