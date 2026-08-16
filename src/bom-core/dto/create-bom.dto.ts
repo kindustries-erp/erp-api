@@ -35,9 +35,10 @@ export class CreateBomDto {
   @IsOptional()
   attributes?: Record<string, string>;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  version: string;
+  version?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

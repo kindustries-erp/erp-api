@@ -61,7 +61,7 @@ erDiagram
 | `code` | `varchar(100)` | NO | | Mã thuộc tính (Unique theo Category `UQ_erp_bom_attr_defs_cat_code`) |
 | `name` | `varchar(255)` | NO | | Tên hiển thị của thuộc tính |
 | `field_type` | `varchar(50)` | NO | | `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX` |
-| `options` | `jsonb` | YES | `NULL` | Danh sách options cho SELECT: `[{"key":"RED","value":"RED","label":"Đỏ"}]` |
+| `options` | `jsonb` | YES | `NULL` | Danh sách options cho SELECT: `[{"value":"blue","label":"Xanh"}]` |
 | `is_required` | `boolean` | NO | `false` | Bắt buộc nhập khi khai báo BOM |
 | `sort_order` | `int` | NO | `0` | Thứ tự hiển thị trên form |
 | `is_active` | `boolean` | NO | `true` | Cờ kích hoạt thuộc tính |
