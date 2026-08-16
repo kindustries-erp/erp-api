@@ -60,7 +60,7 @@ cat << 'EOF' > "$AGENTS_DIR/AGENTS.md"
 
 ## Strict Guardrails
 
-- **NO ROOT PUSHING:** You are explicitly **FORBIDDEN** from running `git add`, `git commit`, or `git push` from the workspace root directory (e.g., `/home/dev/repos/erp/`). Always `cd` into the specific child repository (e.g., `erp-api`, `erp-web`).
+- **NO ROOT PUSHING:** You are explicitly **FORBIDDEN** from running `git add`, `git commit`, or `git push` from the workspace root parent directory. Always `cd` into the specific child repository (e.g., `./erp-api`, `./erp-web`).
 - **LANE ORDER:** Always follow the delivery sequence: `DB -> API -> UI -> QC`.
 - **BUN FIRST:** Use `bun` / `bunx` exclusively. Do NOT use `npm` or `yarn`.
 - **LOCAL TESTING ONLY:** Do NOT build or run deployment containers manually on the local machine. Use local node scripts (`bun run start:dev` / `bun run dev`).
