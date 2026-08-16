@@ -124,7 +124,7 @@ graph TD
     S1["Bước 1: Commit toàn bộ local changes"] --> S2["Bước 2: Pull --rebase từ remote"]
     S2 --> S3{"Có conflict không?"}
     S3 -- Có --> S4["Bước 3: Resolve conflict & rebase --continue"]
-    S3 -- Không --> S5["Bước 4: Verify type:check"]
+    S3 -- Không --> S5["Bước 4: QC Kiểm tra: check:ci & test"]
     S4 --> S5
     S5 --> S6["Bước 5: git push lên remote"]
 ```
@@ -149,8 +149,9 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # (Nếu có conflict -> tiến hành resolve như Mục 3)
 
-# 4. Kiểm tra Typecheck local nhanh
-bun run type:check
+# 4. Kiểm tra QC nghiêm ngặt trước khi push (Typecheck, Lint, Prettier, Unit Test)
+bun run check:ci
+bun run test
 
 # 5. Push lên remote
 git push $REMOTE_NAME $CURRENT_BRANCH
@@ -164,5 +165,6 @@ git push $REMOTE_NAME $CURRENT_BRANCH
 - [ ] Không có file `.env` hay secret nào bị lọt vào staging/commit.
 - [ ] Mọi local changes đều đã được commit an toàn trước khi pull rebase.
 - [ ] `git pull --rebase` đã thành công, không còn trạng thái conflict dở dang.
-- [ ] `bun run type:check` đã pass sạch lỗi.
+- [ ] `bun run check:ci` đã pass sạch lỗi (TypeScript + ESLint + Prettier).
+- [ ] `bun run test` đã chạy và pass toàn bộ test suites.
 - [ ] Push thành công lên đúng branch trên remote `$REMOTE_NAME`.
