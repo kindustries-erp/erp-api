@@ -46,9 +46,17 @@ Use this skill only inside this repository.
 - **TypeScript Build Configuration**: If adding `.ts` files outside of `src/` (e.g. in `scripts/`), ensure the directory is added to the `exclude` array in `tsconfig.build.json`. Otherwise, TypeScript alters the root directory structure in `dist/`, causing the runtime entrypoint (`dist/main.js`) to fail.
 - **Git Commit & Push Process**: When the user requests to "commit and push", determine whether the changes belong to `liouni-erp-web` or `liouni-erp-api` (or both) and execute Git commands inside the respective repository directory. Do not commit/push from the workspace parent.
 
+## Module Knowledge Repository (.agents/skills/modules/)
+
+Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, DTOs, API, Business Rules, Cross-module) được lưu tại `.agents/skills/modules/<module-name>/SKILL.md`.
+
+- Khi làm việc trên module cụ thể: Đọc trực tiếp skill của module đó (vd: `bom-core` tại `.agents/skills/modules/bom-core/SKILL.md`).
+- Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
+
 ## Team-scale reminders
 
 - Use `must` only for standards already enforced in this repo; use `prefer` for target-direction conventions.
 - Keep domain boundaries clear: controller -> DTO/validation -> service/use-case -> persistence/helper.
 - If a new helper/service is created instead of reusing one, note the reason in the task artifact.
 - A backend task is not done until validation evidence and commit/push status are recorded.
+
