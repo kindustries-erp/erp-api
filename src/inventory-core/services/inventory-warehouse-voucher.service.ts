@@ -73,8 +73,8 @@ export class InventoryWarehouseVoucherService {
             pIndex++;
           } else if (key === 'poNo') {
             receiptWhere += ` AND po.po_no ILIKE $${pIndex}`;
-            issueWhere += ` AND 1 = 0`; // no poNo in issues
-            adjustmentWhere += ` AND 1 = 0`; // no poNo in adjustments
+            issueWhere += ` AND so.so_no ILIKE $${pIndex}`;
+            adjustmentWhere += ` AND 1 = 0`;
             params.push(s);
             pIndex++;
           } else if (key === 'partnerName') {
@@ -165,7 +165,7 @@ export class InventoryWarehouseVoucherService {
             if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
             receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
-            issueWhere += ` AND 1 = 0`;
+            issueWhere += ` AND so.so_no = ANY($${pIndex})`;
             adjustmentWhere += ` AND 1 = 0`;
             params.push(values);
             pIndex++;
@@ -235,6 +235,8 @@ export class InventoryWarehouseVoucherService {
                g.status, g.remarks, g.supplier_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
                po.po_no as "poNo",
+               g.purchase_order_id as "purchaseOrderId",
+               NULL as "salesOrderId",
                (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id) as "totalQty"
         FROM public.erp_goods_receipts g
         LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
@@ -248,10 +250,13 @@ export class InventoryWarehouseVoucherService {
         SELECT g.id, g.issue_no as "voucherNo", g.issue_date as "date", 'issue' as "type",
                g.status, g.remarks, g.customer_id as "partnerId", COALESCE(bp.display_name, bp.name) as "partnerName",
                g.created_at as "createdAt",
-               NULL as "poNo",
+               so.so_no as "poNo",
+               NULL as "purchaseOrderId",
+               g.sales_order_id as "salesOrderId",
                (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id) as "totalQty"
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
+        LEFT JOIN public.erp_sales_orders so ON g.sales_order_id = so.id
         WHERE ${issueWhere}
       `);
     }
@@ -262,6 +267,8 @@ export class InventoryWarehouseVoucherService {
                g.status, g.remarks, NULL as "partnerId", NULL as "partnerName",
                g.created_at as "createdAt",
                NULL as "poNo",
+               NULL as "purchaseOrderId",
+               NULL as "salesOrderId",
                (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
         FROM public.erp_inventory_adjustments g
         WHERE ${adjustmentWhere}
@@ -392,7 +399,7 @@ export class InventoryWarehouseVoucherService {
             if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
             receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
-            issueWhere += ` AND 1 = 0`;
+            issueWhere += ` AND so.so_no = ANY($${pIndex})`;
             adjustmentWhere += ` AND 1 = 0`;
             params.push(values);
             pIndex++;
@@ -471,6 +478,8 @@ export class InventoryWarehouseVoucherService {
     } else if (column === 'poNo') {
       selectExpr = `
         ${includeReceipts ? `SELECT po.po_no as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id WHERE ${receiptWhere}` : ''}
+        ${includeReceipts && includeIssues ? 'UNION ALL' : ''}
+        ${includeIssues ? `SELECT so.so_no as val FROM public.erp_goods_issues g LEFT JOIN public.erp_sales_orders so ON g.sales_order_id = so.id WHERE ${issueWhere}` : ''}
       `;
     } else if (column === 'partnerName') {
       selectExpr = `
