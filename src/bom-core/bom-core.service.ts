@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,6 +11,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
+import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
 import { ListBomDto } from './dto/list-bom.dto';
@@ -26,7 +28,7 @@ export class BomCoreService {
   ) {}
 
   async create(dto: CreateBomDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], attributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpBom);
       const lineRepo = manager.getRepository(ErpBomLine);
@@ -62,9 +64,30 @@ export class BomCoreService {
           ),
         );
       }
+
+      if (attributes && typeof attributes === 'object') {
+        const attrValRepo = manager.getRepository(ErpBomAttributeValue);
+        const attrMap = attributes as Record<string, string | number | boolean>;
+        for (const [attrDefId, rawVal] of Object.entries(attrMap)) {
+          if (rawVal !== undefined && rawVal !== null) {
+            const valStr =
+              typeof rawVal === 'string' ? rawVal.trim() : `${rawVal}`.trim();
+            if (valStr !== '') {
+              await attrValRepo.save(
+                attrValRepo.create({
+                  bomId: data.id,
+                  attrDefId,
+                  valueText: valStr,
+                }),
+              );
+            }
+          }
+        }
+      }
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: savedLines },
+        data: { ...data, lines: savedLines, attributes: attributes || {} },
       };
     });
   }
@@ -121,6 +144,10 @@ export class BomCoreService {
   async findOne(id: string) {
     const data = await this.repository.findOneOrFail({
       where: { id, isDeleted: false },
+      relations: {
+        category: true,
+        attributeValues: true,
+      },
     });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
@@ -131,6 +158,25 @@ export class BomCoreService {
     lines.forEach((line: any) => {
       line.uom = line.uom?.name || '';
     });
+
+    const attrMap: Record<string, string> = {};
+    if (data.attributeValues) {
+      data.attributeValues.forEach((val) => {
+        attrMap[val.attrDefId] = val.valueText || '';
+      });
+    }
+    (data as any).attributes = attrMap;
+    (data as any).categoryCode = data.category?.code || null;
+    (data as any).categoryName = data.category?.name || null;
+
+    // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [id, data.finishedGoodItemId || '00000000-0000-0000-0000-000000000000'],
+    );
+    const count = parseInt(prodOrderCount[0]?.count, 10) || 0;
+    (data as any).hasProduction = count > 0;
+    (data as any).productionCount = count;
 
     if (data.finishedGoodItemId) {
       const fgItems = await this.dataSource.query(
@@ -179,10 +225,41 @@ export class BomCoreService {
   }
 
   async update(id: string, dto: UpdateBomDto) {
-    const { lines, ...header } = dto as any;
-    await this.repository.update(id, header);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+
+    // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [
+        id,
+        existing.finishedGoodItemId || '00000000-0000-0000-0000-000000000000',
+      ],
+    );
+    const hasProduction = (parseInt(prodOrderCount[0]?.count, 10) || 0) > 0;
+
+    if (hasProduction) {
+      // Nếu BOM đã có sản xuất: Chỉ cho phép sửa ghi chú và hiệu lực đến
+      const allowedPatch: Partial<ErpBom> = {};
+      if (dto.notes !== undefined) allowedPatch.notes = dto.notes;
+      if (dto.effectiveTo !== undefined)
+        allowedPatch.effectiveTo = dto.effectiveTo;
+      if (Object.keys(allowedPatch).length > 0) {
+        await this.repository.update(id, allowedPatch);
+      }
+      return this.findOne(id);
+    }
+
+    const { lines, attributes, ...header } = dto as any;
+    await this.dataSource.transaction(async (manager) => {
+      const headerRepo = manager.getRepository(ErpBom);
+      if (Object.keys(header).length > 0) {
+        await headerRepo.update(id, header);
+      }
+
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpBomLine);
         await lineRepo.delete({ bomId: id });
         let lineNo = 1;
@@ -208,8 +285,34 @@ export class BomCoreService {
             } as DeepPartial<ErpBomLine>),
           );
         }
-      });
-    }
+      }
+
+      if (attributes !== undefined) {
+        const attrValRepo = manager.getRepository(ErpBomAttributeValue);
+        await attrValRepo.delete({ bomId: id });
+        if (attributes && typeof attributes === 'object') {
+          const attrMap = attributes as Record<
+            string,
+            string | number | boolean
+          >;
+          for (const [attrDefId, rawVal] of Object.entries(attrMap)) {
+            if (rawVal !== undefined && rawVal !== null) {
+              const valStr =
+                typeof rawVal === 'string' ? rawVal.trim() : `${rawVal}`.trim();
+              if (valStr !== '') {
+                await attrValRepo.save(
+                  attrValRepo.create({
+                    bomId: id,
+                    attrDefId,
+                    valueText: valStr,
+                  }),
+                );
+              }
+            }
+          }
+        }
+      }
+    });
     return this.findOne(id);
   }
 
@@ -218,6 +321,21 @@ export class BomCoreService {
       where: { id, isDeleted: false },
     });
     if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [
+        id,
+        existing.finishedGoodItemId || '00000000-0000-0000-0000-000000000000',
+      ],
+    );
+    const hasProduction = (parseInt(prodOrderCount[0]?.count, 10) || 0) > 0;
+    if (hasProduction) {
+      throw new ConflictException(
+        'Định mức (BOM) đã phát sinh lệnh sản xuất, không thể xóa.',
+      );
+    }
+
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };
   }
