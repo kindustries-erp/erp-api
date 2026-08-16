@@ -65,6 +65,22 @@ export class ErpInvoice {
   })
   taxInvoiceType: string | null;
 
+  @Column({
+    type: 'varchar',
+    length: 128,
+    name: 'related_invoice_no',
+    nullable: true,
+  })
+  relatedInvoiceNo: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'related_serial_no',
+    nullable: true,
+  })
+  relatedSerialNo: string | null;
+
   @Column({ type: 'boolean', name: 'is_valid', default: false })
   isValid: boolean;
 

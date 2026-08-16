@@ -199,8 +199,31 @@ export class ErpInvoicesCoreService {
     return this.portalService.getPortalConfig();
   }
 
-  savePortalConfig(token: string, cookies?: string) {
-    return this.portalService.savePortalConfig(token, cookies);
+  savePortalConfig(
+    token: string,
+    cookies?: string,
+    username?: string,
+    password?: string,
+  ) {
+    return this.portalService.savePortalConfig(
+      token,
+      cookies,
+      username,
+      password,
+    );
+  }
+
+  getPortalCaptcha() {
+    return this.portalService.getCaptcha();
+  }
+
+  loginPortalWithCaptcha(dto: {
+    username: string;
+    password?: string;
+    cvalue: string;
+    ckey: string;
+  }) {
+    return this.portalService.loginWithCaptcha(dto);
   }
 
   checkTokenValid(token: string, cookies?: string) {

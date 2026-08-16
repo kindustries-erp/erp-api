@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
@@ -23,6 +23,8 @@ import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
+import { solveGdtSvgCaptcha } from '../helpers/gdt-captcha-solver.helper';
+import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -107,7 +109,12 @@ export class InvoicePortalService {
     return prior?.branchId ?? null;
   }
 
-  async getPortalConfig(): Promise<{ token: string; cookies: string }> {
+  async getPortalConfig(): Promise<{
+    token: string;
+    cookies: string;
+    username: string;
+    hasPassword: boolean;
+  }> {
     const profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
@@ -115,27 +122,266 @@ export class InvoicePortalService {
     return {
       token: profile?.gdt_portal_token || '',
       cookies: profile?.gdt_portal_cookies || '',
+      username: profile?.gdt_portal_username || profile?.tax_code || '',
+      hasPassword: Boolean(profile?.gdt_portal_password),
     };
   }
 
-  async savePortalConfig(token: string, cookies?: string): Promise<void> {
+  async getInternalPortalConfig(): Promise<{
+    token: string;
+    cookies: string;
+    username: string;
+    password?: string;
+  }> {
+    const profile = await this.companyProfileRepo.findOne({
+      where: {},
+      order: { created_at: 'ASC' },
+    });
+    return {
+      token: profile?.gdt_portal_token || '',
+      cookies: profile?.gdt_portal_cookies || '',
+      username: profile?.gdt_portal_username || profile?.tax_code || '',
+      password: safeDecrypt(profile?.gdt_portal_password) || undefined,
+    };
+  }
+
+  async savePortalConfig(
+    token: string,
+    cookies?: string,
+    username?: string,
+    password?: string,
+  ): Promise<void> {
     let profile = await this.companyProfileRepo.findOne({
       where: {},
       order: { created_at: 'ASC' },
     });
+
+    const encryptedPassword =
+      password !== undefined
+        ? password
+          ? encryptText(password)
+          : ''
+        : undefined;
+
     if (!profile) {
       profile = this.companyProfileRepo.create({
         company_name: 'Your Company Name',
         gdt_portal_token: token,
         gdt_portal_cookies: cookies,
+        gdt_portal_username: username,
+        gdt_portal_password: encryptedPassword,
       });
     } else {
       profile.gdt_portal_token = token;
       if (cookies !== undefined) {
         profile.gdt_portal_cookies = cookies;
       }
+      if (username !== undefined) {
+        profile.gdt_portal_username = username;
+      }
+      if (encryptedPassword !== undefined) {
+        profile.gdt_portal_password = encryptedPassword;
+      }
     }
     await this.companyProfileRepo.save(profile);
+  }
+
+  async autoReloginWithRetry(
+    maxRetries = 3,
+    retryDelayMs = 60000,
+  ): Promise<{ token: string; cookies?: string } | null> {
+    const config = await this.getInternalPortalConfig();
+    if (!config.username || !config.password) {
+      this.logger.warn(
+        'Không thể tự động đăng nhập Cổng Thuế: Chưa lưu tên đăng nhập hoặc mật khẩu trong hệ thống',
+      );
+      return null;
+    }
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      this.logger.log(
+        `Bắt đầu tự động đăng nhập lại Cổng Thuế GDT (lần ${attempt}/${maxRetries})...`,
+      );
+      try {
+        const captcha = await this.getCaptcha();
+        if (!captcha?.text || !captcha?.key) {
+          throw new Error('Không thể lấy hoặc giải mã Captcha');
+        }
+
+        const loginRes = await this.loginWithCaptcha({
+          username: config.username,
+          password: config.password,
+          cvalue: captcha.text,
+          ckey: captcha.key,
+        });
+
+        if (loginRes?.success && loginRes?.token) {
+          this.logger.log(
+            `Tự động đăng nhập Cổng Thuế thành công ở lần ${attempt}!`,
+          );
+          const freshConfig = await this.getInternalPortalConfig();
+          return {
+            token: loginRes.token || freshConfig.token,
+            cookies: freshConfig.cookies || undefined,
+          };
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
+        );
+        if (attempt < maxRetries) {
+          this.logger.log(
+            `Chờ ${Math.round(retryDelayMs / 1000)}s trước khi thử lại đăng nhập...`,
+          );
+          await sleep(retryDelayMs);
+        }
+      }
+    }
+
+    this.logger.error(
+      `Tất cả ${maxRetries} lần tự động đăng nhập lại Cổng Thuế đều thất bại.`,
+    );
+    return null;
+  }
+
+  async getCaptcha(): Promise<{ content: string; key: string; text: string }> {
+    try {
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/captcha`;
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          Referer: 'https://hoadondientu.gdt.gov.vn/',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+          'sec-ch-ua':
+            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+        },
+      });
+
+      if (!res.ok) {
+        throw new BadRequestException(
+          `Không thể tải mã Captcha từ Cổng thuế (HTTP ${res.status})`,
+        );
+      }
+
+      const data = (await res.json()) as { content?: string; key?: string };
+      if (!data || !data.key) {
+        throw new BadRequestException('Phản hồi Captcha không hợp lệ');
+      }
+
+      const content = data.content || '';
+      const text = solveGdtSvgCaptcha(content);
+
+      return {
+        content,
+        key: data.key,
+        text,
+      };
+    } catch (err: any) {
+      this.logger.error('Lỗi khi lấy captcha từ GDT', err);
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err.message || 'Không thể kết nối đến máy chủ Cổng thuế để lấy Captcha',
+      );
+    }
+  }
+
+  async loginWithCaptcha(dto: {
+    username: string;
+    password?: string;
+    cvalue: string;
+    ckey: string;
+  }): Promise<{ success: boolean; token: string; message: string }> {
+    const { username, password, cvalue, ckey } = dto;
+    if (!username || !cvalue || !ckey) {
+      throw new BadRequestException(
+        'Tài khoản, mã Captcha và captcha key là bắt buộc',
+      );
+    }
+
+    try {
+      const url = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/authenticate`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+          Referer: 'https://hoadondientu.gdt.gov.vn/',
+          'End-Point': '/',
+          Action: '',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+          'sec-ch-ua':
+            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+        },
+        body: JSON.stringify({
+          username,
+          password: password || '',
+          cvalue,
+          ckey,
+        }),
+      });
+
+      if (!res.ok) {
+        let errMessage = 'Đăng nhập thất bại';
+        try {
+          const errData = await res.json();
+          errMessage =
+            errData?.message ||
+            errData?.error ||
+            errData?.description ||
+            `Đăng nhập thất bại (HTTP ${res.status})`;
+        } catch {
+          errMessage = `Đăng nhập thất bại (HTTP ${res.status})`;
+        }
+        throw new BadRequestException(errMessage);
+      }
+
+      // Extract token from response
+      const data = (await res.json()) as any;
+      const token =
+        data?.token ||
+        data?.appToken ||
+        data?.accessToken ||
+        data?.jwt ||
+        data?.data?.token ||
+        (typeof data === 'string' ? data : '');
+
+      if (!token) {
+        throw new BadRequestException(
+          'Không tìm thấy token trong phản hồi từ Cổng thuế',
+        );
+      }
+
+      // Extract cookies from response headers if present
+      let cookies: string | undefined = undefined;
+      const rawCookies = res.headers.get('set-cookie');
+      if (rawCookies) {
+        cookies = rawCookies
+          .split(',')
+          .map((c) => c.split(';')[0].trim())
+          .join('; ');
+      }
+
+      // Save token and credentials
+      await this.savePortalConfig(token, cookies, username, password);
+
+      return {
+        success: true,
+        token,
+        message: 'Đăng nhập Cổng Thuế thành công!',
+      };
+    } catch (err: any) {
+      this.logger.error('Lỗi khi đăng nhập GDT portal', err);
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(
+        err.message || 'Không thể kết nối đến máy chủ Cổng thuế',
+      );
+    }
   }
 
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
@@ -166,12 +412,43 @@ export class InvoicePortalService {
     let token = dto.token?.trim();
     let cookies = dto.cookies?.trim();
     if (!token) {
-      const config = await this.getPortalConfig();
+      const config = await this.getInternalPortalConfig();
       token = config.token;
       if (!cookies && config.cookies) cookies = config.cookies;
     }
-    if (!token) throw new BadRequestException('token is required');
-    await this.validatePortalTaxpayer(token, cookies);
+    if (!token) {
+      this.logger.log(
+        'Chưa có token Portal. Đang thử tự động đăng nhập Cổng Thuế...',
+      );
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        token = reAuth.token;
+        cookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('token is required');
+      }
+    }
+
+    try {
+      await this.validatePortalTaxpayer(token, cookies);
+    } catch (err: any) {
+      const errMsg = err?.message || err?.response?.message;
+      if (errMsg === 'GDT_TOKEN_EXPIRED') {
+        this.logger.warn(
+          'Token GDT hết hạn khi xác thực hồ sơ. Đang tự động đăng nhập lại...',
+        );
+        const reAuth = await this.autoReloginWithRetry();
+        if (!reAuth) {
+          throw new BadRequestException('GDT_TOKEN_EXPIRED');
+        }
+        token = reAuth.token;
+        cookies = reAuth.cookies;
+        await this.validatePortalTaxpayer(token, cookies);
+      } else {
+        throw err;
+      }
+    }
+
     if (!dto.dateFrom || !dto.dateTo)
       throw new BadRequestException('dateFrom and dateTo are required');
 
@@ -261,9 +538,27 @@ export class InvoicePortalService {
                 };
                 if (cookies) fetchHeaders['Cookie'] = cookies;
 
-                const response = await fetchWithRetry(url, {
+                let response = await fetchWithRetry(url, {
                   headers: fetchHeaders,
                 });
+                if (
+                  !response.ok &&
+                  (response.status === 401 || response.status === 403)
+                ) {
+                  this.logger.warn(
+                    `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
+                  );
+                  const reAuth = await this.autoReloginWithRetry();
+                  if (reAuth) {
+                    token = reAuth.token;
+                    cookies = reAuth.cookies;
+                    fetchHeaders.Authorization = `Bearer ${token}`;
+                    if (cookies) fetchHeaders['Cookie'] = cookies;
+                    response = await fetchWithRetry(url, {
+                      headers: fetchHeaders,
+                    });
+                  }
+                }
                 if (!response.ok)
                   throw new BadRequestException(
                     `Portal request failed with status ${response.status}`,
@@ -335,8 +630,22 @@ export class InvoicePortalService {
                 updated = true;
               }
               if (updated) await this.repository.save(existing);
-              if (!existing.xmlFileKey || !existing.description)
+
+              const isAdjustmentOrReplacement =
+                taxInvoiceStatus === 2 ||
+                taxInvoiceStatus === 3 ||
+                existing.taxInvoiceStatus === 2 ||
+                existing.taxInvoiceStatus === 3;
+              const isMissingRelated =
+                isAdjustmentOrReplacement && !existing.relatedInvoiceNo;
+
+              if (
+                !existing.xmlFileKey ||
+                !existing.description ||
+                isMissingRelated
+              ) {
                 backgroundSyncIds.push(existing.id);
+              }
               skipped++;
               continue;
             }
@@ -411,7 +720,7 @@ export class InvoicePortalService {
         });
 
         if (backgroundSyncIds.length > 0) {
-          this.downloadXmlsInBackground(backgroundSyncIds, token, cookies)
+          this.downloadXmlsInBackground(backgroundSyncIds, token!, cookies)
             .then(async () => {
               if (direction === 'IN') {
                 await this.vinfastPartsService.syncCatalog({
@@ -509,12 +818,19 @@ export class InvoicePortalService {
     let activeToken = token?.trim();
     let activeCookies = cookies?.trim();
     if (!activeToken) {
-      const cfg = await this.getPortalConfig();
+      const cfg = await this.getInternalPortalConfig();
       activeToken = cfg.token;
       if (!activeCookies) activeCookies = cfg.cookies;
     }
-    if (!activeToken) throw new BadRequestException('token is required');
-    if (!token) throw new BadRequestException('Token portal là bắt buộc.');
+    if (!activeToken) {
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        activeToken = reAuth.token;
+        activeCookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('Token portal là bắt buộc.');
+      }
+    }
 
     const invoices = await this.repository.find({
       where: [
@@ -523,6 +839,13 @@ export class InvoicePortalService {
           source: 'PORTAL',
           direction,
           description: IsNull(),
+          isDeleted: false,
+        },
+        {
+          source: 'PORTAL',
+          direction,
+          taxInvoiceStatus: In([2, 3]),
+          relatedInvoiceNo: IsNull(),
           isDeleted: false,
         },
       ],
@@ -597,12 +920,19 @@ export class InvoicePortalService {
     let activeToken = token?.trim();
     let activeCookies = cookies?.trim();
     if (!activeToken) {
-      const cfg = await this.getPortalConfig();
+      const cfg = await this.getInternalPortalConfig();
       activeToken = cfg.token;
       if (!activeCookies) activeCookies = cfg.cookies;
     }
-    if (!activeToken)
-      throw new BadRequestException('Token portal là bắt buộc.');
+    if (!activeToken) {
+      const reAuth = await this.autoReloginWithRetry();
+      if (reAuth) {
+        activeToken = reAuth.token;
+        activeCookies = reAuth.cookies;
+      } else {
+        throw new BadRequestException('Token portal là bắt buộc.');
+      }
+    }
 
     const invoiceResp = await this.lifecycleService.findOne(id);
     const invoice = invoiceResp.data as any;
@@ -622,6 +952,28 @@ export class InvoicePortalService {
       );
       // Extracted XML download logic instead of calling downloadAndSaveXml (which re-syncs JSON)
       await this.downloadXmlOnly(updatedInvoice, activeToken, activeCookies);
+    }
+
+    // Tra cứu và cập nhật HĐ gốc nếu hóa đơn là điều chỉnh (2) hoặc thay thế (3)
+    const latestStatus = updatedInvoice.taxInvoiceStatus;
+    if (latestStatus === 2 || latestStatus === 3) {
+      const relativeInfo = await this.fetchRelativeInvoice(
+        updatedInvoice,
+        activeToken,
+        activeCookies,
+      );
+      if (relativeInfo?.shdgoc) {
+        await this.repository.update(updatedInvoice.id, {
+          relatedInvoiceNo: relativeInfo.shdgoc,
+          relatedSerialNo: relativeInfo.khhdgoc ?? null,
+        });
+        await this.syncRelatedInvoiceStatus(
+          relativeInfo,
+          updatedInvoice,
+          activeToken,
+          activeCookies,
+        );
+      }
     }
 
     // Trigger Vinfast ledger sync in the background to update any new data
@@ -648,7 +1000,11 @@ export class InvoicePortalService {
     const processId = 'sync-progress';
     const invoices = await this.repository.findByIds(invoiceIds);
     const targets = invoices.filter(
-      (inv) => !inv.xmlFileKey || !inv.description,
+      (inv) =>
+        !inv.xmlFileKey ||
+        !inv.description ||
+        ((inv.taxInvoiceStatus === 2 || inv.taxInvoiceStatus === 3) &&
+          !inv.relatedInvoiceNo),
     );
 
     const total = targets.length;
@@ -723,6 +1079,182 @@ export class InvoicePortalService {
 
     await sleep(2000);
     await this.downloadXmlOnly(invoice, token, cookies);
+
+    // Xử lý hóa đơn điều chỉnh (tthai = 2) hoặc thay thế (tthai = 3)
+    const latestInvoice =
+      (await this.repository.findOne({
+        where: { id: invoice.id },
+      })) ?? invoice;
+
+    const status = latestInvoice.taxInvoiceStatus;
+    if (status === 2 || status === 3) {
+      const relativeInfo = await this.fetchRelativeInvoice(
+        latestInvoice,
+        token,
+        cookies,
+      );
+      if (relativeInfo?.shdgoc) {
+        await this.repository.update(latestInvoice.id, {
+          relatedInvoiceNo: relativeInfo.shdgoc,
+          relatedSerialNo: relativeInfo.khhdgoc ?? null,
+        });
+        await this.syncRelatedInvoiceStatus(
+          relativeInfo,
+          latestInvoice,
+          token,
+          cookies,
+        );
+      }
+    }
+  }
+
+  /**
+   * Fetch relative invoice information from GDT Portal (/relative API).
+   * Only triggers when invoice status indicates adjustment (2) or replacement (3).
+   * Supports both query and sco-query endpoints.
+   */
+  async fetchRelativeInvoice(
+    invoice: ErpInvoice,
+    token: string,
+    cookies?: string,
+  ): Promise<{
+    shdgoc: string;
+    khhdgoc: string | null;
+    khmshdgoc?: number | null;
+    lhdgoc?: number | null;
+    nbmst?: string | null;
+  } | null> {
+    const status = invoice.taxInvoiceStatus;
+    if (status !== 2 && status !== 3) {
+      return null;
+    }
+
+    try {
+      let endpoints: string[] = [];
+      if (invoice.taxInvoiceType === 'CASH_REGISTER') {
+        endpoints = ['sco-query'];
+      } else if (invoice.taxInvoiceType === 'STANDARD') {
+        endpoints = ['query'];
+      } else {
+        endpoints = ['query', 'sco-query'];
+      }
+
+      const fetchHeaders: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+      };
+      if (cookies) fetchHeaders['Cookie'] = cookies;
+
+      let res: Response | null = null;
+      for (let i = 0; i < endpoints.length; i++) {
+        const ep = endpoints[i];
+        const url = new URL(
+          `${InvoicePortalService.GDT_API_BASE_URL}/${ep}/invoices/relative`,
+        );
+        url.searchParams.set('nbmst', invoice.sellerTaxCode ?? '');
+        url.searchParams.set('khmshdon', '1');
+        url.searchParams.set('khhdon', invoice.serialNo ?? '');
+        url.searchParams.set('shdon', invoice.invoiceNo);
+
+        res = await fetchWithRetry(
+          url.toString(),
+          { headers: fetchHeaders },
+          i === endpoints.length - 1 ? 2 : 0,
+        );
+        if (res.ok) break;
+      }
+
+      if (!res || !res.ok) {
+        this.logger.warn(
+          `Failed to fetch relative invoice for ${invoice.invoiceNo}: HTTP ${res?.status ?? 'Unknown'}`,
+        );
+        return null;
+      }
+
+      const json = await res.json();
+      if (!json || json.shdgoc == null || String(json.shdgoc).trim() === '') {
+        return null;
+      }
+
+      return {
+        shdgoc: String(json.shdgoc).trim(),
+        khhdgoc: json.khhdgoc ? String(json.khhdgoc).trim() : null,
+        khmshdgoc: json.khmshdgoc != null ? Number(json.khmshdgoc) : null,
+        lhdgoc: json.lhdgoc != null ? Number(json.lhdgoc) : null,
+        nbmst: json.nbmst ? String(json.nbmst).trim() : invoice.sellerTaxCode,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `fetchRelativeInvoice error for ${invoice.invoiceNo}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Sync related original invoice status in DB and re-download its latest XML/ZIP.
+   * If original invoice is found:
+   * - If current invoice is replacement (tthai === 3) -> original taxInvoiceStatus = 5 (replaced)
+   * - If current invoice is adjustment (tthai === 2) -> original taxInvoiceStatus = 4 (adjusted)
+   * - Re-download latest XML/ZIP from GDT portal to R2 for the original invoice.
+   * If not found in DB: log warning and skip.
+   */
+  async syncRelatedInvoiceStatus(
+    relativeInfo: {
+      shdgoc: string;
+      khhdgoc?: string | null;
+      nbmst?: string | null;
+    },
+    currentInvoice: ErpInvoice,
+    token?: string,
+    cookies?: string,
+  ): Promise<void> {
+    try {
+      const whereClause: any = {
+        invoiceNo: String(relativeInfo.shdgoc),
+        direction: currentInvoice.direction,
+        isDeleted: false,
+      };
+
+      if (relativeInfo.khhdgoc) {
+        whereClause.serialNo = relativeInfo.khhdgoc;
+      }
+
+      // For IN invoices, match sellerTaxCode to avoid ambiguity across different vendors
+      if (currentInvoice.direction === 'IN' && relativeInfo.nbmst) {
+        whereClause.sellerTaxCode = relativeInfo.nbmst;
+      }
+
+      const original = await this.repository.findOne({ where: whereClause });
+      if (original) {
+        // tthai = 3 (current is replacement) -> original becomes 5 (replaced)
+        // tthai = 2 (current is adjustment) -> original becomes 4 (adjusted)
+        const newStatus = currentInvoice.taxInvoiceStatus === 3 ? 5 : 4;
+        await this.repository.update(original.id, {
+          taxInvoiceStatus: newStatus,
+        });
+        this.logger.log(
+          `Updated related original invoice ${original.invoiceNo} (serial: ${original.serialNo}) status from ${original.taxInvoiceStatus} -> ${newStatus}`,
+        );
+
+        // Tải lại file XML/ZIP mới nhất của HĐ gốc lên R2
+        if (token) {
+          original.taxInvoiceStatus = newStatus;
+          await this.downloadXmlOnly(original, token, cookies).catch((err) =>
+            this.logger.warn(
+              `Không thể tải lại XML cho HĐ gốc ${original.invoiceNo}: ${(err as Error).message}`,
+            ),
+          );
+        }
+      } else {
+        this.logger.warn(
+          `Related original invoice shdgoc=${relativeInfo.shdgoc} khhdgoc=${relativeInfo.khhdgoc ?? 'N/A'} not found in DB (direction: ${currentInvoice.direction}), skipping status update.`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `syncRelatedInvoiceStatus error for shdgoc ${relativeInfo.shdgoc}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async downloadXmlOnly(

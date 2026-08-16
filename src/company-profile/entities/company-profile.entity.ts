@@ -52,6 +52,19 @@ export class CompanyProfile {
   })
   gdt_portal_cookies: string | null;
 
+  @Column({
+    name: 'gdt_portal_username',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  @ApiProperty({ description: 'Username đồng bộ Portal GDT', required: false })
+  gdt_portal_username: string | null;
+
+  @Column({ name: 'gdt_portal_password', type: 'text', nullable: true })
+  @ApiProperty({ description: 'Password đồng bộ Portal GDT', required: false })
+  gdt_portal_password: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   @ApiProperty({ description: 'Thời gian tạo' })
   created_at: Date;
