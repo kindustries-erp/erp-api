@@ -2,8 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as ExcelJS from 'exceljs';
+import { format } from 'date-fns';
+import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
+import { CompanyProfileService } from '../company-profile/company-profile.service';
 import {
   DataSource,
   DeepPartial,
@@ -35,6 +40,7 @@ export class PurchaseOrdersCoreService {
     @InjectRepository(ErpPurchaseOrderLine)
     private readonly lineRepository: Repository<ErpPurchaseOrderLine>,
     private readonly dependencyService: DocumentDependenciesCoreService,
+    private readonly companyProfileService: CompanyProfileService,
   ) {}
 
   private async generateMonthlyPoNo(manager: any, orderDate?: string) {
@@ -796,4 +802,826 @@ export class PurchaseOrdersCoreService {
 
     return { message: 'Hủy liên kết thành công' };
   }
+
+  async exportPoExcel(id: string): Promise<Buffer> {
+    const po = await this.repository.findOne({
+      where: { id, isDeleted: false },
+      relations: ['supplier'],
+    });
+    if (!po) {
+      throw new NotFoundException('Không tìm thấy đơn mua hàng');
+    }
+
+    const companyProfile = await this.companyProfileService.getProfile();
+
+    const lines = await this.lineRepository.find({
+      where: { purchaseOrderId: id },
+      order: { lineNo: 'ASC' },
+    });
+
+    const itemIds = lines
+      .map((l) => l.itemId)
+      .filter((itemId): itemId is string => Boolean(itemId));
+    const itemUomMap = new Map<string, string>();
+    const itemSkuMap = new Map<string, string>();
+    if (itemIds.length > 0) {
+      const items = await this.dataSource.getRepository(ErpInventoryItem).find({
+        where: { id: In(itemIds) },
+        relations: ['uom'],
+      });
+      for (const it of items) {
+        if (it.uom) {
+          itemUomMap.set(it.id, it.uom.name || it.uom.code);
+        }
+        if (it.sku) {
+          itemSkuMap.set(it.id, it.sku);
+        }
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const defaultFont = { name: 'Times New Roman', size: 11 };
+
+    let orderDate = new Date();
+    if (po.orderDate) {
+      const parsed = new Date(po.orderDate);
+      if (!isNaN(parsed.getTime())) orderDate = parsed;
+    }
+
+    const isDraft = po.status === 'DRAFT';
+
+    if (!isDraft) {
+      const sheet = workbook.addWorksheet('BangKeMuaHang', {
+        pageSetup: { paperSize: 9, orientation: 'portrait' },
+      });
+
+      sheet.columns = [
+        { key: 'stt', width: 6 },
+        { key: 'name', width: 42 },
+        { key: 'address', width: 38 },
+        { key: 'uom', width: 12 },
+        { key: 'qty', width: 12 },
+        { key: 'price', width: 16 },
+        { key: 'amount', width: 18 },
+      ];
+
+      if (companyProfile?.logo) {
+        try {
+          let base64Data = companyProfile.logo;
+          let extension: 'png' | 'jpeg' = 'png';
+          if (base64Data.startsWith('data:image/')) {
+            const parts = base64Data.split(';base64,');
+            const match = parts[0].match(/data:image\/(\w+)/);
+            if (match && (match[1] === 'jpeg' || match[1] === 'jpg')) {
+              extension = 'jpeg';
+            }
+            base64Data = parts[1];
+          }
+          if (base64Data && base64Data.length > 20) {
+            const imageId = workbook.addImage({
+              base64: base64Data,
+              extension,
+            });
+            sheet.addImage(imageId, {
+              tl: { col: 0.1, row: 0.1 },
+              ext: { width: 100, height: 40 },
+            });
+          }
+        } catch {
+          // ignore logo errors
+        }
+      }
+
+      // Header top
+      const r1 = sheet.addRow([
+        `Đơn vị: ${companyProfile?.company_name || '....................................'}`,
+        '',
+        '',
+        '',
+        'Mẫu số 06 - VT',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${r1.number}:D${r1.number}`);
+      sheet.mergeCells(`E${r1.number}:G${r1.number}`);
+      r1.getCell('A').font = { ...defaultFont, bold: true };
+      r1.getCell('A').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+        wrapText: true,
+      };
+      r1.getCell('E').font = { ...defaultFont, bold: true };
+      r1.getCell('E').alignment = { horizontal: 'center', vertical: 'middle' };
+      r1.height = 30;
+
+      const r2 = sheet.addRow([
+        `Địa chỉ: ${companyProfile?.address || '....................................'}`,
+        '',
+        '',
+        '',
+        '(Ban hành theo Thông tư số 133/2016/TT-BTC',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${r2.number}:D${r2.number}`);
+      sheet.mergeCells(`E${r2.number}:G${r2.number}`);
+      r2.getCell('A').font = defaultFont;
+      r2.getCell('A').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+        wrapText: true,
+      };
+      r2.getCell('E').font = { ...defaultFont, italic: true, size: 9 };
+      r2.getCell('E').alignment = { horizontal: 'center', vertical: 'middle' };
+      r2.height = 30;
+
+      const r3 = sheet.addRow([
+        'Bộ phận: ....................................',
+        '',
+        '',
+        '',
+        'ngày 26/8/2016 của Bộ Tài chính)',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${r3.number}:D${r3.number}`);
+      sheet.mergeCells(`E${r3.number}:G${r3.number}`);
+      r3.getCell('A').font = defaultFont;
+      r3.getCell('A').alignment = { horizontal: 'left', vertical: 'middle' };
+      r3.getCell('E').font = { ...defaultFont, italic: true, size: 9 };
+      r3.getCell('E').alignment = { horizontal: 'center', vertical: 'middle' };
+      r3.height = 24;
+
+      const sp1 = sheet.addRow([]);
+      sp1.height = 14;
+
+      const titleRow = sheet.addRow([
+        'BẢNG KÊ MUA HÀNG',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${titleRow.number}:G${titleRow.number}`);
+      titleRow.getCell('A').font = { ...defaultFont, bold: true, size: 16 };
+      titleRow.getCell('A').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      titleRow.height = 36;
+
+      const dateRow = sheet.addRow([
+        `Ngày ${format(orderDate, 'dd')} tháng ${format(orderDate, 'MM')} năm ${format(orderDate, 'yyyy')}`,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${dateRow.number}:G${dateRow.number}`);
+      dateRow.getCell('A').font = { ...defaultFont, italic: true, size: 11 };
+      dateRow.getCell('A').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      dateRow.height = 24;
+
+      const metaRow1 = sheet.addRow([
+        '',
+        '',
+        '',
+        '',
+        'Quyển số: .................',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`E${metaRow1.number}:G${metaRow1.number}`);
+      metaRow1.getCell('E').font = defaultFont;
+      metaRow1.height = 24;
+
+      const metaRow2 = sheet.addRow([
+        '',
+        '',
+        '',
+        '',
+        `Số: ${po.poNo || ''}`,
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`E${metaRow2.number}:G${metaRow2.number}`);
+      metaRow2.getCell('E').font = { ...defaultFont, bold: true };
+      metaRow2.height = 26;
+
+      const metaRow3 = sheet.addRow([
+        '',
+        '',
+        '',
+        '',
+        'Nợ: ....................',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`E${metaRow3.number}:G${metaRow3.number}`);
+      metaRow3.getCell('E').font = defaultFont;
+      metaRow3.height = 24;
+
+      const metaRow4 = sheet.addRow([
+        `- Họ và tên người mua: ${po.createdBy || '...................................................'}`,
+        '',
+        '',
+        '',
+        'Có: ....................',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${metaRow4.number}:D${metaRow4.number}`);
+      sheet.mergeCells(`E${metaRow4.number}:G${metaRow4.number}`);
+      metaRow4.getCell('A').font = defaultFont;
+      metaRow4.getCell('E').font = defaultFont;
+      metaRow4.height = 28;
+
+      const metaRow5 = sheet.addRow([
+        '- Bộ phận (phòng, ban): ...................................................',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${metaRow5.number}:G${metaRow5.number}`);
+      metaRow5.getCell('A').font = defaultFont;
+      metaRow5.height = 26;
+
+      const sp2 = sheet.addRow([]);
+      sp2.height = 14;
+
+      const th1 = sheet.addRow([
+        'STT',
+        'Tên, quy cách, phẩm chất hàng hóa\n(vật tư, công cụ...)',
+        'Địa chỉ\nmua hàng',
+        'Đơn vị\ntính',
+        'Số\nlượng',
+        'Đơn\ngiá',
+        'Thành\ntiền',
+      ]);
+      th1.height = 56;
+
+      const th2 = sheet.addRow(['A', 'B', 'C', 'D', '1', '2', '3']);
+      th2.height = 24;
+
+      [th1, th2].forEach((row) => {
+        row.eachCell((cell) => {
+          cell.font = { ...defaultFont, bold: row === th1 };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            wrapText: true,
+          };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+      });
+
+      let totalQty = 0;
+      let totalAmount = 0;
+      lines.forEach((line, index) => {
+        const qty = Number(line.qtyOrdered) || 0;
+        const price = Number(line.unitPrice) || 0;
+        const lineAmount = Number(line.amount) || qty * price;
+        totalQty += qty;
+        totalAmount += lineAmount;
+
+        const uom = (line.itemId && itemUomMap.get(line.itemId)) || '';
+        const sku =
+          line.itemCode || (line.itemId && itemSkuMap.get(line.itemId)) || '';
+        const rawName = line.itemName || line.description || '';
+        const displayName = sku ? `${rawName} - ${sku}` : rawName;
+        const supplierName = po.supplier?.name || '';
+
+        const dataRow = sheet.addRow([
+          index + 1,
+          displayName,
+          supplierName,
+          uom,
+          qty,
+          price,
+          lineAmount,
+        ]);
+
+        // Dynamically compute row height based on content wrapping
+        const nameLines = Math.ceil(displayName.length / 36);
+        const suppLines = Math.ceil(supplierName.length / 32);
+        const maxLines = Math.max(nameLines, suppLines, 1);
+        dataRow.height = Math.max(36, maxLines * 26);
+
+        dataRow.eachCell((cell, colNum) => {
+          cell.font = defaultFont;
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (colNum === 1 || colNum === 4) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colNum === 5) {
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            cell.numFmt = '#,##0.00';
+          } else if (colNum >= 6) {
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            cell.numFmt = '#,##0';
+          } else {
+            cell.alignment = {
+              vertical: 'middle',
+              horizontal: 'left',
+              wrapText: true,
+            };
+          }
+        });
+      });
+
+      const summaryRow = sheet.addRow([
+        'Cộng',
+        '',
+        '',
+        '',
+        totalQty,
+        'x',
+        totalAmount,
+      ]);
+      summaryRow.height = 28;
+      sheet.mergeCells(`A${summaryRow.number}:D${summaryRow.number}`);
+      summaryRow.eachCell((cell, colNum) => {
+        cell.font = { ...defaultFont, bold: true };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        if (colNum === 1 || colNum === 6) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (colNum === 5) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0.00';
+        } else if (colNum === 7) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0';
+        }
+      });
+
+      const sp3 = sheet.addRow([]);
+      sp3.height = 14;
+
+      const amountTextRow = sheet.addRow([
+        `- Tổng số tiền (Viết bằng chữ): ${readVietnameseCurrency(totalAmount)}`,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      amountTextRow.height = 28;
+      sheet.mergeCells(`A${amountTextRow.number}:G${amountTextRow.number}`);
+      amountTextRow.getCell('A').font = { ...defaultFont, italic: true };
+
+      const noteRow = sheet.addRow([
+        `* Ghi chú: ${po.remarks || '..................................................................'}`,
+      ]);
+      noteRow.height = 28;
+      sheet.mergeCells(`A${noteRow.number}:G${noteRow.number}`);
+      noteRow.getCell('A').font = { ...defaultFont, italic: true };
+
+      const sp4 = sheet.addRow([]);
+      sp4.height = 16;
+
+      const signRow1 = sheet.addRow([
+        'Người mua',
+        '',
+        'Kế toán trưởng',
+        '',
+        'Người duyệt mua',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${signRow1.number}:B${signRow1.number}`);
+      sheet.mergeCells(`C${signRow1.number}:D${signRow1.number}`);
+      sheet.mergeCells(`E${signRow1.number}:G${signRow1.number}`);
+      signRow1.eachCell((cell) => {
+        cell.font = { ...defaultFont, bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      signRow1.height = 28;
+
+      const signRow2 = sheet.addRow([
+        '(Ký, họ tên)',
+        '',
+        '(Ký, họ tên)',
+        '',
+        '(Ký, họ tên)',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${signRow2.number}:B${signRow2.number}`);
+      sheet.mergeCells(`C${signRow2.number}:D${signRow2.number}`);
+      sheet.mergeCells(`E${signRow2.number}:G${signRow2.number}`);
+      signRow2.eachCell((cell) => {
+        cell.font = { ...defaultFont, italic: true, size: 10 };
+        cell.alignment = { vertical: 'top', horizontal: 'center' };
+      });
+      sheet.getRow(signRow2.number).height = 65;
+    } else {
+      const sheet = workbook.addWorksheet('PhieuDeXuatMuaHang', {
+        pageSetup: { paperSize: 9, orientation: 'portrait' },
+      });
+
+      sheet.columns = [
+        { key: 'stt', width: 6 },
+        { key: 'name', width: 48 },
+        { key: 'qty', width: 14 },
+        { key: 'price', width: 18 },
+        { key: 'amount', width: 20 },
+      ];
+
+      if (companyProfile?.logo) {
+        try {
+          let base64Data = companyProfile.logo;
+          let extension: 'png' | 'jpeg' = 'png';
+          if (base64Data.startsWith('data:image/')) {
+            const parts = base64Data.split(';base64,');
+            const match = parts[0].match(/data:image\/(\w+)/);
+            if (match && (match[1] === 'jpeg' || match[1] === 'jpg')) {
+              extension = 'jpeg';
+            }
+            base64Data = parts[1];
+          }
+          if (base64Data && base64Data.length > 20) {
+            const imageId = workbook.addImage({
+              base64: base64Data,
+              extension,
+            });
+            sheet.addImage(imageId, {
+              tl: { col: 0.1, row: 0.1 },
+              ext: { width: 100, height: 40 },
+            });
+          }
+        } catch {
+          // ignore logo errors
+        }
+      }
+
+      const r1 = sheet.addRow([
+        `Đơn vị: ${companyProfile?.company_name || '....................................'}`,
+        '',
+        'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${r1.number}:B${r1.number}`);
+      sheet.mergeCells(`C${r1.number}:E${r1.number}`);
+      r1.getCell('A').font = { ...defaultFont, bold: true };
+      r1.getCell('A').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+        wrapText: true,
+      };
+      r1.getCell('C').font = { ...defaultFont, bold: true, size: 12 };
+      r1.getCell('C').alignment = { horizontal: 'center', vertical: 'middle' };
+      r1.height = 28;
+
+      const r2 = sheet.addRow([
+        `Địa chỉ: ${companyProfile?.address || '....................................'}`,
+        '',
+        'Độc lập – Tự do – Hạnh phúc',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${r2.number}:B${r2.number}`);
+      sheet.mergeCells(`C${r2.number}:E${r2.number}`);
+      r2.getCell('A').font = defaultFont;
+      r2.getCell('A').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+        wrapText: true,
+      };
+      r2.getCell('C').font = { ...defaultFont, bold: true, size: 11 };
+      r2.getCell('C').alignment = { horizontal: 'center', vertical: 'middle' };
+      r2.height = 28;
+
+      const r3 = sheet.addRow(['', '', '-----------------', '', '']);
+      sheet.mergeCells(`C${r3.number}:E${r3.number}`);
+      r3.getCell('C').font = defaultFont;
+      r3.getCell('C').alignment = { horizontal: 'center', vertical: 'middle' };
+      r3.height = 18;
+
+      const r4 = sheet.addRow([
+        '',
+        '',
+        `........., ngày ${format(orderDate, 'dd')} tháng ${format(orderDate, 'MM')} năm ${format(orderDate, 'yyyy')}`,
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`C${r4.number}:E${r4.number}`);
+      r4.getCell('C').font = { ...defaultFont, italic: true };
+      r4.getCell('C').alignment = { horizontal: 'center', vertical: 'middle' };
+      r4.height = 24;
+
+      const sp1 = sheet.addRow([]);
+      sp1.height = 14;
+
+      const titleRow = sheet.addRow(['PHIẾU ĐỀ XUẤT MUA HÀNG', '', '', '', '']);
+      sheet.mergeCells(`A${titleRow.number}:E${titleRow.number}`);
+      titleRow.getCell('A').font = { ...defaultFont, bold: true, size: 16 };
+      titleRow.getCell('A').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      titleRow.height = 36;
+
+      const sp2 = sheet.addRow([]);
+      sp2.height = 14;
+
+      const m1 = sheet.addRow(['Kính gửi: Ban Giám Đốc', '', '', '', '']);
+      sheet.mergeCells(`A${m1.number}:E${m1.number}`);
+      m1.getCell('A').font = defaultFont;
+      m1.height = 24;
+
+      const m2 = sheet.addRow([
+        'Họ và tên người xuất: .................................................................................................',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${m2.number}:E${m2.number}`);
+      m2.getCell('A').font = defaultFont;
+      m2.height = 24;
+
+      const m3 = sheet.addRow([
+        'Chức danh: ...................................................',
+        '',
+        'Bộ phận: ...................................................',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${m3.number}:B${m3.number}`);
+      sheet.mergeCells(`C${m3.number}:E${m3.number}`);
+      m3.getCell('A').font = defaultFont;
+      m3.getCell('C').font = defaultFont;
+      m3.height = 24;
+
+      const m4 = sheet.addRow([
+        `Nội dung đề xuất: ${po.remarks || 'Mua sắm vật tư theo đơn hàng ' + po.poNo}`,
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${m4.number}:E${m4.number}`);
+      m4.getCell('A').font = defaultFont;
+      m4.height = 28;
+
+      const expectedDateStr = po.expectedDate
+        ? format(new Date(po.expectedDate), 'dd/MM/yyyy')
+        : '...................................................';
+      const m5 = sheet.addRow([
+        `Thời gian cần thực hiện: ${expectedDateStr}`,
+        '',
+        '',
+        '',
+        '',
+      ]);
+      sheet.mergeCells(`A${m5.number}:E${m5.number}`);
+      m5.getCell('A').font = defaultFont;
+      m5.height = 24;
+
+      const sp3 = sheet.addRow([]);
+      sp3.height = 14;
+
+      const th = sheet.addRow([
+        'STT',
+        'TÊN HÀNG HOÁ / MÃ LINH KIỆN',
+        'SỐ LƯỢNG',
+        'GIÁ ĐƠN',
+        'THÀNH TIỀN',
+      ]);
+      th.height = 36;
+      th.eachCell((cell) => {
+        cell.font = { ...defaultFont, bold: true };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+
+      let totalQty = 0;
+      let totalAmount = 0;
+      lines.forEach((line, index) => {
+        const qty = Number(line.qtyOrdered) || 0;
+        const price = Number(line.unitPrice) || 0;
+        const lineAmount = Number(line.amount) || qty * price;
+        totalQty += qty;
+        totalAmount += lineAmount;
+
+        const sku =
+          line.itemCode || (line.itemId && itemSkuMap.get(line.itemId)) || '';
+        const rawName = line.itemName || line.description || '';
+        const displayName = sku ? `${rawName} - ${sku}` : rawName;
+
+        const dataRow = sheet.addRow([
+          index + 1,
+          displayName,
+          qty,
+          price,
+          lineAmount,
+        ]);
+
+        const nameLines = Math.ceil(displayName.length / 40);
+        dataRow.height = Math.max(34, nameLines * 26);
+
+        dataRow.eachCell((cell, colNum) => {
+          cell.font = defaultFont;
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (colNum === 1) {
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colNum === 3) {
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            cell.numFmt = '#,##0.00';
+          } else if (colNum >= 4) {
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            cell.numFmt = '#,##0';
+          } else {
+            cell.alignment = {
+              vertical: 'middle',
+              horizontal: 'left',
+              wrapText: true,
+            };
+          }
+        });
+      });
+
+      const summaryRow = sheet.addRow([
+        'Tổng cộng',
+        '',
+        totalQty,
+        '',
+        totalAmount,
+      ]);
+      summaryRow.height = 28;
+      sheet.mergeCells(`A${summaryRow.number}:B${summaryRow.number}`);
+      summaryRow.eachCell((cell, colNum) => {
+        cell.font = { ...defaultFont, bold: true };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        if (colNum === 1) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (colNum === 3) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0.00';
+        } else if (colNum === 5) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0';
+        }
+      });
+
+      const sp4 = sheet.addRow([]);
+      sp4.height = 14;
+
+      const amountTextRow = sheet.addRow([
+        `- Tổng số tiền (Viết bằng chữ): ${readVietnameseCurrency(totalAmount)}`,
+        '',
+        '',
+        '',
+        '',
+      ]);
+      amountTextRow.height = 28;
+      sheet.mergeCells(`A${amountTextRow.number}:E${amountTextRow.number}`);
+      amountTextRow.getCell('A').font = { ...defaultFont, italic: true };
+
+      const sp5 = sheet.addRow([]);
+      sp5.height = 16;
+
+      const signRow1 = sheet.addRow([
+        'PHÊ DUYỆT GIÁM ĐỐC',
+        '',
+        'KẾ TOÁN TRƯỞNG',
+        'NGƯỜI ĐỀ NGHỊ',
+        '',
+      ]);
+      sheet.mergeCells(`A${signRow1.number}:B${signRow1.number}`);
+      sheet.mergeCells(`D${signRow1.number}:E${signRow1.number}`);
+      signRow1.eachCell((cell) => {
+        cell.font = { ...defaultFont, bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      signRow1.height = 28;
+
+      const signRow2 = sheet.addRow([
+        '(Ký và ghi rõ họ tên)',
+        '',
+        '(Ký và ghi rõ họ tên)',
+        '(Ký và ghi rõ họ tên)',
+        '',
+      ]);
+      sheet.mergeCells(`A${signRow2.number}:B${signRow2.number}`);
+      sheet.mergeCells(`D${signRow2.number}:E${signRow2.number}`);
+      signRow2.eachCell((cell) => {
+        cell.font = { ...defaultFont, italic: true, size: 10 };
+        cell.alignment = { vertical: 'top', horizontal: 'center' };
+      });
+      sheet.getRow(signRow2.number).height = 65;
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+}
+
+function readVietnameseCurrency(num: number): string {
+  if (!num || num === 0) return 'Không đồng';
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ'];
+  const digits = [
+    'không',
+    'một',
+    'hai',
+    'ba',
+    'bốn',
+    'năm',
+    'sáu',
+    'bảy',
+    'tám',
+    'chín',
+  ];
+
+  function readThreeDigits(n: number, isFirst: boolean): string {
+    const h = Math.floor(n / 100);
+    const t = Math.floor((n % 100) / 10);
+    const u = n % 10;
+    let res = '';
+    if (h > 0 || !isFirst) {
+      res += digits[h] + ' trăm ';
+    }
+    if (t > 1) {
+      res += digits[t] + ' mươi ';
+      if (u === 1) res += 'mốt';
+      else if (u === 5) res += 'lăm';
+      else if (u > 0) res += digits[u];
+    } else if (t === 1) {
+      res += 'mười ';
+      if (u === 5) res += 'lăm';
+      else if (u > 0) res += digits[u];
+    } else {
+      if ((h > 0 || !isFirst) && u > 0) res += 'lẻ ';
+      if (u > 0) res += digits[u];
+    }
+    return res.trim();
+  }
+
+  let strNum = Math.round(Math.abs(num)).toString();
+  const groups: number[] = [];
+  while (strNum.length > 0) {
+    groups.unshift(parseInt(strNum.slice(-3), 10));
+    strNum = strNum.slice(0, -3);
+  }
+
+  const words: string[] = [];
+  for (let i = 0; i < groups.length; i++) {
+    const grp = groups[i];
+    if (grp > 0) {
+      const isFirst = i === 0;
+      const grpWords = readThreeDigits(grp, isFirst);
+      const unit = units[groups.length - 1 - i];
+      words.push(grpWords + (unit ? ' ' + unit : ''));
+    }
+  }
+
+  const result = words.join(' ').replace(/\s+/g, ' ').trim();
+  return result
+    ? result.charAt(0).toUpperCase() + result.slice(1) + ' đồng'
+    : 'Không đồng';
 }
