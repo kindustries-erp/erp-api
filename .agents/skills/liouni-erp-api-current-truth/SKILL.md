@@ -54,7 +54,7 @@ Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, 
   - **Sản xuất & BOM**: `production-core`, `bom-core`
   - **Mua hàng & Nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
   - **Kho & Tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`
-  - **Tài chính & Dòng tiền**: `bank-statement`, `cashflow-dashboard`
+  - **Tài chính, Dòng tiền & Hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`
   - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
 - Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
 
