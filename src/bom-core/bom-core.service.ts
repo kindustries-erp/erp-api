@@ -70,6 +70,7 @@ export class BomCoreService {
       const data = await headerRepo.save(
         headerRepo.create({
           status: header.status ?? 'ACTIVE',
+          version: header.version?.trim() || '1.0',
           ...header,
         } as DeepPartial<ErpBom>),
       );
