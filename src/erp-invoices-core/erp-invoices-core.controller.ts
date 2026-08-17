@@ -276,7 +276,7 @@ export class ErpInvoicesCoreController {
   }
 
   @Post(':id/sync-detail')
-  syncDetail(@Param('id') id: string, @Body('token') token: string) {
+  syncDetail(@Param('id') id: string, @Body('token') token?: string) {
     return this.service.syncDetailFromPortal(id, token);
   }
 
@@ -360,7 +360,7 @@ export class ErpInvoicesCoreController {
   @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
-    @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
+    @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
   ) {
     return this.service.bulkDownloadXml(
       body.token,
