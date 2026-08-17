@@ -229,6 +229,26 @@ export class BankTransactionsCoreService {
     return this.balanceStatementLifecycleService.createStatementFile(dto);
   }
 
+  async linkInvoiceToTransaction(
+    txnId: string,
+    payload: { invoiceId: string; netOffAmount?: number },
+  ) {
+    return this.transactionAccountingService.linkInvoiceToTransaction(
+      txnId,
+      payload,
+    );
+  }
+
+  async removeInvoiceFromTransaction(
+    txnId: string,
+    invoiceIdOrNetOffId: string,
+  ) {
+    return this.transactionAccountingService.removeInvoiceFromTransaction(
+      txnId,
+      invoiceIdOrNetOffId,
+    );
+  }
+
   async deleteStatementFile(id: string) {
     return this.balanceStatementLifecycleService.deleteStatementFile(id);
   }

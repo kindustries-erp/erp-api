@@ -204,6 +204,21 @@ export class BankTransactionsCoreController {
     return this.service.unpostTransaction(id);
   }
 
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @Post('transactions/:id/net-off-invoices')
+  linkInvoice(
+    @Param('id') id: string,
+    @Body() body: { invoiceId: string; netOffAmount?: number },
+  ) {
+    return this.service.linkInvoiceToTransaction(id, body);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @Delete('transactions/:id/net-off-invoices/:netOffId')
+  removeInvoice(@Param('id') id: string, @Param('netOffId') netOffId: string) {
+    return this.service.removeInvoiceFromTransaction(id, netOffId);
+  }
+
   @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('transactions/import')
   @UseInterceptors(FilesInterceptor('files', 5))
