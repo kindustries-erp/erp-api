@@ -12,6 +12,7 @@ import {
   UploadedFile,
   UploadedFiles,
   BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import {
   CreateBankAccountDto,
   UpdateBankAccountDto,
@@ -46,7 +48,19 @@ import { PostBankTransactionDto } from './dto/post-bank-transaction.dto';
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('bank-transactions-core')
 export class BankTransactionsCoreController {
-  constructor(private readonly service: BankTransactionsCoreService) {}
+  constructor(
+    private readonly service: BankTransactionsCoreService,
+    private readonly traceabilityService: DocumentTraceabilityService,
+  ) {}
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('transactions/:id/traceability-graph')
+  getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
+    return this.traceabilityService.getBankTransactionTraceabilityGraph(
+      id,
+      req.user,
+    );
+  }
 
   // --- Bank Accounts ---
   @RequirePermissions({ resource: 'bank_accounts', action: 'read' })

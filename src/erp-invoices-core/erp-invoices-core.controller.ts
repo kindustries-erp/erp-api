@@ -32,6 +32,7 @@ import { PortalFetchDto } from './dto/portal-invoice.dto';
 import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -41,7 +42,14 @@ export class ErpInvoicesCoreController {
   constructor(
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get(':id/traceability-graph')
+  getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
+    return this.traceabilityService.getInvoiceTraceabilityGraph(id, req.user);
+  }
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản

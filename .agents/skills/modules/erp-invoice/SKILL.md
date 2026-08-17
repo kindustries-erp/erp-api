@@ -182,6 +182,8 @@ src/erp-invoices-core/
 | `PATCH` | `/erp-invoices/bulk-set-branch` | `invoices` | `update` | Gán chi nhánh hàng loạt cho danh sách hóa đơn (tự đồng bộ bút toán sổ cái) |
 | `PATCH` | `/erp-invoices/bulk-set-notes` | `invoices` | `update` | Cập nhật ghi chú hàng loạt cho danh sách hóa đơn |
 | `PATCH` | `/erp-invoices/:id/validate` | `invoices` | `update` | Đánh dấu xác thực hóa đơn hợp lệ/không hợp lệ |
+| `GET` | `/erp-invoices/:id/traceability-graph` | `invoices` | `read` | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng (PO/SO, Phiếu kho, Sao kê, Bút toán GL, Vụ việc Garage) kèm Zero-Trust RBAC mask |
+
 
 ### 4.2. Nhóm API Hạch toán Kế toán (`/api/v1/erp-invoices/:id`)
 
