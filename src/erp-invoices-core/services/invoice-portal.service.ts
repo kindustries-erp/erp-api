@@ -925,12 +925,22 @@ export class InvoicePortalService {
       if (!activeCookies) activeCookies = cfg.cookies;
     }
     if (!activeToken) {
+      const cfg = await this.getInternalPortalConfig();
+      if (!cfg.username || !cfg.password) {
+        this.logger.warn(
+          `Chưa cấu hình Token hoặc Tài khoản Cổng Thuế, bỏ qua đồng bộ chi tiết cho hóa đơn ${id}`,
+        );
+        return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
+      }
       const reAuth = await this.autoReloginWithRetry();
       if (reAuth) {
         activeToken = reAuth.token;
         activeCookies = reAuth.cookies;
       } else {
-        throw new BadRequestException('Token portal là bắt buộc.');
+        this.logger.warn(
+          `Tự động đăng nhập Cổng Thuế không thành công, bỏ qua đồng bộ chi tiết cho hóa đơn ${id}`,
+        );
+        return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
       }
     }
 
