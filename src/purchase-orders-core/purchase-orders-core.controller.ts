@@ -8,7 +8,9 @@ import {
   Delete,
   Query,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
@@ -71,6 +73,24 @@ export class PurchaseOrdersCoreController {
   @Get(':id/connections')
   getConnections(@Param('id') id: string) {
     return this.service.getConnections(id);
+  }
+
+  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @Get(':id/export/excel')
+  async exportExcel(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.service.exportPoExcel(id);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=purchase-order-${id}_${timestamp}.xlsx`,
+    );
+    res.send(buffer);
   }
 
   @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
