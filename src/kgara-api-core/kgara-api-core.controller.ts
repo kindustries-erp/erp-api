@@ -36,8 +36,11 @@ import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
-import { AuthGuard } from '@nestjs/passport';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
 export class KgaraApiCoreController {
   private readonly logger = new Logger(KgaraApiCoreController.name);
@@ -64,11 +67,13 @@ export class KgaraApiCoreController {
   ) {}
 
   @Get('branches')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getBranches() {
     return this.branchRepo.find({ order: { name: 'ASC' } });
   }
 
   @Get('cases')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCases(
     @BranchId() branchId: string,
     @Query('page') page: string = '1',
@@ -79,7 +84,14 @@ export class KgaraApiCoreController {
     @Query('filtersStr') filtersStr?: string,
     @Query('includeDeleted') includeDeleted?: string,
   ) {
-    const query = this.caseRepo.createQueryBuilder('case');
+    const query = this.caseRepo
+      .createQueryBuilder('case')
+      .leftJoinAndMapOne(
+        'case.grossProfit',
+        KgaraGrossProfit,
+        'gp',
+        'gp.hdPhieuDichVuId = case.hdPhieuDichVuId OR gp.vuViecCode = case.soChungTu',
+      );
 
     if (branchId) {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
@@ -118,8 +130,26 @@ export class KgaraApiCoreController {
 
     const [data, total] = await query.getManyAndCount();
 
+    const enrichedData = data.map((item) => {
+      const gp = (item as any).grossProfit;
+      const doanhThu = item.doanhThu ?? (gp ? Number(gp.doanhThu) : null);
+      const chiPhi = item.chiPhi ?? (gp ? Number(gp.chiPhi) : null);
+      const loiNhuan = item.loiNhuan ?? (gp ? Number(gp.loiNhuan) : null);
+      const margin =
+        doanhThu && Number(doanhThu) > 0 && loiNhuan != null
+          ? (Number(loiNhuan) / Number(doanhThu)) * 100
+          : null;
+      return {
+        ...item,
+        doanhThu,
+        chiPhi,
+        loiNhuan,
+        margin,
+      };
+    });
+
     return {
-      data,
+      data: enrichedData,
       pagination: {
         page: parseInt(page, 10) || 1,
         pageSize: take,
@@ -129,6 +159,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/column-options')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseColumnOptions(
     @BranchId() branchId: string,
     @Query('column') column: string,
@@ -262,6 +293,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/gross-profit-report')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getGrossProfitReport(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -337,6 +369,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('gross-profit/:id/linked-invoices')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getGrossProfitLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.find({
       where: { grossProfitId: id },
@@ -345,6 +378,7 @@ export class KgaraApiCoreController {
   }
 
   @Post('gross-profit/:id/linked-invoices')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async addGrossProfitLinkedInvoice(
     @Param('id') id: string,
     @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
@@ -359,6 +393,7 @@ export class KgaraApiCoreController {
   }
 
   @Delete('gross-profit/:id/linked-invoices/:linkedId')
+  @RequirePermissions({ resource: 'garage', action: 'delete' })
   async removeGrossProfitLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
@@ -368,6 +403,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/by-code/:code')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseByCode(@Param('code') code: string) {
     let caseData = await this.caseRepo.findOne({ where: { soChungTu: code } });
     if (!caseData) {
@@ -392,6 +428,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/by-code/:code/gross-profit')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getGrossProfitByCode(@Param('code') code: string) {
     const grossProfit = await this.grossProfitRepo.findOne({
       where: { vuViecCode: code },
@@ -427,6 +464,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/:id')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseById(@Param('id') id: string) {
     const caseData = await this.caseRepo.findOne({ where: { id } });
     if (!caseData) {
@@ -436,6 +474,7 @@ export class KgaraApiCoreController {
   }
 
   @Patch('cases/:id/erp-notes')
+  @RequirePermissions({ resource: 'garage', action: 'update' })
   async updateErpNotes(
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
@@ -450,6 +489,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/external/:externalId')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseByExternalId(
     @Param('externalId') externalId: string,
     @Query('branchId') branchId?: string,
@@ -474,6 +514,7 @@ export class KgaraApiCoreController {
   }
 
   @Post('sync/all')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncAll(@BranchId() branchId: string) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
@@ -524,12 +565,14 @@ export class KgaraApiCoreController {
   }
 
   @Post('sync/branches')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncBranches() {
     await this.syncService.syncBranches();
     return { success: true, message: 'Branches synced successfully.' };
   }
 
   @Post('sync/cases/incremental')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncCasesIncremental(@BranchId() branchId: string) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
@@ -552,44 +595,44 @@ export class KgaraApiCoreController {
   }
 
   @Post('sync/cases')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncCases(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Body() body: { from?: string; to?: string },
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    const result = await this.syncService.syncCasesForBranch(
-      branchId,
-      from,
-      to,
-    );
-    return { success: true, message: 'Cases synced successfully.', ...result };
+    return this.syncService.syncCasesForBranch(branchId, body.from, body.to);
   }
 
   @Post('sync/gross-profit')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncGrossProfit(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Body() body: { from?: string; to?: string },
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    await this.syncService.syncGrossProfitForBranch(branchId, from, to);
-    return { success: true, message: 'Gross profit synced successfully.' };
+    return this.syncService.syncGrossProfitForBranch(
+      branchId,
+      body.from,
+      body.to,
+    );
   }
 
   @Post('sync/cases/:id/detail')
-  async syncCaseDetail(@BranchId() branchId: string, @Param('id') id: string) {
-    if (!branchId)
+  @RequirePermissions({ resource: 'garage', action: 'create' })
+  async syncCaseDetail(@Param('id') id: string, @BranchId() branchId: string) {
+    if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
-    const data = await this.syncService.syncCaseDetail(id, branchId);
-    return { success: true, data };
+    }
+    return this.syncService.syncCaseDetail(branchId, id);
   }
 
   @Post('sync/receivables')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncReceivables(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -602,6 +645,7 @@ export class KgaraApiCoreController {
   }
 
   @Post('sync/payables')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncPayables(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -614,6 +658,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('reports/gross-profit-detail')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getGrossProfitDetail(
     @BranchId() branchId: string,
     @Query('from') from: string,
@@ -625,6 +670,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('reports/gross-profit-detail/journal')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getGrossProfitJournal(
     @BranchId() branchId: string,
     @Query('from') from: string,
@@ -637,6 +683,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('dashboard')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getDashboard(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -648,6 +695,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('receivables')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getReceivables(@BranchId() branchId: string) {
     const where: any = {};
     if (branchId) where.branchExternalId = branchId;
@@ -655,6 +703,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('payables')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getPayables(@BranchId() branchId: string) {
     const where: any = {};
     if (branchId) where.branchExternalId = branchId;
@@ -662,17 +711,20 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/:id/services')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseServices(@Param('id') id: string) {
     return this.caseServiceRepo.find({ where: { hdPhieuDichVuId: id } });
   }
 
   @Get('cases/:id/payments')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCasePayments(@Param('id') id: string) {
     // Return empty array since KGara V2 sync doesn't fetch detailed payment transactions.
     return [];
   }
 
   @Get('sync-runs')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getSyncRuns(
     @BranchId() branchId: string,
     @Query('take') take: string = '50',
@@ -688,6 +740,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('cases/:id/linked-invoices')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -703,6 +756,7 @@ export class KgaraApiCoreController {
   }
 
   @Post('cases/:id/linked-invoices')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
   async addLinkedInvoice(
     @Param('id') id: string,
     @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
@@ -717,6 +771,7 @@ export class KgaraApiCoreController {
   }
 
   @Get('invoices/:invoiceId/linked-cases')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
   async getLinkedCases(@Param('invoiceId') invoiceId: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -732,6 +787,7 @@ export class KgaraApiCoreController {
   }
 
   @Delete('cases/:id/linked-invoices/:linkedId')
+  @RequirePermissions({ resource: 'garage', action: 'delete' })
   async removeLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,

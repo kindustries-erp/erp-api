@@ -31,6 +31,9 @@ describe('KgaraSyncService', () => {
       getReceivables: jest.fn(),
       getPayables: jest.fn(),
       getCaseDetail: jest.fn(),
+      getGrossProfitDetail: jest
+        .fn()
+        .mockResolvedValue({ results: { Groups: [] } }),
     };
 
     const mockRepo = () => ({
@@ -38,6 +41,7 @@ describe('KgaraSyncService', () => {
       findOne: jest.fn(),
       save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      upsert: jest.fn().mockResolvedValue({ identifiers: [] }),
       manager: {
         transaction: jest.fn((cb) =>
           cb({

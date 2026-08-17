@@ -31,9 +31,13 @@ export class RbacCoreService {
     action: string,
   ): Promise<boolean> {
     const permissions = await this.getUserPermissions(userId);
+    const matchResources = [resource, '*'];
+    if (resource === 'garage') {
+      matchResources.push('greenway_integration', 'kgara_integration');
+    }
     return permissions.some(
       (p) =>
-        (p.resource === resource || p.resource === '*') &&
+        matchResources.includes(p.resource) &&
         (p.action === action || p.action === '*'),
     );
   }
@@ -193,7 +197,8 @@ export class RbacCoreService {
       { resource: 'activity_logs', label: 'Activity Logs' },
       { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
-      { resource: 'greenway_integration', label: 'Garage / Kgara' },
+      { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
+      { resource: 'greenway_integration', label: 'Garage / Kgara (Legacy)' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',

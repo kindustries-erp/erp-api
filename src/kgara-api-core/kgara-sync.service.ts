@@ -254,8 +254,10 @@ export class KgaraSyncService {
             range.to,
           );
 
-          if (profitResponse?.Groups) {
-            for (const group of profitResponse.Groups) {
+          const groups =
+            profitResponse?.results?.Groups || profitResponse?.Groups;
+          if (groups) {
+            for (const group of groups) {
               if (group.Items) {
                 for (const item of group.Items) {
                   if (item.VuViecID) {
