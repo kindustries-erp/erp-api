@@ -116,6 +116,7 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 | `GET` | `/api/v1/purchase-orders/:id/invoices` | `purchase_orders:read` | Lấy danh sách các hóa đơn điện tử được liên kết với đơn PO này |
 | `POST` | `/api/v1/purchase-orders/:id/link-invoices` | `purchase_orders:update` | Gán danh sách ID hóa đơn vào đơn mua hàng |
 | `DELETE`| `/api/v1/purchase-orders/:id/invoices/:invoiceId` | `purchase_orders:update` | Hủy liên kết một hóa đơn khỏi đơn mua hàng |
+| `GET` | `/api/v1/purchase-orders/:id/export/excel` | `purchase_orders:read` | Xuất file Excel Bảng kê mua hàng (Mẫu 06-VT) hoặc Phiếu đề xuất mua hàng (Draft) |
 
 ### 4.2. Yêu Cầu Mua Hàng (`/api/v1/purchase-requests`)
 | Method | Endpoint | RBAC Permission | Mô tả |
