@@ -234,6 +234,8 @@ export class KgaraApiCoreController {
       totalAmount: '"case"."tien_co_thue"',
       balanceAmount: '"case"."tien_con_phai_thanh_toan"',
       caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      ngayHoanThanhCongViec: 'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
+      completionDate: 'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       updatedAt: 'TO_CHAR("case"."updated_at", \'YYYY-MM-DD\')',
       dataAsOf: 'TO_CHAR("case"."data_as_of", \'YYYY-MM-DD\')',
       createdAt: 'TO_CHAR("case"."created_at", \'YYYY-MM-DD\')',
