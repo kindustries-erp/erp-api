@@ -125,13 +125,17 @@ jobs:
       - name: Transfer Image to Head
         env:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.sha }}
         run: |
-          docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}
-          docker save ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} | \
-            sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "docker load"
+          TMP_TAR="/tmp/api-image-master-${IMAGE_TAG}.tar.gz"
+          docker pull ${{ env.IMAGE_NAME }}:${IMAGE_TAG}
+          echo "Saving and compressing image..."
+          docker save ${{ env.IMAGE_NAME }}:${IMAGE_TAG} | gzip > image.tar.gz
+          echo "Transferring image..."
+          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ vars.HEAD_PORT }} image.tar.gz ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }}:${TMP_TAR}
+          echo "Loading image on Head..."
+          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ vars.HEAD_PORT }} ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} "docker load -i ${TMP_TAR} && rm -f ${TMP_TAR}"
+          rm -f image.tar.gz
 
       - name: Run deploy script
         env:
@@ -145,7 +149,7 @@ jobs:
              docker rm -f erp-api-master || true ; \
              docker rm -f liouni-erp-core-api || true ; \
              docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-master --restart always --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+             docker run -d --name erp-api-master --restart always --pull never --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
 
       - name: Health check
         env:
