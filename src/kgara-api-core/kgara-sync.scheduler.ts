@@ -35,19 +35,14 @@ export class KgaraSyncScheduler {
       let totalWithInvoices = 0;
 
       const now = new Date();
-      const firstDayLastMonth = new Date(
+      const firstDayTwoMonthsAgo = new Date(
         now.getFullYear(),
-        now.getMonth() - 1,
+        now.getMonth() - 2,
         1,
       );
-      const lastDayThisMonth = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        0,
-      );
 
-      const from = firstDayLastMonth.toLocaleDateString('en-CA');
-      const to = lastDayThisMonth.toLocaleDateString('en-CA');
+      const from = firstDayTwoMonthsAgo.toLocaleDateString('en-CA');
+      const to = now.toLocaleDateString('en-CA');
 
       for (const branch of branches) {
         if (!branch.externalId) continue;

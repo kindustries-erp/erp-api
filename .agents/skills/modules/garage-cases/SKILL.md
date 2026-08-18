@@ -1,21 +1,23 @@
 ---
 name: garage-cases
-description: Module tri thức Quản lý Vụ việc Dịch vụ Garage & Sửa chữa xe (Garage Cases, Service Lines, Receivables, Payables & Auto-Sync) trong erp-api (kgara-api-core). Chứa toàn bộ database schema, entities, API endpoints, logic đồng bộ 2 chiều, phát hiện xóa mềm và liên kết hóa đơn thuế.
+description: Module tri thức Quản lý Vụ việc Dịch vụ Garage & Sửa chữa xe (Garage Cases, Service Lines, Receivables, Payables, Auto-Sync & Gross Profit Analysis) trong erp-api (kgara-api-core). Chứa toàn bộ database schema, entities, API endpoints, logic đồng bộ 2 chiều, phát hiện xóa mềm, đối soát lợi nhuận gộp và liên kết hóa đơn thuế.
 ---
 
-# 📦 Module Tri Thức: Quản Lý Vụ Việc Dịch Vụ Garage & Sửa Chữa Xe (Garage Cases) - Backend (`erp-api`)
+# 📦 Module Tri Thức: Quản Lý Vụ Việc Dịch Vụ & Lợi Nhuận Gộp Garage (Garage Cases & Gross Profit) - Backend (`erp-api`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ Quản lý Vụ việc Garage (`kgara-api-core`) chịu trách nhiệm tiếp nhận, lưu trữ, xử lý và đồng bộ toàn bộ dữ liệu hoạt động sửa chữa, bảo dưỡng xe tại xưởng dịch vụ từ hệ thống KGara (Greenway).
+Phân hệ Quản lý Vụ việc Garage (`kgara-api-core`) chịu trách nhiệm tiếp nhận, lưu trữ, xử lý và đồng bộ toàn bộ dữ liệu hoạt động sửa chữa, bảo dưỡng xe và phân tích lợi nhuận tại xưởng dịch vụ từ hệ thống KGara (Greenway).
 
 Các nghiệp vụ trọng tâm:
 - **Quản lý Hồ sơ Vụ việc Dịch vụ (`kgara_cases`)**: Lưu trữ thông tin định danh phiếu dịch vụ (`so_chung_tu`), biển số xe (`bien_so_xe`), số khung/VIN (`so_khung`), thông tin khách hàng, trạng thái tiến độ dịch vụ (Tiếp nhận -> Báo giá -> Đang sửa -> Hoàn thành -> Giao xe), cùng toàn bộ tổng tiền trước thuế, thuế VAT, tiền đã thanh toán và công nợ còn lại.
 - **Chi tiết Dòng Dịch vụ & Phụ tùng (`kgara_case_services`)**: Bóc tách chi tiết từng dòng công việc trong phiếu dịch vụ, phân biệt rõ dòng công lao động (`tien_dich_vu`, `so_gio_cong_lam`) và dòng phụ tùng vật tư (`tien_phu_tung`, `gia_von_phu_tung`, `kho_code`).
 - **Đồng bộ Dữ liệu Tự động & Tăng dần (Incremental Watermark Sync)**: Kết nối với API KGara bằng cơ chế Bearer Token tự động làm mới, hỗ trợ đồng bộ theo dải ngày (`from`, `to`) hoặc đồng bộ tăng dần (`updatedSince`) với bộ đệm lùi thời gian (10 phút) tránh mất mát dữ liệu.
 - **Phát hiện & Quản lý Xóa mềm Vụ việc (Soft-delete & Deletion Counter)**: Thuật toán kiểm đếm số lần vắng mặt (`kgara_delete_count`). Khi vụ việc không còn tồn tại trên KGara qua 2 lần quét liên tiếp, hệ thống sẽ đánh dấu xóa mềm (`kgara_deleted_at`). Nếu vụ việc xuất hiện trở lại, hệ thống tự động phục hồi.
-- **Cảnh báo Thông minh & Giám sát Tự động (Hourly Scheduler & Notifications)**: Cron job chạy hàng giờ kiểm tra tính toàn vẹn dữ liệu cho từng chi nhánh, tự động gửi thông báo (`NotificationsService`) tới tài khoản Admin nếu phát hiện phiếu bị xóa, đặc biệt cảnh báo nghiêm ngặt các phiếu đang có chứng từ hóa đơn liên kết.
-- **Liên kết Hóa đơn Điện tử & Sổ sách ERP (`kgara_case_linked_invoice`)**: Hỗ trợ liên kết 2 chiều giữa vụ việc dịch vụ với hóa đơn điện tử (`erp_invoices`) phục vụ công tác đối soát kế toán và quyết toán chi phí.
+- **Cảnh báo Thông minh & Giám sát Tự động (Hourly Scheduler & Notifications)**: Cron job chạy hàng giờ kiểm tra tính toàn vẹn dữ liệu cho từng chi nhánh (quét 2 tháng gần nhất từ ngày chạy), tự động gửi thông báo (`NotificationsService`) tới tài khoản Admin nếu phát hiện phiếu bị xóa, đặc biệt cảnh báo nghiêm ngặt các phiếu đang có chứng từ hóa đơn liên kết.
+- **Tổng hợp & Báo cáo Lợi Nhuận Gộp Vụ Việc (`kgara_gross_profit`)**: Bóc tách chỉ số tài chính $\text{Lợi Nhuận Gộp (LoiNhuan)} = \text{Doanh Thu (DoanhThu)} - \text{Chi Phí / Giá Vốn (ChiPhi)}$ theo từng vụ việc, tính tổng hợp kỳ báo cáo (`TongCong: { DoanhThu, ChiPhi, LaiGop }`), waterfall sync các tháng có phát sinh và đối soát với hóa đơn thuế GTGT.
+- **Liên kết Hóa đơn Điện tử & Sổ sách ERP (`kgara_case_linked_invoice`)**: Hỗ trợ liên kết 2 chiều giữa vụ việc dịch vụ / bản ghi lợi nhuận gộp với hóa đơn điện tử (`erp_invoices`) phục vụ công tác đối soát kế toán và quyết toán chi phí.
+- **Truy xuất Báo cáo Chi tiết & Sổ Nhật ký KGara (Gross Profit Journal Proxy)**: Tích hợp proxy gọi trực tiếp sang API báo cáo sổ nhật ký chi tiết (`/reports/gross-profit-detail/journal`) của KGara để kiểm tra từng bút toán chi phí gốc.
 - **Quản lý Sổ Công nợ Phải thu & Phải trả (`kgara_receivables`, `kgara_payables`)**: Đồng bộ và lưu trữ sổ công nợ khách hàng (phải thu theo vụ việc) và công nợ nhà cung cấp phụ tùng/đối tác theo tài khoản kế toán 331.
 
 ---
@@ -87,7 +89,28 @@ Các nghiệp vụ trọng tâm:
 
 ---
 
-### 2.3. Bảng `kgara_case_linked_invoice` (Liên Kết Hóa Đơn Điện Tử)
+### 2.3. Bảng `kgara_gross_profit` (Sổ Tổng Hợp Lợi Nhuận Gộp Vụ Việc)
+
+| Cột | Kiểu dữ liệu | Nullable | Mặc định | Mô tả / Ràng buộc |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính nội bộ ERP (PK) |
+| `hd_phieu_dich_vu_id` | `varchar(100)` | NO | — | Khóa ngoại tham chiếu mã vụ việc KGara (`HdPhieuDichVuID`) (**Unique Index**) |
+| `branch_external_id` | `varchar(100)` | YES | `NULL` | Mã chi nhánh KGara quản lý (**Index**) |
+| `vu_viec_code` | `varchar(100)` | YES | `NULL` | Mã số chứng từ / số phiếu vụ việc (vd: `PDV-202607-001`) |
+| `vu_viec_name` | `varchar(255)` | YES | `NULL` | Tên vụ việc hoặc tóm tắt nội dung dịch vụ |
+| `ten_khach_hang` | `varchar(255)` | YES | `NULL` | Tên khách hàng / chủ xe |
+| `doanh_thu` | `numeric(18,2)` | YES | `NULL` | Tổng doanh thu ghi nhận từ vụ việc (VNĐ) |
+| `chi_phi` | `numeric(18,2)` | YES | `NULL` | Tổng chi phí / giá vốn phụ tùng & dịch vụ (VNĐ) |
+| `loi_nhuan` | `numeric(18,2)` | YES | `NULL` | Lợi nhuận gộp ($\text{DoanhThu} - \text{ChiPhi}$) |
+| `report_from` | `date` | YES | `NULL` | Ngày bắt đầu kỳ báo cáo đồng bộ |
+| `report_to` | `date` | YES | `NULL` | Ngày kết thúc kỳ báo cáo đồng bộ |
+| `raw_data` | `jsonb` | YES | `NULL` | Payload JSON chi tiết từ API báo cáo KGara |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo bản ghi |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật bản ghi |
+
+---
+
+### 2.4. Bảng `kgara_case_linked_invoice` (Liên Kết Hóa Đơn Điện Tử)
 
 | Cột | Kiểu dữ liệu | Nullable | Mặc định | Mô tả / Ràng buộc |
 | :--- | :--- | :--- | :--- | :--- |
@@ -104,7 +127,48 @@ Các nghiệp vụ trọng tâm:
 
 ---
 
-### 2.4. Bảng `kgara_receivables` & `kgara_payables` (Sổ Công Nợ Kho & Xưởng)
+### 2.5. Sơ đồ Quan hệ Dữ liệu (ERD)
+
+```text
+       ┌───────────────────────────────┐
+       │         kgara_cases           │
+       ├───────────────────────────────┤
+       │ id (PK)                       │
+       │ hd_phieu_dich_vu_id (UQ) ─────┼────────┐
+       │ so_chung_tu                   │        │
+       │ bien_so_xe                    │        │
+       │ ...                           │        │
+       └──────────────┬────────────────┘        │
+                      │ 1                       │ 1
+                      │                         │
+                      │ N                       │ 1
+       ┌──────────────┴────────────────┐        │
+       │   kgara_case_linked_invoice   │        │
+       ├───────────────────────────────┤        │
+       │ id (PK)                       │        │
+       │ caseDbId (FK)                 │        │
+       │ gross_profit_id (FK) ─────────┼──┐     │
+       │ invoiceId (FK -> erp_invoices)│  │     │
+       │ linkType ('IN' | 'OUT')       │  │     │
+       └───────────────────────────────┘  │     │
+                                          │ N   │
+                                          │     │
+                               ┌──────────┴─────┴──────────────┐
+                               │       kgara_gross_profit      │
+                               ├───────────────────────────────┤
+                               │ id (PK)                       │
+                               │ hd_phieu_dich_vu_id (UQ/FK)   │
+                               │ vu_viec_code                  │
+                               │ doanh_thu                     │
+                               │ chi_phi                       │
+                               │ loi_nhuan                     │
+                               │ report_from / report_to       │
+                               └───────────────────────────────┘
+```
+
+---
+
+### 2.6. Bảng `kgara_receivables` & `kgara_payables` (Sổ Công Nợ Kho & Xưởng)
 
 - **`kgara_receivables`**: Sổ công nợ phải thu từ khách hàng theo vụ việc dịch vụ.
   - Khóa phức hợp duy nhất: `branch_external_id + hd_phieu_dich_vu_id + so_chung_tu + period_from + period_to`.
@@ -113,7 +177,7 @@ Các nghiệp vụ trọng tâm:
 
 ---
 
-### 2.5. Bảng `kgara_branches`, `kgara_auth`, `kgara_sync_runs`
+### 2.7. Bảng `kgara_branches`, `kgara_auth`, `kgara_sync_runs`
 
 - **`kgara_branches`**: Danh mục chi nhánh / phân xưởng KGara (`external_id`, `code`, `name`, `parent_id`, `is_active`).
 - **`kgara_auth`**: Lưu trữ phiên đăng nhập KGara (`access_token`, `refresh_token`, `token_expires`, `ss_client_id`).
@@ -129,7 +193,7 @@ src/kgara-api-core/
 │   ├── kgara_auth.entity.ts                # Entity bảng kgara_auth (lưu OAuth token & SS_ClientID)
 │   ├── kgara_branch.entity.ts              # Entity bảng kgara_branches (danh mục chi nhánh xưởng)
 │   ├── kgara_case.entity.ts                # Entity bảng kgara_cases (phiếu dịch vụ / vụ việc)
-│   ├── kgara_case_linked_invoice.entity.ts # Entity bảng kgara_case_linked_invoice (liên kết HĐĐT ERP)
+│   ├── kgara_case_linked_invoice.entity.ts # Entity bảng kgara_case_linked_invoice (liên kết HĐĐT ERP & Gross Profit)
 │   ├── kgara_case_service.entity.ts        # Entity bảng kgara_case_services (chi tiết công việc/phụ tùng)
 │   ├── kgara_gross_profit.entity.ts        # Entity bảng kgara_gross_profit (tổng hợp lợi nhuận gộp)
 │   ├── kgara_payable.entity.ts             # Entity bảng kgara_payables (sổ công nợ phải trả 331)
@@ -138,9 +202,9 @@ src/kgara-api-core/
 ├── kgara-api-core.controller.ts            # Controller định tuyến API /api/v1/greenway
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
-├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401)
-├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu và gửi thông báo
-├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark và soft-delete
+├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
+├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
+├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark, soft-delete & gross profit
 └── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 ```
 
@@ -151,6 +215,7 @@ src/kgara-api-core/
 Controller Base Route: `/api/v1/greenway`  
 Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-id`
 
+### 4.1. Nhóm Vụ Việc & Dòng Dịch Vụ
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
@@ -166,6 +231,22 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `POST`| `/cases/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` | Gắn liên kết một hóa đơn điện tử vào vụ việc |
 | `DELETE`| `/cases/:id/linked-invoices/:linkedId` | `id`, `linkedId` | Xóa liên kết hóa đơn khỏi vụ việc |
 | `GET` | `/invoices/:invoiceId/linked-cases` | `invoiceId` (UUID ERP Invoice) | Tra cứu ngược danh sách các vụ việc dịch vụ đang liên kết với hóa đơn này |
+
+### 4.2. Nhóm Lợi Nhuận Gộp & Đối Soát Báo Cáo
+| Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`) |
+| `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc |
+| `POST`| `/sync/gross-profit` | `@BranchId()`, Query: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
+| `GET` | `/reports/gross-profit-detail` | `@BranchId()`, Query: `from`, `to` | Proxy gọi trực tiếp API báo cáo chi tiết lợi nhuận gộp từ máy chủ KGara |
+| `GET` | `/reports/gross-profit-detail/journal` | `@BranchId()`, Query: `from`, `to`, `vuViecID` | Proxy lấy sổ nhật ký hạch toán chi phí/doanh thu chi tiết của vụ việc |
+| `GET` | `/gross-profit/:id/linked-invoices` | `id` (UUID `kgara_gross_profit`) | Lấy danh sách hóa đơn điện tử đang liên kết với bản ghi lợi nhuận gộp này |
+| `POST`| `/gross-profit/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` | Gắn liên kết một hóa đơn điện tử (đầu vào hoặc đầu ra) vào bản ghi lợi nhuận gộp |
+| `DELETE`| `/gross-profit/:id/linked-invoices/:linkedId` | `id`, `linkedId` | Hủy liên kết hóa đơn khỏi bản ghi lợi nhuận gộp |
+
+### 4.3. Nhóm Đồng Bộ & Sổ Kế Toán
+| Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
+| :--- | :--- | :--- | :--- |
 | `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày và thực hiện kiểm đếm xóa mềm |
@@ -200,24 +281,42 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.
 6. Nếu một vụ việc đã bị xóa mềm sau đó xuất hiện trở lại trong danh sách sync: Hệ thống tự động đặt lại `kgara_deleted_at = null` và `kgara_delete_count = 0` (Restoration).
 
-### 5.4. Lịch Quét Tự động Hàng Giờ & Cảnh báo Admin (`KgaraSyncScheduler`)
+### 5.4. Lịch Quét Tự động Hàng Giờ 2 Tháng Gần Nhất & Cảnh báo Admin (`KgaraSyncScheduler`)
 - Chạy tự động vào mỗi đầu giờ (`@Cron(CronExpression.EVERY_HOUR)`).
-- Quét dữ liệu từ ngày đầu tháng trước (`firstDayLastMonth`) đến ngày cuối tháng này (`lastDayThisMonth`) cho tất cả chi nhánh đang hoạt động.
+- **Cửa sổ đồng bộ nâng cao**: Quét dữ liệu trong phạm vi **2 tháng gần nhất tính từ thời điểm chạy** (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh đang hoạt động.
 - Nếu phát hiện vụ việc bị xóa mềm:
   - Tự động kiểm tra liên kết hóa đơn trong `kgara_case_linked_invoice`.
   - Gửi thông báo loại `WARNING` tới tất cả Admin nếu vụ việc bị xóa đang có hóa đơn liên kết; gửi thông báo loại `INFO` nếu không có hóa đơn liên kết.
+
+### 5.5. Thuật toán Tổng Hợp Báo Cáo Lợi Nhuận Gộp (`getGrossProfitReport`)
+1. Truy vấn toàn bộ bản ghi trong bảng `kgara_gross_profit` theo `branchExternalId` và dải ngày `reportFrom >= from`, `reportTo <= to`.
+2. Thực hiện `leftJoinAndMapOne` với bảng `kgara_cases` dựa trên điều kiện `case.soChungTu = gp.vuViecCode` để bổ sung toàn bộ metadata của xe (biển số xe, ngày phát sinh, khách hàng).
+3. Duyệt danh sách, chuyển đổi kiểu dữ liệu (`Number(gp.doanhThu)`, `Number(gp.chiPhi)`, `Number(gp.loiNhuan)`).
+4. Tích lũy tổng doanh thu (`totalRevenue`), tổng chi phí (`totalCost`), tổng lãi gộp (`totalProfit`).
+5. Trả về cấu trúc chuẩn tương thích giao diện UI (`results: { TongCong, Groups }`).
+
+### 5.6. Cơ chế Đồng bộ Tự động Lợi Nhuận Đa Tháng (`syncCasesForBranch` Waterfall Sync)
+- Khi thực hiện đồng bộ vụ việc (`syncCasesForBranch`), hệ thống tự động ghi nhận danh sách các ngày phát sinh vụ việc (`updatedCaseDates`).
+- Nếu người dùng không chỉ định khoảng ngày (`from`, `to`), hệ thống tự động sinh dải ngày:
+  - Tháng hiện tại: từ ngày 1 đến ngày cuối tháng.
+  - Các tháng trước/sau có vụ việc thay đổi (`monthsToSync`).
+- Hệ thống duyệt qua từng khoảng tháng và gọi `getGrossProfitDetail`, sau đó thực hiện lệnh `upsert` trên bảng `kgara_gross_profit` theo khóa xung đột `['hdPhieuDichVuId']`.
+
+### 5.7. Đối Soát & Kiểm Tra Hóa Đơn Thuế Gắn Kèm (`kgara_case_linked_invoice`)
+- Phân loại 2 chiều:
+  - `linkType = 'IN'`: Hóa đơn mua phụ tùng, dầu nhớt, vật tư tiêu hao đầu vào cấu thành nên chi phí vụ việc.
+  - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng tương ứng với doanh thu dịch vụ.
+- Ràng buộc toàn vẹn: Khi bản ghi `kgara_gross_profit` hoặc `kgara_cases` bị xóa, các dòng liên kết hóa đơn tương ứng sẽ tự động bị xóa theo (`onDelete: 'CASCADE'`), đảm bảo không để lại bản ghi mồ côi.
 
 ---
 
 ## 6. Tích hợp Liên Module
 
 - **`erp-invoices-core`**:
-  - Cho phép người dùng liên kết chéo hóa đơn đầu vào mua phụ tùng (`IN`) hoặc hóa đơn đầu ra dịch vụ (`OUT`) với từng vụ việc qua bảng `kgara_case_linked_invoice`.
+  - Cho phép người dùng liên kết chéo hóa đơn đầu vào mua phụ tùng (`IN`) hoặc hóa đơn đầu ra dịch vụ (`OUT`) với từng vụ việc / bản ghi lợi nhuận gộp qua bảng `kgara_case_linked_invoice`.
   - Hỗ trợ xem danh sách vụ việc từ màn hình hóa đơn và ngược lại.
 - **`notifications`**:
   - Gửi thông báo real-time tới chuông thông báo người dùng và admin khi phát hiện bất thường về dữ liệu đồng bộ hoặc xóa phiếu.
-- **`garage-gross-profit`**:
-  - Cung cấp dữ liệu nền tảng (`soChungTu`, `hdPhieuDichVuId`, `khachHangName`, `bienSoXe`) phục vụ báo cáo và phân tích lợi nhuận gộp của xưởng dịch vụ.
 
 ---
 
@@ -226,4 +325,4 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 Khi chỉnh sửa `kgara-api-core`:
 1. Chạy Type-check: `bun run check:ci`
 2. Chạy Unit test: `bunx jest src/kgara-api-core/ --forceExit`
-3. Xác minh migration `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
+3. Xác minh migration `1780000000000-AddKgaraGrossProfit.ts`, `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
