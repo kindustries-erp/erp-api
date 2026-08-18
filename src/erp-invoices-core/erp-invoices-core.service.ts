@@ -180,6 +180,10 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.unpostInvoice(id);
   }
 
+  autoPostStandard(id: string) {
+    return this.lifecycleService.autoPostStandard(id);
+  }
+
   linkVouchersToInvoice(
     invoiceId: string,
     payload: { bankTransactionId: string; netOffAmount?: number }[],

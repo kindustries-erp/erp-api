@@ -254,6 +254,12 @@ export class ErpInvoicesCoreController {
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/auto-post-standard')
+  autoPostStandard(@Param('id') id: string) {
+    return this.service.autoPostStandard(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Patch('bulk-set-branch')
   bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
     return this.service.bulkSetBranch(body.ids, body.branchId);

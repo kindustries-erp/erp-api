@@ -15,6 +15,7 @@ import { UpdateErpInvoiceDto } from '../dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from '../dto/post-invoice.dto';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { toInvoiceDto } from '../helpers/invoice-mapper.helper';
+import { resolvePurchaseDebitAccountCode } from '../helpers/invoice-tax-code-accounting.helper';
 import { R2Service } from '../../r2/r2.service';
 import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-transactions-core.service';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
@@ -368,6 +369,177 @@ export class InvoiceLifecycleService {
     invoice.journalEntryId = null;
     await this.repository.save(invoice);
     return invoice;
+  }
+
+  async autoPostStandard(id: string) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.isDeleted) throw new BadRequestException('Invoice is deleted');
+    if (invoice.postingStatus === 'POSTED') {
+      return invoice;
+    }
+
+    if (!invoice.branchId) {
+      // Try to recover branchId from linked voucher netoffs
+      const netOffs = await this.repository.manager.find(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId: id },
+          relations: ['bankTransaction'],
+        },
+      );
+      const validBranch = netOffs.find(
+        (n) =>
+          n.bankTransaction &&
+          !n.bankTransaction.isDeleted &&
+          n.bankTransaction.branchId,
+      )?.bankTransaction?.branchId;
+
+      if (validBranch) {
+        invoice.branchId = validBranch;
+        await this.repository.save(invoice);
+      } else {
+        const branches: { id: string }[] = await this.repository.manager.query(
+          `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 2`,
+        );
+        if (branches.length === 1) {
+          invoice.branchId = branches[0].id;
+          await this.repository.save(invoice);
+        } else {
+          throw new BadRequestException(
+            'Hóa đơn chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
+          );
+        }
+      }
+    }
+
+    const accounts: { id: string; account_code: string }[] =
+      await this.repository.manager.query(
+        `SELECT id, account_code FROM erp_chart_of_accounts WHERE is_deleted = false AND is_active = true ORDER BY length(account_code) ASC, account_code ASC`,
+      );
+
+    const findAccountId = (prefix: string): string | null => {
+      const exact = accounts.find((a) => a.account_code === prefix);
+      if (exact) return exact.id;
+      const starts = accounts.find((a) => a.account_code.startsWith(prefix));
+      return starts ? starts.id : null;
+    };
+
+    const preVat = Math.round((Number(invoice.preVatAmount) || 0) * 100) / 100;
+    const vat = Math.round((Number(invoice.vatAmount) || 0) * 100) / 100;
+    const total = Math.round((Number(invoice.totalAmount) || 0) * 100) / 100;
+
+    if (total <= 0 && preVat <= 0) {
+      throw new BadRequestException(
+        'Giá trị hóa đơn không hợp lệ để hạch toán (Tổng tiền <= 0).',
+      );
+    }
+
+    const defaultDesc = `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+    const userDesc = invoice.description || defaultDesc;
+    const lines: {
+      accountId: string;
+      debit: number;
+      credit: number;
+      description?: string;
+    }[] = [];
+
+    if (invoice.direction === 'IN') {
+      const debitCode = resolvePurchaseDebitAccountCode(invoice.sellerTaxCode);
+      const debitAccountId =
+        findAccountId(debitCode) ||
+        findAccountId('642') ||
+        findAccountId('632');
+      const vatAccountId = findAccountId('133') || findAccountId('1331');
+      const apAccountId = findAccountId('331');
+
+      if (!debitAccountId || !apAccountId) {
+        throw new BadRequestException(
+          'Không tìm thấy tài khoản kế toán phù hợp (632/642 hoặc 331) trong hệ thống.',
+        );
+      }
+
+      if (preVat > 0) {
+        lines.push({
+          accountId: debitAccountId,
+          debit: preVat,
+          credit: 0,
+          description: userDesc,
+        });
+      }
+      if (vat > 0) {
+        if (!vatAccountId) {
+          throw new BadRequestException(
+            'Không tìm thấy tài khoản thuế GTGT (133) trong hệ thống.',
+          );
+        }
+        lines.push({
+          accountId: vatAccountId,
+          debit: vat,
+          credit: 0,
+          description: `Thuế GTGT ${invoice.invoiceNo}`,
+        });
+      }
+      if (total > 0) {
+        lines.push({
+          accountId: apAccountId,
+          debit: 0,
+          credit: total,
+          description: userDesc,
+        });
+      }
+    } else {
+      // OUT: Nợ 131 / Có 511 / Có 3331
+      const arAccountId = findAccountId('131');
+      const revenueAccountId = findAccountId('511') || findAccountId('711');
+      const vatOutAccountId = findAccountId('3331') || findAccountId('333');
+
+      if (!arAccountId || !revenueAccountId) {
+        throw new BadRequestException(
+          'Không tìm thấy tài khoản kế toán phù hợp (131 hoặc 511) trong hệ thống.',
+        );
+      }
+
+      if (total > 0) {
+        lines.push({
+          accountId: arAccountId,
+          debit: total,
+          credit: 0,
+          description: userDesc,
+        });
+      }
+      if (preVat > 0) {
+        lines.push({
+          accountId: revenueAccountId,
+          debit: 0,
+          credit: preVat,
+          description: userDesc,
+        });
+      }
+      if (vat > 0) {
+        if (!vatOutAccountId) {
+          throw new BadRequestException(
+            'Không tìm thấy tài khoản thuế GTGT đầu ra (3331) trong hệ thống.',
+          );
+        }
+        lines.push({
+          accountId: vatOutAccountId,
+          debit: 0,
+          credit: vat,
+          description: `Thuế GTGT ${invoice.invoiceNo}`,
+        });
+      }
+    }
+
+    const postingDate = invoice.invoiceDate
+      ? new Date(invoice.invoiceDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    return this.postInvoice(id, {
+      postingDate,
+      description: userDesc,
+      lines,
+    });
   }
 
   // ---------------------------------------------------------------------------

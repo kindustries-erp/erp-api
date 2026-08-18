@@ -12,6 +12,9 @@ import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun, GwSyncStatus } from './entities/kgara_sync_run.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 
+import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+
 describe('KgaraSyncService', () => {
   let service: KgaraSyncService;
   let clientService: any;
@@ -23,6 +26,8 @@ describe('KgaraSyncService', () => {
   let syncRunRepo: any;
   let grossProfitRepo: any;
   let linkedInvoiceRepo: any;
+  let settlementRepo: any;
+  let notificationsService: any;
 
   beforeEach(async () => {
     clientService = {
@@ -59,6 +64,11 @@ describe('KgaraSyncService', () => {
     syncRunRepo = mockRepo() as any;
     grossProfitRepo = mockRepo() as any;
     linkedInvoiceRepo = mockRepo() as any;
+    settlementRepo = mockRepo() as any;
+    notificationsService = {
+      createNotification: jest.fn().mockResolvedValue({}),
+      broadcast: jest.fn(),
+    };
 
     // Add count method to linkedInvoiceRepo
     linkedInvoiceRepo.count = jest.fn();
@@ -69,6 +79,10 @@ describe('KgaraSyncService', () => {
         {
           provide: KgaraClientService,
           useValue: clientService,
+        },
+        {
+          provide: NotificationsService,
+          useValue: notificationsService,
         },
         {
           provide: getRepositoryToken(KgaraBranch),
@@ -101,6 +115,10 @@ describe('KgaraSyncService', () => {
         {
           provide: getRepositoryToken(KgaraCaseLinkedInvoice),
           useValue: linkedInvoiceRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraCaseSettlement),
+          useValue: settlementRepo,
         },
       ],
     }).compile();

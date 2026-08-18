@@ -315,18 +315,34 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.8. Quy tắc Quản lý Dòng tiền & Công nợ 100% trên ERP (`kgara_case_settlements` & `bank_transactions`)
 - **Nguyên tắc nghiệp vụ dòng tiền**: Không sử dụng các trường thanh toán cũ trên máy chủ KGara để theo dõi thu/chi, vì trên thực tế KGara không quản lý tài khoản thu/chi thực tế của doanh nghiệp.
-- **Theo dõi 2 chiều dòng tiền thực tế trên ERP**:
+- **Theo dõi 2 chiều dòng tiền thực tế thuần túy trên ERP (Pure Cashflow Standard)**:
+  - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
+  - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
   1. **Chiều Phải Thu (Doanh thu / Khách hàng)**:
      - Mục tiêu thu: Tổng tiền thanh toán có thuế (`tienCoThue` / `TongTienThanhToan`).
-     - Đã thu thực tế (ERP): Tổng tiền đã thu qua Sao kê ngân hàng (`directReceiptOnSystem`), Tiền mặt sổ quỹ (`directReceiptOffSystem`), và Cấn trừ hóa đơn (`invoiceCollected`).
+     - Đã thu thực tế (ERP): `totalCollected = directReceiptOnSystem + directReceiptOffSystem`.
      - Còn phải thu: `Math.max(0, targetRevenue - totalCollected)`.
   2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
-     - Đã thanh toán (ERP): Tổng tiền chi qua Sao kê ngân hàng (`directPaymentOnSystem`), Tiền mặt sổ quỹ (`directPaymentOffSystem`), và Cấn trừ hóa đơn (`invoicePaid`).
+     - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
      - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
 - **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
   - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
   - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
+
+### 5.9. Cơ chế Đồng bộ Cấn trừ Tự động 2 Chiều (Bidirectional Net-Off Sync)
+- **Vụ việc → Hóa đơn**:
+  - Khi thêm giao dịch Sao kê ngân hàng (`ON_SYSTEM`) vào vụ việc qua `addCaseSettlement`: Backend tự động tìm các Hóa đơn VAT liên kết đang có và tạo bản ghi cấn trừ `erp_invoice_voucher_netoff` tương ứng (giới hạn theo tổng tiền hóa đơn).
+  - Khi gỡ giao dịch Sao kê khỏi vụ việc qua `removeCaseSettlement`: Backend tự động dọn dẹp các bản ghi `erp_invoice_voucher_netoff` liên quan.
+- **Hóa đơn → Vụ việc**:
+  - Khi liên kết Hóa đơn vào vụ việc qua `addLinkedInvoice`: Backend tự động tạo liên kết `erp_invoice_voucher_netoff` cho các giao dịch sao kê đã có sẵn trong vụ việc.
+  - Khi gỡ liên kết Hóa đơn khỏi vụ việc qua `removeLinkedInvoice`: Backend tự động xóa các bản ghi `erp_invoice_voucher_netoff` giữa hóa đơn đó và các giao dịch sao kê của vụ việc.
+
+### 5.10. Quy tắc Gỡ liên kết Chứng từ trên Giao diện (Client-side Staging & Batch Save)
+- Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](file:///home/dev/repos/erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
+  - Hành động gỡ được ghi nhận vào trạng thái pending trên client (`pendingDeletedInvoiceIds`, `pendingDeletedSettlementIds`).
+  - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
+  - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.
 
 ---
 
@@ -334,7 +350,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 - **`erp-invoices-core`**:
   - Cho phép người dùng liên kết chéo hóa đơn đầu vào mua phụ tùng (`IN`) hoặc hóa đơn đầu ra dịch vụ (`OUT`) với từng vụ việc / bản ghi lợi nhuận gộp qua bảng `kgara_case_linked_invoice`.
-  - Hỗ trợ xem danh sách vụ việc từ màn hình hóa đơn và ngược lại.
+  - Tự động đồng bộ cấn trừ sao kê 2 chiều giữa vụ việc và hóa đơn.
 - **`notifications`**:
   - Gửi thông báo real-time tới chuông thông báo người dùng và admin khi phát hiện bất thường về dữ liệu đồng bộ hoặc xóa phiếu.
 

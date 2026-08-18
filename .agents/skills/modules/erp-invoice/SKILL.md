@@ -276,6 +276,16 @@ src/erp-invoices-core/
 - **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `Lệnh SC...`.
 - **Subscriber Phụ tùng VinFast (`ErpInvoiceItemSubscriber`)**: Tự động bắt sự kiện `beforeInsert` và `beforeUpdate` trên `ErpInvoiceItem` để trích xuất mã linh kiện chuẩn (3 chữ cái in hoa + 8 chữ số + 0-2 ký tự) hoặc các trường hợp đặc thù như pin cao áp (`BAT21001011`, `EEP73110011AP`) và động cơ điện bảo hành.
 
+### 5.5. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
+- **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+  1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
+     - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
+     - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.
+     - Fallback mặc định cho tất cả các nhà cung cấp/mã số thuế khác chưa được phân loại cụ thể.
+  2. **Tài khoản `642` (Chi phí quản lý doanh nghiệp)**:
+     - Các mã số thuế chi phí quản lý chỉ định: `0100686209-002`, `0312650437`, `0318880490`, `0104093672`, `0318115309`, `0317121966`.
+- **Cơ chế Tự động sinh Định khoản**: Khi hóa đơn có liên kết chứng từ hoặc khi mở drawer nội bộ, hệ thống tự động sinh cấu trúc bút toán Nợ (`632`/`642`), Nợ VAT (`1331`), Có (`331`/`1121`/`1111`) mà không ép buộc thao tác bật thủ công.
+
 ---
 
 ## 6. Tích hợp Liên Module

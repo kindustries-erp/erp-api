@@ -783,7 +783,12 @@ export class KgaraApiCoreController {
       `SELECT l.*, 
               i.invoice_no as "invoiceNo", 
               i.seller_name as "sellerName", 
-              i.buyer_name as "buyerName"
+              i.buyer_name as "buyerName",
+              i.direction as "direction",
+              i.total_amount as "totalAmount",
+              i.pre_vat_amount as "preVatAmount",
+              i.vat_amount as "vatAmount",
+              i.description as "description"
        FROM kgara_case_linked_invoice l
        LEFT JOIN erp_invoices i ON l."invoiceId" = i.id
        WHERE l."caseDbId"::text = $1
@@ -798,13 +803,54 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
   ) {
-    const link = this.linkedInvoiceRepo.create({
-      caseDbId: id,
-      invoiceId: body.invoiceId,
-      linkType: body.linkType,
-      note: body.note,
+    const existing = await this.linkedInvoiceRepo.findOne({
+      where: { caseDbId: id, invoiceId: body.invoiceId },
     });
-    return this.linkedInvoiceRepo.save(link);
+    let link = existing;
+    if (!existing) {
+      link = this.linkedInvoiceRepo.create({
+        caseDbId: id,
+        invoiceId: body.invoiceId,
+        linkType: body.linkType,
+        note: body.note,
+      });
+      link = await this.linkedInvoiceRepo.save(link);
+    }
+
+    // Auto-sync: If the case already has ON_SYSTEM settlements matching the linkType direction
+    try {
+      const isOut = body.linkType === 'OUT';
+      const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
+      const settlements = await this.settlementRepo.find({
+        where: {
+          caseId: id,
+          sourceChannel: 'ON_SYSTEM',
+          settlementType: targetSettlementType,
+        },
+      });
+
+      for (const s of settlements) {
+        if (s.bankTransactionId) {
+          const netOff = await this.settlementRepo.manager.query(
+            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
+            [body.invoiceId, s.bankTransactionId],
+          );
+          if (!netOff || netOff.length === 0) {
+            await this.settlementRepo.manager.query(
+              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
+              [body.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
+            );
+          }
+        }
+      }
+    } catch (syncErr) {
+      this.logger.warn(
+        `Could not sync case settlements to invoice netoff: ${syncErr}`,
+      );
+    }
+
+    return link;
   }
 
   @Get('invoices/:invoiceId/linked-cases')
@@ -829,7 +875,28 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
   ) {
-    await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+    const link = await this.linkedInvoiceRepo.findOne({
+      where: { id: linkedId, caseDbId: id },
+    });
+    if (link) {
+      try {
+        const settlements = await this.settlementRepo.find({
+          where: { caseId: id, sourceChannel: 'ON_SYSTEM' },
+        });
+        const txnIds = settlements
+          .map((s) => s.bankTransactionId)
+          .filter((tid): tid is string => !!tid);
+        if (txnIds.length > 0) {
+          await this.linkedInvoiceRepo.manager.query(
+            `DELETE FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = ANY($2::uuid[])`,
+            [link.invoiceId, txnIds],
+          );
+        }
+      } catch (delSyncErr) {
+        this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
+      }
+      await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+    }
     return { success: true };
   }
 
@@ -871,42 +938,7 @@ export class KgaraApiCoreController {
       ? Number(c.loiNhuan ?? gp?.loiNhuan ?? targetRevenue - targetCost)
       : null;
 
-    // 1. Tier 1: Linked Invoices & Net-offs
-    const linkedInvoices = await this.linkedInvoiceRepo.query(
-      `SELECT DISTINCT i.id, i.invoice_no as "invoiceNo", i.direction, i.total_amount as "totalAmount", l."linkType" as "linkType"
-       FROM erp_invoices i
-       LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
-       WHERE (l."caseDbId"::text = $1 OR ($2 != '' AND i.settlement_order = $2) OR i.settlement_order = $1)
-         AND i.is_deleted = false`,
-      [c.id, c.soChungTu || ''],
-    );
-
-    let invoiceCollected = 0;
-    let invoicePaid = 0;
-    const invoiceVoucherTxnIds = new Set<string>();
-
-    for (const inv of linkedInvoices) {
-      const isOut = inv.direction === 'OUT' || inv.linkType === 'OUT';
-      const netOffs = await this.linkedInvoiceRepo.query(
-        `SELECT n.bank_transaction_id, n.net_off_amount FROM erp_invoice_voucher_netoff n
-         JOIN erp_bank_transactions t ON n.bank_transaction_id = t.id
-         WHERE n.invoice_id = $1 AND t.is_deleted = false`,
-        [inv.id],
-      );
-      for (const n of netOffs) {
-        const amt = Number(n.net_off_amount || 0);
-        if (isOut) {
-          invoiceCollected += amt;
-        } else {
-          invoicePaid += amt;
-        }
-        if (n.bank_transaction_id) {
-          invoiceVoucherTxnIds.add(n.bank_transaction_id);
-        }
-      }
-    }
-
-    // 2. Tier 2 & Tier 3: Direct Settlements
+    // Direct Settlements is the single source of truth for cashflow & payments
     const settlements = await this.settlementRepo.find({
       where: { caseId: c.id },
       order: { createdAt: 'DESC' },
@@ -921,43 +953,27 @@ export class KgaraApiCoreController {
       const amt = Number(s.amount || 0);
       if (s.settlementType === 'RECEIPT') {
         if (s.sourceChannel === 'ON_SYSTEM') {
-          if (
-            s.bankTransactionId &&
-            invoiceVoucherTxnIds.has(s.bankTransactionId)
-          ) {
-            // Already accounted via invoice net-off
-          } else {
-            directReceiptOnSystem += amt;
-          }
+          directReceiptOnSystem += amt;
         } else {
           directReceiptOffSystem += amt;
         }
       } else {
         if (s.sourceChannel === 'ON_SYSTEM') {
-          if (
-            s.bankTransactionId &&
-            invoiceVoucherTxnIds.has(s.bankTransactionId)
-          ) {
-            // Already accounted via invoice net-off
-          } else {
-            directPaymentOnSystem += amt;
-          }
+          directPaymentOnSystem += amt;
         } else {
           directPaymentOffSystem += amt;
         }
       }
     }
 
-    const totalCollected =
-      invoiceCollected + directReceiptOnSystem + directReceiptOffSystem;
+    const totalCollected = directReceiptOnSystem + directReceiptOffSystem;
     const remainingReceivable = Math.max(0, targetRevenue - totalCollected);
     const isOverCollected = totalCollected > targetRevenue && targetRevenue > 0;
     const overCollectedAmount = isOverCollected
       ? totalCollected - targetRevenue
       : 0;
 
-    const totalPaid =
-      invoicePaid + directPaymentOnSystem + directPaymentOffSystem;
+    const totalPaid = directPaymentOnSystem + directPaymentOffSystem;
     const remainingPayable = Math.max(0, targetCost - totalPaid);
 
     const realizedCashProfit = totalCollected - totalPaid;
@@ -978,7 +994,6 @@ export class KgaraApiCoreController {
       expectedProfit,
       breakdown: {
         receipts: {
-          invoiceCollected,
           directReceiptOnSystem,
           directReceiptOffSystem,
           totalCollected,
@@ -987,7 +1002,6 @@ export class KgaraApiCoreController {
           overCollectedAmount,
         },
         payments: {
-          invoicePaid,
           directPaymentOnSystem,
           directPaymentOffSystem,
           totalPaid,
@@ -1009,13 +1023,23 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseSettlements(@Param('id') id: string) {
     return this.settlementRepo.query(
-      `SELECT s.*, 
-              t.reference_number as "referenceNumber",
-              t.source_type as "sourceType",
-              t.correspondent_name as "correspondentName",
-              b.bank_name as "bankName",
-              b.account_number as "accountNumber",
-              c.name as "cashBookName"
+      `SELECT s.id::text as "id", 
+              s.case_id::text as "caseId",
+              s.bank_transaction_id::text as "bankTransactionId",
+              s.settlement_type::text as "settlementType",
+              s.source_channel::text as "sourceChannel",
+              s.category::text as "category",
+              s.amount::numeric as "amount",
+              s.trans_date as "transDate",
+              s.partner_name::text as "partnerName",
+              s.note::text as "note",
+              s.created_at as "createdAt",
+              t.reference_number::text as "referenceNumber",
+              t.source_type::text as "sourceType",
+              t.correspondent_name::text as "correspondentName",
+              b.bank_name::text as "bankName",
+              b.account_number::text as "accountNumber",
+              c.name::text as "cashBookName"
        FROM kgara_case_settlements s
        LEFT JOIN erp_bank_transactions t ON s.bank_transaction_id = t.id
        LEFT JOIN erp_bank_accounts b ON t.bank_account_id = b.id
@@ -1042,20 +1066,60 @@ export class KgaraApiCoreController {
       note?: string;
     },
   ) {
+    const sourceChannel =
+      body.sourceChannel ||
+      (body.bankTransactionId ? 'ON_SYSTEM' : 'OFF_SYSTEM_MANUAL');
+
     const settlement = this.settlementRepo.create({
       caseId: id,
       bankTransactionId: body.bankTransactionId || undefined,
       settlementType: body.settlementType,
-      sourceChannel:
-        body.sourceChannel ||
-        (body.bankTransactionId ? 'ON_SYSTEM' : 'OFF_SYSTEM_MANUAL'),
+      sourceChannel,
       category: body.category,
       amount: body.amount,
       transDate: body.transDate,
       partnerName: body.partnerName,
       note: body.note,
     });
-    return this.settlementRepo.save(settlement);
+    const saved = await this.settlementRepo.save(settlement);
+
+    // Auto-cấn trừ 2 chiều: Nếu giao dịch là ON_SYSTEM (Sao kê ngân hàng / Sổ quỹ)
+    // Tự động tìm hóa đơn liên kết của vụ việc có hướng tương ứng và cấn trừ vào Hóa đơn
+    if (sourceChannel === 'ON_SYSTEM' && body.bankTransactionId) {
+      try {
+        const isOut = body.settlementType === 'RECEIPT';
+        const targetDirection = isOut ? 'OUT' : 'IN';
+        const linkedInvoices = await this.linkedInvoiceRepo.query(
+          `SELECT DISTINCT i.id, i.total_amount as "totalAmount"
+           FROM erp_invoices i
+           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
+             AND (i.direction = $2 OR l."linkType" = $2)
+             AND i.is_deleted = false`,
+          [id, targetDirection],
+        );
+
+        for (const inv of linkedInvoices) {
+          const netOff = await this.settlementRepo.manager.query(
+            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
+            [inv.id, body.bankTransactionId],
+          );
+          if (!netOff || netOff.length === 0) {
+            await this.settlementRepo.manager.query(
+              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
+              [inv.id, body.bankTransactionId, Number(body.amount || 0)],
+            );
+          }
+        }
+      } catch (syncErr) {
+        this.logger.warn(
+          `Could not sync case settlement to invoice netoff: ${syncErr}`,
+        );
+      }
+    }
+
+    return saved;
   }
 
   @Delete('cases/:id/settlements/:settlementId')
@@ -1064,6 +1128,34 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,
   ) {
+    const settlement = await this.settlementRepo.findOne({
+      where: { id: settlementId, caseId: id },
+    });
+
+    if (settlement && settlement.bankTransactionId) {
+      try {
+        const linkedInvoices = await this.linkedInvoiceRepo.query(
+          `SELECT DISTINCT i.id
+           FROM erp_invoices i
+           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
+             AND i.is_deleted = false`,
+          [id],
+        );
+        const invIds = linkedInvoices.map((i: any) => i.id).filter(Boolean);
+        if (invIds.length > 0) {
+          await this.settlementRepo.manager.query(
+            `DELETE FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = $1 AND invoice_id = ANY($2::uuid[])`,
+            [settlement.bankTransactionId, invIds],
+          );
+        }
+      } catch (delSyncErr) {
+        this.logger.warn(
+          `Could not clean up invoice netoff on settlement delete: ${delSyncErr}`,
+        );
+      }
+    }
+
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
     return { success: true };
   }
