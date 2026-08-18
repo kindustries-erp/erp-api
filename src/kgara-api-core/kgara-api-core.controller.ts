@@ -875,6 +875,12 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
   ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(linkedId) || !uuidRegex.test(id)) {
+      return { success: true, message: 'Ignored non-persisted temporary ID' };
+    }
+
     const link = await this.linkedInvoiceRepo.findOne({
       where: { id: linkedId, caseDbId: id },
     });
@@ -1128,6 +1134,12 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,
   ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(settlementId) || !uuidRegex.test(id)) {
+      return { success: true, message: 'Ignored non-persisted temporary ID' };
+    }
+
     const settlement = await this.settlementRepo.findOne({
       where: { id: settlementId, caseId: id },
     });
