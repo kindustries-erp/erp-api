@@ -34,11 +34,14 @@ import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
+import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { Request as Req } from '@nestjs/common';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -62,8 +65,11 @@ export class KgaraApiCoreController {
     private syncRunRepo: Repository<GwSyncRun>,
     @InjectRepository(KgaraGrossProfit)
     private grossProfitRepo: Repository<KgaraGrossProfit>,
+    @InjectRepository(KgaraCaseSettlement)
+    private settlementRepo: Repository<KgaraCaseSettlement>,
     private syncService: KgaraSyncService,
     private client: KgaraClientService,
+    private traceabilityService: DocumentTraceabilityService,
   ) {}
 
   @Get('branches')
@@ -753,7 +759,7 @@ export class KgaraApiCoreController {
               i.buyer_name as "buyerName"
        FROM kgara_case_linked_invoice l
        LEFT JOIN erp_invoices i ON l."invoiceId" = i.id
-       WHERE l."caseDbId" = $1
+       WHERE l."caseDbId"::text = $1
        ORDER BY l."createdAt" DESC`,
       [id],
     );
@@ -784,7 +790,7 @@ export class KgaraApiCoreController {
               c.khach_hang_name as "khachHangName"
        FROM kgara_case_linked_invoice l
        LEFT JOIN kgara_cases c ON l."caseDbId" = c.id
-       WHERE l."invoiceId" = $1
+       WHERE l."invoiceId"::text = $1
        ORDER BY l."createdAt" DESC`,
       [invoiceId],
     );
@@ -797,6 +803,236 @@ export class KgaraApiCoreController {
     @Param('linkedId') linkedId: string,
   ) {
     await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+    return { success: true };
+  }
+
+  @Get('cases/:id/traceability-graph')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getCaseTraceabilityGraph(@Param('id') id: string, @Req() req: any) {
+    return this.traceabilityService.getGarageCaseTraceabilityGraph(
+      id,
+      req.user,
+    );
+  }
+
+  @Get('cases/:id/financial-summary')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getCaseFinancialSummary(@Param('id') id: string) {
+    const c = await this.caseRepo.findOne({
+      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+    });
+    if (!c) throw new NotFoundException('Không tìm thấy phiếu dịch vụ');
+
+    const gp = await this.grossProfitRepo.findOne({
+      where: [
+        { hdPhieuDichVuId: c.hdPhieuDichVuId },
+        { vuViecCode: c.soChungTu || undefined },
+      ],
+    });
+
+    const isCompleted = c.tinhTrangDichVu === 3;
+    const targetRevenue = Number(
+      c.doanhThu ?? gp?.doanhThu ?? c.tienCoThue ?? 0,
+    );
+    const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
+    const expectedProfit = isCompleted
+      ? Number(c.loiNhuan ?? gp?.loiNhuan ?? targetRevenue - targetCost)
+      : null;
+
+    // 1. Tier 1: Linked Invoices & Net-offs
+    const linkedInvoices = await this.linkedInvoiceRepo.query(
+      `SELECT DISTINCT i.id, i.invoice_no as "invoiceNo", i.direction, i.total_amount as "totalAmount", l."linkType" as "linkType"
+       FROM erp_invoices i
+       LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+       WHERE (l."caseDbId"::text = $1 OR ($2 != '' AND i.settlement_order = $2) OR i.settlement_order = $1)
+         AND i.is_deleted = false`,
+      [c.id, c.soChungTu || ''],
+    );
+
+    let invoiceCollected = 0;
+    let invoicePaid = 0;
+    const invoiceVoucherTxnIds = new Set<string>();
+
+    for (const inv of linkedInvoices) {
+      const isOut = inv.direction === 'OUT' || inv.linkType === 'OUT';
+      const netOffs = await this.linkedInvoiceRepo.query(
+        `SELECT n.bank_transaction_id, n.net_off_amount FROM erp_invoice_voucher_netoff n
+         JOIN erp_bank_transactions t ON n.bank_transaction_id = t.id
+         WHERE n.invoice_id = $1 AND t.is_deleted = false`,
+        [inv.id],
+      );
+      for (const n of netOffs) {
+        const amt = Number(n.net_off_amount || 0);
+        if (isOut) {
+          invoiceCollected += amt;
+        } else {
+          invoicePaid += amt;
+        }
+        if (n.bank_transaction_id) {
+          invoiceVoucherTxnIds.add(n.bank_transaction_id);
+        }
+      }
+    }
+
+    // 2. Tier 2 & Tier 3: Direct Settlements
+    const settlements = await this.settlementRepo.find({
+      where: { caseId: c.id },
+      order: { createdAt: 'DESC' },
+    });
+
+    let directReceiptOnSystem = 0;
+    let directReceiptOffSystem = 0;
+    let directPaymentOnSystem = 0;
+    let directPaymentOffSystem = 0;
+
+    for (const s of settlements) {
+      const amt = Number(s.amount || 0);
+      if (s.settlementType === 'RECEIPT') {
+        if (s.sourceChannel === 'ON_SYSTEM') {
+          if (
+            s.bankTransactionId &&
+            invoiceVoucherTxnIds.has(s.bankTransactionId)
+          ) {
+            // Already accounted via invoice net-off
+          } else {
+            directReceiptOnSystem += amt;
+          }
+        } else {
+          directReceiptOffSystem += amt;
+        }
+      } else {
+        if (s.sourceChannel === 'ON_SYSTEM') {
+          if (
+            s.bankTransactionId &&
+            invoiceVoucherTxnIds.has(s.bankTransactionId)
+          ) {
+            // Already accounted via invoice net-off
+          } else {
+            directPaymentOnSystem += amt;
+          }
+        } else {
+          directPaymentOffSystem += amt;
+        }
+      }
+    }
+
+    const totalCollected =
+      invoiceCollected + directReceiptOnSystem + directReceiptOffSystem;
+    const remainingReceivable = Math.max(0, targetRevenue - totalCollected);
+    const isOverCollected = totalCollected > targetRevenue && targetRevenue > 0;
+    const overCollectedAmount = isOverCollected
+      ? totalCollected - targetRevenue
+      : 0;
+
+    const totalPaid =
+      invoicePaid + directPaymentOnSystem + directPaymentOffSystem;
+    const remainingPayable = Math.max(0, targetCost - totalPaid);
+
+    const realizedCashProfit = totalCollected - totalPaid;
+    const kgaraPaidAmount = Number(c.tienDaThanhToan || 0);
+    const reconciliationDiscrepancy = Math.abs(
+      kgaraPaidAmount - totalCollected,
+    );
+    const hasDiscrepancy = reconciliationDiscrepancy > 1000;
+
+    return {
+      caseId: c.id,
+      soChungTu: c.soChungTu,
+      tinhTrangDichVu: c.tinhTrangDichVu,
+      tenTinhTrangDichVu: c.tenTinhTrangDichVu,
+      isCompleted,
+      targetRevenue,
+      targetCost,
+      expectedProfit,
+      breakdown: {
+        receipts: {
+          invoiceCollected,
+          directReceiptOnSystem,
+          directReceiptOffSystem,
+          totalCollected,
+          remainingReceivable,
+          isOverCollected,
+          overCollectedAmount,
+        },
+        payments: {
+          invoicePaid,
+          directPaymentOnSystem,
+          directPaymentOffSystem,
+          totalPaid,
+          remainingPayable,
+        },
+        realizedCashProfit,
+      },
+      reconciliation: {
+        kgaraPaidAmount,
+        erpCollectedAmount: totalCollected,
+        discrepancy: reconciliationDiscrepancy,
+        hasDiscrepancy,
+        status: hasDiscrepancy ? 'MISMATCH' : 'MATCHED',
+      },
+    };
+  }
+
+  @Get('cases/:id/settlements')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getCaseSettlements(@Param('id') id: string) {
+    return this.settlementRepo.query(
+      `SELECT s.*, 
+              t.reference_number as "referenceNumber",
+              t.source_type as "sourceType",
+              t.correspondent_name as "correspondentName",
+              b.bank_name as "bankName",
+              b.account_number as "accountNumber",
+              c.name as "cashBookName"
+       FROM kgara_case_settlements s
+       LEFT JOIN erp_bank_transactions t ON s.bank_transaction_id = t.id
+       LEFT JOIN erp_bank_accounts b ON t.bank_account_id = b.id
+       LEFT JOIN erp_cash_books c ON t.cash_book_id = c.id
+       WHERE s.case_id::text = $1
+       ORDER BY s.created_at DESC`,
+      [id],
+    );
+  }
+
+  @Post('cases/:id/settlements')
+  @RequirePermissions({ resource: 'garage', action: 'create' })
+  async addCaseSettlement(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      bankTransactionId?: string;
+      settlementType: 'RECEIPT' | 'PAYMENT';
+      sourceChannel?: 'ON_SYSTEM' | 'OFF_SYSTEM_MANUAL';
+      category?: string;
+      amount: number;
+      transDate?: string;
+      partnerName?: string;
+      note?: string;
+    },
+  ) {
+    const settlement = this.settlementRepo.create({
+      caseId: id,
+      bankTransactionId: body.bankTransactionId || undefined,
+      settlementType: body.settlementType,
+      sourceChannel:
+        body.sourceChannel ||
+        (body.bankTransactionId ? 'ON_SYSTEM' : 'OFF_SYSTEM_MANUAL'),
+      category: body.category,
+      amount: body.amount,
+      transDate: body.transDate,
+      partnerName: body.partnerName,
+      note: body.note,
+    });
+    return this.settlementRepo.save(settlement);
+  }
+
+  @Delete('cases/:id/settlements/:settlementId')
+  @RequirePermissions({ resource: 'garage', action: 'delete' })
+  async removeCaseSettlement(
+    @Param('id') id: string,
+    @Param('settlementId') settlementId: string,
+  ) {
+    await this.settlementRepo.delete({ id: settlementId, caseId: id });
     return { success: true };
   }
 }

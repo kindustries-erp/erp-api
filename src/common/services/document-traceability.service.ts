@@ -63,6 +63,16 @@ export class DocumentTraceabilityService {
   }
 
   /**
+   * Main entry point to get Traceability Graph starting from a Garage Case / Quotation
+   */
+  async getGarageCaseTraceabilityGraph(
+    caseId: string,
+    user?: any,
+  ): Promise<TraceabilityGraphDto> {
+    return this.buildGraph('GARAGE_CASE', caseId, user);
+  }
+
+  /**
    * Universal Multi-hop BFS Traceability Graph Builder
    */
   async buildGraph(
@@ -83,6 +93,13 @@ export class DocumentTraceabilityService {
       if (!txn)
         throw new NotFoundException('Không tìm thấy giao dịch ngân hàng');
       rawNodesMap.set(txn.id, { ...txn, depth: 0 });
+    } else if (rootType === 'GARAGE_CASE') {
+      const c = await this.fetchGarageCase(rootId);
+      if (!c)
+        throw new NotFoundException(
+          'Không tìm thấy phiếu dịch vụ / sổ báo giá',
+        );
+      rawNodesMap.set(c.id, { ...c, depth: 0 });
     }
 
     // 2. Discover Direct & Transitive Relationships (BFS Traversal)
@@ -328,6 +345,83 @@ export class DocumentTraceabilityService {
     };
   }
 
+  private async fetchGarageCase(idOrCode: string): Promise<RawNodeItem | null> {
+    const rows = await this.dataSource.query(
+      `SELECT c.id, c.so_chung_tu, c.bien_so_xe, c.khach_hang_name, c.khach_hang_code, 
+              c.tien_co_thue, c.tien_da_thanh_toan, c.tien_con_phai_thanh_toan,
+              c.doanh_thu, c.chi_phi, c.loi_nhuan, c.tinh_trang_dich_vu, c.ten_tinh_trang_dich_vu,
+              c.ngay_phat_sinh, c.hd_phieu_dich_vu_id,
+              gp.id as gross_profit_id, gp.doanh_thu as gp_doanh_thu, gp.chi_phi as gp_chi_phi, gp.loi_nhuan as gp_loi_nhuan
+       FROM kgara_cases c
+       LEFT JOIN kgara_gross_profit gp ON (gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu)
+       WHERE (c.id::text = $1 OR c.so_chung_tu = $1 OR c.hd_phieu_dich_vu_id = $1)
+         AND c.kgara_deleted_at IS NULL
+       LIMIT 1`,
+      [idOrCode],
+    );
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0];
+    const amount = Number(r.doanh_thu ?? r.gp_doanh_thu ?? r.tien_co_thue ?? 0);
+    const status =
+      r.ten_tinh_trang_dich_vu ||
+      (r.tinh_trang_dich_vu === 3
+        ? 'Hoàn tất'
+        : r.tinh_trang_dich_vu === 9
+          ? 'Đã hủy'
+          : 'Đang xử lý');
+    const statusVariant =
+      r.tinh_trang_dich_vu === 3
+        ? 'default'
+        : r.tinh_trang_dich_vu === 9
+          ? 'danger'
+          : 'secondary';
+
+    return {
+      id: r.id,
+      docType: 'GARAGE_CASE',
+      docNo: r.so_chung_tu || `PDV-${r.id.slice(0, 8)}`,
+      title:
+        `Sổ báo giá ${r.bien_so_xe ? '(' + r.bien_so_xe + ')' : ''}`.trim(),
+      date: r.ngay_phat_sinh
+        ? new Date(r.ngay_phat_sinh).toISOString().slice(0, 10)
+        : null,
+      amount,
+      status,
+      statusVariant,
+      partnerName: r.khach_hang_name || r.khach_hang_code,
+      depth: 0,
+      metadata: {
+        caseDbId: r.id,
+        hdPhieuDichVuId: r.hd_phieu_dich_vu_id,
+        grossProfitId: r.gross_profit_id,
+        bienSoXe: r.bien_so_xe,
+        soChungTu: r.so_chung_tu,
+        tinhTrangDichVu: r.tinh_trang_dich_vu,
+        tienCoThue: Number(r.tien_co_thue || 0),
+        tienDaThanhToan: Number(r.tien_da_thanh_toan || 0),
+        tienConPhaiThanhToan: Number(r.tien_con_phai_thanh_toan || 0),
+        doanhThu:
+          r.doanh_thu != null
+            ? Number(r.doanh_thu)
+            : r.gp_doanh_thu != null
+              ? Number(r.gp_doanh_thu)
+              : null,
+        chiPhi:
+          r.chi_phi != null
+            ? Number(r.chi_phi)
+            : r.gp_chi_phi != null
+              ? Number(r.gp_chi_phi)
+              : null,
+        loiNhuan:
+          r.loi_nhuan != null
+            ? Number(r.loi_nhuan)
+            : r.gp_loi_nhuan != null
+              ? Number(r.gp_loi_nhuan)
+              : null,
+      },
+    };
+  }
+
   private async expandInvoiceNode(
     invoiceId: string,
     currentDepth: number,
@@ -530,6 +624,71 @@ export class DocumentTraceabilityService {
           target: glId,
           relationType: 'JOURNAL_POSTED',
           label: 'Hạch toán sổ cái',
+          isTransitive: currentDepth > 0,
+        });
+      }
+    }
+
+    // 5. Check Garage Cases (Linked upstream or via settlement_order)
+    const caseRows = await this.dataSource.query(
+      `SELECT DISTINCT c.id, c.so_chung_tu, c.bien_so_xe, c.khach_hang_name, c.tien_co_thue, c.doanh_thu, c.tinh_trang_dich_vu, c.ten_tinh_trang_dich_vu, c.ngay_phat_sinh, l."linkType" as link_type
+       FROM kgara_cases c
+       LEFT JOIN kgara_case_linked_invoice l ON (l."caseDbId" = c.id OR l.gross_profit_id IN (SELECT id FROM kgara_gross_profit WHERE hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id))
+       JOIN erp_invoices i ON (l."invoiceId" = i.id OR i.settlement_order = c.so_chung_tu OR i.settlement_order = c.id::text)
+       WHERE i.id = $1 AND c.kgara_deleted_at IS NULL`,
+      [invoiceId],
+    );
+
+    for (const c of caseRows) {
+      if (!nodes.has(c.id)) {
+        const status =
+          c.ten_tinh_trang_dich_vu ||
+          (c.tinh_trang_dich_vu === 3
+            ? 'Hoàn tất'
+            : c.tinh_trang_dich_vu === 9
+              ? 'Đã hủy'
+              : 'Đang xử lý');
+        nodes.set(c.id, {
+          id: c.id,
+          docType: 'GARAGE_CASE',
+          docNo: c.so_chung_tu || `PDV-${c.id.slice(0, 8)}`,
+          title:
+            `Sổ báo giá ${c.bien_so_xe ? '(' + c.bien_so_xe + ')' : ''}`.trim(),
+          date: c.ngay_phat_sinh
+            ? new Date(c.ngay_phat_sinh).toISOString().slice(0, 10)
+            : null,
+          amount: Number(c.doanh_thu || c.tien_co_thue || 0),
+          status,
+          statusVariant:
+            c.tinh_trang_dich_vu === 3
+              ? 'default'
+              : c.tinh_trang_dich_vu === 9
+                ? 'danger'
+                : 'secondary',
+          partnerName: c.khach_hang_name,
+          depth: currentDepth + 1,
+        });
+
+        if (!visited.has(c.id)) {
+          visited.add(c.id);
+          queue.push({
+            id: c.id,
+            type: 'GARAGE_CASE',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      const isOut =
+        invNode?.metadata?.direction === 'OUT' || c.link_type === 'OUT';
+      const edgeId = `e-case-${c.id}-inv-${invoiceId}`;
+      if (!edges.has(edgeId)) {
+        edges.set(edgeId, {
+          id: edgeId,
+          source: c.id,
+          target: invoiceId,
+          relationType: isOut ? 'INVOICED_FROM' : 'EXPENSE_FOR',
+          label: isOut ? 'HĐ Doanh thu dịch vụ' : 'HĐ Chi phí vật tư',
           isTransitive: currentDepth > 0,
         });
       }
@@ -739,7 +898,200 @@ export class DocumentTraceabilityService {
     queue: { id: string; type: TraceabilityNodeType; depth: number }[],
     visited: Set<string>,
   ) {
-    // Empty placeholder for garage case expander
+    const caseNode = nodes.get(caseId);
+    const caseCode = caseNode?.docNo;
+
+    // 1. Expand Linked Invoices (Tier 1)
+    const invRows = await this.dataSource.query(
+      `SELECT DISTINCT i.id, i.invoice_no, i.serial_no, i.direction, i.invoice_date, i.total_amount, i.status, i.seller_name, i.buyer_name, i.purchase_order_id, i.sales_order_id, i.journal_entry_id, l."linkType" as link_type
+       FROM erp_invoices i
+       LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+       WHERE (l."caseDbId"::text = $1 OR ($2 != '' AND i.settlement_order = $2) OR i.settlement_order = $1)
+         AND i.is_deleted = false`,
+      [caseId, caseCode || ''],
+    );
+
+    const connectedViaInvoiceTxnIds = new Set<string>();
+
+    for (const r of invRows) {
+      const partner = r.direction === 'IN' ? r.seller_name : r.buyer_name;
+      if (!nodes.has(r.id)) {
+        nodes.set(r.id, {
+          id: r.id,
+          docType: 'INVOICE',
+          docNo: r.invoice_no,
+          title:
+            `HĐ ${r.direction === 'IN' ? 'đầu vào' : 'đầu ra'} ${r.serial_no ? '(' + r.serial_no + ')' : ''}`.trim(),
+          date: r.invoice_date,
+          amount: r.total_amount ? Number(r.total_amount) : 0,
+          status: r.status,
+          statusVariant:
+            r.status === 'CONFIRMED' || r.status === 'ACTIVE'
+              ? 'default'
+              : 'secondary',
+          partnerName: partner,
+          depth: currentDepth + 1,
+          metadata: {
+            direction: r.direction,
+            serialNo: r.serial_no,
+            purchaseOrderId: r.purchase_order_id,
+            salesOrderId: r.sales_order_id,
+            journalEntryId: r.journal_entry_id,
+          },
+        });
+
+        if (!visited.has(r.id)) {
+          visited.add(r.id);
+          queue.push({
+            id: r.id,
+            type: 'INVOICE',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      const isOut = r.direction === 'OUT' || r.link_type === 'OUT';
+      const edgeId = `e-case-${caseId}-inv-${r.id}`;
+      if (!edges.has(edgeId)) {
+        edges.set(edgeId, {
+          id: edgeId,
+          source: caseId,
+          target: r.id,
+          relationType: isOut ? 'INVOICED_FROM' : 'EXPENSE_FOR',
+          label: isOut
+            ? 'Doanh thu dịch vụ (HĐ Bán)'
+            : 'Chi phí vật tư (HĐ Mua)',
+          isTransitive: currentDepth > 0,
+        });
+      }
+
+      // Track bank transactions attached to this invoice to prevent duplication
+      const netOffTxns = await this.dataSource.query(
+        `SELECT bank_transaction_id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1`,
+        [r.id],
+      );
+      for (const t of netOffTxns) {
+        if (t.bank_transaction_id) {
+          connectedViaInvoiceTxnIds.add(t.bank_transaction_id);
+        }
+      }
+    }
+
+    // 2. Expand Direct Settlements (Tier 2 & Tier 3 via kgara_case_settlements)
+    const settlementRows = await this.dataSource.query(
+      `SELECT s.id as settlement_id, s.amount, s.settlement_type, s.source_channel, s.category, s.trans_date, s.partner_name, s.note,
+              t.id as txn_id, t.source_type, t.trans_date as txn_date, t.debit_amount, t.credit_amount, t.reference_number, t.correspondent_name,
+              b.bank_name, b.account_number, c.name as cash_book_name
+       FROM kgara_case_settlements s
+       LEFT JOIN erp_bank_transactions t ON s.bank_transaction_id = t.id AND t.is_deleted = false
+       LEFT JOIN erp_bank_accounts b ON t.bank_account_id = b.id
+       LEFT JOIN erp_cash_books c ON t.cash_book_id = c.id
+       WHERE s.case_id::text = $1`,
+      [caseId],
+    );
+
+    for (const s of settlementRows) {
+      const isReceipt = s.settlement_type === 'RECEIPT';
+      const sAmt = Number(s.amount || 0);
+
+      if (s.source_channel === 'ON_SYSTEM' && s.txn_id) {
+        // Tier 2: Direct on-system bank / cash voucher
+        // Check if already connected via invoice (Transitive Reduction)
+        const isAlsoViaInvoice = connectedViaInvoiceTxnIds.has(s.txn_id);
+
+        if (!nodes.has(s.txn_id)) {
+          const isCredit = Number(s.credit_amount || 0) > 0;
+          const sourceLabel =
+            s.source_type === 'BANK'
+              ? `${s.bank_name || 'Ngân hàng'} - ${s.account_number || ''}`.trim()
+              : s.cash_book_name || 'Sổ quỹ';
+
+          nodes.set(s.txn_id, {
+            id: s.txn_id,
+            docType: 'BANK_TXN',
+            docNo:
+              s.reference_number ||
+              (isCredit ? 'GBC' : 'UNC') + `-${s.txn_id.slice(0, 8)}`,
+            title: `${s.source_type === 'BANK' ? (isCredit ? 'Giấy báo có' : 'Ủy nhiệm chi') : 'Phiếu ' + (isCredit ? 'thu' : 'chi')} (${sourceLabel})`,
+            date: s.txn_date
+              ? new Date(s.txn_date).toISOString().slice(0, 10)
+              : null,
+            amount: isCredit
+              ? Number(s.credit_amount)
+              : Number(s.debit_amount || 0),
+            netOffAmount: sAmt,
+            status: 'RECORDED',
+            statusVariant: 'default',
+            partnerName: s.correspondent_name || s.partner_name,
+            depth: currentDepth + 1,
+          });
+
+          if (!visited.has(s.txn_id)) {
+            visited.add(s.txn_id);
+            queue.push({
+              id: s.txn_id,
+              type: 'BANK_TXN',
+              depth: currentDepth + 1,
+            });
+          }
+        }
+
+        const edgeId = `e-case-${caseId}-txn-${s.txn_id}`;
+        if (!edges.has(edgeId)) {
+          edges.set(edgeId, {
+            id: edgeId,
+            source: caseId,
+            target: s.txn_id,
+            relationType: 'NET_OFF',
+            label: isAlsoViaInvoice
+              ? `Đã gắn qua HĐ (${sAmt.toLocaleString('vi-VN')} ₫)`
+              : isReceipt
+                ? `Thu trực tiếp: ${sAmt.toLocaleString('vi-VN')} ₫`
+                : `Chi trực tiếp: ${sAmt.toLocaleString('vi-VN')} ₫`,
+            amount: sAmt,
+            isTransitive: isAlsoViaInvoice || currentDepth > 0,
+          });
+        }
+      } else {
+        // Tier 3: Off-system manual record
+        const manualId = `manual-${s.settlement_id}`;
+        if (!nodes.has(manualId)) {
+          nodes.set(manualId, {
+            id: manualId,
+            docType: 'BANK_TXN',
+            docNo: `NOTE-${s.category || (isReceipt ? 'THU-NGOAI' : 'CHI-NGOAI')}`,
+            title: `${isReceipt ? 'Khoản thu ngoài ERP' : 'Khoản chi ngoài ERP'} (${s.partner_name || 'Nội bộ'})`,
+            date: s.trans_date
+              ? new Date(s.trans_date).toISOString().slice(0, 10)
+              : null,
+            amount: sAmt,
+            netOffAmount: sAmt,
+            status: 'MANUAL_NOTE',
+            statusVariant: 'outline',
+            partnerName: s.partner_name,
+            depth: currentDepth + 1,
+            metadata: {
+              isOffSystem: true,
+              note: s.note,
+              category: s.category,
+            },
+          });
+        }
+
+        const edgeId = `e-case-${caseId}-manual-${s.settlement_id}`;
+        if (!edges.has(edgeId)) {
+          edges.set(edgeId, {
+            id: edgeId,
+            source: caseId,
+            target: manualId,
+            relationType: 'NET_OFF',
+            label: `${isReceipt ? 'Thu ngoài ERP' : 'Chi ngoài ERP'}: ${sAmt.toLocaleString('vi-VN')} ₫`,
+            amount: sAmt,
+            isTransitive: currentDepth > 0,
+          });
+        }
+      }
+    }
   }
 
   private getResourceForDocType(docType: TraceabilityNodeType): string {

@@ -11,6 +11,7 @@ export type TraceabilityNodeType =
 export type TraceabilityRelationType =
   | 'NET_OFF'
   | 'INVOICED_FROM'
+  | 'EXPENSE_FOR'
   | 'RECEIPT_OF'
   | 'ISSUE_OF'
   | 'JOURNAL_POSTED'
