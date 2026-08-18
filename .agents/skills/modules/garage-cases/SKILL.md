@@ -313,6 +313,21 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng tương ứng với doanh thu dịch vụ.
 - Ràng buộc toàn vẹn: Khi bản ghi `kgara_gross_profit` hoặc `kgara_cases` bị xóa, các dòng liên kết hóa đơn tương ứng sẽ tự động bị xóa theo (`onDelete: 'CASCADE'`), đảm bảo không để lại bản ghi mồ côi.
 
+### 5.8. Quy tắc Quản lý Dòng tiền & Công nợ 100% trên ERP (`kgara_case_settlements` & `bank_transactions`)
+- **Nguyên tắc nghiệp vụ dòng tiền**: Không sử dụng các trường thanh toán cũ trên máy chủ KGara để theo dõi thu/chi, vì trên thực tế KGara không quản lý tài khoản thu/chi thực tế của doanh nghiệp.
+- **Theo dõi 2 chiều dòng tiền thực tế trên ERP**:
+  1. **Chiều Phải Thu (Doanh thu / Khách hàng)**:
+     - Mục tiêu thu: Tổng tiền thanh toán có thuế (`tienCoThue` / `TongTienThanhToan`).
+     - Đã thu thực tế (ERP): Tổng tiền đã thu qua Sao kê ngân hàng (`directReceiptOnSystem`), Tiền mặt sổ quỹ (`directReceiptOffSystem`), và Cấn trừ hóa đơn (`invoiceCollected`).
+     - Còn phải thu: `Math.max(0, targetRevenue - totalCollected)`.
+  2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
+     - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
+     - Đã thanh toán (ERP): Tổng tiền chi qua Sao kê ngân hàng (`directPaymentOnSystem`), Tiền mặt sổ quỹ (`directPaymentOffSystem`), và Cấn trừ hóa đơn (`invoicePaid`).
+     - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
+- **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
+  - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
+  - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
+
 ---
 
 ## 6. Tích hợp Liên Module

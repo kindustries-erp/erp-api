@@ -444,11 +444,36 @@ export class KgaraApiCoreController {
       where: { vuViecCode: code },
     });
     if (!grossProfit) {
+      const caseData = await this.caseRepo.findOne({
+        where: { soChungTu: code },
+      });
+      if (caseData) {
+        const rev = Number(
+          caseData.doanhThu ?? caseData.rawData?.DoanhThu ?? 0,
+        );
+        const cost = Number(caseData.chiPhi ?? caseData.rawData?.ChiPhi ?? 0);
+        const profit = Number(
+          caseData.loiNhuan ?? caseData.rawData?.LoiNhuan ?? rev - cost,
+        );
+        const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
+        return {
+          id: null,
+          DoanhThu: rev,
+          ChiPhi: cost,
+          LoiNhuan: profit,
+          BienLoiNhuan: margin,
+          VuViecCode: code,
+          VuViecName: null,
+          VuViecID: caseData.hdPhieuDichVuId,
+          ...(caseData.rawData as object),
+        };
+      }
       return {
         id: null,
         DoanhThu: 0,
         ChiPhi: 0,
         LoiNhuan: 0,
+        BienLoiNhuan: 0,
         VuViecCode: code,
         VuViecName: null,
         VuViecID: null,
@@ -457,7 +482,8 @@ export class KgaraApiCoreController {
     const gp = grossProfit;
     const rev = Number(gp.doanhThu) || 0;
     const cost = Number(gp.chiPhi) || 0;
-    const profit = Number(gp.loiNhuan) || 0;
+    const profit = Number(gp.loiNhuan) || rev - cost;
+    const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
     return {
       id: gp.id,
       createdAt: gp.createdAt,
@@ -465,6 +491,7 @@ export class KgaraApiCoreController {
       DoanhThu: rev,
       ChiPhi: cost,
       LoiNhuan: profit,
+      BienLoiNhuan: margin,
       VuViecCode: gp.vuViecCode,
       VuViecName: gp.vuViecName,
       TenKhachHang: gp.tenKhachHang,
@@ -831,9 +858,14 @@ export class KgaraApiCoreController {
     });
 
     const isCompleted = c.tinhTrangDichVu === 3;
-    const targetRevenue = Number(
-      c.doanhThu ?? gp?.doanhThu ?? c.tienCoThue ?? 0,
+    const totalPayable = Number(
+      c.tienCoThue ??
+        c.rawData?.TongTienThanhToan ??
+        c.doanhThu ??
+        gp?.doanhThu ??
+        0,
     );
+    const targetRevenue = totalPayable;
     const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
     const expectedProfit = isCompleted
       ? Number(c.loiNhuan ?? gp?.loiNhuan ?? targetRevenue - targetCost)
