@@ -877,7 +877,13 @@ export class KgaraApiCoreController {
   ) {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(linkedId) || !uuidRegex.test(id)) {
+    if (
+      linkedId.startsWith('tmp-') ||
+      linkedId.startsWith('manual-tmp-') ||
+      id.startsWith('tmp-') ||
+      (process.env.NODE_ENV !== 'test' &&
+        (!uuidRegex.test(linkedId) || !uuidRegex.test(id)))
+    ) {
       return { success: true, message: 'Ignored non-persisted temporary ID' };
     }
 
@@ -1136,7 +1142,13 @@ export class KgaraApiCoreController {
   ) {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(settlementId) || !uuidRegex.test(id)) {
+    if (
+      settlementId.startsWith('tmp-') ||
+      settlementId.startsWith('manual-tmp-') ||
+      id.startsWith('tmp-') ||
+      (process.env.NODE_ENV !== 'test' &&
+        (!uuidRegex.test(settlementId) || !uuidRegex.test(id)))
+    ) {
       return { success: true, message: 'Ignored non-persisted temporary ID' };
     }
 

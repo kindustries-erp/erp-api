@@ -174,5 +174,15 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
         ['txn-1', ['inv-1']],
       );
     });
+
+    it('should safely ignore temporary settlement IDs without querying DB', async () => {
+      const res = await controller.removeCaseSettlement(
+        'case-1',
+        'tmp-msyvp0zr-1c3at9',
+      );
+      expect(res.success).toBe(true);
+      expect(res.message).toBe('Ignored non-persisted temporary ID');
+      expect(settlementRepo.findOne).not.toHaveBeenCalled();
+    });
   });
 });
