@@ -91,6 +91,11 @@ export class CreateErpInvoiceItemDto {
   @Type(() => Number)
   @IsNumber()
   totalAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemCode?: string | null;
 }
 
 export class CreateErpInvoiceDto {
@@ -266,6 +271,16 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  settlementOrder?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  licensePlate?: string;
 
   @ApiPropertyOptional({ type: [CreateErpInvoiceItemDto] })
   @IsOptional()

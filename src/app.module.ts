@@ -36,6 +36,7 @@ import { ErpAttachmentsCoreModule } from './erp-attachments-core/erp-attachments
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { isCronEnabled } from './common/utils/cron.util';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
@@ -52,10 +53,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 
 @Module({
   imports: [
-    ...(process.env.APP_ENV?.endsWith('-production') ||
-    process.env.NODE_ENV === 'production'
-      ? [ScheduleModule.forRoot()]
-      : []),
+    ...(isCronEnabled() ? [ScheduleModule.forRoot()] : []),
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),

@@ -52,10 +52,12 @@ Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, 
 
 - Khi làm việc trên module cụ thể: Đọc trực tiếp skill của module đó:
   - **Sản xuất & BOM**: `production-core`, `bom-core`
+  - **Bán hàng & Sau bán hàng**: `erp-sales-orders`, `sales-report-dashboard`, `after-sales`
   - **Mua hàng & Nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
   - **Kho & Tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`
   - **Tài chính, Dòng tiền & Hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`
   - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
+  - **Dịch vụ Garage & Sửa chữa xe**: `garage-cases`, `garage-gross-profit`
 - Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
 
 ## Team-scale reminders

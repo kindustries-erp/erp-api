@@ -165,8 +165,12 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 | | `DELETE`| `/cash-books/:id` | `{ resource: 'bank_accounts', action: 'delete' }` | Xóa mềm sổ quỹ |
 | **Transactions** | `GET` | `/transactions` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
 | | `GET` | `/transactions/:id` | `{ resource: 'bank_statements', action: 'read' }` | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
+| | `GET` | `/transactions/:id/traceability-graph` | `{ resource: 'bank_statements', action: 'read' }` | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
 | | `GET` | `/transactions/:id/posting` | `{ resource: 'bank_statements', action: 'read' }` | Lấy thông tin bút toán kế toán hiện thời |
+| | `POST` | `/transactions/:id/net-off-invoices` | `{ resource: 'bank_statements', action: 'update' }` | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
+| | `DELETE`| `/transactions/:id/net-off-invoices/:netOffId` | `{ resource: 'bank_statements', action: 'update' }` | Gỡ bỏ liên kết cấn trừ hóa đơn |
 | | `GET` | `/transactions/column-options` | `{ resource: 'bank_statements', action: 'read' }` | Lấy danh sách options duy nhất cho bộ lọc dropdown |
+
 | | `POST` | `/transactions/manual` | `{ resource: 'bank_statements', action: 'create' }` | Tạo giao dịch thu/chi thủ công |
 | | `PATCH`| `/transactions/:id` | `{ resource: 'bank_statements', action: 'update' }` | Cập nhật ghi chú/thông tin đối tác giao dịch |
 | | `POST` | `/transactions/:id/post` | `{ resource: 'bank_statements', action: 'update' }` | Hạch toán ghi nhận bút toán kế toán |

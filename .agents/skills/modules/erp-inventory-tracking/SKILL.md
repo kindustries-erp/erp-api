@@ -145,6 +145,24 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
    - Kích hoạt `warranty_activated_at = now()`, `activation_source = 'ERP_DELIVERY'`.
 4. Commit Transaction và trả về danh sách kết quả đã bàn giao thành công.
 
+### 5.2. Cơ chế Kích hoạt Bảo hành UNVERIFIED (Ghost Flow & Whitelist 200 xe Đợt 3)
+1. **Mục đích**: Cho phép khách hàng/đại lý kích hoạt bảo hành sớm khi quét mã QR trên xe dù dữ liệu xe chưa kịp hoàn tất thủ tục nhập kho/sản xuất chính thống.
+2. **Whitelist 200 Xe Đợt 3 (`unverified-vehicles-batch3.json`)**:
+   - Khi xe chưa có trong bảng `erp_vehicles`, hệ thống **chỉ cho phép** các xe có Số Khung & Số Máy khớp chính xác với 200 xe xuất xưởng Đợt 3 được kích hoạt.
+   - Các xe ngoài danh mục sẽ bị từ chối (`found: false, reason: 'NOT_IN_SYSTEM'`).
+3. **Quy tắc Số Serial & Prefix `UNVERIFIED_`**:
+   - **Luồng UNVERIFIED**: Lưu trực tiếp vào Database `attributes.ghost_serial = 'UNVERIFIED_' + serial_no` (ví dụ: `UNVERIFIED_XDA1754752`).
+   - **Luồng Sản Xuất Đúng Quy Trình**: Serial trong bảng `erp_inventory_tracking_serials` lưu số serial chuẩn sạch, **không** có prefix.
+4. **Truy vấn & Hiển thị trên ERP**:
+   - SQL biểu thức cột `serial_no`:
+     ```sql
+     COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin')) AS serial_no
+     ```
+   - SQL biểu thức cột màu sơn:
+     ```sql
+     COALESCE(s.attributes->>'color', l.attributes->>'ghost_color') AS color
+     ```
+
 ---
 
 ## 6. Tích hợp Liên Module

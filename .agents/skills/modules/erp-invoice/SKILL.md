@@ -147,7 +147,8 @@ src/erp-invoices-core/
 │   ├── invoice-import.service.ts              # Xử lý nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
 │   ├── invoice-portal.service.ts              # Xử lý sync GDT, login, captcha, bulk download XML
-│   └── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
+│   ├── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
+│   └── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (Strict Match Rule & Xếp hạng 6 cấp độ)
 ├── subscribers/
 │   └── erp-invoice-item.subscriber.ts         # TypeORM Subscriber tự nhận diện mã phụ tùng VinFast
 ├── utils/
@@ -174,6 +175,7 @@ src/erp-invoices-core/
 | `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
+| `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
 | `GET` | `/erp-invoices/:id` | `invoices` | `read` | Lấy chi tiết một hóa đơn kèm items, cấn trừ ngân hàng và tệp đính kèm |
 | `POST` | `/erp-invoices` | `invoices` | `create` | Tạo mới thủ công một hóa đơn |
 | `PATCH` | `/erp-invoices/:id` | `invoices` | `update` | Cập nhật thông tin hóa đơn và các dòng chi tiết |
@@ -182,6 +184,8 @@ src/erp-invoices-core/
 | `PATCH` | `/erp-invoices/bulk-set-branch` | `invoices` | `update` | Gán chi nhánh hàng loạt cho danh sách hóa đơn (tự đồng bộ bút toán sổ cái) |
 | `PATCH` | `/erp-invoices/bulk-set-notes` | `invoices` | `update` | Cập nhật ghi chú hàng loạt cho danh sách hóa đơn |
 | `PATCH` | `/erp-invoices/:id/validate` | `invoices` | `update` | Đánh dấu xác thực hóa đơn hợp lệ/không hợp lệ |
+| `GET` | `/erp-invoices/:id/traceability-graph` | `invoices` | `read` | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng (PO/SO, Phiếu kho, Sao kê, Bút toán GL, Vụ việc Garage) kèm Zero-Trust RBAC mask |
+
 
 ### 4.2. Nhóm API Hạch toán Kế toán (`/api/v1/erp-invoices/:id`)
 
@@ -200,9 +204,9 @@ src/erp-invoices-core/
 | `POST` | `/erp-invoices/portal/login` | `invoices` | `update` | Đăng nhập Cổng thuế GDT với username, password, captcha |
 | `GET` | `/erp-invoices/portal/token` | `invoices` | `update` | Lấy cấu hình Token/Cookie Cổng thuế đã lưu |
 | `POST` | `/erp-invoices/portal/token` | `invoices` | `update` | Lưu cấu hình Token/Cookie/Tài khoản Cổng thuế vào Company Profile |
-| `POST` | `/erp-invoices/portal/sync` | `invoices` | `update` | Kích hoạt đồng bộ hóa đơn từ GDT theo khoảng ngày, tự tải XML ngầm |
-| `POST` | `/erp-invoices/portal/bulk-download-xml` | `invoices` | `update` | Tải bổ sung tệp XML gốc từ GDT cho các hóa đơn chưa có XML trong DB |
-| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể |
+| `POST` | `/erp-invoices/portal/sync` | `invoices` | `update` | Kích hoạt đồng bộ hóa đơn từ GDT theo khoảng ngày (tự đọc Token/Cookie từ DB), tự tải XML ngầm |
+| `POST` | `/erp-invoices/portal/bulk-download-xml` | `invoices` | `update` | Tải bổ sung tệp XML gốc từ GDT cho các hóa đơn chưa có XML trong DB (tự đọc Token/Cookie từ DB) |
+| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB) |
 | `GET (SSE)` | `/erp-invoices/portal/progress` | — | — | Stream SSE tiến độ đồng bộ hóa đơn GDT thời gian thực |
 
 ### 4.4. Nhóm API Tệp Đính Kèm, File R2 & Import/Export
@@ -273,6 +277,28 @@ src/erp-invoices-core/
 - **Biển số xe (`license_plate`)**: Helper `invoice-metadata.helper.ts` nhận diện các định dạng biển số xe Việt Nam (vd: `51G-123.45`, `30H 987.65`, `BS: 29A-11223`) trong nội dung diễn giải.
 - **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `Lệnh SC...`.
 - **Subscriber Phụ tùng VinFast (`ErpInvoiceItemSubscriber`)**: Tự động bắt sự kiện `beforeInsert` và `beforeUpdate` trên `ErpInvoiceItem` để trích xuất mã linh kiện chuẩn (3 chữ cái in hoa + 8 chữ số + 0-2 ký tự) hoặc các trường hợp đặc thù như pin cao áp (`BAT21001011`, `EEP73110011AP`) và động cơ điện bảo hành.
+
+### 5.5. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
+- **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+  1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
+     - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
+     - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.
+     - Fallback mặc định cho tất cả các nhà cung cấp/mã số thuế khác chưa được phân loại cụ thể.
+  2. **Tài khoản `642` (Chi phí quản lý doanh nghiệp)**:
+     - Các mã số thuế chi phí quản lý chỉ định: `0100686209-002`, `0312650437`, `0318880490`, `0104093672`, `0318115309`, `0317121966`.
+- **Cơ chế Tự động sinh Định khoản**: Khi hóa đơn có liên kết chứng từ hoặc khi mở drawer nội bộ, hệ thống tự động sinh cấu trúc bút toán Nợ (`632`/`642`), Nợ VAT (`1331`), Có (`331`/`1121`/`1111`) mà không ép buộc thao tác bật thủ công.
+
+### 5.6. Tự động Phân loại Chi nhánh & Quét trước DB Cache (`invoice-branch.helper.ts`, `out-invoice-display.helper.ts`)
+- **Cơ chế Quét trước DB (Pre-scan Branch Cache)**:
+  - `InvoicePortalService.preloadBranchCache()` tự động quét toàn bộ chi nhánh active từ `erp_branches` nạp vào RAM cache khi khởi động và trước mỗi lượt sync, hỗ trợ tra cứu $O(1)$ an toàn và loại bỏ log warning lặp lại.
+- **Quy tắc phân loại Hóa đơn Bán ra (`direction = 'OUT'`)**:
+  - Khớp MST người mua trong `DAO_TRI_OUT_TAX_CODES` (`0110269067-001`, `0110269067`, `0202357718`, `0108926276`) hoặc tiền tố lệnh quyết toán (`S52801`, `S52802`, `S64701`) $\to$ Chi nhánh **Đào Trí** (`ĐT`).
+  - Các trường hợp còn lại $\to$ Fallback về chi nhánh **Phổ Quang** (`PQ`).
+- **Quy tắc phân loại Hóa đơn Mua vào (`direction = 'IN'`)**:
+  - Khớp MST người bán/người mua trong `DAO_TRI_IN_TAX_CODES` (`0202357718` - VinFast) $\to$ Chi nhánh **Đào Trí** (`ĐT`).
+  - Nếu không khớp rule cứng $\to$ Fallback tìm theo lịch sử chi nhánh của các hóa đơn IN trước đó cùng `sellerTaxCode` (`resolveHistoricalBranchForIn`).
+- **Kiểm soát Cron Job theo môi trường (`isCronEnabled()`)**:
+  - `ErpInvoicesCronService` tự động kiểm tra `isCronEnabled()`: mặc định tắt tự động đồng bộ trên localhost/development, chỉ kích hoạt khi ở `production` hoặc khi đặt `ENABLE_CRON=true` trong file `.env`.
 
 ---
 

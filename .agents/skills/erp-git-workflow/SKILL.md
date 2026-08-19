@@ -177,7 +177,15 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # 4. Kiểm tra QC nghiêm ngặt trước khi push (Typecheck, Lint, Prettier, Unit Test)
 bun run check:ci
-bun run test
+
+# Chạy Unit test tương ứng từng repo:
+# - Trong erp-api: bunx jest --forceExit
+# - Trong erp-web: bun run test
+if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
+  bunx jest --forceExit
+else
+  bun run test
+fi
 
 # 5. Push lên remote
 git push $REMOTE_NAME $CURRENT_BRANCH
@@ -193,5 +201,7 @@ git push $REMOTE_NAME $CURRENT_BRANCH
 - [ ] Mọi local changes đều đã được commit an toàn trước khi pull rebase.
 - [ ] `git pull --rebase` đã thành công, không còn trạng thái conflict dở dang.
 - [ ] `bun run check:ci` đã pass sạch lỗi (TypeScript + ESLint + Prettier).
-- [ ] `bun run test` đã chạy và pass toàn bộ test suites.
+- [ ] **Unit Tests**:
+  - `erp-api`: `bunx jest --forceExit` đã pass 100% tất cả 38 test suites.
+  - `erp-web`: `bun run test` đã pass 100% tất cả 55 test suites.
 - [ ] Push thành công lên đúng branch trên remote `$REMOTE_NAME`.
