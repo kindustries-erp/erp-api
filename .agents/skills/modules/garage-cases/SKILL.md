@@ -353,6 +353,20 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
   - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
 
+### 5.12. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
+- **Mốc thời gian theo dõi**: Toàn bộ nghiệp vụ theo dõi công nợ đối tác xưởng Garage áp dụng mốc chặn dưới từ tháng 07/2026 (`>= 2026-07-01`).
+- **Công nợ Khách hàng (`GET /cases/customers-debt`)**:
+  - Dữ liệu được nhóm và tính toán tổng hợp trực tiếp từ bảng `kgara_cases` theo `khach_hang_code`.
+  - Phân bổ 4 nhóm tuổi nợ (Aging buckets): `0_30` ngày, `31_60` ngày, `61_90` ngày, và `over_90` ngày dựa trên khoảng cách giữa ngày phát sinh phiếu (`ngay_phat_sinh`) và ngày hiện tại.
+  - Hỗ trợ phân trang, tìm kiếm đa trường (`q`), lọc theo dải ngày (`from`, `to`), bộ lọc popover cột (`filtersStr`, `column_filters`), và sắp xếp theo doanh thu, đã thu, còn phải thu, tuổi nợ.
+  - Endpoint `GET /cases/customers-debt/column-options`: Trả về danh sách phân trang các giá trị duy nhất phục vụ bộ lọc popover.
+  - Endpoint `GET /cases/by-customer/:customerCode`: Truy xuất toàn bộ danh sách phiếu dịch vụ phát sinh của khách hàng kèm tuổi nợ và chi tiết thanh toán từng phiếu.
+- **Công nợ Nhà cung cấp (`GET /payables/suppliers-debt`)**:
+  - Dữ liệu được nhóm và tổng hợp từ sổ công nợ phải trả `kgara_payables` (tài khoản theo dõi 331) theo `doi_tac_id`.
+  - Tính toán số dư đầu kỳ (`dk_no`, `dk_co`), số phát sinh trong kỳ (`ps_no`: đã thanh toán, `ps_co`: mua hàng/dịch vụ), số dư cuối kỳ (`ck_co - ck_no` = `balance_amount`) và tuổi nợ.
+  - Endpoint `GET /payables/suppliers-debt/column-options`: Phục vụ bộ lọc popover cho mã/tên nhà cung cấp và tài khoản.
+  - Endpoint `GET /payables/by-supplier/:supplierId/cases`: Lấy chi tiết các bút toán phát sinh và tự động kết nối với các phiếu dịch vụ `kgara_cases` liên đới qua mã chứng từ `maSoVuViec = soChungTu`.
+
 ---
 
 ## 6. Tích hợp Liên Module
@@ -371,3 +385,4 @@ Khi chỉnh sửa `kgara-api-core`:
 1. Chạy Type-check: `bun run check:ci`
 2. Chạy Unit test: `bunx jest src/kgara-api-core/ --forceExit`
 3. Xác minh migration `1780000000000-AddKgaraGrossProfit.ts`, `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
+
