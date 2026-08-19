@@ -10,6 +10,7 @@ import { SinvoiceService } from './sinvoice.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { isCronEnabled } from '../common/utils/cron.util';
 
 @Injectable()
 export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +27,12 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!isCronEnabled()) {
+      this.logger.log(
+        'Sinvoice draft auto-sync cron is disabled in this environment.',
+      );
+      return;
+    }
     this.scheduleNextSync();
   }
 

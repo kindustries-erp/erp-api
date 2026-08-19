@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { Subject } from 'rxjs';
@@ -20,7 +25,10 @@ import {
 } from '../helpers/invoice-gdt.helper';
 import { sleep } from '../../common/utils/delay.util';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
-import { resolveOutInvoiceBranchCode } from '../helpers/invoice-branch.helper';
+import {
+  resolveOutInvoiceBranchCode,
+  resolveInInvoiceBranchCode,
+} from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 import { solveGdtSvgCaptcha } from '../helpers/gdt-captcha-solver.helper';
@@ -36,7 +44,7 @@ export type PortalProgressEvent = {
 };
 
 @Injectable()
-export class InvoicePortalService {
+export class InvoicePortalService implements OnModuleInit {
   private readonly logger = new Logger(InvoicePortalService.name);
   private static readonly GDT_API_BASE_URL =
     'https://hoadondientu.gdt.gov.vn/api';
@@ -58,19 +66,43 @@ export class InvoicePortalService {
   ) {}
 
   // ---------------------------------------------------------------------------
-  // Config
+  // Config & Branch Pre-scan Cache
   // ---------------------------------------------------------------------------
 
   private readonly _branchIdCache = new Map<string, string>();
+  private _isBranchCacheLoaded = false;
 
-  private async resolveBranchIdForOut(
-    settlementOrder: string | null | undefined,
-    buyerTaxCode?: string | null,
-  ): Promise<string | null> {
-    const branchCode = resolveOutInvoiceBranchCode(
-      settlementOrder,
-      buyerTaxCode,
-    );
+  async onModuleInit() {
+    await this.preloadBranchCache();
+  }
+
+  public async preloadBranchCache(): Promise<Map<string, string>> {
+    try {
+      const branches = await this.branchRepository.find({
+        where: { isActive: true },
+        select: ['id', 'code', 'name'],
+      });
+
+      this._branchIdCache.clear();
+      for (const branch of branches) {
+        if (branch.code) {
+          this._branchIdCache.set(branch.code.trim(), branch.id);
+        }
+      }
+      this._isBranchCacheLoaded = true;
+      this.logger.log(
+        `Pre-scanned ${branches.length} active branches into cache (${Array.from(this._branchIdCache.keys()).join(', ')}).`,
+      );
+    } catch (err) {
+      this.logger.error('Failed to pre-scan branches from DB', err);
+    }
+    return this._branchIdCache;
+  }
+
+  private async getBranchIdByCode(branchCode: string): Promise<string | null> {
+    if (!this._isBranchCacheLoaded) {
+      await this.preloadBranchCache();
+    }
 
     if (this._branchIdCache.has(branchCode)) {
       return this._branchIdCache.get(branchCode)!;
@@ -86,8 +118,33 @@ export class InvoicePortalService {
       return branch.id;
     }
 
-    this.logger.warn(`Branch với code="${branchCode}" không tìm thấy trong DB`);
+    this.logger.debug(
+      `Branch với code="${branchCode}" không tìm thấy trong DB`,
+    );
     return null;
+  }
+
+  private async resolveBranchIdForOut(
+    settlementOrder: string | null | undefined,
+    buyerTaxCode?: string | null,
+  ): Promise<string | null> {
+    const branchCode = resolveOutInvoiceBranchCode(
+      settlementOrder,
+      buyerTaxCode,
+    );
+    return this.getBranchIdByCode(branchCode);
+  }
+
+  private async resolveBranchIdForIn(
+    sellerTaxCode?: string | null,
+    buyerTaxCode?: string | null,
+  ): Promise<string | null> {
+    const branchCode = resolveInInvoiceBranchCode(sellerTaxCode, buyerTaxCode);
+    if (branchCode) {
+      const branchId = await this.getBranchIdByCode(branchCode);
+      if (branchId) return branchId;
+    }
+    return this.resolveHistoricalBranchForIn(sellerTaxCode ?? null);
   }
 
   private async resolveHistoricalBranchForIn(
@@ -591,6 +648,9 @@ export class InvoicePortalService {
           }
         }
 
+        // Pre-scan DB branches before classification
+        await this.preloadBranchCache();
+
         // Save to DB
         let created = 0;
         let skipped = 0;
@@ -695,8 +755,9 @@ export class InvoicePortalService {
             }
 
             if (direction === 'IN') {
-              const branchId = await this.resolveHistoricalBranchForIn(
+              const branchId = await this.resolveBranchIdForIn(
                 saved.sellerTaxCode,
+                saved.buyerTaxCode,
               );
               if (branchId) {
                 await this.repository.update(saved.id, { branchId });
@@ -1071,7 +1132,7 @@ export class InvoicePortalService {
     if (invoice.direction === 'OUT') {
       const updated = await this.repository.findOne({
         where: { id: invoice.id },
-        select: ['id', 'settlementOrder', 'branchId'],
+        select: ['id', 'settlementOrder', 'branchId', 'buyerTaxCode'],
       });
       if (updated) {
         const newBranchId = await this.resolveBranchIdForOut(
@@ -1082,6 +1143,23 @@ export class InvoicePortalService {
           await this.repository.update(invoice.id, { branchId: newBranchId });
           this.logger.log(
             `Branch updated for invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
+          );
+        }
+      }
+    } else if (invoice.direction === 'IN') {
+      const updated = await this.repository.findOne({
+        where: { id: invoice.id },
+        select: ['id', 'sellerTaxCode', 'buyerTaxCode', 'branchId'],
+      });
+      if (updated) {
+        const newBranchId = await this.resolveBranchIdForIn(
+          updated.sellerTaxCode,
+          updated.buyerTaxCode,
+        );
+        if (newBranchId && updated.branchId !== newBranchId) {
+          await this.repository.update(invoice.id, { branchId: newBranchId });
+          this.logger.log(
+            `Branch updated for IN invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
           );
         }
       }

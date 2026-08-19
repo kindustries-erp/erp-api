@@ -288,6 +288,18 @@ src/erp-invoices-core/
      - Các mã số thuế chi phí quản lý chỉ định: `0100686209-002`, `0312650437`, `0318880490`, `0104093672`, `0318115309`, `0317121966`.
 - **Cơ chế Tự động sinh Định khoản**: Khi hóa đơn có liên kết chứng từ hoặc khi mở drawer nội bộ, hệ thống tự động sinh cấu trúc bút toán Nợ (`632`/`642`), Nợ VAT (`1331`), Có (`331`/`1121`/`1111`) mà không ép buộc thao tác bật thủ công.
 
+### 5.6. Tự động Phân loại Chi nhánh & Quét trước DB Cache (`invoice-branch.helper.ts`, `out-invoice-display.helper.ts`)
+- **Cơ chế Quét trước DB (Pre-scan Branch Cache)**:
+  - `InvoicePortalService.preloadBranchCache()` tự động quét toàn bộ chi nhánh active từ `erp_branches` nạp vào RAM cache khi khởi động và trước mỗi lượt sync, hỗ trợ tra cứu $O(1)$ an toàn và loại bỏ log warning lặp lại.
+- **Quy tắc phân loại Hóa đơn Bán ra (`direction = 'OUT'`)**:
+  - Khớp MST người mua trong `DAO_TRI_OUT_TAX_CODES` (`0110269067-001`, `0110269067`, `0202357718`, `0108926276`) hoặc tiền tố lệnh quyết toán (`S52801`, `S52802`, `S64701`) $\to$ Chi nhánh **Đào Trí** (`ĐT`).
+  - Các trường hợp còn lại $\to$ Fallback về chi nhánh **Phổ Quang** (`PQ`).
+- **Quy tắc phân loại Hóa đơn Mua vào (`direction = 'IN'`)**:
+  - Khớp MST người bán/người mua trong `DAO_TRI_IN_TAX_CODES` (`0202357718` - VinFast) $\to$ Chi nhánh **Đào Trí** (`ĐT`).
+  - Nếu không khớp rule cứng $\to$ Fallback tìm theo lịch sử chi nhánh của các hóa đơn IN trước đó cùng `sellerTaxCode` (`resolveHistoricalBranchForIn`).
+- **Kiểm soát Cron Job theo môi trường (`isCronEnabled()`)**:
+  - `ErpInvoicesCronService` tự động kiểm tra `isCronEnabled()`: mặc định tắt tự động đồng bộ trên localhost/development, chỉ kích hoạt khi ở `production` hoặc khi đặt `ENABLE_CRON=true` trong file `.env`.
+
 ---
 
 ## 6. Tích hợp Liên Module

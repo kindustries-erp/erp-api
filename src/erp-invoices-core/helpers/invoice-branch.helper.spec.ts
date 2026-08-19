@@ -1,7 +1,9 @@
 import {
   isDaoTriOutInvoiceTaxCode,
+  isDaoTriInInvoiceTaxCode,
   classifyInvoiceLine,
   resolveOutInvoiceBranchCode,
+  resolveInInvoiceBranchCode,
 } from './out-invoice-display.helper';
 
 describe('out-invoice-display.helper', () => {
@@ -13,6 +15,20 @@ describe('out-invoice-display.helper', () => {
       resolveOutInvoiceBranchCode('S99999-WO-26-01-01-001', '0202357718'),
     ).toBe('ĐT');
     expect(isDaoTriOutInvoiceTaxCode('0108926276')).toBe(true);
+  });
+
+  it('classifies Đào Trí IN invoices by tax code 0202357718', () => {
+    expect(isDaoTriInInvoiceTaxCode('0202357718')).toBe(true);
+    expect(isDaoTriInInvoiceTaxCode('0110269067')).toBe(false);
+    expect(resolveInInvoiceBranchCode('0202357718', '0318334886-003')).toBe(
+      'ĐT',
+    );
+    expect(resolveInInvoiceBranchCode('0318334886-003', '0202357718')).toBe(
+      'ĐT',
+    );
+    expect(resolveInInvoiceBranchCode('0100109106', '0318334886-003')).toBe(
+      null,
+    );
   });
 
   it('falls back to settlement order prefixes when tax code does not match', () => {
