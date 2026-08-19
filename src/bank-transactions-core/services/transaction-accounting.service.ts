@@ -432,4 +432,71 @@ export class TransactionAccountingService {
       });
     }
   }
+
+  async linkInvoiceToTransaction(
+    txnId: string,
+    payload: { invoiceId: string; netOffAmount?: number },
+  ) {
+    const txn = await this.transactionRepo.findOne({
+      where: { id: txnId, isDeleted: false },
+    });
+    if (!txn) {
+      throw new NotFoundException(`Transaction ${txnId} not found`);
+    }
+
+    const invoice = await this.dataSource.query(
+      `SELECT id, branch_id FROM erp_invoices WHERE id = $1 AND is_deleted = false LIMIT 1`,
+      [payload.invoiceId],
+    );
+    if (!invoice || invoice.length === 0) {
+      throw new NotFoundException(`Invoice ${payload.invoiceId} not found`);
+    }
+
+    const existing = await this.dataSource.query(
+      `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
+      [payload.invoiceId, txnId],
+    );
+
+    if (existing && existing.length > 0) {
+      await this.dataSource.query(
+        `UPDATE erp_invoice_voucher_netoff SET net_off_amount = $1, updated_at = now() WHERE id = $2`,
+        [payload.netOffAmount ?? 0, existing[0].id],
+      );
+    } else {
+      await this.dataSource.query(
+        `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
+        [payload.invoiceId, txnId, payload.netOffAmount ?? 0],
+      );
+    }
+
+    // Refresh journal entries if needed
+    try {
+      await this.refreshJournalEntriesForBankTransaction(txnId);
+    } catch {
+      // Non-blocking
+    }
+
+    return { message: 'Đã liên kết hóa đơn thành công' };
+  }
+
+  async removeInvoiceFromTransaction(
+    txnId: string,
+    invoiceIdOrNetOffId: string,
+  ) {
+    await this.dataSource.query(
+      `DELETE FROM erp_invoice_voucher_netoff
+       WHERE bank_transaction_id = $1 AND (invoice_id = $2 OR id = $2)`,
+      [txnId, invoiceIdOrNetOffId],
+    );
+
+    // Refresh journal entries if needed
+    try {
+      await this.refreshJournalEntriesForBankTransaction(txnId);
+    } catch {
+      // Non-blocking
+    }
+
+    return { message: 'Đã gỡ liên kết hóa đơn thành công' };
+  }
 }

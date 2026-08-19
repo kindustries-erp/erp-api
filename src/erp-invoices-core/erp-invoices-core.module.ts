@@ -22,6 +22,7 @@ import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
 import { InvoiceExportBackgroundService } from './services/invoice-export-background.service';
+import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
 import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpInvoiceItemSubscriber } from './subscribers/erp-invoice-item.subscriber';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
@@ -56,11 +57,16 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
     InvoiceFilesService,
     InvoiceQueryService,
     InvoiceExportBackgroundService,
+    InvoiceSmartNetoffService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
     ErpInvoiceItemSubscriber,
   ],
-  exports: [ErpInvoicesCoreService, InvoiceDashboardService],
+  exports: [
+    ErpInvoicesCoreService,
+    InvoiceDashboardService,
+    InvoiceSmartNetoffService,
+  ],
 })
 export class ErpInvoicesCoreModule {}

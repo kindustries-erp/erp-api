@@ -12,6 +12,7 @@ import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { format } from 'date-fns';
 import { Subject } from 'rxjs';
+import { isCronEnabled } from '../common/utils/cron.util';
 
 export interface SerialProgressEvent {
   processId: 'serial-generation' | 'ping';
@@ -41,6 +42,12 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!isCronEnabled()) {
+      this.logger.log(
+        'GoodsReceipts background serial generation is disabled in this environment.',
+      );
+      return;
+    }
     this.scheduleNextRun(10000); // Wait 10 seconds before starting
   }
 

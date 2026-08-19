@@ -1,11 +1,17 @@
-const DAO_TRI_OUT_TAX_CODES = new Set([
+export const DAO_TRI_OUT_TAX_CODES = new Set([
   '0110269067-001',
   '0110269067',
   '0202357718',
   '0108926276',
 ]);
 
-const DAO_TRI_SETTLEMENT_PREFIXES = new Set(['S52801', 'S52802', 'S64701']);
+export const DAO_TRI_IN_TAX_CODES = new Set(['0202357718']);
+
+export const DAO_TRI_SETTLEMENT_PREFIXES = new Set([
+  'S52801',
+  'S52802',
+  'S64701',
+]);
 
 function normalizeText(value: string | null | undefined): string {
   return String(value || '').trim();
@@ -28,6 +34,25 @@ export function isDaoTriOutInvoiceTaxCode(
   taxCode: string | null | undefined,
 ): boolean {
   return DAO_TRI_OUT_TAX_CODES.has(normalizeText(taxCode));
+}
+
+export function isDaoTriInInvoiceTaxCode(
+  taxCode: string | null | undefined,
+): boolean {
+  return DAO_TRI_IN_TAX_CODES.has(normalizeText(taxCode));
+}
+
+export function resolveInInvoiceBranchCode(
+  sellerTaxCode?: string | null,
+  buyerTaxCode?: string | null,
+): 'ĐT' | null {
+  if (
+    isDaoTriInInvoiceTaxCode(sellerTaxCode) ||
+    isDaoTriInInvoiceTaxCode(buyerTaxCode)
+  ) {
+    return 'ĐT';
+  }
+  return null;
 }
 
 export function resolveOutInvoiceBranchCode(

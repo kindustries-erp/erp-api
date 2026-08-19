@@ -32,6 +32,7 @@ import { PortalFetchDto } from './dto/portal-invoice.dto';
 import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -41,7 +42,14 @@ export class ErpInvoicesCoreController {
   constructor(
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get(':id/traceability-graph')
+  getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
+    return this.traceabilityService.getInvoiceTraceabilityGraph(id, req.user);
+  }
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
@@ -221,6 +229,12 @@ export class ErpInvoicesCoreController {
     return this.service.getBulkNetOffs(ids);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('smart-net-off-suggestions')
+  getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
+    return this.service.getSmartNetOffSuggestions(invoiceIds);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
@@ -243,6 +257,12 @@ export class ErpInvoicesCoreController {
   @Post(':id/unpost')
   unpostInvoice(@Param('id') id: string) {
     return this.service.unpostInvoice(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/auto-post-standard')
+  autoPostStandard(@Param('id') id: string) {
+    return this.service.autoPostStandard(id);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
@@ -276,7 +296,7 @@ export class ErpInvoicesCoreController {
   }
 
   @Post(':id/sync-detail')
-  syncDetail(@Param('id') id: string, @Body('token') token: string) {
+  syncDetail(@Param('id') id: string, @Body('token') token?: string) {
     return this.service.syncDetailFromPortal(id, token);
   }
 
@@ -360,7 +380,7 @@ export class ErpInvoicesCoreController {
   @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
-    @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
+    @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
   ) {
     return this.service.bulkDownloadXml(
       body.token,

@@ -1,6 +1,6 @@
 ---
 name: erp-git-workflow
-description: Quy trình chuẩn cho thao tác Git (commit, pull, push, rebase resolve) trong workspace Liouni ERP (erp-api và erp-web). Hỗ trợ relative paths đa workspace, tự động commit local changes trước khi pull rebase, và quy trình commit -> pull --rebase -> resolve -> push an toàn.
+description: Quy trình chuẩn cho thao tác Git (commit, pull, push, rebase resolve) trong workspace Liouni ERP (erp-api và erp-web). Hỗ trợ relative paths đa workspace, tự động commit local changes trước khi pull rebase, bắt buộc chạy unit tests và fix lỗi trước khi commit/push, và quy trình commit -> pull --rebase -> resolve -> push an toàn.
 ---
 
 # Liouni ERP Git Workflow (Commit, Pull, Push & Conflict Resolution)
@@ -16,21 +16,25 @@ Skill này định nghĩa quy trình chuẩn chỉnh và an toàn tuyệt đối
    - Luôn `cd` vào repo con tương ứng theo đường dẫn tương đối:
      - Backend API: `./erp-api`
      - Frontend Web: `./erp-web`
-2. **Không bao giờ làm mất / ghi đè code (No Override)**:
+2. **🛡️ Test-First Guard (Bắt buộc chạy Unit Test & Fix trước khi Commit & Push)**:
+   - **Backend (`erp-api`)**: **BẮT BUỘC** chạy `bunx jest --forceExit` và sửa triệt để 100% lỗi test trước khi thực hiện `git commit` và trước khi `git push`.
+   - **Frontend (`erp-web`)**: **BẮT BUỘC** chạy `bun run test` và sửa triệt để 100% lỗi test trước khi thực hiện `git commit` và trước khi `git push`.
+   - Tuyệt đối KHÔNG commit hoặc push code khi test suites còn failing.
+3. **Không bao giờ làm mất / ghi đè code (No Override)**:
    - Khi có local changes (chưa commit), **BẮT BUỘC commit trước khi pull**. Tuyệt đối không pull khi working tree chưa commit để tránh rủi ro override hoặc mất code.
-3. **Không commit file nhạy cảm**:
+4. **Không commit file nhạy cảm**:
    - Tuyệt đối không commit các file `.env`, `.env.*`, file logs, dump DB, credentials.
-4. **Remote & Branch chuẩn**:
+5. **Remote & Branch chuẩn**:
    - Remote mặc định: `github-industries` (fallback về `origin` nếu repo không có `github-industries`).
    - Branch chính: `erp-master` (hoặc branch hiện tại đang checkout).
-5. **Luôn Rebase First**:
+6. **Luôn Rebase First**:
    - Khi kéo code về phải luôn dùng `git pull --rebase` để lịch sử commit tuyến tính, rõ ràng.
-6. **Đồng bộ Tri thức Module Bắt buộc (Module Knowledge Sync Mandatory)**:
+7. **Đồng bộ Tri thức Module Bắt buộc (Module Knowledge Sync Mandatory)**:
    - Mọi lần commit code có tác động tới Database Schema, DTOs, API Endpoints, Permissions hoặc Business Logic của một module **BẮT BUỘC** phải rà soát và cập nhật/xóa bớt nội dung tương ứng trong `.agents/skills/modules/<module-name>/SKILL.md` trước khi commit.
 
 ---
 
-## 2. Quy trình Commit Code (Có Module Knowledge Sync Guard)
+## 2. Quy trình Commit Code (Có Test Guard & Module Knowledge Sync Guard)
 
 Khi người dùng yêu cầu **"commit code"** hoặc khi cần lưu lại thay đổi trước khi pull/push:
 
@@ -38,9 +42,10 @@ Khi người dùng yêu cầu **"commit code"** hoặc khi cần lưu lại thay
 graph TD
     A["1. cd vào repo con (./erp-api hoặc ./erp-web)"] --> B["2. git status -s & Review diff"]
     B --> C["3. 🛡️ Module Knowledge Sync Guard: Dò quét & cập nhật SKILL.md"]
-    C --> D["4. git add file code + file SKILL.md đã cập nhật"]
-    D --> E["5. Đặt commit message chuẩn Conventional Commits"]
-    E --> F["6. git commit (pre-commit hook tự động chạy lint-staged)"]
+    C --> D["4. 🧪 Run Unit Test: bunx jest --forceExit / bun run test (FIX HẾT LỖI)"]
+    D --> E["5. git add file code + file SKILL.md đã cập nhật"]
+    E --> F["6. Đặt commit message chuẩn Conventional Commits"]
+    F --> G["7. git commit (pre-commit hook tự động chạy lint-staged)"]
 ```
 
 ### Các bước thực hiện chi tiết:
@@ -59,7 +64,7 @@ git diff
 
 #### Bước 3: 🛡️ Module Knowledge Sync Guard (Bắt buộc)
 Trước khi stage file, Agent / Kỹ sư **BẮT BUỘC** thực hiện rà soát tri thức:
-1. **Xác định Domain/Module**: Nhận diện module bị ảnh hưởng từ danh sách file thay đổi (vd: `src/inventory-core/`, `src/bom-core/`, `src/production-core/`, `src/goods-receipts-core/`, v.v.).
+1. **Xác định Domain/Module**: Nhận diện module bị ảnh hưởng từ danh sách file thay đổi (vd: `src/inventory-core/`, `src/bom-core/`, `src/app-config/`, v.v.).
 2. **Dò tìm file Skill tương ứng**: Kiểm tra file `.agents/skills/modules/<module-name>/SKILL.md` tại cả `erp-api` và `erp-web`.
 3. **Đối soát 5 Trụ Cột Tri Thức**:
    - **Database Schema & Entities**: Có thêm/sửa/xóa bảng, cột, kiểu dữ liệu, index, quan hệ quan trọng nào không?
@@ -71,18 +76,30 @@ Trước khi stage file, Agent / Kỹ sư **BẮT BUỘC** thực hiện rà so�
    - Nếu có thay đổi $\to$ Cập nhật trực tiếp vào file `SKILL.md` của module đó.
    - Nếu là module mới hoàn toàn chưa có skill $\to$ Sử dụng skill `scan-module-knowledge` để tạo mới và đăng ký vào Current-Truth.
 
-#### Bước 4: Stage files
+#### Bước 4: 🧪 Run Unit Test & Fix lỗi (Bắt buộc trước khi Commit)
+Chạy test suite và sửa toàn bộ lỗi phát sinh:
+- **Trong `erp-api`**:
+  ```bash
+  bunx jest --forceExit
+  ```
+- **Trong `erp-web`**:
+  ```bash
+  bun run test
+  ```
+Nếu có test failed $\to$ Điều chỉnh code hoặc cập nhật test assertion tương ứng để 100% tests passed.
+
+#### Bước 5: Stage files
 ```bash
 # Stage cả file mã nguồn và file SKILL.md liên quan đã cập nhật
 git add <danh_sach_file_code> <danh_sach_file_skill_md>
 ```
 
-#### Bước 5: Commit với format chuẩn (Conventional Commits)
+#### Bước 6: Commit với format chuẩn (Conventional Commits)
 ```bash
 git commit -m "<type>(<scope>): <mô tả ngắn gọn>"
 ```
 * `type`: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `style`.
-* *Ví dụ*: `git commit -m "feat(inventory): thêm cảnh báo tồn kho BOM 5 xe và cập nhật skill"`
+* *Ví dụ*: `git commit -m "feat(app-config): hỗ trợ public app config dynamic APP_ENV và lưu trữ user preferences"`
 
 ---
 
@@ -147,10 +164,10 @@ Khi người dùng yêu cầu **"push code"**, quy trình BẮT BUỘC phải th
 
 ```mermaid
 graph TD
-    S1["Bước 1: Review Module Skills & Commit local changes"] --> S2["Bước 2: Pull --rebase từ remote"]
+    S1["Bước 1: Review Module Skills, Run Tests & Commit local changes"] --> S2["Bước 2: Pull --rebase từ remote"]
     S2 --> S3{"Có conflict không?"}
     S3 -- Có --> S4["Bước 3: Resolve conflict & rebase --continue"]
-    S3 -- Không --> S5["Bước 4: QC Kiểm tra: check:ci & test"]
+    S3 -- Không --> S5["Bước 4: QC Kiểm tra: check:ci & Unit Tests (FIX LỖI)"]
     S4 --> S5
     S5 --> S6["Bước 5: git push lên remote"]
 ```
@@ -164,8 +181,15 @@ cd ./erp-api # hoặc cd ./erp-web
 CURRENT_BRANCH=$(git branch --show-current)
 REMOTE_NAME=$(git remote | grep -w github-industries || echo "origin")
 
-# 2. Rà soát Module Skills và Commit nếu còn dirty changes
+# 2. Rà soát Module Skills, Chạy Unit Tests và Commit nếu còn dirty changes
 if [ -n "$(git status -s)" ]; then
+  # Chạy test trước khi commit
+  if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
+    bunx jest --forceExit
+  else
+    bun run test
+  fi
+  
   git add <cac_file_thay_doi>
   git commit -m "<type>(<scope>): <mo_ta>"
 fi
@@ -177,7 +201,15 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # 4. Kiểm tra QC nghiêm ngặt trước khi push (Typecheck, Lint, Prettier, Unit Test)
 bun run check:ci
-bun run test
+
+# Chạy Unit test tương ứng từng repo:
+# - Trong erp-api: bunx jest --forceExit
+# - Trong erp-web: bun run test
+if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
+  bunx jest --forceExit
+else
+  bun run test
+fi
 
 # 5. Push lên remote
 git push $REMOTE_NAME $CURRENT_BRANCH
@@ -190,8 +222,10 @@ git push $REMOTE_NAME $CURRENT_BRANCH
 - [ ] Đường dẫn sử dụng là tương đối (`./erp-api` hoặc `./erp-web`), không phụ thuộc workspace root tuyệt đối.
 - [ ] Không có file `.env` hay secret nào bị lọt vào staging/commit.
 - [ ] **Module Knowledge Sync Guard**: Đã rà soát và cập nhật/xóa bớt nội dung trong `SKILL.md` của các module bị ảnh hưởng.
+- [ ] **Unit Tests Guard**:
+  - `erp-api`: Đã chạy `bunx jest --forceExit` và pass 100% tất cả test suites (đã fix toàn bộ lỗi phát sinh) **trước khi commit và trước khi push**.
+  - `erp-web`: Đã chạy `bun run test` và pass 100% tất cả test suites **trước khi commit và trước khi push**.
 - [ ] Mọi local changes đều đã được commit an toàn trước khi pull rebase.
 - [ ] `git pull --rebase` đã thành công, không còn trạng thái conflict dở dang.
 - [ ] `bun run check:ci` đã pass sạch lỗi (TypeScript + ESLint + Prettier).
-- [ ] `bun run test` đã chạy và pass toàn bộ test suites.
 - [ ] Push thành công lên đúng branch trên remote `$REMOTE_NAME`.

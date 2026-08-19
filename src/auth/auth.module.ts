@@ -11,6 +11,7 @@ import { UsersModule } from '../users/users.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { RbacCoreModule } from '../rbac-core/rbac-core.module';
+import { AppConfigModule } from '../app-config/app-config.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RbacCoreModule } from '../rbac-core/rbac-core.module';
     UsersModule,
     AuditCoreModule,
     RbacCoreModule,
+    AppConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

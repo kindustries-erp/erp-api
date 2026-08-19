@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -58,6 +59,7 @@ import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.
 import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
+import { KgaraCaseSettlement } from '../kgara-api-core/entities/kgara_case_settlement.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -75,6 +77,7 @@ import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-cat
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 const entities = [
   CoreUser,
+  CoreUserPreference,
   CoreRefreshToken,
   CoreRole,
   CorePermission,
@@ -131,6 +134,7 @@ const entities = [
   KgaraCaseService,
   KgaraCaseLinkedInvoice,
   KgaraGrossProfit,
+  KgaraCaseSettlement,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,

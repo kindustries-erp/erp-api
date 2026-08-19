@@ -566,7 +566,7 @@ export class InventorySerialService {
     } else if (column === 'itemName') selectField = 'i.item_name';
     else if (column === 'serialNo')
       selectField =
-        "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+        "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
     else if (column === 'vinNo')
       selectField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
     else if (column === 'engineNo')
@@ -579,7 +579,8 @@ export class InventorySerialService {
     } else if (column === 'dealerName') {
       selectField = "l.attributes->>'dealer_name'";
     } else if (column === 'color') {
-      selectField = "s.attributes->>'color'";
+      selectField =
+        "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
     } else {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };
     }
@@ -617,7 +618,7 @@ export class InventorySerialService {
           else if (col === 'itemName') filterField = 'i.item_name';
           else if (col === 'serialNo')
             filterField =
-              "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
           else if (col === 'vinNo')
             filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
           else if (col === 'engineNo')
@@ -625,7 +626,9 @@ export class InventorySerialService {
               "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
-          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'color')
+            filterField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
@@ -686,7 +689,7 @@ export class InventorySerialService {
       SELECT 
         l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
         l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id, l.attributes,
-        s.id as serial_id, COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin')) as serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
+        s.id as serial_id, COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin')) as serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
         i.sku, i.item_name,
         COALESCE(v.vin_no, l.attributes->>'ghost_vin') as vin_no, COALESCE(v.engine_no, l.attributes->>'ghost_engine') as engine_no,
         so.so_no, so.expected_delivery_date as expected_delivery_date
@@ -717,7 +720,7 @@ export class InventorySerialService {
 
     if (query.search) {
       sql += ` AND (
-        COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin')) ILIKE $${paramIdx} OR 
+        COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin')) ILIKE $${paramIdx} OR 
         COALESCE(v.vin_no, l.attributes->>'ghost_vin') ILIKE $${paramIdx} OR 
         l.customer_name ILIKE $${paramIdx} OR 
         l.customer_phone ILIKE $${paramIdx}
@@ -755,7 +758,7 @@ export class InventorySerialService {
           else if (col === 'itemName') filterField = 'i.item_name';
           else if (col === 'serialNo')
             filterField =
-              "COALESCE(s.serial_no, 'UNVERIFIED-' || (l.attributes->>'ghost_vin'))";
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
           else if (col === 'vinNo')
             filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
           else if (col === 'engineNo')
@@ -763,7 +766,9 @@ export class InventorySerialService {
               "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
-          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'color')
+            filterField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
@@ -840,12 +845,19 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             searchField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') searchField = 'i.item_name';
-          else if (col === 'serialNo') searchField = 's.serial_no';
-          else if (col === 'vinNo') searchField = 'v.vin_no';
-          else if (col === 'engineNo') searchField = 'v.engine_no';
+          else if (col === 'serialNo')
+            searchField =
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            searchField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            searchField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') searchField = 'so.so_no';
           else if (col === 'customerName') searchField = 'l.customer_name';
-          else if (col === 'color') searchField = "s.attributes->>'color'";
+          else if (col === 'color')
+            searchField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             searchField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
