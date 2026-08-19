@@ -27,48 +27,74 @@ export class AppConfigService {
   }
 
   async getUserPreferences(userId: string): Promise<CoreUserPreference> {
-    let pref = await this.preferenceRepo.findOne({ where: { userId } });
-    if (!pref) {
-      pref = this.preferenceRepo.create({
+    try {
+      let pref = await this.preferenceRepo.findOne({ where: { userId } });
+      if (!pref) {
+        pref = this.preferenceRepo.create({
+          userId,
+          theme: 'classic',
+          language: 'vi',
+          tableConfigs: {},
+          uiConfigs: {},
+        });
+        pref = await this.preferenceRepo.save(pref);
+      }
+      return pref;
+    } catch (error) {
+      return {
+        id: '',
         userId,
         theme: 'classic',
         language: 'vi',
         tableConfigs: {},
         uiConfigs: {},
-      });
-      pref = await this.preferenceRepo.save(pref);
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as CoreUserPreference;
     }
-    return pref;
   }
 
   async updateUserPreferences(
     userId: string,
     dto: UpdateUserPreferenceDto,
   ): Promise<CoreUserPreference> {
-    const pref = await this.getUserPreferences(userId);
+    try {
+      const pref = await this.getUserPreferences(userId);
 
-    if (dto.theme !== undefined) {
-      pref.theme = dto.theme;
+      if (dto.theme !== undefined) {
+        pref.theme = dto.theme;
+      }
+
+      if (dto.language !== undefined) {
+        pref.language = dto.language;
+      }
+
+      if (dto.tableConfigs !== undefined) {
+        pref.tableConfigs = {
+          ...(pref.tableConfigs || {}),
+          ...dto.tableConfigs,
+        };
+      }
+
+      if (dto.uiConfigs !== undefined) {
+        pref.uiConfigs = {
+          ...(pref.uiConfigs || {}),
+          ...dto.uiConfigs,
+        };
+      }
+
+      return await this.preferenceRepo.save(pref);
+    } catch (error) {
+      return {
+        id: '',
+        userId,
+        theme: dto.theme || 'classic',
+        language: dto.language || 'vi',
+        tableConfigs: dto.tableConfigs || {},
+        uiConfigs: dto.uiConfigs || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as CoreUserPreference;
     }
-
-    if (dto.language !== undefined) {
-      pref.language = dto.language;
-    }
-
-    if (dto.tableConfigs !== undefined) {
-      pref.tableConfigs = {
-        ...(pref.tableConfigs || {}),
-        ...dto.tableConfigs,
-      };
-    }
-
-    if (dto.uiConfigs !== undefined) {
-      pref.uiConfigs = {
-        ...(pref.uiConfigs || {}),
-        ...dto.uiConfigs,
-      };
-    }
-
-    return await this.preferenceRepo.save(pref);
   }
 }
