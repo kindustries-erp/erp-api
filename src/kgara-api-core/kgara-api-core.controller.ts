@@ -556,6 +556,7 @@ export class KgaraApiCoreController {
       queryParams.push(`%${q}%`);
     }
 
+    const havingConditions: string[] = [];
     const combinedFiltersStr = filtersStr || columnFiltersParam;
     if (combinedFiltersStr) {
       try {
@@ -580,6 +581,45 @@ export class KgaraApiCoreController {
               `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
             );
             queryParams.push(values);
+          } else if (col === 'paymentProgress') {
+            const subConds: string[] = [];
+            if (values.includes('PAID')) {
+              subConds.push(
+                '(COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0) <= 0 AND COALESCE(SUM("case"."tien_da_thanh_toan"), 0) > 0)',
+              );
+            }
+            if (values.includes('PARTIAL')) {
+              subConds.push(
+                '(COALESCE(SUM("case"."tien_da_thanh_toan"), 0) > 0 AND COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0) > 0)',
+              );
+            }
+            if (values.includes('UNPAID')) {
+              subConds.push(
+                '(COALESCE(SUM("case"."tien_da_thanh_toan"), 0) <= 0 AND COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0) > 0)',
+              );
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
+          } else if (col === 'maxAgingDays') {
+            const subConds: string[] = [];
+            const maxAgingExpr =
+              'COALESCE(MAX(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 THEN CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now())) ELSE 0 END), 0)';
+            if (values.includes('0-30')) {
+              subConds.push(`(${maxAgingExpr} <= 30)`);
+            }
+            if (values.includes('31-60')) {
+              subConds.push(`(${maxAgingExpr} BETWEEN 31 AND 60)`);
+            }
+            if (values.includes('61-90')) {
+              subConds.push(`(${maxAgingExpr} BETWEEN 61 AND 90)`);
+            }
+            if (values.includes('>90')) {
+              subConds.push(`(${maxAgingExpr} > 90)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
           }
         }
       } catch {
@@ -618,8 +658,12 @@ export class KgaraApiCoreController {
     }
 
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const havingClause =
+      havingConditions.length > 0
+        ? `HAVING ${havingConditions.join(' AND ')}`
+        : '';
 
-    const summarySql = `
+    let summarySql = `
       SELECT
         COUNT(DISTINCT COALESCE("case"."khach_hang_code", 'UNKNOWN'))::int AS total_customers,
         COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS total_revenue,
@@ -632,6 +676,35 @@ export class KgaraApiCoreController {
       FROM "kgara_cases" "case"
       ${whereClause}
     `;
+
+    if (havingConditions.length > 0) {
+      summarySql = `
+        SELECT
+          COUNT(*)::int AS total_customers,
+          COALESCE(SUM(tong_doanh_thu), 0)::numeric AS total_revenue,
+          COALESCE(SUM(da_thanh_toan), 0)::numeric AS total_paid,
+          COALESCE(SUM(con_phai_thu), 0)::numeric AS total_balance,
+          COALESCE(SUM(aging_0_30), 0)::numeric AS total_aging_0_30,
+          COALESCE(SUM(aging_31_60), 0)::numeric AS total_aging_31_60,
+          COALESCE(SUM(aging_61_90), 0)::numeric AS total_aging_61_90,
+          COALESCE(SUM(aging_over_90), 0)::numeric AS total_aging_over_90
+        FROM (
+          SELECT
+            COALESCE("case"."khach_hang_code", 'UNKNOWN') AS khach_hang_code,
+            COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS tong_doanh_thu,
+            COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS da_thanh_toan,
+            COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS con_phai_thu,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_0_30,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_31_60,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_61_90,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
+          FROM "kgara_cases" "case"
+          ${whereClause}
+          GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
+          ${havingClause}
+        ) sub
+      `;
+    }
 
     const summaryResult = await this.caseRepo.manager.query(
       summarySql,
@@ -696,6 +769,7 @@ export class KgaraApiCoreController {
       FROM "kgara_cases" "case"
       ${whereClause}
       GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
+      ${havingClause}
       ${orderClause}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
@@ -747,6 +821,27 @@ export class KgaraApiCoreController {
     @Query('pageSize') pageSize: string = '20',
     @Query('filtersStr') filtersStr?: string,
   ) {
+    if (column === 'paymentProgress') {
+      const options = ['PAID', 'PARTIAL', 'UNPAID'];
+      return {
+        items: options,
+        total: options.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'maxAgingDays') {
+      const options = ['0-30', '31-60', '61-90', '>90'];
+      return {
+        items: options,
+        total: options.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
     let selectExpr = '"case"."khach_hang_code"';
     if (column === 'customerName') selectExpr = '"case"."khach_hang_name"';
     else if (column === 'customerCode') selectExpr = '"case"."khach_hang_code"';
