@@ -349,7 +349,18 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
   - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.
 
-### 5.11. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
+### 5.11. Cơ chế Bộ Lọc Đa Chiều Nâng Cao (`__ALL_MATCHING__`, `__BLANK__` & Cascading Options)
+- **Chuẩn Lọc Toàn Diện trên Bảng Garage Cases (`/cases`) & Sổ Công Nợ Khách Hàng (`/cases/customers-debt`)**:
+  - `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm):
+    - Khi ô tìm kiếm rỗng (`searchStr = ""`): Hệ thống hiểu là chọn toàn bộ dữ liệu $\rightarrow$ Không áp điều kiện lọc WHERE để giữ trọn vẹn tập dữ liệu.
+    - Khi có từ khóa tìm kiếm: Sử dụng hàm chuẩn `applyMultiKeywordFilter` hỗ trợ tìm kiếm theo chuỗi con (`ILIKE`), tìm kiếm chính xác khi bọc dấu ngoặc kép (`"..."`), hoặc tìm kiếm nhiều từ khóa cách nhau bởi dấu chấm phẩy (`;`).
+  - `__BLANK__` (Lọc giá trị trống / Null): Xử lý kết hợp `(column IS NULL OR CAST(column AS TEXT) = '' OR column IN (...))` cho phép người dùng lọc đồng thời giá trị rỗng cùng với các tùy chọn cụ thể khác.
+  - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
+  - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí 2 nút Quick Actions nổi:
+    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.
+    - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
+
+### 5.12. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
 - Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
   - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
   - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
