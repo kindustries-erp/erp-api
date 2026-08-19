@@ -205,7 +205,10 @@ src/kgara-api-core/
 ├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
 ├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
 ├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark, soft-delete & gross profit
-└── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
+├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
+└── services/
+    ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)
+    └── garage-smart-settlement.service.spec.ts # Unit tests cho gợi ý cấn trừ vụ việc
 ```
 
 ---
@@ -234,6 +237,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/:id/traceability-graph` | `id` (UUID Case) | Lấy cây phả hệ mạng lưới chứng từ liên đới (Phiếu DV -> Hóa đơn -> Sao kê/Sổ quỹ -> Sổ cái GL) |
 | `GET` | `/cases/:id/financial-summary` | `id` (UUID Case) | Ma trận tài chính 3 tầng (Doanh thu, Chi phí, Đã thu đa kênh, Còn phải thu, Lãi thực tế, Đối soát KGara) |
 | `GET` | `/cases/:id/settlements` | `id` (UUID Case) | Lấy danh sách giao dịch thu/chi trực tiếp từ Sao kê/Sổ quỹ ERP & Ngoài sổ sách |
+| `GET` | `/cases/:id/smart-settlement-suggestions` | `id` (UUID Case), Query: `type` (`RECEIPT` \| `PAYMENT`) | Gợi ý đối soát sao kê thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ + Biển số xe + Khách hàng) |
 | `POST`| `/cases/:id/settlements` | `id`, Body: `{ bankTransactionId, settlementType, sourceChannel, category, amount, transDate, partnerName, note }` | Ghi nhận cấn trừ giao dịch dòng tiền (ERP hoặc ngoài sổ sách) |
 | `DELETE`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId` | Xóa bản ghi thu/chi dòng tiền khỏi vụ việc |
 

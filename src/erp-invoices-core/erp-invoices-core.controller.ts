@@ -229,6 +229,12 @@ export class ErpInvoicesCoreController {
     return this.service.getBulkNetOffs(ids);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('smart-net-off-suggestions')
+  getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
+    return this.service.getSmartNetOffSuggestions(invoiceIds);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {

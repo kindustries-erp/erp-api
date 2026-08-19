@@ -21,6 +21,7 @@ import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
+import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { KgaraApiCoreController } from './kgara-api-core.controller';
 
 @Module({
@@ -47,8 +48,9 @@ import { KgaraApiCoreController } from './kgara-api-core.controller';
     KgaraClientService,
     KgaraSyncService,
     KgaraSyncScheduler,
+    GarageSmartSettlementService,
   ],
   controllers: [KgaraApiCoreController],
-  exports: [KgaraSyncService, KgaraClientService],
+  exports: [KgaraSyncService, KgaraClientService, GarageSmartSettlementService],
 })
 export class KgaraApiCoreModule {}

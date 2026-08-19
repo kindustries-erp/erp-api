@@ -17,6 +17,8 @@ import { DocumentTraceabilityService } from '../common/services/document-traceab
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 
+import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
+
 describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
   let controller: KgaraApiCoreController;
   let caseRepo: any;
@@ -68,6 +70,10 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
         { provide: KgaraSyncService, useValue: {} },
         { provide: KgaraClientService, useValue: {} },
         { provide: DocumentTraceabilityService, useValue: {} },
+        {
+          provide: GarageSmartSettlementService,
+          useValue: { getSuggestionsForCase: jest.fn() },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)

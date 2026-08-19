@@ -147,7 +147,8 @@ src/erp-invoices-core/
 │   ├── invoice-import.service.ts              # Xử lý nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
 │   ├── invoice-portal.service.ts              # Xử lý sync GDT, login, captcha, bulk download XML
-│   └── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
+│   ├── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
+│   └── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (Strict Match Rule & Xếp hạng 6 cấp độ)
 ├── subscribers/
 │   └── erp-invoice-item.subscriber.ts         # TypeORM Subscriber tự nhận diện mã phụ tùng VinFast
 ├── utils/
@@ -174,6 +175,7 @@ src/erp-invoices-core/
 | `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
+| `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
 | `GET` | `/erp-invoices/:id` | `invoices` | `read` | Lấy chi tiết một hóa đơn kèm items, cấn trừ ngân hàng và tệp đính kèm |
 | `POST` | `/erp-invoices` | `invoices` | `create` | Tạo mới thủ công một hóa đơn |
 | `PATCH` | `/erp-invoices/:id` | `invoices` | `update` | Cập nhật thông tin hóa đơn và các dòng chi tiết |

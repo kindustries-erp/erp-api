@@ -42,6 +42,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { Request as Req } from '@nestjs/common';
+import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -70,6 +71,7 @@ export class KgaraApiCoreController {
     private syncService: KgaraSyncService,
     private client: KgaraClientService,
     private traceabilityService: DocumentTraceabilityService,
+    private smartSettlementService: GarageSmartSettlementService,
   ) {}
 
   @Get('branches')
@@ -1059,6 +1061,18 @@ export class KgaraApiCoreController {
        WHERE s.case_id::text = $1
        ORDER BY s.created_at DESC`,
       [id],
+    );
+  }
+
+  @Get('cases/:id/smart-settlement-suggestions')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getSmartSettlementSuggestions(
+    @Param('id') id: string,
+    @Query('type') type?: 'RECEIPT' | 'PAYMENT',
+  ) {
+    return this.smartSettlementService.getSuggestionsForCase(
+      id,
+      type || 'RECEIPT',
     );
   }
 

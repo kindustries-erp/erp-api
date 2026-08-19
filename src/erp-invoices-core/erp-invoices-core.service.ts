@@ -12,6 +12,7 @@ import {
   type InvoiceExportProgressEvent,
 } from './services/invoice-export-background.service';
 import type { PortalProgressEvent } from './services/invoice-portal.service';
+import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -72,6 +73,7 @@ export class ErpInvoicesCoreService {
     private readonly filesService: InvoiceFilesService,
     private readonly queryService: InvoiceQueryService,
     private readonly exportBackgroundService: InvoiceExportBackgroundService,
+    private readonly smartNetoffService: InvoiceSmartNetoffService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -130,6 +132,10 @@ export class ErpInvoicesCoreService {
 
   getBulkNetOffs(invoiceIds: string[]) {
     return this.queryService.getBulkNetOffs(invoiceIds);
+  }
+
+  getSmartNetOffSuggestions(invoiceIds: string[]) {
+    return this.smartNetoffService.getSuggestionsForInvoices(invoiceIds);
   }
 
   getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
