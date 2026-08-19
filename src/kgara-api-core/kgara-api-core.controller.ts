@@ -240,6 +240,7 @@ export class KgaraApiCoreController {
       chiPhi: '"case"."chi_phi"',
       loiNhuan: '"case"."loi_nhuan"',
       totalAmount: '"case"."tien_co_thue"',
+      paidAmount: '"case"."tien_da_thanh_toan"',
       balanceAmount: '"case"."tien_con_phai_thanh_toan"',
       caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
       ngayHoanThanhCongViec:
@@ -574,6 +575,11 @@ export class KgaraApiCoreController {
               `"case"."khach_hang_name" = ANY($${queryParams.length + 1})`,
             );
             queryParams.push(values);
+          } else if (col === 'branchName' || col === 'branchExternalId') {
+            whereConditions.push(
+              `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
+            );
+            queryParams.push(values);
           }
         }
       } catch {
@@ -597,6 +603,11 @@ export class KgaraApiCoreController {
           } else if (col === 'customerName') {
             whereConditions.push(
               `"case"."khach_hang_name" ILIKE $${queryParams.length + 1}`,
+            );
+            queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'branchName' || col === 'branchExternalId') {
+            whereConditions.push(
+              `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
             );
             queryParams.push(`%${val.trim()}%`);
           }
@@ -639,6 +650,8 @@ export class KgaraApiCoreController {
         if (col === 'customerCode') sortParts.push(`khach_hang_code ${dir}`);
         else if (col === 'customerName')
           sortParts.push(`khach_hang_name ${dir}`);
+        else if (col === 'branchName' || col === 'branchExternalId')
+          sortParts.push(`branch_external_id ${dir}`);
         else if (col === 'totalAmount' || col === 'totalRevenue')
           sortParts.push(`tong_doanh_thu ${dir}`);
         else if (col === 'paidAmount') sortParts.push(`da_thanh_toan ${dir}`);
@@ -668,6 +681,7 @@ export class KgaraApiCoreController {
       SELECT
         COALESCE("case"."khach_hang_code", 'UNKNOWN') AS khach_hang_code,
         MAX(COALESCE("case"."khach_hang_name", 'Chưa xác định')) AS khach_hang_name,
+        MAX("case"."branch_external_id") AS branch_external_id,
         COUNT("case"."id")::int AS so_phieu,
         COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS tong_doanh_thu,
         COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS da_thanh_toan,
@@ -691,6 +705,7 @@ export class KgaraApiCoreController {
     const formattedData = rawRows.map((r: any) => ({
       customerCode: r.khach_hang_code,
       customerName: r.khach_hang_name,
+      branchExternalId: r.branch_external_id,
       caseCount: Number(r.so_phieu) || 0,
       totalAmount: Number(r.tong_doanh_thu) || 0,
       paidAmount: Number(r.da_thanh_toan) || 0,
@@ -735,6 +750,8 @@ export class KgaraApiCoreController {
     let selectExpr = '"case"."khach_hang_code"';
     if (column === 'customerName') selectExpr = '"case"."khach_hang_name"';
     else if (column === 'customerCode') selectExpr = '"case"."khach_hang_code"';
+    else if (column === 'branchName' || column === 'branchExternalId')
+      selectExpr = '"case"."branch_external_id"';
 
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const safePageSize = Math.max(parseInt(pageSize, 10) || 20, 1);
