@@ -55,7 +55,7 @@ Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, 
   - **Bán hàng & Sau bán hàng**: `erp-sales-orders`, `sales-report-dashboard`, `after-sales`
   - **Mua hàng & Nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
   - **Kho & Tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`
-  - **Tài chính, Dòng tiền & Hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`
+  - **Tài chính, Dòng tiền, Hóa đơn & Tài khoản**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `settings-accounts`
   - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
   - **Dịch vụ Garage & Sửa chữa xe**: `garage-cases`, `garage-gross-profit`
   - **Hệ thống & Cấu hình**: `app-config`
