@@ -127,14 +127,17 @@ jobs:
       - name: Transfer Image to Head
         env:
           SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.sha }}
         run: |
-          docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}
+          TMP_TAR="/tmp/api-image-greenway-production-${IMAGE_TAG}.tar.gz"
+          docker pull ${{ env.IMAGE_NAME }}:${IMAGE_TAG}
           echo "Saving and compressing image..."
-          docker save ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }} | gzip > image.tar.gz
+          docker save ${{ env.IMAGE_NAME }}:${IMAGE_TAG} | gzip > image.tar.gz
           echo "Transferring image..."
-          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ vars.HEAD_PORT }} image.tar.gz ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }}:/tmp/api-image.tar.gz
+          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ vars.HEAD_PORT }} image.tar.gz ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }}:${TMP_TAR}
           echo "Loading image on Head..."
-          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ vars.HEAD_PORT }} ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} "docker load -i /tmp/api-image.tar.gz && rm /tmp/api-image.tar.gz"
+          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ vars.HEAD_PORT }} ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} "docker load -i ${TMP_TAR} && rm -f ${TMP_TAR}"
+          rm -f image.tar.gz
 
       - name: Run deploy script
         env:

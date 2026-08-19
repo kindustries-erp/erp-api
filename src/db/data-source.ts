@@ -12,6 +12,9 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
+import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
+import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
+import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
@@ -55,6 +58,7 @@ import { KgaraCaseService } from '../kgara-api-core/entities/kgara_case_service.
 import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_linked_invoice.entity';
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
+import { KgaraCaseSettlement } from '../kgara-api-core/entities/kgara_case_settlement.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -83,6 +87,9 @@ const entities = [
   ErpInventoryBalance,
   ErpBom,
   ErpBomLine,
+  ErpBomCategory,
+  ErpBomAttributeDef,
+  ErpBomAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,
   ErpPurchaseOrder,
@@ -125,6 +132,7 @@ const entities = [
   KgaraCaseService,
   KgaraCaseLinkedInvoice,
   KgaraGrossProfit,
+  KgaraCaseSettlement,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,

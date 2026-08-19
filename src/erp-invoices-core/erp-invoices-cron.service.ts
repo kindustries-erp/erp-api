@@ -10,6 +10,7 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { isCronEnabled } from '../common/utils/cron.util';
 
 @Injectable()
 export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +27,12 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!isCronEnabled()) {
+      this.logger.log(
+        'ErpInvoices auto-sync cron is disabled in this environment.',
+      );
+      return;
+    }
     this.scheduleNextSync();
   }
 

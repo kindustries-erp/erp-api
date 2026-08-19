@@ -12,6 +12,7 @@ import {
   type InvoiceExportProgressEvent,
 } from './services/invoice-export-background.service';
 import type { PortalProgressEvent } from './services/invoice-portal.service';
+import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -72,6 +73,7 @@ export class ErpInvoicesCoreService {
     private readonly filesService: InvoiceFilesService,
     private readonly queryService: InvoiceQueryService,
     private readonly exportBackgroundService: InvoiceExportBackgroundService,
+    private readonly smartNetoffService: InvoiceSmartNetoffService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -132,6 +134,10 @@ export class ErpInvoicesCoreService {
     return this.queryService.getBulkNetOffs(invoiceIds);
   }
 
+  getSmartNetOffSuggestions(invoiceIds: string[]) {
+    return this.smartNetoffService.getSuggestionsForInvoices(invoiceIds);
+  }
+
   getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
     return this.queryService.getStats(direction, dateFrom, dateTo);
   }
@@ -180,6 +186,10 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.unpostInvoice(id);
   }
 
+  autoPostStandard(id: string) {
+    return this.lifecycleService.autoPostStandard(id);
+  }
+
   linkVouchersToInvoice(
     invoiceId: string,
     payload: { bankTransactionId: string; netOffAmount?: number }[],
@@ -199,8 +209,31 @@ export class ErpInvoicesCoreService {
     return this.portalService.getPortalConfig();
   }
 
-  savePortalConfig(token: string, cookies?: string) {
-    return this.portalService.savePortalConfig(token, cookies);
+  savePortalConfig(
+    token: string,
+    cookies?: string,
+    username?: string,
+    password?: string,
+  ) {
+    return this.portalService.savePortalConfig(
+      token,
+      cookies,
+      username,
+      password,
+    );
+  }
+
+  getPortalCaptcha() {
+    return this.portalService.getCaptcha();
+  }
+
+  loginPortalWithCaptcha(dto: {
+    username: string;
+    password?: string;
+    cvalue: string;
+    ckey: string;
+  }) {
+    return this.portalService.loginWithCaptcha(dto);
   }
 
   checkTokenValid(token: string, cookies?: string) {

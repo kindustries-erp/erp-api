@@ -10,6 +10,8 @@ import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun, GwSyncStatus } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
+import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class KgaraSyncService {
@@ -32,7 +34,10 @@ export class KgaraSyncService {
     private grossProfitRepo: Repository<KgaraGrossProfit>,
     @InjectRepository(KgaraCaseLinkedInvoice)
     private linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
+    @InjectRepository(KgaraCaseSettlement)
+    private settlementRepo: Repository<KgaraCaseSettlement>,
     private client: KgaraClientService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private async createSyncRun(
@@ -147,19 +152,65 @@ export class KgaraSyncService {
 
           syncedIds.add(c.HdPhieuDichVuID);
 
+          // State transitions handling
+          const previousStatus = gwCase.tinhTrangDichVu;
+          const newStatus = c.TinhTrangDichVu;
+
           // Typed mappings - ERP fields are explicitly omitted (not overwritten)
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
           gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
-          gwCase.tinhTrangDichVu = c.TinhTrangDichVu;
+          gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
           gwCase.tienCoThue = c.TienCoThue;
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
           gwCase.tienConPhaiThanhToan = c.TienConPhaiThanhToan;
-          if (c.DoanhThu !== undefined) gwCase.doanhThu = c.DoanhThu;
-          if (c.ChiPhi !== undefined) gwCase.chiPhi = c.ChiPhi;
-          if (c.LoiNhuan !== undefined) gwCase.loiNhuan = c.LoiNhuan;
+
+          if (newStatus === 9) {
+            // Cancelled: Clear gross profit
+            gwCase.doanhThu = 0;
+            gwCase.chiPhi = 0;
+            gwCase.loiNhuan = 0;
+            await this.grossProfitRepo.delete({
+              hdPhieuDichVuId: c.HdPhieuDichVuID,
+            });
+
+            if (gwCase.id) {
+              const hasInvoices = await this.linkedInvoiceRepo.count({
+                where: { caseDbId: gwCase.id },
+              });
+              const hasSettlements = await this.settlementRepo.count({
+                where: { caseId: gwCase.id },
+              });
+              if (hasInvoices > 0 || hasSettlements > 0) {
+                this.logger.warn(
+                  `ALERT: Cancelled case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} has active linked invoices (${hasInvoices}) or settlements (${hasSettlements})!`,
+                );
+              }
+            }
+          } else if (previousStatus === 3 && newStatus !== 3) {
+            // Reverted from Completed (3) to In-progress: Reset GP
+            gwCase.doanhThu = null;
+            gwCase.chiPhi = null;
+            gwCase.loiNhuan = null;
+            await this.grossProfitRepo.delete({
+              hdPhieuDichVuId: c.HdPhieuDichVuID,
+            });
+            this.logger.log(
+              `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
+            );
+          } else if (newStatus === 3) {
+            // Only completed status has Gross Profit
+            if (c.DoanhThu !== undefined) gwCase.doanhThu = c.DoanhThu;
+            if (c.ChiPhi !== undefined) gwCase.chiPhi = c.ChiPhi;
+            if (c.LoiNhuan !== undefined) gwCase.loiNhuan = c.LoiNhuan;
+          } else {
+            // Non-completed status: Do not retain gross profit
+            gwCase.doanhThu = null;
+            gwCase.chiPhi = null;
+            gwCase.loiNhuan = null;
+          }
           gwCase.ngayPhatSinh = c.NgayPhatSinhFull
             ? new Date(c.NgayPhatSinhFull)
             : c.NgayPhatSinh
@@ -254,8 +305,10 @@ export class KgaraSyncService {
             range.to,
           );
 
-          if (profitResponse?.Groups) {
-            for (const group of profitResponse.Groups) {
+          const groups =
+            profitResponse?.results?.Groups || profitResponse?.Groups;
+          if (groups) {
+            for (const group of groups) {
               if (group.Items) {
                 for (const item of group.Items) {
                   if (item.VuViecID) {
@@ -633,15 +686,63 @@ export class KgaraSyncService {
         gwCase.branchExternalId = branchExternalId;
       }
 
+      // State transitions handling
+      const previousStatus = gwCase.tinhTrangDichVu;
+      const newStatus = caseData.TinhTrangDichVu;
+
       // Selective mappings
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
       gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
-      gwCase.tinhTrangDichVu = caseData.TinhTrangDichVu;
+      gwCase.tinhTrangDichVu = newStatus;
+      gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
       gwCase.tienCoThue = caseData.TienCoThue;
       gwCase.tienDaThanhToan = caseData.TienDaThanhToan;
       gwCase.tienConPhaiThanhToan = caseData.TienConPhaiThanhToan;
+
+      if (newStatus === 9) {
+        // Cancelled: Clear gross profit
+        gwCase.doanhThu = 0;
+        gwCase.chiPhi = 0;
+        gwCase.loiNhuan = 0;
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+
+        if (gwCase.id) {
+          const hasInvoices = await this.linkedInvoiceRepo.count({
+            where: { caseDbId: gwCase.id },
+          });
+          const hasSettlements = await this.settlementRepo.count({
+            where: { caseId: gwCase.id },
+          });
+          if (hasInvoices > 0 || hasSettlements > 0) {
+            this.logger.warn(
+              `ALERT: Cancelled case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} has active linked invoices (${hasInvoices}) or settlements (${hasSettlements})!`,
+            );
+          }
+        }
+      } else if (previousStatus === 3 && newStatus !== 3) {
+        // Reverted from Completed (3) to In-progress: Reset GP
+        gwCase.doanhThu = null;
+        gwCase.chiPhi = null;
+        gwCase.loiNhuan = null;
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+        this.logger.log(
+          `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
+        );
+      } else if (newStatus === 3) {
+        // Only completed status has Gross Profit
+        if (caseData.DoanhThu !== undefined)
+          gwCase.doanhThu = caseData.DoanhThu;
+        if (caseData.ChiPhi !== undefined) gwCase.chiPhi = caseData.ChiPhi;
+        if (caseData.LoiNhuan !== undefined)
+          gwCase.loiNhuan = caseData.LoiNhuan;
+      } else {
+        // Non-completed status: Do not retain gross profit
+        gwCase.doanhThu = null;
+        gwCase.chiPhi = null;
+        gwCase.loiNhuan = null;
+      }
       gwCase.ngayPhatSinh = caseData.NgayPhatSinhFull
         ? new Date(caseData.NgayPhatSinhFull)
         : caseData.NgayPhatSinh

@@ -53,6 +53,18 @@ export class GoodsReceiptsCoreController {
     return this.service.getNextReceiptNo(date);
   }
 
+  @Post('validate-serials')
+  validateSerials(@Body() dto: { itemId?: string; serials: string[] }) {
+    return this.service.validateSerials(dto);
+  }
+
+  @Post('auto-generate-preview')
+  autoGeneratePreview(
+    @Body() dto: { itemId: string; qty: number; receiptDate?: string },
+  ) {
+    return this.service.generatePreviewSerials(dto);
+  }
+
   @Get('serial-generation/progress')
   getSerialGenerationProgress() {
     return this.cronService.getProgress();

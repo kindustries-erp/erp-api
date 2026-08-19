@@ -29,8 +29,10 @@ import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -40,7 +42,14 @@ export class ErpInvoicesCoreController {
   constructor(
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get(':id/traceability-graph')
+  getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
+    return this.traceabilityService.getInvoiceTraceabilityGraph(id, req.user);
+  }
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
@@ -220,6 +229,12 @@ export class ErpInvoicesCoreController {
     return this.service.getBulkNetOffs(ids);
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Post('smart-net-off-suggestions')
+  getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
+    return this.service.getSmartNetOffSuggestions(invoiceIds);
+  }
+
   @RequirePermissions({ resource: 'invoices', action: 'create' })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
@@ -242,6 +257,12 @@ export class ErpInvoicesCoreController {
   @Post(':id/unpost')
   unpostInvoice(@Param('id') id: string) {
     return this.service.unpostInvoice(id);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post(':id/auto-post-standard')
+  autoPostStandard(@Param('id') id: string) {
+    return this.service.autoPostStandard(id);
   }
 
   @RequirePermissions({ resource: 'invoices', action: 'update' })
@@ -275,7 +296,7 @@ export class ErpInvoicesCoreController {
   }
 
   @Post(':id/sync-detail')
-  syncDetail(@Param('id') id: string, @Body('token') token: string) {
+  syncDetail(@Param('id') id: string, @Body('token') token?: string) {
     return this.service.syncDetailFromPortal(id, token);
   }
 
@@ -301,6 +322,7 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/sync')
   async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
     try {
@@ -355,9 +377,10 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/bulk-download-xml
    * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
    */
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
-    @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
+    @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
   ) {
     return this.service.bulkDownloadXml(
       body.token,
@@ -366,14 +389,41 @@ export class ErpInvoicesCoreController {
     );
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Get('portal/captcha')
+  async getPortalCaptcha() {
+    return await this.service.getPortalCaptcha();
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @Post('portal/login')
+  async loginPortal(@Body() dto: PortalLoginDto) {
+    return await this.service.loginPortalWithCaptcha(dto);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Get('portal/token')
   async getPortalToken() {
     return await this.service.getPortalConfig();
   }
 
+  @RequirePermissions({ resource: 'invoices', action: 'update' })
   @Post('portal/token')
-  async savePortalToken(@Body() body: { token: string; cookies?: string }) {
-    await this.service.savePortalConfig(body.token, body.cookies);
+  async savePortalToken(
+    @Body()
+    body: {
+      token: string;
+      cookies?: string;
+      username?: string;
+      password?: string;
+    },
+  ) {
+    await this.service.savePortalConfig(
+      body.token,
+      body.cookies,
+      body.username,
+      body.password,
+    );
     return { message: 'Config saved successfully' };
   }
 

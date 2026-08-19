@@ -8,6 +8,10 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
 import { CheckWarrantyDto } from './dto/check-warranty.dto';
 import { ActivateWarrantyDto } from './dto/activate-warranty.dto';
+import {
+  findUnverifiedVehicle,
+  UnverifiedVehicle,
+} from './data/unverified-vehicles';
 
 @Injectable()
 export class PublicWarrantyService {
@@ -35,11 +39,19 @@ export class PublicWarrantyService {
     });
 
     if (!vehicle) {
-      // --- TEMPORARY WORKAROUND (GHOST LIFECYCLE) ---
-      // If the vehicle does not exist in the DB, check if it was previously activated as a 'ghost'.
-      // This ensures we do not block customers from activating warranties, while avoiding
-      // polluting the erp_vehicles and erp_inventory_tracking_serials tables before the
-      // official manufacturing flow creates the real records.
+      // --- RESTRICTED UNVERIFIED VEHICLE CHECK ---
+      // Only allow vehicles present in the 200 batch 3 unverified list
+      const unverifiedVehicle = findUnverifiedVehicle(vin_no, engine_no);
+      if (!unverifiedVehicle) {
+        return {
+          found: false,
+          reason: 'NOT_IN_SYSTEM',
+          vehicle: null,
+          active_warranty: null,
+        };
+      }
+
+      // Check if it was previously activated as a 'ghost'.
       const ghostLifecycle = await this.lifecycleRepo
         .createQueryBuilder('l')
         .where("l.attributes->>'is_ghost' = 'true'")
@@ -57,7 +69,7 @@ export class PublicWarrantyService {
           vehicle: {
             vin_no,
             engine_no,
-            model_name: 'Unknown',
+            model_name: unverifiedVehicle.model_name || 'KL Lotus Paceo',
             warranty_status: 'ACTIVE',
           },
           active_warranty: {
@@ -80,7 +92,7 @@ export class PublicWarrantyService {
         vehicle: {
           vin_no,
           engine_no,
-          model_name: 'Unknown',
+          model_name: unverifiedVehicle.model_name || 'KL Lotus Paceo',
           warranty_status: 'NOT_ACTIVATED',
         },
         active_warranty: null,
@@ -108,7 +120,7 @@ export class PublicWarrantyService {
         vehicle: {
           vin_no: vehicle.vinNo,
           engine_no: vehicle.engineNo,
-          model_name: 'KL Lotus',
+          model_name: 'KL Lotus Paceo',
           warranty_status: 'NOT_ACTIVATED',
         },
         active_warranty: null,
@@ -141,7 +153,7 @@ export class PublicWarrantyService {
       vehicle: {
         vin_no: vehicle.vinNo,
         engine_no: vehicle.engineNo,
-        model_name: 'KL Lotus', // Placeholder or relation
+        model_name: 'KL Lotus Paceo',
         warranty_status: active_warranty ? 'ACTIVE' : 'NOT_ACTIVATED',
       },
       active_warranty,
@@ -157,6 +169,8 @@ export class PublicWarrantyService {
     });
 
     let trackingSerial: ErpInventoryTrackingSerial | null = null;
+    let unverifiedVehicle: UnverifiedVehicle | undefined = undefined;
+
     if (vehicle) {
       trackingSerial = await this.trackingSerialRepo.findOne({
         where: { vinId: vehicle.id },
@@ -171,20 +185,33 @@ export class PublicWarrantyService {
           'Xe chưa được bàn giao, không thể kích hoạt bảo hành. Vui lòng liên hệ đại lý.',
         );
       }
+    } else {
+      unverifiedVehicle = findUnverifiedVehicle(vin_no, engine_no);
+      if (!unverifiedVehicle) {
+        throw new BadRequestException(
+          'Phương tiện không tồn tại hoặc không thuộc danh mục được phép kích hoạt bảo hành.',
+        );
+      }
     }
 
     let lifecycle: ErpSerialLifecycle | null = null;
     let isGhost = false;
 
-    // --- STANDARD FLOW ---
-    // If the tracking serial exists, we use it. This preserves the original correct flow.
+    // --- STANDARD FLOW vs RESTRICTED GHOST FLOW ---
     if (trackingSerial) {
       lifecycle = await this.lifecycleRepo.findOne({
         where: { serialId: trackingSerial.id },
       });
     } else {
-      // --- TEMPORARY WORKAROUND (GHOST LIFECYCLE) ---
       isGhost = true;
+      lifecycle = await this.lifecycleRepo
+        .createQueryBuilder('l')
+        .where("l.attributes->>'is_ghost' = 'true'")
+        .andWhere("l.attributes->>'ghost_vin' = :vin", { vin: vin_no })
+        .andWhere("l.attributes->>'ghost_engine' = :engine", {
+          engine: engine_no,
+        })
+        .getOne();
     }
 
     if (lifecycle && lifecycle.warrantyActivatedAt) {
@@ -245,10 +272,16 @@ export class PublicWarrantyService {
       dealer_code: dto.dealer_id, // Store original code in case not found in BusinessPartners
     };
 
-    if (isGhost) {
+    if (isGhost && unverifiedVehicle) {
       currentLifecycle.attributes.is_ghost = true;
       currentLifecycle.attributes.ghost_vin = vin_no;
       currentLifecycle.attributes.ghost_engine = engine_no;
+      currentLifecycle.attributes.ghost_serial = `UNVERIFIED_${unverifiedVehicle.serial_no}`;
+      currentLifecycle.attributes.ghost_color = unverifiedVehicle.color;
+      currentLifecycle.attributes.ghost_model_name =
+        unverifiedVehicle.model_name;
+      currentLifecycle.attributes.ghost_release_date =
+        unverifiedVehicle.release_date;
     }
 
     await this.lifecycleRepo.save(currentLifecycle);

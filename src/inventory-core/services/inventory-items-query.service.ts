@@ -69,7 +69,7 @@ export class InventoryItemsQueryService {
 
     const [items, total] = await this.repository.findAndCount({
       where: whereCondition,
-      relations: ['uom', 'itemType'],
+      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order,

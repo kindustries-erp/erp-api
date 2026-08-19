@@ -25,4 +25,13 @@ export class CreateGoodsReceiptLineDto {
   @IsOptional()
   @IsNumberString()
   amount?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  declaredSerials?: Array<{
+    serialNo: string;
+    notes?: string | null;
+    lotNo?: string | null;
+    attributes?: Record<string, string> | null;
+  }>;
 }

@@ -24,9 +24,21 @@ export class CreateBomDto {
   @IsUUID()
   finishedGoodItemId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Dynamic attribute values map: attrDefId -> valueText',
+  })
+  @IsOptional()
+  attributes?: Record<string, string>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  version: string;
+  version?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

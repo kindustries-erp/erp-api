@@ -12,6 +12,7 @@ import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { format } from 'date-fns';
 import { Subject } from 'rxjs';
+import { isCronEnabled } from '../common/utils/cron.util';
 
 export interface SerialProgressEvent {
   processId: 'serial-generation' | 'ping';
@@ -41,6 +42,12 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!isCronEnabled()) {
+      this.logger.log(
+        'GoodsReceipts background serial generation is disabled in this environment.',
+      );
+      return;
+    }
     this.scheduleNextRun(10000); // Wait 10 seconds before starting
   }
 
@@ -137,29 +144,8 @@ export class GoodsReceiptsCronService implements OnModuleInit, OnModuleDestroy {
           let remainingSerials = totalPendingSerials;
 
           for (const { line, gr } of linesToProcess) {
-            const item = await this.itemRepo.findOne({
-              where: { id: line.itemId! },
-              relations: ['trackingPolicy'],
-            });
-
-            if (item?.trackingPolicy?.code === 'SERIAL') {
-              const qtyInt = Math.round(Number(line.qtyReceived || 0));
-              if (qtyInt > 0) {
-                const receiptDateStr = gr.receiptDate
-                  ? format(new Date(gr.receiptDate as any), 'yyyy-MM-dd')
-                  : format(new Date(), 'yyyy-MM-dd');
-
-                await this.goodsReceiptsCoreService.generateComponentSerials(
-                  this.grLineRepo.manager,
-                  item,
-                  qtyInt,
-                  line.id,
-                  receiptDateStr,
-                );
-              }
-            }
-
-            // Mark as generated
+            // Serials are now explicitly declared and generated at post-time.
+            // Mark line as generated to clear queue.
             line.serialsGenerated = true;
             await this.grLineRepo.save(line);
 

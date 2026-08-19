@@ -22,6 +22,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
           .mockImplementation((_entity: any, data: any) => ({ ...data })),
         save: jest.fn().mockResolvedValue([]),
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
+        query: jest.fn(),
       },
     };
 
@@ -221,5 +222,167 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     expect(
       bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
+  });
+
+  describe('autoPostStandard', () => {
+    it('auto-posts IN invoice with 642 debit account for tax code in 642 list', async () => {
+      const invoice = {
+        id: 'inv-in-642',
+        isDeleted: false,
+        branchId: 'branch-1',
+        postingStatus: 'UNPOSTED',
+        direction: 'IN',
+        sellerTaxCode: '0317121966',
+        preVatAmount: 1000000,
+        vatAmount: 100000,
+        totalAmount: 1100000,
+        invoiceNo: '0000123',
+        invoiceDate: '2026-08-18',
+      };
+
+      repository.findOne.mockResolvedValue(invoice);
+      repository.manager.query.mockResolvedValueOnce([
+        { id: 'acc-642', account_code: '642' },
+        { id: 'acc-632', account_code: '632' },
+        { id: 'acc-133', account_code: '133' },
+        { id: 'acc-331', account_code: '331' },
+      ]);
+
+      const spyPost = jest
+        .spyOn(service, 'postInvoice')
+        .mockResolvedValue(invoice as any);
+
+      await service.autoPostStandard('inv-in-642');
+
+      expect(spyPost).toHaveBeenCalledWith(
+        'inv-in-642',
+        expect.objectContaining({
+          postingDate: '2026-08-18',
+          lines: [
+            expect.objectContaining({
+              accountId: 'acc-642',
+              debit: 1000000,
+              credit: 0,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-133',
+              debit: 100000,
+              credit: 0,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-331',
+              debit: 0,
+              credit: 1100000,
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('auto-posts IN invoice with 632 debit account for default/VinFast tax codes', async () => {
+      const invoice = {
+        id: 'inv-in-632',
+        isDeleted: false,
+        branchId: 'branch-1',
+        postingStatus: 'UNPOSTED',
+        direction: 'IN',
+        sellerTaxCode: '0108926276', // VinFast
+        preVatAmount: 5000000,
+        vatAmount: 500000,
+        totalAmount: 5500000,
+        invoiceNo: '0000999',
+        invoiceDate: '2026-08-18',
+      };
+
+      repository.findOne.mockResolvedValue(invoice);
+      repository.manager.query.mockResolvedValueOnce([
+        { id: 'acc-642', account_code: '642' },
+        { id: 'acc-632', account_code: '632' },
+        { id: 'acc-133', account_code: '133' },
+        { id: 'acc-331', account_code: '331' },
+      ]);
+
+      const spyPost = jest
+        .spyOn(service, 'postInvoice')
+        .mockResolvedValue(invoice as any);
+
+      await service.autoPostStandard('inv-in-632');
+
+      expect(spyPost).toHaveBeenCalledWith(
+        'inv-in-632',
+        expect.objectContaining({
+          postingDate: '2026-08-18',
+          lines: [
+            expect.objectContaining({
+              accountId: 'acc-632',
+              debit: 5000000,
+              credit: 0,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-133',
+              debit: 500000,
+              credit: 0,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-331',
+              debit: 0,
+              credit: 5500000,
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('auto-posts OUT invoice with 131, 511, 3331 accounts', async () => {
+      const invoice = {
+        id: 'inv-out-1',
+        isDeleted: false,
+        branchId: 'branch-1',
+        postingStatus: 'UNPOSTED',
+        direction: 'OUT',
+        preVatAmount: 2000000,
+        vatAmount: 200000,
+        totalAmount: 2200000,
+        invoiceNo: '0000777',
+        invoiceDate: '2026-08-18',
+      };
+
+      repository.findOne.mockResolvedValue(invoice);
+      repository.manager.query.mockResolvedValueOnce([
+        { id: 'acc-131', account_code: '131' },
+        { id: 'acc-511', account_code: '511' },
+        { id: 'acc-3331', account_code: '3331' },
+      ]);
+
+      const spyPost = jest
+        .spyOn(service, 'postInvoice')
+        .mockResolvedValue(invoice as any);
+
+      await service.autoPostStandard('inv-out-1');
+
+      expect(spyPost).toHaveBeenCalledWith(
+        'inv-out-1',
+        expect.objectContaining({
+          postingDate: '2026-08-18',
+          lines: [
+            expect.objectContaining({
+              accountId: 'acc-131',
+              debit: 2200000,
+              credit: 0,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-511',
+              debit: 0,
+              credit: 2000000,
+            }),
+            expect.objectContaining({
+              accountId: 'acc-3331',
+              debit: 0,
+              credit: 200000,
+            }),
+          ],
+        }),
+      );
+    });
   });
 });

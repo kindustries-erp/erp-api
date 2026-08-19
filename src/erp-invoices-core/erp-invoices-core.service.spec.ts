@@ -87,6 +87,11 @@ describe('ErpInvoicesCoreService', () => {
       getReadyExportFile: jest.fn(),
     };
 
+    const smartNetoffService: any = {
+      getSuggestionsForInvoices: jest.fn(),
+      getSuggestionsForSingleInvoice: jest.fn(),
+    };
+
     service = new ErpInvoicesCoreService(
       lifecycleService,
       portalService,
@@ -94,6 +99,7 @@ describe('ErpInvoicesCoreService', () => {
       filesService,
       queryService,
       exportBackgroundService,
+      smartNetoffService,
     );
   });
 

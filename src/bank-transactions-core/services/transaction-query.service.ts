@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
 import { TransactionAccountingService } from './transaction-accounting.service';
+import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
 
 @Injectable()
 export class TransactionQueryService {
@@ -161,6 +162,42 @@ export class TransactionQueryService {
             continue;
           }
 
+          if (col === 'invoiceSubject') {
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+            const netOffSubjectSubquery = `EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff n
+              JOIN erp_invoices i ON n.invoice_id = i.id
+              WHERE n.bank_transaction_id = txn.id
+              AND (
+                CASE WHEN i.direction = 'IN' 
+                  THEN CONCAT_WS(' - ', NULLIF(i.seller_tax_code, ''), i.seller_name)
+                  ELSE CONCAT_WS(' - ', NULLIF(i.buyer_tax_code, ''), i.buyer_name)
+                END IN (:...vals_${col})
+                OR i.seller_name IN (:...vals_${col})
+                OR i.buyer_name IN (:...vals_${col})
+                OR i.seller_tax_code IN (:...vals_${col})
+                OR i.buyer_tax_code IN (:...vals_${col})
+              )
+            )`;
+            const noNetOffSubquery = `NOT EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id
+            )`;
+
+            if (hasBlank && realVals.length > 0) {
+              qb.andWhere(`(${netOffSubjectSubquery} OR ${noNetOffSubquery})`, {
+                [`vals_${col}`]: realVals,
+              });
+            } else if (hasBlank) {
+              qb.andWhere(noNetOffSubquery);
+            } else {
+              qb.andWhere(netOffSubjectSubquery, {
+                [`vals_${col}`]: vals,
+              });
+            }
+            continue;
+          }
+
           if (col === 'account') {
             if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (filter.sourceType === 'CASH')
@@ -183,14 +220,42 @@ export class TransactionQueryService {
             filterField = 'txn.referenceNumber';
 
           if (filterField) {
-            if (col === 'transDate') {
-              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
-                [`vals_${col}`]: vals,
-              });
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+
+            if (hasBlank && realVals.length > 0) {
+              if (col === 'transDate') {
+                qb.andWhere(
+                  `(${filterField} IN (:...vals_${col}) OR ${filterField} IS NULL OR ${filterField} = '')`,
+                  { [`vals_${col}`]: realVals },
+                );
+              } else {
+                qb.andWhere(
+                  `(CAST(${filterField} AS TEXT) IN (:...vals_${col}) OR ${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`,
+                  { [`vals_${col}`]: realVals },
+                );
+              }
+            } else if (hasBlank) {
+              if (col === 'transDate') {
+                qb.andWhere(`(${filterField} IS NULL OR ${filterField} = '')`);
+              } else {
+                qb.andWhere(
+                  `(${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`,
+                );
+              }
             } else {
-              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
-                [`vals_${col}`]: vals,
-              });
+              if (col === 'transDate') {
+                qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                  [`vals_${col}`]: vals,
+                });
+              } else {
+                qb.andWhere(
+                  `CAST(${filterField} AS TEXT) IN (:...vals_${col})`,
+                  {
+                    [`vals_${col}`]: vals,
+                  },
+                );
+              }
             }
           }
         }
@@ -209,6 +274,55 @@ export class TransactionQueryService {
 
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
+
+          if (col === 'invoiceSubject') {
+            const keywords = val
+              .split(';')
+              .map((k) => k.trim())
+              .filter((k) => k.length > 0);
+
+            if (keywords.length > 0) {
+              qb.andWhere(
+                new Brackets((sqb) => {
+                  keywords.forEach((kw, idx) => {
+                    let isExact = false;
+                    let cleanKw = kw;
+                    if (
+                      kw.startsWith('"') &&
+                      kw.endsWith('"') &&
+                      kw.length >= 2
+                    ) {
+                      isExact = true;
+                      cleanKw = kw.slice(1, -1);
+                    }
+                    const paramName = `subjSearch_${idx}`;
+                    const paramVal = isExact ? cleanKw : `%${cleanKw}%`;
+                    const op = isExact ? '=' : 'ILIKE';
+                    const cond = `EXISTS (
+                      SELECT 1 FROM erp_invoice_voucher_netoff n
+                      JOIN erp_invoices i ON n.invoice_id = i.id
+                      WHERE n.bank_transaction_id = txn.id
+                      AND (
+                        i.seller_name ${op} :${paramName}
+                        OR i.buyer_name ${op} :${paramName}
+                        OR i.seller_tax_code ${op} :${paramName}
+                        OR i.buyer_tax_code ${op} :${paramName}
+                        OR CONCAT_WS(' - ', NULLIF(i.seller_tax_code, ''), i.seller_name) ${op} :${paramName}
+                        OR CONCAT_WS(' - ', NULLIF(i.buyer_tax_code, ''), i.buyer_name) ${op} :${paramName}
+                      )
+                    )`;
+                    if (idx === 0) {
+                      sqb.where(cond, { [paramName]: paramVal });
+                    } else {
+                      sqb.orWhere(cond, { [paramName]: paramVal });
+                    }
+                  });
+                }),
+              );
+            }
+            continue;
+          }
+
           let searchField = '';
           if (col === 'account') {
             if (filter.sourceType === 'BANK')
@@ -237,9 +351,12 @@ export class TransactionQueryService {
 
           if (searchField) {
             if (col === 'transDate') {
-              qb.andWhere(`${searchField} ILIKE :search_${col}`, {
-                [`search_${col}`]: `%${val}%`,
-              });
+              applyMultiKeywordFilter(
+                qb,
+                "TO_CHAR(txn.transDate, 'DD/MM/YYYY')",
+                val,
+                `search_${col}`,
+              );
             } else if (
               [
                 'thu',
@@ -249,16 +366,20 @@ export class TransactionQueryService {
                 'remainingAmount',
               ].includes(col)
             ) {
-              qb.andWhere(
-                `REPLACE(REPLACE(CAST(${searchField} AS TEXT), '.', ''), ',', '') ILIKE :search_${col}`,
-                {
-                  [`search_${col}`]: `%${val.replace(/[,.]/g, '')}%`,
-                },
+              const cleanVal = val.replace(/[,.]/g, '');
+              applyMultiKeywordFilter(
+                qb,
+                `REPLACE(REPLACE(CAST(${searchField} AS TEXT), '.', ''), ',', '')`,
+                cleanVal,
+                `search_${col}`,
               );
             } else {
-              qb.andWhere(`CAST(${searchField} AS TEXT) ILIKE :search_${col}`, {
-                [`search_${col}`]: `%${val}%`,
-              });
+              applyMultiKeywordFilter(
+                qb,
+                `CAST(${searchField} AS TEXT)`,
+                val,
+                `search_${col}`,
+              );
             }
           }
         }
@@ -357,7 +478,12 @@ export class TransactionQueryService {
       labelField = 'branch.name';
     } else if (column === 'referenceNumber')
       selectField = 'txn.referenceNumber';
-    else if (column === 'partner')
+    else if (column === 'invoiceSubject') {
+      qb.innerJoin('txn.invoiceNetOffs', 'netoff');
+      qb.innerJoin('netoff.invoice', 'inv');
+      selectField = `CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END`;
+      labelField = selectField;
+    } else if (column === 'partner')
       selectField =
         "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
@@ -412,14 +538,42 @@ export class TransactionQueryService {
               "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
 
           if (filterField) {
-            if (col === 'transDate') {
-              qb.andWhere(`${filterField} IN (:...vals_${col})`, {
-                [`vals_${col}`]: vals,
-              });
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+
+            if (hasBlank && realVals.length > 0) {
+              if (col === 'transDate') {
+                qb.andWhere(
+                  `(${filterField} IN (:...vals_${col}) OR ${filterField} IS NULL OR ${filterField} = '')`,
+                  { [`vals_${col}`]: realVals },
+                );
+              } else {
+                qb.andWhere(
+                  `(CAST(${filterField} AS TEXT) IN (:...vals_${col}) OR ${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`,
+                  { [`vals_${col}`]: realVals },
+                );
+              }
+            } else if (hasBlank) {
+              if (col === 'transDate') {
+                qb.andWhere(`(${filterField} IS NULL OR ${filterField} = '')`);
+              } else {
+                qb.andWhere(
+                  `(${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`,
+                );
+              }
             } else {
-              qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
-                [`vals_${col}`]: vals,
-              });
+              if (col === 'transDate') {
+                qb.andWhere(`${filterField} IN (:...vals_${col})`, {
+                  [`vals_${col}`]: vals,
+                });
+              } else {
+                qb.andWhere(
+                  `CAST(${filterField} AS TEXT) IN (:...vals_${col})`,
+                  {
+                    [`vals_${col}`]: vals,
+                  },
+                );
+              }
             }
           }
         }
@@ -427,15 +581,12 @@ export class TransactionQueryService {
     }
 
     if (search) {
-      if (column === 'transDate') {
-        qb.andWhere(`${labelField} ILIKE :search`, {
-          search: `%${search}%`,
-        });
-      } else {
-        qb.andWhere(`CAST(${labelField} AS TEXT) ILIKE :search`, {
-          search: `%${search}%`,
-        });
-      }
+      applyMultiKeywordFilter(
+        qb,
+        column === 'transDate' ? labelField : `CAST(${labelField} AS TEXT)`,
+        search,
+        'col_search',
+      );
     }
 
     qb.orderBy('value', 'ASC');

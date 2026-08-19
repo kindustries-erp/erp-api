@@ -188,11 +188,6 @@ export class InvoiceImportService {
           );
         }
 
-        const notes =
-          parsed.lookupCode || parsed.providerLink
-            ? `[Lookup Info] Code: ${parsed.lookupCode ?? 'N/A'} - Link: ${parsed.providerLink ?? 'N/A'}`
-            : '';
-
         const newInvoiceData: any = {
           invoiceNo: parsed.invoiceNo,
           invoiceNoNormalized: invoiceNoNorm || undefined,
@@ -210,7 +205,7 @@ export class InvoiceImportService {
           buyerTaxCode: parsed.buyerTaxCode,
           buyerAddress: parsed.buyerAddress,
           description: parsed.description,
-          notes: notes || undefined,
+          notes: undefined,
           preVatAmount: String(parsed.preVatAmount),
           vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
           vatAmount: String(parsed.vatAmount),
@@ -395,11 +390,6 @@ export class InvoiceImportService {
           );
         }
 
-        const notes =
-          parsed.lookupCode || parsed.providerLink
-            ? `[Lookup Info] Code: ${parsed.lookupCode ?? 'N/A'} - Link: ${parsed.providerLink ?? 'N/A'}`
-            : '';
-
         const invoice = this.repository.create({
           invoiceNo: parsed.invoiceNo,
           invoiceNoNormalized: invoiceNoNorm || undefined,
@@ -417,7 +407,7 @@ export class InvoiceImportService {
           buyerTaxCode: parsed.buyerTaxCode,
           buyerAddress: parsed.buyerAddress,
           description: parsed.description,
-          notes: notes || undefined,
+          notes: undefined,
           preVatAmount: String(parsed.preVatAmount),
           vatRate: parsed.vatRate != null ? String(parsed.vatRate) : null,
           vatAmount: String(parsed.vatAmount),
