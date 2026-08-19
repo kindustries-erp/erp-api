@@ -17,6 +17,7 @@ import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 import { RbacCoreService } from '../rbac-core/rbac-core.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { AppConfigService } from '../app-config/app-config.service';
 
 // Refresh token lifetime: 30 days in seconds
 const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
@@ -33,6 +34,7 @@ export class AuthService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly auditCoreService: AuditCoreService,
     private readonly rbacCoreService: RbacCoreService,
+    private readonly appConfigService: AppConfigService,
     @InjectRepository(CoreRefreshToken)
     private readonly refreshTokenRepo: Repository<CoreRefreshToken>,
   ) {}
@@ -200,6 +202,8 @@ export class AuthService implements OnModuleInit {
     const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
     const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
 
+    const preferences = await this.appConfigService.getUserPreferences(user.id);
+
     return {
       accessToken,
       refreshToken,
@@ -211,6 +215,12 @@ export class AuthService implements OnModuleInit {
         status: user.status,
         employeeId: user.employeeId,
         legacyDirectusUserId: user.legacyDirectusUserId,
+      },
+      preferences: {
+        theme: preferences.theme,
+        language: preferences.language,
+        tableConfigs: preferences.tableConfigs,
+        uiConfigs: preferences.uiConfigs,
       },
     };
   }
@@ -463,6 +473,10 @@ export class AuthService implements OnModuleInit {
       message: `Login as user ${targetUser.email}`,
     });
 
+    const preferences = await this.appConfigService.getUserPreferences(
+      targetUser.id,
+    );
+
     return {
       accessToken,
       refreshToken,
@@ -474,6 +488,12 @@ export class AuthService implements OnModuleInit {
         status: targetUser.status,
         employeeId: targetUser.employeeId,
         legacyDirectusUserId: targetUser.legacyDirectusUserId,
+      },
+      preferences: {
+        theme: preferences.theme,
+        language: preferences.language,
+        tableConfigs: preferences.tableConfigs,
+        uiConfigs: preferences.uiConfigs,
       },
     };
   }
@@ -490,6 +510,7 @@ export class AuthService implements OnModuleInit {
     );
 
     const permissions = await this.rbacCoreService.getUserPermissions(user.id);
+    const preferences = await this.appConfigService.getUserPreferences(user.id);
 
     return {
       id: user.id,
@@ -513,6 +534,12 @@ export class AuthService implements OnModuleInit {
         action: p.action,
         conditions: p.conditions,
       })),
+      preferences: {
+        theme: preferences.theme,
+        language: preferences.language,
+        tableConfigs: preferences.tableConfigs,
+        uiConfigs: preferences.uiConfigs,
+      },
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
