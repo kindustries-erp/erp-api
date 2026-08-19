@@ -356,12 +356,14 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.12. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
 - **Mốc thời gian theo dõi**: Toàn bộ nghiệp vụ theo dõi công nợ đối tác xưởng Garage áp dụng mốc chặn dưới từ tháng 07/2026 (`>= 2026-07-01`).
-- **Công nợ Khách hàng (`GET /cases/customers-debt`)**:
+- **Công nợ Khách hàng (`GET /cases/customers-debt`, `GET /cases/customers-debt/column-options`, `GET /cases/by-customer/:customerCode`)**:
+  - **Quy tắc Phiếu Hoàn tất**: Dữ liệu công nợ khách hàng **chỉ tính toán và phản ánh các Phiếu dịch vụ đã kết thúc/hoàn tất** (`tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu = 'Kết thúc'`). Các phiếu đang báo giá, tiếp nhận, đang sửa hoặc đã hủy được tự động loại trừ.
   - Dữ liệu được nhóm và tính toán tổng hợp trực tiếp từ bảng `kgara_cases` theo `khach_hang_code`.
   - Phân bổ 4 nhóm tuổi nợ (Aging buckets): `0_30` ngày, `31_60` ngày, `61_90` ngày, và `over_90` ngày dựa trên khoảng cách giữa ngày phát sinh phiếu (`ngay_phat_sinh`) và ngày hiện tại.
   - Hỗ trợ phân trang, tìm kiếm đa trường (`q`), lọc theo dải ngày (`from`, `to`), bộ lọc popover cột (`filtersStr`, `column_filters`), và sắp xếp theo doanh thu, đã thu, còn phải thu, tuổi nợ.
-  - Endpoint `GET /cases/customers-debt/column-options`: Trả về danh sách phân trang các giá trị duy nhất phục vụ bộ lọc popover.
-  - Endpoint `GET /cases/by-customer/:customerCode`: Truy xuất toàn bộ danh sách phiếu dịch vụ phát sinh của khách hàng kèm tuổi nợ và chi tiết thanh toán từng phiếu.
+  - Tự động làm giàu dữ liệu và đồng bộ số dư `tien_da_thanh_toan`, `tien_con_phai_thanh_toan` từ bảng `kgara_case_settlements` khi thêm/xóa giao dịch cấn trừ và khi khởi tạo module (`onModuleInit`).
+  - Bảo toàn số tiền đã cấn trừ trên ERP khi đồng bộ dữ liệu định kỳ từ KGara (`kgara-sync.service.ts`).
+  - Giao diện Drawer "Hồ sơ công nợ khách hàng" (`GarageCustomerDetailDrawer.tsx`) chuẩn hóa theo `/standardize-table`, `variant="spreadsheet"`, kích thước cột tỉ lệ chuẩn kèm `minWidth={1210}`, các `DrawerSection` hỗ trợ collapsible, giới hạn chiều cao `max-h` kèm thanh cuộn mượt mà, và cột Tuổi nợ (Aging) trực quan đồng bộ 100% với trang `/garage-customers`.
 - **Công nợ Nhà cung cấp (`GET /payables/suppliers-debt`)**:
   - Dữ liệu được nhóm và tổng hợp từ sổ công nợ phải trả `kgara_payables` (tài khoản theo dõi 331) theo `doi_tac_id`.
   - Tính toán số dư đầu kỳ (`dk_no`, `dk_co`), số phát sinh trong kỳ (`ps_no`: đã thanh toán, `ps_co`: mua hàng/dịch vụ), số dư cuối kỳ (`ck_co - ck_no` = `balance_amount`) và tuổi nợ.

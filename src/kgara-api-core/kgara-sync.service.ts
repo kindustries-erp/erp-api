@@ -211,6 +211,23 @@ export class KgaraSyncService {
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
           gwCase.tienConPhaiThanhToan = c.TienConPhaiThanhToan;
 
+          if (gwCase.id) {
+            const existingSettlements = await this.settlementRepo.find({
+              where: { caseId: gwCase.id },
+            });
+            if (existingSettlements.length > 0) {
+              const totalReceipts = existingSettlements
+                .filter((s) => s.settlementType === 'RECEIPT')
+                .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              const targetRevenue = Number(c.TienCoThue ?? c.DoanhThu ?? 0);
+              gwCase.tienDaThanhToan = totalReceipts;
+              gwCase.tienConPhaiThanhToan = Math.max(
+                0,
+                targetRevenue - totalReceipts,
+              );
+            }
+          }
+
           if (newStatus === 9) {
             // Cancelled: Clear gross profit
             gwCase.doanhThu = 0;
@@ -735,6 +752,25 @@ export class KgaraSyncService {
       gwCase.tienCoThue = caseData.TienCoThue;
       gwCase.tienDaThanhToan = caseData.TienDaThanhToan;
       gwCase.tienConPhaiThanhToan = caseData.TienConPhaiThanhToan;
+
+      if (gwCase.id) {
+        const existingSettlements = await this.settlementRepo.find({
+          where: { caseId: gwCase.id },
+        });
+        if (existingSettlements.length > 0) {
+          const totalReceipts = existingSettlements
+            .filter((s) => s.settlementType === 'RECEIPT')
+            .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+          const targetRevenue = Number(
+            caseData.TienCoThue ?? caseData.DoanhThu ?? 0,
+          );
+          gwCase.tienDaThanhToan = totalReceipts;
+          gwCase.tienConPhaiThanhToan = Math.max(
+            0,
+            targetRevenue - totalReceipts,
+          );
+        }
+      }
 
       if (newStatus === 9) {
         // Cancelled: Clear gross profit

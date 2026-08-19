@@ -13,6 +13,7 @@ import {
   ExecutionContext,
   NotFoundException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 
 export const BranchId = createParamDecorator(
@@ -25,7 +26,7 @@ export const BranchId = createParamDecorator(
   },
 );
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, SelectQueryBuilder } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraReceivable } from './entities/kgara_receivable.entity';
@@ -46,7 +47,7 @@ import { GarageSmartSettlementService } from './services/garage-smart-settlement
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
-export class KgaraApiCoreController {
+export class KgaraApiCoreController implements OnModuleInit {
   private readonly logger = new Logger(KgaraApiCoreController.name);
 
   constructor(
@@ -73,6 +74,26 @@ export class KgaraApiCoreController {
     private traceabilityService: DocumentTraceabilityService,
     private smartSettlementService: GarageSmartSettlementService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.settlementRepo.manager.query(`
+        UPDATE kgara_cases c
+        SET
+          tien_da_thanh_toan = COALESCE(s.total_receipts, 0),
+          tien_con_phai_thanh_toan = GREATEST(0, COALESCE(c.tien_co_thue, c.doanh_thu, 0) - COALESCE(s.total_receipts, 0))
+        FROM (
+          SELECT case_id, SUM(amount) as total_receipts
+          FROM kgara_case_settlements
+          WHERE settlement_type = 'RECEIPT'
+          GROUP BY case_id
+        ) s
+        WHERE c.id = s.case_id;
+      `);
+    } catch (e) {
+      this.logger.warn(`Initial settlement balance sync: ${e}`);
+    }
+  }
 
   @Get('branches')
   @RequirePermissions({ resource: 'garage', action: 'read' })
@@ -192,6 +213,35 @@ export class KgaraApiCoreController {
 
     const [data, total] = await query.getManyAndCount();
 
+    const caseIds = data.map((item) => item.id).filter(Boolean);
+    const settlementsMap: Record<
+      string,
+      { receipts: number; payments: number }
+    > = {};
+
+    if (caseIds.length > 0) {
+      const settlementRows = await this.settlementRepo
+        .createQueryBuilder('s')
+        .select('s.caseId', 'caseId')
+        .addSelect('s.settlementType', 'settlementType')
+        .addSelect('SUM(s.amount)', 'totalAmount')
+        .where('s.caseId IN (:...caseIds)', { caseIds })
+        .groupBy('s.caseId')
+        .addGroupBy('s.settlementType')
+        .getRawMany();
+
+      for (const row of settlementRows) {
+        if (!settlementsMap[row.caseId]) {
+          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+        }
+        if (row.settlementType === 'RECEIPT') {
+          settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+        } else if (row.settlementType === 'PAYMENT') {
+          settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
+        }
+      }
+    }
+
     const enrichedData = data.map((item) => {
       const gp = (item as any).grossProfit;
       const doanhThu = item.doanhThu ?? (gp ? Number(gp.doanhThu) : null);
@@ -201,12 +251,29 @@ export class KgaraApiCoreController {
         doanhThu && Number(doanhThu) > 0 && loiNhuan != null
           ? (Number(loiNhuan) / Number(doanhThu)) * 100
           : null;
+
+      const setInfo = settlementsMap[item.id];
+      const hasSettlement = setInfo !== undefined;
+      const targetRev = Number(
+        item.tienCoThue ?? item.rawData?.TongTienThanhToan ?? doanhThu ?? 0,
+      );
+      const totalPaid = hasSettlement
+        ? setInfo.receipts
+        : Number(item.tienDaThanhToan) || 0;
+      const remainingBal = hasSettlement
+        ? Math.max(0, targetRev - totalPaid)
+        : Number(item.tienConPhaiThanhToan) || 0;
+      const paidCost = hasSettlement ? setInfo.payments : 0;
+
       return {
         ...item,
         doanhThu,
         chiPhi,
         loiNhuan,
         margin,
+        tienDaThanhToan: totalPaid,
+        tienConPhaiThanhToan: remainingBal,
+        tienDaChi: paidCost,
       };
     });
 
@@ -582,7 +649,10 @@ export class KgaraApiCoreController {
     const baselineDate = '2026-07-01';
     const effectiveFrom = from && from > baselineDate ? from : baselineDate;
 
-    const whereConditions: string[] = ['"case"."kgara_deleted_at" IS NULL'];
+    const whereConditions: string[] = [
+      '"case"."kgara_deleted_at" IS NULL',
+      '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" = \'Kết thúc\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\')',
+    ];
     const queryParams: any[] = [];
 
     whereConditions.push(
@@ -915,6 +985,14 @@ export class KgaraApiCoreController {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
     }
     query.andWhere('case.kgaraDeletedAt IS NULL');
+    query.andWhere(
+      '(case.tinhTrangDichVu = 3 OR case.tenTinhTrangDichVu = :stFinished OR case.tenTinhTrangDichVu ILIKE :stFinPattern OR case.tenTinhTrangDichVu ILIKE :stDonePattern)',
+      {
+        stFinished: 'Kết thúc',
+        stFinPattern: '%kết thúc%',
+        stDonePattern: '%hoàn tất%',
+      },
+    );
     query.andWhere('case.ngayPhatSinh >= :baselineDate', {
       baselineDate: '2026-07-01',
     });
@@ -958,6 +1036,14 @@ export class KgaraApiCoreController {
     const query = this.caseRepo
       .createQueryBuilder('case')
       .where('case.kgaraDeletedAt IS NULL')
+      .andWhere(
+        '(case.tinhTrangDichVu = 3 OR case.tenTinhTrangDichVu = :stFinished OR case.tenTinhTrangDichVu ILIKE :stFinPattern OR case.tenTinhTrangDichVu ILIKE :stDonePattern)',
+        {
+          stFinished: 'Kết thúc',
+          stFinPattern: '%kết thúc%',
+          stDonePattern: '%hoàn tất%',
+        },
+      )
       .andWhere('case.ngayPhatSinh >= :baselineDate', {
         baselineDate: '2026-07-01',
       });
@@ -976,6 +1062,35 @@ export class KgaraApiCoreController {
 
     const cases = await query.getMany();
 
+    const caseIds = cases.map((item) => item.id).filter(Boolean);
+    const settlementsMap: Record<
+      string,
+      { receipts: number; payments: number }
+    > = {};
+
+    if (caseIds.length > 0) {
+      const settlementRows = await this.settlementRepo
+        .createQueryBuilder('s')
+        .select('s.caseId', 'caseId')
+        .addSelect('s.settlementType', 'settlementType')
+        .addSelect('SUM(s.amount)', 'totalAmount')
+        .where('s.caseId IN (:...caseIds)', { caseIds })
+        .groupBy('s.caseId')
+        .addGroupBy('s.settlementType')
+        .getRawMany();
+
+      for (const row of settlementRows) {
+        if (!settlementsMap[row.caseId]) {
+          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+        }
+        if (row.settlementType === 'RECEIPT') {
+          settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+        } else if (row.settlementType === 'PAYMENT') {
+          settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
+        }
+      }
+    }
+
     const enriched = cases.map((c) => {
       const pDate = c.ngayPhatSinh ? new Date(c.ngayPhatSinh) : null;
       const today = new Date();
@@ -984,12 +1099,24 @@ export class KgaraApiCoreController {
         const diffTime = Math.abs(today.getTime() - pDate.getTime());
         agingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
+      const setInfo = settlementsMap[c.id];
+      const hasSettlement = setInfo !== undefined;
+      const targetRev = Number(
+        c.tienCoThue ?? c.rawData?.TongTienThanhToan ?? c.doanhThu ?? 0,
+      );
+      const totalPaid = hasSettlement
+        ? setInfo.receipts
+        : Number(c.tienDaThanhToan) || 0;
+      const remainingBal = hasSettlement
+        ? Math.max(0, targetRev - totalPaid)
+        : Number(c.tienConPhaiThanhToan) || 0;
+
       return {
         ...c,
         agingDays,
         tienCoThue: Number(c.tienCoThue) || 0,
-        tienDaThanhToan: Number(c.tienDaThanhToan) || 0,
-        tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan) || 0,
+        tienDaThanhToan: totalPaid,
+        tienConPhaiThanhToan: remainingBal,
       };
     });
 
@@ -2008,6 +2135,7 @@ export class KgaraApiCoreController {
       }
     }
 
+    await this.recalculateCaseSettlementSummary(id);
     return saved;
   }
 
@@ -2058,6 +2186,42 @@ export class KgaraApiCoreController {
     }
 
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
+    await this.recalculateCaseSettlementSummary(id);
     return { success: true };
+  }
+
+  private async recalculateCaseSettlementSummary(caseId: string) {
+    try {
+      const c = await this.caseRepo.findOne({
+        where: [
+          { id: caseId },
+          { soChungTu: caseId },
+          { hdPhieuDichVuId: caseId },
+        ],
+      });
+      if (!c) return;
+
+      const settlements = await this.settlementRepo.find({
+        where: { caseId: c.id },
+      });
+
+      const totalReceipts = settlements
+        .filter((s) => s.settlementType === 'RECEIPT')
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+      const targetRevenue = Number(
+        c.tienCoThue ?? c.rawData?.TongTienThanhToan ?? c.doanhThu ?? 0,
+      );
+      const remainingReceivable = Math.max(0, targetRevenue - totalReceipts);
+
+      await this.caseRepo.update(c.id, {
+        tienDaThanhToan: totalReceipts,
+        tienConPhaiThanhToan: remainingReceivable,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to recalculate case settlement summary for ${caseId}: ${err}`,
+      );
+    }
   }
 }
