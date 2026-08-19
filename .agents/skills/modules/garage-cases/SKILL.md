@@ -222,7 +222,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
-| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường và lọc nâng cao |
+| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao và sắp xếp đa cột (mặc định: `ngayPhatSinh DESC`, `ngayTiepNhan DESC`, `soChungTu DESC`) |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (tự động fetch detail từ KGara nếu thiếu dòng) |
@@ -245,9 +245,9 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 ### 4.2. Nhóm Lợi Nhuận Gộp & Đối Soát Báo Cáo
 | Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`) |
+| `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`), sắp xếp `ngayPhatSinh DESC` |
 | `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc |
-| `POST`| `/sync/gross-profit` | `@BranchId()`, Query: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
+| `POST`| `/sync/gross-profit` | `@BranchId()`, Query/Body: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
 | `GET` | `/reports/gross-profit-detail` | `@BranchId()`, Query: `from`, `to` | Proxy gọi trực tiếp API báo cáo chi tiết lợi nhuận gộp từ máy chủ KGara |
 | `GET` | `/reports/gross-profit-detail/journal` | `@BranchId()`, Query: `from`, `to`, `vuViecID` | Proxy lấy sổ nhật ký hạch toán chi phí/doanh thu chi tiết của vụ việc |
 | `GET` | `/gross-profit/:id/linked-invoices` | `id` (UUID `kgara_gross_profit`) | Lấy danh sách hóa đơn điện tử đang liên kết với bản ghi lợi nhuận gộp này |
@@ -259,11 +259,11 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | :--- | :--- | :--- | :--- |
 | `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
-| `POST`| `/sync/cases` | `@BranchId()`, Query: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày và thực hiện kiểm đếm xóa mềm |
+| `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
 | `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
 | `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể |
-| `POST`| `/sync/receivables` | `@BranchId()`, Query: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
-| `POST`| `/sync/payables` | `@BranchId()`, Query: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
+| `POST`| `/sync/receivables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
+| `POST`| `/sync/payables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
 | `GET` | `/sync-runs` | `@BranchId()`, `take` (mặc định 50) | Lấy lịch sử nhật ký các lần chạy đồng bộ gần nhất |
 | `GET` | `/receivables` | `@BranchId()` | Lấy danh sách công nợ phải thu đã đồng bộ |
 | `GET` | `/payables` | `@BranchId()` | Lấy danh sách công nợ phải trả đã đồng bộ |
@@ -367,6 +367,15 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Tính toán số dư đầu kỳ (`dk_no`, `dk_co`), số phát sinh trong kỳ (`ps_no`: đã thanh toán, `ps_co`: mua hàng/dịch vụ), số dư cuối kỳ (`ck_co - ck_no` = `balance_amount`) và tuổi nợ.
   - Endpoint `GET /payables/suppliers-debt/column-options`: Phục vụ bộ lọc popover cho mã/tên nhà cung cấp và tài khoản.
   - Endpoint `GET /payables/by-supplier/:supplierId/cases`: Lấy chi tiết các bút toán phát sinh và tự động kết nối với các phiếu dịch vụ `kgara_cases` liên đới qua mã chứng từ `maSoVuViec = soChungTu`.
+
+### 5.13. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
+- **Hàm tiện ích `parseSafeDate`**:
+  - Nhận diện và chuyển đổi an toàn các định dạng ngày từ KGara (`ISO`, `DD/MM/YYYY`, `DD-MM-YYYY`, `number timestamp`).
+  - Tự động bỏ qua các chuỗi không hợp lệ như `"0001-01-01T00:00:00"`, `"1900-01-01"`, `"0NaN"`, `"null"`, `"undefined"`, trả về `null` thay vì `Invalid Date` để chống lỗi `500 QueryFailedError (0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN)` khi TypeORM ghi xuống Postgres.
+- **Quy tắc Sắp xếp Thứ tự Vụ việc Đồng bộ BE/FE**:
+  - Mặc định ưu tiên sắp xếp:
+    $$\text{case.ngayPhatSinh DESC (NULLS LAST)} \longrightarrow \text{case.ngayTiepNhan DESC (NULLS LAST)} \longrightarrow \text{case.soChungTu DESC} \longrightarrow \text{case.updatedAt DESC}$$
+  - Hỗ trợ tham số query `sorts` linh hoạt đa cột (`+col` / `-col`).
 
 ---
 

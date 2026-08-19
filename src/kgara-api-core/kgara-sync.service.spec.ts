@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraSyncService, parseSafeDate } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -47,6 +47,11 @@ describe('KgaraSyncService', () => {
       save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
       upsert: jest.fn().mockResolvedValue({ identifiers: [] }),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      }),
       manager: {
         transaction: jest.fn((cb) =>
           cb({
@@ -321,6 +326,78 @@ describe('KgaraSyncService', () => {
       expect(payableRepo.save).toHaveBeenCalledTimes(1);
       expect(payableRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ taiKhoanId: 'pay-1', doiTacId: 'dt-1' }),
+      );
+    });
+  });
+
+  describe('parseSafeDate', () => {
+    it('should correctly parse valid ISO strings and Date objects', () => {
+      const now = new Date();
+      expect(parseSafeDate(now)).toEqual(now);
+      expect(parseSafeDate('2026-08-01T00:00:00Z')?.toISOString()).toEqual(
+        '2026-08-01T00:00:00.000Z',
+      );
+      expect(parseSafeDate('2026-08-05')?.toISOString().split('T')[0]).toEqual(
+        '2026-08-05',
+      );
+    });
+
+    it('should parse DD/MM/YYYY and DD/MM/YYYY HH:mm:ss format', () => {
+      const parsed = parseSafeDate('05/08/2026 14:30:00');
+      expect(parsed).not.toBeNull();
+      expect(parsed?.getFullYear()).toEqual(2026);
+      expect(parsed?.getMonth()).toEqual(7); // August (0-indexed)
+      expect(parsed?.getDate()).toEqual(5);
+    });
+
+    it('should safely return null for invalid or empty dates without returning Invalid Date', () => {
+      expect(parseSafeDate(null)).toBeNull();
+      expect(parseSafeDate(undefined)).toBeNull();
+      expect(parseSafeDate('')).toBeNull();
+      expect(parseSafeDate('null')).toBeNull();
+      expect(parseSafeDate('undefined')).toBeNull();
+      expect(parseSafeDate('0001-01-01T00:00:00')).toBeNull();
+      expect(parseSafeDate('1900-01-01T00:00:00')).toBeNull();
+      expect(parseSafeDate('0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN')).toBeNull();
+      expect(parseSafeDate('invalid-date-string')).toBeNull();
+      expect(parseSafeDate(new Date(NaN))).toBeNull();
+    });
+  });
+
+  describe('syncCasesForBranch with malformed date fields', () => {
+    it('should handle malformed date fields from KGara without throwing or storing NaN', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [
+          {
+            HdPhieuDichVuID: 'case-bad-date',
+            SoChungTu: 'PDV-001',
+            NgayPhatSinhFull: '0001-01-01T00:00:00',
+            NgayPhatSinh: 'invalid-date',
+            NgayTiepNhan: '0NaN-NaN-NaN',
+            NgayHoanThanhCongViec: null,
+            NgayGiaoXeFull: undefined,
+          },
+        ],
+        pagination: { totalPages: 1 },
+        dataAsOf: 'null',
+      });
+      caseRepo.findOne.mockResolvedValue(null);
+
+      const res = await service.syncCasesForBranch(
+        'br-1',
+        '2026-08-01',
+        '2026-08-05',
+      );
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-bad-date',
+          ngayPhatSinh: null,
+          ngayTiepNhan: null,
+          ngayHoanThanhCongViec: null,
+          ngayGiaoXeFull: null,
+          dataAsOf: null,
+        }),
       );
     });
   });

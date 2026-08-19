@@ -91,6 +91,7 @@ export class KgaraApiCoreController {
     @Query('to') to?: string,
     @Query('filtersStr') filtersStr?: string,
     @Query('includeDeleted') includeDeleted?: string,
+    @Query('sorts') sorts?: string | string[],
   ) {
     const query = this.caseRepo
       .createQueryBuilder('case')
@@ -110,10 +111,12 @@ export class KgaraApiCoreController {
     }
 
     if (from) {
-      query.andWhere('case.ngayPhatSinh >= :from', { from });
+      const fromDate = from.includes('T') ? from : `${from} 00:00:00`;
+      query.andWhere('case.ngayPhatSinh >= :fromDate', { fromDate });
     }
     if (to) {
-      query.andWhere('case.ngayPhatSinh <= :to', { to });
+      const toDate = to.includes('T') ? to : `${to} 23:59:59.999`;
+      query.andWhere('case.ngayPhatSinh <= :toDate', { toDate });
     }
 
     if (q) {
@@ -129,7 +132,58 @@ export class KgaraApiCoreController {
 
     this.applyCaseListFilters(query, filtersStr);
 
-    query.orderBy('case.updatedAt', 'DESC');
+    if (sorts) {
+      const sortList = Array.isArray(sorts) ? sorts : [sorts];
+      let first = true;
+      for (const s of sortList) {
+        const isDesc = s.startsWith('-');
+        const col = isDesc ? s.substring(1) : s;
+        const dir: 'ASC' | 'DESC' = isDesc ? 'DESC' : 'ASC';
+        const nulls = isDesc ? 'NULLS LAST' : 'NULLS FIRST';
+
+        let targetCol: string | null = null;
+        if (col === 'caseDate' || col === 'ngayPhatSinh')
+          targetCol = 'case.ngayPhatSinh';
+        else if (col === 'ngayTiepNhan') targetCol = 'case.ngayTiepNhan';
+        else if (col === 'ngayHoanThanhCongViec' || col === 'completionDate')
+          targetCol = 'case.ngayHoanThanhCongViec';
+        else if (col === 'soChungTu' || col === 'code' || col === 'caseCode')
+          targetCol = 'case.soChungTu';
+        else if (col === 'bienSoXe' || col === 'licensePlate')
+          targetCol = 'case.bienSoXe';
+        else if (col === 'khachHangName' || col === 'customerName')
+          targetCol = 'case.khachHangName';
+        else if (col === 'khachHangCode' || col === 'customerCode')
+          targetCol = 'case.khachHangCode';
+        else if (col === 'doanhThu') targetCol = 'case.doanhThu';
+        else if (col === 'chiPhi') targetCol = 'case.chiPhi';
+        else if (col === 'loiNhuan') targetCol = 'case.loiNhuan';
+        else if (col === 'tienCoThue' || col === 'totalAmount')
+          targetCol = 'case.tienCoThue';
+        else if (col === 'tienDaThanhToan' || col === 'paidAmount')
+          targetCol = 'case.tienDaThanhToan';
+        else if (col === 'tienConPhaiThanhToan' || col === 'balanceAmount')
+          targetCol = 'case.tienConPhaiThanhToan';
+        else if (col === 'updatedAt') targetCol = 'case.updatedAt';
+        else if (col === 'createdAt') targetCol = 'case.createdAt';
+
+        if (targetCol) {
+          if (first) {
+            query.orderBy(targetCol, dir, nulls);
+            first = false;
+          } else {
+            query.addOrderBy(targetCol, dir, nulls);
+          }
+        }
+      }
+      query.addOrderBy('case.soChungTu', 'DESC');
+    } else {
+      query
+        .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
+        .addOrderBy('case.ngayTiepNhan', 'DESC', 'NULLS LAST')
+        .addOrderBy('case.soChungTu', 'DESC')
+        .addOrderBy('case.updatedAt', 'DESC');
+    }
 
     const take = parseInt(pageSize, 10) || 20;
     const skip = (parseInt(page, 10) - 1 || 0) * take;
@@ -332,7 +386,9 @@ export class KgaraApiCoreController {
       query.andWhere('gp.reportTo <= :to', { to });
     }
 
-    query.orderBy('gp.updatedAt', 'DESC');
+    query
+      .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
+      .addOrderBy('gp.updatedAt', 'DESC');
 
     const results = await query.getMany();
 
@@ -1434,28 +1490,32 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncCases(
     @BranchId() branchId: string,
-    @Body() body: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string },
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    return this.syncService.syncCasesForBranch(branchId, body.from, body.to);
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
+    return this.syncService.syncCasesForBranch(branchId, from, to);
   }
 
   @Post('sync/gross-profit')
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncGrossProfit(
     @BranchId() branchId: string,
-    @Body() body: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string },
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    return this.syncService.syncGrossProfitForBranch(
-      branchId,
-      body.from,
-      body.to,
-    );
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
+    return this.syncService.syncGrossProfitForBranch(branchId, from, to);
   }
 
   @Post('sync/cases/:id/detail')
@@ -1471,11 +1531,14 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncReceivables(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
+    @Body() body?: { from?: string; to?: string },
   ) {
     if (!branchId)
       return { success: false, message: 'Missing x-kgara-branch-id header' };
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
     await this.syncService.syncReceivables(branchId, from, to);
     return { success: true, message: 'Receivables synced successfully.' };
   }
@@ -1484,11 +1547,14 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncPayables(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
+    @Body() body?: { from?: string; to?: string },
   ) {
     if (!branchId)
       return { success: false, message: 'Missing x-kgara-branch-id header' };
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
     await this.syncService.syncPayables(branchId, from, to);
     return { success: true, message: 'Payables synced successfully.' };
   }

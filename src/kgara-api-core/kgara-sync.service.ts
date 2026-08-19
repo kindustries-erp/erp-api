@@ -13,6 +13,50 @@ import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.ent
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * Safely parse date from various formats without producing Invalid Date / NaN
+ */
+export function parseSafeDate(value: any): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (
+      !trimmed ||
+      trimmed === 'null' ||
+      trimmed === 'undefined' ||
+      trimmed.includes('NaN') ||
+      trimmed.startsWith('0001-01-01') ||
+      trimmed.startsWith('1900-01-01')
+    ) {
+      return null;
+    }
+    // Check if DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = trimmed.match(
+      /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[\sT](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
+    );
+    if (dmyMatch) {
+      const [, d, m, y, hh, mm, ss] = dmyMatch;
+      const isoFormatted = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}${
+        hh
+          ? `T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}:${(ss || '00').padStart(2, '0')}`
+          : 'T00:00:00'
+      }`;
+      const parsed = new Date(isoFormatted);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 @Injectable()
 export class KgaraSyncService {
   private readonly logger = new Logger(KgaraSyncService.name);
@@ -68,7 +112,7 @@ export class KgaraSyncService {
     run.rowCount = rowCount;
     if (errorMsg) run.errorMessage = errorMsg;
     if (responseStatus) run.responseStatus = responseStatus;
-    if (dataAsOf) run.dataAsOf = new Date(dataAsOf);
+    if (dataAsOf) run.dataAsOf = parseSafeDate(dataAsOf);
     await this.syncRunRepo.save(run);
   }
 
@@ -211,28 +255,19 @@ export class KgaraSyncService {
             gwCase.chiPhi = null;
             gwCase.loiNhuan = null;
           }
-          gwCase.ngayPhatSinh = c.NgayPhatSinhFull
-            ? new Date(c.NgayPhatSinhFull)
-            : c.NgayPhatSinh
-              ? new Date(c.NgayPhatSinh)
-              : null;
-          gwCase.ngayTiepNhan = c.NgayTiepNhan
-            ? new Date(c.NgayTiepNhan)
-            : null;
-          gwCase.ngayHoanThanhCongViec = c.NgayHoanThanhCongViec
-            ? new Date(c.NgayHoanThanhCongViec)
-            : null;
-          gwCase.ngayGiaoXeFull = c.NgayGiaoXeFull
-            ? new Date(c.NgayGiaoXeFull)
-            : null;
+          gwCase.ngayPhatSinh =
+            parseSafeDate(c.NgayPhatSinhFull) || parseSafeDate(c.NgayPhatSinh);
+          gwCase.ngayTiepNhan = parseSafeDate(c.NgayTiepNhan);
+          gwCase.ngayHoanThanhCongViec = parseSafeDate(c.NgayHoanThanhCongViec);
+          gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           gwCase.soKhung = c.SoKhung;
-          gwCase.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          gwCase.dataAsOf = parseSafeDate(dataAsOf);
 
           const caseDate =
             gwCase.ngayHoanThanhCongViec ||
             gwCase.ngayPhatSinh ||
             gwCase.ngayTiepNhan;
-          if (caseDate) {
+          if (caseDate && !isNaN(caseDate.getTime())) {
             updatedCaseDates.add(caseDate.toISOString());
           }
 
@@ -261,10 +296,13 @@ export class KgaraSyncService {
       try {
         const dateRangesToSync: { from: string; to: string }[] = [];
 
-        if (from && to) {
+        const parsedFrom = parseSafeDate(from);
+        const parsedTo = parseSafeDate(to);
+
+        if (parsedFrom && parsedTo) {
           dateRangesToSync.push({
-            from: from.split('T')[0],
-            to: to.split('T')[0],
+            from: parsedFrom.toISOString().split('T')[0],
+            to: parsedTo.toISOString().split('T')[0],
           });
         } else {
           const now = new Date();
@@ -278,8 +316,8 @@ export class KgaraSyncService {
 
           const monthsToSync = new Set<string>();
           for (const isoStr of updatedCaseDates) {
-            const d = new Date(isoStr);
-            if (d < firstDay || d > lastDay) {
+            const d = parseSafeDate(isoStr);
+            if (d && (d < firstDay || d > lastDay)) {
               monthsToSync.add(
                 `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
               );
@@ -389,10 +427,13 @@ export class KgaraSyncService {
     );
     try {
       const dateRangesToSync: { from: string; to: string }[] = [];
-      if (from && to) {
+      const parsedFrom = parseSafeDate(from);
+      const parsedTo = parseSafeDate(to);
+
+      if (parsedFrom && parsedTo) {
         dateRangesToSync.push({
-          from: from.split('T')[0],
-          to: to.split('T')[0],
+          from: parsedFrom.toISOString().split('T')[0],
+          to: parsedTo.toISOString().split('T')[0],
         });
       } else {
         const now = new Date();
@@ -480,10 +521,10 @@ export class KgaraSyncService {
         totalPages = response?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
-        for (const r of receivables) {
-          const pFrom = from ? new Date(from) : new Date('2000-01-01');
-          const pTo = to ? new Date(to) : new Date('2099-12-31');
+        const pFrom = parseSafeDate(from) || new Date('2000-01-01');
+        const pTo = parseSafeDate(to) || new Date('2099-12-31');
 
+        for (const r of receivables) {
           let rec = await this.receivableRepo.findOne({
             where: {
               branchExternalId,
@@ -507,8 +548,8 @@ export class KgaraSyncService {
           rec.soKhung = r.SoKhung;
           rec.tienThanhToan = r.TienThanhToan;
           rec.tienDaThanhToan = r.TienDaThanhToan;
-          rec.ngayPhatSinh = r.NgayPhatSinh ? new Date(r.NgayPhatSinh) : null;
-          rec.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          rec.ngayPhatSinh = parseSafeDate(r.NgayPhatSinh);
+          rec.dataAsOf = parseSafeDate(dataAsOf);
           rec.rawData = r;
 
           await this.receivableRepo.save(rec);
@@ -571,10 +612,10 @@ export class KgaraSyncService {
         totalPages = response?.results?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
-        for (const p of payables) {
-          const pFrom = from ? new Date(from) : new Date('2000-01-01');
-          const pTo = to ? new Date(to) : new Date('2099-12-31');
+        const pFrom = parseSafeDate(from) || new Date('2000-01-01');
+        const pTo = parseSafeDate(to) || new Date('2099-12-31');
 
+        for (const p of payables) {
           let pay = await this.payableRepo.findOne({
             where: {
               branchExternalId,
@@ -621,7 +662,7 @@ export class KgaraSyncService {
           pay.tyGiaDk = p.TyGiaDK;
           pay.tyGiaPsNo = p.TyGiaPSNo;
           pay.tyGiaPsCo = p.TyGiaPSCo;
-          pay.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          pay.dataAsOf = parseSafeDate(dataAsOf);
           pay.rawData = p;
 
           await this.payableRepo.save(pay);
@@ -651,29 +692,23 @@ export class KgaraSyncService {
     }
   }
 
-  async syncCaseDetail(caseId: string, branchExternalId: string): Promise<any> {
-    this.logger.log(`Syncing case detail for case ${caseId}...`);
+  async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
+    this.logger.log(`Syncing detail for case ${caseId}...`);
     const run = await this.createSyncRun(
       branchExternalId,
-      '/api/v1/gr/cases/detail',
-      { id: caseId },
+      `/api/v1/gr/cases/detail/${caseId}`,
+      {},
       1,
     );
 
     try {
       const response = await this.client.getCaseDetail(
-        caseId,
         branchExternalId,
+        caseId,
       );
       const caseData = response?.data;
       if (!caseData) {
-        await this.closeSyncRun(
-          run,
-          GwSyncStatus.FAILED,
-          0,
-          'No data returned',
-        );
-        return null;
+        throw new Error(`Case ${caseId} detail not found on Kgara`);
       }
 
       // Update case if exists
@@ -743,22 +778,16 @@ export class KgaraSyncService {
         gwCase.chiPhi = null;
         gwCase.loiNhuan = null;
       }
-      gwCase.ngayPhatSinh = caseData.NgayPhatSinhFull
-        ? new Date(caseData.NgayPhatSinhFull)
-        : caseData.NgayPhatSinh
-          ? new Date(caseData.NgayPhatSinh)
-          : null;
-      gwCase.ngayTiepNhan = caseData.NgayTiepNhan
-        ? new Date(caseData.NgayTiepNhan)
-        : null;
-      gwCase.ngayHoanThanhCongViec = caseData.NgayHoanThanhCongViec
-        ? new Date(caseData.NgayHoanThanhCongViec)
-        : null;
-      gwCase.ngayGiaoXeFull = caseData.NgayGiaoXeFull
-        ? new Date(caseData.NgayGiaoXeFull)
-        : null;
+      gwCase.ngayPhatSinh =
+        parseSafeDate(caseData.NgayPhatSinhFull) ||
+        parseSafeDate(caseData.NgayPhatSinh);
+      gwCase.ngayTiepNhan = parseSafeDate(caseData.NgayTiepNhan);
+      gwCase.ngayHoanThanhCongViec = parseSafeDate(
+        caseData.NgayHoanThanhCongViec,
+      );
+      gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
       gwCase.soKhung = caseData.SoKhung;
-      gwCase.dataAsOf = response.dataAsOf ? new Date(response.dataAsOf) : null;
+      gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
 
       // Restore case if it was previously soft-deleted
@@ -837,12 +866,13 @@ export class KgaraSyncService {
       where: { branchExternalId, endpoint, status: GwSyncStatus.SUCCESS },
       order: { requestStartedAt: 'DESC' },
     });
-    if (!lastRun) return undefined;
+    if (!lastRun || !lastRun.requestStartedAt) return undefined;
+
+    const lastDate = parseSafeDate(lastRun.requestStartedAt);
+    if (!lastDate) return undefined;
 
     // Substract 10 minutes overlap as recommended
-    const watermark = new Date(
-      lastRun.requestStartedAt.getTime() - 10 * 60 * 1000,
-    );
+    const watermark = new Date(lastDate.getTime() - 10 * 60 * 1000);
     return watermark.toISOString();
   }
 
@@ -859,14 +889,27 @@ export class KgaraSyncService {
       `Running deletion detection for branch ${branchExternalId} from ${from} to ${to}...`,
     );
 
+    const fromDate = parseSafeDate(from);
+    const toDate = parseSafeDate(to);
+
     // Find all cases in ERP for this branch and date range
-    const erpCases = await this.caseRepo
+    const qb = this.caseRepo
       .createQueryBuilder('case')
       .where('case.branchExternalId = :branchExternalId', { branchExternalId })
-      .andWhere('case.ngayPhatSinh >= :from', { from })
-      .andWhere('case.ngayPhatSinh <= :to', { to })
-      .andWhere('case.kgaraDeletedAt IS NULL')
-      .getMany();
+      .andWhere('case.kgaraDeletedAt IS NULL');
+
+    if (fromDate) {
+      const fromStr = from.includes('T')
+        ? from
+        : `${from.split('T')[0]} 00:00:00`;
+      qb.andWhere('case.ngayPhatSinh >= :fromStr', { fromStr });
+    }
+    if (toDate) {
+      const toStr = to.includes('T') ? to : `${to.split('T')[0]} 23:59:59.999`;
+      qb.andWhere('case.ngayPhatSinh <= :toStr', { toStr });
+    }
+
+    const erpCases = await qb.getMany();
 
     const deletedCases = erpCases.filter(
       (c) => !syncedIds.has(c.hdPhieuDichVuId),
