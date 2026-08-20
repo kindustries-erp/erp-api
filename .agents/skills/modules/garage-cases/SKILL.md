@@ -261,7 +261,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
 | `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
-| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể |
+| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id` \| `case.id` \| `so_chung_tu`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể (tự động phân giải ID và đảo đúng thứ tự tham số client) |
 | `POST`| `/sync/receivables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
 | `POST`| `/sync/payables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
 | `GET` | `/sync-runs` | `@BranchId()`, `take` (mặc định 50) | Lấy lịch sử nhật ký các lần chạy đồng bộ gần nhất |
