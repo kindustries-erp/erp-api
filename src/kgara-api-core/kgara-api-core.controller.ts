@@ -441,17 +441,17 @@ export class KgaraApiCoreController implements OnModuleInit {
       const conditions: string[] = [];
       if (values.includes('PAID')) {
         conditions.push(
-          '(COALESCE(case.chiPhi, 0) > 0 AND COALESCE(case.chiPhi, 0) <= COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = \'PAYMENT\'), 0))',
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE(case.chiPhi, 0) <= COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
         );
       }
       if (values.includes('PARTIAL')) {
         conditions.push(
-          '(COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = \'PAYMENT\'), 0) > 0 AND COALESCE(case.chiPhi, 0) > COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = \'PAYMENT\'), 0))',
+          "(COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) > 0 AND COALESCE(case.chiPhi, 0) > COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
         );
       }
       if (values.includes('UNPAID')) {
         conditions.push(
-          '(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = \'PAYMENT\'), 0) <= 0)',
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) <= 0)",
         );
       }
       if (conditions.length > 0) {
@@ -473,7 +473,9 @@ export class KgaraApiCoreController implements OnModuleInit {
         { [`${paramPrefix}_vals`]: realVals },
       );
     } else if (hasBlank) {
-      qb.andWhere(`(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`);
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
     } else {
       qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
         [`${paramPrefix}_vals`]: realVals,
@@ -902,6 +904,34 @@ export class KgaraApiCoreController implements OnModuleInit {
             if (subConds.length > 0) {
               havingConditions.push(`(${subConds.join(' OR ')})`);
             }
+          } else if (col === 'caseCount') {
+            const numVals = values
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v));
+            if (numVals.length > 0) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(numVals);
+            }
+          } else if (col === 'totalAmount') {
+            const subConds: string[] = [];
+            const sumExpr = 'COALESCE(SUM("case"."tien_co_thue"), 0)';
+            if (values.includes('0-10m')) {
+              subConds.push(`(${sumExpr} < 10000000)`);
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${sumExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${sumExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${sumExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
           }
         }
       } catch {
@@ -932,6 +962,23 @@ export class KgaraApiCoreController implements OnModuleInit {
               `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
             );
             queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'caseCount') {
+            const num = parseInt(val.trim(), 10);
+            if (!isNaN(num)) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+          } else if (col === 'totalAmount') {
+            const cleaned = val.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM("case"."tien_co_thue"), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
           }
         }
       } catch {
@@ -1105,9 +1152,14 @@ export class KgaraApiCoreController implements OnModuleInit {
   ) {
     if (column === 'paymentProgress') {
       const options = ['PAID', 'PARTIAL', 'UNPAID'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -1115,9 +1167,63 @@ export class KgaraApiCoreController implements OnModuleInit {
     }
     if (column === 'maxAgingDays') {
       const options = ['0-30', '31-60', '61-90', '>90'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'caseCount') {
+      const branchCond = branchId
+        ? `AND "branch_external_id" = '${branchId.replace(/'/g, "''")}'`
+        : '';
+      const rawCounts = await this.caseRepo.manager.query(`
+        SELECT so_phieu::text AS value FROM (
+          SELECT COUNT("id") AS so_phieu
+          FROM "kgara_cases"
+          WHERE "kgara_deleted_at" IS NULL
+            AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
+            AND "ngay_phat_sinh" >= '2026-07-01'
+            ${branchCond}
+          GROUP BY COALESCE("khach_hang_code", 'UNKNOWN')
+        ) sub
+        GROUP BY so_phieu
+        ORDER BY so_phieu ASC
+      `);
+      const items = rawCounts.map((r: any) => String(r.value));
+      const filtered = search
+        ? items.filter((it: string) => it.includes(search))
+        : items;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'totalAmount') {
+      const options = [
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.label.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered.map((f) => f.value),
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -1187,12 +1293,12 @@ export class KgaraApiCoreController implements OnModuleInit {
           if (col === 'customerCode') {
             if (hasBlank && realVals.length > 0) {
               query.andWhere(
-                '(case.khachHangCode IS NULL OR case.khachHangCode = \'\' OR case.khachHangCode IN (:...ccVals))',
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '' OR case.khachHangCode IN (:...ccVals))",
                 { ccVals: realVals },
               );
             } else if (hasBlank) {
               query.andWhere(
-                '(case.khachHangCode IS NULL OR case.khachHangCode = \'\')',
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '')",
               );
             } else {
               query.andWhere('case.khachHangCode IN (:...ccVals)', {
@@ -1202,12 +1308,12 @@ export class KgaraApiCoreController implements OnModuleInit {
           } else if (col === 'customerName') {
             if (hasBlank && realVals.length > 0) {
               query.andWhere(
-                '(case.khachHangName IS NULL OR case.khachHangName = \'\' OR case.khachHangName IN (:...cnVals))',
+                "(case.khachHangName IS NULL OR case.khachHangName = '' OR case.khachHangName IN (:...cnVals))",
                 { cnVals: realVals },
               );
             } else if (hasBlank) {
               query.andWhere(
-                '(case.khachHangName IS NULL OR case.khachHangName = \'\')',
+                "(case.khachHangName IS NULL OR case.khachHangName = '')",
               );
             } else {
               query.andWhere('case.khachHangName IN (:...cnVals)', {
@@ -1217,12 +1323,12 @@ export class KgaraApiCoreController implements OnModuleInit {
           } else if (col === 'branchName' || col === 'branchExternalId') {
             if (hasBlank && realVals.length > 0) {
               query.andWhere(
-                '(case.branchExternalId IS NULL OR case.branchExternalId = \'\' OR case.branchExternalId IN (:...brVals))',
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '' OR case.branchExternalId IN (:...brVals))",
                 { brVals: realVals },
               );
             } else if (hasBlank) {
               query.andWhere(
-                '(case.branchExternalId IS NULL OR case.branchExternalId = \'\')',
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '')",
               );
             } else {
               query.andWhere('case.branchExternalId IN (:...brVals)', {
@@ -2300,6 +2406,18 @@ export class KgaraApiCoreController implements OnModuleInit {
     return this.smartSettlementService.getSuggestionsForCase(
       id,
       type || 'RECEIPT',
+    );
+  }
+
+  @Get('cases/:id/smart-invoice-suggestions')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getSmartInvoiceSuggestions(
+    @Param('id') id: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.smartSettlementService.getInvoiceSuggestionsForCase(
+      id,
+      direction || 'OUT',
     );
   }
 

@@ -176,4 +176,106 @@ describe('GarageSmartSettlementService', () => {
       expect(suggestions[0].score.plateMatch).toBe(true);
     });
   });
+
+  describe('getInvoiceSuggestionsForCase', () => {
+    const sampleCase: KgaraCase = {
+      id: 'case-123',
+      soChungTu: 'SC-202608-001',
+      bienSoXe: '51G-123.45',
+      khachHangName: 'Nguyễn Văn An',
+      tienCoThue: 2500000,
+      tienDaThanhToan: 0,
+      tienConPhaiThanhToan: 2500000,
+      doanhThu: 2500000,
+      chiPhi: 1000000,
+    } as any;
+
+    it('should rank PERFECT when amount, license plate, and customer match for OUT invoice', async () => {
+      mockCaseRepo.findOne.mockResolvedValueOnce(sampleCase);
+      mockManagerQuery.mockResolvedValueOnce([
+        {
+          id: 'inv-1',
+          invoiceNo: '0001234',
+          serialNo: '1C26TGA',
+          invoiceDate: '2026-08-16T10:00:00Z',
+          direction: 'OUT',
+          buyerName: 'Nguyễn Văn An',
+          totalAmount: '2500000',
+          preVatAmount: '2272727.27',
+          vatAmount: '227272.73',
+          licensePlate: '51G-123.45',
+          settlementOrder: 'SC-202608-001',
+          description: 'Sua chua xe 51G-123.45 theo SC-202608-001',
+        },
+      ]);
+
+      const suggestions = await service.getInvoiceSuggestionsForCase(
+        'case-123',
+        'OUT',
+      );
+
+      expect(suggestions).toHaveLength(1);
+      expect(suggestions[0].score.badge).toBe('PERFECT');
+      expect(suggestions[0].score.amountMatch).toBe(true);
+      expect(suggestions[0].score.plateMatch).toBe(true);
+      expect(suggestions[0].score.orderMatch).toBe(true);
+      expect(suggestions[0].score.customerMatch).toBe(true);
+      expect(suggestions[0].invoice.invoiceNo).toBe('0001234');
+    });
+
+    it('should rank HIGH when amount and license plate match for IN invoice', async () => {
+      mockCaseRepo.findOne.mockResolvedValueOnce(sampleCase);
+      mockManagerQuery.mockResolvedValueOnce([
+        {
+          id: 'inv-2',
+          invoiceNo: '0005678',
+          serialNo: '1C26TMB',
+          invoiceDate: '2026-08-16T10:00:00Z',
+          direction: 'IN',
+          sellerName: 'Nha Cung Cap X',
+          totalAmount: '1000000',
+          licensePlate: '51G-123.45',
+          description: 'Phu tung xe 51G-123.45',
+        },
+      ]);
+
+      const suggestions = await service.getInvoiceSuggestionsForCase(
+        'case-123',
+        'IN',
+      );
+
+      expect(suggestions).toHaveLength(1);
+      expect(suggestions[0].score.badge).toBe('HIGH');
+      expect(suggestions[0].score.amountMatch).toBe(true);
+      expect(suggestions[0].score.plateMatch).toBe(true);
+      expect(suggestions[0].score.customerMatch).toBe(false);
+    });
+
+    it('should rank NOTICE when settlementOrder matches but amount differs', async () => {
+      mockCaseRepo.findOne.mockResolvedValueOnce(sampleCase);
+      mockManagerQuery.mockResolvedValueOnce([
+        {
+          id: 'inv-3',
+          invoiceNo: '0009999',
+          serialNo: '1C26TGA',
+          invoiceDate: '2026-08-16T10:00:00Z',
+          direction: 'OUT',
+          buyerName: 'Khach Hang Y',
+          totalAmount: '3000000',
+          settlementOrder: 'SC-202608-001',
+          description: 'Hoa don bo sung SC-202608-001',
+        },
+      ]);
+
+      const suggestions = await service.getInvoiceSuggestionsForCase(
+        'case-123',
+        'OUT',
+      );
+
+      expect(suggestions).toHaveLength(1);
+      expect(suggestions[0].score.badge).toBe('NOTICE');
+      expect(suggestions[0].score.amountMatch).toBe(false);
+      expect(suggestions[0].score.orderMatch).toBe(true);
+    });
+  });
 });
