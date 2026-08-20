@@ -1,0 +1,707 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { KgaraCase } from './entities/kgara_case.entity';
+import { KgaraCaseService } from './entities/kgara_case_service.entity';
+import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
+import * as ExcelJS from 'exceljs';
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  subMonths,
+  subWeeks,
+  subDays,
+  format,
+} from 'date-fns';
+
+@Injectable()
+export class GarageDashboardService {
+  private readonly logger = new Logger(GarageDashboardService.name);
+
+  constructor(
+    @InjectRepository(KgaraCase)
+    private readonly caseRepo: Repository<KgaraCase>,
+    @InjectRepository(KgaraCaseService)
+    private readonly caseServiceRepo: Repository<KgaraCaseService>,
+    @InjectRepository(KgaraGrossProfit)
+    private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
+  ) {}
+
+  /**
+   * 1. Lấy biểu đồ xu hướng theo tháng (Doanh thu, Giá vốn, Lợi nhuận gộp)
+   */
+  async getDashboardStats(dateFrom?: string, dateTo?: string) {
+    const qb = this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select(
+        "TO_CHAR(COALESCE(c.ngay_phat_sinh, c.created_at), 'YYYY-MM')",
+        'month',
+      )
+      .addSelect(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'revenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+      .addSelect(
+        'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+        'profit',
+      )
+      .addSelect('COUNT(c.id)', 'caseCount')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)');
+
+    if (dateFrom) {
+      qb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom', {
+        dateFrom,
+      });
+    }
+    if (dateTo) {
+      const effectiveDateTo =
+        dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
+      qb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+        dateTo: effectiveDateTo,
+      });
+    }
+
+    qb.groupBy("TO_CHAR(COALESCE(c.ngay_phat_sinh, c.created_at), 'YYYY-MM')");
+    qb.orderBy('month', 'ASC');
+
+    const result = await qb.getRawMany();
+
+    const trend = result.map((r) => {
+      const rev = Number(r.revenue) || 0;
+      const cost = Number(r.cost) || 0;
+      const profit = Number(r.profit) || 0;
+      return {
+        label: r.month,
+        revenue: rev,
+        cost: cost,
+        profit: profit,
+        margin: rev > 0 ? (profit / rev) * 100 : 0,
+        caseCount: Number(r.caseCount) || 0,
+      };
+    });
+
+    return { trend };
+  }
+
+  /**
+   * 2. Lấy chỉ số KPI Checkpoints (Tháng này / Tuần này / Hôm nay) kèm Sparklines Doanh thu & Chi phí
+   */
+  async getCheckpointKpis() {
+    const now = new Date();
+
+    // 1. Month stats & sparkline (6 months)
+    const monthSparklineLabels: string[] = [];
+    const monthRevenueChart: number[] = [];
+    const monthCostChart: number[] = [];
+    const monthProfitChart: number[] = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = subMonths(now, i);
+      const mStart = format(startOfMonth(d), 'yyyy-MM-dd');
+      const mEnd = format(endOfMonth(d), 'yyyy-MM-dd 23:59:59.999');
+      monthSparklineLabels.push(`Tháng ${format(d, 'MM/yyyy')}`);
+
+      const res = await this.caseRepo
+        .createQueryBuilder('c')
+        .leftJoin(
+          KgaraGrossProfit,
+          'gp',
+          'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+        )
+        .select(
+          'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+          'revenue',
+        )
+        .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+        .addSelect(
+          'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+          'profit',
+        )
+        .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere(
+          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :mStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :mEnd',
+          { mStart, mEnd },
+        )
+        .getRawOne();
+
+      monthRevenueChart.push(Number(res?.revenue) || 0);
+      monthCostChart.push(Number(res?.cost) || 0);
+      monthProfitChart.push(Number(res?.profit) || 0);
+    }
+
+    const curMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
+    const curMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd 23:59:59.999');
+    const curMonthRes = await this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'revenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+      .addSelect(
+        'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+        'profit',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere(
+        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curMonthStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curMonthEnd',
+        { curMonthStart, curMonthEnd },
+      )
+      .getRawOne();
+
+    // 2. Week stats & sparkline (4 weeks)
+    const weekSparklineLabels: string[] = [];
+    const weekRevenueChart: number[] = [];
+    const weekCostChart: number[] = [];
+    const weekProfitChart: number[] = [];
+
+    for (let i = 3; i >= 0; i--) {
+      const d = subWeeks(now, i);
+      const wStart = format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      const wEnd = format(
+        endOfWeek(d, { weekStartsOn: 1 }),
+        'yyyy-MM-dd 23:59:59.999',
+      );
+      weekSparklineLabels.push(
+        `${format(startOfWeek(d, { weekStartsOn: 1 }), 'dd/MM')} - ${format(endOfWeek(d, { weekStartsOn: 1 }), 'dd/MM')}`,
+      );
+
+      const res = await this.caseRepo
+        .createQueryBuilder('c')
+        .leftJoin(
+          KgaraGrossProfit,
+          'gp',
+          'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+        )
+        .select(
+          'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+          'revenue',
+        )
+        .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+        .addSelect(
+          'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+          'profit',
+        )
+        .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere(
+          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :wStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :wEnd',
+          { wStart, wEnd },
+        )
+        .getRawOne();
+
+      weekRevenueChart.push(Number(res?.revenue) || 0);
+      weekCostChart.push(Number(res?.cost) || 0);
+      weekProfitChart.push(Number(res?.profit) || 0);
+    }
+
+    const curWeekStart = format(
+      startOfWeek(now, { weekStartsOn: 1 }),
+      'yyyy-MM-dd',
+    );
+    const curWeekEnd = format(
+      endOfWeek(now, { weekStartsOn: 1 }),
+      'yyyy-MM-dd 23:59:59.999',
+    );
+    const curWeekRes = await this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'revenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+      .addSelect(
+        'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+        'profit',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere(
+        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curWeekStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curWeekEnd',
+        { curWeekStart, curWeekEnd },
+      )
+      .getRawOne();
+
+    // 3. Day stats & sparkline (7 days)
+    const daySparklineLabels: string[] = [];
+    const dayRevenueChart: number[] = [];
+    const dayCostChart: number[] = [];
+    const dayProfitChart: number[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = subDays(now, i);
+      const dStart = format(d, 'yyyy-MM-dd');
+      const dEnd = format(d, 'yyyy-MM-dd 23:59:59.999');
+      daySparklineLabels.push(format(d, 'dd/MM/yyyy'));
+
+      const res = await this.caseRepo
+        .createQueryBuilder('c')
+        .leftJoin(
+          KgaraGrossProfit,
+          'gp',
+          'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+        )
+        .select(
+          'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+          'revenue',
+        )
+        .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+        .addSelect(
+          'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+          'profit',
+        )
+        .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere(
+          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :dStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :dEnd',
+          { dStart, dEnd },
+        )
+        .getRawOne();
+
+      dayRevenueChart.push(Number(res?.revenue) || 0);
+      dayCostChart.push(Number(res?.cost) || 0);
+      dayProfitChart.push(Number(res?.profit) || 0);
+    }
+
+    const curDayStart = format(now, 'yyyy-MM-dd');
+    const curDayEnd = format(now, 'yyyy-MM-dd 23:59:59.999');
+    const curDayRes = await this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'revenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cost')
+      .addSelect(
+        'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+        'profit',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere(
+        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd',
+        { curDayStart, curDayEnd },
+      )
+      .getRawOne();
+
+    return {
+      month: {
+        totalRevenue: Number(curMonthRes?.revenue) || 0,
+        totalCost: Number(curMonthRes?.cost) || 0,
+        totalProfit: Number(curMonthRes?.profit) || 0,
+        totalCount: Number(curMonthRes?.count) || 0,
+        revenueChart: monthRevenueChart,
+        costChart: monthCostChart,
+        profitChart: monthProfitChart,
+        labels: monthSparklineLabels,
+      },
+      week: {
+        totalRevenue: Number(curWeekRes?.revenue) || 0,
+        totalCost: Number(curWeekRes?.cost) || 0,
+        totalProfit: Number(curWeekRes?.profit) || 0,
+        totalCount: Number(curWeekRes?.count) || 0,
+        revenueChart: weekRevenueChart,
+        costChart: weekCostChart,
+        profitChart: weekProfitChart,
+        labels: weekSparklineLabels,
+      },
+      day: {
+        totalRevenue: Number(curDayRes?.revenue) || 0,
+        totalCost: Number(curDayRes?.cost) || 0,
+        totalProfit: Number(curDayRes?.profit) || 0,
+        totalCount: Number(curDayRes?.count) || 0,
+        revenueChart: dayRevenueChart,
+        costChart: dayCostChart,
+        profitChart: dayProfitChart,
+        labels: daySparklineLabels,
+      },
+    };
+  }
+
+  /**
+   * 3. Lấy danh sách vụ việc trong khoảng thời gian checkpoint (click sparkline)
+   */
+  async getCheckpointCases(
+    dateFrom: string,
+    dateTo: string,
+    page: number = 1,
+    pageSize: number = 20,
+  ) {
+    const effectiveDateTo =
+      dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
+
+    const qb = this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoinAndMapOne(
+        'c.grossProfit',
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom', {
+        dateFrom,
+      })
+      .andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+        dateTo: effectiveDateTo,
+      })
+      .orderBy('COALESCE(c.ngay_phat_sinh, c.created_at)', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      items: items.map((c: any) => {
+        const gp = c.grossProfit;
+        const rev = Number(gp?.doanhThu ?? c.doanhThu ?? c.tienCoThue ?? 0);
+        const cost = Number(gp?.chiPhi ?? c.chiPhi ?? 0);
+        const profit = Number(gp?.loiNhuan ?? c.loiNhuan ?? rev - cost);
+
+        return {
+          id: c.id,
+          soChungTu: c.soChungTu,
+          bienSoXe: c.bienSoXe,
+          khachHangCode: c.khachHangCode,
+          khachHangName: c.khachHangName,
+          tenTinhTrangDichVu: c.tenTinhTrangDichVu,
+          doanhThu: rev,
+          chiPhi: cost,
+          loiNhuan: profit,
+          tienDaThanhToan: Number(c.tienDaThanhToan ?? 0),
+          tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan ?? 0),
+          ngayPhatSinh: c.ngayPhatSinh || c.createdAt,
+        };
+      }),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /**
+   * 4. Lấy danh sách khách hàng và công nợ (Customer Stats & Debt)
+   */
+  async getCustomersStats(
+    page: number = 1,
+    pageSize: number = 20,
+    search?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    sortBy?: string,
+    sortOrder?: 'ASC' | 'DESC',
+    columnSearch?: string,
+    columnFilters?: string,
+  ) {
+    const customerQuery = `
+      SELECT 
+        COALESCE(NULLIF(c.khach_hang_code, ''), NULLIF(c.khach_hang_name, ''), 'KH_LE') as "customerCode",
+        MAX(c.khach_hang_name) as "customerName",
+        MAX(c.bien_so_xe) as "latestLicensePlate",
+        SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0)) as "totalRevenue",
+        SUM(COALESCE(gp.chi_phi, c.chi_phi, 0)) as "totalCost",
+        SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0)) as "totalProfit",
+        SUM(COALESCE(c.tien_da_thanh_toan, 0)) as "paidAmount",
+        SUM(COALESCE(c.tien_con_phai_thanh_toan, 0)) as "receivableAmount",
+        COUNT(c.id) as "caseCount",
+        MAX(COALESCE(c.ngay_phat_sinh, c.created_at)) as "lastVisitDate"
+      FROM kgara_cases c
+      LEFT JOIN kgara_gross_profit gp ON gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu
+      WHERE c.kgara_deleted_at IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)
+        ${dateFrom ? `AND COALESCE(c.ngay_phat_sinh, c.created_at) >= '${dateFrom}'` : ''}
+        ${dateTo ? `AND COALESCE(c.ngay_phat_sinh, c.created_at) <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
+      GROUP BY COALESCE(NULLIF(c.khach_hang_code, ''), NULLIF(c.khach_hang_name, ''), 'KH_LE')
+      HAVING COALESCE(NULLIF(c.khach_hang_code, ''), NULLIF(c.khach_hang_name, ''), 'KH_LE') IS NOT NULL
+    `;
+
+    let finalQuery = `SELECT * FROM (${customerQuery}) cust`;
+    const whereConditions: string[] = [];
+
+    if (search) {
+      const s = search.replace(/'/g, "''");
+      whereConditions.push(
+        `(cust."customerCode" ILIKE '%${s}%' OR cust."customerName" ILIKE '%${s}%' OR cust."latestLicensePlate" ILIKE '%${s}%')`,
+      );
+    }
+
+    if (columnSearch) {
+      try {
+        const cSearch = JSON.parse(columnSearch) as Record<string, string>;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          const s = val.replace(/'/g, "''");
+          if (col === 'customerCode') {
+            whereConditions.push(`cust."customerCode" ILIKE '%${s}%'`);
+          } else if (col === 'customerName') {
+            whereConditions.push(`cust."customerName" ILIKE '%${s}%'`);
+          } else if (col === 'latestLicensePlate') {
+            whereConditions.push(`cust."latestLicensePlate" ILIKE '%${s}%'`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (columnFilters) {
+      try {
+        const cFilters = JSON.parse(columnFilters) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          const quotedVals = vals
+            .map((v) => `'${v.replace(/'/g, "''")}'`)
+            .join(', ');
+          if (col === 'customerCode') {
+            whereConditions.push(`cust."customerCode" IN (${quotedVals})`);
+          } else if (col === 'customerName') {
+            whereConditions.push(`cust."customerName" IN (${quotedVals})`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (sortBy === 'receivableAmount') {
+      whereConditions.push(`cust."receivableAmount" > 0`);
+    }
+
+    if (whereConditions.length > 0) {
+      finalQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
+
+    const countQuery = `SELECT COUNT(*) as count FROM (${finalQuery}) as t`;
+    const countResult = await this.caseRepo.query(countQuery);
+    const total = parseInt(countResult[0]?.count || '0', 10);
+
+    let orderClause = `ORDER BY cust."totalRevenue" DESC`;
+    if (sortBy === 'receivableAmount') {
+      orderClause = `ORDER BY cust."receivableAmount" ${sortOrder || 'DESC'}`;
+    } else if (sortBy === 'lastVisitDate') {
+      orderClause = `ORDER BY cust."lastVisitDate" ${sortOrder || 'DESC'}`;
+    } else if (sortBy) {
+      orderClause = `ORDER BY cust."${sortBy}" ${sortOrder || 'DESC'}`;
+    }
+
+    const dataQuery = `${finalQuery} ${orderClause} LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
+    const rawData = await this.caseRepo.query(dataQuery);
+
+    const items = rawData.map((r: any) => {
+      const rev = Number(r.totalRevenue) || 0;
+      const cost = Number(r.totalCost) || 0;
+      const profit = Number(r.totalProfit) || 0;
+      const paid = Number(r.paidAmount) || 0;
+      const receivable = Number(r.receivableAmount) || 0;
+
+      return {
+        customerCode: r.customerCode,
+        customerName: r.customerName || 'Khách lẻ',
+        latestLicensePlate: r.latestLicensePlate || '-',
+        totalRevenue: rev,
+        totalCost: cost,
+        totalGrossProfit: profit,
+        margin: rev > 0 ? (profit / rev) * 100 : 0,
+        paidAmount: paid,
+        receivableAmount: receivable,
+        caseCount: Number(r.caseCount) || 0,
+        lastVisitDate: r.lastVisitDate,
+      };
+    });
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /**
+   * 5. Xuất báo cáo Excel chuyên nghiệp đa bảng (Multi-sheet Export)
+   */
+  async exportExcel(dateFrom?: string, dateTo?: string): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+
+    // Sheet 1: Tổng quan Xu hướng Tháng
+    const stats = await this.getDashboardStats(dateFrom, dateTo);
+    const sheet1 = workbook.addWorksheet('Tổng quan Tháng');
+    sheet1.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet1.autoFilter = 'A1:F1';
+    sheet1.columns = [
+      { header: 'Tháng', key: 'month', width: 15 },
+      {
+        header: 'Doanh thu (VND)',
+        key: 'revenue',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Giá vốn (VND)',
+        key: 'cost',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Lợi nhuận gộp (VND)',
+        key: 'profit',
+        width: 22,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Biên LN (%)',
+        key: 'margin',
+        width: 15,
+        style: { numFmt: '0.0"%"' },
+      },
+      { header: 'Số vụ việc', key: 'caseCount', width: 15 },
+    ];
+
+    stats.trend.forEach((t) => {
+      sheet1.addRow({
+        month: t.label,
+        revenue: t.revenue,
+        cost: t.cost,
+        profit: t.profit,
+        margin: t.margin,
+        caseCount: t.caseCount,
+      });
+    });
+
+    // Sheet 2: Chi tiết Phiếu Dịch Vụ
+    const casesQb = this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoinAndMapOne(
+        'c.grossProfit',
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)');
+
+    if (dateFrom) {
+      casesQb.andWhere(
+        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom',
+        {
+          dateFrom,
+        },
+      );
+    }
+    if (dateTo) {
+      const effectiveDateTo =
+        dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
+      casesQb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+        dateTo: effectiveDateTo,
+      });
+    }
+
+    casesQb.orderBy('COALESCE(c.ngay_phat_sinh, c.created_at)', 'DESC');
+    const cases = await casesQb.getMany();
+
+    const sheet2 = workbook.addWorksheet('Chi tiết Phiếu dịch vụ');
+    sheet2.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet2.autoFilter = 'A1:K1';
+    sheet2.columns = [
+      { header: 'Ngày phát sinh', key: 'ngayPhatSinh', width: 16 },
+      { header: 'Số chứng từ', key: 'soChungTu', width: 18 },
+      { header: 'Biển số xe', key: 'bienSoXe', width: 15 },
+      { header: 'Mã khách hàng', key: 'khachHangCode', width: 18 },
+      { header: 'Tên khách hàng', key: 'khachHangName', width: 30 },
+      { header: 'Trạng thái dịch vụ', key: 'tenTinhTrangDichVu', width: 20 },
+      {
+        header: 'Doanh thu (VND)',
+        key: 'doanhThu',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Giá vốn (VND)',
+        key: 'chiPhi',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Lãi gộp (VND)',
+        key: 'loiNhuan',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Đã trả (VND)',
+        key: 'tienDaThanhToan',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Còn nợ (VND)',
+        key: 'tienConPhaiThanhToan',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+    ];
+
+    cases.forEach((c: any) => {
+      const dt = c.ngayPhatSinh || c.createdAt;
+      const gp = c.grossProfit;
+      const rev = Number(gp?.doanhThu ?? c.doanhThu ?? c.tienCoThue ?? 0);
+      const cost = Number(gp?.chiPhi ?? c.chiPhi ?? 0);
+      const profit = Number(gp?.loiNhuan ?? c.loiNhuan ?? rev - cost);
+
+      sheet2.addRow({
+        ngayPhatSinh: dt ? format(new Date(dt), 'yyyy-MM-dd') : '',
+        soChungTu: c.soChungTu || '',
+        bienSoXe: c.bienSoXe || '',
+        khachHangCode: c.khachHangCode || '',
+        khachHangName: c.khachHangName || '',
+        tenTinhTrangDichVu: c.tenTinhTrangDichVu || '',
+        doanhThu: rev,
+        chiPhi: cost,
+        loiNhuan: profit,
+        tienDaThanhToan: Number(c.tienDaThanhToan ?? 0),
+        tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan ?? 0),
+      });
+    });
+
+    // Định dạng tiêu đề cho tất cả worksheet
+    workbook.worksheets.forEach((s) => {
+      s.getRow(1).font = { bold: true };
+      s.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+      s.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' },
+      };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as unknown as Buffer;
+  }
+}
