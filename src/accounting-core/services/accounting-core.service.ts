@@ -321,10 +321,15 @@ export class AccountingCoreService {
       const codes = Array.isArray(accountCode)
         ? accountCode
         : typeof accountCode === 'string'
-          ? accountCode.split(',').map((c) => c.trim()).filter(Boolean)
+          ? accountCode
+              .split(',')
+              .map((c) => c.trim())
+              .filter(Boolean)
           : [];
       if (codes.length > 0) {
-        qb.andWhere('coa.accountCode IN (:...accountCodes)', { accountCodes: codes });
+        qb.andWhere('coa.accountCode IN (:...accountCodes)', {
+          accountCodes: codes,
+        });
       }
     }
 
@@ -333,19 +338,28 @@ export class AccountingCoreService {
       const names = Array.isArray(accountName)
         ? accountName
         : typeof accountName === 'string'
-          ? accountName.split(',').map((n) => n.trim()).filter(Boolean)
+          ? accountName
+              .split(',')
+              .map((n) => n.trim())
+              .filter(Boolean)
           : [];
       if (names.length > 0) {
-        qb.andWhere('coa.accountName IN (:...accountNames)', { accountNames: names });
+        qb.andWhere('coa.accountName IN (:...accountNames)', {
+          accountNames: names,
+        });
       }
     }
 
-    const parentAccount = query.parentAccount || query.parentId || query.parent_id;
+    const parentAccount =
+      query.parentAccount || query.parentId || query.parent_id;
     if (parentAccount) {
       const parents = Array.isArray(parentAccount)
         ? parentAccount
         : typeof parentAccount === 'string'
-          ? parentAccount.split(',').map((p) => p.trim()).filter(Boolean)
+          ? parentAccount
+              .split(',')
+              .map((p) => p.trim())
+              .filter(Boolean)
           : [];
       if (parents.length > 0) {
         const hasBlank = parents.includes('__BLANK__');
@@ -373,7 +387,10 @@ export class AccountingCoreService {
           accountTypes: accountType,
         });
       } else if (typeof accountType === 'string' && accountType.trim()) {
-        const types = accountType.split(',').map((t) => t.trim()).filter(Boolean);
+        const types = accountType
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
         if (types.length > 1) {
           qb.andWhere('coa.accountType IN (:...accountTypes)', {
             accountTypes: types,
@@ -388,7 +405,11 @@ export class AccountingCoreService {
 
     const isActive = query.isActive ?? query.is_active;
     if (isActive !== undefined && isActive !== null && isActive !== '') {
-      const activeVal = isActive === true || isActive === 'true' || isActive === 1 || isActive === '1';
+      const activeVal =
+        isActive === true ||
+        isActive === 'true' ||
+        isActive === 1 ||
+        isActive === '1';
       qb.andWhere('coa.isActive = :isActive', { isActive: activeVal });
     }
 
@@ -398,7 +419,10 @@ export class AccountingCoreService {
       const sortList = Array.isArray(sortParam)
         ? sortParam
         : typeof sortParam === 'string'
-          ? sortParam.split(',').map((s) => s.trim()).filter(Boolean)
+          ? sortParam
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
           : [];
 
       let hasOrder = false;
@@ -473,16 +497,24 @@ export class AccountingCoreService {
           if (col === column) continue;
 
           if (col === 'accountType' || col === 'account_type') {
-            qb.andWhere('coa.accountType IN (:...fAccountTypes)', { fAccountTypes: vals });
+            qb.andWhere('coa.accountType IN (:...fAccountTypes)', {
+              fAccountTypes: vals,
+            });
           } else if (col === 'isActive' || col === 'is_active') {
             const hasTrue = vals.includes('true');
             const hasFalse = vals.includes('false');
-            if (hasTrue && !hasFalse) qb.andWhere('coa.isActive = :fActive', { fActive: true });
-            else if (hasFalse && !hasTrue) qb.andWhere('coa.isActive = :fActive', { fActive: false });
+            if (hasTrue && !hasFalse)
+              qb.andWhere('coa.isActive = :fActive', { fActive: true });
+            else if (hasFalse && !hasTrue)
+              qb.andWhere('coa.isActive = :fActive', { fActive: false });
           } else if (col === 'accountCode' || col === 'account_code') {
-            qb.andWhere('coa.accountCode IN (:...fAccountCodes)', { fAccountCodes: vals });
+            qb.andWhere('coa.accountCode IN (:...fAccountCodes)', {
+              fAccountCodes: vals,
+            });
           } else if (col === 'accountName' || col === 'account_name') {
-            qb.andWhere('coa.accountName IN (:...fAccountNames)', { fAccountNames: vals });
+            qb.andWhere('coa.accountName IN (:...fAccountNames)', {
+              fAccountNames: vals,
+            });
           } else if (col === 'parentAccount' || col === 'parentId') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -508,17 +540,25 @@ export class AccountingCoreService {
       qb.select('DISTINCT coa.accountCode', 'value');
       qb.andWhere("coa.accountCode IS NOT NULL AND coa.accountCode != ''");
       if (search && search.trim()) {
-        qb.andWhere('coa.accountCode ILIKE :colSearch', { colSearch: `%${search.trim()}%` });
+        qb.andWhere('coa.accountCode ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
       }
       qb.orderBy('value', 'ASC');
     } else if (column === 'accountName' || column === 'account_name') {
       qb.select('DISTINCT coa.accountName', 'value');
       qb.andWhere("coa.accountName IS NOT NULL AND coa.accountName != ''");
       if (search && search.trim()) {
-        qb.andWhere('coa.accountName ILIKE :colSearch', { colSearch: `%${search.trim()}%` });
+        qb.andWhere('coa.accountName ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
       }
       qb.orderBy('value', 'ASC');
-    } else if (column === 'parentAccount' || column === 'parentId' || column === 'parent_id') {
+    } else if (
+      column === 'parentAccount' ||
+      column === 'parentId' ||
+      column === 'parent_id'
+    ) {
       qb.select('DISTINCT parent.accountCode', 'value');
       qb.addSelect('parent.accountName', 'label');
       qb.andWhere('parent.id IS NOT NULL');
@@ -533,7 +573,9 @@ export class AccountingCoreService {
       qb.select('DISTINCT coa.accountType', 'value');
       qb.andWhere('coa.accountType IS NOT NULL');
       if (search && search.trim()) {
-        qb.andWhere('coa.accountType ILIKE :colSearch', { colSearch: `%${search.trim()}%` });
+        qb.andWhere('coa.accountType ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
       }
       qb.orderBy('value', 'ASC');
     } else {
@@ -576,7 +618,9 @@ export class AccountingCoreService {
       .getOne();
 
     if (!account) {
-      throw new NotFoundException(`Tài khoản kế toán không tồn tại (ID: ${id})`);
+      throw new NotFoundException(
+        `Tài khoản kế toán không tồn tại (ID: ${id})`,
+      );
     }
 
     return account;
@@ -596,13 +640,19 @@ export class AccountingCoreService {
       where: { accountCode: code, isDeleted: false },
     });
     if (existing) {
-      throw new BadRequestException(`Mã tài khoản "${code}" đã tồn tại trên hệ thống`);
+      throw new BadRequestException(
+        `Mã tài khoản "${code}" đã tồn tại trên hệ thống`,
+      );
     }
 
     const account = this.chartOfAccountRepo.create({
       accountCode: code,
       accountName: name,
-      accountType: (dto.account_type || dto.accountType || 'ASSET').toUpperCase(),
+      accountType: (
+        dto.account_type ||
+        dto.accountType ||
+        'ASSET'
+      ).toUpperCase(),
       parentId: dto.parent_account_id ?? dto.parentId ?? null,
       isActive: dto.is_active ?? dto.isActive ?? true,
     });
