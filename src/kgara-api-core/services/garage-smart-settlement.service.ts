@@ -166,8 +166,8 @@ export class GarageSmartSettlementService {
     const customerKeywords = extractCustomerKeywords(kCase.khachHangName);
 
     // Build SQL text conditions
-    const queryParams: any[] = [targetAmount];
-    let paramIdx = 2;
+    const queryParams: any[] = [targetAmount, caseId];
+    let paramIdx = 3;
 
     const textConditions: string[] = [];
 
@@ -228,6 +228,9 @@ export class GarageSmartSettlementService {
       LEFT JOIN (
         SELECT bank_transaction_id, SUM(net_off_amount) as used_amount
         FROM erp_invoice_voucher_netoff
+        WHERE invoice_id NOT IN (
+          SELECT "invoiceId" FROM kgara_case_linked_invoice WHERE "caseDbId"::text = $2
+        )
         GROUP BY bank_transaction_id
       ) no_sum ON no_sum.bank_transaction_id = txn.id
       WHERE txn.is_deleted = false

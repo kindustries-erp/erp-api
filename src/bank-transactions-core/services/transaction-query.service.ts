@@ -91,16 +91,30 @@ export class TransactionQueryService {
       });
     }
     if (filter.startDate) {
-      qb.andWhere('txn.transDate >= :startDate', {
-        startDate: filter.startDate,
-      });
+      if (filter.startDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
+          { startDate: filter.startDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') >= :startDate::timestamp",
+          { startDate: filter.startDate },
+        );
+      }
     }
     if (filter.endDate) {
-      const eDate =
-        filter.endDate.length === 10
-          ? `${filter.endDate} 23:59:59.999`
-          : filter.endDate;
-      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+      if (filter.endDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
+          { endDate: filter.endDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') <= :endDate::timestamp",
+          { endDate: filter.endDate },
+        );
+      }
     }
     if (filter.search) {
       qb.andWhere(
@@ -204,7 +218,8 @@ export class TransactionQueryService {
               filterField = 'txn.cashBookId';
             else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
           } else if (col === 'transDate')
-            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+            filterField =
+              "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
           else if (col === 'description') filterField = 'txn.description';
           else if (col === 'thu') filterField = 'txn.creditAmount';
           else if (col === 'chi') filterField = 'txn.debitAmount';
@@ -457,7 +472,8 @@ export class TransactionQueryService {
         labelField = `COALESCE(bankAccount.bankName || ' - ' || bankAccount.accountNumber, cashBook.name)`;
       }
     } else if (column === 'transDate')
-      selectField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+      selectField =
+        "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
     else if (column === 'description') selectField = 'txn.description';
     else if (column === 'thu') selectField = 'txn.creditAmount';
     else if (column === 'chi') selectField = 'txn.debitAmount';
@@ -516,7 +532,8 @@ export class TransactionQueryService {
             else if (sourceType === 'CASH') filterField = 'txn.cashBookId';
             else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
           } else if (col === 'transDate')
-            filterField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
+            filterField =
+              "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
           else if (col === 'description') filterField = 'txn.description';
           else if (col === 'thu') filterField = 'txn.creditAmount';
           else if (col === 'chi') filterField = 'txn.debitAmount';

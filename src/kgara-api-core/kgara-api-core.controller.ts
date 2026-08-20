@@ -219,6 +219,10 @@ export class KgaraApiCoreController implements OnModuleInit {
       string,
       { receipts: number; payments: number }
     > = {};
+    const linkedInvoiceCounts: Record<
+      string,
+      { total: number; outCount: number; inCount: number }
+    > = {};
 
     if (caseIds.length > 0) {
       const settlementRows = await this.settlementRepo
@@ -240,6 +244,30 @@ export class KgaraApiCoreController implements OnModuleInit {
         } else if (row.settlementType === 'PAYMENT') {
           settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
         }
+      }
+
+      const linkRows = await this.linkedInvoiceRepo
+        .createQueryBuilder('l')
+        .select('l.caseDbId', 'caseId')
+        .addSelect('COUNT(*)', 'total')
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'OUT' THEN 1 ELSE 0 END)`,
+          'outCount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'IN' THEN 1 ELSE 0 END)`,
+          'inCount',
+        )
+        .where('l.caseDbId IN (:...caseIds)', { caseIds })
+        .groupBy('l.caseDbId')
+        .getRawMany();
+
+      for (const row of linkRows) {
+        linkedInvoiceCounts[row.caseId] = {
+          total: Number(row.total || 0),
+          outCount: Number(row.outCount || 0),
+          inCount: Number(row.inCount || 0),
+        };
       }
     }
 
@@ -265,6 +293,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         ? Math.max(0, targetRev - totalPaid)
         : Number(item.tienConPhaiThanhToan) || 0;
       const paidCost = hasSettlement ? setInfo.payments : 0;
+      const linkInfo = linkedInvoiceCounts[item.id];
 
       return {
         ...item,
@@ -275,6 +304,9 @@ export class KgaraApiCoreController implements OnModuleInit {
         tienDaThanhToan: totalPaid,
         tienConPhaiThanhToan: remainingBal,
         tienDaChi: paidCost,
+        linkedInvoiceCount: linkInfo?.total || 0,
+        linkedInvoiceOutCount: linkInfo?.outCount || 0,
+        linkedInvoiceInCount: linkInfo?.inCount || 0,
       };
     });
 
@@ -488,6 +520,25 @@ export class KgaraApiCoreController implements OnModuleInit {
       if (values.includes('UNPAID')) {
         conditions.push(
           "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) <= 0)",
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 4. Cột đặc thù: hasLinkedInvoice (Đã liên kết hóa đơn VAT)
+    if (column === 'hasLinkedInvoice') {
+      const conditions: string[] = [];
+      if (values.includes('YES')) {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+        );
+      }
+      if (values.includes('NO')) {
+        conditions.push(
+          'NOT EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
         );
       }
       if (conditions.length > 0) {
@@ -2286,10 +2337,12 @@ export class KgaraApiCoreController implements OnModuleInit {
         results.push(link);
       }
 
-      // Auto-sync: If the case already has ON_SYSTEM settlements matching the linkType direction
+      // Auto-sync 2 chiều khi liên kết Hóa đơn <-> Phiếu dịch vụ:
       try {
         const isOut = item.linkType === 'OUT';
         const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
+
+        // 1. Chiều Case -> Invoice: Nếu Case đã có sao kê ON_SYSTEM, cấn trừ sang Hóa đơn
         const settlements = await this.settlementRepo.find({
           where: {
             caseId: id,
@@ -2313,9 +2366,44 @@ export class KgaraApiCoreController implements OnModuleInit {
             }
           }
         }
+
+        // 2. Chiều Invoice -> Case: Nếu Hóa đơn đã có cấn trừ sao kê sẵn, cấn trừ sang Phiếu dịch vụ
+        const invoiceNetOffs = await this.settlementRepo.manager.query(
+          `SELECT n.bank_transaction_id, n.net_off_amount, t.trans_date, t.correspondent_name, t.description
+           FROM erp_invoice_voucher_netoff n
+           LEFT JOIN erp_bank_transactions t ON t.id = n.bank_transaction_id
+           WHERE n.invoice_id = $1`,
+          [item.invoiceId],
+        );
+
+        for (const no of invoiceNetOffs) {
+          if (!no.bank_transaction_id) continue;
+          const existingCaseSettlement = await this.settlementRepo.findOne({
+            where: {
+              caseId: id,
+              bankTransactionId: no.bank_transaction_id,
+            },
+          });
+
+          if (!existingCaseSettlement) {
+            const newSettlement = this.settlementRepo.create({
+              caseId: id,
+              bankTransactionId: no.bank_transaction_id,
+              settlementType: targetSettlementType,
+              sourceChannel: 'ON_SYSTEM',
+              amount: Number(no.net_off_amount || 0),
+              transDate: no.trans_date,
+              partnerName: no.correspondent_name,
+              note: `Đồng bộ cấn trừ từ hóa đơn liên kết`,
+            });
+            await this.settlementRepo.save(newSettlement);
+          }
+        }
+
+        await this.recalculateCaseSettlementSummary(id);
       } catch (syncErr) {
         this.logger.warn(
-          `Could not sync case settlements to invoice netoff: ${syncErr}`,
+          `Could not sync bi-directional settlements and netoff: ${syncErr}`,
         );
       }
     }
@@ -2378,6 +2466,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
       }
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+      await this.recalculateCaseSettlementSummary(id);
     }
     return { success: true };
   }

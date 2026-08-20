@@ -5,9 +5,10 @@ describe('TransactionQueryService', () => {
   let service: TransactionQueryService;
   let transactionRepo: any;
   let transactionAccountingService: any;
+  let qb: any;
 
   beforeEach(() => {
-    const qb: any = {
+    qb = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -120,6 +121,26 @@ describe('TransactionQueryService', () => {
       pageSize: 20,
       totalPages: 0,
     });
+  });
+
+  it('applies GMT+7 timezone to startDate and endDate in getTransactions', async () => {
+    await service.getTransactions({
+      startDate: '2026-07-01',
+      endDate: '2026-07-31',
+    } as any);
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
+      {
+        startDate: '2026-07-01',
+      },
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
+      {
+        endDate: '2026-07-31',
+      },
+    );
   });
 
   it('returns empty options for unsupported column', async () => {
