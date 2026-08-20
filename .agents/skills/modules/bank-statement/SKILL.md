@@ -211,6 +211,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   4. Tạo hoặc cập nhật chứng từ `erp_journal_entries` với mã tham chiếu nguồn `sourceId = txn.id`, `sourceType = 'BANK'` hoặc `'CASH'`.
 
 ### 5.3. Thuật toán Bộ Lọc Nâng Cao & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+- **Lọc Khoảng Ngày Múi Giờ Việt Nam (Timezone-Aware Date Range Filter)**:
+  - Do `trans_date` trong database PostgreSQL lưu theo mốc UTC, khi lọc theo khoảng ngày (`startDate` - `endDate`), hệ thống áp dụng chuyển đổi múi giờ chuẩn trong SQL:
+    ```sql
+    (txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date
+    AND
+    (txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date
+    ```
+  - Đảm bảo các giao dịch diễn ra rạng sáng đầu tháng tiếp theo theo giờ Việt Nam không bị lọt nhầm vào tháng trước do sai lệch múi giờ UTC/GMT+7.
 - **Tìm kiếm đa từ khóa & khớp chính xác (`applyMultiKeywordFilter`)**:
   - Dấu chấm phẩy `;`: Tách thành nhiều từ khóa và áp dụng điều kiện `OR` (ví dụ: `BIDV;TCB`).
   - Dấu ngoặc kép `"..."`: Tìm kiếm chính xác từng ký tự (Exact match với `op = '='` hoặc `ILIKE 'text'`), không gắn wildcard `%`.
