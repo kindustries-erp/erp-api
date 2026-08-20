@@ -251,19 +251,20 @@ describe('GarageSmartSettlementService', () => {
       expect(suggestions[0].score.customerMatch).toBe(false);
     });
 
-    it('should rank NOTICE when settlementOrder matches but amount differs', async () => {
+    it('should handle null buyerName and sellerName without throwing TypeError', async () => {
       mockCaseRepo.findOne.mockResolvedValueOnce(sampleCase);
       mockManagerQuery.mockResolvedValueOnce([
         {
-          id: 'inv-3',
-          invoiceNo: '0009999',
-          serialNo: '1C26TGA',
+          id: 'inv-null-partner',
+          invoiceNo: '0001111',
           invoiceDate: '2026-08-16T10:00:00Z',
           direction: 'OUT',
-          buyerName: 'Khach Hang Y',
-          totalAmount: '3000000',
-          settlementOrder: 'SC-202608-001',
-          description: 'Hoa don bo sung SC-202608-001',
+          buyerName: null,
+          sellerName: null,
+          totalAmount: '2500000',
+          description: null,
+          licensePlate: null,
+          settlementOrder: null,
         },
       ]);
 
@@ -273,9 +274,8 @@ describe('GarageSmartSettlementService', () => {
       );
 
       expect(suggestions).toHaveLength(1);
-      expect(suggestions[0].score.badge).toBe('NOTICE');
-      expect(suggestions[0].score.amountMatch).toBe(false);
-      expect(suggestions[0].score.orderMatch).toBe(true);
+      expect(suggestions[0].invoice.invoiceNo).toBe('0001111');
+      expect(suggestions[0].score.amountMatch).toBe(true);
     });
   });
 });

@@ -231,7 +231,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/:id/services` | `id` (`hd_phieu_dich_vu_id`) | Lấy danh sách chi tiết các dòng công việc và phụ tùng của vụ việc |
 | `GET` | `/cases/:id/payments` | `id` (`hd_phieu_dich_vu_id`) | Lấy lịch sử thanh toán của vụ việc (trả về mảng rỗng do KGara V2 quản lý qua receivable) |
 | `GET` | `/cases/:id/linked-invoices` | `id` (`caseDbId`) | Lấy danh sách hóa đơn điện tử (`erp_invoices`) đang liên kết với vụ việc |
-| `POST`| `/cases/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` | Gắn liên kết một hóa đơn điện tử vào vụ việc |
+| `POST`| `/cases/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` \| `{ items: [...] }` \| `Array<{ invoiceId, linkType, note }>` | Gắn liên kết một hoặc nhiều hóa đơn điện tử vào vụ việc (hỗ trợ batch insert và tự động tạo netoff) |
 | `DELETE`| `/cases/:id/linked-invoices/:linkedId` | `id`, `linkedId` | Xóa liên kết hóa đơn khỏi vụ việc |
 | `GET` | `/invoices/:invoiceId/linked-cases` | `invoiceId` (UUID ERP Invoice) | Tra cứu ngược danh sách các vụ việc dịch vụ đang liên kết với hóa đơn này |
 | `GET` | `/cases/:id/traceability-graph` | `id` (UUID Case) | Lấy cây phả hệ mạng lưới chứng từ liên đới (Phiếu DV -> Hóa đơn -> Sao kê/Sổ quỹ -> Sổ cái GL) |
@@ -239,6 +239,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/customers-debt` | `@BranchId()`, Query: `page`, `pageSize`, `q`, `from`, `to`, `sorts`, `column_filters`, `column_search` | Tổng hợp công nợ khách hàng theo phiếu DV, tính tuổi nợ (Aging 0-30, 31-60, 61-90, >90), phân bổ chi nhánh, lọc HAVING theo `paymentProgress` (PAID, PARTIAL, UNPAID), `maxAgingDays`, `caseCount` (số lượng phiếu), `totalAmount` (phân khoảng <10m, 10-20m, 20-50m, >50m), mốc baseline 07/2026 |
 | `GET` | `/cases/customers-debt/column-options` | `@BranchId()`, Query: `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách options phân trang distinct cho bộ lọc cột bảng công nợ khách hàng (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`) |
 | `GET` | `/cases/:id/smart-settlement-suggestions` | `id` (UUID Case), Query: `type` (`RECEIPT` \| `PAYMENT`) | Gợi ý đối soát sao kê thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ + Biển số xe + Khách hàng) |
+| `GET` | `/cases/:id/smart-invoice-suggestions` | `id` (UUID Case), Query: `direction` (`OUT` \| `IN`) | Gợi ý đối soát hóa đơn VAT thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ/Lệnh quyết toán + Biển số xe + Tên khách/Nhà cung cấp + Cùng tháng) |
 | `POST`| `/cases/:id/settlements` | `id`, Body: `{ bankTransactionId, settlementType, sourceChannel, category, amount, transDate, partnerName, note }` | Ghi nhận cấn trừ giao dịch dòng tiền (ERP hoặc ngoài sổ sách) |
 | `DELETE`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId` | Xóa bản ghi thu/chi dòng tiền khỏi vụ việc |
 
