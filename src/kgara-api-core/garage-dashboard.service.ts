@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
+import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import * as ExcelJS from 'exceljs';
 import {
   startOfMonth,
@@ -27,10 +28,13 @@ export class GarageDashboardService {
     private readonly caseServiceRepo: Repository<KgaraCaseService>,
     @InjectRepository(KgaraGrossProfit)
     private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
+    @InjectRepository(KgaraCaseSettlement)
+    private readonly settlementRepo: Repository<KgaraCaseSettlement>,
   ) {}
 
   /**
-   * 1. Lấy biểu đồ xu hướng theo tháng (Doanh thu, Giá vốn, Lợi nhuận gộp)
+   * 1. Lấy biểu đồ xu hướng theo tháng (Doanh thu, Giá vốn, Lợi nhuận gộp, Tiến độ thu tiền, Tiến độ trả tiền & Phân bổ trạng thái theo từng tháng)
+   * Chỉ tính các vụ việc ĐÃ CÓ ngày hoàn thành công việc (ngay_hoan_thanh_cong_viec IS NOT NULL).
    */
   async getDashboardStats(dateFrom?: string, dateTo?: string) {
     const qb = this.caseRepo
@@ -40,10 +44,7 @@ export class GarageDashboardService {
         'gp',
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
-      .select(
-        "TO_CHAR(COALESCE(c.ngay_phat_sinh, c.created_at), 'YYYY-MM')",
-        'month',
-      )
+      .select("TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')", 'month')
       .addSelect(
         'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
         'revenue',
@@ -53,47 +54,266 @@ export class GarageDashboardService {
         'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
         'profit',
       )
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'caseCount')
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)');
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
     if (dateFrom) {
-      qb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom', {
+      qb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
         dateFrom,
       });
     }
     if (dateTo) {
       const effectiveDateTo =
         dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
-      qb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+      qb.andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
         dateTo: effectiveDateTo,
       });
     }
 
-    qb.groupBy("TO_CHAR(COALESCE(c.ngay_phat_sinh, c.created_at), 'YYYY-MM')");
+    qb.groupBy("TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')");
     qb.orderBy('month', 'ASC');
 
     const result = await qb.getRawMany();
+
+    // 1.1 Truy vấn dòng tiền chi trả chi phí (settlement_type = 'PAYMENT') theo tháng
+    const costSettlementsQb = this.settlementRepo
+      .createQueryBuilder('s')
+      .innerJoin(KgaraCase, 'c', 'c.id = s.case_id')
+      .select("TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')", 'month')
+      .addSelect('SUM(s.amount)', 'totalPaidCost')
+      .where("s.settlement_type = 'PAYMENT'")
+      .andWhere('c.kgara_deleted_at IS NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
+
+    if (dateFrom) {
+      costSettlementsQb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
+        dateFrom,
+      });
+    }
+    if (dateTo) {
+      const effectiveDateTo =
+        dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
+      costSettlementsQb.andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+        dateTo: effectiveDateTo,
+      });
+    }
+
+    costSettlementsQb.groupBy(
+      "TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')",
+    );
+    const rawPaidCost = await costSettlementsQb.getRawMany();
+    const paidCostMap = Object.fromEntries(
+      rawPaidCost.map((r) => [r.month, Number(r.totalPaidCost) || 0]),
+    );
 
     const trend = result.map((r) => {
       const rev = Number(r.revenue) || 0;
       const cost = Number(r.cost) || 0;
       const profit = Number(r.profit) || 0;
+      const paid = Number(r.paid) || 0;
+      const receivable = Number(r.receivable) || 0;
+      const totalBilled = paid + receivable > 0 ? paid + receivable : rev;
+      const collectionRate =
+        totalBilled > 0
+          ? Math.min(100, Math.round((paid / totalBilled) * 1000) / 10)
+          : 0;
+
+      const paidCost = paidCostMap[r.month] || 0;
+      const payableCost = Math.max(0, cost - paidCost);
+      const costPaymentRate =
+        cost > 0
+          ? Math.min(100, Math.round((paidCost / cost) * 1000) / 10)
+          : 100;
+
       return {
         label: r.month,
         revenue: rev,
         cost: cost,
         profit: profit,
         margin: rev > 0 ? (profit / rev) * 100 : 0,
+        paid,
+        receivable,
+        collectionRate,
+        paidCost,
+        payableCost,
+        costPaymentRate,
+        collectionRateDiff: 0,
+        costPaymentRateDiff: 0,
         caseCount: Number(r.caseCount) || 0,
       };
     });
 
-    return { trend };
+    // Tính biến động MoM (Month-over-Month) so với tháng liền kề trước đó
+    for (let i = 0; i < trend.length; i++) {
+      if (i > 0) {
+        trend[i].collectionRateDiff =
+          Math.round(
+            (trend[i].collectionRate - trend[i - 1].collectionRate) * 10,
+          ) / 10;
+        trend[i].costPaymentRateDiff =
+          Math.round(
+            (trend[i].costPaymentRate - trend[i - 1].costPaymentRate) * 10,
+          ) / 10;
+      }
+    }
+
+    // 1.2 Tổng quan Tiến độ thu tiền Khách hàng (Collection Summary - Chỉ tính từ tháng 07/2026 như /garage-customers)
+    const effectiveCollectionTrend = trend.filter((t) =>
+      dateFrom ? true : t.label >= '2026-07',
+    );
+    const totalRevenue = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + t.revenue,
+      0,
+    );
+    const totalPaid = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + t.paid,
+      0,
+    );
+    const totalReceivable = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + t.receivable,
+      0,
+    );
+    const totalBilled =
+      totalPaid + totalReceivable > 0
+        ? totalPaid + totalReceivable
+        : totalRevenue;
+    const overallCollectionRate =
+      totalBilled > 0
+        ? Math.min(100, Math.round((totalPaid / totalBilled) * 1000) / 10)
+        : 0;
+
+    const collectionSummary = {
+      totalBilled,
+      totalRevenue,
+      totalPaid,
+      totalReceivable,
+      collectionRate: overallCollectionRate,
+      baselineMonth: '2026-07',
+    };
+
+    // 1.3 Tổng quan Tiến độ trả tiền Nhà cung cấp / Chi phí (Cost Payment Summary - Chỉ tính từ tháng 07/2026)
+    const totalCost = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + t.cost,
+      0,
+    );
+    const totalPaidCost = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + t.paidCost,
+      0,
+    );
+    const totalPayableCost = Math.max(0, totalCost - totalPaidCost);
+    const overallCostPaymentRate =
+      totalCost > 0
+        ? Math.min(100, Math.round((totalPaidCost / totalCost) * 1000) / 10)
+        : 100;
+
+    const costPaymentSummary = {
+      totalCost,
+      totalPaidCost,
+      totalPayableCost,
+      paymentRate: overallCostPaymentRate,
+      baselineMonth: '2026-07',
+    };
+
+    // 1.4 Phân bổ Trạng thái Phiếu dịch vụ theo từng tháng trong 6 tháng gần nhất
+    const sixMonthsAgo = format(subMonths(new Date(), 6), 'yyyy-MM-dd');
+    const statusQb = this.caseRepo
+      .createQueryBuilder('c')
+      .select(
+        "TO_CHAR(COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at), 'YYYY-MM')",
+        'month',
+      )
+      .addSelect('COALESCE(c.tinh_trang_dich_vu, 0)', 'statusCode')
+      .addSelect(
+        "COALESCE(NULLIF(c.ten_tinh_trang_dich_vu, ''), 'Khác')",
+        'statusName',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
+        { sixMonthsAgo },
+      )
+      .groupBy('1, 2, 3')
+      .orderBy('month', 'DESC')
+      .addOrderBy('count', 'DESC');
+
+    const rawStatus = await statusQb.getRawMany();
+
+    const statusDistributionByMonth: Record<string, any[]> = {};
+    const statusTotalByMonth: Record<string, number> = {};
+    const overallStatusMap: Record<
+      string,
+      { statusCode: number; statusName: string; count: number }
+    > = {};
+    let totalStatusCount = 0;
+
+    for (const s of rawStatus) {
+      const m = s.month;
+      const cnt = Number(s.count) || 0;
+      const statusCode = Number(s.statusCode) || 0;
+      const statusName = s.statusName;
+
+      if (!statusDistributionByMonth[m]) {
+        statusDistributionByMonth[m] = [];
+        statusTotalByMonth[m] = 0;
+      }
+      statusDistributionByMonth[m].push({
+        statusCode,
+        statusName,
+        count: cnt,
+      });
+      statusTotalByMonth[m] += cnt;
+
+      const key = `${statusCode}_${statusName}`;
+      if (!overallStatusMap[key]) {
+        overallStatusMap[key] = { statusCode, statusName, count: 0 };
+      }
+      overallStatusMap[key].count += cnt;
+      totalStatusCount += cnt;
+    }
+
+    // Tính tỷ lệ % theo từng tháng
+    for (const [m, items] of Object.entries(statusDistributionByMonth)) {
+      const mTotal = statusTotalByMonth[m] || 1;
+      for (const item of items) {
+        item.percentage =
+          Math.round(((item.count as number) / mTotal) * 1000) / 10;
+      }
+    }
+
+    // Tính tỷ lệ % tổng thể toàn kỳ 6 tháng
+    const statusDistribution = Object.values(overallStatusMap)
+      .map((s) => ({
+        statusCode: s.statusCode,
+        statusName: s.statusName,
+        count: s.count,
+        percentage:
+          totalStatusCount > 0
+            ? Math.round((s.count / totalStatusCount) * 1000) / 10
+            : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const availableMonths = Object.keys(statusDistributionByMonth)
+      .sort()
+      .reverse();
+
+    return {
+      trend,
+      collectionSummary,
+      costPaymentSummary,
+      statusDistribution,
+      statusDistributionByMonth,
+      availableMonths,
+    };
   }
 
   /**
-   * 2. Lấy chỉ số KPI Checkpoints (Tháng này / Tuần này / Hôm nay) kèm Sparklines Doanh thu & Chi phí
+   * 2. Lấy chỉ số KPI Checkpoints (Tháng này / Tuần này / Hôm nay) kèm Sparklines theo Ngày hoàn thành
    */
   async getCheckpointKpis() {
     const now = new Date();
@@ -128,8 +348,9 @@ export class GarageDashboardService {
         )
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(
-          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :mStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :mEnd',
+          'c.ngay_hoan_thanh_cong_viec >= :mStart AND c.ngay_hoan_thanh_cong_viec <= :mEnd',
           { mStart, mEnd },
         )
         .getRawOne();
@@ -160,8 +381,9 @@ export class GarageDashboardService {
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curMonthStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curMonthEnd',
+        'c.ngay_hoan_thanh_cong_viec >= :curMonthStart AND c.ngay_hoan_thanh_cong_viec <= :curMonthEnd',
         { curMonthStart, curMonthEnd },
       )
       .getRawOne();
@@ -201,8 +423,9 @@ export class GarageDashboardService {
         )
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(
-          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :wStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :wEnd',
+          'c.ngay_hoan_thanh_cong_viec >= :wStart AND c.ngay_hoan_thanh_cong_viec <= :wEnd',
           { wStart, wEnd },
         )
         .getRawOne();
@@ -239,8 +462,9 @@ export class GarageDashboardService {
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curWeekStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curWeekEnd',
+        'c.ngay_hoan_thanh_cong_viec >= :curWeekStart AND c.ngay_hoan_thanh_cong_viec <= :curWeekEnd',
         { curWeekStart, curWeekEnd },
       )
       .getRawOne();
@@ -275,8 +499,9 @@ export class GarageDashboardService {
         )
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(
-          'COALESCE(c.ngay_phat_sinh, c.created_at) >= :dStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :dEnd',
+          'c.ngay_hoan_thanh_cong_viec >= :dStart AND c.ngay_hoan_thanh_cong_viec <= :dEnd',
           { dStart, dEnd },
         )
         .getRawOne();
@@ -307,8 +532,9 @@ export class GarageDashboardService {
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd',
+        'c.ngay_hoan_thanh_cong_viec >= :curDayStart AND c.ngay_hoan_thanh_cong_viec <= :curDayEnd',
         { curDayStart, curDayEnd },
       )
       .getRawOne();
@@ -349,6 +575,7 @@ export class GarageDashboardService {
 
   /**
    * 3. Lấy danh sách vụ việc trong khoảng thời gian checkpoint (click sparkline)
+   * Sửa lỗi TypeORM 500 ("COALESCE(c" alias not found) bằng cách dùng direct column orderBy('c.ngayHoanThanhCongViec', 'DESC')
    */
   async getCheckpointCases(
     dateFrom: string,
@@ -369,13 +596,14 @@ export class GarageDashboardService {
       )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom', {
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
         dateFrom,
       })
-      .andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
         dateTo: effectiveDateTo,
       })
-      .orderBy('COALESCE(c.ngay_phat_sinh, c.created_at)', 'DESC')
+      .orderBy('c.ngayHoanThanhCongViec', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
 
@@ -400,6 +628,7 @@ export class GarageDashboardService {
           loiNhuan: profit,
           tienDaThanhToan: Number(c.tienDaThanhToan ?? 0),
           tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan ?? 0),
+          ngayHoanThanhCongViec: c.ngayHoanThanhCongViec,
           ngayPhatSinh: c.ngayPhatSinh || c.createdAt,
         };
       }),
@@ -411,7 +640,7 @@ export class GarageDashboardService {
   }
 
   /**
-   * 4. Lấy danh sách khách hàng và công nợ (Customer Stats & Debt)
+   * 4. Lấy danh sách khách hàng và công nợ (Customer Stats & Debt) theo Ngày hoàn thành
    */
   async getCustomersStats(
     page: number = 1,
@@ -435,12 +664,14 @@ export class GarageDashboardService {
         SUM(COALESCE(c.tien_da_thanh_toan, 0)) as "paidAmount",
         SUM(COALESCE(c.tien_con_phai_thanh_toan, 0)) as "receivableAmount",
         COUNT(c.id) as "caseCount",
-        MAX(COALESCE(c.ngay_phat_sinh, c.created_at)) as "lastVisitDate"
+        MAX(c.ngay_hoan_thanh_cong_viec) as "lastVisitDate"
       FROM kgara_cases c
       LEFT JOIN kgara_gross_profit gp ON gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu
-      WHERE c.kgara_deleted_at IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)
-        ${dateFrom ? `AND COALESCE(c.ngay_phat_sinh, c.created_at) >= '${dateFrom}'` : ''}
-        ${dateTo ? `AND COALESCE(c.ngay_phat_sinh, c.created_at) <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
+      WHERE c.kgara_deleted_at IS NULL 
+        AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)
+        AND c.ngay_hoan_thanh_cong_viec IS NOT NULL
+        ${dateFrom ? `AND c.ngay_hoan_thanh_cong_viec >= '${dateFrom}'` : ''}
+        ${dateTo ? `AND c.ngay_hoan_thanh_cong_viec <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
       GROUP BY COALESCE(NULLIF(c.khach_hang_code, ''), NULLIF(c.khach_hang_name, ''), 'KH_LE')
       HAVING COALESCE(NULLIF(c.khach_hang_code, ''), NULLIF(c.khach_hang_name, ''), 'KH_LE') IS NOT NULL
     `;
@@ -545,7 +776,7 @@ export class GarageDashboardService {
   }
 
   /**
-   * 5. Xuất báo cáo Excel chuyên nghiệp đa bảng (Multi-sheet Export)
+   * 5. Xuất báo cáo Excel chuyên nghiệp đa bảng (Multi-sheet Export) theo Ngày hoàn thành
    */
   async exportExcel(dateFrom?: string, dateTo?: string): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
@@ -554,7 +785,7 @@ export class GarageDashboardService {
     const stats = await this.getDashboardStats(dateFrom, dateTo);
     const sheet1 = workbook.addWorksheet('Tổng quan Tháng');
     sheet1.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet1.autoFilter = 'A1:F1';
+    sheet1.autoFilter = 'A1:L1';
     sheet1.columns = [
       { header: 'Tháng', key: 'month', width: 15 },
       {
@@ -581,6 +812,42 @@ export class GarageDashboardService {
         width: 15,
         style: { numFmt: '0.0"%"' },
       },
+      {
+        header: 'Đã thu (VND)',
+        key: 'paid',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Còn phải thu (VND)',
+        key: 'receivable',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Tỷ lệ thu (%)',
+        key: 'collectionRate',
+        width: 15,
+        style: { numFmt: '0.0"%"' },
+      },
+      {
+        header: 'Đã chi trả CP (VND)',
+        key: 'paidCost',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Còn nợ NCC (VND)',
+        key: 'payableCost',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Tỷ lệ chi (%)',
+        key: 'costPaymentRate',
+        width: 15,
+        style: { numFmt: '0.0"%"' },
+      },
       { header: 'Số vụ việc', key: 'caseCount', width: 15 },
     ];
 
@@ -591,6 +858,12 @@ export class GarageDashboardService {
         cost: t.cost,
         profit: t.profit,
         margin: t.margin,
+        paid: t.paid,
+        receivable: t.receivable,
+        collectionRate: t.collectionRate,
+        paidCost: t.paidCost,
+        payableCost: t.payableCost,
+        costPaymentRate: t.costPaymentRate,
         caseCount: t.caseCount,
       });
     });
@@ -605,31 +878,30 @@ export class GarageDashboardService {
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)');
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
     if (dateFrom) {
-      casesQb.andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :dateFrom',
-        {
-          dateFrom,
-        },
-      );
+      casesQb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
+        dateFrom,
+      });
     }
     if (dateTo) {
       const effectiveDateTo =
         dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
-      casesQb.andWhere('COALESCE(c.ngay_phat_sinh, c.created_at) <= :dateTo', {
+      casesQb.andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
         dateTo: effectiveDateTo,
       });
     }
 
-    casesQb.orderBy('COALESCE(c.ngay_phat_sinh, c.created_at)', 'DESC');
+    casesQb.orderBy('c.ngayHoanThanhCongViec', 'DESC');
     const cases = await casesQb.getMany();
 
     const sheet2 = workbook.addWorksheet('Chi tiết Phiếu dịch vụ');
     sheet2.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet2.autoFilter = 'A1:K1';
+    sheet2.autoFilter = 'A1:L1';
     sheet2.columns = [
+      { header: 'Ngày hoàn thành', key: 'ngayHoanThanhCongViec', width: 18 },
       { header: 'Ngày phát sinh', key: 'ngayPhatSinh', width: 16 },
       { header: 'Số chứng từ', key: 'soChungTu', width: 18 },
       { header: 'Biển số xe', key: 'bienSoXe', width: 15 },
@@ -669,6 +941,7 @@ export class GarageDashboardService {
     ];
 
     cases.forEach((c: any) => {
+      const dtComplete = c.ngayHoanThanhCongViec;
       const dt = c.ngayPhatSinh || c.createdAt;
       const gp = c.grossProfit;
       const rev = Number(gp?.doanhThu ?? c.doanhThu ?? c.tienCoThue ?? 0);
@@ -676,6 +949,9 @@ export class GarageDashboardService {
       const profit = Number(gp?.loiNhuan ?? c.loiNhuan ?? rev - cost);
 
       sheet2.addRow({
+        ngayHoanThanhCongViec: dtComplete
+          ? format(new Date(dtComplete), 'yyyy-MM-dd')
+          : '',
         ngayPhatSinh: dt ? format(new Date(dt), 'yyyy-MM-dd') : '',
         soChungTu: c.soChungTu || '',
         bienSoXe: c.bienSoXe || '',

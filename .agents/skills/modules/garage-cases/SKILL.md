@@ -354,7 +354,14 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm):
     - Khi ô tìm kiếm rỗng (`searchStr = ""`): Hệ thống hiểu là chọn toàn bộ dữ liệu $\rightarrow$ Không áp điều kiện lọc WHERE để giữ trọn vẹn tập dữ liệu.
     - Khi có từ khóa tìm kiếm: Sử dụng hàm chuẩn `applyMultiKeywordFilter` hỗ trợ tìm kiếm theo chuỗi con (`ILIKE`), tìm kiếm chính xác khi bọc dấu ngoặc kép (`"..."`), hoặc tìm kiếm nhiều từ khóa cách nhau bởi dấu chấm phẩy (`;`).
-  - `__BLANK__` (Lọc giá trị trống / Null): Xử lý kết hợp `(column IS NULL OR CAST(column AS TEXT) = '' OR column IN (...))` cho phép người dùng lọc đồng thời giá trị rỗng cùng với các tùy chọn cụ thể khác.
+  - `__BLANK__` (Lọc giá trị trống / Null / 0): Xử lý kết hợp `(column IS NULL OR CAST(column AS TEXT) = '' OR column IN (...))` cho phép người dùng lọc đồng thời giá trị rỗng cùng với các tùy chọn cụ thể khác.
+  - **Hỗ trợ Bộ Lọc 6 Cột Trọng Tâm trên Bảng Phiếu Dịch Vụ**:
+    - **Ngày tiếp nhận (`caseDate` / `ngayTiepNhan`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker dải ngày từ - đến.
+    - **Ngày kết thúc (`ngayHoanThanhCongViec`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker + Tùy chọn `(blank)` để lọc phiếu chưa kết thúc.
+    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")`, định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
+    - **Chi phí (`chiPhi`)**: Áp dụng `COALESCE("case"."chi_phi", "gp"."chi_phi")`, định dạng tiền tệ và lọc `__BLANK__`.
+    - **Lợi nhuận (`loiNhuan`)**: Áp dụng `COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", DoanhThu - ChiPhi)`, định dạng tiền tệ và lọc `__BLANK__`.
+    - **Biên LN (`margin`)**: Tính toán tỷ lệ % margin tức thời và hỗ trợ 4 phân khúc chọn nhanh: `'HIGH'` ($\ge 50\%$), `'MID'` ($20\% - 50\%$), `'LOW'` ($0\% - 20\%$), `'NEGATIVE'` ($< 0\%$) cùng lọc `__BLANK__`.
   - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
   - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí các Quick Actions thuận tiện:
     - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.

@@ -308,6 +308,11 @@ export class KgaraApiCoreController implements OnModuleInit {
 
     const query = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hdPhieuDichVuId = case.hdPhieuDichVuId OR gp.vuViecCode = case.soChungTu',
+      )
       .select(`DISTINCT ${selectExpr}`, 'value');
 
     if (branchId) {
@@ -364,18 +369,26 @@ export class KgaraApiCoreController implements OnModuleInit {
       branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:
         "CASE WHEN COALESCE((\"case\".\"raw_data\" ->> 'XeLamBaoHiem')::boolean, false) THEN 'yes' ELSE 'no' END",
-      doanhThu: '"case"."doanh_thu"',
-      chiPhi: '"case"."chi_phi"',
-      loiNhuan: '"case"."loi_nhuan"',
+      doanhThu:
+        'COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")',
+      chiPhi: 'COALESCE("case"."chi_phi", "gp"."chi_phi")',
+      loiNhuan:
+        'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))',
+      margin:
+        'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
+      bienLoiNhuan:
+        'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
       totalAmount: '"case"."tien_co_thue"',
       tienCoThue: '"case"."tien_co_thue"',
       paidAmount: '"case"."tien_da_thanh_toan"',
       tienDaThanhToan: '"case"."tien_da_thanh_toan"',
       balanceAmount: '"case"."tien_con_phai_thanh_toan"',
       tienConPhaiThanhToan: '"case"."tien_con_phai_thanh_toan"',
-      caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      caseDate:
+        'TO_CHAR(COALESCE("case"."ngay_tiep_nhan", "case"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
       ngayPhatSinh: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
-      ngayTiepNhan: 'TO_CHAR("case"."ngay_tiep_nhan", \'YYYY-MM-DD\')',
+      ngayTiepNhan:
+        'TO_CHAR(COALESCE("case"."ngay_tiep_nhan", "case"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
       ngayHoanThanhCongViec:
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       completionDate:
@@ -395,6 +408,29 @@ export class KgaraApiCoreController implements OnModuleInit {
     paramPrefix: string,
   ) {
     if (!values || values.length === 0) return;
+
+    // 0. Xử lý khoảng ngày (Date Range: "YYYY-MM-DD..YYYY-MM-DD" hoặc "YYYY-MM-DD|YYYY-MM-DD")
+    if (
+      values.length === 1 &&
+      (values[0].includes('..') || values[0].includes('|'))
+    ) {
+      const separator = values[0].includes('..') ? '..' : '|';
+      const [fromDate, toDate] = values[0].split(separator);
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (filterExpr) {
+        if (fromDate) {
+          qb.andWhere(`${filterExpr} >= :${paramPrefix}_from_date`, {
+            [`${paramPrefix}_from_date`]: fromDate,
+          });
+        }
+        if (toDate) {
+          qb.andWhere(`${filterExpr} <= :${paramPrefix}_to_date`, {
+            [`${paramPrefix}_to_date`]: toDate,
+          });
+        }
+        return;
+      }
+    }
 
     // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
     if (values[0] === '__ALL_MATCHING__') {
@@ -460,10 +496,82 @@ export class KgaraApiCoreController implements OnModuleInit {
       return;
     }
 
+    // 4. Cột đặc thù: margin / bienLoiNhuan (Biên lợi nhuận)
+    if (column === 'margin' || column === 'bienLoiNhuan') {
+      const marginExpr = `(CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100) ELSE 0 END)`;
+
+      const conditions: string[] = [];
+      const hasBlank = values.includes('__BLANK__');
+      const numericVals: number[] = [];
+
+      for (const val of values) {
+        if (val === 'HIGH') {
+          conditions.push(`${marginExpr} >= 50`);
+        } else if (val === 'MID') {
+          conditions.push(`(${marginExpr} >= 20 AND ${marginExpr} < 50)`);
+        } else if (val === 'LOW') {
+          conditions.push(`(${marginExpr} >= 0 AND ${marginExpr} < 20)`);
+        } else if (val === 'NEGATIVE') {
+          conditions.push(`${marginExpr} < 0`);
+        } else if (val !== '__BLANK__') {
+          const num = Number(val);
+          if (!isNaN(num)) {
+            numericVals.push(num);
+          }
+        }
+      }
+
+      if (numericVals.length > 0) {
+        conditions.push(
+          `ROUND(${marginExpr}::numeric, 1) IN (:...${paramPrefix}_margin_vals)`,
+        );
+      }
+
+      if (hasBlank) {
+        conditions.push(
+          `(COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) <= 0)`,
+        );
+      }
+
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, {
+          [`${paramPrefix}_margin_vals`]: numericVals,
+        });
+      }
+      return;
+    }
+
+    // 5. Cột số tiền: doanhThu, chiPhi, loiNhuan
+    if (column === 'doanhThu' || column === 'chiPhi' || column === 'loiNhuan') {
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (!filterExpr) return;
+
+      const hasBlank = values.includes('__BLANK__');
+      const realVals = values.filter((v) => v !== '__BLANK__');
+      const numericVals = realVals
+        .map((v) => Number(v))
+        .filter((v) => !isNaN(v));
+
+      const conditions: string[] = [];
+      if (hasBlank) {
+        conditions.push(`(${filterExpr} IS NULL OR ${filterExpr} = 0)`);
+      }
+      if (numericVals.length > 0) {
+        conditions.push(`${filterExpr} IN (:...${paramPrefix}_num_vals)`);
+      }
+
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, {
+          [`${paramPrefix}_num_vals`]: numericVals,
+        });
+      }
+      return;
+    }
+
     const filterExpr = this.getCaseColumnSelectExpr(column);
     if (!filterExpr) return;
 
-    // 4. Xử lý __BLANK__ (Lọc giá trị trống / null)
+    // 6. Xử lý __BLANK__ (Lọc giá trị trống / null)
     const hasBlank = values.includes('__BLANK__');
     const realVals = values.filter((v) => v !== '__BLANK__');
 
