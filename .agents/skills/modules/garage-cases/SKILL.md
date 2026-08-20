@@ -222,7 +222,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
-| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao và sắp xếp đa cột (mặc định: `ngayPhatSinh DESC`, `ngayTiepNhan DESC`, `soChungTu DESC`) |
+| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (bao gồm `hasLinkedInvoice`: `YES`/`NO`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`) và sắp xếp đa cột (mặc định: `ngayPhatSinh DESC`, `ngayTiepNhan DESC`, `soChungTu DESC`) |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (tự động fetch detail từ KGara nếu thiếu dòng) |

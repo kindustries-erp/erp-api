@@ -219,6 +219,10 @@ export class KgaraApiCoreController implements OnModuleInit {
       string,
       { receipts: number; payments: number }
     > = {};
+    const linkedInvoiceCounts: Record<
+      string,
+      { total: number; outCount: number; inCount: number }
+    > = {};
 
     if (caseIds.length > 0) {
       const settlementRows = await this.settlementRepo
@@ -240,6 +244,30 @@ export class KgaraApiCoreController implements OnModuleInit {
         } else if (row.settlementType === 'PAYMENT') {
           settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
         }
+      }
+
+      const linkRows = await this.linkedInvoiceRepo
+        .createQueryBuilder('l')
+        .select('l.caseDbId', 'caseId')
+        .addSelect('COUNT(*)', 'total')
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'OUT' THEN 1 ELSE 0 END)`,
+          'outCount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'IN' THEN 1 ELSE 0 END)`,
+          'inCount',
+        )
+        .where('l.caseDbId IN (:...caseIds)', { caseIds })
+        .groupBy('l.caseDbId')
+        .getRawMany();
+
+      for (const row of linkRows) {
+        linkedInvoiceCounts[row.caseId] = {
+          total: Number(row.total || 0),
+          outCount: Number(row.outCount || 0),
+          inCount: Number(row.inCount || 0),
+        };
       }
     }
 
@@ -265,6 +293,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         ? Math.max(0, targetRev - totalPaid)
         : Number(item.tienConPhaiThanhToan) || 0;
       const paidCost = hasSettlement ? setInfo.payments : 0;
+      const linkInfo = linkedInvoiceCounts[item.id];
 
       return {
         ...item,
@@ -275,6 +304,9 @@ export class KgaraApiCoreController implements OnModuleInit {
         tienDaThanhToan: totalPaid,
         tienConPhaiThanhToan: remainingBal,
         tienDaChi: paidCost,
+        linkedInvoiceCount: linkInfo?.total || 0,
+        linkedInvoiceOutCount: linkInfo?.outCount || 0,
+        linkedInvoiceInCount: linkInfo?.inCount || 0,
       };
     });
 
@@ -488,6 +520,25 @@ export class KgaraApiCoreController implements OnModuleInit {
       if (values.includes('UNPAID')) {
         conditions.push(
           "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) <= 0)",
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 4. Cột đặc thù: hasLinkedInvoice (Đã liên kết hóa đơn VAT)
+    if (column === 'hasLinkedInvoice') {
+      const conditions: string[] = [];
+      if (values.includes('YES')) {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+        );
+      }
+      if (values.includes('NO')) {
+        conditions.push(
+          'NOT EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
         );
       }
       if (conditions.length > 0) {
