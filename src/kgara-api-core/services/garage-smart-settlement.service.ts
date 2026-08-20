@@ -41,6 +41,45 @@ export interface GarageSmartSettlementSuggestion {
   matchedKeywords: string[];
 }
 
+export interface GarageSmartInvoiceSuggestion {
+  invoice: {
+    id: string;
+    invoiceNo: string;
+    serialNo?: string;
+    invoiceDate: string;
+    direction: 'IN' | 'OUT';
+    sellerName?: string;
+    buyerName?: string;
+    sellerTaxCode?: string;
+    buyerTaxCode?: string;
+    totalAmount: number;
+    preVatAmount: number;
+    vatAmount: number;
+    vatRate?: number;
+    licensePlate?: string;
+    settlementOrder?: string;
+    description?: string;
+    status?: string;
+    xmlFileKey?: string;
+    pdfFileKey?: string;
+  };
+  score: {
+    score: number;
+    amountMatch: boolean;
+    plateMatch: boolean;
+    orderMatch: boolean;
+    customerMatch: boolean;
+    badge:
+      | 'PERFECT'
+      | 'HIGH'
+      | 'LIKELY'
+      | 'POSSIBLE'
+      | 'NOTICE_STRONG'
+      | 'NOTICE';
+  };
+  matchedKeywords: string[];
+}
+
 export function removeVietnameseAccents(str: string): string {
   return str
     .normalize('NFD')
@@ -343,6 +382,288 @@ export class GarageSmartSettlementService {
       return (
         new Date(b.txn.transDate).getTime() -
         new Date(a.txn.transDate).getTime()
+      );
+    });
+
+    return scoredSuggestions.slice(0, 5);
+  }
+
+  async getInvoiceSuggestionsForCase(
+    caseId: string,
+    direction: 'IN' | 'OUT' = 'OUT',
+  ): Promise<GarageSmartInvoiceSuggestion[]> {
+    const kCase = await this.caseRepo.findOne({
+      where: { id: caseId },
+    });
+
+    if (!kCase) {
+      throw new NotFoundException(`Garage Case ${caseId} không tìm thấy`);
+    }
+
+    // Determine target amount based on direction
+    let targetAmount = 0;
+    if (direction === 'OUT') {
+      targetAmount = Number(kCase.tienCoThue || kCase.doanhThu || 0);
+    } else {
+      targetAmount = Number(kCase.chiPhi || 0);
+    }
+
+    // Extract prioritized matching signals
+    const rawPlate = (kCase.bienSoXe || '').trim();
+    const normalizedPlate = cleanLicensePlate(rawPlate);
+    const soChungTu = (kCase.soChungTu || '').trim();
+    const customerKeywords = extractCustomerKeywords(kCase.khachHangName);
+
+    // Build SQL query prioritizing: 1. Amount, 2. License plate, 3. Settlement order, 4. Customer name
+    const queryParams: any[] = [direction, caseId];
+    let paramIdx = 3;
+
+    let targetAmtParamIdx: number | null = null;
+    if (targetAmount > 0) {
+      queryParams.push(targetAmount);
+      targetAmtParamIdx = paramIdx;
+      paramIdx++;
+    }
+
+    const textConditions: string[] = [];
+
+    // 2. License plate
+    if (rawPlate.length > 0) {
+      textConditions.push(
+        `(inv.license_plate ILIKE $${paramIdx} OR inv.description ILIKE $${paramIdx})`,
+      );
+      queryParams.push(`%${rawPlate}%`);
+      paramIdx++;
+    }
+
+    if (
+      normalizedPlate.length > 0 &&
+      normalizedPlate !== rawPlate.toLowerCase()
+    ) {
+      textConditions.push(
+        `REPLACE(REPLACE(REPLACE(LOWER(COALESCE(inv.license_plate, '') || ' ' || COALESCE(inv.description, '')), '.', ''), '-', ''), ' ', '') ILIKE $${paramIdx}`,
+      );
+      queryParams.push(`%${normalizedPlate}%`);
+      paramIdx++;
+    }
+
+    // 3. Settlement order / Case code
+    if (soChungTu.length > 0) {
+      textConditions.push(
+        `(inv.settlement_order ILIKE $${paramIdx} OR inv.description ILIKE $${paramIdx})`,
+      );
+      queryParams.push(`%${soChungTu}%`);
+      paramIdx++;
+    }
+
+    // 4. Customer name
+    for (const kw of customerKeywords) {
+      const partnerField =
+        direction === 'OUT' ? 'inv.buyer_name' : 'inv.seller_name';
+      textConditions.push(
+        `(${partnerField} ILIKE $${paramIdx} OR inv.description ILIKE $${paramIdx})`,
+      );
+      queryParams.push(`%${kw}%`);
+      paramIdx++;
+    }
+
+    let textConditionSql = '';
+    if (textConditions.length > 0) {
+      textConditionSql = `OR ${textConditions.join(' OR ')}`;
+    }
+
+    const amountConditionSql =
+      targetAmtParamIdx !== null
+        ? `ABS(COALESCE(inv.total_amount, 0) - $${targetAmtParamIdx}) < 1`
+        : '1=0';
+
+    const sql = `
+      SELECT 
+        inv.id,
+        inv.invoice_no as "invoiceNo",
+        inv.serial_no as "serialNo",
+        inv.invoice_date as "invoiceDate",
+        inv.direction,
+        inv.seller_name as "sellerName",
+        inv.buyer_name as "buyerName",
+        inv.seller_tax_code as "sellerTaxCode",
+        inv.buyer_tax_code as "buyerTaxCode",
+        COALESCE(inv.total_amount, 0)::numeric as "totalAmount",
+        COALESCE(inv.pre_vat_amount, 0)::numeric as "preVatAmount",
+        COALESCE(inv.vat_amount, 0)::numeric as "vatAmount",
+        inv.vat_rate as "vatRate",
+        inv.license_plate as "licensePlate",
+        inv.settlement_order as "settlementOrder",
+        inv.description,
+        inv.status,
+        inv.xml_file_key as "xmlFileKey",
+        inv.pdf_file_key as "pdfFileKey"
+      FROM erp_invoices inv
+      WHERE inv.is_deleted = false
+        AND inv.direction = $1
+        AND (inv.status IS NULL OR inv.status != 'CANCELLED')
+        AND inv.id NOT IN (
+          SELECT "invoiceId" FROM kgara_case_linked_invoice WHERE "caseDbId"::text = $2
+        )
+        AND (
+          ${amountConditionSql}
+          ${textConditionSql}
+        )
+      ORDER BY inv.invoice_date DESC
+      LIMIT 50
+    `;
+
+    const candidates: any[] = await this.caseRepo.manager.query(
+      sql,
+      queryParams,
+    );
+
+    const scoredSuggestions: GarageSmartInvoiceSuggestion[] = [];
+
+    const caseMonth =
+      kCase.ngayPhatSinh || kCase.ngayTiepNhan
+        ? new Date(kCase.ngayPhatSinh || kCase.ngayTiepNhan!)
+            .toISOString()
+            .substring(0, 7)
+        : null;
+
+    for (const raw of candidates) {
+      const invAmt = parseFloat(raw.totalAmount) || 0;
+      const amtDiff =
+        targetAmount > 0 ? Math.abs(invAmt - targetAmount) : 999999;
+      const amountMatch = amtDiff < 1; // 1. Khớp tiền
+
+      const desc = (raw.description || '').toLowerCase();
+      const descCleaned = cleanLicensePlate(desc);
+      const licensePlate = (raw.licensePlate || '').toLowerCase();
+      const licensePlateCleaned = cleanLicensePlate(licensePlate);
+      const settlementOrder = (raw.settlementOrder || '').toLowerCase();
+      const partner = (
+        direction === 'OUT' ? raw.buyerName : raw.sellerName || ''
+      ).toLowerCase();
+
+      // 2. Khớp số xe
+      const plateMatch =
+        (rawPlate.length > 0 &&
+          (licensePlate.includes(rawPlate.toLowerCase()) ||
+            desc.includes(rawPlate.toLowerCase()))) ||
+        (normalizedPlate.length > 0 &&
+          (licensePlateCleaned.includes(normalizedPlate) ||
+            descCleaned.includes(normalizedPlate)));
+
+      // 3. Khớp lệnh quyết toán / Số chứng từ
+      const orderMatch =
+        soChungTu.length > 0 &&
+        (settlementOrder.includes(soChungTu.toLowerCase()) ||
+          desc.includes(soChungTu.toLowerCase()));
+
+      // 4. Khớp tên khách hàng
+      const matchedKw: string[] = [];
+      if (plateMatch && rawPlate.length > 0) matchedKw.push(rawPlate);
+      if (orderMatch && soChungTu.length > 0) matchedKw.push(soChungTu);
+
+      let customerMatch = false;
+      for (const kw of customerKeywords) {
+        if (partner.includes(kw) || desc.includes(kw)) {
+          customerMatch = true;
+          if (!matchedKw.includes(kw)) matchedKw.push(kw);
+        }
+      }
+
+      const invMonth = raw.invoiceDate
+        ? new Date(raw.invoiceDate).toISOString().substring(0, 7)
+        : null;
+      const sameMonth = caseMonth && invMonth && caseMonth === invMonth;
+
+      let score = 0;
+      let badge: GarageSmartInvoiceSuggestion['score']['badge'] | null = null;
+
+      const hasDocumentSignal = plateMatch || orderMatch;
+
+      if (amountMatch) {
+        score += 10;
+        if (hasDocumentSignal && customerMatch) {
+          badge = 'PERFECT';
+          score += 8 + 5;
+        } else if (hasDocumentSignal) {
+          badge = 'HIGH';
+          score += 8;
+        } else if (customerMatch) {
+          badge = 'LIKELY';
+          score += 5;
+        } else {
+          badge = 'POSSIBLE';
+        }
+      } else {
+        if (hasDocumentSignal && customerMatch) {
+          badge = 'NOTICE_STRONG';
+          score += 8 + 5;
+        } else if (hasDocumentSignal) {
+          badge = 'NOTICE';
+          score += 8;
+        } else {
+          // Bỏ qua các hóa đơn không khớp cả tiền lẫn số xe/lệnh QT
+          continue;
+        }
+      }
+
+      if (sameMonth) score += 2;
+
+      scoredSuggestions.push({
+        invoice: {
+          id: raw.id,
+          invoiceNo: raw.invoiceNo || '',
+          serialNo: raw.serialNo || undefined,
+          invoiceDate: raw.invoiceDate
+            ? new Date(raw.invoiceDate).toISOString().substring(0, 10)
+            : new Date().toISOString().substring(0, 10),
+          direction: raw.direction || direction,
+          sellerName: raw.sellerName || undefined,
+          buyerName: raw.buyerName || undefined,
+          sellerTaxCode: raw.sellerTaxCode || undefined,
+          buyerTaxCode: raw.buyerTaxCode || undefined,
+          totalAmount: parseFloat(raw.totalAmount) || 0,
+          preVatAmount: parseFloat(raw.preVatAmount) || 0,
+          vatAmount: parseFloat(raw.vatAmount) || 0,
+          vatRate: raw.vatRate ? parseFloat(raw.vatRate) : undefined,
+          licensePlate: raw.licensePlate || undefined,
+          settlementOrder: raw.settlementOrder || undefined,
+          description: raw.description || undefined,
+          status: raw.status || undefined,
+          xmlFileKey: raw.xmlFileKey || undefined,
+          pdfFileKey: raw.pdfFileKey || undefined,
+        },
+        score: {
+          score,
+          amountMatch,
+          plateMatch,
+          orderMatch,
+          customerMatch,
+          badge,
+        },
+        matchedKeywords: matchedKw,
+      });
+    }
+
+    const BADGE_ORDER: Record<
+      GarageSmartInvoiceSuggestion['score']['badge'],
+      number
+    > = {
+      PERFECT: 6,
+      HIGH: 5,
+      LIKELY: 4,
+      POSSIBLE: 3,
+      NOTICE_STRONG: 2,
+      NOTICE: 1,
+    };
+
+    scoredSuggestions.sort((a, b) => {
+      const badgeDiff = BADGE_ORDER[b.score.badge] - BADGE_ORDER[a.score.badge];
+      if (badgeDiff !== 0) return badgeDiff;
+      if (b.score.score !== a.score.score) return b.score.score - a.score.score;
+      return (
+        new Date(b.invoice.invoiceDate).getTime() -
+        new Date(a.invoice.invoiceDate).getTime()
       );
     });
 

@@ -39,6 +39,7 @@ import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
+import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -351,19 +352,30 @@ export class KgaraApiCoreController implements OnModuleInit {
   private getCaseColumnSelectExpr(column: string): string | null {
     const mapping: Record<string, string> = {
       caseCode: '"case"."so_chung_tu"',
+      soChungTu: '"case"."so_chung_tu"',
       licensePlate: '"case"."bien_so_xe"',
+      bienSoXe: '"case"."bien_so_xe"',
       customerCode: '"case"."khach_hang_code"',
+      khachHangCode: '"case"."khach_hang_code"',
       customerName: '"case"."khach_hang_name"',
+      khachHangName: '"case"."khach_hang_name"',
       statusName: '"case"."ten_tinh_trang_dich_vu"',
+      branchName: '"case"."branch_external_id"',
+      branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:
         "CASE WHEN COALESCE((\"case\".\"raw_data\" ->> 'XeLamBaoHiem')::boolean, false) THEN 'yes' ELSE 'no' END",
       doanhThu: '"case"."doanh_thu"',
       chiPhi: '"case"."chi_phi"',
       loiNhuan: '"case"."loi_nhuan"',
       totalAmount: '"case"."tien_co_thue"',
+      tienCoThue: '"case"."tien_co_thue"',
       paidAmount: '"case"."tien_da_thanh_toan"',
+      tienDaThanhToan: '"case"."tien_da_thanh_toan"',
       balanceAmount: '"case"."tien_con_phai_thanh_toan"',
+      tienConPhaiThanhToan: '"case"."tien_con_phai_thanh_toan"',
       caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      ngayPhatSinh: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      ngayTiepNhan: 'TO_CHAR("case"."ngay_tiep_nhan", \'YYYY-MM-DD\')',
       ngayHoanThanhCongViec:
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       completionDate:
@@ -374,6 +386,101 @@ export class KgaraApiCoreController implements OnModuleInit {
     };
 
     return mapping[column] || null;
+  }
+
+  private applySingleCaseColumnFilter(
+    qb: SelectQueryBuilder<KgaraCase>,
+    column: string,
+    values: string[],
+    paramPrefix: string,
+  ) {
+    if (!values || values.length === 0) return;
+
+    // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+    if (values[0] === '__ALL_MATCHING__') {
+      const searchStr = (values[1] || '').trim();
+      if (!searchStr) return;
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (filterExpr) {
+        applyMultiKeywordFilter(
+          qb,
+          `CAST(${filterExpr} AS TEXT)`,
+          searchStr,
+          `${paramPrefix}_search`,
+        );
+      }
+      return;
+    }
+
+    // 2. Cột đặc thù: collectionProgress (Tiến độ thu)
+    if (column === 'collectionProgress') {
+      const conditions: string[] = [];
+      if (values.includes('PAID')) {
+        conditions.push(
+          '(COALESCE(case.tienConPhaiThanhToan, 0) <= 0 AND COALESCE(case.tienDaThanhToan, 0) > 0)',
+        );
+      }
+      if (values.includes('PARTIAL')) {
+        conditions.push(
+          '(COALESCE(case.tienDaThanhToan, 0) > 0 AND COALESCE(case.tienConPhaiThanhToan, 0) > 0)',
+        );
+      }
+      if (values.includes('UNPAID')) {
+        conditions.push(
+          '(COALESCE(case.tienDaThanhToan, 0) <= 0 AND COALESCE(case.tienConPhaiThanhToan, 0) > 0)',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 3. Cột đặc thù: costProgress (Tiến độ chi)
+    if (column === 'costProgress') {
+      const conditions: string[] = [];
+      if (values.includes('PAID')) {
+        conditions.push(
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE(case.chiPhi, 0) <= COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
+        );
+      }
+      if (values.includes('PARTIAL')) {
+        conditions.push(
+          "(COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) > 0 AND COALESCE(case.chiPhi, 0) > COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
+        );
+      }
+      if (values.includes('UNPAID')) {
+        conditions.push(
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) <= 0)",
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    const filterExpr = this.getCaseColumnSelectExpr(column);
+    if (!filterExpr) return;
+
+    // 4. Xử lý __BLANK__ (Lọc giá trị trống / null)
+    const hasBlank = values.includes('__BLANK__');
+    const realVals = values.filter((v) => v !== '__BLANK__');
+
+    if (hasBlank && realVals.length > 0) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '' OR CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals))`,
+        { [`${paramPrefix}_vals`]: realVals },
+      );
+    } else if (hasBlank) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
+    } else {
+      qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
+        [`${paramPrefix}_vals`]: realVals,
+      });
+    }
   }
 
   private applyCaseOptionFilters(
@@ -390,12 +497,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         if (column === activeColumn) continue;
         if (!values || values.length === 0) continue;
 
-        const filterExpr = this.getCaseColumnSelectExpr(column);
-        if (!filterExpr) continue;
-
-        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
-          [`vals_${column}`]: values,
-        });
+        this.applySingleCaseColumnFilter(qb, column, values, `opt_${column}`);
       }
     } catch {
       // ignore malformed filter payloads
@@ -414,12 +516,7 @@ export class KgaraApiCoreController implements OnModuleInit {
       for (const [column, values] of Object.entries(filters)) {
         if (!values || values.length === 0) continue;
 
-        const filterExpr = this.getCaseColumnSelectExpr(column);
-        if (!filterExpr) continue;
-
-        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
-          [`vals_${column}`]: values,
-        });
+        this.applySingleCaseColumnFilter(qb, column, values, `list_${column}`);
       }
     } catch {
       // ignore malformed filter payloads
@@ -692,21 +789,82 @@ export class KgaraApiCoreController implements OnModuleInit {
         >;
         for (const [col, values] of Object.entries(filters)) {
           if (!values || values.length === 0) continue;
+
+          // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchVal = (values[1] || '').trim();
+            if (!searchVal) continue; // Nếu không có searchVal thì không lọc (giữ toàn bộ data)
+            if (col === 'customerCode') {
+              whereConditions.push(
+                `"case"."khach_hang_code" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            } else if (col === 'customerName') {
+              whereConditions.push(
+                `"case"."khach_hang_name" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            } else if (col === 'branchName' || col === 'branchExternalId') {
+              whereConditions.push(
+                `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            }
+            continue;
+          }
+
+          // 2. Xử lý __BLANK__
+          const hasBlank = values.includes('__BLANK__');
+          const realVals = values.filter((v) => v !== '__BLANK__');
+
           if (col === 'customerCode') {
-            whereConditions.push(
-              `"case"."khach_hang_code" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."khach_hang_code" IS NULL OR "case"."khach_hang_code" = '' OR "case"."khach_hang_code" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."khach_hang_code" IS NULL OR "case"."khach_hang_code" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."khach_hang_code" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'customerName') {
-            whereConditions.push(
-              `"case"."khach_hang_name" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '' OR "case"."khach_hang_name" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."khach_hang_name" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'branchName' || col === 'branchExternalId') {
-            whereConditions.push(
-              `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."branch_external_id" IS NULL OR "case"."branch_external_id" = '' OR "case"."branch_external_id" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."branch_external_id" IS NULL OR "case"."branch_external_id" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'paymentProgress') {
             const subConds: string[] = [];
             if (values.includes('PAID')) {
@@ -746,6 +904,34 @@ export class KgaraApiCoreController implements OnModuleInit {
             if (subConds.length > 0) {
               havingConditions.push(`(${subConds.join(' OR ')})`);
             }
+          } else if (col === 'caseCount') {
+            const numVals = values
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v));
+            if (numVals.length > 0) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(numVals);
+            }
+          } else if (col === 'totalAmount') {
+            const subConds: string[] = [];
+            const sumExpr = 'COALESCE(SUM("case"."tien_co_thue"), 0)';
+            if (values.includes('0-10m')) {
+              subConds.push(`(${sumExpr} < 10000000)`);
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${sumExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${sumExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${sumExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
           }
         }
       } catch {
@@ -776,6 +962,23 @@ export class KgaraApiCoreController implements OnModuleInit {
               `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
             );
             queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'caseCount') {
+            const num = parseInt(val.trim(), 10);
+            if (!isNaN(num)) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+          } else if (col === 'totalAmount') {
+            const cleaned = val.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM("case"."tien_co_thue"), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
           }
         }
       } catch {
@@ -949,9 +1152,14 @@ export class KgaraApiCoreController implements OnModuleInit {
   ) {
     if (column === 'paymentProgress') {
       const options = ['PAID', 'PARTIAL', 'UNPAID'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -959,9 +1167,63 @@ export class KgaraApiCoreController implements OnModuleInit {
     }
     if (column === 'maxAgingDays') {
       const options = ['0-30', '31-60', '61-90', '>90'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'caseCount') {
+      const branchCond = branchId
+        ? `AND "branch_external_id" = '${branchId.replace(/'/g, "''")}'`
+        : '';
+      const rawCounts = await this.caseRepo.manager.query(`
+        SELECT so_phieu::text AS value FROM (
+          SELECT COUNT("id") AS so_phieu
+          FROM "kgara_cases"
+          WHERE "kgara_deleted_at" IS NULL
+            AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
+            AND "ngay_phat_sinh" >= '2026-07-01'
+            ${branchCond}
+          GROUP BY COALESCE("khach_hang_code", 'UNKNOWN')
+        ) sub
+        GROUP BY so_phieu
+        ORDER BY so_phieu ASC
+      `);
+      const items = rawCounts.map((r: any) => String(r.value));
+      const filtered = search
+        ? items.filter((it: string) => it.includes(search))
+        : items;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'totalAmount') {
+      const options = [
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.label.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered.map((f) => f.value),
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -998,6 +1260,87 @@ export class KgaraApiCoreController implements OnModuleInit {
     });
     query.andWhere(`${selectExpr} IS NOT NULL`);
     query.andWhere(`CAST(${selectExpr} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, values] of Object.entries(filters)) {
+          if (col === column) continue;
+          if (!values || values.length === 0) continue;
+
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchVal = (values[1] || '').trim();
+            if (!searchVal) continue;
+            if (col === 'customerCode') {
+              query.andWhere('case.khachHangCode ILIKE :ccSearch', {
+                ccSearch: `%${searchVal}%`,
+              });
+            } else if (col === 'customerName') {
+              query.andWhere('case.khachHangName ILIKE :cnSearch', {
+                cnSearch: `%${searchVal}%`,
+              });
+            } else if (col === 'branchName' || col === 'branchExternalId') {
+              query.andWhere('case.branchExternalId ILIKE :brSearch', {
+                brSearch: `%${searchVal}%`,
+              });
+            }
+            continue;
+          }
+
+          const hasBlank = values.includes('__BLANK__');
+          const realVals = values.filter((v) => v !== '__BLANK__');
+
+          if (col === 'customerCode') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '' OR case.khachHangCode IN (:...ccVals))",
+                { ccVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '')",
+              );
+            } else {
+              query.andWhere('case.khachHangCode IN (:...ccVals)', {
+                ccVals: realVals,
+              });
+            }
+          } else if (col === 'customerName') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '' OR case.khachHangName IN (:...cnVals))",
+                { cnVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '')",
+              );
+            } else {
+              query.andWhere('case.khachHangName IN (:...cnVals)', {
+                cnVals: realVals,
+              });
+            }
+          } else if (col === 'branchName' || col === 'branchExternalId') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '' OR case.branchExternalId IN (:...brVals))",
+                { brVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '')",
+              );
+            } else {
+              query.andWhere('case.branchExternalId IN (:...brVals)', {
+                brVals: realVals,
+              });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     if (search) {
       query.andWhere(`CAST(${selectExpr} AS TEXT) ILIKE :search`, {
@@ -2063,6 +2406,18 @@ export class KgaraApiCoreController implements OnModuleInit {
     return this.smartSettlementService.getSuggestionsForCase(
       id,
       type || 'RECEIPT',
+    );
+  }
+
+  @Get('cases/:id/smart-invoice-suggestions')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getSmartInvoiceSuggestions(
+    @Param('id') id: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.smartSettlementService.getInvoiceSuggestionsForCase(
+      id,
+      direction || 'OUT',
     );
   }
 

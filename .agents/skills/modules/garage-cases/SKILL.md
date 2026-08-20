@@ -236,8 +236,8 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/invoices/:invoiceId/linked-cases` | `invoiceId` (UUID ERP Invoice) | Tra cứu ngược danh sách các vụ việc dịch vụ đang liên kết với hóa đơn này |
 | `GET` | `/cases/:id/traceability-graph` | `id` (UUID Case) | Lấy cây phả hệ mạng lưới chứng từ liên đới (Phiếu DV -> Hóa đơn -> Sao kê/Sổ quỹ -> Sổ cái GL) |
 | `GET` | `/cases/:id/financial-summary` | `id` (UUID Case) | Ma trận tài chính 3 tầng (Doanh thu, Chi phí, Đã thu đa kênh, Còn phải thu, Lãi thực tế, Đối soát KGara) |
-| `GET` | `/cases/customers-debt` | `@BranchId()`, Query: `page`, `pageSize`, `q`, `from`, `to`, `sorts`, `column_filters`, `column_search` | Tổng hợp công nợ khách hàng theo phiếu DV, tính tuổi nợ (Aging 0-30, 31-60, 61-90, >90), phân bổ chi nhánh, lọc HAVING theo `paymentProgress` (PAID, PARTIAL, UNPAID) và `maxAgingDays` (0-30, 31-60, 61-90, >90), mốc baseline 07/2026 |
-| `GET` | `/cases/customers-debt/column-options` | `@BranchId()`, Query: `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách options phân trang distinct cho bộ lọc cột bảng công nợ khách hàng (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`) |
+| `GET` | `/cases/customers-debt` | `@BranchId()`, Query: `page`, `pageSize`, `q`, `from`, `to`, `sorts`, `column_filters`, `column_search` | Tổng hợp công nợ khách hàng theo phiếu DV, tính tuổi nợ (Aging 0-30, 31-60, 61-90, >90), phân bổ chi nhánh, lọc HAVING theo `paymentProgress` (PAID, PARTIAL, UNPAID), `maxAgingDays`, `caseCount` (số lượng phiếu), `totalAmount` (phân khoảng <10m, 10-20m, 20-50m, >50m), mốc baseline 07/2026 |
+| `GET` | `/cases/customers-debt/column-options` | `@BranchId()`, Query: `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách options phân trang distinct cho bộ lọc cột bảng công nợ khách hàng (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`) |
 | `GET` | `/cases/:id/smart-settlement-suggestions` | `id` (UUID Case), Query: `type` (`RECEIPT` \| `PAYMENT`) | Gợi ý đối soát sao kê thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ + Biển số xe + Khách hàng) |
 | `POST`| `/cases/:id/settlements` | `id`, Body: `{ bankTransactionId, settlementType, sourceChannel, category, amount, transDate, partnerName, note }` | Ghi nhận cấn trừ giao dịch dòng tiền (ERP hoặc ngoài sổ sách) |
 | `DELETE`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId` | Xóa bản ghi thu/chi dòng tiền khỏi vụ việc |
@@ -349,7 +349,21 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
   - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.
 
-### 5.11. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
+### 5.11. Cơ chế Bộ Lọc Đa Chiều Nâng Cao (`__ALL_MATCHING__`, `__BLANK__` & Cascading Options)
+- **Chuẩn Lọc Toàn Diện trên Bảng Garage Cases (`/cases`) & Sổ Công Nợ Khách Hàng (`/cases/customers-debt`)**:
+  - `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm):
+    - Khi ô tìm kiếm rỗng (`searchStr = ""`): Hệ thống hiểu là chọn toàn bộ dữ liệu $\rightarrow$ Không áp điều kiện lọc WHERE để giữ trọn vẹn tập dữ liệu.
+    - Khi có từ khóa tìm kiếm: Sử dụng hàm chuẩn `applyMultiKeywordFilter` hỗ trợ tìm kiếm theo chuỗi con (`ILIKE`), tìm kiếm chính xác khi bọc dấu ngoặc kép (`"..."`), hoặc tìm kiếm nhiều từ khóa cách nhau bởi dấu chấm phẩy (`;`).
+  - `__BLANK__` (Lọc giá trị trống / Null): Xử lý kết hợp `(column IS NULL OR CAST(column AS TEXT) = '' OR column IN (...))` cho phép người dùng lọc đồng thời giá trị rỗng cùng với các tùy chọn cụ thể khác.
+  - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
+  - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí các Quick Actions thuận tiện:
+    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.
+    - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
+    - 🔄 **Đồng bộ từ KGara** (`RefreshCw` icon) $\rightarrow$ Kích hoạt đồng bộ chi tiết vụ việc trực tiếp từ KGara.
+    - ⚖️ **Cấn trừ sao kê** (`Scale` icon) $\rightarrow$ Mở modal cấn trừ giao dịch ngân hàng/sổ quỹ vào vụ việc.
+    - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.
+
+### 5.12. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
 - Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
   - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
   - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
