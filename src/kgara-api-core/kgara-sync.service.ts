@@ -711,31 +711,51 @@ export class KgaraSyncService {
 
   async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
     this.logger.log(`Syncing detail for case ${caseId}...`);
+
+    // Resolve targetCaseId and effectiveBranchId if an ERP internal UUID or soChungTu was passed
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        caseId,
+      );
+    let gwCase = await this.caseRepo.findOne({
+      where: [
+        { hdPhieuDichVuId: caseId },
+        ...(isUuid ? [{ id: caseId }] : []),
+        { soChungTu: caseId },
+      ],
+    });
+
+    const targetCaseId = gwCase?.hdPhieuDichVuId || caseId;
+    const effectiveBranchId =
+      branchExternalId || gwCase?.branchExternalId || '';
+
     const run = await this.createSyncRun(
-      branchExternalId,
-      `/api/v1/gr/cases/detail/${caseId}`,
+      effectiveBranchId,
+      `/api/v1/gr/cases/detail/${targetCaseId}`,
       {},
       1,
     );
 
     try {
       const response = await this.client.getCaseDetail(
-        branchExternalId,
-        caseId,
+        targetCaseId,
+        effectiveBranchId,
       );
       const caseData = response?.data;
       if (!caseData) {
-        throw new Error(`Case ${caseId} detail not found on Kgara`);
+        throw new Error(`Case ${targetCaseId} detail not found on Kgara`);
       }
 
       // Update case if exists
-      let gwCase = await this.caseRepo.findOne({
-        where: { hdPhieuDichVuId: caseId },
-      });
+      if (!gwCase) {
+        gwCase = await this.caseRepo.findOne({
+          where: { hdPhieuDichVuId: targetCaseId },
+        });
+      }
       if (!gwCase) {
         gwCase = new KgaraCase();
-        gwCase.hdPhieuDichVuId = caseId;
-        gwCase.branchExternalId = branchExternalId;
+        gwCase.hdPhieuDichVuId = targetCaseId;
+        gwCase.branchExternalId = effectiveBranchId;
       }
 
       // State transitions handling
@@ -777,7 +797,7 @@ export class KgaraSyncService {
         gwCase.doanhThu = 0;
         gwCase.chiPhi = 0;
         gwCase.loiNhuan = 0;
-        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: targetCaseId });
 
         if (gwCase.id) {
           const hasInvoices = await this.linkedInvoiceRepo.count({
@@ -797,7 +817,7 @@ export class KgaraSyncService {
         gwCase.doanhThu = null;
         gwCase.chiPhi = null;
         gwCase.loiNhuan = null;
-        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: targetCaseId });
         this.logger.log(
           `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
         );
@@ -830,7 +850,7 @@ export class KgaraSyncService {
       if (gwCase.kgaraDeletedAt) {
         gwCase.kgaraDeletedAt = null;
         gwCase.kgaraDeleteCount = 0;
-        this.logger.log(`Case ${caseId} was restored from soft-delete.`);
+        this.logger.log(`Case ${targetCaseId} was restored from soft-delete.`);
       }
 
       await this.caseRepo.save(gwCase);
@@ -848,7 +868,7 @@ export class KgaraSyncService {
           if (!srv) {
             srv = new KgaraCaseService();
             srv.hdPhieuDichVuChiTietId = s.HdPhieuDichVuChiTietID;
-            srv.hdPhieuDichVuId = caseId;
+            srv.hdPhieuDichVuId = targetCaseId;
           }
 
           srv.noiDungChiTiet = s.NoiDungChiTiet;
@@ -883,7 +903,7 @@ export class KgaraSyncService {
         undefined,
         200,
       );
-      this.logger.log(`Finished syncing case detail for case ${caseId}.`);
+      this.logger.log(`Finished syncing case detail for case ${targetCaseId}.`);
       return caseData;
     } catch (error: any) {
       await this.closeSyncRun(run, GwSyncStatus.FAILED, 0, error.message);
