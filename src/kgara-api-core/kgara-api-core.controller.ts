@@ -2244,56 +2244,83 @@ export class KgaraApiCoreController implements OnModuleInit {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async addLinkedInvoice(
     @Param('id') id: string,
-    @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
+    @Body()
+    body:
+      | { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string }
+      | {
+          items: Array<{
+            invoiceId: string;
+            linkType: 'IN' | 'OUT';
+            note?: string;
+          }>;
+        }
+      | Array<{ invoiceId: string; linkType: 'IN' | 'OUT'; note?: string }>,
   ) {
-    const existing = await this.linkedInvoiceRepo.findOne({
-      where: { caseDbId: id, invoiceId: body.invoiceId },
-    });
-    let link = existing;
-    if (!existing) {
-      link = this.linkedInvoiceRepo.create({
-        caseDbId: id,
-        invoiceId: body.invoiceId,
-        linkType: body.linkType,
-        note: body.note,
-      });
-      link = await this.linkedInvoiceRepo.save(link);
-    }
+    const rawItems: Array<{
+      invoiceId: string;
+      linkType: 'IN' | 'OUT';
+      note?: string;
+    }> = Array.isArray(body)
+      ? body
+      : (body as any)?.items && Array.isArray((body as any).items)
+        ? (body as any).items
+        : [body as any];
 
-    // Auto-sync: If the case already has ON_SYSTEM settlements matching the linkType direction
-    try {
-      const isOut = body.linkType === 'OUT';
-      const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-      const settlements = await this.settlementRepo.find({
-        where: {
-          caseId: id,
-          sourceChannel: 'ON_SYSTEM',
-          settlementType: targetSettlementType,
-        },
+    const results: any[] = [];
+    for (const item of rawItems) {
+      if (!item?.invoiceId) continue;
+      const existing = await this.linkedInvoiceRepo.findOne({
+        where: { caseDbId: id, invoiceId: item.invoiceId },
       });
+      let link = existing;
+      if (!existing) {
+        link = this.linkedInvoiceRepo.create({
+          caseDbId: id,
+          invoiceId: item.invoiceId,
+          linkType: item.linkType || 'OUT',
+          note: item.note,
+        });
+        link = await this.linkedInvoiceRepo.save(link);
+      }
+      if (link) {
+        results.push(link);
+      }
 
-      for (const s of settlements) {
-        if (s.bankTransactionId) {
-          const netOff = await this.settlementRepo.manager.query(
-            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-            [body.invoiceId, s.bankTransactionId],
-          );
-          if (!netOff || netOff.length === 0) {
-            await this.settlementRepo.manager.query(
-              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-              [body.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
+      // Auto-sync: If the case already has ON_SYSTEM settlements matching the linkType direction
+      try {
+        const isOut = item.linkType === 'OUT';
+        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
+        const settlements = await this.settlementRepo.find({
+          where: {
+            caseId: id,
+            sourceChannel: 'ON_SYSTEM',
+            settlementType: targetSettlementType,
+          },
+        });
+
+        for (const s of settlements) {
+          if (s.bankTransactionId) {
+            const netOff = await this.settlementRepo.manager.query(
+              `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
+              [item.invoiceId, s.bankTransactionId],
             );
+            if (!netOff || netOff.length === 0) {
+              await this.settlementRepo.manager.query(
+                `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
+                [item.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
+              );
+            }
           }
         }
+      } catch (syncErr) {
+        this.logger.warn(
+          `Could not sync case settlements to invoice netoff: ${syncErr}`,
+        );
       }
-    } catch (syncErr) {
-      this.logger.warn(
-        `Could not sync case settlements to invoice netoff: ${syncErr}`,
-      );
     }
 
-    return link;
+    return Array.isArray(body) || (body as any)?.items ? results : results[0];
   }
 
   @Get('invoices/:invoiceId/linked-cases')

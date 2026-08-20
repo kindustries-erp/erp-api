@@ -539,7 +539,7 @@ export class GarageSmartSettlementService {
       const licensePlateCleaned = cleanLicensePlate(licensePlate);
       const settlementOrder = (raw.settlementOrder || '').toLowerCase();
       const partner = (
-        direction === 'OUT' ? raw.buyerName : raw.sellerName || ''
+        (direction === 'OUT' ? raw.buyerName : raw.sellerName) || ''
       ).toLowerCase();
 
       // 2. Khớp số xe
