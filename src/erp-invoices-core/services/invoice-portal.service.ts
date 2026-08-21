@@ -444,14 +444,14 @@ export class InvoicePortalService implements OnModuleInit {
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
     if (!token) return false;
     try {
-      const url = `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase?sort=tdlap%3Adesc&size=1`;
+      const url = InvoicePortalService.GDT_PROFILE_URL;
       const res = await fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           ...(cookies ? { Cookie: cookies } : {}),
         },
       });
-      return res.status !== 401 && res.status !== 403;
+      return res.ok && res.status !== 401 && res.status !== 403;
     } catch {
       return false;
     }

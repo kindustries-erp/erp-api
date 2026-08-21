@@ -256,11 +256,30 @@ src/erp-invoices-core/
 - Tự động trích xuất thông tin người bán, người mua (MST, tên, địa chỉ, CCCD đối với cá nhân), diễn giải, số tiền trước thuế, thuế suất, tiền thuế, tiền chiết khấu và mảng chi tiết từng dòng mặt hàng.
 - Trích xuất mã tra cứu (`lookupCode`) và đường dẫn tra cứu (`providerLink`) từ khối `<TTKhac>` / `<TTin>`.
 
-### 5.2. Đồng bộ Cổng Thuế GDT & Tự động Đăng nhập lại
-- **Kiểm tra Token & Hồ sơ Người nộp thuế**: Trước khi đồng bộ, hệ thống gọi `checkTokenValid` và kiểm tra MST của hồ sơ GDT có khớp với MST doanh nghiệp đang cấu hình trong `CompanyProfile` không (tránh kéo nhầm dữ liệu công ty khác).
-- **Tự động đăng nhập lại khi token hết hạn**: Nếu token GDT hết hạn, `InvoicePortalService` tự động lấy captcha, gọi helper giải mã và đăng nhập lại tối đa 3 lần.
-- **Phân trang & Giới hạn Tốc độ (Rate-Limit)**: Kéo danh sách hóa đơn theo từng trang từ GDT, có khoảng trễ (`sleep`) giữa các request tải XML để tránh bị chặn IP/tài khoản.
-- **Cập nhật Trạng thái Hóa đơn Gốc Liên quan**: Khi gặp hóa đơn thay thế hoặc điều chỉnh (mã trạng thái 4 hoặc 5), tự động tìm và cập nhật trạng thái của hóa đơn gốc trong DB (`tax_invoice_status`).
+### 5.2. Đồng bộ Cổng Thuế GDT & Tự động Đăng nhập lại (Auto Re-login & Captcha Solving)
+- **Lưu trữ Cấu hình Bảo mật (`company_profile`)**:
+  - Tên đăng nhập / MST (`gdt_portal_username`), Token JWT (`gdt_portal_token`), Cookie phiên (`gdt_portal_cookies`).
+  - Mật khẩu Cổng Thuế (`gdt_portal_password`) được mã hóa an toàn qua thuật toán AES-256-CBC với tiền tố `enc:<iv_hex>:<cipher_hex>` sử dụng secret key từ `GDT_ENCRYPT_SECRET` hoặc `JWT_SECRET`.
+- **Giải mã Captcha SVG Tự động (`gdt-captcha-solver.helper.ts`)**:
+  - Tải mã Captcha SVG từ `https://hoadondientu.gdt.gov.vn/api/captcha`.
+  - Bộ giải `solveGdtSvgCaptcha` bóc tách các thẻ `<path>`, loại bỏ đường nhiễu (`stroke` không có `fill`), trích xuất chuỗi lệnh đường vẽ (`d` attribute command patterns) và đối chiếu với từ điển mô hình `GDT_CAPTCHA_MODEL` để giải chuỗi 6 ký tự chính xác.
+- **Kiểm tra Tính hợp lệ của Token (`checkTokenValid`)**:
+  - Gọi trực tiếp endpoint `https://hoadondientu.gdt.gov.vn/api/security-taxpayer/profile`.
+  - Trả về `true` khi `res.ok && res.status !== 401 && res.status !== 403`, tránh gọi các endpoint tra cứu hóa đơn rỗng tham số gây lỗi HTTP 500.
+- **Quy trình Tự động Đăng nhập lại (`autoReloginWithRetry`)**:
+  - Tự động lấy cấu hình username/password giải mã từ DB.
+  - Lấy Captcha và tự giải mã qua `solveGdtSvgCaptcha`.
+  - Gửi POST `/security-taxpayer/authenticate` tối đa 3 lần (`maxRetries = 3`, khoảng cách `retryDelayMs = 60s`).
+  - Khi thành công, tự động lưu Token mới và Cookie vào `company_profile` và tiếp tục luồng xử lý.
+- **Cơ chế Tự phục hồi trong Tiến trình Cron (`ErpInvoicesCronService`)**:
+  - Khi tiến trình cron chạy định kỳ: nếu token chưa có hoặc `checkTokenValid` trả về `false`, Cron Job chủ động gọi `autoReloginWithRetry()` để tự lấy token mới.
+  - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsService`.
+- **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
+  - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
+- **Phân trang & Giới hạn Tốc độ (Rate-Limit)**:
+  - Kéo danh sách hóa đơn theo từng trang từ GDT (size tối đa 50 theo ngày), có khoảng trễ ngẫu nhiên 4-7 giây giữa các request tải XML để tránh bị chặn IP/tài khoản.
+- **Cập nhật Trạng thái Hóa đơn Gốc Liên quan**:
+  - Khi gặp hóa đơn thay thế hoặc điều chỉnh (mã trạng thái 4 hoặc 5), tự động tìm và cập nhật trạng thái của hóa đơn gốc trong DB (`tax_invoice_status`).
 
 ### 5.3. Hạch toán Kế toán Kép (Double-Entry Posting)
 - Khi gọi `postInvoice`, hệ thống kiểm tra:
