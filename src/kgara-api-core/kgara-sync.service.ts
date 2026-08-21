@@ -215,7 +215,7 @@ export class KgaraSyncService {
             const existingSettlements = await this.settlementRepo.find({
               where: { caseId: gwCase.id },
             });
-            if (existingSettlements.length > 0) {
+            if (existingSettlements?.length > 0) {
               const totalReceipts = existingSettlements
                 .filter((s) => s.settlementType === 'RECEIPT')
                 .reduce((sum, s) => sum + Number(s.amount || 0), 0);
@@ -777,7 +777,7 @@ export class KgaraSyncService {
         const existingSettlements = await this.settlementRepo.find({
           where: { caseId: gwCase.id },
         });
-        if (existingSettlements.length > 0) {
+        if (existingSettlements?.length > 0) {
           const totalReceipts = existingSettlements
             .filter((s) => s.settlementType === 'RECEIPT')
             .reduce((sum, s) => sum + Number(s.amount || 0), 0);

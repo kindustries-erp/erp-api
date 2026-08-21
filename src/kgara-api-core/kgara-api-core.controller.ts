@@ -188,6 +188,7 @@ export class KgaraApiCoreController implements OnModuleInit {
           targetCol = 'case.tienConPhaiThanhToan';
         else if (col === 'updatedAt') targetCol = 'case.updatedAt';
         else if (col === 'createdAt') targetCol = 'case.createdAt';
+        else if (col === 'classification') targetCol = 'case.classification';
 
         if (targetCol) {
           if (first) {
@@ -397,6 +398,7 @@ export class KgaraApiCoreController implements OnModuleInit {
       customerName: '"case"."khach_hang_name"',
       khachHangName: '"case"."khach_hang_name"',
       statusName: '"case"."ten_tinh_trang_dich_vu"',
+      classification: '"case"."classification"',
       branchName: '"case"."branch_external_id"',
       branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:
@@ -2000,11 +2002,39 @@ export class KgaraApiCoreController implements OnModuleInit {
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
   ) {
-    const caseData = await this.caseRepo.findOne({ where: { id } });
+    const caseData = await this.caseRepo.findOne({
+      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+    });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
     }
     caseData.erpNotes = body.erpNotes;
+    await this.caseRepo.save(caseData);
+    return caseData;
+  }
+
+  @Patch('cases/:id/config')
+  @RequirePermissions({ resource: 'garage', action: 'update' })
+  async updateCaseConfig(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      classification?: string | null;
+      erpNotes?: string | null;
+    },
+  ) {
+    const caseData = await this.caseRepo.findOne({
+      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+    });
+    if (!caseData) {
+      throw new NotFoundException(`Case with id ${id} not found`);
+    }
+    if (body.classification !== undefined) {
+      caseData.classification = body.classification;
+    }
+    if (body.erpNotes !== undefined) {
+      caseData.erpNotes = body.erpNotes;
+    }
     await this.caseRepo.save(caseData);
     return caseData;
   }

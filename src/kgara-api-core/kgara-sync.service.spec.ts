@@ -42,7 +42,7 @@ describe('KgaraSyncService', () => {
     };
 
     const mockRepo = () => ({
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -397,6 +397,73 @@ describe('KgaraSyncService', () => {
           ngayHoanThanhCongViec: null,
           ngayGiaoXeFull: null,
           dataAsOf: null,
+        }),
+      );
+    });
+  });
+
+  describe('Preservation of ERP internal fields during sync', () => {
+    it('should preserve classification and erpNotes when syncing cases for branch', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [
+          {
+            HdPhieuDichVuID: 'case-preserve-1',
+            SoChungTu: 'PDV-202608-001',
+            BienSoXe: '30A-12345',
+            TenTinhTrangDichVu: 'Đang sửa',
+            TinhTrangDichVu: 2,
+          },
+        ],
+        pagination: { totalPages: 1 },
+      });
+
+      const existingCase = {
+        id: 'uuid-1',
+        hdPhieuDichVuId: 'case-preserve-1',
+        soChungTu: 'PDV-202608-001',
+        classification: 'KY_GUI_NOI_BO',
+        erpNotes: 'Ghi chú quan trọng từ ERP',
+      };
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      await service.syncCasesForBranch('br-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-preserve-1',
+          classification: 'KY_GUI_NOI_BO',
+          erpNotes: 'Ghi chú quan trọng từ ERP',
+        }),
+      );
+    });
+
+    it('should preserve classification and erpNotes when syncing case detail', async () => {
+      clientService.getCaseDetail.mockResolvedValueOnce({
+        data: {
+          HdPhieuDichVuID: 'case-preserve-2',
+          SoChungTu: 'PDV-202608-002',
+          BienSoXe: '30B-99999',
+          TenTinhTrangDichVu: 'Hoàn tất',
+          TinhTrangDichVu: 3,
+        },
+      });
+
+      const existingCase = {
+        id: 'uuid-2',
+        hdPhieuDichVuId: 'case-preserve-2',
+        soChungTu: 'PDV-202608-002',
+        classification: 'OJ',
+        erpNotes: 'Gia công bên ngoài',
+      };
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      await service.syncCaseDetail('br-1', 'case-preserve-2');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-preserve-2',
+          classification: 'OJ',
+          erpNotes: 'Gia công bên ngoài',
         }),
       );
     });
