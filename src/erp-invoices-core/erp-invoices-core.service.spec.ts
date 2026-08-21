@@ -51,6 +51,7 @@ describe('ErpInvoicesCoreService', () => {
       getPortalConfig: jest.fn(),
       savePortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
+      autoReloginWithRetry: jest.fn(),
       syncFromPortal: jest.fn(),
       bulkDownloadXml: jest.fn(),
       syncDetailFromPortal: jest.fn(),
@@ -219,6 +220,16 @@ describe('ErpInvoicesCoreService', () => {
     it('returns false for empty token (via portalService)', async () => {
       portalService.checkTokenValid.mockResolvedValue(false);
       expect(await service.checkTokenValid('')).toBe(false);
+    });
+  });
+
+  describe('autoReloginWithRetry', () => {
+    it('delegates to portalService.autoReloginWithRetry', async () => {
+      const mockResult = { token: 'new-token', cookies: 'cookies' };
+      portalService.autoReloginWithRetry.mockResolvedValue(mockResult);
+      const res = await service.autoReloginWithRetry(3, 5000);
+      expect(res).toEqual(mockResult);
+      expect(portalService.autoReloginWithRetry).toHaveBeenCalledWith(3, 5000);
     });
   });
 });

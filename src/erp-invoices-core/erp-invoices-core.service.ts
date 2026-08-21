@@ -240,6 +240,10 @@ export class ErpInvoicesCoreService {
     return this.portalService.checkTokenValid(token, cookies);
   }
 
+  autoReloginWithRetry(maxRetries?: number, retryDelayMs?: number) {
+    return this.portalService.autoReloginWithRetry(maxRetries, retryDelayMs);
+  }
+
   syncFromPortal(
     dto: PortalFetchDto,
     userId?: string,
