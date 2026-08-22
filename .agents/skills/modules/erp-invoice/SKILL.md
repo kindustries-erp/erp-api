@@ -176,7 +176,7 @@ src/erp-invoices-core/
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
 | `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
-| `GET` | `/erp-invoices/:id` | `invoices` | `read` | Lấy chi tiết một hóa đơn kèm items, cấn trừ ngân hàng và tệp đính kèm |
+| `GET` | `/erp-invoices/:id` | `invoices` | `read` | Lấy chi tiết một hóa đơn kèm items, cấn trừ ngân hàng và tệp đính kèm (hỗ trợ tra cứu theo UUID, `invoiceNo_serialNo`, hoặc `invoiceNo`) |
 | `POST` | `/erp-invoices` | `invoices` | `create` | Tạo mới thủ công một hóa đơn |
 | `PATCH` | `/erp-invoices/:id` | `invoices` | `update` | Cập nhật thông tin hóa đơn và các dòng chi tiết |
 | `DELETE`| `/erp-invoices/:id` | `invoices` | `delete` | Xóa mềm hóa đơn (chỉ cho phép khi trạng thái `DRAFT`) |
