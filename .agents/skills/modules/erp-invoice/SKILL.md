@@ -368,3 +368,38 @@ bunx jest src/erp-invoices-core/helpers/invoice-branch.helper.spec.ts
 # Kiểm tra TypeScript typecheck toàn dự án
 bun run check:ci
 ```
+
+---
+
+## 8. Kiến trúc Frontend & Cấu trúc Atomic (`erp-web`)
+
+Thư mục: `src/modules/erp-invoices-core/components/ErpInvoicesTab/`
+
+Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`erp-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
+
+```
+src/modules/erp-invoices-core/components/ErpInvoicesTab/
+├── index.tsx                                    # Entry export backward-compatible
+├── ErpInvoicesTab.tsx                           # Main View: SpreadsheetPageTemplate + Drawers + Modals
+├── useErpInvoicesTabLogic.tsx                   # Orchestrator Hook kết hợp các sub-hooks chuyên biệt
+├── utils.ts                                     # Pure functions, formatters & constants
+├── hooks/
+│   ├── useInvoiceBulkActions.tsx                # Quản lý selection, bulk download ZIP, bulk edit/posting/netoff
+│   ├── useInvoiceTableHandlers.ts               # Sort state, column search/filter, dynamic column options
+│   ├── useInvoiceSummary.tsx                    # Tính toán dòng tổng cộng Footer Summary Row
+│   └── useInvoiceModals.ts                      # Quản lý state mở/đóng 12 Drawers, Preview PDF, Export, Sync
+└── components/
+    ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối 14+ cột bảng dữ liệu
+    ├── InvoiceDrawers.tsx                       # Gom cụm 10 Drawer/Modal xem & xử lý hóa đơn
+    ├── InvoiceBulkModals.tsx                    # Gom cụm các Modal/Drawer thao tác hàng loạt
+    ├── cells/
+    │   ├── InvoiceAttachmentsCell.tsx           # Icon XML + Popover quản lý danh sách file PDF
+    │   ├── InvoiceItemsPopover.tsx              # Popover bảng chi tiết mặt hàng 15 cột trong ô Diễn giải
+    │   ├── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
+    │   └── InvoicePartnerCell.tsx               # Hiển thị Bên bán / Bên mua / MST kèm click mở PartnerDrawer
+    └── columns/
+        ├── generalColumns.tsx                   # Nhóm cột chung (Chứng từ, Ngày, Số HĐ, Ký hiệu, Đối tác, MST, Chi nhánh,...)
+        ├── taxColumns.tsx                       # Nhóm cột thuế (Loại HĐ, Trạng thái GDT, KQ Kiểm tra, HĐ hợp lệ)
+        └── amountColumns.tsx                    # Nhóm cột số tiền (Diễn giải, Chiết khấu, Tiền trước VAT, VAT, Tổng tiền, Cấn trừ,...)
+```
+
