@@ -2,10 +2,19 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
 @Entity({ name: 'erp_audit_logs' })
+@Index('IDX_erp_audit_logs_entity_created', [
+  'entityType',
+  'entityId',
+  'createdAt',
+])
+@Index('IDX_erp_audit_logs_created_at', ['createdAt'])
+@Index('IDX_erp_audit_logs_actor_created', ['actorUserId', 'createdAt'])
+@Index('IDX_erp_audit_logs_module_action', ['module', 'actionType'])
 export class ErpAuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;

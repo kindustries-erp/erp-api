@@ -1,8 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ErpAuditLog } from './entities/erp-audit-log.entity';
 import { AuditLogCoreQueryDto } from './dto/audit-log-core-query.dto';
+import { sanitizeAuditPayload } from './utils/audit-payload.sanitizer';
 
 export interface RecordActionInput {
   actorUserId?: string | null;
@@ -27,15 +34,69 @@ export interface RecordActionInput {
 }
 
 @Injectable()
-export class AuditCoreService {
+export class AuditCoreService
+  implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown
+{
+  private readonly logger = new Logger(AuditCoreService.name);
+  private buffer: Partial<ErpAuditLog>[] = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private isFlushing = false;
+
+  private readonly BATCH_SIZE = 50;
+  private readonly FLUSH_INTERVAL_MS = 2000;
+
   constructor(
     @InjectRepository(ErpAuditLog)
     private readonly auditRepository: Repository<ErpAuditLog>,
   ) {}
 
+  onModuleInit() {
+    this.startFlushTimer();
+  }
+
+  async onModuleDestroy() {
+    this.stopFlushTimer();
+    await this.flush();
+  }
+
+  async onApplicationShutdown() {
+    this.stopFlushTimer();
+    await this.flush();
+  }
+
+  private startFlushTimer() {
+    if (this.flushTimer) return;
+    this.flushTimer = setInterval(() => {
+      void this.flush();
+    }, this.FLUSH_INTERVAL_MS);
+    if (this.flushTimer.unref) {
+      this.flushTimer.unref();
+    }
+  }
+
+  private stopFlushTimer() {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  /**
+   * Non-blocking record action. Sanitizes payload and pushes to in-memory buffer.
+   */
   async recordAction(input: RecordActionInput): Promise<void> {
     try {
-      const row = this.auditRepository.create({
+      const sanitizedBefore = input.beforeSnapshot
+        ? sanitizeAuditPayload(input.beforeSnapshot)
+        : null;
+      const sanitizedAfter = input.afterSnapshot
+        ? sanitizeAuditPayload(input.afterSnapshot)
+        : null;
+      const sanitizedError = input.errorSnapshot
+        ? sanitizeAuditPayload(input.errorSnapshot)
+        : null;
+
+      const logEntry: Partial<ErpAuditLog> = {
         requestId: input.requestId ?? null,
         actorUserId: input.actorUserId ?? null,
         actorEmail: input.actorEmail ?? null,
@@ -47,18 +108,54 @@ export class AuditCoreService {
         route: input.route ?? null,
         httpMethod: input.httpMethod ?? null,
         status: input.status ?? 'SUCCESS',
-        message: input.message ?? null,
+        message: input.message ? input.message.slice(0, 2000) : null,
         uiScreen: input.uiScreen ?? null,
         uiAction: input.uiAction ?? null,
-        beforeSnapshot: input.beforeSnapshot ?? null,
-        afterSnapshot: input.afterSnapshot ?? null,
-        errorSnapshot: input.errorSnapshot ?? null,
+        beforeSnapshot: sanitizedBefore,
+        afterSnapshot: sanitizedAfter,
+        errorSnapshot: sanitizedError,
         ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-      });
-      await this.auditRepository.save(row);
-    } catch {
-      // audit must never break business flow
+        userAgent: input.userAgent ? input.userAgent.slice(0, 500) : null,
+      };
+
+      this.buffer.push(logEntry);
+
+      if (this.buffer.length >= this.BATCH_SIZE) {
+        void this.flush();
+      }
+    } catch (e: any) {
+      this.logger.warn(`Failed to buffer audit log: ${e.message}`);
+    }
+  }
+
+  /**
+   * Flush pending audit logs in buffer to PostgreSQL database.
+   */
+  async flush(): Promise<void> {
+    if (this.isFlushing || this.buffer.length === 0) {
+      return;
+    }
+
+    this.isFlushing = true;
+    const itemsToFlush = this.buffer.splice(0, this.buffer.length);
+
+    try {
+      await this.auditRepository
+        .createQueryBuilder()
+        .insert()
+        .into(ErpAuditLog)
+        .values(itemsToFlush as any)
+        .execute();
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to flush ${itemsToFlush.length} audit logs to database: ${err.message}`,
+      );
+      // Re-queue items if buffer is not full
+      if (this.buffer.length < 500) {
+        this.buffer.unshift(...itemsToFlush);
+      }
+    } finally {
+      this.isFlushing = false;
     }
   }
 
@@ -116,5 +213,27 @@ export class AuditCoreService {
       where: { entityType, entityId },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Helper to compute before vs after diff for display in drawers
+   */
+  buildDiff(beforePayload: any, afterPayload: any) {
+    const before =
+      beforePayload && typeof beforePayload === 'object' ? beforePayload : {};
+    const after =
+      afterPayload && typeof afterPayload === 'object' ? afterPayload : {};
+    const keys = Array.from(
+      new Set([...Object.keys(before), ...Object.keys(after)]),
+    ).sort();
+    const diff: Record<string, { before: any; after: any }> = {};
+    for (const key of keys) {
+      const beforeValue = before[key] ?? null;
+      const afterValue = after[key] ?? null;
+      if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+        diff[key] = { before: beforeValue, after: afterValue };
+      }
+    }
+    return diff;
   }
 }
