@@ -1,8 +1,17 @@
-import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AppConfigService } from './app-config.service';
 import { UpdateUserPreferenceDto } from './dto/update-user-preference.dto';
+import { QueryChangelogDto } from './dto/query-changelog.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('App Config & Preferences')
@@ -17,6 +26,15 @@ export class AppConfigController {
   })
   getPublicConfig() {
     return this.appConfigService.getPublicConfig();
+  }
+
+  @Get('changelog')
+  @ApiOperation({
+    summary:
+      'Lấy danh sách nhật ký phát hành (Changelog Timeline) có tìm kiếm và phân trang server-side',
+  })
+  getChangelog(@Query() query: QueryChangelogDto) {
+    return this.appConfigService.getChangelog(query);
   }
 
   @Get('preferences')

@@ -44,9 +44,12 @@ Các nghiệp vụ trọng tâm:
 src/app-config/
 ├── dto/
 │   ├── app-config.dto.ts               # DTO response cho public config
+│   ├── query-changelog.dto.ts          # DTO phân trang & tìm kiếm server-side cho changelog
 │   └── update-user-preference.dto.ts   # DTO cập nhật theme, language, tableConfigs, uiConfigs
-├── app-config.controller.ts            # Controller định nghĩa /app/config và /app/preferences
-├── app-config.service.ts               # Service đọc APP_ENV và merge preferences
+├── data/
+│   └── changelog-data.ts               # Bộ dữ liệu master các phiên bản phát hành ERP
+├── app-config.controller.ts            # Controller định nghĩa /app/config, /app/changelog và /app/preferences
+├── app-config.service.ts               # Service đọc APP_ENV, merge preferences và lọc phân trang changelog
 └── app-config.module.ts                # NestJS Module đăng ký Controller, Service & Repository
 
 src/users/entities/
@@ -65,6 +68,7 @@ Controller Base Route: `/api/v1/app`
 | Method | Endpoint | Auth Guard | Tham số / Body | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/app/config` | *Public (Không cần Auth)* | — | Lấy cấu hình môi trường công khai (`appEnv`, `appName`, `version`) |
+| `GET` | `/api/v1/app/changelog` | *Public (Không cần Auth)* | Query: `QueryChangelogDto` (`search`, `page`, `limit`) | Lấy danh sách nhật ký phát hành phân trang và tìm kiếm server-side |
 | `GET` | `/api/v1/app/preferences` | `JwtAuthGuard` | Header Bearer Token | Lấy toàn bộ tùy chọn cá nhân của user đang đăng nhập |
 | `PATCH`| `/api/v1/app/preferences` | `JwtAuthGuard` | Body: `UpdateUserPreferenceDto` | Cập nhật tùy chọn cá nhân (deep merge JSONB `tableConfigs`, `uiConfigs`) |
 

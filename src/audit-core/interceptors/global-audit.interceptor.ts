@@ -35,9 +35,9 @@ export class GlobalAuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    // Mặc định bỏ qua các Request OPTIONS, HEAD (CORS preflight) để không làm phình to DB rác
-    // Đã thay đổi theo yêu cầu: GET method hiện TỰ ĐỘNG ĐƯỢC LOG
-    if (['OPTIONS', 'HEAD'].includes(method) && !auditMeta) {
+    // Mặc định bỏ qua các Request GET, OPTIONS, HEAD trừ khi có gắn @AuditLog decorator chỉ định
+    // để tránh làm phình to Database với hàng trăm nghìn log đọc dữ liệu (polling, tables, dashboards)
+    if (['GET', 'OPTIONS', 'HEAD'].includes(method) && !auditMeta) {
       return next.handle();
     }
 
@@ -72,6 +72,7 @@ export class GlobalAuditInterceptor implements NestInterceptor {
           }
           if (
             !afterSnapshot &&
+            ['POST', 'PUT', 'PATCH'].includes(method) &&
             typeof resData === 'object' &&
             resData !== null
           ) {
