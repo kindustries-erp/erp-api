@@ -20,7 +20,13 @@ describe('AppConfigController', () => {
       }),
       getChangelog: jest.fn().mockReturnValue({
         items: [],
-        meta: { page: 1, limit: 6, total: 0, totalPages: 1, hasNextPage: false },
+        meta: {
+          page: 1,
+          limit: 6,
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+        },
       }),
       getUserPreferences: jest.fn().mockResolvedValue({
         id: 'pref-1',
