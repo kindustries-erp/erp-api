@@ -319,6 +319,14 @@ src/erp-invoices-core/
 - **Kiểm soát Cron Job theo môi trường (`isCronEnabled()`)**:
   - `ErpInvoicesCronService` tự động kiểm tra `isCronEnabled()`: mặc định tắt tự động đồng bộ trên localhost/development, chỉ kích hoạt khi ở `production` hoặc khi đặt `ENABLE_CRON=true` trong file `.env`.
 
+### 5.7. Bộ lọc & Tìm kiếm Đa trường Hóa đơn (Multi-field Column Search & Dynamic Options)
+- **`InvoiceQueryService.getColumnOptions`**:
+  - Đối với cột `invoiceNo`: Truy vấn distinct các cặp `(invoice_no, serial_no)`, hỗ trợ tìm kiếm kết hợp đa từ khóa trên cả 2 trường `['inv.invoice_no', 'inv.serial_no']` qua `applyMultiKeywordMultiFieldFilter`, format label trả về dạng `Số HĐ (Ký hiệu)` (vd: `0001234 (1C26TGA)`).
+  - Đối với cột `partner`: Truy vấn distinct các cặp Tên đối tác và MST theo chiều (`IN` $\to$ `seller_name`, `seller_tax_code`; `OUT` $\to$ `buyer_name`, `buyer_tax_code`), hỗ trợ tìm kiếm đa từ khóa trên cả tên và mã số thuế đồng thời, format label trả về dạng `Tên đối tác (MST)`.
+- **`InvoiceQueryService._applyColumnSearch` & `_applyColumnFilters`**:
+  - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`.
+  - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD).
+
 ---
 
 ## 6. Tích hợp Liên Module
@@ -389,17 +397,22 @@ src/modules/erp-invoices-core/components/ErpInvoicesTab/
 │   ├── useInvoiceSummary.tsx                    # Tính toán dòng tổng cộng Footer Summary Row
 │   └── useInvoiceModals.ts                      # Quản lý state mở/đóng 12 Drawers, Preview PDF, Export, Sync
 └── components/
-    ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối 14+ cột bảng dữ liệu
+    ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối và định vị thứ tự 14+ cột bảng dữ liệu
     ├── InvoiceDrawers.tsx                       # Gom cụm 10 Drawer/Modal xem & xử lý hóa đơn
     ├── InvoiceBulkModals.tsx                    # Gom cụm các Modal/Drawer thao tác hàng loạt
     ├── cells/
+    │   ├── InvoiceNoCell.tsx                    # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono), Eye icon căn giữa & copy độc lập
+    │   ├── InvoicePartnerCell.tsx               # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono), Drawer icon căn giữa & copy độc lập
     │   ├── InvoiceAttachmentsCell.tsx           # Icon XML + Popover quản lý danh sách file PDF
     │   ├── InvoiceItemsPopover.tsx              # Popover bảng chi tiết mặt hàng 15 cột trong ô Diễn giải
-    │   ├── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
-    │   └── InvoicePartnerCell.tsx               # Hiển thị Bên bán / Bên mua / MST kèm click mở PartnerDrawer
+    │   └── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
     └── columns/
-        ├── generalColumns.tsx                   # Nhóm cột chung (Chứng từ, Ngày, Số HĐ, Ký hiệu, Đối tác, MST, Chi nhánh,...)
+        ├── generalColumns.tsx                   # Nhóm cột chung (Ngày HĐ, Số/Ký hiệu HĐ, Bên bán/mua & MST, Chi nhánh,...)
         ├── taxColumns.tsx                       # Nhóm cột thuế (Loại HĐ, Trạng thái GDT, KQ Kiểm tra, HĐ hợp lệ)
-        └── amountColumns.tsx                    # Nhóm cột số tiền (Diễn giải, Chiết khấu, Tiền trước VAT, VAT, Tổng tiền, Cấn trừ,...)
+        └── amountColumns.tsx                    # Nhóm cột số tiền (Diễn giải 2 dòng 250px, Chiết khấu, Tiền trước VAT, VAT, Tổng tiền, Thuế suất, Cấn trừ,...)
 ```
+
+### 8.1. Thứ tự & Bố cục Cột Chuẩn Hóa
+Bảng hóa đơn được tối ưu hóa hiển thị với thứ tự trực quan:
+`Ngày HĐ` $\to$ `Số / Ký hiệu HĐ` (120px) $\to$ `Bên bán / MST` (250px) $\to$ `Loại HĐ` $\to$ `Diễn giải` (250px, 2 dòng) $\to$ `Chiết khấu` $\to$ `Trước GTGT` $\to$ `Thuế GTGT` $\to$ `Thành tiền` $\to$ **`Thuế suất GTGT`** $\to$ **`Trạng thái (GDT)`** $\to$ **`KQ Kiểm tra`** $\to$ `Cấn trừ` $\to$ `Còn lại` $\to$ `Hạch toán` $\to$ `Chi nhánh` $\to$ `Chứng từ`.
 
