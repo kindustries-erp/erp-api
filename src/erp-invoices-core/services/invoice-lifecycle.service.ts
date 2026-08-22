@@ -38,16 +38,49 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async findOne(id: string) {
-    const data = await this.repository.findOne({
-      where: { id, isDeleted: false },
-      relations: [
-        'items',
-        'voucherNetOffs',
-        'voucherNetOffs.bankTransaction',
-        'attachments',
-        'attachments.attachment',
-      ],
-    });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+
+    const relations = [
+      'items',
+      'voucherNetOffs',
+      'voucherNetOffs.bankTransaction',
+      'attachments',
+      'attachments.attachment',
+    ];
+
+    let data: ErpInvoice | null = null;
+    if (isUuid) {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+    } else if (id.includes('_')) {
+      const [invoiceNo, ...serialParts] = id.split('_');
+      const serialNo = serialParts.join('_');
+      data = await this.repository.findOne({
+        where: {
+          invoiceNo,
+          ...(serialNo ? { serialNo } : {}),
+          isDeleted: false,
+        },
+        relations,
+      });
+    } else {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+      if (!data) {
+        data = await this.repository.findOne({
+          where: { invoiceNo: id, isDeleted: false },
+          relations,
+        });
+      }
+    }
+
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
   }

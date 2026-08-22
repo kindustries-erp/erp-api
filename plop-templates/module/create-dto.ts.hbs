@@ -1,0 +1,33 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class Create{{pascalCase entityName}}Dto {
+  @ApiProperty({ description: 'Mã định danh', example: '{{upperCase prefix}}-001' })
+  @IsNotEmpty({ message: 'Mã không được để trống' })
+  @IsString()
+  code: string;
+
+  @ApiProperty({ description: 'Tên / Mô tả', example: 'Mô tả chi tiết' })
+  @IsNotEmpty({ message: 'Tên không được để trống' })
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({ description: 'Trạng thái', default: 'ACTIVE' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+{{#if hasAmount}}
+  @ApiPropertyOptional({ description: 'Số tiền / Giá trị', default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  amount?: number;
+{{/if}}
+
+  @ApiPropertyOptional({ description: 'Ghi chú' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

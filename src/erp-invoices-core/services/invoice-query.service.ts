@@ -50,17 +50,33 @@ export class InvoiceQueryService {
 
     let selectField = '';
     let isDateColumn = false;
+    let isCustomGroupColumn = false;
+    let customSecondaryField = '';
+
     if (column === 'invoiceDate') {
       selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
       isDateColumn = true;
-    } else if (column === 'serialNo') selectField = 'inv.serial_no';
-    else if (column === 'invoiceNo') selectField = 'inv.invoice_no';
-    else if (column === 'partner') {
-      if (direction === 'IN') selectField = 'inv.seller_name';
-      else if (direction === 'OUT') selectField = 'inv.buyer_name';
-      else
+    } else if (column === 'serialNo') {
+      selectField = 'inv.serial_no';
+    } else if (column === 'invoiceNo') {
+      selectField = 'inv.invoice_no';
+      customSecondaryField = 'inv.serial_no';
+      isCustomGroupColumn = true;
+    } else if (column === 'partner') {
+      isCustomGroupColumn = true;
+      if (direction === 'IN') {
+        selectField = 'inv.seller_name';
+        customSecondaryField = 'inv.seller_tax_code';
+      } else if (direction === 'OUT') {
         selectField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
+          "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)";
+        customSecondaryField = 'inv.buyer_tax_code';
+      } else {
+        selectField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+        customSecondaryField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+      }
     } else if (column === 'taxCode') {
       if (direction === 'IN') selectField = 'inv.seller_tax_code';
       else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
@@ -78,13 +94,24 @@ export class InvoiceQueryService {
     else if (column === 'notes') selectField = 'inv.notes';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
-    qb.select(`DISTINCT ${selectField}`, 'value');
-    if (isDateColumn) {
-      qb.andWhere('inv.invoice_date IS NOT NULL');
-      qb.andWhere(`${selectField} != ''`);
+    if (isCustomGroupColumn) {
+      qb.select(`${selectField}`, 'value').addSelect(
+        `${customSecondaryField}`,
+        'secondary_val',
+      );
+      qb.andWhere(
+        `((${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != '') OR (${customSecondaryField} IS NOT NULL AND CAST(${customSecondaryField} AS TEXT) != ''))`,
+      );
+      qb.groupBy(`${selectField}`).addGroupBy(`${customSecondaryField}`);
     } else {
-      qb.andWhere(`${selectField} IS NOT NULL`);
-      qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+      qb.select(`DISTINCT ${selectField}`, 'value');
+      if (isDateColumn) {
+        qb.andWhere('inv.invoice_date IS NOT NULL');
+        qb.andWhere(`${selectField} != ''`);
+      } else {
+        qb.andWhere(`${selectField} IS NOT NULL`);
+        qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+      }
     }
 
     if (filtersStr) {
@@ -94,18 +121,40 @@ export class InvoiceQueryService {
           if (!vals || vals.length === 0) continue;
           if (col === column) continue;
 
+          if (col === 'invoiceNo') {
+            qb.andWhere(
+              '(inv.invoice_no IN (:...vals_invoiceNo) OR inv.serial_no IN (:...vals_invoiceNo))',
+              { vals_invoiceNo: vals },
+            );
+            continue;
+          }
+
+          if (col === 'partner') {
+            const partnerNameField =
+              direction === 'IN'
+                ? 'inv.seller_name'
+                : direction === 'OUT'
+                  ? "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)"
+                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+            const partnerTaxField =
+              direction === 'IN'
+                ? 'inv.seller_tax_code'
+                : direction === 'OUT'
+                  ? 'inv.buyer_tax_code'
+                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+
+            qb.andWhere(
+              `(${partnerNameField} IN (:...vals_partner) OR ${partnerTaxField} IN (:...vals_partner))`,
+              { vals_partner: vals },
+            );
+            continue;
+          }
+
           let filterField = '';
           if (col === 'invoiceDate')
             filterField = `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`;
           else if (col === 'serialNo') filterField = 'inv.serial_no';
-          else if (col === 'invoiceNo') filterField = 'inv.invoice_no';
-          else if (col === 'partner') {
-            if (direction === 'IN') filterField = 'inv.seller_name';
-            else if (direction === 'OUT') filterField = 'inv.buyer_name';
-            else
-              filterField =
-                "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
-          } else if (col === 'taxCode') {
+          else if (col === 'taxCode') {
             if (direction === 'IN') filterField = 'inv.seller_tax_code';
             else if (direction === 'OUT') filterField = 'inv.buyer_tax_code';
             else
@@ -135,35 +184,113 @@ export class InvoiceQueryService {
     }
 
     if (search) {
-      let searchField = `CAST(${selectField} AS TEXT)`;
-      let searchKeyword = search;
+      if (column === 'invoiceNo') {
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['inv.invoice_no', 'inv.serial_no'],
+          search,
+          'search_invoiceNo',
+        );
+      } else if (column === 'partner') {
+        if (direction === 'IN') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.seller_name', 'inv.seller_tax_code'],
+            search,
+            'search_partner',
+          );
+        } else if (direction === 'OUT') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.buyer_name', 'inv.buyer_personal_name', 'inv.buyer_tax_code'],
+            search,
+            'search_partner',
+          );
+        } else {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            [
+              'inv.seller_name',
+              'inv.seller_tax_code',
+              'inv.buyer_name',
+              'inv.buyer_personal_name',
+              'inv.buyer_tax_code',
+            ],
+            search,
+            'search_partner',
+          );
+        }
+      } else {
+        let searchField = `CAST(${selectField} AS TEXT)`;
+        let searchKeyword = search;
 
-      if (
-        ['preVatAmount', 'vatAmount', 'discountAmount', 'totalAmount'].includes(
-          column,
-        )
-      ) {
-        searchField = `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '')`;
-        searchKeyword = search.replace(/[,.]/g, '');
+        if (
+          [
+            'preVatAmount',
+            'vatAmount',
+            'discountAmount',
+            'totalAmount',
+          ].includes(column)
+        ) {
+          searchField = `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '')`;
+          searchKeyword = search.replace(/[,.]/g, '');
+        }
+
+        applyMultiKeywordFilter(qb, searchField, searchKeyword, 'search');
       }
-
-      applyMultiKeywordFilter(qb, searchField, searchKeyword, 'search');
     }
 
     qb.orderBy('value', 'ASC');
 
-    const totalRaw = await qb
-      .clone()
-      .orderBy()
-      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
-      .getRawOne();
-    const total = parseInt(totalRaw?.cnt || '0', 10);
+    let total = 0;
+    if (isCustomGroupColumn) {
+      const totalRaw = await qb
+        .clone()
+        .orderBy()
+        .select(
+          `COUNT(DISTINCT CONCAT(COALESCE(${selectField}, ''), ':', COALESCE(${customSecondaryField}, '')))`,
+          'cnt',
+        )
+        .getRawOne();
+      total = parseInt(totalRaw?.cnt || '0', 10);
+    } else {
+      const totalRaw = await qb
+        .clone()
+        .orderBy()
+        .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+        .getRawOne();
+      total = parseInt(totalRaw?.cnt || '0', 10);
+    }
 
     qb.offset((page - 1) * pageSize).limit(pageSize);
     const results = await qb.getRawMany();
 
+    let items: any[] = [];
+    if (column === 'invoiceNo') {
+      items = results
+        .map((r) => {
+          const val = r.value ? String(r.value).trim() : '';
+          const sec = r.secondary_val ? String(r.secondary_val).trim() : '';
+          const label = sec ? `${val} (${sec})` : val;
+          return { value: val, label: label || val };
+        })
+        .filter((x) => Boolean(x.value));
+    } else if (column === 'partner') {
+      items = results
+        .map((r) => {
+          const name = r.value ? String(r.value).trim() : '';
+          const tax = r.secondary_val ? String(r.secondary_val).trim() : '';
+          const label = name && tax ? `${name} (${tax})` : name || tax || '—';
+          const value = name || tax;
+          return { value, label };
+        })
+        .filter((x) => Boolean(x.value));
+    } else {
+      items = results.map((r) => String(r.value)).filter(Boolean);
+    }
+
     return {
-      items: results.map((r) => String(r.value)).filter(Boolean),
+      items,
       total,
       page,
       pageSize,
@@ -1322,18 +1449,39 @@ export class InvoiceQueryService {
       if (!val) return;
 
       if (key === 'invoiceNo') {
-        applyMultiKeywordFilter(qb, 'inv.invoice_no', val, 'invoiceNoSearch');
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['inv.invoice_no', 'inv.serial_no'],
+          val,
+          'invoiceNoSearch',
+        );
       } else if (key === 'serialNo') {
         applyMultiKeywordFilter(qb, 'inv.serial_no', val, 'serialNoSearch');
       } else if (key === 'partner') {
         if (direction === 'IN') {
-          applyMultiKeywordFilter(qb, 'inv.seller_name', val, 'partnerSearch');
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.seller_name', 'inv.seller_tax_code'],
+            val,
+            'partnerSearch',
+          );
         } else if (direction === 'OUT') {
-          applyMultiKeywordFilter(qb, 'inv.buyer_name', val, 'partnerSearch');
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.buyer_name', 'inv.buyer_personal_name', 'inv.buyer_tax_code'],
+            val,
+            'partnerSearch',
+          );
         } else {
           applyMultiKeywordMultiFieldFilter(
             qb,
-            ['inv.seller_name', 'inv.buyer_name'],
+            [
+              'inv.seller_name',
+              'inv.seller_tax_code',
+              'inv.buyer_name',
+              'inv.buyer_personal_name',
+              'inv.buyer_tax_code',
+            ],
             val,
             'partnerSearch',
           );
@@ -1494,26 +1642,40 @@ export class InvoiceQueryService {
           serialNoVals: vals,
         });
       else if (key === 'invoiceNo') {
-        qb.andWhere('inv.invoice_no IN (:...invoiceNoVals)', {
-          invoiceNoVals: vals,
-        });
+        qb.andWhere(
+          '(inv.invoice_no IN (:...invoiceNoVals) OR inv.serial_no IN (:...invoiceNoVals))',
+          { invoiceNoVals: vals },
+        );
       } else if (key === 'partner') {
         const hasBlank = vals.includes('__BLANK__');
         const realVals = vals.filter((v) => v !== '__BLANK__');
-        const fieldMap: any = { IN: 'inv.seller_name', OUT: 'inv.buyer_name' };
-        const field = direction
-          ? fieldMap[direction]
-          : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name WHEN inv.direction = 'OUT' THEN inv.buyer_name END)";
+        const nameField =
+          direction === 'IN'
+            ? 'inv.seller_name'
+            : direction === 'OUT'
+              ? "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)"
+              : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+        const taxField =
+          direction === 'IN'
+            ? 'inv.seller_tax_code'
+            : direction === 'OUT'
+              ? 'inv.buyer_tax_code'
+              : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
 
         if (hasBlank && realVals.length > 0) {
           qb.andWhere(
-            `(${field} IN (:...partnerVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            `(${nameField} IN (:...partnerVals) OR ${taxField} IN (:...partnerVals) OR ${nameField} IS NULL OR CAST(${nameField} AS TEXT) = '')`,
             { partnerVals: realVals },
           );
         } else if (hasBlank) {
-          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+          qb.andWhere(
+            `(${nameField} IS NULL OR CAST(${nameField} AS TEXT) = '')`,
+          );
         } else {
-          qb.andWhere(`${field} IN (:...partnerVals)`, { partnerVals: vals });
+          qb.andWhere(
+            `(${nameField} IN (:...partnerVals) OR ${taxField} IN (:...partnerVals))`,
+            { partnerVals: vals },
+          );
         }
       } else if (key === 'taxCode') {
         const hasBlank = vals.includes('__BLANK__');
