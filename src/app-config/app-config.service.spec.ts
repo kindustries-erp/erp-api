@@ -108,4 +108,33 @@ describe('AppConfigService', () => {
     expect(result.uiConfigs).toEqual({ sidebar: true });
     expect(repo.save).toHaveBeenCalled();
   });
+
+  describe('getChangelog', () => {
+    it('should return paginated releases with default page and limit', () => {
+      const result = service.getChangelog({});
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.limit).toBe(6);
+      expect(result.items.length).toBeGreaterThan(0);
+      expect(result.meta.total).toBeGreaterThan(0);
+    });
+
+    it('should filter releases by keyword case-insensitively', () => {
+      const result = service.getChangelog({ search: 'garage' });
+      expect(result.items.length).toBeGreaterThan(0);
+      expect(
+        result.items.every(
+          (r) =>
+            r.version.toLowerCase().includes('garage') ||
+            r.tag?.toLowerCase().includes('garage') ||
+            r.titleVi.toLowerCase().includes('garage') ||
+            r.titleEn.toLowerCase().includes('garage') ||
+            r.items.some(
+              (it) =>
+                it.textVi.toLowerCase().includes('garage') ||
+                it.textEn.toLowerCase().includes('garage'),
+            ),
+        ),
+      ).toBe(true);
+    });
+  });
 });

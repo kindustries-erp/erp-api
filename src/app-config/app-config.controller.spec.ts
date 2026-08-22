@@ -8,6 +8,7 @@ describe('AppConfigController', () => {
     getPublicConfig: jest.Mock;
     getUserPreferences: jest.Mock;
     updateUserPreferences: jest.Mock;
+    getChangelog: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -16,6 +17,10 @@ describe('AppConfigController', () => {
         appEnv: 'greenway-staging',
         appName: 'Liouni ERP',
         version: '1.0.0',
+      }),
+      getChangelog: jest.fn().mockReturnValue({
+        items: [],
+        meta: { page: 1, limit: 6, total: 0, totalPages: 1, hasNextPage: false },
       }),
       getUserPreferences: jest.fn().mockResolvedValue({
         id: 'pref-1',
@@ -75,5 +80,16 @@ describe('AppConfigController', () => {
     const result = await controller.updateUserPreferences(dto, req);
     expect(result.data.theme).toBe('midnight');
     expect(service.updateUserPreferences).toHaveBeenCalledWith('user-1', dto);
+  });
+
+  it('should return paginated changelog without auth', () => {
+    service.getChangelog = jest.fn().mockReturnValue({
+      items: [{ version: 'v2026.08.22' }],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1, hasNextPage: false },
+    });
+    const query = { page: 1, limit: 6, search: 'Garage' };
+    const result = controller.getChangelog(query);
+    expect(result.items.length).toBe(1);
+    expect(service.getChangelog).toHaveBeenCalledWith(query);
   });
 });
