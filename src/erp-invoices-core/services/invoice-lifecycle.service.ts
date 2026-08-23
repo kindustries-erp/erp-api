@@ -90,8 +90,11 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateErpInvoiceDto) {
+    const createPayload: any = { ...dto };
+    delete createPayload.attributes;
+
     const invoice = this.repository.create({
-      ...dto,
+      ...createPayload,
       preVatAmount: String(dto.preVatAmount ?? 0),
       vatRate: dto.vatRate != null ? String(dto.vatRate) : null,
       vatAmount: String(dto.vatAmount ?? 0),
@@ -126,6 +129,7 @@ export class InvoiceLifecycleService {
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
     const updatePayload: any = { ...dto };
+    delete updatePayload.attributes;
     if (dto.preVatAmount != null)
       updatePayload.preVatAmount = String(dto.preVatAmount);
     if (dto.vatRate != null) updatePayload.vatRate = String(dto.vatRate);

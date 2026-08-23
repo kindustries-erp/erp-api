@@ -5,20 +5,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, In, Repository } from 'typeorm';
-import { ErpBomCategory } from './entities/erp_bom_category.entity';
+import { DataSource, ILike, In, Repository } from 'typeorm';
+import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
 import {
   BomAttributeOption,
   ErpBomAttributeDef,
-} from './entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from './entities/erp_bom_attribute_value.entity';
-import { CreateBomCategoryDto } from './dto/create-bom-category.dto';
-import { UpdateBomCategoryDto } from './dto/update-bom-category.dto';
-import { CreateBomAttributeDefDto } from './dto/create-bom-attribute-def.dto';
-import { UpdateBomAttributeDefDto } from './dto/update-bom-attribute-def.dto';
+} from '../bom-config/entities/erp_bom_attribute_def.entity';
+import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
+import { CreateModuleCategoryDto } from './dto/create-module-category.dto';
+import { UpdateModuleCategoryDto } from './dto/update-module-category.dto';
+import { CreateModuleAttrDefDto } from './dto/create-module-attr-def.dto';
+import { UpdateModuleAttrDefDto } from './dto/update-module-attr-def.dto';
+import { SaveEntityValuesDto } from './dto/save-entity-values.dto';
 
 @Injectable()
-export class BomConfigService {
+export class ModuleConfigService {
   constructor(
     @InjectRepository(ErpBomCategory)
     private readonly categoryRepo: Repository<ErpBomCategory>,
@@ -26,6 +28,9 @@ export class BomConfigService {
     private readonly attrDefRepo: Repository<ErpBomAttributeDef>,
     @InjectRepository(ErpBomAttributeValue)
     private readonly attrValueRepo: Repository<ErpBomAttributeValue>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -62,11 +67,16 @@ export class BomConfigService {
   }
 
   /**
-   * Lấy danh sách Categories kèm theo AttributeDefs và usageCount cho từng Def
+   * Lấy danh sách Categories theo moduleKey kèm theo AttributeDefs và usageCount cho từng Def
    */
-  async getCategories(): Promise<ErpBomCategory[]> {
+  async getCategories(moduleKey?: string): Promise<ErpBomCategory[]> {
+    const where: any = { isDeleted: false };
+    if (moduleKey) {
+      where.moduleKey = moduleKey.trim().toUpperCase();
+    }
+
     const categories = await this.categoryRepo.find({
-      where: { isDeleted: false, moduleKey: 'BOM' },
+      where,
       order: { createdAt: 'ASC' },
       relations: {
         attributeDefs: true,
@@ -109,20 +119,24 @@ export class BomConfigService {
   }
 
   /**
-   * Tạo Category mới
+   * Tạo Category mới theo moduleKey
    */
-  async createCategory(dto: CreateBomCategoryDto): Promise<ErpBomCategory> {
+  async createCategory(dto: CreateModuleCategoryDto): Promise<ErpBomCategory> {
+    const moduleKey = (dto.moduleKey || 'BOM').trim().toUpperCase();
     const code = dto.code.trim().toUpperCase();
+
     const existing = await this.categoryRepo.findOne({
-      where: { moduleKey: 'BOM', code: ILike(code), isDeleted: false },
+      where: { moduleKey, code: ILike(code), isDeleted: false },
     });
 
     if (existing) {
-      throw new ConflictException(`Mã danh mục "${code}" đã tồn tại.`);
+      throw new ConflictException(
+        `Mã danh mục "${code}" đã tồn tại trong module "${moduleKey}".`,
+      );
     }
 
     const cat = this.categoryRepo.create({
-      moduleKey: 'BOM',
+      moduleKey,
       code,
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
@@ -137,17 +151,17 @@ export class BomConfigService {
    */
   async updateCategory(
     id: string,
-    dto: UpdateBomCategoryDto,
+    dto: UpdateModuleCategoryDto,
   ): Promise<ErpBomCategory> {
     const cat = await this.categoryRepo.findOne({
       where: { id, isDeleted: false },
       relations: { attributeDefs: true },
     });
     if (!cat) {
-      throw new NotFoundException(`Không tìm thấy danh mục BOM ID ${id}`);
+      throw new NotFoundException(`Không tìm thấy danh mục ID ${id}`);
     }
 
-    // Kiểm tra xem danh mục có thuộc tính nào đang có BOM dùng không
+    // Kiểm tra xem danh mục có thuộc tính nào đang có dữ liệu dùng không
     const defs = (cat.attributeDefs || []).filter((d) => !d.isDeleted);
     let inUseCount = 0;
     if (defs.length > 0) {
@@ -157,24 +171,37 @@ export class BomConfigService {
       });
     }
 
+    const targetModuleKey = dto.moduleKey
+      ? dto.moduleKey.trim().toUpperCase()
+      : cat.moduleKey;
+
     if (dto.code) {
       const code = dto.code.trim().toUpperCase();
-      if (code !== cat.code) {
+      if (code !== cat.code || targetModuleKey !== cat.moduleKey) {
         if (inUseCount > 0) {
           throw new ConflictException(
-            'Danh mục đang có dữ liệu trong BOM, không thể thay đổi mã danh mục.',
+            'Danh mục đang có dữ liệu sử dụng, không thể thay đổi mã danh mục.',
           );
         }
         const existing = await this.categoryRepo.findOne({
-          where: { code: ILike(code), isDeleted: false },
+          where: {
+            moduleKey: targetModuleKey,
+            code: ILike(code),
+            isDeleted: false,
+          },
         });
         if (existing && existing.id !== id) {
-          throw new ConflictException(`Mã danh mục "${code}" đã tồn tại.`);
+          throw new ConflictException(
+            `Mã danh mục "${code}" đã tồn tại trong module "${targetModuleKey}".`,
+          );
         }
         cat.code = code;
       }
     }
 
+    if (dto.moduleKey !== undefined) {
+      cat.moduleKey = targetModuleKey;
+    }
     if (dto.name !== undefined) {
       cat.name = dto.name.trim();
     }
@@ -197,7 +224,7 @@ export class BomConfigService {
       relations: { attributeDefs: true },
     });
     if (!cat) {
-      throw new NotFoundException(`Không tìm thấy danh mục BOM ID ${id}`);
+      throw new NotFoundException(`Không tìm thấy danh mục ID ${id}`);
     }
 
     // Kiểm tra xem có attributeDef nào có usageCount > 0 không
@@ -209,7 +236,7 @@ export class BomConfigService {
       });
       if (usedCount > 0) {
         throw new ConflictException(
-          'Danh mục có dữ liệu đang sử dụng trong BOM, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động (Deactivate).',
+          'Danh mục có dữ liệu đang sử dụng, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động (Deactivate).',
         );
       }
 
@@ -262,14 +289,14 @@ export class BomConfigService {
    * Tạo AttributeDef mới
    */
   async createAttributeDef(
-    dto: CreateBomAttributeDefDto,
+    dto: CreateModuleAttrDefDto,
   ): Promise<ErpBomAttributeDef> {
     const category = await this.categoryRepo.findOne({
       where: { id: dto.categoryId, isDeleted: false },
     });
     if (!category) {
       throw new NotFoundException(
-        `Không tìm thấy danh mục BOM ID ${dto.categoryId}`,
+        `Không tìm thấy danh mục ID ${dto.categoryId}`,
       );
     }
 
@@ -311,29 +338,29 @@ export class BomConfigService {
    */
   async updateAttributeDef(
     id: string,
-    dto: UpdateBomAttributeDefDto,
+    dto: UpdateModuleAttrDefDto,
   ): Promise<ErpBomAttributeDef> {
     const def = await this.attrDefRepo.findOne({
       where: { id, isDeleted: false },
     });
     if (!def) {
-      throw new NotFoundException(`Không tìm thấy thuộc tính BOM ID ${id}`);
+      throw new NotFoundException(`Không tìm thấy thuộc tính ID ${id}`);
     }
 
     const usageCount = await this.attrValueRepo.count({
       where: { attrDefId: id },
     });
 
-    // Nếu đã có BOM sử dụng, chặn đổi code và fieldType
+    // Nếu đã có dữ liệu sử dụng, chặn đổi code và fieldType
     if (usageCount > 0) {
       if (dto.code && dto.code.trim().toLowerCase() !== def.code) {
         throw new ConflictException(
-          'Thuộc tính đang được sử dụng trong BOM, không thể thay đổi mã thuộc tính.',
+          'Thuộc tính đang được sử dụng, không thể thay đổi mã thuộc tính.',
         );
       }
       if (dto.fieldType && dto.fieldType !== def.fieldType) {
         throw new ConflictException(
-          'Thuộc tính đang được sử dụng trong BOM, không thể thay đổi kiểu dữ liệu.',
+          'Thuộc tính đang được sử dụng, không thể thay đổi kiểu dữ liệu.',
         );
       }
     }
@@ -391,7 +418,7 @@ export class BomConfigService {
       where: { id, isDeleted: false },
     });
     if (!def) {
-      throw new NotFoundException(`Không tìm thấy thuộc tính BOM ID ${id}`);
+      throw new NotFoundException(`Không tìm thấy thuộc tính ID ${id}`);
     }
 
     const usageCount = await this.attrValueRepo.count({
@@ -400,11 +427,173 @@ export class BomConfigService {
 
     if (usageCount > 0) {
       throw new ConflictException(
-        'Thuộc tính đang được sử dụng trong BOM, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động (Deactivate).',
+        'Thuộc tính đang được sử dụng, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động (Deactivate).',
       );
     }
 
     def.isDeleted = true;
     await this.attrDefRepo.save(def);
+  }
+
+  /**
+   * Lấy cấu hình custom fields (category + attributes + values) của một entity bất kỳ
+   */
+  async getEntityValues(entityType: string, entityId: string) {
+    const upperType = entityType.trim().toUpperCase();
+
+    // 1. Lấy categoryId từ entity table nếu có
+    let categoryId: string | null = null;
+    if (upperType === 'INVOICE') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_invoices WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'BANK_TXN') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_bank_transactions WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'BOM') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_boms WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    }
+
+    // 2. Lấy giá trị thuộc tính từ erp_entity_attribute_values
+    const entityValues = await this.entityAttrValueRepo.find({
+      where: { entityType: upperType, entityId },
+      relations: { attrDef: true },
+    });
+
+    // Nếu chưa có categoryId từ entity table, lấy từ entity_attribute_values nếu có
+    if (!categoryId && entityValues.length > 0 && entityValues[0].categoryId) {
+      categoryId = entityValues[0].categoryId;
+    }
+
+    let category: ErpBomCategory | null = null;
+    if (categoryId) {
+      category = await this.categoryRepo.findOne({
+        where: { id: categoryId, isDeleted: false },
+        relations: { attributeDefs: true },
+      });
+      if (category && category.attributeDefs) {
+        category.attributeDefs = category.attributeDefs
+          .filter((d) => !d.isDeleted)
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      }
+    }
+
+    const attributes: Record<string, any> = {};
+    for (const ev of entityValues) {
+      attributes[ev.attrDefId] = ev.valueText;
+    }
+
+    return {
+      entityType: upperType,
+      entityId,
+      categoryId,
+      category,
+      attributes,
+      attributeValues: entityValues.map((ev) => ({
+        id: ev.id,
+        attrDefId: ev.attrDefId,
+        attrCode: ev.attrDef?.code,
+        attrName: ev.attrDef?.name,
+        fieldType: ev.attrDef?.fieldType,
+        valueText: ev.valueText,
+      })),
+    };
+  }
+
+  /**
+   * Lưu cấu hình custom fields (category + attributes) cho một entity bất kỳ
+   */
+  async saveEntityValues(
+    entityType: string,
+    entityId: string,
+    dto: SaveEntityValuesDto,
+  ) {
+    const upperType = entityType.trim().toUpperCase();
+    const { categoryId, attributes = {} } = dto;
+
+    return this.dataSource.transaction(async (manager) => {
+      // 1. Validate required attributes nếu có categoryId
+      if (categoryId) {
+        const cat = await manager.findOne(ErpBomCategory, {
+          where: { id: categoryId, isDeleted: false },
+          relations: { attributeDefs: true },
+        });
+        if (!cat) {
+          throw new NotFoundException(
+            `Không tìm thấy danh mục ID ${categoryId}`,
+          );
+        }
+
+        const requiredDefs = (cat.attributeDefs || []).filter(
+          (d) => d.isRequired && d.isActive && !d.isDeleted,
+        );
+
+        for (const reqDef of requiredDefs) {
+          const val = attributes[reqDef.id];
+          if (
+            val === undefined ||
+            val === null ||
+            (typeof val === 'string' && val.trim() === '')
+          ) {
+            throw new BadRequestException(
+              `Thuộc tính bắt buộc "${reqDef.name}" chưa được nhập.`,
+            );
+          }
+        }
+      }
+
+      // 2. Cập nhật category_id trên entity table
+      if (upperType === 'INVOICE') {
+        await manager.query(
+          `UPDATE erp_invoices SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (upperType === 'BANK_TXN') {
+        await manager.query(
+          `UPDATE erp_bank_transactions SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (upperType === 'BOM') {
+        await manager.query(
+          `UPDATE erp_boms SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      }
+
+      // 3. Xóa các giá trị cũ
+      await manager.delete(ErpEntityAttributeValue, {
+        entityType: upperType,
+        entityId,
+      });
+
+      // 4. Lưu các giá trị mới
+      if (categoryId && attributes && Object.keys(attributes).length > 0) {
+        const newEntities: ErpEntityAttributeValue[] = [];
+        for (const [attrDefId, val] of Object.entries(attributes)) {
+          if (val !== undefined && val !== null && val !== '') {
+            const entityVal = manager.create(ErpEntityAttributeValue, {
+              entityType: upperType,
+              entityId,
+              categoryId,
+              attrDefId,
+              valueText: String(val),
+            });
+            newEntities.push(entityVal);
+          }
+        }
+        if (newEntities.length > 0) {
+          await manager.save(ErpEntityAttributeValue, newEntities);
+        }
+      }
+    });
   }
 }

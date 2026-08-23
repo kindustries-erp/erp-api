@@ -10,6 +10,7 @@ import {
   Min,
   ValidateNested,
   IsBoolean,
+  IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -167,6 +168,18 @@ export class CreateErpInvoiceDto {
   @IsString()
   @MaxLength(255)
   invoiceCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Dynamic attribute values map: attrDefId -> valueText',
+  })
+  @IsOptional()
+  @IsObject()
+  attributes?: Record<string, any>;
 
   @ApiPropertyOptional()
   @IsOptional()

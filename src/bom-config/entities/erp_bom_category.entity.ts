@@ -10,11 +10,14 @@ import {
 import { ErpBomAttributeDef } from './erp_bom_attribute_def.entity';
 
 @Entity({ name: 'erp_bom_categories' })
+@Index(['moduleKey', 'code'], { unique: true })
 export class ErpBomCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 50, name: 'module_key', default: 'BOM' })
+  moduleKey: string;
+
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;
 

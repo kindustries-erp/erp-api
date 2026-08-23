@@ -15,6 +15,7 @@ import { BusinessPartnersCoreModule } from './business-partners-core/business-pa
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { BomConfigModule } from './bom-config/bom-config.module';
+import { ModuleConfigModule } from './module-config/module-config.module';
 import { PurchaseRequestsCoreModule } from './purchase-requests-core/purchase-requests-core.module';
 import { PurchaseOrdersCoreModule } from './purchase-orders-core/purchase-orders-core.module';
 import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-core.module';
@@ -117,6 +118,7 @@ import { AppConfigModule } from './app-config/app-config.module';
     ErpMfgCoreModule,
     BomCoreModule,
     BomConfigModule,
+    ModuleConfigModule,
     PurchaseRequestsCoreModule,
     PurchaseOrdersCoreModule,
     GoodsReceiptsCoreModule,
