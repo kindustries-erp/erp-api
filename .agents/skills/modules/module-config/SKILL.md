@@ -122,7 +122,10 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
 - **`bom-core`**:
   - `erp_boms.category_id` liên kết `erp_bom_categories.id` (`moduleKey = 'BOM'`).
 - **Frontend (`erp-web`)**:
-  - `ModuleCustomFieldConfigDrawer`: Quản trị tập trung dạng Tab trong Thiết lập chung hoặc dạng đơn cột 1-column trong Action Dropdown của từng module page.
+  - `ModuleCustomFieldConfigDrawer`: Quản trị tập trung dạng 2-columns (`size="lg"`, `collapsibleRightPanel={true}`):
+    - **Hệ thống Tab 2 tầng**: Tầng 1 là Group Tab (`DrawerTopTabBar`) cho 5 Khối nghiệp vụ lớn (Finance, Production, Commerce, Inventory, Garage) kèm badge đếm thuộc tính; Tầng 2 là `PillTabs` (style bo tròn chuẩn) hiển thị các phân hệ con của từng khối.
+    - **Form Thêm/Sửa thuộc tính**: Sử dụng `Combobox` chuẩn ERP với label và subLabel giải thích rõ ràng từng kiểu dữ liệu.
+    - **Cột Phải Live Form Preview**: Không gian xem trước form thực tế chuyên dụng, thiết kế phẳng liền mạch không lồng card.
   - `ModuleEntityCustomFieldsSection`: Component nhúng cột phải (Right Panel) tự động nạp danh mục, render controls và lưu giá trị.
 
 ---
@@ -131,11 +134,11 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
 
 ```bash
 # Backend unit tests
-cd /home/dev/repos/erp/erp-api && bunx jest src/module-config/
+cd ./erp-api && bunx jest src/module-config/
 
 # Backend CI checks
-cd /home/dev/repos/erp/erp-api && bun run check:ci
+cd ./erp-api && bun run check:ci
 
 # Frontend Type check & Vitest
-cd /home/dev/repos/erp/erp-web && bun run type:check && bun run test
+cd ./erp-web && bun run type:check && bun run test
 ```
