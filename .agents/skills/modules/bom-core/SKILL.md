@@ -39,12 +39,13 @@ erDiagram
     erp_boms ||--o{ erp_production_orders : "executes in"
 ```
 
-### 2.1. Bảng `erp_bom_categories` (Danh mục BOM)
+### 2.1. Bảng `erp_bom_categories` (Danh mục BOM & Đa Module)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Primary Key |
-| `code` | `varchar(100)` | NO | | Mã danh mục duy nhất (Unique Index `IDX_erp_bom_categories_code`) |
+| `module_key` | `varchar(50)` | NO | `'BOM'` | Phân hệ nghiệp vụ (`BOM`, `INVOICE`, `BANK_TXN`) |
+| `code` | `varchar(100)` | NO | | Mã danh mục duy nhất theo module (Unique Index `(module_key, code)`) |
 | `name` | `varchar(255)` | NO | | Tên danh mục |
 | `description` | `text` | YES | `NULL` | Mô tả danh mục |
 | `is_active` | `boolean` | NO | `true` | Cờ kích hoạt danh mục |

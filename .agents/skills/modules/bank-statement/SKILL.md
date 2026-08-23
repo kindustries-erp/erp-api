@@ -98,6 +98,7 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 | `correspondent_name` | `varchar(255)` | `NULL` | Tên đối tác / Người thụ hưởng đối ứng |
 | `correspondent_bank` | `varchar(255)` | `NULL` | Ngân hàng của đối tác |
 | `correspondent_accounting_account_id` | `uuid` | `FK -> erp_chart_of_accounts(id)`, `NULL` | Tài khoản kế toán đối ứng (vd: 331, 131) |
+| `category_id` | `uuid` | `FK -> erp_bom_categories(id)`, `NULL` | Danh mục phân loại giao dịch (`module_key = 'BANK_TXN'`) |
 | `import_batch_id` | `varchar(50)` | `NULL` | Mã UUID của đợt upload file sao kê |
 | `is_deleted` | `boolean` | `default: false` | Cờ xóa mềm (hoặc khi rollback batch) |
 
@@ -235,6 +236,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 - **`erp-invoices-core`**: Đối soát và ghi nhận thanh toán cấn trừ công nợ hóa đơn (`erp_invoice_voucher_netoff`).
 - **`cashflow-dashboard` & `dashboard-core`**: Cung cấp dữ liệu nền tảng cho báo cáo dòng tiền, phân bổ đối tác, dự báo dòng tiền và gợi ý ngân sách tự động.
 - **`tags-core`**: Gán tag phân loại doanh thu/chi phí đa chiều (`sys_tags`, `sys_entity_tags`).
+- **`module-config`**: Quản lý danh mục phân loại (`category_id`) và các trường thuộc tính tùy chỉnh động (`erp_entity_attribute_values` với `entity_type = 'BANK_TXN'`). Cấu hình qua Action Dropdown trang Sao kê / menu Thiết lập chung và hiển thị/chọn tại cột phải trong Drawer Chi tiết giao dịch.
 
 ---
 

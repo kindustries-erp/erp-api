@@ -26,7 +26,9 @@ export class TransactionAccountingService {
         'Must provide either bankAccountId or cashBookId',
       );
     }
-    const txn = this.transactionRepo.create(dto);
+    const createData = { ...dto };
+    delete (createData as any).attributes;
+    const txn = this.transactionRepo.create(createData);
     return this.transactionRepo.save(txn);
   }
 
@@ -201,10 +203,13 @@ export class TransactionAccountingService {
       lines: cleanedLines,
     });
 
+    if (dto.categoryId !== undefined) {
+      txn.categoryId = dto.categoryId || null;
+    }
     if (dto.description !== undefined) {
       txn.accountingDescription = dto.description?.trim() || null;
-      await this.transactionRepo.save(txn);
     }
+    await this.transactionRepo.save(txn);
 
     return this.getTransactionPosting(id);
   }
@@ -233,7 +238,9 @@ export class TransactionAccountingService {
     if (!txn) {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
-    Object.assign(txn, dto);
+    const updateData = { ...dto };
+    delete (updateData as any).attributes;
+    Object.assign(txn, updateData);
     const saved = await this.transactionRepo.save(txn);
 
     await this.refreshJournalEntriesForBankTransaction(saved.id);

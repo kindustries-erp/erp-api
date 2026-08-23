@@ -56,7 +56,8 @@ Các nghiệp vụ trọng tâm:
 | `buyer_address` | `text` | YES | `NULL` | Địa chỉ bên mua |
 | `description` | `text` | YES | `NULL` | Trích yếu / Diễn giải hóa đơn |
 | `invoice_type` | `varchar(255)` | YES | `NULL` | Phân loại nghiệp vụ (vd: `VINFAST_PARTS`, `INSURANCE`,...) |
-| `invoice_category` | `varchar(255)` | YES | `NULL` | Danh mục hóa đơn |
+| `invoice_category` | `varchar(255)` | YES | `NULL` | Danh mục hóa đơn (legacy text field) |
+| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_bom_categories.id` (`module_key = 'INVOICE'`) |
 | `pre_vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền trước thuế (VNĐ) |
 | `vat_rate` | `numeric(9,4)` | YES | `NULL` | Thuế suất VAT chung (nếu đồng nhất) |
 | `vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền thuế GTGT (VNĐ) |
@@ -349,6 +350,7 @@ graph TD
 4. **`vinfast-parts`**: Tự động kích hoạt tính toán lại sổ cái phụ tùng FIFO khi có hóa đơn phụ tùng mới được đồng bộ.
 5. **`notifications`**: Gửi thông báo hệ thống khi token GDT hết hạn hoặc khi tác vụ đồng bộ/xuất file nền hoàn tất.
 6. **`purchase-orders-core`**: Liên kết số hóa đơn nhà cung cấp (`supplier_invoice_no`) và ID hóa đơn vào đơn mua hàng.
+7. **`module-config`**: Quản lý danh mục phân loại (`category_id`) và các trường thuộc tính tùy chỉnh động (`erp_entity_attribute_values` với `entity_type = 'INVOICE'`). Được cấu hình qua Action Dropdown trang Hóa đơn / menu Thiết lập chung và hiển thị/chọn tại cột phải trong Drawer Hóa đơn.
 
 ---
 

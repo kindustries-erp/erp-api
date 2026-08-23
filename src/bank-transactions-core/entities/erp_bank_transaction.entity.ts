@@ -13,6 +13,7 @@ import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
 
 @Entity({ name: 'erp_bank_transactions' })
 export class ErpBankTransaction {
@@ -21,6 +22,13 @@ export class ErpBankTransaction {
 
   @Column({ type: 'varchar', length: 10, name: 'source_type' })
   sourceType: 'BANK' | 'CASH';
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpBomCategory | null;
 
   @Column({ type: 'uuid', name: 'bank_account_id', nullable: true })
   bankAccountId: string | null;
