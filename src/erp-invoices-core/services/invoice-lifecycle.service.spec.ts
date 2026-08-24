@@ -34,6 +34,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
 
     service = new InvoiceLifecycleService(
       repository,
+      { find: jest.fn().mockResolvedValue([]) } as any,
       { deleteObject: jest.fn() } as any,
       bankTransactionsCoreService,
       {

@@ -54,9 +54,22 @@ export class ModuleConfigController {
 
   // ================= Attribute Defs =================
 
+  @Get('global-attribute-defs')
+  getGlobalAttributeDefs(@Query('moduleKey') moduleKey: string) {
+    return this.service.getGlobalAttributeDefs(moduleKey);
+  }
+
   @Get('attribute-defs')
-  getAttributeDefs(@Query('categoryId') categoryId?: string) {
-    return this.service.getAttributeDefs(categoryId);
+  getAttributeDefs(
+    @Query('categoryId') categoryId?: string,
+    @Query('isGlobal') isGlobal?: string,
+    @Query('moduleKey') moduleKey?: string,
+  ) {
+    const isGlobalBool =
+      isGlobal !== undefined
+        ? isGlobal === 'true' || isGlobal === '1'
+        : undefined;
+    return this.service.getAttributeDefs(categoryId, isGlobalBool, moduleKey);
   }
 
   @Post('attribute-defs')

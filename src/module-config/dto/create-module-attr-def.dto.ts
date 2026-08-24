@@ -23,10 +23,29 @@ export interface BomAttributeOption {
 }
 
 export class CreateModuleAttrDefDto {
-  @ApiProperty({ description: 'Category UUID' })
+  @ApiPropertyOptional({
+    description: 'Category UUID (required if isGlobal is false)',
+  })
   @IsUUID()
-  @IsNotEmpty()
-  categoryId: string;
+  @IsOptional()
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether this is a global attribute for the module',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isGlobal?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Module key when isGlobal is true',
+    example: 'INVOICE',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(50)
+  moduleKeyGlobal?: string;
 
   @ApiProperty({ description: 'Attribute code', example: 'color' })
   @IsString()

@@ -24,7 +24,7 @@ describe('ModuleConfigService', () => {
   };
 
   const mockAttrDefRepo = {
-    find: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn(),
     create: jest.fn((dto) => dto),
     save: jest.fn((entity) => Promise.resolve({ id: 'def-1', ...entity })),
@@ -32,7 +32,7 @@ describe('ModuleConfigService', () => {
   };
 
   const mockAttrValueRepo = {
-    count: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     createQueryBuilder: jest.fn(() => ({
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
@@ -44,12 +44,21 @@ describe('ModuleConfigService', () => {
 
   const mockEntityAttrValueRepo = {
     find: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    createQueryBuilder: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    })),
     create: jest.fn((dto) => dto),
     save: jest.fn((entity) => Promise.resolve(entity)),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
 
   const mockManager = {
+    find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn(),
     query: jest.fn().mockResolvedValue([]),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -248,7 +257,7 @@ describe('ModuleConfigService', () => {
       expect(mockManager.save).toHaveBeenCalled();
     });
 
-    it('should throw BadRequestException if required attribute is missing', async () => {
+    it('should save category attributes smoothly without throwing if required attribute is missing', async () => {
       mockManager.findOne.mockResolvedValue({
         id: 'cat-1',
         attributeDefs: [
@@ -267,7 +276,83 @@ describe('ModuleConfigService', () => {
           categoryId: 'cat-1',
           attributes: {},
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.not.toThrow();
+    });
+
+    it('should validate and save global attributes without category', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: 'glob-1',
+          name: 'Ghi chú chung',
+          isRequired: true,
+          isActive: true,
+          isDeleted: false,
+          isGlobal: true,
+        },
+      ]);
+
+      await service.saveEntityValues('INVOICE', 'inv-123', {
+        globalAttributes: { 'glob-1': 'Test note' },
+      });
+
+      expect(mockManager.delete).toHaveBeenCalled();
+      expect(mockManager.save).toHaveBeenCalled();
+    });
+
+    it('should save entity values smoothly without throwing on missing required attributes', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: 'glob-1',
+          name: 'Ghi chú chung',
+          isRequired: true,
+          isActive: true,
+          isDeleted: false,
+          isGlobal: true,
+        },
+      ]);
+
+      await expect(
+        service.saveEntityValues('INVOICE', 'inv-123', {
+          globalAttributes: {},
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('Global attributes management', () => {
+    it('should create a global attribute successfully', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue(null);
+      const res = await service.createAttributeDef({
+        isGlobal: true,
+        moduleKeyGlobal: 'INVOICE',
+        code: 'approval_note',
+        name: 'Ghi chú phê duyệt',
+        fieldType: 'TEXT',
+      });
+      expect(res).toBeDefined();
+      expect(mockAttrDefRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE',
+          categoryId: null,
+          code: 'approval_note',
+        }),
+      );
+    });
+
+    it('should get global attribute defs by moduleKey', async () => {
+      mockAttrDefRepo.find.mockResolvedValue([
+        {
+          id: 'glob-1',
+          code: 'note',
+          name: 'Ghi chú',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE',
+        },
+      ]);
+      const res = await service.getGlobalAttributeDefs('INVOICE');
+      expect(res.length).toBe(1);
+      expect(res[0].code).toBe('note');
     });
   });
 });

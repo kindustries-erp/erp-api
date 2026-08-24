@@ -43,7 +43,9 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
       'applyMultiKeywordMultiFieldFilter',
@@ -66,7 +68,9 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
       'applyMultiKeywordMultiFieldFilter',
@@ -127,7 +131,9 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -189,7 +195,9 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -249,7 +257,9 @@ describe('InvoiceQueryService', () => {
     ]);
 
     const repository = createRepositoryMock(qb) as any;
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'OUT' });
 
     const workbook = new ExcelJS.Workbook();

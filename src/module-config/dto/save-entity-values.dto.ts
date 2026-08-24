@@ -8,4 +8,8 @@ export class SaveEntityValuesDto {
   @IsOptional()
   @IsObject()
   attributes?: Record<string, any>;
+
+  @IsOptional()
+  @IsObject()
+  globalAttributes?: Record<string, any>;
 }

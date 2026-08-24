@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  Between,
+  In,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import * as ExcelJS from 'exceljs';
 
 import {
@@ -8,6 +14,7 @@ import {
   applyMultiKeywordMultiFieldFilter,
 } from '../../common/utils/query-builder.util';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
+import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 import {
   toInvoiceDto,
   parseVatRateForDisplay,
@@ -27,6 +34,8 @@ export class InvoiceQueryService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -498,12 +507,14 @@ export class InvoiceQueryService {
         .leftJoinAndSelect('inv.items', 'items')
         .leftJoinAndSelect('inv.attachments', 'link')
         .leftJoinAndSelect('link.attachment', 'attachment')
+        .leftJoinAndSelect('inv.category', 'category')
         .addOrderBy('inv.createdAt', 'DESC')
         .skip((page - 1) * pageSize)
         .take(pageSize)
         .getManyAndCount();
 
       const mappedItems = await this._loadNetOffAmounts(searchResults[0]);
+      await this._loadCustomAttributes(mappedItems);
       return {
         items: mappedItems.map((i: any) => toInvoiceDto(i)),
         total: searchResults[1],
@@ -515,13 +526,14 @@ export class InvoiceQueryService {
 
     const [items, total] = await this.repository.findAndCount({
       where,
-      relations: ['items', 'attachments', 'attachments.attachment'],
+      relations: ['items', 'attachments', 'attachments.attachment', 'category'],
       order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
 
     const mappedItems = await this._loadNetOffAmounts(items);
+    await this._loadCustomAttributes(mappedItems);
     return {
       items: mappedItems.map((i: any) => toInvoiceDto(i)),
       total,
@@ -529,6 +541,80 @@ export class InvoiceQueryService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  /**
+   * Batch load custom and global attributes for a list of invoices
+   */
+  private async _loadCustomAttributes(items: ErpInvoice[]): Promise<void> {
+    const invoiceIds = items.map((i) => i.id).filter(Boolean);
+    if (invoiceIds.length === 0) return;
+
+    try {
+      const attrValues = await this.entityAttrValueRepo.find({
+        where: { entityType: 'INVOICE', entityId: In(invoiceIds) },
+        relations: ['attrDef'],
+      });
+
+      const map: Record<
+        string,
+        {
+          attributes: Record<string, any>;
+          globalAttributes: Record<string, any>;
+          attributeValues: any[];
+        }
+      > = {};
+
+      for (const ev of attrValues) {
+        if (!map[ev.entityId]) {
+          map[ev.entityId] = {
+            attributes: {},
+            globalAttributes: {},
+            attributeValues: [],
+          };
+        }
+        const entry = map[ev.entityId];
+        if (ev.attrDef?.isGlobal) {
+          entry.globalAttributes[ev.attrDefId] = ev.valueText;
+          if (ev.attrDef?.code) {
+            entry.globalAttributes[ev.attrDef.code] = ev.valueText;
+          }
+        } else {
+          entry.attributes[ev.attrDefId] = ev.valueText;
+          if (ev.attrDef?.code) {
+            entry.attributes[ev.attrDef.code] = ev.valueText;
+          }
+        }
+        entry.attributeValues.push({
+          id: ev.id,
+          attrDefId: ev.attrDefId,
+          attrCode: ev.attrDef?.code,
+          attrName: ev.attrDef?.name,
+          fieldType: ev.attrDef?.fieldType,
+          valueText: ev.valueText,
+          isGlobal: ev.attrDef?.isGlobal || false,
+        });
+      }
+
+      for (const item of items) {
+        const customData = map[item.id];
+        if (customData) {
+          (item as any).attributes = customData.attributes;
+          (item as any).globalAttributes = customData.globalAttributes;
+          (item as any).customAttributes = customData.attributes;
+          (item as any).attributeValues = customData.attributeValues;
+        } else {
+          (item as any).attributes = {};
+          (item as any).globalAttributes = {};
+          (item as any).customAttributes = {};
+          (item as any).attributeValues = [];
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Failed to batch load invoice custom attributes: ${err?.message}`,
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

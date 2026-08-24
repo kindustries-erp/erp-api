@@ -30,14 +30,26 @@ export class ErpBomAttributeDef {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', name: 'category_id' })
-  categoryId: string;
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
 
   @ManyToOne(() => ErpBomCategory, (cat) => cat.attributeDefs, {
     onDelete: 'CASCADE',
+    nullable: true,
   })
   @JoinColumn({ name: 'category_id' })
   category?: ErpBomCategory;
+
+  @Column({ type: 'boolean', name: 'is_global', default: false })
+  isGlobal: boolean;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'module_key_global',
+    nullable: true,
+  })
+  moduleKeyGlobal: string | null;
 
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;

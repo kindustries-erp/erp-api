@@ -16,6 +16,7 @@ import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
 import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
 import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
 import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
@@ -92,6 +93,7 @@ const entities = [
   ErpBomCategory,
   ErpBomAttributeDef,
   ErpBomAttributeValue,
+  ErpEntityAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,
   ErpPurchaseOrder,

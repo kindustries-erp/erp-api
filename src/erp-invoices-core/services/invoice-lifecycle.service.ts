@@ -21,6 +21,8 @@ import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-t
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
+import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
+
 @Injectable()
 export class InvoiceLifecycleService {
   private readonly logger = new Logger(InvoiceLifecycleService.name);
@@ -28,6 +30,8 @@ export class InvoiceLifecycleService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
@@ -49,6 +53,7 @@ export class InvoiceLifecycleService {
       'voucherNetOffs.bankTransaction',
       'attachments',
       'attachments.attachment',
+      'category',
     ];
 
     let data: ErpInvoice | null = null;
@@ -82,6 +87,44 @@ export class InvoiceLifecycleService {
     }
 
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+
+    // Load custom attributes & global attributes
+    const entityAttrValues = await this.entityAttrValueRepo.find({
+      where: { entityType: 'INVOICE', entityId: data.id },
+      relations: ['attrDef'],
+    });
+
+    const attributes: Record<string, any> = {};
+    const globalAttributes: Record<string, any> = {};
+    for (const ev of entityAttrValues) {
+      if (ev.attrDef?.isGlobal) {
+        globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
+      } else {
+        attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
+      }
+    }
+
+    const attributeValues = entityAttrValues.map((ev) => ({
+      id: ev.id,
+      attrDefId: ev.attrDefId,
+      attrCode: ev.attrDef?.code,
+      attrName: ev.attrDef?.name,
+      fieldType: ev.attrDef?.fieldType,
+      valueText: ev.valueText,
+      isGlobal: ev.attrDef?.isGlobal || false,
+    }));
+
+    (data as any).attributes = attributes;
+    (data as any).globalAttributes = globalAttributes;
+    (data as any).customAttributes = attributes;
+    (data as any).attributeValues = attributeValues;
+
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
   }
 
