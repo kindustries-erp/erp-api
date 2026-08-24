@@ -58,6 +58,7 @@ export class GarageDashboardService {
       )
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('COUNT(c.id)', 'caseCount')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -118,7 +119,13 @@ export class GarageDashboardService {
       const profit = Number(r.profit) || 0;
       const paid = Number(r.paid) || 0;
       const receivable = Number(r.receivable) || 0;
-      const totalBilled = paid + receivable > 0 ? paid + receivable : rev;
+      const tienCoThue = Number(r.tienCoThue) || 0;
+      const totalBilled =
+        tienCoThue > 0
+          ? tienCoThue
+          : paid + receivable > 0
+            ? paid + receivable
+            : rev;
       const collectionRate =
         totalBilled > 0
           ? Math.min(100, Math.round((paid / totalBilled) * 1000) / 10)
@@ -139,6 +146,8 @@ export class GarageDashboardService {
         margin: rev > 0 ? (profit / rev) * 100 : 0,
         paid,
         receivable,
+        tienCoThue,
+        totalBilled,
         collectionRate,
         paidCost,
         payableCost,
@@ -179,10 +188,16 @@ export class GarageDashboardService {
       (sum, t) => sum + t.receivable,
       0,
     );
+    const totalTienCoThue = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + (t.tienCoThue || 0),
+      0,
+    );
     const totalBilled =
-      totalPaid + totalReceivable > 0
-        ? totalPaid + totalReceivable
-        : totalRevenue;
+      totalTienCoThue > 0
+        ? totalTienCoThue
+        : totalPaid + totalReceivable > 0
+          ? totalPaid + totalReceivable
+          : totalRevenue;
     const overallCollectionRate =
       totalBilled > 0
         ? Math.min(100, Math.round((totalPaid / totalBilled) * 1000) / 10)
@@ -190,6 +205,7 @@ export class GarageDashboardService {
 
     const collectionSummary = {
       totalBilled,
+      totalTienCoThue,
       totalRevenue,
       totalPaid,
       totalReceivable,
@@ -325,6 +341,7 @@ export class GarageDashboardService {
     const monthRevenueChart: number[] = [];
     const monthCostChart: number[] = [];
     const monthProfitChart: number[] = [];
+    const monthTienCoThueChart: number[] = [];
 
     for (let i = 5; i >= 0; i--) {
       const d = subMonths(now, i);
@@ -348,6 +365,7 @@ export class GarageDashboardService {
           'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
           'profit',
         )
+        .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -360,6 +378,7 @@ export class GarageDashboardService {
       monthRevenueChart.push(Number(res?.revenue) || 0);
       monthCostChart.push(Number(res?.cost) || 0);
       monthProfitChart.push(Number(res?.profit) || 0);
+      monthTienCoThueChart.push(Number(res?.tienCoThue) || 0);
     }
 
     const curMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -380,6 +399,7 @@ export class GarageDashboardService {
         'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
         'profit',
       )
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -395,6 +415,7 @@ export class GarageDashboardService {
     const weekRevenueChart: number[] = [];
     const weekCostChart: number[] = [];
     const weekProfitChart: number[] = [];
+    const weekTienCoThueChart: number[] = [];
 
     for (let i = 3; i >= 0; i--) {
       const d = subWeeks(now, i);
@@ -423,6 +444,7 @@ export class GarageDashboardService {
           'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
           'profit',
         )
+        .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -435,6 +457,7 @@ export class GarageDashboardService {
       weekRevenueChart.push(Number(res?.revenue) || 0);
       weekCostChart.push(Number(res?.cost) || 0);
       weekProfitChart.push(Number(res?.profit) || 0);
+      weekTienCoThueChart.push(Number(res?.tienCoThue) || 0);
     }
 
     const curWeekStart = format(
@@ -461,6 +484,7 @@ export class GarageDashboardService {
         'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
         'profit',
       )
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -476,6 +500,7 @@ export class GarageDashboardService {
     const dayRevenueChart: number[] = [];
     const dayCostChart: number[] = [];
     const dayProfitChart: number[] = [];
+    const dayTienCoThueChart: number[] = [];
 
     for (let i = 6; i >= 0; i--) {
       const d = subDays(now, i);
@@ -499,6 +524,7 @@ export class GarageDashboardService {
           'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
           'profit',
         )
+        .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -511,6 +537,7 @@ export class GarageDashboardService {
       dayRevenueChart.push(Number(res?.revenue) || 0);
       dayCostChart.push(Number(res?.cost) || 0);
       dayProfitChart.push(Number(res?.profit) || 0);
+      dayTienCoThueChart.push(Number(res?.tienCoThue) || 0);
     }
 
     const curDayStart = format(now, 'yyyy-MM-dd');
@@ -531,6 +558,7 @@ export class GarageDashboardService {
         'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
         'profit',
       )
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -546,30 +574,36 @@ export class GarageDashboardService {
         totalRevenue: Number(curMonthRes?.revenue) || 0,
         totalCost: Number(curMonthRes?.cost) || 0,
         totalProfit: Number(curMonthRes?.profit) || 0,
+        totalTienCoThue: Number(curMonthRes?.tienCoThue) || 0,
         totalCount: Number(curMonthRes?.count) || 0,
         revenueChart: monthRevenueChart,
         costChart: monthCostChart,
         profitChart: monthProfitChart,
+        tienCoThueChart: monthTienCoThueChart,
         labels: monthSparklineLabels,
       },
       week: {
         totalRevenue: Number(curWeekRes?.revenue) || 0,
         totalCost: Number(curWeekRes?.cost) || 0,
         totalProfit: Number(curWeekRes?.profit) || 0,
+        totalTienCoThue: Number(curWeekRes?.tienCoThue) || 0,
         totalCount: Number(curWeekRes?.count) || 0,
         revenueChart: weekRevenueChart,
         costChart: weekCostChart,
         profitChart: weekProfitChart,
+        tienCoThueChart: weekTienCoThueChart,
         labels: weekSparklineLabels,
       },
       day: {
         totalRevenue: Number(curDayRes?.revenue) || 0,
         totalCost: Number(curDayRes?.cost) || 0,
         totalProfit: Number(curDayRes?.profit) || 0,
+        totalTienCoThue: Number(curDayRes?.tienCoThue) || 0,
         totalCount: Number(curDayRes?.count) || 0,
         revenueChart: dayRevenueChart,
         costChart: dayCostChart,
         profitChart: dayProfitChart,
+        tienCoThueChart: dayTienCoThueChart,
         labels: daySparklineLabels,
       },
     };

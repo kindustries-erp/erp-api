@@ -22,7 +22,14 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Cột Kỳ báo cáo (`period`) tích hợp `<DateRangeColumnSlot>` lọc khoảng ngày/tháng và các quick presets.
     - Context Menu (Row Actions) 4 thao tác chuẩn hóa: **Xem chi tiết** (`Eye`), **Chỉnh sửa** (`Pencil`), **Nhân đôi** (`Copy` - prefill toàn bộ dữ liệu vào form tạo mới), **Xóa** (`Trash2`).
     - Xem/sửa/nhân đôi qua 1-column StandardFormDrawer (`GarageOpexDrawer.tsx`) tích hợp xem trước số tiền bằng chữ (Vietnamese Currency Words) và định dạng số.
-- **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport`)**:
+- **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx`)**:
+  - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
+  - Phải thu (`totalBilled`) tính chuẩn xác theo `SUM(tien_co_thue)` (Doanh thu thuần + Thuế GTGT VAT).
+  - Bảng hỗ trợ 2 Tab: Thu tiền khách hàng & Trả tiền chi phí NCC kèm `summaryRow` tổng cộng, badge tỷ lệ, thanh tiến độ inline và biến động MoM.
+- **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
+  - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
+  - Đồng bộ tự động theo bộ lọc ngày toàn trang (`filter.state.dateFrom`, `filter.state.dateTo`), loại bỏ dropdown tháng/năm cục bộ.
+  - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước và tháng này (COGS, OPEX, Gross Margin, Net Margin).
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:
     1. `I. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
@@ -33,12 +40,11 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     6. `VI. Hoa hồng` (Tổng hợp các khoản hoa hồng `HOA_HONG_*` trong tháng)
     7. `VII. Lợi nhuận ròng (sau hoa hồng)` (`Net Profit After Commission = Net Profit Before Commission - Commission`, kèm % Biên LN ròng)
   - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước cho từng danh mục phát sinh.
-- **Biểu đồ Xu hướng Tháng Đa Chiều (Doanh thu, Chi phí, Thu tiền & Trả tiền NCC)**:
-  - `revenue`, `cost`, `profit`, `margin`: Chỉ số tài chính lãi gộp.
-  - `paid`, `receivable`, `collectionRate`: Tiền khách đã thanh toán, công nợ phải thu và tỷ lệ hoàn tất thu tiền (%).
-  - `paidCost`, `payableCost`, `costPaymentRate`: Tiền đã chi trả chi phí/NCC, công nợ phải trả NCC và tỷ lệ chi trả (%).
-- **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis`)**:
+- **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
+  - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
+    - Card Doanh thu: **Doanh thu thuần** & **Doanh thu có VAT** (khớp số liệu với bảng chi tiết).
+    - Card Chi phí: **Chi phí thuần** & **Chi phí có VAT**.
   - Hỗ trợ click-to-drilldown xem danh sách phiếu dịch vụ chi tiết hoàn thành trong kỳ (`getCheckpointCases`).
 - **Xuất Báo Cáo Excel Chuyên Nghiệp**:
   - `exportExcel`: Báo cáo Tổng quan Garage 2 sheets (Tổng quan tháng & Chi tiết phiếu dịch vụ).
