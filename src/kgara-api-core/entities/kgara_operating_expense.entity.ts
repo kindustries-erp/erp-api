@@ -32,6 +32,24 @@ export class KgaraOperatingExpense {
   @Column({ type: 'text', nullable: true })
   note?: string | null;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'recurrence_type',
+    nullable: true,
+  })
+  recurrenceType?: string | null;
+
+  @Column({ type: 'smallint', name: 'recurrence_until_year', nullable: true })
+  recurrenceUntilYear?: number | null;
+
+  @Column({ type: 'smallint', name: 'recurrence_until_month', nullable: true })
+  recurrenceUntilMonth?: number | null;
+
+  @Column({ type: 'uuid', name: 'recurrence_anchor_id', nullable: true })
+  @Index('idx_kgara_opex_recurrence_anchor')
+  recurrenceAnchorId?: string | null;
+
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy?: string | null;
 

@@ -37,6 +37,26 @@ export class CreateGarageOpexDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsString()
+  @IsOptional()
+  recurrenceType?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  recurrenceUntilYear?: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(12)
+  @IsOptional()
+  @Type(() => Number)
+  recurrenceUntilMonth?: number;
+
+  @IsString()
+  @IsOptional()
+  recurrenceAnchorId?: string;
 }
 
 export class UpdateGarageOpexDto {
@@ -68,6 +88,65 @@ export class UpdateGarageOpexDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsString()
+  @IsOptional()
+  recurrenceType?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  recurrenceUntilYear?: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(12)
+  @IsOptional()
+  @Type(() => Number)
+  recurrenceUntilMonth?: number;
+
+  @IsString()
+  @IsOptional()
+  recurrenceAnchorId?: string;
+}
+
+export class ApplyRecurringOpexDto {
+  @IsString()
+  @IsNotEmpty()
+  applyScope: 'this' | 'this_and_future';
+
+  @IsNumber()
+  @IsNotEmpty()
+  @Type(() => Number)
+  amount: number;
+
+  @IsString()
+  @IsOptional()
+  categoryKey?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryName?: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+
+  @IsString()
+  @IsOptional()
+  recurrenceType?: string = 'monthly';
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  untilYear?: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(12)
+  @IsOptional()
+  @Type(() => Number)
+  untilMonth?: number;
 }
 
 export class ListGarageOpexQueryDto {
@@ -78,6 +157,14 @@ export class ListGarageOpexQueryDto {
   @IsOptional()
   @Type(() => Number)
   month?: number;
+
+  @IsOptional()
+  @IsString()
+  date_from?: string;
+
+  @IsOptional()
+  @IsString()
+  date_to?: string;
 
   @IsOptional()
   @Type(() => Number)

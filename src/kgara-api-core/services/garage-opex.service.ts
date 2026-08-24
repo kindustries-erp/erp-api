@@ -29,7 +29,35 @@ export class GarageOpexService {
       qb.andWhere('opex.period_year = :year', { year: Number(query.year) });
     }
     if (query.month) {
-      qb.andWhere('opex.period_month = :month', { month: Number(query.month) });
+      qb.andWhere('opex.period_month = :month', {
+        month: Number(query.month),
+      });
+    }
+
+    // Filter date_from / date_to (Period range)
+    if (query.date_from) {
+      const fromParts = query.date_from.split('-').map(Number);
+      const fromYear = fromParts[0];
+      const fromMonth = fromParts[1] || 1;
+      const fromPeriodInt = fromYear * 100 + fromMonth;
+      qb.andWhere(
+        '(opex.period_year * 100 + opex.period_month) >= :fromPeriodInt',
+        {
+          fromPeriodInt,
+        },
+      );
+    }
+    if (query.date_to) {
+      const toParts = query.date_to.split('-').map(Number);
+      const toYear = toParts[0];
+      const toMonth = toParts[1] || 12;
+      const toPeriodInt = toYear * 100 + toMonth;
+      qb.andWhere(
+        '(opex.period_year * 100 + opex.period_month) <= :toPeriodInt',
+        {
+          toPeriodInt,
+        },
+      );
     }
 
     // Column Filters
@@ -267,9 +295,40 @@ export class GarageOpexService {
       categoryName: dto.categoryName,
       amount: Number(dto.amount) || 0,
       note: dto.note || null,
+      recurrenceType: dto.recurrenceType || null,
+      recurrenceUntilYear: dto.recurrenceUntilYear
+        ? Number(dto.recurrenceUntilYear)
+        : null,
+      recurrenceUntilMonth: dto.recurrenceUntilMonth
+        ? Number(dto.recurrenceUntilMonth)
+        : null,
+      recurrenceAnchorId: dto.recurrenceAnchorId || null,
       createdBy: userId || null,
     });
     const saved = await this.opexRepo.save(item);
+
+    // If recurring was configured upon creation with an until period, generate future months
+    if (
+      saved.recurrenceType === 'monthly' &&
+      saved.recurrenceUntilYear &&
+      saved.recurrenceUntilMonth
+    ) {
+      await this.applyRecurring(
+        saved.id,
+        {
+          applyScope: 'this_and_future',
+          amount: Number(saved.amount),
+          categoryKey: saved.categoryKey,
+          categoryName: saved.categoryName,
+          note: saved.note || undefined,
+          recurrenceType: 'monthly',
+          untilYear: saved.recurrenceUntilYear,
+          untilMonth: saved.recurrenceUntilMonth,
+        },
+        userId,
+      );
+    }
+
     return {
       ...saved,
       amount: Number(saved.amount) || 0,
@@ -290,12 +349,150 @@ export class GarageOpexService {
     if (dto.categoryName !== undefined) item.categoryName = dto.categoryName;
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
     if (dto.note !== undefined) item.note = dto.note || null;
+    if (dto.recurrenceType !== undefined)
+      item.recurrenceType = dto.recurrenceType || null;
+    if (dto.recurrenceUntilYear !== undefined)
+      item.recurrenceUntilYear = dto.recurrenceUntilYear
+        ? Number(dto.recurrenceUntilYear)
+        : null;
+    if (dto.recurrenceUntilMonth !== undefined)
+      item.recurrenceUntilMonth = dto.recurrenceUntilMonth
+        ? Number(dto.recurrenceUntilMonth)
+        : null;
+    if (dto.recurrenceAnchorId !== undefined)
+      item.recurrenceAnchorId = dto.recurrenceAnchorId || null;
 
     const updated = await this.opexRepo.save(item);
     return {
       ...updated,
       amount: Number(updated.amount) || 0,
       period: `${String(updated.periodMonth).padStart(2, '0')}/${updated.periodYear}`,
+    };
+  }
+
+  /**
+   * Áp dụng thay đổi định kỳ (Google Calendar style: this vs this_and_future)
+   */
+  async applyRecurring(
+    id: string,
+    dto: import('../dto/garage-opex.dto').ApplyRecurringOpexDto,
+    userId?: string,
+  ) {
+    const item = await this.opexRepo.findOne({ where: { id } });
+    if (!item) {
+      throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
+    }
+
+    if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
+    if (dto.categoryKey !== undefined) item.categoryKey = dto.categoryKey;
+    if (dto.categoryName !== undefined) item.categoryName = dto.categoryName;
+    if (dto.note !== undefined) item.note = dto.note || null;
+    if (dto.recurrenceType !== undefined)
+      item.recurrenceType = dto.recurrenceType || null;
+    if (dto.untilYear !== undefined)
+      item.recurrenceUntilYear = dto.untilYear ? Number(dto.untilYear) : null;
+    if (dto.untilMonth !== undefined)
+      item.recurrenceUntilMonth = dto.untilMonth
+        ? Number(dto.untilMonth)
+        : null;
+
+    const saved = await this.opexRepo.save(item);
+
+    if (dto.applyScope === 'this') {
+      return {
+        updated: 1,
+        created: 0,
+        total: 1,
+        item: {
+          ...saved,
+          amount: Number(saved.amount) || 0,
+          period: `${String(saved.periodMonth).padStart(2, '0')}/${saved.periodYear}`,
+        },
+      };
+    }
+
+    // Apply for this and all future periods in recurrence range
+    const anchorId = item.recurrenceAnchorId || item.id;
+    let startYear = Number(item.periodYear);
+    let startMonth = Number(item.periodMonth) + 1;
+    if (startMonth > 12) {
+      startMonth = 1;
+      startYear += 1;
+    }
+
+    const endYear = dto.untilYear
+      ? Number(dto.untilYear)
+      : item.recurrenceUntilYear
+        ? Number(item.recurrenceUntilYear)
+        : item.periodYear + 1;
+    const endMonth = dto.untilMonth
+      ? Number(dto.untilMonth)
+      : item.recurrenceUntilMonth
+        ? Number(item.recurrenceUntilMonth)
+        : item.periodMonth;
+
+    const periods: Array<{ year: number; month: number }> = [];
+    let curY = startYear;
+    let curM = startMonth;
+    while (curY < endYear || (curY === endYear && curM <= endMonth)) {
+      periods.push({ year: curY, month: curM });
+      curM++;
+      if (curM > 12) {
+        curM = 1;
+        curY++;
+      }
+    }
+
+    let updatedCount = 0;
+    let createdCount = 0;
+
+    for (const p of periods) {
+      const existing = await this.opexRepo.findOne({
+        where: {
+          periodYear: p.year,
+          periodMonth: p.month,
+          categoryKey: item.categoryKey,
+        },
+      });
+
+      if (existing) {
+        existing.amount = item.amount;
+        existing.categoryName = item.categoryName;
+        existing.note = item.note;
+        existing.recurrenceType = item.recurrenceType;
+        existing.recurrenceUntilYear = item.recurrenceUntilYear;
+        existing.recurrenceUntilMonth = item.recurrenceUntilMonth;
+        existing.recurrenceAnchorId = anchorId;
+        await this.opexRepo.save(existing);
+        updatedCount++;
+      } else {
+        const newItem = this.opexRepo.create({
+          periodYear: p.year,
+          periodMonth: p.month,
+          categoryKey: item.categoryKey,
+          categoryName: item.categoryName,
+          amount: item.amount,
+          note: item.note,
+          recurrenceType: item.recurrenceType,
+          recurrenceUntilYear: item.recurrenceUntilYear,
+          recurrenceUntilMonth: item.recurrenceUntilMonth,
+          recurrenceAnchorId: anchorId,
+          createdBy: userId || null,
+        });
+        await this.opexRepo.save(newItem);
+        createdCount++;
+      }
+    }
+
+    return {
+      updated: updatedCount + 1, // include current record
+      created: createdCount,
+      total: updatedCount + 1 + createdCount,
+      item: {
+        ...saved,
+        amount: Number(saved.amount) || 0,
+        period: `${String(saved.periodMonth).padStart(2, '0')}/${saved.periodYear}`,
+      },
     };
   }
 
@@ -338,8 +535,17 @@ export class GarageOpexService {
       note?: string | null;
     }> = [];
 
+    const directCostItems: Array<{
+      id: string;
+      categoryKey: string;
+      categoryName: string;
+      amount: number;
+      note?: string | null;
+    }> = [];
+
     let totalOpex = 0;
     let totalCommission = 0;
+    let totalDirectCost = 0;
 
     for (const item of items) {
       const amt = Number(item.amount) || 0;
@@ -351,7 +557,13 @@ export class GarageOpexService {
         note: item.note,
       };
 
-      if (item.categoryKey.startsWith('HOA_HONG_')) {
+      if (
+        item.categoryKey === 'HOA_HONG_TRUC_TIEP' ||
+        item.categoryKey === 'CHI_PHI_TRUC_TIEP_KHAC'
+      ) {
+        directCostItems.push(row);
+        totalDirectCost += amt;
+      } else if (item.categoryKey.startsWith('HOA_HONG_')) {
         commissionItems.push(row);
         totalCommission += amt;
       } else {
@@ -361,6 +573,10 @@ export class GarageOpexService {
     }
 
     return {
+      directCost: {
+        total: totalDirectCost,
+        items: directCostItems,
+      },
       opex: {
         total: totalOpex,
         items: opexItems,

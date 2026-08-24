@@ -1015,15 +1015,17 @@ export class GarageDashboardService {
 
     const rawAgg = await qb.getRawOne();
     const revenue = Number(rawAgg?.revenue) || 0;
-    const cogs = Number(rawAgg?.cogs) || 0;
-    const grossProfit = revenue - cogs;
+    const cogsDirect = Number(rawAgg?.cogs) || 0;
     const caseCount = Number(rawAgg?.caseCount) || 0;
 
-    // 2. Lấy Chi phí vận hành & Hoa hồng nhập tay từ GarageOpexService
+    // 2. Lấy Chi phí vận hành, Hoa hồng & Chi phí trực tiếp nhập tay từ GarageOpexService
     const opexSummary = await this.opexService.getSummaryByPeriod(
       currentYear,
       currentMonth,
     );
+
+    const cogs = cogsDirect + opexSummary.directCost.total;
+    const grossProfit = revenue - cogs;
 
     const netProfitBeforeCommission = grossProfit - opexSummary.opex.total;
     const netProfitAfterCommission =
@@ -1035,6 +1037,8 @@ export class GarageDashboardService {
       caseCount,
       revenue,
       cogs,
+      cogsDirect,
+      cogsAdjustment: opexSummary.directCost,
       grossProfit,
       grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
       opex: opexSummary.opex,
@@ -1123,9 +1127,22 @@ export class GarageDashboardService {
       },
       {
         category: '   Chi phí phụ tùng & Gia công ngoài',
-        amount: report.cogs,
+        amount: report.cogsDirect,
         isChild: true,
       },
+    ];
+
+    if (report.cogsAdjustment && report.cogsAdjustment.items.length > 0) {
+      for (const item of report.cogsAdjustment.items) {
+        rowsData.push({
+          category: `   ${item.categoryName}`,
+          amount: item.amount,
+          isChild: true,
+        });
+      }
+    }
+
+    rowsData.push(
       {
         category: 'III. Lợi nhuận gộp',
         amount: report.grossProfit,
@@ -1136,7 +1153,7 @@ export class GarageDashboardService {
         amount: report.opex.total,
         isHeader: true,
       },
-    ];
+    );
 
     if (report.opex.items.length === 0) {
       rowsData.push({

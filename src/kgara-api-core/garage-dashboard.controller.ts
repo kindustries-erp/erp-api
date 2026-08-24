@@ -21,6 +21,7 @@ import { GarageOpexService } from './services/garage-opex.service';
 import {
   CreateGarageOpexDto,
   UpdateGarageOpexDto,
+  ApplyRecurringOpexDto,
   ListGarageOpexQueryDto,
 } from './dto/garage-opex.dto';
 
@@ -176,6 +177,16 @@ export class GarageDashboardController {
   @Put('opex/:id')
   updateOpex(@Param('id') id: string, @Body() dto: UpdateGarageOpexDto) {
     return this.opexService.update(id, dto);
+  }
+
+  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @Post('opex/:id/apply-recurring')
+  applyRecurringOpex(
+    @Param('id') id: string,
+    @Body() dto: ApplyRecurringOpexDto,
+    @Req() req: any,
+  ) {
+    return this.opexService.applyRecurring(id, dto, req.user?.id);
   }
 
   @RequirePermissions({ resource: 'garage', action: 'delete' })

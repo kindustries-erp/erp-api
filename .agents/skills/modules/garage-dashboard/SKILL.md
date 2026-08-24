@@ -13,19 +13,26 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
 - **Quy tắc Tính toán Doanh thu & Chi phí theo Ngày hoàn thành (Strict Completion Date Rule)**:
   - **CHỈ tính** doanh thu, chi phí, lãi gộp và số vụ việc cho các phiếu dịch vụ **ĐÃ CÓ ngày hoàn thành công việc** (`c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
   - Bỏ qua các phiếu bị xóa trên KGara (`c.kgara_deleted_at IS NULL`) hoặc phiếu hủy (`c.tinh_trang_dich_vu != 9`).
-- **Quản lý Chi phí vận hành (OPEX) & Hoa hồng**:
-  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, vật tư tiêu hao, bảo trì, khấu hao, khác) và hoa hồng (sale, dịch vụ).
-  - Phân loại qua `category_key`, lưu trữ theo `(period_year, period_month)` và áp dụng toàn hệ thống Garage.
-  - Hỗ trợ xem danh sách bảng chuẩn với bộ lọc/sắp xếp server-side (`/greenway/dashboard/opex`), lọc theo cột (`column-options`), thêm/sửa/xóa qua 1-column Drawer.
+- **Quản lý Chi phí vận hành (OPEX), Giá vốn nhập tay & Hoa hồng**:
+  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, vật tư tiêu hao, bảo trì, khấu hao, khác), giá vốn trực tiếp (hoa hồng trực tiếp DV, chi phí trực tiếp khác) và hoa hồng (sale, dịch vụ).
+  - Phân loại qua `category_key` theo 3 nhóm chi phí: `OPEX` (CP Vận hành), `COGS` (Giá vốn), `COMMISSION` (Hoa hồng), lưu trữ theo `(period_year, period_month)`.
+  - Hỗ trợ phát sinh định kỳ lặp lại theo chu kỳ tháng (`monthly`) với cơ chế áp dụng linh hoạt chuẩn Google Calendar (`this` vs `this_and_future`).
+  - Hỗ trợ xem danh sách bảng chuẩn `/greenway/dashboard/opex` theo đúng quy chuẩn `standardize-table-page` & `standardize-table`:
+    - Cột STT (`#`) bắt đầu chính xác từ số 1.
+    - Cột Kỳ báo cáo (`period`) tích hợp `<DateRangeColumnSlot>` lọc khoảng ngày/tháng và các quick presets.
+    - Context Menu (Row Actions) 4 thao tác chuẩn hóa: **Xem chi tiết** (`Eye`), **Chỉnh sửa** (`Pencil`), **Nhân đôi** (`Copy` - prefill toàn bộ dữ liệu vào form tạo mới), **Xóa** (`Trash2`).
+    - Xem/sửa/nhân đôi qua 1-column StandardFormDrawer (`GarageOpexDrawer.tsx`) tích hợp xem trước số tiền bằng chữ (Vietnamese Currency Words) và định dạng số.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport`)**:
+  - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:
     1. `I. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
-    2. `II. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài)
+    2. `II. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài + Direct Costs nhập tay)
     3. `III. Lợi nhuận gộp` (`Gross Profit = Revenue - COGS`, kèm % Biên LN gộp)
     4. `IV. Chi phí vận hành` (Tổng hợp các khoản OPEX trong tháng)
     5. `V. Lợi nhuận ròng (trước hoa hồng)` (`Net Profit Before Commission = Gross Profit - OPEX`)
     6. `VI. Hoa hồng` (Tổng hợp các khoản hoa hồng `HOA_HONG_*` trong tháng)
     7. `VII. Lợi nhuận ròng (sau hoa hồng)` (`Net Profit After Commission = Net Profit Before Commission - Commission`, kèm % Biên LN ròng)
+  - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước cho từng danh mục phát sinh.
 - **Biểu đồ Xu hướng Tháng Đa Chiều (Doanh thu, Chi phí, Thu tiền & Trả tiền NCC)**:
   - `revenue`, `cost`, `profit`, `margin`: Chỉ số tài chính lãi gộp.
   - `paid`, `receivable`, `collectionRate`: Tiền khách đã thanh toán, công nợ phải thu và tỷ lệ hoàn tất thu tiền (%).
@@ -53,16 +60,20 @@ kgara_operating_expenses (Chi phí vận hành & Hoa hồng theo kỳ tháng)
 
 ### 2.2. Chi tiết các Bảng tham gia:
 
-#### Bảng `kgara_operating_expenses` (Bảng mới tạo)
+#### Bảng `kgara_operating_expenses`
 | Tên Cột | Kiểu Dữ Liệu | Nullable | Mặc Định | Ràng Buộc / Index | Mô Tả |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `uuid_generate_v4()` | PK | Định danh bản ghi chi phí |
 | `period_year` | `smallint` | NO | — | Index `idx_kgara_opex_period` | Năm chi phí (vd: 2026) |
 | `period_month` | `smallint` | NO | — | Index `idx_kgara_opex_period` | Tháng chi phí (1 - 12) |
-| `category_key` | `varchar(100)` | NO | — | Index `idx_kgara_opex_category` | Mã loại CP (NHAN_SU, THUE_MAT_BANG, HOA_HONG_SALE,...) |
+| `category_key` | `varchar(100)` | NO | — | Index `idx_kgara_opex_category` | Mã loại CP (NHAN_SU, THUE_MAT_BANG, HOA_HONG_TRUC_TIEP, CHI_PHI_TRUC_TIEP_KHAC, HOA_HONG_SALE,...) |
 | `category_name` | `varchar(255)` | NO | — | — | Tên/Diễn giải chi tiết khoản chi |
 | `amount` | `numeric(18,2)` | NO | `0` | — | Số tiền chi phí (VND) |
 | `note` | `text` | YES | `null` | — | Ghi chú bổ sung |
+| `recurrence_type` | `varchar(20)` | YES | `null` | — | Chu kỳ lặp lại (`monthly` hoặc null) |
+| `recurrence_until_year` | `smallint` | YES | `null` | — | Năm kết thúc chuỗi định kỳ |
+| `recurrence_until_month`| `smallint` | YES | `null` | — | Tháng kết thúc chuỗi định kỳ |
+| `recurrence_anchor_id`  | `uuid` | YES | `null` | Index `idx_kgara_opex_recurrence_anchor` | ID bản ghi gốc trong chuỗi định kỳ |
 | `created_by` | `uuid` | YES | `null` | — | ID người tạo |
 | `created_at` | `timestamptz` | NO | `now()` | — | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | — | Thời gian cập nhật |
@@ -80,14 +91,14 @@ kgara_operating_expenses (Chi phí vận hành & Hoa hồng theo kỳ tháng)
 ```text
 src/kgara-api-core/
 ├── dto/
-│   └── garage-opex.dto.ts              # Create, Update, List Query DTOs cho OPEX
+│   └── garage-opex.dto.ts              # Create, Update, ApplyRecurring, List Query DTOs cho OPEX
 ├── entities/
 │   └── kgara_operating_expense.entity.ts # TypeORM Entity cho kgara_operating_expenses
 ├── services/
-│   ├── garage-opex.service.ts          # CRUD OPEX, server-side filtering & period summary
+│   ├── garage-opex.service.ts          # CRUD OPEX, recurring upsert & period summary (COGS/OPEX/Commission)
 │   └── garage-opex.service.spec.ts     # Unit tests cho GarageOpexService (Pass 100%)
-├── garage-dashboard.controller.ts      # REST Controller (Dashboard, Checkpoint, OPEX, P&L)
-├── garage-dashboard.service.ts         # Aggregation Doanh thu/COGS, P&L Report, ExcelJS
+├── garage-dashboard.controller.ts      # REST Controller (Dashboard, Checkpoint, OPEX, P&L, ApplyRecurring)
+├── garage-dashboard.service.ts         # Aggregation Doanh thu/COGS/DirectCost, P&L Report, ExcelJS
 └── kgara-api-core.module.ts            # NestJS Module đăng ký Entity, Controllers & Services
 ```
 
@@ -111,8 +122,9 @@ Resource RBAC: `garage`
 | `GET` | `/opex/:id` | `{ resource: 'garage', action: 'read' }` | `id` (uuid) | Chi tiết một khoản chi phí vận hành |
 | `POST` | `/opex` | `{ resource: 'garage', action: 'create' }`| `CreateGarageOpexDto` | Tạo mới khoản chi phí vận hành |
 | `PUT` | `/opex/:id` | `{ resource: 'garage', action: 'update' }`| `UpdateGarageOpexDto` | Cập nhật khoản chi phí vận hành |
+| `POST`| `/opex/:id/apply-recurring` | `{ resource: 'garage', action: 'update' }`| `ApplyRecurringOpexDto` | Áp dụng thay đổi định kỳ (This vs This and Future) |
 | `DELETE`| `/opex/:id` | `{ resource: 'garage', action: 'delete' }`| `id` (uuid) | Xóa khoản chi phí vận hành |
-| `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L 7 dòng theo tháng |
+| `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L theo tháng kèm `cogsAdjustment` |
 | `GET` | `/pnl-report/export` | `{ resource: 'garage', action: 'read' }`| `year`, `month` | Xuất file Excel Báo cáo P&L theo tháng |
 
 ---
@@ -124,15 +136,16 @@ Resource RBAC: `garage`
    $$\sum \text{COALESCE}(gp.\text{doanh\_thu}, c.\text{doanh\_thu}, c.\text{tien\_co\_thue}, 0)$$
    áp dụng cho các phiếu hoàn thành trong tháng `TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM') = :periodStr`.
 2. **Chi phí giá vốn ($C_{COGS}$)**:
-   $$\sum \text{COALESCE}(gp.\text{chi\_phi}, c.\text{chi\_phi}, 0)$$
+   $$C_{COGS} = \sum \text{COALESCE}(gp.\text{chi\_phi}, c.\text{chi\_phi}, 0) + \sum \text{DirectCosts}_{\text{nhập tay}}$$
+   với $\text{DirectCosts}$ là các khoản OPEX có `category_key IN ('HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC')`.
 3. **Lợi nhuận gộp ($GP$)**:
    $$GP = R - C_{COGS}, \quad \text{Gross Margin} = \frac{GP}{R} \times 100\%$$
 4. **Chi phí vận hành ($OPEX$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key NOT LIKE 'HOA_HONG_%'` trong kỳ.
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key NOT LIKE 'HOA_HONG_%'` và `category_key NOT IN ('CHI_PHI_TRUC_TIEP_KHAC')` trong kỳ.
 5. **Lợi nhuận ròng trước hoa hồng ($NP_{pre}$)**:
    $$NP_{pre} = GP - OPEX$$
 6. **Hoa hồng ($COMM$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key LIKE 'HOA_HONG_%'` trong kỳ.
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key LIKE 'HOA_HONG_%'` và `category_key != 'HOA_HONG_TRUC_TIEP'` trong kỳ.
 7. **Lợi nhuận ròng sau hoa hồng ($NP_{post}$)**:
    $$NP_{post} = NP_{pre} - COMM, \quad \text{Net Margin} = \frac{NP_{post}}{R} \times 100\%$$
 
