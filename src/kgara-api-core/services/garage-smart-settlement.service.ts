@@ -23,6 +23,7 @@ export interface GarageSmartSettlementSuggestion {
       name?: string;
     };
     remainingAmount: number;
+    alreadySettledForThisCase?: boolean;
   };
   score: {
     score: number;
@@ -221,7 +222,8 @@ export class GarageSmartSettlementService {
         b.bank_name as "bankName",
         b.account_number as "accountNumber",
         c.name as "cashBookName",
-        (GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0))::numeric as "remainingAmount"
+        (GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0))::numeric as "remainingAmount",
+        (already_settled.bank_transaction_id IS NOT NULL) as "alreadySettledForThisCase"
       FROM erp_bank_transactions txn
       LEFT JOIN erp_bank_accounts b ON txn.bank_account_id = b.id
       LEFT JOIN erp_cash_books c ON txn.cash_book_id = c.id
@@ -233,9 +235,17 @@ export class GarageSmartSettlementService {
         )
         GROUP BY bank_transaction_id
       ) no_sum ON no_sum.bank_transaction_id = txn.id
+      LEFT JOIN (
+        SELECT bank_transaction_id
+        FROM kgara_case_settlements
+        WHERE case_id::text = $2 AND bank_transaction_id IS NOT NULL
+      ) already_settled ON already_settled.bank_transaction_id = txn.id
       WHERE txn.is_deleted = false
         AND (${settlementType === 'RECEIPT' ? 'txn.credit_amount > 0' : 'txn.debit_amount > 0'})
-        AND (GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0)) > 0
+        AND (
+          already_settled.bank_transaction_id IS NOT NULL
+          OR (GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0)) > 0
+        )
         AND (
           ABS(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - $1) < 1
           ${textConditionSql}
@@ -353,6 +363,7 @@ export class GarageSmartSettlementService {
             : undefined,
           cashBook: raw.cashBookName ? { name: raw.cashBookName } : undefined,
           remainingAmount: parseFloat(raw.remainingAmount) || 0,
+          alreadySettledForThisCase: Boolean(raw.alreadySettledForThisCase),
         },
         score: {
           score,

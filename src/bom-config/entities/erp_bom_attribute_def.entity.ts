@@ -9,8 +9,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from './erp_bom_category.entity';
-import { ErpBomAttributeValue } from './erp_bom_attribute_value.entity';
+import type { ErpBomCategory } from './erp_bom_category.entity';
+import type { ErpBomAttributeValue } from './erp_bom_attribute_value.entity';
 
 export type BomAttributeFieldType =
   | 'TEXT'
@@ -33,7 +33,7 @@ export class ErpBomAttributeDef {
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, (cat) => cat.attributeDefs, {
+  @ManyToOne('ErpBomCategory', 'attributeDefs', {
     onDelete: 'CASCADE',
     nullable: true,
   })
@@ -81,7 +81,7 @@ export class ErpBomAttributeDef {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => ErpBomAttributeValue, (val) => val.attrDef)
+  @OneToMany('ErpBomAttributeValue', 'attrDef')
   attributeValues?: ErpBomAttributeValue[];
 
   // Non-persistent computed field

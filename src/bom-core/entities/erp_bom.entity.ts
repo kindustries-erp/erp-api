@@ -9,8 +9,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeValue } from '../../bom-config/entities/erp_bom_attribute_value.entity';
+import type { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
+import type { ErpBomAttributeValue } from '../../bom-config/entities/erp_bom_attribute_value.entity';
 
 @Entity({ name: 'erp_boms' })
 export class ErpBom {
@@ -30,7 +30,7 @@ export class ErpBom {
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL' })
+  @ManyToOne('ErpBomCategory', { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'category_id' })
   category?: ErpBomCategory;
 
@@ -61,6 +61,6 @@ export class ErpBom {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => ErpBomAttributeValue, (val) => val.bom)
+  @OneToMany('ErpBomAttributeValue', 'bom')
   attributeValues?: ErpBomAttributeValue[];
 }

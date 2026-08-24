@@ -243,6 +243,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/:id/smart-settlement-suggestions` | `id` (UUID Case), Query: `type` (`RECEIPT` \| `PAYMENT`) | Gợi ý đối soát sao kê thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ + Biển số xe + Khách hàng) |
 | `GET` | `/cases/:id/smart-invoice-suggestions` | `id` (UUID Case), Query: `direction` (`OUT` \| `IN`) | Gợi ý đối soát hóa đơn VAT thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ/Lệnh quyết toán + Biển số xe + Tên khách/Nhà cung cấp + Cùng tháng) |
 | `POST`| `/cases/:id/settlements` | `id`, Body: `{ bankTransactionId, settlementType, sourceChannel, category, amount, transDate, partnerName, note }` | Ghi nhận cấn trừ giao dịch dòng tiền (ERP hoặc ngoài sổ sách) |
+| `PATCH`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId`, Body: `{ amount?, category?, note?, transDate?, partnerName? }` | Cập nhật giao dịch cấn trừ ngoài sổ sách (`OFF_SYSTEM_MANUAL`), tự động cập nhật net-off hóa đơn liên kết nếu có và tính lại công nợ. Chặn sửa sao kê ngân hàng (`ON_SYSTEM`) |
 | `DELETE`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId` | Xóa bản ghi thu/chi dòng tiền khỏi vụ việc |
 
 ### 4.2. Nhóm Lợi Nhuận Gộp & Đối Soát Báo Cáo
@@ -334,6 +335,10 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
      - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
+- **Ma trận Quyền hạn Thao tác trên Dòng tiền**:
+  - `OFF_SYSTEM_MANUAL` (Sổ ngoài / Tiền mặt): Cho phép **Thêm**, **Sửa** (qua `PATCH /cases/:id/settlements/:settlementId`), và **Xóa**.
+  - `ON_SYSTEM` (Sao kê ngân hàng / Sổ quỹ ERP): Cho phép **Thêm** và **Xóa**; **Chặn Sửa** trực tiếp (nút Sửa hiển thị mờ kèm Tooltip giải thích; Backend guard trả về `400 BadRequestException`).
+  - `isViaInvoice` (Cấn trừ tự động từ Hóa đơn): **Khóa hoàn toàn** không cho Sửa/Xóa trực tiếp; hiển thị icon Khóa kèm Tooltip: _"Cấn trừ tự động từ hóa đơn liên kết. Để gỡ, hãy xóa liên kết hóa đơn tương ứng."_
 - **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
   - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
   - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
@@ -341,6 +346,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 ### 5.9. Cơ chế Đồng bộ Cấn trừ Tự động 2 Chiều Toàn Diện (Full Bidirectional Net-Off & Settlement Sync)
 - **Vụ việc → Hóa đơn**:
   - Khi thêm giao dịch Sao kê ngân hàng (`ON_SYSTEM`) vào vụ việc qua `addCaseSettlement`: Backend tự động tìm các Hóa đơn VAT liên kết đang có và tạo/cập nhật bản ghi cấn trừ `erp_invoice_voucher_netoff` tương ứng.
+  - Khi cập nhật số tiền giao dịch (`updateCaseSettlement`): Backend tự động cập nhật lại `net_off_amount` trên các hóa đơn liên kết tương ứng.
   - Khi gỡ giao dịch Sao kê khỏi vụ việc qua `removeCaseSettlement`: Backend tự động dọn dẹp các bản ghi `erp_invoice_voucher_netoff` trên toàn bộ hóa đơn liên kết và tính lại công nợ.
 - **Hóa đơn → Vụ việc**:
   - Khi cấn trừ Sao kê với Hóa đơn qua `linkInvoiceToTransaction` trong `TransactionAccountingService`: Backend tự động quét các vụ việc đang liên kết với hóa đơn đó (`kgara_case_linked_invoice`), tự động tạo/cập nhật `kgara_case_settlements` và cập nhật giảm công nợ `tien_con_phai_thanh_toan` của vụ việc.
@@ -349,7 +355,8 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Tự động đồng bộ 2 chiều: Nếu vụ việc đã có sao kê trước $\rightarrow$ cấn trừ sang Hóa đơn; Nếu Hóa đơn đã có sao kê trước $\rightarrow$ tự động tạo settlement cho vụ việc và tính lại số dư.
   - Khi gỡ liên kết (`removeLinkedInvoice`): Tự động dọn dẹp các cấn trừ chéo giữa 2 bên.
 - **Gợi ý Đối soát Thông minh (`GarageSmartSettlementService`)**:
-  - Khi tính `remainingAmount` trong gợi ý sao kê cho vụ việc, tự động loại trừ net-off của chính các hóa đơn liên kết với vụ việc đó, tránh việc sao kê đã full net-off cho hóa đơn bị ẩn khỏi danh sách gợi ý.
+  - Khi tính `remainingAmount` trong gợi ý sao kê cho vụ việc, tự động loại trừ net-off của chính các hóa đơn liên kết với vụ việc đó (`invoice_id NOT IN (...)`), tránh việc sao kê đã full net-off cho hóa đơn bị ẩn khỏi danh sách gợi ý.
+  - Tự động `LEFT JOIN` kiểm tra `already_settled` để sao kê đã là cấn trừ của vụ việc hiện tại luôn xuất hiện trong gợi ý (kèm cờ `alreadySettledForThisCase = true`, badge `ĐÃ CẤN TRỪ` và nút `Chọn lại cấn trừ`).
 
 ### 5.10. Quy tắc Gỡ liên kết Chứng từ trên Giao diện (Client-side Staging & Batch Save)
 - Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](file:///home/dev/repos/erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
