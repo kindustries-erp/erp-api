@@ -139,6 +139,7 @@ describe('GarageSmartSettlementService', () => {
           creditAmount: '2500000',
           sourceType: 'BANK',
           remainingAmount: '2500000',
+          alreadySettledForThisCase: true,
         },
       ]);
 
@@ -149,6 +150,8 @@ describe('GarageSmartSettlementService', () => {
 
       expect(suggestions).toHaveLength(1);
       expect(suggestions[0].score.badge).toBe('POSSIBLE');
+      expect(suggestions[0].score.amountMatch).toBe(true);
+      expect(suggestions[0].txn.alreadySettledForThisCase).toBe(true);
     });
 
     it('should rank NOTICE when plate matches but amount differs', async () => {

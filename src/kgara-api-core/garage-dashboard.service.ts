@@ -5,6 +5,7 @@ import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
+import { GarageOpexService } from './services/garage-opex.service';
 import * as ExcelJS from 'exceljs';
 import {
   startOfMonth,
@@ -30,6 +31,7 @@ export class GarageDashboardService {
     private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
     @InjectRepository(KgaraCaseSettlement)
     private readonly settlementRepo: Repository<KgaraCaseSettlement>,
+    private readonly opexService: GarageOpexService,
   ) {}
 
   /**
@@ -976,6 +978,265 @@ export class GarageDashboardService {
         fgColor: { argb: 'FFE0E0E0' },
       };
     });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as unknown as Buffer;
+  }
+
+  /**
+   * 6. Lấy Báo cáo Lợi nhuận (P&L) Garage theo tháng (Doanh thu + Giá vốn + CP vận hành + Hoa hồng -> Lợi nhuận ròng)
+   */
+  async getPnlReport(year?: number, month?: number) {
+    const currentYear = year ? Number(year) : new Date().getFullYear();
+    const currentMonth = month ? Number(month) : new Date().getMonth() + 1;
+    const periodStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+    // 1. Tổng hợp Doanh thu & Chi phí giá vốn từ các vụ việc hoàn thành trong tháng
+    const qb = this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'revenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cogs')
+      .addSelect('COUNT(c.id)', 'caseCount')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere(
+        "TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM') = :periodStr",
+        { periodStr },
+      );
+
+    const rawAgg = await qb.getRawOne();
+    const revenue = Number(rawAgg?.revenue) || 0;
+    const cogsDirect = Number(rawAgg?.cogs) || 0;
+    const caseCount = Number(rawAgg?.caseCount) || 0;
+
+    // 2. Lấy Chi phí vận hành, Hoa hồng & Chi phí trực tiếp nhập tay từ GarageOpexService
+    const opexSummary = await this.opexService.getSummaryByPeriod(
+      currentYear,
+      currentMonth,
+    );
+
+    const cogs = cogsDirect + opexSummary.directCost.total;
+    const grossProfit = revenue - cogs;
+
+    const netProfitBeforeCommission = grossProfit - opexSummary.opex.total;
+    const netProfitAfterCommission =
+      netProfitBeforeCommission - opexSummary.commission.total;
+
+    return {
+      period: { year: currentYear, month: currentMonth },
+      periodStr: `${String(currentMonth).padStart(2, '0')}/${currentYear}`,
+      caseCount,
+      revenue,
+      cogs,
+      cogsDirect,
+      cogsAdjustment: opexSummary.directCost,
+      grossProfit,
+      grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+      opex: opexSummary.opex,
+      netProfitBeforeCommission,
+      commission: opexSummary.commission,
+      netProfitAfterCommission,
+      netMarginRate:
+        revenue > 0 ? (netProfitAfterCommission / revenue) * 100 : 0,
+    };
+  }
+
+  /**
+   * 7. Xuất Báo cáo Lợi nhuận (P&L) ra file Excel
+   */
+  async exportPnlExcel(year?: number, month?: number): Promise<Buffer> {
+    const report = await this.getPnlReport(year, month);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Liouni ERP';
+    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet(
+      `P&L Tháng ${report.period.month}-${report.period.year}`,
+    );
+
+    sheet.columns = [
+      { header: 'Danh Mục', key: 'category', width: 45 },
+      {
+        header: 'Giá Trị (VND)',
+        key: 'amount',
+        width: 25,
+        style: { numFmt: '#,##0' },
+      },
+    ];
+
+    // Tiêu đề lớn
+    sheet.spliceRows(1, 0, [
+      `BÁO CÁO LỢI NHUẬN (P&L) GARAGE - THÁNG ${String(report.period.month).padStart(2, '0')}/${report.period.year}`,
+      '',
+    ]);
+    sheet.mergeCells('A1:B1');
+    const titleRow = sheet.getRow(1);
+    titleRow.font = {
+      name: 'Arial',
+      size: 14,
+      bold: true,
+      color: { argb: 'FF1E293B' },
+    };
+    titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleRow.height = 30;
+
+    // Header bảng
+    const headerRow = sheet.getRow(2);
+    headerRow.font = {
+      name: 'Arial',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF334155' },
+    };
+    headerRow.height = 24;
+
+    const rowsData: Array<{
+      category: string;
+      amount: number | string;
+      isHeader?: boolean;
+      isHighlight?: boolean;
+      isSuccess?: boolean;
+      isChild?: boolean;
+    }> = [
+      { category: 'I. Doanh Thu', amount: report.revenue, isHeader: true },
+      {
+        category: '   Doanh Thu Dịch Vụ',
+        amount: report.revenue,
+        isChild: true,
+      },
+      {
+        category: 'II. Chi phí (Giá vốn)',
+        amount: report.cogs,
+        isHeader: true,
+      },
+      {
+        category: '   Chi phí phụ tùng & Gia công ngoài',
+        amount: report.cogsDirect,
+        isChild: true,
+      },
+    ];
+
+    if (report.cogsAdjustment && report.cogsAdjustment.items.length > 0) {
+      for (const item of report.cogsAdjustment.items) {
+        rowsData.push({
+          category: `   ${item.categoryName}`,
+          amount: item.amount,
+          isChild: true,
+        });
+      }
+    }
+
+    rowsData.push(
+      {
+        category: 'III. Lợi nhuận gộp',
+        amount: report.grossProfit,
+        isHighlight: true,
+      },
+      {
+        category: 'IV. Chi phí vận hành',
+        amount: report.opex.total,
+        isHeader: true,
+      },
+    );
+
+    if (report.opex.items.length === 0) {
+      rowsData.push({
+        category: '   (Chưa nhập chi phí vận hành)',
+        amount: 0,
+        isChild: true,
+      });
+    } else {
+      for (const item of report.opex.items) {
+        rowsData.push({
+          category: `   ${item.categoryName}`,
+          amount: item.amount,
+          isChild: true,
+        });
+      }
+    }
+
+    rowsData.push({
+      category: 'V. Lợi nhuận ròng (trước hoa hồng)',
+      amount: report.netProfitBeforeCommission,
+      isHighlight: true,
+    });
+
+    rowsData.push({
+      category: 'VI. Hoa hồng',
+      amount: report.commission.total,
+      isHeader: true,
+    });
+
+    if (report.commission.items.length === 0) {
+      rowsData.push({
+        category: '   (Chưa nhập hoa hồng)',
+        amount: 0,
+        isChild: true,
+      });
+    } else {
+      for (const item of report.commission.items) {
+        rowsData.push({
+          category: `   ${item.categoryName}`,
+          amount: item.amount,
+          isChild: true,
+        });
+      }
+    }
+
+    rowsData.push({
+      category: 'VII. Lợi nhuận ròng (sau hoa hồng)',
+      amount: report.netProfitAfterCommission,
+      isSuccess: true,
+    });
+
+    for (const r of rowsData) {
+      const addedRow = sheet.addRow({
+        category: r.category,
+        amount: typeof r.amount === 'number' ? r.amount : 0,
+      });
+      addedRow.height = 22;
+
+      if (r.isHeader) {
+        addedRow.font = { bold: true, color: { argb: 'FF0F172A' } };
+        addedRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF1F5F9' },
+        };
+      } else if (r.isHighlight) {
+        addedRow.font = { bold: true, color: { argb: 'FF1E3A8A' } };
+        addedRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFDBEAFE' },
+        };
+      } else if (r.isSuccess) {
+        addedRow.font = { bold: true, size: 12, color: { argb: 'FF14532D' } };
+        addedRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFDCFCE7' },
+        };
+      } else if (r.isChild) {
+        addedRow.font = { color: { argb: 'FF475569' } };
+      }
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as unknown as Buffer;

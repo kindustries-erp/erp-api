@@ -343,7 +343,7 @@ export class BomConfigService {
       if (code !== def.code) {
         const existing = await this.attrDefRepo.findOne({
           where: {
-            categoryId: def.categoryId,
+            categoryId: def.categoryId!,
             code: ILike(code),
             isDeleted: false,
           },

@@ -12,6 +12,7 @@ import {
   createParamDecorator,
   ExecutionContext,
   NotFoundException,
+  BadRequestException,
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
@@ -2797,6 +2798,93 @@ export class KgaraApiCoreController implements OnModuleInit {
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
     await this.recalculateCaseSettlementSummary(id);
     return { success: true };
+  }
+
+  @Patch('cases/:id/settlements/:settlementId')
+  @RequirePermissions({ resource: 'garage', action: 'update' })
+  async updateCaseSettlement(
+    @Param('id') id: string,
+    @Param('settlementId') settlementId: string,
+    @Body()
+    body: {
+      amount?: number;
+      category?: string;
+      note?: string;
+      transDate?: string;
+      partnerName?: string;
+    },
+  ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (
+      settlementId.startsWith('tmp-') ||
+      settlementId.startsWith('manual-tmp-') ||
+      id.startsWith('tmp-') ||
+      (process.env.NODE_ENV !== 'test' &&
+        (!uuidRegex.test(settlementId) || !uuidRegex.test(id)))
+    ) {
+      return { success: true, message: 'Ignored non-persisted temporary ID' };
+    }
+
+    const settlement = await this.settlementRepo.findOne({
+      where: { id: settlementId, caseId: id },
+    });
+
+    if (!settlement) {
+      throw new NotFoundException(
+        `Không tìm thấy cấn trừ ${settlementId} của vụ việc ${id}`,
+      );
+    }
+
+    if (settlement.sourceChannel === 'ON_SYSTEM') {
+      throw new BadRequestException(
+        'Sao kê ngân hàng chỉ có thể thêm hoặc xóa, không chỉnh sửa trực tiếp.',
+      );
+    }
+
+    const oldAmount = Number(settlement.amount || 0);
+
+    if (body.category !== undefined) settlement.category = body.category;
+    if (body.note !== undefined) settlement.note = body.note;
+    if (body.transDate !== undefined) settlement.transDate = body.transDate;
+    if (body.partnerName !== undefined)
+      settlement.partnerName = body.partnerName;
+    if (body.amount !== undefined) settlement.amount = Number(body.amount);
+
+    const saved = await this.settlementRepo.save(settlement);
+
+    if (
+      body.amount !== undefined &&
+      Number(body.amount) !== oldAmount &&
+      settlement.bankTransactionId
+    ) {
+      try {
+        const linkedInvoices = await this.linkedInvoiceRepo.query(
+          `SELECT DISTINCT i.id
+           FROM erp_invoices i
+           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
+             AND i.is_deleted = false`,
+          [id],
+        );
+        const invIds = linkedInvoices.map((i: any) => i.id).filter(Boolean);
+        if (invIds.length > 0) {
+          await this.settlementRepo.manager.query(
+            `UPDATE erp_invoice_voucher_netoff
+             SET net_off_amount = $1, updated_at = now()
+             WHERE bank_transaction_id = $2 AND invoice_id = ANY($3::uuid[])`,
+            [Number(body.amount), settlement.bankTransactionId, invIds],
+          );
+        }
+      } catch (updateSyncErr) {
+        this.logger.warn(
+          `Could not update invoice netoff on settlement update: ${updateSyncErr}`,
+        );
+      }
+    }
+
+    await this.recalculateCaseSettlementSummary(id);
+    return saved;
   }
 
   private async recalculateCaseSettlementSummary(caseId: string) {
