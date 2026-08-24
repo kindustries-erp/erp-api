@@ -409,12 +409,14 @@ src/modules/erp-invoices-core/components/ErpInvoicesTab/
 │   ├── useInvoiceSummary.tsx                    # Tính toán dòng tổng cộng Footer Summary Row
 │   └── useInvoiceModals.ts                      # Quản lý state mở/đóng 12 Drawers, Preview PDF, Export, Sync
 └── components/
+    ├── InvoiceViewModeCombobox.tsx              # Dropdown chọn/chỉnh sửa chế độ xem (Tổng quan, Kiểm toán, Custom)
+    ├── InvoiceViewConfigDrawer.tsx              # Drawer cấu hình cột hiển thị & Reset về mặc định
     ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối và định vị thứ tự 14+ cột bảng dữ liệu
     ├── InvoiceDrawers.tsx                       # Gom cụm 10 Drawer/Modal xem & xử lý hóa đơn
     ├── InvoiceBulkModals.tsx                    # Gom cụm các Modal/Drawer thao tác hàng loạt
     ├── cells/
-    │   ├── InvoiceNoCell.tsx                    # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono), Eye icon căn giữa & copy độc lập
-    │   ├── InvoicePartnerCell.tsx               # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono), Drawer icon căn giữa & copy độc lập
+    │   ├── InvoiceNoCell.tsx                    # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono)
+    │   ├── InvoicePartnerCell.tsx               # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono)
     │   ├── InvoiceAttachmentsCell.tsx           # Icon XML + Popover quản lý danh sách file PDF
     │   ├── InvoiceItemsPopover.tsx              # Popover bảng chi tiết mặt hàng 15 cột trong ô Diễn giải
     │   └── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
