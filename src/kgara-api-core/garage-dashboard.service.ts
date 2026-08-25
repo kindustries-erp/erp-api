@@ -108,6 +108,106 @@ export class GarageDashboardService {
         "COUNT(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN c.id END)",
         'caseCountNoInvoice',
       )
+      // Classification Breakdowns: Sửa chữa chung
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costSuaChuaChung',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN c.id END)",
+        'caseCountSuaChuaChung',
+      )
+      // Classification Breakdowns: Ký gửi / Nội bộ
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costKyGuiNoiBo',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
+        'caseCountKyGuiNoiBo',
+      )
+      // Classification Breakdowns: OJ Ngoài
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costOj',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN c.id END)",
+        'caseCountOj',
+      )
+      // Classification Breakdowns: Khác / Chưa phân loại
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costOther',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN c.id END)",
+        'caseCountOther',
+      )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
@@ -144,6 +244,22 @@ export class GarageDashboardService {
         "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
         'paidCostNoInvoice',
       )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN s.amount ELSE 0 END)",
+        'paidCostSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN s.amount ELSE 0 END)",
+        'paidCostKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN s.amount ELSE 0 END)",
+        'paidCostOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN s.amount ELSE 0 END)",
+        'paidCostOther',
+      )
       .where("s.settlement_type = 'PAYMENT'")
       .andWhere('c.kgara_deleted_at IS NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
@@ -172,6 +288,10 @@ export class GarageDashboardService {
           total: Number(r.totalPaidCost) || 0,
           withInvoice: Number(r.paidCostWithInvoice) || 0,
           noInvoice: Number(r.paidCostNoInvoice) || 0,
+          suaChuaChung: Number(r.paidCostSuaChuaChung) || 0,
+          kyGuiNoiBo: Number(r.paidCostKyGuiNoiBo) || 0,
+          oj: Number(r.paidCostOj) || 0,
+          other: Number(r.paidCostOther) || 0,
         },
       ]),
     );
@@ -198,6 +318,10 @@ export class GarageDashboardService {
         total: 0,
         withInvoice: 0,
         noInvoice: 0,
+        suaChuaChung: 0,
+        kyGuiNoiBo: 0,
+        oj: 0,
+        other: 0,
       };
       const paidCost = paidCostInfo.total;
       const payableCost = Math.max(0, cost - paidCost);
@@ -272,6 +396,112 @@ export class GarageDashboardService {
             )
           : 100;
 
+      // ── Classification Breakdowns ──
+      // 1. Sửa chữa chung
+      const tcSuaChuaChung = Number(r.tienCoThueSuaChuaChung) || 0;
+      const pSuaChuaChung = Number(r.paidSuaChuaChung) || 0;
+      const recSuaChuaChung = Number(r.receivableSuaChuaChung) || 0;
+      const revSuaChuaChung = Number(r.revenueSuaChuaChung) || 0;
+      const billedSuaChuaChung =
+        tcSuaChuaChung > 0
+          ? tcSuaChuaChung
+          : pSuaChuaChung + recSuaChuaChung > 0
+            ? pSuaChuaChung + recSuaChuaChung
+            : revSuaChuaChung;
+      const rateSuaChuaChung =
+        billedSuaChuaChung > 0
+          ? Math.min(
+              100,
+              Math.round((pSuaChuaChung / billedSuaChuaChung) * 1000) / 10,
+            )
+          : 0;
+      const costSuaChuaChung = Number(r.costSuaChuaChung) || 0;
+      const paidCostSuaChuaChung = paidCostInfo.suaChuaChung;
+      const payableCostSuaChuaChung = Math.max(
+        0,
+        costSuaChuaChung - paidCostSuaChuaChung,
+      );
+      const costRateSuaChuaChung =
+        costSuaChuaChung > 0
+          ? Math.min(
+              100,
+              Math.round((paidCostSuaChuaChung / costSuaChuaChung) * 1000) / 10,
+            )
+          : 100;
+
+      // 2. Ký gửi / Nội bộ
+      const tcKyGuiNoiBo = Number(r.tienCoThueKyGuiNoiBo) || 0;
+      const pKyGuiNoiBo = Number(r.paidKyGuiNoiBo) || 0;
+      const recKyGuiNoiBo = Number(r.receivableKyGuiNoiBo) || 0;
+      const revKyGuiNoiBo = Number(r.revenueKyGuiNoiBo) || 0;
+      const billedKyGuiNoiBo =
+        tcKyGuiNoiBo > 0
+          ? tcKyGuiNoiBo
+          : pKyGuiNoiBo + recKyGuiNoiBo > 0
+            ? pKyGuiNoiBo + recKyGuiNoiBo
+            : revKyGuiNoiBo;
+      const rateKyGuiNoiBo =
+        billedKyGuiNoiBo > 0
+          ? Math.min(
+              100,
+              Math.round((pKyGuiNoiBo / billedKyGuiNoiBo) * 1000) / 10,
+            )
+          : 0;
+      const costKyGuiNoiBo = Number(r.costKyGuiNoiBo) || 0;
+      const paidCostKyGuiNoiBo = paidCostInfo.kyGuiNoiBo;
+      const payableCostKyGuiNoiBo = Math.max(
+        0,
+        costKyGuiNoiBo - paidCostKyGuiNoiBo,
+      );
+      const costRateKyGuiNoiBo =
+        costKyGuiNoiBo > 0
+          ? Math.min(
+              100,
+              Math.round((paidCostKyGuiNoiBo / costKyGuiNoiBo) * 1000) / 10,
+            )
+          : 100;
+
+      // 3. OJ Ngoài
+      const tcOj = Number(r.tienCoThueOj) || 0;
+      const pOj = Number(r.paidOj) || 0;
+      const recOj = Number(r.receivableOj) || 0;
+      const revOj = Number(r.revenueOj) || 0;
+      const billedOj = tcOj > 0 ? tcOj : pOj + recOj > 0 ? pOj + recOj : revOj;
+      const rateOj =
+        billedOj > 0
+          ? Math.min(100, Math.round((pOj / billedOj) * 1000) / 10)
+          : 0;
+      const costOj = Number(r.costOj) || 0;
+      const paidCostOj = paidCostInfo.oj;
+      const payableCostOj = Math.max(0, costOj - paidCostOj);
+      const costRateOj =
+        costOj > 0
+          ? Math.min(100, Math.round((paidCostOj / costOj) * 1000) / 10)
+          : 100;
+
+      // 4. Khác / Chưa phân loại
+      const tcOther = Number(r.tienCoThueOther) || 0;
+      const pOther = Number(r.paidOther) || 0;
+      const recOther = Number(r.receivableOther) || 0;
+      const revOther = Number(r.revenueOther) || 0;
+      const billedOther =
+        tcOther > 0
+          ? tcOther
+          : pOther + recOther > 0
+            ? pOther + recOther
+            : revOther;
+      const rateOther =
+        billedOther > 0
+          ? Math.min(100, Math.round((pOther / billedOther) * 1000) / 10)
+          : 0;
+      const costOther = Number(r.costOther) || 0;
+      const paidCostOther = paidCostInfo.other;
+      const payableCostOther = Math.max(0, costOther - paidCostOther);
+      const costRateOther =
+        costOther > 0
+          ? Math.min(100, Math.round((paidCostOther / costOther) * 1000) / 10)
+          : 100;
+
       return {
         label: r.month,
         revenue: rev,
@@ -308,6 +538,50 @@ export class GarageDashboardService {
         paidCostNoInvoice,
         payableCostNoInvoice,
         costRateNoInvoice,
+
+        // Classification breakdowns: Sửa chữa chung
+        caseCountSuaChuaChung: Number(r.caseCountSuaChuaChung) || 0,
+        billedSuaChuaChung,
+        paidSuaChuaChung: pSuaChuaChung,
+        receivableSuaChuaChung: recSuaChuaChung,
+        rateSuaChuaChung,
+        costSuaChuaChung,
+        paidCostSuaChuaChung,
+        payableCostSuaChuaChung,
+        costRateSuaChuaChung,
+
+        // Classification breakdowns: Ký gửi / Nội bộ
+        caseCountKyGuiNoiBo: Number(r.caseCountKyGuiNoiBo) || 0,
+        billedKyGuiNoiBo,
+        paidKyGuiNoiBo: pKyGuiNoiBo,
+        receivableKyGuiNoiBo: recKyGuiNoiBo,
+        rateKyGuiNoiBo,
+        costKyGuiNoiBo,
+        paidCostKyGuiNoiBo,
+        payableCostKyGuiNoiBo,
+        costRateKyGuiNoiBo,
+
+        // Classification breakdowns: OJ Ngoài
+        caseCountOj: Number(r.caseCountOj) || 0,
+        billedOj,
+        paidOj: pOj,
+        receivableOj: recOj,
+        rateOj,
+        costOj,
+        paidCostOj,
+        payableCostOj,
+        costRateOj,
+
+        // Classification breakdowns: Khác / Chưa phân loại
+        caseCountOther: Number(r.caseCountOther) || 0,
+        billedOther,
+        paidOther: pOther,
+        receivableOther: recOther,
+        rateOther,
+        costOther,
+        paidCostOther,
+        payableCostOther,
+        costRateOther,
       };
     });
 
