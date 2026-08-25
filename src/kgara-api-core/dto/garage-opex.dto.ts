@@ -34,6 +34,11 @@ export class CreateGarageOpexDto {
   @Type(() => Number)
   amount: number;
 
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  ojAmount?: number;
+
   @IsString()
   @IsOptional()
   note?: string;
@@ -85,6 +90,11 @@ export class UpdateGarageOpexDto {
   @Type(() => Number)
   amount?: number;
 
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  ojAmount?: number;
+
   @IsString()
   @IsOptional()
   note?: string;
@@ -119,6 +129,11 @@ export class ApplyRecurringOpexDto {
   @IsNotEmpty()
   @Type(() => Number)
   amount: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  ojAmount?: number;
 
   @IsString()
   @IsOptional()

@@ -29,6 +29,15 @@ export class KgaraOperatingExpense {
   @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 })
   amount: number;
 
+  @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 2,
+    name: 'oj_amount',
+    default: 0,
+  })
+  ojAmount: number;
+
   @Column({ type: 'text', nullable: true })
   note?: string | null;
 

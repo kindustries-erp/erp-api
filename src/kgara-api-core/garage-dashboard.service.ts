@@ -1192,6 +1192,18 @@ export class GarageDashboardService {
       )
       .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cogs')
       .addSelect('COUNT(c.id)', 'caseCount')
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'ojRevenue',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'ojCogs',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)",
+        'ojCaseCount',
+      )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -1205,6 +1217,10 @@ export class GarageDashboardService {
     const cogsDirect = Number(rawAgg?.cogs) || 0;
     const caseCount = Number(rawAgg?.caseCount) || 0;
 
+    const ojRevenue = Number(rawAgg?.ojRevenue) || 0;
+    const ojCogsDirect = Number(rawAgg?.ojCogs) || 0;
+    const ojCaseCount = Number(rawAgg?.ojCaseCount) || 0;
+
     // 2. Lấy Chi phí vận hành, Hoa hồng & Chi phí trực tiếp nhập tay từ GarageOpexService
     const opexSummary = await this.opexService.getSummaryByPeriod(
       currentYear,
@@ -1217,6 +1233,16 @@ export class GarageDashboardService {
     const netProfitBeforeCommission = grossProfit - opexSummary.opex.total;
     const netProfitAfterCommission =
       netProfitBeforeCommission - opexSummary.commission.total;
+
+    // Tính toán riêng cho phân khúc OJ
+    const ojDirectCostTotal = opexSummary.directCost.ojTotal || 0;
+    const ojCogs = ojCogsDirect + ojDirectCostTotal;
+    const ojGrossProfit = ojRevenue - ojCogs;
+    const ojOpexTotal = opexSummary.opex.ojTotal || 0;
+    const ojNetProfitBeforeCommission = ojGrossProfit - ojOpexTotal;
+    const ojCommissionTotal = opexSummary.commission.ojTotal || 0;
+    const ojNetProfitAfterCommission =
+      ojNetProfitBeforeCommission - ojCommissionTotal;
 
     return {
       period: { year: currentYear, month: currentMonth },
@@ -1234,6 +1260,22 @@ export class GarageDashboardService {
       netProfitAfterCommission,
       netMarginRate:
         revenue > 0 ? (netProfitAfterCommission / revenue) * 100 : 0,
+      oj: {
+        caseCount: ojCaseCount,
+        revenue: ojRevenue,
+        revenueRatio: revenue > 0 ? (ojRevenue / revenue) * 100 : 0,
+        cogs: ojCogs,
+        cogsDirect: ojCogsDirect,
+        cogsAdjustmentTotal: ojDirectCostTotal,
+        grossProfit: ojGrossProfit,
+        grossMarginRate: ojRevenue > 0 ? (ojGrossProfit / ojRevenue) * 100 : 0,
+        opexTotal: ojOpexTotal,
+        netProfitBeforeCommission: ojNetProfitBeforeCommission,
+        commissionTotal: ojCommissionTotal,
+        netProfitAfterCommission: ojNetProfitAfterCommission,
+        netMarginRate:
+          ojRevenue > 0 ? (ojNetProfitAfterCommission / ojRevenue) * 100 : 0,
+      },
     };
   }
 
@@ -1254,9 +1296,15 @@ export class GarageDashboardService {
     sheet.columns = [
       { header: 'Danh Mục', key: 'category', width: 45 },
       {
-        header: 'Giá Trị (VND)',
+        header: 'Toàn Bộ (VND)',
         key: 'amount',
-        width: 25,
+        width: 24,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Riêng OJ (VND)',
+        key: 'ojAmount',
+        width: 24,
         style: { numFmt: '#,##0' },
       },
     ];
@@ -1265,8 +1313,9 @@ export class GarageDashboardService {
     sheet.spliceRows(1, 0, [
       `BÁO CÁO LỢI NHUẬN (P&L) GARAGE - THÁNG ${String(report.period.month).padStart(2, '0')}/${report.period.year}`,
       '',
+      '',
     ]);
-    sheet.mergeCells('A1:B1');
+    sheet.mergeCells('A1:C1');
     const titleRow = sheet.getRow(1);
     titleRow.font = {
       name: 'Arial',
@@ -1296,25 +1345,34 @@ export class GarageDashboardService {
     const rowsData: Array<{
       category: string;
       amount: number | string;
+      ojAmount?: number | string;
       isHeader?: boolean;
       isHighlight?: boolean;
       isSuccess?: boolean;
       isChild?: boolean;
     }> = [
-      { category: 'I. Doanh Thu', amount: report.revenue, isHeader: true },
+      {
+        category: 'I. Doanh Thu',
+        amount: report.revenue,
+        ojAmount: report.oj?.revenue || 0,
+        isHeader: true,
+      },
       {
         category: '   Doanh Thu Dịch Vụ',
         amount: report.revenue,
+        ojAmount: report.oj?.revenue || 0,
         isChild: true,
       },
       {
         category: 'II. Chi phí (Giá vốn)',
         amount: report.cogs,
+        ojAmount: report.oj?.cogs || 0,
         isHeader: true,
       },
       {
         category: '   Chi phí phụ tùng & Gia công ngoài',
         amount: report.cogsDirect,
+        ojAmount: report.oj?.cogsDirect || 0,
         isChild: true,
       },
     ];
@@ -1324,6 +1382,7 @@ export class GarageDashboardService {
         rowsData.push({
           category: `   ${item.categoryName}`,
           amount: item.amount,
+          ojAmount: item.ojAmount || 0,
           isChild: true,
         });
       }
@@ -1333,11 +1392,13 @@ export class GarageDashboardService {
       {
         category: 'III. Lợi nhuận gộp',
         amount: report.grossProfit,
+        ojAmount: report.oj?.grossProfit || 0,
         isHighlight: true,
       },
       {
         category: 'IV. Chi phí vận hành',
         amount: report.opex.total,
+        ojAmount: report.oj?.opexTotal || 0,
         isHeader: true,
       },
     );
@@ -1346,6 +1407,7 @@ export class GarageDashboardService {
       rowsData.push({
         category: '   (Chưa nhập chi phí vận hành)',
         amount: 0,
+        ojAmount: 0,
         isChild: true,
       });
     } else {
@@ -1353,6 +1415,7 @@ export class GarageDashboardService {
         rowsData.push({
           category: `   ${item.categoryName}`,
           amount: item.amount,
+          ojAmount: item.ojAmount || 0,
           isChild: true,
         });
       }
@@ -1361,12 +1424,14 @@ export class GarageDashboardService {
     rowsData.push({
       category: 'V. Lợi nhuận ròng (trước hoa hồng)',
       amount: report.netProfitBeforeCommission,
+      ojAmount: report.oj?.netProfitBeforeCommission || 0,
       isHighlight: true,
     });
 
     rowsData.push({
       category: 'VI. Hoa hồng',
       amount: report.commission.total,
+      ojAmount: report.oj?.commissionTotal || 0,
       isHeader: true,
     });
 
@@ -1374,6 +1439,7 @@ export class GarageDashboardService {
       rowsData.push({
         category: '   (Chưa nhập hoa hồng)',
         amount: 0,
+        ojAmount: 0,
         isChild: true,
       });
     } else {
@@ -1381,6 +1447,7 @@ export class GarageDashboardService {
         rowsData.push({
           category: `   ${item.categoryName}`,
           amount: item.amount,
+          ojAmount: item.ojAmount || 0,
           isChild: true,
         });
       }
@@ -1389,6 +1456,7 @@ export class GarageDashboardService {
     rowsData.push({
       category: 'VII. Lợi nhuận ròng (sau hoa hồng)',
       amount: report.netProfitAfterCommission,
+      ojAmount: report.oj?.netProfitAfterCommission || 0,
       isSuccess: true,
     });
 
@@ -1396,6 +1464,7 @@ export class GarageDashboardService {
       const addedRow = sheet.addRow({
         category: r.category,
         amount: typeof r.amount === 'number' ? r.amount : 0,
+        ojAmount: typeof r.ojAmount === 'number' ? r.ojAmount : 0,
       });
       addedRow.height = 22;
 
