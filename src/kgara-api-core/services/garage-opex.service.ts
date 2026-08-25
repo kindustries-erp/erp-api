@@ -191,6 +191,7 @@ export class GarageOpexService {
     const data = rawItems.map((item) => ({
       ...item,
       amount: Number(item.amount) || 0,
+      ojAmount: Number(item.ojAmount) || 0,
       period: `${String(item.periodMonth).padStart(2, '0')}/${item.periodYear}`,
     }));
 
@@ -283,6 +284,7 @@ export class GarageOpexService {
     return {
       ...item,
       amount: Number(item.amount) || 0,
+      ojAmount: Number(item.ojAmount) || 0,
       period: `${String(item.periodMonth).padStart(2, '0')}/${item.periodYear}`,
     };
   }
@@ -294,6 +296,7 @@ export class GarageOpexService {
       categoryKey: dto.categoryKey,
       categoryName: dto.categoryName,
       amount: Number(dto.amount) || 0,
+      ojAmount: Number(dto.ojAmount) || 0,
       note: dto.note || null,
       recurrenceType: dto.recurrenceType || null,
       recurrenceUntilYear: dto.recurrenceUntilYear
@@ -318,6 +321,7 @@ export class GarageOpexService {
         {
           applyScope: 'this_and_future',
           amount: Number(saved.amount),
+          ojAmount: Number(saved.ojAmount) || 0,
           categoryKey: saved.categoryKey,
           categoryName: saved.categoryName,
           note: saved.note || undefined,
@@ -332,6 +336,7 @@ export class GarageOpexService {
     return {
       ...saved,
       amount: Number(saved.amount) || 0,
+      ojAmount: Number(saved.ojAmount) || 0,
       period: `${String(saved.periodMonth).padStart(2, '0')}/${saved.periodYear}`,
     };
   }
@@ -348,6 +353,7 @@ export class GarageOpexService {
     if (dto.categoryKey !== undefined) item.categoryKey = dto.categoryKey;
     if (dto.categoryName !== undefined) item.categoryName = dto.categoryName;
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
+    if (dto.ojAmount !== undefined) item.ojAmount = Number(dto.ojAmount) || 0;
     if (dto.note !== undefined) item.note = dto.note || null;
     if (dto.recurrenceType !== undefined)
       item.recurrenceType = dto.recurrenceType || null;
@@ -366,6 +372,7 @@ export class GarageOpexService {
     return {
       ...updated,
       amount: Number(updated.amount) || 0,
+      ojAmount: Number(updated.ojAmount) || 0,
       period: `${String(updated.periodMonth).padStart(2, '0')}/${updated.periodYear}`,
     };
   }
@@ -384,6 +391,7 @@ export class GarageOpexService {
     }
 
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
+    if (dto.ojAmount !== undefined) item.ojAmount = Number(dto.ojAmount) || 0;
     if (dto.categoryKey !== undefined) item.categoryKey = dto.categoryKey;
     if (dto.categoryName !== undefined) item.categoryName = dto.categoryName;
     if (dto.note !== undefined) item.note = dto.note || null;
@@ -406,6 +414,7 @@ export class GarageOpexService {
         item: {
           ...saved,
           amount: Number(saved.amount) || 0,
+          ojAmount: Number(saved.ojAmount) || 0,
           period: `${String(saved.periodMonth).padStart(2, '0')}/${saved.periodYear}`,
         },
       };
@@ -457,6 +466,7 @@ export class GarageOpexService {
 
       if (existing) {
         existing.amount = item.amount;
+        existing.ojAmount = item.ojAmount;
         existing.categoryName = item.categoryName;
         existing.note = item.note;
         existing.recurrenceType = item.recurrenceType;
@@ -472,6 +482,7 @@ export class GarageOpexService {
           categoryKey: item.categoryKey,
           categoryName: item.categoryName,
           amount: item.amount,
+          ojAmount: item.ojAmount,
           note: item.note,
           recurrenceType: item.recurrenceType,
           recurrenceUntilYear: item.recurrenceUntilYear,
@@ -491,6 +502,7 @@ export class GarageOpexService {
       item: {
         ...saved,
         amount: Number(saved.amount) || 0,
+        ojAmount: Number(saved.ojAmount) || 0,
         period: `${String(saved.periodMonth).padStart(2, '0')}/${saved.periodYear}`,
       },
     };
@@ -524,6 +536,7 @@ export class GarageOpexService {
       categoryKey: string;
       categoryName: string;
       amount: number;
+      ojAmount: number;
       note?: string | null;
     }> = [];
 
@@ -532,6 +545,7 @@ export class GarageOpexService {
       categoryKey: string;
       categoryName: string;
       amount: number;
+      ojAmount: number;
       note?: string | null;
     }> = [];
 
@@ -540,20 +554,26 @@ export class GarageOpexService {
       categoryKey: string;
       categoryName: string;
       amount: number;
+      ojAmount: number;
       note?: string | null;
     }> = [];
 
     let totalOpex = 0;
+    let ojTotalOpex = 0;
     let totalCommission = 0;
+    let ojTotalCommission = 0;
     let totalDirectCost = 0;
+    let ojTotalDirectCost = 0;
 
     for (const item of items) {
       const amt = Number(item.amount) || 0;
+      const ojAmt = Number(item.ojAmount) || 0;
       const row = {
         id: item.id,
         categoryKey: item.categoryKey,
         categoryName: item.categoryName,
         amount: amt,
+        ojAmount: ojAmt,
         note: item.note,
       };
 
@@ -563,26 +583,32 @@ export class GarageOpexService {
       ) {
         directCostItems.push(row);
         totalDirectCost += amt;
+        ojTotalDirectCost += ojAmt;
       } else if (item.categoryKey.startsWith('HOA_HONG_')) {
         commissionItems.push(row);
         totalCommission += amt;
+        ojTotalCommission += ojAmt;
       } else {
         opexItems.push(row);
         totalOpex += amt;
+        ojTotalOpex += ojAmt;
       }
     }
 
     return {
       directCost: {
         total: totalDirectCost,
+        ojTotal: ojTotalDirectCost,
         items: directCostItems,
       },
       opex: {
         total: totalOpex,
+        ojTotal: ojTotalOpex,
         items: opexItems,
       },
       commission: {
         total: totalCommission,
+        ojTotal: ojTotalCommission,
         items: commissionItems,
       },
     };

@@ -24,14 +24,20 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Xem/sửa/nhân đôi qua 1-column StandardFormDrawer (`GarageOpexDrawer.tsx`) tích hợp xem trước số tiền bằng chữ (Vietnamese Currency Words) và định dạng số.
 - **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx`)**:
   - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
-  - Phải thu (`totalBilled`) tính chuẩn xác theo `SUM(tien_co_thue)` (Doanh thu thuần + Thuế GTGT VAT).
-  - Phân tách chi tiết 2 nhóm: **Có xuất hóa đơn** (`hd_phieu_dich_vu_id IS NOT NULL`) và **Không xuất hóa đơn** (`hd_phieu_dich_vu_id IS NULL`) với mini progress bar riêng biệt cho từng nhóm.
-  - Bảng hỗ trợ 2 Tab: Thu tiền khách hàng & Trả tiền chi phí NCC kèm `summaryRow` tổng cộng, badge tỷ lệ, thanh tiến độ inline và biến động MoM.
+  - Switch chuyển Tab pill bo tròn gọn gàng chuẩn Dashboard Tổng quan với 2 lựa chọn: **Phải Thu** & **Phải Trả**.
+  - Tiêu đề cột tinh gọn & đồng bộ, bố cục chuẩn hóa:
+    - Tab **Phải Thu**: `#` | `Tháng` | `Số vụ việc` (120px) | `Doanh Thu` | `Còn Phải Thu` (highlight nền xanh lá nhạt `bg-emerald-500/10`) | `Tổng Phải Thu` (progress bar xanh ngọc `#059669`) | `Có HĐ` | `Không HĐ`.
+    - Tab **Phải Trả**: `#` | `Tháng` | `Số vụ việc` (120px) | `Còn Phải Trả` (highlight nền cam nhạt `bg-orange-500/10`) | `Tổng Phải Trả` (progress bar cam `#ea580c`) | `Có HĐ` | `Không HĐ`.
+  - Kết hợp hiển thị **Tổng Phải Thu** (Phải thu / Đã thu) và **Tổng Phải Trả** (Phải trả / Đã trả) dạng thanh tiến độ progress bar + badge % hoàn tất trực quan đồng bộ màu với biểu đồ xu hướng.
+  - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** (`hd_phieu_dich_vu_id IS NULL`) kèm mini progress bar riêng biệt.
+  - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
-  - Tích hợp **Combobox Dropdown Kỳ (Tháng/Năm)** trực tiếp tại header Section để chọn nhanh kỳ báo cáo độc lập.
-  - Bảng tài chính thiết kế tinh giản, bớt màu mè (chỉ highlight nhẹ dòng Lợi nhuận ròng sau hoa hồng).
-  - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước và tháng này (COGS, OPEX, Gross Margin, Net Margin).
+  - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
+  - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
+  - Bảng tài chính thiết kế tinh giản, trung tính (chỉ highlight nhẹ dòng Lợi nhuận ròng sau hoa hồng).
+  - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Phát sinh OJ` (Cột riêng cho Omoda/Jaecoo kèm % tỷ trọng & biên LN nằm bên trái Tháng này) | `Tháng này` (Tổng) | `Tháng trước` (Tổng).
+  - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước, tháng này và cột OJ (COGS, OPEX, Gross Margin, Net Margin).
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:
     1. `I. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
@@ -41,7 +47,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     5. `V. Lợi nhuận ròng (trước hoa hồng)` (`Net Profit Before Commission = Gross Profit - OPEX`)
     6. `VI. Hoa hồng` (Tổng hợp các khoản hoa hồng `HOA_HONG_*` trong tháng)
     7. `VII. Lợi nhuận ròng (sau hoa hồng)` (`Net Profit After Commission = Net Profit Before Commission - Commission`, kèm % Biên LN ròng)
-  - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước cho từng danh mục phát sinh.
+  - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước và số tiền chi riêng cho OJ cho từng danh mục phát sinh.
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
@@ -77,6 +83,7 @@ kgara_operating_expenses (Chi phí vận hành & Hoa hồng theo kỳ tháng)
 | `category_key` | `varchar(100)` | NO | — | Index `idx_kgara_opex_category` | Mã loại CP (NHAN_SU, THUE_MAT_BANG, HOA_HONG_TRUC_TIEP, CHI_PHI_TRUC_TIEP_KHAC, HOA_HONG_SALE,...) |
 | `category_name` | `varchar(255)` | NO | — | — | Tên/Diễn giải chi tiết khoản chi |
 | `amount` | `numeric(18,2)` | NO | `0` | — | Số tiền chi phí (VND) |
+| `oj_amount` | `numeric(18,2)` | NO | `0` | — | Số tiền chi phí phân bổ tính riêng cho OJ (Omoda/Jaecoo) |
 | `note` | `text` | YES | `null` | — | Ghi chú bổ sung |
 | `recurrence_type` | `varchar(20)` | YES | `null` | — | Chu kỳ lặp lại (`monthly` hoặc null) |
 | `recurrence_until_year` | `smallint` | YES | `null` | — | Năm kết thúc chuỗi định kỳ |

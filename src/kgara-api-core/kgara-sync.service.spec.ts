@@ -282,6 +282,28 @@ describe('KgaraSyncService', () => {
         }),
       );
     });
+
+    it('should exclude cases with classification OJ_NGOAI from soft-delete detection query', async () => {
+      const mockAndWhere = jest.fn().mockReturnThis();
+      const mockWhere = jest.fn().mockReturnThis();
+      caseRepo.createQueryBuilder = jest.fn().mockReturnValue({
+        where: mockWhere,
+        andWhere: mockAndWhere,
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.detectAndMarkDeletedCases(
+        'br-1',
+        '2026-07-01',
+        '2026-07-31',
+        new Set(['case-1']),
+      );
+
+      expect(mockAndWhere).toHaveBeenCalledWith(
+        '(case.classification != :ojNgoai OR case.classification IS NULL)',
+        { ojNgoai: 'OJ_NGOAI' },
+      );
+    });
   });
 
   describe('syncReceivables', () => {

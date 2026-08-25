@@ -948,11 +948,15 @@ export class KgaraSyncService {
     const fromDate = parseSafeDate(from);
     const toDate = parseSafeDate(to);
 
-    // Find all cases in ERP for this branch and date range
+    // Find all cases in ERP for this branch and date range (excluding manual external cases like OJ_NGOAI)
     const qb = this.caseRepo
       .createQueryBuilder('case')
       .where('case.branchExternalId = :branchExternalId', { branchExternalId })
-      .andWhere('case.kgaraDeletedAt IS NULL');
+      .andWhere('case.kgaraDeletedAt IS NULL')
+      .andWhere(
+        '(case.classification != :ojNgoai OR case.classification IS NULL)',
+        { ojNgoai: 'OJ_NGOAI' },
+      );
 
     if (fromDate) {
       const fromStr = from.includes('T')
