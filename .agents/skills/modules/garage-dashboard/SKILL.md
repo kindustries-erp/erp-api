@@ -25,10 +25,12 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
 - **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx`)**:
   - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
   - Phải thu (`totalBilled`) tính chuẩn xác theo `SUM(tien_co_thue)` (Doanh thu thuần + Thuế GTGT VAT).
+  - Phân tách chi tiết 2 nhóm: **Có xuất hóa đơn** (`hd_phieu_dich_vu_id IS NOT NULL`) và **Không xuất hóa đơn** (`hd_phieu_dich_vu_id IS NULL`) với mini progress bar riêng biệt cho từng nhóm.
   - Bảng hỗ trợ 2 Tab: Thu tiền khách hàng & Trả tiền chi phí NCC kèm `summaryRow` tổng cộng, badge tỷ lệ, thanh tiến độ inline và biến động MoM.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
-  - Đồng bộ tự động theo bộ lọc ngày toàn trang (`filter.state.dateFrom`, `filter.state.dateTo`), loại bỏ dropdown tháng/năm cục bộ.
+  - Tích hợp **Combobox Dropdown Kỳ (Tháng/Năm)** trực tiếp tại header Section để chọn nhanh kỳ báo cáo độc lập.
+  - Bảng tài chính thiết kế tinh giản, bớt màu mè (chỉ highlight nhẹ dòng Lợi nhuận ròng sau hoa hồng).
   - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước và tháng này (COGS, OPEX, Gross Margin, Net Margin).
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:

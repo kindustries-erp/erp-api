@@ -60,6 +60,54 @@ export class GarageDashboardService {
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('COUNT(c.id)', 'caseCount')
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        'tienCoThueNoInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        'paidNoInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableNoInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        'revenueNoInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costNoInvoice',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN c.id END)",
+        'caseCountWithInvoice',
+      )
+      .addSelect(
+        "COUNT(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN c.id END)",
+        'caseCountNoInvoice',
+      )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
@@ -88,6 +136,14 @@ export class GarageDashboardService {
       .innerJoin(KgaraCase, 'c', 'c.id = s.case_id')
       .select("TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')", 'month')
       .addSelect('SUM(s.amount)', 'totalPaidCost')
+      .addSelect(
+        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostWithInvoice',
+      )
+      .addSelect(
+        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostNoInvoice',
+      )
       .where("s.settlement_type = 'PAYMENT'")
       .andWhere('c.kgara_deleted_at IS NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
@@ -110,7 +166,14 @@ export class GarageDashboardService {
     );
     const rawPaidCost = await costSettlementsQb.getRawMany();
     const paidCostMap = Object.fromEntries(
-      rawPaidCost.map((r) => [r.month, Number(r.totalPaidCost) || 0]),
+      rawPaidCost.map((r) => [
+        r.month,
+        {
+          total: Number(r.totalPaidCost) || 0,
+          withInvoice: Number(r.paidCostWithInvoice) || 0,
+          noInvoice: Number(r.paidCostNoInvoice) || 0,
+        },
+      ]),
     );
 
     const trend = result.map((r) => {
@@ -131,11 +194,82 @@ export class GarageDashboardService {
           ? Math.min(100, Math.round((paid / totalBilled) * 1000) / 10)
           : 0;
 
-      const paidCost = paidCostMap[r.month] || 0;
+      const paidCostInfo = paidCostMap[r.month] || {
+        total: 0,
+        withInvoice: 0,
+        noInvoice: 0,
+      };
+      const paidCost = paidCostInfo.total;
       const payableCost = Math.max(0, cost - paidCost);
       const costPaymentRate =
         cost > 0
           ? Math.min(100, Math.round((paidCost / cost) * 1000) / 10)
+          : 100;
+
+      // Invoice / Non-invoice breakdowns for Receivables
+      const tienCoThueWithInvoice = Number(r.tienCoThueWithInvoice) || 0;
+      const tienCoThueNoInvoice = Number(r.tienCoThueNoInvoice) || 0;
+      const paidWithInvoice = Number(r.paidWithInvoice) || 0;
+      const paidNoInvoice = Number(r.paidNoInvoice) || 0;
+      const receivableWithInvoice = Number(r.receivableWithInvoice) || 0;
+      const receivableNoInvoice = Number(r.receivableNoInvoice) || 0;
+      const revenueWithInvoice = Number(r.revenueWithInvoice) || 0;
+      const revenueNoInvoice = Number(r.revenueNoInvoice) || 0;
+
+      const billedWithInvoice =
+        tienCoThueWithInvoice > 0
+          ? tienCoThueWithInvoice
+          : paidWithInvoice + receivableWithInvoice > 0
+            ? paidWithInvoice + receivableWithInvoice
+            : revenueWithInvoice;
+      const billedNoInvoice =
+        tienCoThueNoInvoice > 0
+          ? tienCoThueNoInvoice
+          : paidNoInvoice + receivableNoInvoice > 0
+            ? paidNoInvoice + receivableNoInvoice
+            : revenueNoInvoice;
+
+      const rateWithInvoice =
+        billedWithInvoice > 0
+          ? Math.min(
+              100,
+              Math.round((paidWithInvoice / billedWithInvoice) * 1000) / 10,
+            )
+          : 0;
+      const rateNoInvoice =
+        billedNoInvoice > 0
+          ? Math.min(
+              100,
+              Math.round((paidNoInvoice / billedNoInvoice) * 1000) / 10,
+            )
+          : 0;
+
+      // Invoice / Non-invoice breakdowns for Payables
+      const costWithInvoice = Number(r.costWithInvoice) || 0;
+      const costNoInvoice = Number(r.costNoInvoice) || 0;
+      const paidCostWithInvoice = paidCostInfo.withInvoice;
+      const paidCostNoInvoice = paidCostInfo.noInvoice;
+      const payableCostWithInvoice = Math.max(
+        0,
+        costWithInvoice - paidCostWithInvoice,
+      );
+      const payableCostNoInvoice = Math.max(
+        0,
+        costNoInvoice - paidCostNoInvoice,
+      );
+      const costRateWithInvoice =
+        costWithInvoice > 0
+          ? Math.min(
+              100,
+              Math.round((paidCostWithInvoice / costWithInvoice) * 1000) / 10,
+            )
+          : 100;
+      const costRateNoInvoice =
+        costNoInvoice > 0
+          ? Math.min(
+              100,
+              Math.round((paidCostNoInvoice / costNoInvoice) * 1000) / 10,
+            )
           : 100;
 
       return {
@@ -155,6 +289,25 @@ export class GarageDashboardService {
         collectionRateDiff: 0,
         costPaymentRateDiff: 0,
         caseCount: Number(r.caseCount) || 0,
+        // Invoice breakdowns
+        caseCountWithInvoice: Number(r.caseCountWithInvoice) || 0,
+        caseCountNoInvoice: Number(r.caseCountNoInvoice) || 0,
+        billedWithInvoice,
+        paidWithInvoice,
+        receivableWithInvoice,
+        rateWithInvoice,
+        billedNoInvoice,
+        paidNoInvoice,
+        receivableNoInvoice,
+        rateNoInvoice,
+        costWithInvoice,
+        paidCostWithInvoice,
+        payableCostWithInvoice,
+        costRateWithInvoice,
+        costNoInvoice,
+        paidCostNoInvoice,
+        payableCostNoInvoice,
+        costRateNoInvoice,
       };
     });
 
