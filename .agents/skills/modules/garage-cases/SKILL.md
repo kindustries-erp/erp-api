@@ -328,9 +328,9 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
   - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
   1. **Chiều Phải Thu (Doanh thu / Khách hàng)**:
-     - Mục tiêu thu: Tổng tiền thanh toán có thuế (`tienCoThue` / `TongTienThanhToan`).
+     - Mục tiêu thu (`targetRevenue`): **Tổng tiền thanh toán có thuế** (`tienCoThue` / `TongTienThanhToan`), **tuyệt đối không fallback sang doanh thu chưa thuế** (`doanhThu`).
      - Đã thu thực tế (ERP): `totalCollected = directReceiptOnSystem + directReceiptOffSystem`.
-     - Còn phải thu: `Math.max(0, targetRevenue - totalCollected)`.
+     - Còn phải thu (`tienConPhaiThanhToan`): `Math.max(0, targetRevenue - totalCollected)`.
   2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
