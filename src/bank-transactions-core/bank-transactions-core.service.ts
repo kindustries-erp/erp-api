@@ -25,6 +25,7 @@ import { TransactionImportService } from './services/transaction-import.service'
 import { TransactionQueryService } from './services/transaction-query.service';
 import { TransactionAnalyticsService } from './services/transaction-analytics.service';
 import { TransactionAccountingService } from './services/transaction-accounting.service';
+import { BankStatementExportBackgroundService } from './services/bank-statement-export-background.service';
 
 @Injectable()
 export class BankTransactionsCoreService {
@@ -36,6 +37,7 @@ export class BankTransactionsCoreService {
     private readonly transactionQueryService: TransactionQueryService,
     private readonly transactionAnalyticsService: TransactionAnalyticsService,
     private readonly transactionAccountingService: TransactionAccountingService,
+    private readonly exportBackgroundService: BankStatementExportBackgroundService,
   ) {}
 
   // --- Bank Accounts ---
@@ -251,5 +253,33 @@ export class BankTransactionsCoreService {
 
   async deleteStatementFile(id: string) {
     return this.balanceStatementLifecycleService.deleteStatementFile(id);
+  }
+
+  // --- Background Excel Export ---
+  async startExportExcelBackground(
+    query: BankTransactionFilterDto,
+    userId: string,
+  ) {
+    return this.exportBackgroundService.startBackgroundExport(query, userId);
+  }
+
+  getExportExcelHistory(userId: string, page?: number, pageSize?: number) {
+    return this.exportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getExportExcelBackgroundFile(jobId: string, userId: string) {
+    return this.exportBackgroundService.getReadyExportFile(jobId, userId);
+  }
+
+  getExportExcelProgressSnapshot(userId: string) {
+    return this.exportBackgroundService.getJobSnapshotForUser(userId);
+  }
+
+  getExportExcelProgressStream() {
+    return this.exportBackgroundService.progress$;
   }
 }
