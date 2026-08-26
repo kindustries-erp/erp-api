@@ -187,10 +187,37 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 ---
 
-## 7. Quy tắc Kiểm thử & Báo cáo Chất lượng (QC Mandate)
+---
+
+## 8. Kiến trúc Giao diện Frontend (`erp-web`)
+
+### 8.1. Unified Top-Tabs Drawer (`ProductionOrderDrawer.tsx`)
+- Phân hệ sử dụng chuẩn **`StandardFormDrawer` (`size="xl"`, `layout="2-columns"`)** thống nhất toàn bộ quy trình kế hoạch và thực thi xưởng sản xuất vào 1 Drawer duy nhất:
+  - **Tab 1 (`details`) — Định mức BOM**: Bọc trong `<DrawerSection collapsible defaultCollapsed={false}>` làm main content, hỗ trợ filter popover, thay thế NVL (`alternativeItems`), kiểm tra tồn khả dụng và ghi chú dòng.
+  - **Tab 2 (`execution`) — Tiến trình & Thực thi**:
+    - *Giai đoạn 1*: Bắt đầu xuất NVL theo đợt (`XK-`).
+    - *Giai đoạn 2*: Hoàn thành sản xuất từng xe / hàng loạt, hỗ trợ định danh VIN/Số máy/Serial/Mã màu popover và Textarea Bulk Import.
+    - *Bảng thành phẩm*: Danh sách xe/serial đã xuất xưởng.
+  - **Tab 3 (`traceability`) — Chứng từ liên kết**: Phiếu xuất NVL (`XK-`), Phiếu nhập thành phẩm (`NK-`), BOM gốc và Canvas Traceability Graph (bung full-width 100%).
+  - **Tab 4 (`history`) — Lịch sử thao tác**: Timeline theo dõi các mốc vòng đời lệnh (`DRAFT` $\to$ `CONFIRMED` $\to$ `IN_PROGRESS` $\to$ `COMPLETED`/`CANCELLED`).
+  - **Cột phải (`ProductionOrderRightPanel.tsx`)**: Gồm 3 `DrawerSection collapsible` (*Thông tin thành phẩm & Lệnh*, *Kế hoạch thời gian*, *Ghi chú & Quản lý*).
+  - **Tiêu đề Header**: Định dạng 1 dòng `Chi tiết Lệnh Sản Xuất: MO-xxxx` kèm Status Badge, không dùng subtitle xuống dòng.
+
+### 8.2. Chuẩn Hóa Bảng Dữ liệu (`ProductionOrderListPage.tsx`)
+- **Cột STT (`#`)**: Cột đầu tiên rộng `40px`, căn giữa tuyệt đối (`key: "index"`, `size: 40`, `enableResizing: false`, `cell: (_, idx) => <span className="w-full block text-center">{idx}</span>`).
+- **Ẩn Global Search Box**: Thiết lập `search: false` trong `filterConfig`, tập trung tìm kiếm đa chiều qua Table Column Header Filter.
+- **Hiệu ứng Mờ Dòng Hủy**: Áp dụng `getRowClassName` gán `opacity-40 text-muted-foreground` cho các dòng lệnh có trạng thái `CANCELLED` (theo chuẩn `/garage-cases`).
+- **Context Menu / Action Column**: Cung cấp action *"Chi tiết"* (xem) và *"Chỉnh sửa"* (`Pencil` icon, mở trực tiếp Edit Mode).
+
+---
+
+## 9. Quy tắc Kiểm thử & Báo cáo Chất lượng (QC Mandate)
 
 Khi thực hiện bất kỳ thay đổi nào trong `production-core`:
 1. **Gate 0 Database Verification**: Xác minh các bảng `erp_production_orders`, `erp_production_order_materials`, `erp_production_order_serial_assignments` qua `DATABASE_URL`.
-2. **TypeCheck**: Bắt buộc chạy `bun run check:ci` trong thư mục `erp-api/`.
-3. **Unit Tests**: Chạy bộ kiểm thử Jest: `bunx jest src/production-core/ --forceExit`.
-4. Không commit/push trực tiếp từ workspace cha; luôn `cd` vào `erp-api` để thao tác Git.
+2. **TypeCheck**: Bắt buộc chạy `bun run type:check` / `bun run check:ci`.
+3. **Unit Tests**: Chạy bộ kiểm thử:
+   - Backend: `bunx jest src/production-core/ --forceExit`
+   - Frontend: `bun run test`
+4. Thao tác Git tuân thủ nghiêm ngặt skill `erp-git-workflow` (chạy lệnh bên trong repo con `erp-api` hoặc `erp-web`).
+

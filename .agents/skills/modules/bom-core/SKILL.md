@@ -217,6 +217,11 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`.
   - Backend (`bom-core.service.ts`): Phương thức `validateRequiredAttributes()` chặn lưu và ném `BadRequestException` nếu payload thiếu các trường thuộc tính bắt buộc của danh mục.
 
 ### 5.3. Giao diện Người Dùng Chuẩn Mực (Frontend UX Standards)
+- **Chuẩn Hóa Bảng Dữ liệu (`ErpBomPage.tsx`)**:
+  - **Cột STT (`#`)**: Cột đầu tiên rộng `40px`, căn giữa tuyệt đối (`key: "index"`, `size: 40`, `enableResizing: false`, `cell: (_, idx) => <span className="w-full block text-center">{idx}</span>`).
+  - **Ẩn Global Search Box**: Thiết lập `search: false` trong `filterConfig`, tập trung tìm kiếm qua Table Column Header Filter.
+  - **Hiệu ứng Mờ Dòng Ngừng Áp Dụng**: Gán `getRowClassName` với `opacity-40 text-muted-foreground` cho các dòng BOM trạng thái `INACTIVE`.
+  - **Context Menu / Action Column**: Cung cấp action *"Chi tiết"* (xem) và *"Chỉnh sửa"* (`Pencil` icon, mở trực tiếp Edit Mode qua `openEdit(item)`).
 - **Split Button "Tạo mới"**: Nút bên trái bấm mở form tạo BOM trực tiếp; Divider ở giữa; Mũi tên bên phải mở dropdown "Cấu hình BOM".
 - **Toolbar Section Định mức NVL**: Nút `+ Thêm dòng` đi kèm Dropdown `Thao tác ▾` (phân nhóm EXCEL: Tải file mẫu, Nhập Excel; KHÁC: Xóa tất cả).
 - **Icon Xóa Dòng**: Sử dụng icon `<Trash2 className="w-3.5 h-3.5" />` màu xám hover đỏ tinh tế.
@@ -234,4 +239,6 @@ Khi chỉnh sửa bất kỳ phần nào liên quan đến BOM:
 1. **Backend CI**: `bun run format && bun run check:ci` (TypeScript + ESLint + Prettier).
 2. **Backend Unit Tests**: `bunx jest src/bom-core/ src/bom-config/ --forceExit` (Đảm bảo 100% tests PASS).
 3. **Frontend Type Check**: `bun run type:check` trên `erp-web`.
-4. **Git Workflow**: Tuân thủ `/erp-git-workflow` (chạy git trong repo con tương đối, commit trước khi pull rebase).
+4. **Frontend Unit Tests**: `bun run test` trên `erp-web`.
+5. **Git Workflow**: Tuân thủ `/erp-git-workflow` (chạy git trong repo con tương đối, commit trước khi pull rebase).
+
