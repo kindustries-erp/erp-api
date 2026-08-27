@@ -24,9 +24,18 @@ import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { GarageOpexService } from './services/garage-opex.service';
-import { KgaraApiCoreController } from './kgara-api-core.controller';
 import { GarageDashboardService } from './garage-dashboard.service';
+import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+
+import { KgaraApiCoreController } from './kgara-api-core.controller';
 import { GarageDashboardController } from './garage-dashboard.controller';
+import { KgaraCasesController } from './controllers/kgara-cases.controller';
+import { KgaraCustomersController } from './controllers/kgara-customers.controller';
+import { KgaraSuppliersController } from './controllers/kgara-suppliers.controller';
+import { KgaraGrossProfitController } from './controllers/kgara-gross-profit.controller';
+import { KgaraSyncController } from './controllers/kgara-sync.controller';
+import { KgaraReportsController } from './controllers/kgara-reports.controller';
+import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
 
 @Module({
   imports: [
@@ -56,14 +65,26 @@ import { GarageDashboardController } from './garage-dashboard.controller';
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    KgaraCaseQueryService,
   ],
-  controllers: [KgaraApiCoreController, GarageDashboardController],
+  controllers: [
+    KgaraApiCoreController,
+    GarageDashboardController,
+    KgaraCasesController,
+    KgaraCustomersController,
+    KgaraSuppliersController,
+    KgaraGrossProfitController,
+    KgaraSyncController,
+    KgaraReportsController,
+    KgaraCaseFinancialController,
+  ],
   exports: [
     KgaraSyncService,
     KgaraClientService,
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    KgaraCaseQueryService,
   ],
 })
 export class KgaraApiCoreModule {}

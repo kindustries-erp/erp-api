@@ -1,26 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KgaraApiCoreController } from './kgara-api-core.controller';
-import { KgaraBranch } from './entities/kgara_branch.entity';
+import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
 import { KgaraCase } from './entities/kgara_case.entity';
-import { KgaraReceivable } from './entities/kgara_receivable.entity';
-import { KgaraPayable } from './entities/kgara_payable.entity';
-import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
-import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
-import { KgaraSyncService } from './kgara-sync.service';
-import { KgaraClientService } from './kgara-client.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
-
+import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
+import { KgaraCaseQueryService } from './services/kgara-case-query.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 
-import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
-
-describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
-  let controller: KgaraApiCoreController;
+describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () => {
+  let controller: KgaraCaseFinancialController;
+  let rootController: KgaraApiCoreController;
   let caseRepo: any;
   let linkedInvoiceRepo: any;
   let settlementRepo: any;
@@ -30,6 +24,7 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
     const mockRepo = () => ({
       find: jest.fn(),
       findOne: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       create: jest.fn().mockImplementation((e) => e),
       save: jest
         .fn()
@@ -47,18 +42,13 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
     grossProfitRepo = mockRepo();
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [KgaraApiCoreController],
+      controllers: [KgaraCaseFinancialController, KgaraApiCoreController],
       providers: [
-        { provide: getRepositoryToken(KgaraBranch), useValue: mockRepo() },
         { provide: getRepositoryToken(KgaraCase), useValue: caseRepo },
-        { provide: getRepositoryToken(KgaraReceivable), useValue: mockRepo() },
-        { provide: getRepositoryToken(KgaraPayable), useValue: mockRepo() },
-        { provide: getRepositoryToken(KgaraCaseService), useValue: mockRepo() },
         {
           provide: getRepositoryToken(KgaraCaseLinkedInvoice),
           useValue: linkedInvoiceRepo,
         },
-        { provide: getRepositoryToken(GwSyncRun), useValue: mockRepo() },
         {
           provide: getRepositoryToken(KgaraGrossProfit),
           useValue: grossProfitRepo,
@@ -67,13 +57,12 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
           provide: getRepositoryToken(KgaraCaseSettlement),
           useValue: settlementRepo,
         },
-        { provide: KgaraSyncService, useValue: {} },
-        { provide: KgaraClientService, useValue: {} },
         { provide: DocumentTraceabilityService, useValue: {} },
         {
           provide: GarageSmartSettlementService,
           useValue: { getSuggestionsForCase: jest.fn() },
         },
+        KgaraCaseQueryService,
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -82,11 +71,15 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
       .useValue({ canActivate: () => true })
       .compile();
 
-    controller = module.get<KgaraApiCoreController>(KgaraApiCoreController);
+    controller = module.get<KgaraCaseFinancialController>(
+      KgaraCaseFinancialController,
+    );
+    rootController = module.get<KgaraApiCoreController>(KgaraApiCoreController);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+    expect(rootController).toBeDefined();
   });
 
   describe('getLinkedInvoices', () => {

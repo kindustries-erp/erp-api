@@ -200,14 +200,25 @@ src/kgara-api-core/
 │   ├── kgara_payable.entity.ts             # Entity bảng kgara_payables (sổ công nợ phải trả 331)
 │   ├── kgara_receivable.entity.ts          # Entity bảng kgara_receivables (sổ công nợ phải thu)
 │   └── kgara_sync_run.entity.ts            # Entity bảng kgara_sync_runs (nhật ký đồng bộ)
-├── kgara-api-core.controller.ts            # Controller định tuyến API /api/v1/greenway
-├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM và Providers
+├── controllers/
+│   ├── kgara-cases.controller.ts           # Controller danh sách, chi tiết, filter, options & lãi gộp vụ việc
+│   ├── kgara-case-financial.controller.ts  # Controller tài chính vụ việc, cấn trừ sao kê & liên kết hóa đơn
+│   ├── kgara-customers.controller.ts       # Controller công nợ khách hàng & lịch sử theo khách
+│   ├── kgara-suppliers.controller.ts       # Controller công nợ nhà cung cấp & theo NCC
+│   ├── kgara-gross-profit.controller.ts    # Controller hóa đơn liên kết lãi gộp
+│   ├── kgara-sync.controller.ts            # Controller kích hoạt sync dữ liệu KGara
+│   └── kgara-reports.controller.ts         # Controller báo cáo, dashboard, raw receivables/payables
+├── decorators/
+│   └── branch-id.decorator.ts              # Custom parameter decorator @BranchId()
+├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
+├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
 ├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
 ├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
 ├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark, soft-delete & gross profit
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
+    ├── kgara-case-query.service.ts         # Query engine & recalculateCaseSettlementSummary helper
     ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)
     └── garage-smart-settlement.service.spec.ts # Unit tests cho gợi ý cấn trừ vụ việc
 ```
