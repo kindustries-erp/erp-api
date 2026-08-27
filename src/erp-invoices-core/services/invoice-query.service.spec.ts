@@ -283,4 +283,122 @@ describe('InvoiceQueryService', () => {
     expect(discountRow!.getCell(5).value).toBe(-200000);
     expect(discountRow!.getCell(7).value).toBe(-200000);
   });
+
+  it('findAllItems queries items and returns paginated result with summary', async () => {
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          total_quantity: '5',
+          total_pre_vat_amount: '1000000',
+          total_vat_amount: '100000',
+          total_discount_amount: '0',
+          total_amount: '1100000',
+        }),
+      }),
+      getCount: jest.fn().mockResolvedValue(1),
+      select: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          id: 'item-uuid-1',
+          invoice_id: 'inv-uuid-1',
+          item_code: 'VT-01',
+          description: 'Lốp xe VinFast',
+          unit: 'Cái',
+          quantity: '5',
+          unit_price: '200000',
+          pre_vat_amount: '1000000',
+          vat_rate: '10',
+          vat_amount: '100000',
+          discount_amount: '0',
+          total_amount: '1100000',
+          invoice_subcategory: 'NORMAL',
+          invoice_no: '0000123',
+          serial_no: '1C24TYY',
+          invoice_date: '2026-08-20',
+          direction: 'IN',
+          status: 'CONFIRMED',
+          posting_status: 'POSTED',
+          seller_name: 'VinFast Auto',
+          seller_tax_code: '0108926276',
+        },
+      ]),
+    };
+
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const result = await service.findAllItems({
+      direction: 'IN',
+      search: 'VinFast',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(itemRepo.createQueryBuilder).toHaveBeenCalledWith('ii');
+    expect(result.total).toBe(1);
+    expect(result.items.length).toBe(1);
+    expect(result.items[0].itemCode).toBe('VT-01');
+    expect(result.items[0].description).toBe('Lốp xe VinFast');
+    expect(result.items[0].sellerName).toBe('VinFast Auto');
+    expect(result.summary.totalAmount).toBe(1100000);
+    expect(result.summary.totalQuantity).toBe(5);
+  });
+
+  it('getItemColumnOptions returns distinct options for item columns', async () => {
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue({
+        getCount: jest.fn().mockResolvedValue(2),
+      }),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest
+        .fn()
+        .mockResolvedValue([{ value: 'Bánh xe' }, { value: 'Lốp xe' }]),
+    };
+
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const res = await service.getItemColumnOptions(
+      'description',
+      'xe',
+      1,
+      20,
+      undefined,
+      'IN',
+    );
+
+    expect(res.total).toBe(2);
+    expect(res.items).toEqual([
+      { value: 'Bánh xe', label: 'Bánh xe', secondaryLabel: undefined },
+      { value: 'Lốp xe', label: 'Lốp xe', secondaryLabel: undefined },
+    ]);
+  });
 });

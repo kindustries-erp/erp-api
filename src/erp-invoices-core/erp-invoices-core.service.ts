@@ -25,6 +25,8 @@ export type {
   BulkImportResult,
 } from './services/invoice-import.service';
 
+export type { ErpInvoiceItemQuery } from './services/invoice-query.service';
+
 export interface ErpInvoiceQuery {
   direction?: string;
   search?: string;
@@ -84,6 +86,12 @@ export class ErpInvoicesCoreService {
     return this.queryService.findAll(query);
   }
 
+  findAllItems(
+    query: import('./services/invoice-query.service').ErpInvoiceItemQuery,
+  ) {
+    return this.queryService.findAllItems(query);
+  }
+
   getColumnOptions(
     column: string,
     search: string,
@@ -102,8 +110,32 @@ export class ErpInvoicesCoreService {
     );
   }
 
+  getItemColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    direction?: 'IN' | 'OUT',
+  ) {
+    return this.queryService.getItemColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+      direction,
+    );
+  }
+
   exportExcel(query: ErpInvoiceQuery) {
     return this.queryService.exportExcel(query);
+  }
+
+  exportItemsExcel(
+    query: import('./services/invoice-query.service').ErpInvoiceItemQuery,
+  ) {
+    return this.queryService.exportItemsExcel(query);
   }
 
   startExportExcelBackground(query: ErpInvoiceQuery, userId: string) {

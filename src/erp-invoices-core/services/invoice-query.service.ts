@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -14,6 +14,7 @@ import {
   applyMultiKeywordMultiFieldFilter,
 } from '../../common/utils/query-builder.util';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
+import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
 import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 import {
   toInvoiceDto,
@@ -24,6 +25,29 @@ import {
   resolveOutInvoiceBranchCode,
 } from '../helpers/out-invoice-display.helper';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
+
+export interface ErpInvoiceItemQuery {
+  direction?: 'IN' | 'OUT';
+  search?: string;
+  invoice_no?: string;
+  serial_no?: string;
+  seller_name?: string;
+  buyer_name?: string;
+  partner_tax_code?: string;
+  item_code?: string;
+  description?: string;
+  invoice_subcategory?: string;
+  date_from?: string;
+  date_to?: string;
+  status?: string;
+  posting_status?: string;
+  page?: number;
+  pageSize?: number;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  column_search?: string;
+  column_filters?: string;
+}
 
 @Injectable()
 export class InvoiceQueryService {
@@ -36,6 +60,9 @@ export class InvoiceQueryService {
     private readonly repository: Repository<ErpInvoice>,
     @InjectRepository(ErpEntityAttributeValue)
     private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
+    @Optional()
+    @InjectRepository(ErpInvoiceItem)
+    private readonly itemRepository?: Repository<ErpInvoiceItem>,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -1907,5 +1934,638 @@ export class InvoiceQueryService {
   ) {
     // Export uses same filter logic as findAll
     this._applyColumnFilters(qb, columnFilters, direction);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Invoice Items Query & Column Options
+  // ---------------------------------------------------------------------------
+
+  async findAllItems(query: ErpInvoiceItemQuery) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 50;
+
+    const itemRepo =
+      this.itemRepository ||
+      this.repository.manager.getRepository(ErpInvoiceItem);
+
+    const qb = itemRepo
+      .createQueryBuilder('ii')
+      .innerJoin(ErpInvoice, 'inv', 'inv.id = ii.invoice_id')
+      .where('inv.is_deleted = false');
+
+    if (query.direction) {
+      qb.andWhere('inv.direction = :direction', { direction: query.direction });
+    }
+
+    if (query.status) {
+      qb.andWhere('inv.status = :status', { status: query.status });
+    }
+
+    if (query.posting_status) {
+      qb.andWhere('inv.posting_status = :postingStatus', {
+        postingStatus: query.posting_status,
+      });
+    }
+
+    if (query.invoice_subcategory) {
+      qb.andWhere('ii.invoice_subcategory = :subcat', {
+        subcat: query.invoice_subcategory,
+      });
+    }
+
+    if (query.date_from) {
+      qb.andWhere('inv.invoice_date >= :dateFrom', {
+        dateFrom: query.date_from,
+      });
+    }
+
+    if (query.date_to) {
+      const effectiveDateTo =
+        query.date_to.length === 10
+          ? `${query.date_to} 23:59:59.999`
+          : query.date_to;
+      qb.andWhere('inv.invoice_date <= :dateTo', { dateTo: effectiveDateTo });
+    }
+
+    // Global Search
+    if (query.search) {
+      const q = `%${query.search.trim()}%`;
+      const qClean = `%${query.search.replace(/[,.]/g, '').trim()}%`;
+      qb.andWhere(
+        `(
+          inv.invoice_no ILIKE :q
+          OR inv.serial_no ILIKE :q
+          OR inv.buyer_name ILIKE :q
+          OR inv.seller_name ILIKE :q
+          OR inv.buyer_tax_code ILIKE :q
+          OR inv.seller_tax_code ILIKE :q
+          OR ii.item_code ILIKE :q
+          OR ii.description ILIKE :q
+          OR REPLACE(REPLACE(CAST(ii.quantity AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(ii.unit_price AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(ii.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(ii.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+        )`,
+        { q, qClean },
+      );
+    }
+
+    // Column Search
+    let columnSearch: Record<string, string> = {};
+    let columnFilters: Record<string, string[]> = {};
+    try {
+      if (query.column_search) columnSearch = JSON.parse(query.column_search);
+      if (query.column_filters)
+        columnFilters = JSON.parse(query.column_filters);
+    } catch (e) {
+      this.logger.error('Failed to parse column_search or column_filters', e);
+    }
+
+    for (const [col, val] of Object.entries(columnSearch)) {
+      if (!val || !val.trim()) continue;
+      const term = `%${val.trim()}%`;
+      const termClean = `%${val.replace(/[,.]/g, '').trim()}%`;
+      if (col === 'invoiceNo') {
+        qb.andWhere(
+          '(inv.invoice_no ILIKE :term_invNo OR inv.serial_no ILIKE :term_invNo)',
+          { term_invNo: term },
+        );
+      } else if (col === 'serialNo') {
+        qb.andWhere('inv.serial_no ILIKE :term_serial', { term_serial: term });
+      } else if (col === 'partner') {
+        qb.andWhere(
+          '(inv.seller_name ILIKE :term_partner OR inv.buyer_name ILIKE :term_partner OR inv.buyer_personal_name ILIKE :term_partner)',
+          { term_partner: term },
+        );
+      } else if (col === 'taxCode') {
+        qb.andWhere(
+          '(inv.seller_tax_code ILIKE :term_taxCode OR inv.buyer_tax_code ILIKE :term_taxCode)',
+          { term_taxCode: term },
+        );
+      } else if (col === 'itemCode') {
+        qb.andWhere('ii.item_code ILIKE :term_itemCode', {
+          term_itemCode: term,
+        });
+      } else if (col === 'description') {
+        qb.andWhere('ii.description ILIKE :term_desc', { term_desc: term });
+      } else if (col === 'unit') {
+        qb.andWhere('ii.unit ILIKE :term_unit', { term_unit: term });
+      } else if (col === 'quantity') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.quantity AS TEXT), '.', ''), ',', '') ILIKE :term_qty",
+          { term_qty: termClean },
+        );
+      } else if (col === 'unitPrice') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.unit_price AS TEXT), '.', ''), ',', '') ILIKE :term_up",
+          { term_up: termClean },
+        );
+      } else if (col === 'preVatAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :term_preVat",
+          { term_preVat: termClean },
+        );
+      } else if (col === 'vatAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :term_vatAmt",
+          { term_vatAmt: termClean },
+        );
+      } else if (col === 'discountAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :term_disc",
+          { term_disc: termClean },
+        );
+      } else if (col === 'totalAmount') {
+        qb.andWhere(
+          "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :term_tot",
+          { term_tot: termClean },
+        );
+      } else if (col === 'licensePlate') {
+        qb.andWhere('inv.license_plate ILIKE :term_lp', { term_lp: term });
+      } else if (col === 'settlementOrder') {
+        qb.andWhere('inv.settlement_order ILIKE :term_so', { term_so: term });
+      }
+    }
+
+    // Column Filters
+    for (const [col, vals] of Object.entries(columnFilters)) {
+      if (!vals || vals.length === 0) continue;
+      if (col === 'invoiceNo') {
+        qb.andWhere(
+          '(inv.invoice_no IN (:...vals_invNo) OR inv.serial_no IN (:...vals_invNo))',
+          { vals_invNo: vals },
+        );
+      } else if (col === 'serialNo') {
+        qb.andWhere('inv.serial_no IN (:...vals_serial)', {
+          vals_serial: vals,
+        });
+      } else if (col === 'partner') {
+        qb.andWhere(
+          '(inv.seller_name IN (:...vals_partner) OR inv.buyer_name IN (:...vals_partner) OR inv.buyer_personal_name IN (:...vals_partner))',
+          { vals_partner: vals },
+        );
+      } else if (col === 'taxCode') {
+        qb.andWhere(
+          '(inv.seller_tax_code IN (:...vals_taxCode) OR inv.buyer_tax_code IN (:...vals_taxCode))',
+          { vals_taxCode: vals },
+        );
+      } else if (col === 'itemCode') {
+        qb.andWhere('ii.item_code IN (:...vals_itemCode)', {
+          vals_itemCode: vals,
+        });
+      } else if (col === 'unit') {
+        qb.andWhere('ii.unit IN (:...vals_unit)', { vals_unit: vals });
+      } else if (col === 'vatRate') {
+        const numericRates = vals
+          .map((v) => Number(v))
+          .filter((v) => !isNaN(v));
+        if (numericRates.length > 0) {
+          qb.andWhere('ii.vat_rate IN (:...vals_vatRate)', {
+            vals_vatRate: numericRates,
+          });
+        }
+      } else if (col === 'invoiceSubcategory') {
+        qb.andWhere('ii.invoice_subcategory IN (:...vals_subcat)', {
+          vals_subcat: vals,
+        });
+      } else if (col === 'status') {
+        qb.andWhere('inv.status IN (:...vals_status)', { vals_status: vals });
+      } else if (col === 'postingStatus') {
+        qb.andWhere('inv.posting_status IN (:...vals_postStatus)', {
+          vals_postStatus: vals,
+        });
+      } else if (col === 'licensePlate') {
+        qb.andWhere('inv.license_plate IN (:...vals_lp)', { vals_lp: vals });
+      } else if (col === 'settlementOrder') {
+        qb.andWhere('inv.settlement_order IN (:...vals_so)', { vals_so: vals });
+      }
+    }
+
+    // Summary calculation and total count (calculated before applying orderBy to avoid Postgres aggregate error)
+    const summaryQb = qb.clone();
+    const summaryRaw = await summaryQb
+      .select([
+        'COALESCE(SUM(ii.quantity), 0) AS total_quantity',
+        'COALESCE(SUM(ii.pre_vat_amount), 0) AS total_pre_vat_amount',
+        'COALESCE(SUM(ii.vat_amount), 0) AS total_vat_amount',
+        'COALESCE(SUM(ii.discount_amount), 0) AS total_discount_amount',
+        'COALESCE(SUM(ii.total_amount), 0) AS total_amount',
+      ])
+      .getRawOne();
+
+    const total = await qb.getCount();
+
+    // Sorting
+    let sortColumn = 'inv.invoice_date';
+    let sortOrder: 'ASC' | 'DESC' = 'DESC';
+
+    if (query.sort_by) {
+      const sortMap: Record<string, string> = {
+        invoiceDate: 'inv.invoice_date',
+        invoiceNo: 'inv.invoice_no',
+        serialNo: 'inv.serial_no',
+        partner:
+          query.direction === 'IN' ? 'inv.seller_name' : 'inv.buyer_name',
+        taxCode:
+          query.direction === 'IN'
+            ? 'inv.seller_tax_code'
+            : 'inv.buyer_tax_code',
+        itemCode: 'ii.item_code',
+        description: 'ii.description',
+        unit: 'ii.unit',
+        quantity: 'ii.quantity',
+        unitPrice: 'ii.unit_price',
+        preVatAmount: 'ii.pre_vat_amount',
+        vatRate: 'ii.vat_rate',
+        vatAmount: 'ii.vat_amount',
+        discountAmount: 'ii.discount_amount',
+        totalAmount: 'ii.total_amount',
+        invoiceSubcategory: 'ii.invoice_subcategory',
+        status: 'inv.status',
+        postingStatus: 'inv.posting_status',
+        licensePlate: 'inv.license_plate',
+        settlementOrder: 'inv.settlement_order',
+        createdAt: 'ii.created_at',
+      };
+      if (sortMap[query.sort_by]) {
+        sortColumn = sortMap[query.sort_by];
+      }
+    }
+    if (query.sort_order) {
+      sortOrder = query.sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    }
+
+    qb.orderBy(sortColumn, sortOrder).addOrderBy('ii.id', 'ASC');
+
+    const rawItems = await qb
+      .select([
+        'ii.id AS id',
+        'ii.invoice_id AS invoice_id',
+        'ii.item_code AS item_code',
+        'ii.description AS description',
+        'ii.unit AS unit',
+        'ii.quantity AS quantity',
+        'ii.unit_price AS unit_price',
+        'ii.pre_vat_amount AS pre_vat_amount',
+        'ii.vat_rate AS vat_rate',
+        'ii.vat_amount AS vat_amount',
+        'ii.discount_amount AS discount_amount',
+        'ii.total_amount AS total_amount',
+        'ii.invoice_subcategory AS invoice_subcategory',
+        'ii.created_at AS created_at',
+        'inv.invoice_no AS invoice_no',
+        'inv.serial_no AS serial_no',
+        "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') AS invoice_date",
+        'inv.direction AS direction',
+        'inv.status AS status',
+        'inv.posting_status AS posting_status',
+        'inv.seller_name AS seller_name',
+        'inv.seller_tax_code AS seller_tax_code',
+        'inv.buyer_name AS buyer_name',
+        'inv.buyer_personal_name AS buyer_personal_name',
+        'inv.buyer_tax_code AS buyer_tax_code',
+        'inv.buyer_cccd AS buyer_cccd',
+        'inv.license_plate AS license_plate',
+        'inv.settlement_order AS settlement_order',
+        'inv.branch_id AS branch_id',
+      ])
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getRawMany();
+
+    const items = rawItems.map((r) => ({
+      id: r.id,
+      invoiceId: r.invoice_id,
+      invoiceNo: r.invoice_no,
+      serialNo: r.serial_no,
+      invoiceDate: r.invoice_date || '',
+      direction: r.direction,
+      status: r.status,
+      postingStatus: r.posting_status,
+      sellerName: r.seller_name,
+      sellerTaxCode: r.seller_tax_code,
+      buyerName: r.buyer_name,
+      buyerPersonalName: r.buyer_personal_name,
+      buyerTaxCode: r.buyer_tax_code,
+      buyerCccd: r.buyer_cccd,
+      licensePlate: r.license_plate,
+      settlementOrder: r.settlement_order,
+      branchId: r.branch_id,
+      itemCode: r.item_code,
+      description: r.description,
+      unit: r.unit,
+      quantity: r.quantity !== null ? Number(r.quantity) : null,
+      unitPrice: r.unit_price !== null ? Number(r.unit_price) : null,
+      preVatAmount: Number(r.pre_vat_amount || 0),
+      vatRate: r.vat_rate !== null ? parseVatRateForDisplay(r.vat_rate) : null,
+      vatAmount: Number(r.vat_amount || 0),
+      discountAmount: Number(r.discount_amount || 0),
+      totalAmount: Number(r.total_amount || 0),
+      invoiceSubcategory: r.invoice_subcategory || 'NORMAL',
+      createdAt: r.created_at,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+      summary: {
+        totalQuantity: Number(summaryRaw?.total_quantity || 0),
+        totalPreVatAmount: Number(summaryRaw?.total_pre_vat_amount || 0),
+        totalVatAmount: Number(summaryRaw?.total_vat_amount || 0),
+        totalDiscountAmount: Number(summaryRaw?.total_discount_amount || 0),
+        totalAmount: Number(summaryRaw?.total_amount || 0),
+      },
+    };
+  }
+
+  async getItemColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    direction?: 'IN' | 'OUT',
+  ) {
+    const itemRepo =
+      this.itemRepository ||
+      this.repository.manager.getRepository(ErpInvoiceItem);
+
+    const qb = itemRepo
+      .createQueryBuilder('ii')
+      .innerJoin(ErpInvoice, 'inv', 'inv.id = ii.invoice_id')
+      .where('inv.is_deleted = false');
+
+    if (direction) {
+      qb.andWhere('inv.direction = :direction', { direction });
+    }
+
+    let selectField = '';
+    let isDateColumn = false;
+    let isCustomGroupColumn = false;
+    let customSecondaryField = '';
+
+    if (column === 'invoiceDate') {
+      selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
+      isDateColumn = true;
+    } else if (column === 'serialNo') {
+      selectField = 'inv.serial_no';
+    } else if (column === 'invoiceNo') {
+      selectField = 'inv.invoice_no';
+      customSecondaryField = 'inv.serial_no';
+      isCustomGroupColumn = true;
+    } else if (column === 'partner') {
+      isCustomGroupColumn = true;
+      if (direction === 'IN') {
+        selectField = 'inv.seller_name';
+        customSecondaryField = 'inv.seller_tax_code';
+      } else if (direction === 'OUT') {
+        selectField =
+          "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)";
+        customSecondaryField = 'inv.buyer_tax_code';
+      } else {
+        selectField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+        customSecondaryField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+      }
+    } else if (column === 'taxCode') {
+      if (direction === 'IN') selectField = 'inv.seller_tax_code';
+      else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
+      else
+        selectField =
+          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
+    } else if (column === 'itemCode') selectField = 'ii.item_code';
+    else if (column === 'description') selectField = 'ii.description';
+    else if (column === 'unit') selectField = 'ii.unit';
+    else if (column === 'vatRate') selectField = 'ii.vat_rate';
+    else if (column === 'invoiceSubcategory')
+      selectField = 'ii.invoice_subcategory';
+    else if (column === 'status') selectField = 'inv.status';
+    else if (column === 'postingStatus') selectField = 'inv.posting_status';
+    else if (column === 'licensePlate') selectField = 'inv.license_plate';
+    else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    if (isCustomGroupColumn) {
+      qb.select(`${selectField}`, 'value').addSelect(
+        `${customSecondaryField}`,
+        'secondary_val',
+      );
+      qb.andWhere(
+        `((${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != '') OR (${customSecondaryField} IS NOT NULL AND CAST(${customSecondaryField} AS TEXT) != ''))`,
+      );
+      qb.groupBy(`${selectField}`).addGroupBy(`${customSecondaryField}`);
+    } else {
+      qb.select(`DISTINCT ${selectField}`, 'value');
+      if (isDateColumn) {
+        qb.andWhere('inv.invoice_date IS NOT NULL');
+        qb.andWhere(`${selectField} != ''`);
+      } else {
+        qb.andWhere(`${selectField} IS NOT NULL`);
+        qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+      }
+    }
+
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      if (isCustomGroupColumn) {
+        qb.andWhere(
+          `(${selectField} ILIKE :s OR ${customSecondaryField} ILIKE :s)`,
+          { s },
+        );
+      } else {
+        qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :s`, { s });
+      }
+    }
+
+    if (column === 'invoiceDate') {
+      qb.orderBy(`${selectField}`, 'DESC');
+    } else {
+      qb.orderBy(`${selectField}`, 'ASC');
+    }
+
+    const countQb = qb.clone();
+    let total = 0;
+    try {
+      if (isCustomGroupColumn) {
+        const countRes = await countQb.getRawMany();
+        total = countRes.length;
+      } else {
+        total = await countQb.getCount();
+      }
+    } catch {
+      total = 0;
+    }
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const rawItems = await qb.getRawMany();
+
+    const items = rawItems
+      .map((r) => {
+        let val =
+          r.value !== undefined && r.value !== null ? String(r.value) : '';
+        let sec =
+          r.secondary_val !== undefined && r.secondary_val !== null
+            ? String(r.secondary_val)
+            : undefined;
+        if (column === 'vatRate' && val) {
+          val = String(parseVatRateForDisplay(val));
+        }
+        return {
+          value: val,
+          label: sec ? `${val} (${sec})` : val,
+          secondaryLabel: sec,
+        };
+      })
+      .filter((i) => Boolean(i.value));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async exportItemsExcel(query: ErpInvoiceItemQuery): Promise<Buffer> {
+    const result = await this.findAllItems({
+      ...query,
+      page: 1,
+      pageSize: 100000,
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Liouni ERP';
+    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.created = new Date();
+
+    const sheetName =
+      query.direction === 'OUT' ? 'Dòng HĐ Đầu Ra' : 'Dòng HĐ Đầu Vào';
+    const worksheet = workbook.addWorksheet(sheetName, {
+      views: [{ showGridLines: true }],
+    });
+
+    worksheet.columns = [
+      { header: 'STT', key: 'stt', width: 8 },
+      { header: 'Số HĐ', key: 'invoiceNo', width: 16 },
+      { header: 'Ký hiệu', key: 'serialNo', width: 14 },
+      { header: 'Ngày HĐ', key: 'invoiceDate', width: 14 },
+      {
+        header: query.direction === 'OUT' ? 'Người mua' : 'Người bán',
+        key: 'partnerName',
+        width: 32,
+      },
+      { header: 'Mã số thuế', key: 'taxCode', width: 16 },
+      { header: 'Mã hàng', key: 'itemCode', width: 16 },
+      {
+        header: 'Diễn giải / Tên hàng hóa, dịch vụ',
+        key: 'description',
+        width: 40,
+      },
+      { header: 'ĐVT', key: 'unit', width: 10 },
+      { header: 'Số lượng', key: 'quantity', width: 12 },
+      { header: 'Đơn giá', key: 'unitPrice', width: 16 },
+      { header: 'Thành tiền', key: 'preVatAmount', width: 18 },
+      { header: 'Thuế suất', key: 'vatRate', width: 12 },
+      { header: 'Tiền thuế VAT', key: 'vatAmount', width: 16 },
+      { header: 'Chiết khấu', key: 'discountAmount', width: 16 },
+      { header: 'Tổng thanh toán', key: 'totalAmount', width: 20 },
+      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 16 },
+      { header: 'Trạng thái', key: 'status', width: 14 },
+      { header: 'Ghi sổ', key: 'postingStatus', width: 14 },
+    ];
+
+    // Style Header Row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' },
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 26;
+
+    result.items.forEach((item, index) => {
+      const row = worksheet.addRow({
+        stt: index + 1,
+        invoiceNo: item.invoiceNo || '',
+        serialNo: item.serialNo || '',
+        invoiceDate: item.invoiceDate || '',
+        partnerName:
+          query.direction === 'OUT'
+            ? item.buyerName || item.buyerPersonalName || ''
+            : item.sellerName || '',
+        taxCode:
+          query.direction === 'OUT'
+            ? item.buyerTaxCode || item.buyerCccd || ''
+            : item.sellerTaxCode || '',
+        itemCode: item.itemCode || '',
+        description: item.description || '',
+        unit: item.unit || '',
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        preVatAmount: item.preVatAmount,
+        vatRate: item.vatRate ? `${item.vatRate}` : '',
+        vatAmount: item.vatAmount,
+        discountAmount: item.discountAmount,
+        totalAmount: item.totalAmount,
+        invoiceSubcategory: item.invoiceSubcategory || 'NORMAL',
+        status: item.status || '',
+        postingStatus: item.postingStatus || '',
+      });
+
+      row.getCell('stt').alignment = { horizontal: 'center' };
+      row.getCell('invoiceDate').alignment = { horizontal: 'center' };
+      row.getCell('taxCode').alignment = { horizontal: 'center' };
+      row.getCell('unit').alignment = { horizontal: 'center' };
+      row.getCell('vatRate').alignment = { horizontal: 'center' };
+      row.getCell('status').alignment = { horizontal: 'center' };
+      row.getCell('postingStatus').alignment = { horizontal: 'center' };
+
+      row.getCell('quantity').numFmt = '#,##0.00';
+      row.getCell('unitPrice').numFmt = '#,##0';
+      row.getCell('preVatAmount').numFmt = '#,##0';
+      row.getCell('vatAmount').numFmt = '#,##0';
+      row.getCell('discountAmount').numFmt = '#,##0';
+      row.getCell('totalAmount').numFmt = '#,##0';
+    });
+
+    // Summary Row
+    const summaryRow = worksheet.addRow({
+      stt: '',
+      invoiceNo: 'TỔNG CỘNG',
+      serialNo: '',
+      invoiceDate: '',
+      partnerName: '',
+      taxCode: '',
+      itemCode: '',
+      description: '',
+      unit: '',
+      quantity: result.summary.totalQuantity,
+      unitPrice: '',
+      preVatAmount: result.summary.totalPreVatAmount,
+      vatRate: '',
+      vatAmount: result.summary.totalVatAmount,
+      discountAmount: result.summary.totalDiscountAmount,
+      totalAmount: result.summary.totalAmount,
+      invoiceSubcategory: '',
+      status: '',
+      postingStatus: '',
+    });
+    summaryRow.font = { bold: true };
+    summaryRow.getCell('quantity').numFmt = '#,##0.00';
+    summaryRow.getCell('preVatAmount').numFmt = '#,##0';
+    summaryRow.getCell('vatAmount').numFmt = '#,##0';
+    summaryRow.getCell('discountAmount').numFmt = '#,##0';
+    summaryRow.getCell('totalAmount').numFmt = '#,##0';
+
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(arrayBuffer);
   }
 }

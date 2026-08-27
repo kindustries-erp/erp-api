@@ -173,6 +173,7 @@ src/erp-invoices-core/
 | Method | Endpoint | Resource | Action | Mô tả chi tiết |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/erp-invoices` | `invoices` | `read` | Lấy danh sách hóa đơn phân trang, tìm kiếm đa trường, lọc ngày, lọc chiều (`IN`/`OUT`) |
+| `GET` | `/erp-invoices/items` | `invoices` | `read` | Lấy danh sách chi tiết các dòng diễn giải mặt hàng hóa đơn phân trang, tìm kiếm đa trường, lọc theo phân loại dòng (`invoice_subcategory`), lọc ngày, đối tác và thống kê KPI dòng tiền/thuế |
 | `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
