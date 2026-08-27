@@ -30,6 +30,11 @@ export class GlobalAuditInterceptor implements NestInterceptor {
       [context.getHandler(), context.getClass()],
     );
 
+    // Bỏ qua nếu tính năng Audit Log bị tắt qua cấu hình ENABLE_AUDIT_LOG=false
+    if (!this.auditCoreService.isEnabled) {
+      return next.handle();
+    }
+
     // Bỏ qua nếu có cờ skip
     if (auditMeta?.skip) {
       return next.handle();

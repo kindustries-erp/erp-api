@@ -40,6 +40,12 @@ describe('AuditRetentionScheduler', () => {
   });
 
   it('runs retention cleanup and queries database with retention days', async () => {
+    mockConfigService.get.mockImplementation((key: string) => {
+      if (key === 'AUDIT_LOG_RETENTION_DAYS') return '30';
+      if (key === 'ENABLE_AUDIT_LOG') return 'true';
+      return undefined;
+    });
+
     mockRepository.query
       .mockResolvedValueOnce([[], 2000]) // Batch 1
       .mockResolvedValueOnce([[], 150]); // Batch 2 (end)
@@ -52,5 +58,17 @@ describe('AuditRetentionScheduler', () => {
       expect.stringContaining('DELETE FROM erp_audit_logs'),
       [30, 2000],
     );
+  });
+
+  it('skips retention cleanup when ENABLE_AUDIT_LOG is false', async () => {
+    mockConfigService.get.mockImplementation((key: string) => {
+      if (key === 'ENABLE_AUDIT_LOG') return 'false';
+      return undefined;
+    });
+
+    const total = await scheduler.handleRetentionCleanup();
+
+    expect(total).toBe(0);
+    expect(mockRepository.query).not.toHaveBeenCalled();
   });
 });
