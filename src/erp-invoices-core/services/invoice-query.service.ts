@@ -2196,7 +2196,9 @@ export class InvoiceQueryService {
       sortOrder = query.sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     }
 
-    qb.orderBy(sortColumn, sortOrder).addOrderBy('ii.id', 'ASC');
+    qb.orderBy(sortColumn, sortOrder)
+      .addOrderBy('inv.invoice_no', 'DESC')
+      .addOrderBy('ii.id', 'ASC');
 
     const rawItems = await qb
       .select([
