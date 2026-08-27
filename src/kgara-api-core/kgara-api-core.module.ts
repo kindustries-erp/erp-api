@@ -26,6 +26,11 @@ import { GarageSmartSettlementService } from './services/garage-smart-settlement
 import { GarageOpexService } from './services/garage-opex.service';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+import { SyncRunLoggerService } from './services/sync-run-logger.service';
+import { SyncDeletionService } from './services/sync-deletion.service';
+import { SyncGrossProfitService } from './services/sync-gross-profit.service';
+import { SyncDebtService } from './services/sync-debt.service';
+import { SyncCaseService } from './services/sync-case.service';
 
 import { KgaraApiCoreController } from './kgara-api-core.controller';
 import { GarageDashboardController } from './garage-dashboard.controller';
@@ -66,6 +71,11 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageOpexService,
     GarageDashboardService,
     KgaraCaseQueryService,
+    SyncRunLoggerService,
+    SyncDeletionService,
+    SyncGrossProfitService,
+    SyncDebtService,
+    SyncCaseService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -85,6 +95,11 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageOpexService,
     GarageDashboardService,
     KgaraCaseQueryService,
+    SyncRunLoggerService,
+    SyncDeletionService,
+    SyncGrossProfitService,
+    SyncDebtService,
+    SyncCaseService,
   ],
 })
 export class KgaraApiCoreModule {}

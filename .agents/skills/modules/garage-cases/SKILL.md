@@ -210,14 +210,21 @@ src/kgara-api-core/
 │   └── kgara-reports.controller.ts         # Controller báo cáo, dashboard, raw receivables/payables
 ├── decorators/
 │   └── branch-id.decorator.ts              # Custom parameter decorator @BranchId()
+├── utils/
+│   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
 ├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
 ├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
-├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark, soft-delete & gross profit
+├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
+    ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
+    ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
+    ├── sync-debt.service.ts                # Sub-Service đồng bộ sổ nợ phải thu (AR) & phải trả NCC 331 (AP)
+    ├── sync-deletion.service.ts            # Sub-Service thuật toán phát hiện và đánh dấu xóa mềm
+    ├── sync-run-logger.service.ts          # Sub-Service quản lý audit log (GwSyncRun) & incremental watermark
     ├── kgara-case-query.service.ts         # Query engine & recalculateCaseSettlementSummary helper
     ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)
     └── garage-smart-settlement.service.spec.ts # Unit tests cho gợi ý cấn trừ vụ việc
