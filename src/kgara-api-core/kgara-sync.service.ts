@@ -13,6 +13,77 @@ import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.ent
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * Safely parse date from various formats without producing Invalid Date / NaN
+ */
+export function parseSafeDate(value: any): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (
+      !trimmed ||
+      trimmed === 'null' ||
+      trimmed === 'undefined' ||
+      trimmed.includes('NaN') ||
+      trimmed.startsWith('0001-01-01') ||
+      trimmed.startsWith('1900-01-01')
+    ) {
+      return null;
+    }
+    // Check if DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = trimmed.match(
+      /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[\sT](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/,
+    );
+    if (dmyMatch) {
+      const [, d, m, y, hh, mm, ss] = dmyMatch;
+      const isoFormatted = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}${
+        hh
+          ? `T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}:${(ss || '00').padStart(2, '0')}`
+          : 'T00:00:00'
+      }`;
+      const parsed = new Date(isoFormatted);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+/**
+ * Safely extract net total payable amount from case data / raw payload
+ * Prioritizes TongTienThanhToan / TienThanhToanKH / (TienCoThue - TienChietKhau)
+ */
+export function extractNetPayableAmount(item: any): number {
+  if (!item) return 0;
+  const raw = item.rawData || item;
+
+  const tongTienThanhToan = Number(raw.TongTienThanhToan);
+  if (!isNaN(tongTienThanhToan) && tongTienThanhToan > 0) {
+    return tongTienThanhToan;
+  }
+
+  const tienThanhToanKH = Number(raw.TienThanhToanKH);
+  if (!isNaN(tienThanhToanKH) && tienThanhToanKH > 0) {
+    return tienThanhToanKH;
+  }
+
+  const tienCoThue = Number(raw.TienCoThue ?? item.tienCoThue ?? 0);
+  const tienChietKhau = Number(raw.TienChietKhau ?? 0);
+  if (tienChietKhau > 0 && tienCoThue > tienChietKhau) {
+    return tienCoThue - tienChietKhau;
+  }
+
+  return isNaN(tienCoThue) ? 0 : tienCoThue;
+}
+
 @Injectable()
 export class KgaraSyncService {
   private readonly logger = new Logger(KgaraSyncService.name);
@@ -68,7 +139,7 @@ export class KgaraSyncService {
     run.rowCount = rowCount;
     if (errorMsg) run.errorMessage = errorMsg;
     if (responseStatus) run.responseStatus = responseStatus;
-    if (dataAsOf) run.dataAsOf = new Date(dataAsOf);
+    if (dataAsOf) run.dataAsOf = parseSafeDate(dataAsOf);
     await this.syncRunRepo.save(run);
   }
 
@@ -157,15 +228,35 @@ export class KgaraSyncService {
           const newStatus = c.TinhTrangDichVu;
 
           // Typed mappings - ERP fields are explicitly omitted (not overwritten)
+          const netPayable = extractNetPayableAmount(c);
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
           gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
-          gwCase.tienCoThue = c.TienCoThue;
+          gwCase.tienCoThue = netPayable;
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
-          gwCase.tienConPhaiThanhToan = c.TienConPhaiThanhToan;
+          gwCase.tienConPhaiThanhToan = Math.max(
+            0,
+            netPayable - Number(c.TienDaThanhToan || 0),
+          );
+
+          if (gwCase.id) {
+            const existingSettlements = await this.settlementRepo.find({
+              where: { caseId: gwCase.id },
+            });
+            if (existingSettlements?.length > 0) {
+              const totalReceipts = existingSettlements
+                .filter((s) => s.settlementType === 'RECEIPT')
+                .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              gwCase.tienDaThanhToan = totalReceipts;
+              gwCase.tienConPhaiThanhToan = Math.max(
+                0,
+                netPayable - totalReceipts,
+              );
+            }
+          }
 
           if (newStatus === 9) {
             // Cancelled: Clear gross profit
@@ -211,28 +302,19 @@ export class KgaraSyncService {
             gwCase.chiPhi = null;
             gwCase.loiNhuan = null;
           }
-          gwCase.ngayPhatSinh = c.NgayPhatSinhFull
-            ? new Date(c.NgayPhatSinhFull)
-            : c.NgayPhatSinh
-              ? new Date(c.NgayPhatSinh)
-              : null;
-          gwCase.ngayTiepNhan = c.NgayTiepNhan
-            ? new Date(c.NgayTiepNhan)
-            : null;
-          gwCase.ngayHoanThanhCongViec = c.NgayHoanThanhCongViec
-            ? new Date(c.NgayHoanThanhCongViec)
-            : null;
-          gwCase.ngayGiaoXeFull = c.NgayGiaoXeFull
-            ? new Date(c.NgayGiaoXeFull)
-            : null;
+          gwCase.ngayPhatSinh =
+            parseSafeDate(c.NgayPhatSinhFull) || parseSafeDate(c.NgayPhatSinh);
+          gwCase.ngayTiepNhan = parseSafeDate(c.NgayTiepNhan);
+          gwCase.ngayHoanThanhCongViec = parseSafeDate(c.NgayHoanThanhCongViec);
+          gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           gwCase.soKhung = c.SoKhung;
-          gwCase.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          gwCase.dataAsOf = parseSafeDate(dataAsOf);
 
           const caseDate =
             gwCase.ngayHoanThanhCongViec ||
             gwCase.ngayPhatSinh ||
             gwCase.ngayTiepNhan;
-          if (caseDate) {
+          if (caseDate && !isNaN(caseDate.getTime())) {
             updatedCaseDates.add(caseDate.toISOString());
           }
 
@@ -261,10 +343,13 @@ export class KgaraSyncService {
       try {
         const dateRangesToSync: { from: string; to: string }[] = [];
 
-        if (from && to) {
+        const parsedFrom = parseSafeDate(from);
+        const parsedTo = parseSafeDate(to);
+
+        if (parsedFrom && parsedTo) {
           dateRangesToSync.push({
-            from: from.split('T')[0],
-            to: to.split('T')[0],
+            from: parsedFrom.toISOString().split('T')[0],
+            to: parsedTo.toISOString().split('T')[0],
           });
         } else {
           const now = new Date();
@@ -278,8 +363,8 @@ export class KgaraSyncService {
 
           const monthsToSync = new Set<string>();
           for (const isoStr of updatedCaseDates) {
-            const d = new Date(isoStr);
-            if (d < firstDay || d > lastDay) {
+            const d = parseSafeDate(isoStr);
+            if (d && (d < firstDay || d > lastDay)) {
               monthsToSync.add(
                 `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
               );
@@ -389,10 +474,13 @@ export class KgaraSyncService {
     );
     try {
       const dateRangesToSync: { from: string; to: string }[] = [];
-      if (from && to) {
+      const parsedFrom = parseSafeDate(from);
+      const parsedTo = parseSafeDate(to);
+
+      if (parsedFrom && parsedTo) {
         dateRangesToSync.push({
-          from: from.split('T')[0],
-          to: to.split('T')[0],
+          from: parsedFrom.toISOString().split('T')[0],
+          to: parsedTo.toISOString().split('T')[0],
         });
       } else {
         const now = new Date();
@@ -480,10 +568,10 @@ export class KgaraSyncService {
         totalPages = response?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
-        for (const r of receivables) {
-          const pFrom = from ? new Date(from) : new Date('2000-01-01');
-          const pTo = to ? new Date(to) : new Date('2099-12-31');
+        const pFrom = parseSafeDate(from) || new Date('2000-01-01');
+        const pTo = parseSafeDate(to) || new Date('2099-12-31');
 
+        for (const r of receivables) {
           let rec = await this.receivableRepo.findOne({
             where: {
               branchExternalId,
@@ -507,8 +595,8 @@ export class KgaraSyncService {
           rec.soKhung = r.SoKhung;
           rec.tienThanhToan = r.TienThanhToan;
           rec.tienDaThanhToan = r.TienDaThanhToan;
-          rec.ngayPhatSinh = r.NgayPhatSinh ? new Date(r.NgayPhatSinh) : null;
-          rec.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          rec.ngayPhatSinh = parseSafeDate(r.NgayPhatSinh);
+          rec.dataAsOf = parseSafeDate(dataAsOf);
           rec.rawData = r;
 
           await this.receivableRepo.save(rec);
@@ -571,10 +659,10 @@ export class KgaraSyncService {
         totalPages = response?.results?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
-        for (const p of payables) {
-          const pFrom = from ? new Date(from) : new Date('2000-01-01');
-          const pTo = to ? new Date(to) : new Date('2099-12-31');
+        const pFrom = parseSafeDate(from) || new Date('2000-01-01');
+        const pTo = parseSafeDate(to) || new Date('2099-12-31');
 
+        for (const p of payables) {
           let pay = await this.payableRepo.findOne({
             where: {
               branchExternalId,
@@ -621,7 +709,7 @@ export class KgaraSyncService {
           pay.tyGiaDk = p.TyGiaDK;
           pay.tyGiaPsNo = p.TyGiaPSNo;
           pay.tyGiaPsCo = p.TyGiaPSCo;
-          pay.dataAsOf = dataAsOf ? new Date(dataAsOf) : null;
+          pay.dataAsOf = parseSafeDate(dataAsOf);
           pay.rawData = p;
 
           await this.payableRepo.save(pay);
@@ -651,39 +739,53 @@ export class KgaraSyncService {
     }
   }
 
-  async syncCaseDetail(caseId: string, branchExternalId: string): Promise<any> {
-    this.logger.log(`Syncing case detail for case ${caseId}...`);
+  async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
+    this.logger.log(`Syncing detail for case ${caseId}...`);
+
+    // Resolve targetCaseId and effectiveBranchId if an ERP internal UUID or soChungTu was passed
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        caseId,
+      );
+    let gwCase = await this.caseRepo.findOne({
+      where: [
+        { hdPhieuDichVuId: caseId },
+        ...(isUuid ? [{ id: caseId }] : []),
+        { soChungTu: caseId },
+      ],
+    });
+
+    const targetCaseId = gwCase?.hdPhieuDichVuId || caseId;
+    const effectiveBranchId =
+      branchExternalId || gwCase?.branchExternalId || '';
+
     const run = await this.createSyncRun(
-      branchExternalId,
-      '/api/v1/gr/cases/detail',
-      { id: caseId },
+      effectiveBranchId,
+      `/api/v1/gr/cases/detail/${targetCaseId}`,
+      {},
       1,
     );
 
     try {
       const response = await this.client.getCaseDetail(
-        caseId,
-        branchExternalId,
+        targetCaseId,
+        effectiveBranchId,
       );
       const caseData = response?.data;
       if (!caseData) {
-        await this.closeSyncRun(
-          run,
-          GwSyncStatus.FAILED,
-          0,
-          'No data returned',
-        );
-        return null;
+        throw new Error(`Case ${targetCaseId} detail not found on Kgara`);
       }
 
       // Update case if exists
-      let gwCase = await this.caseRepo.findOne({
-        where: { hdPhieuDichVuId: caseId },
-      });
+      if (!gwCase) {
+        gwCase = await this.caseRepo.findOne({
+          where: { hdPhieuDichVuId: targetCaseId },
+        });
+      }
       if (!gwCase) {
         gwCase = new KgaraCase();
-        gwCase.hdPhieuDichVuId = caseId;
-        gwCase.branchExternalId = branchExternalId;
+        gwCase.hdPhieuDichVuId = targetCaseId;
+        gwCase.branchExternalId = effectiveBranchId;
       }
 
       // State transitions handling
@@ -691,22 +793,39 @@ export class KgaraSyncService {
       const newStatus = caseData.TinhTrangDichVu;
 
       // Selective mappings
+      const netPayable = extractNetPayableAmount(caseData);
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
       gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
       gwCase.tinhTrangDichVu = newStatus;
       gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
-      gwCase.tienCoThue = caseData.TienCoThue;
+      gwCase.tienCoThue = netPayable;
       gwCase.tienDaThanhToan = caseData.TienDaThanhToan;
-      gwCase.tienConPhaiThanhToan = caseData.TienConPhaiThanhToan;
+      gwCase.tienConPhaiThanhToan = Math.max(
+        0,
+        netPayable - Number(caseData.TienDaThanhToan || 0),
+      );
+
+      if (gwCase.id) {
+        const existingSettlements = await this.settlementRepo.find({
+          where: { caseId: gwCase.id },
+        });
+        if (existingSettlements?.length > 0) {
+          const totalReceipts = existingSettlements
+            .filter((s) => s.settlementType === 'RECEIPT')
+            .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+          gwCase.tienDaThanhToan = totalReceipts;
+          gwCase.tienConPhaiThanhToan = Math.max(0, netPayable - totalReceipts);
+        }
+      }
 
       if (newStatus === 9) {
         // Cancelled: Clear gross profit
         gwCase.doanhThu = 0;
         gwCase.chiPhi = 0;
         gwCase.loiNhuan = 0;
-        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: targetCaseId });
 
         if (gwCase.id) {
           const hasInvoices = await this.linkedInvoiceRepo.count({
@@ -726,7 +845,7 @@ export class KgaraSyncService {
         gwCase.doanhThu = null;
         gwCase.chiPhi = null;
         gwCase.loiNhuan = null;
-        await this.grossProfitRepo.delete({ hdPhieuDichVuId: caseId });
+        await this.grossProfitRepo.delete({ hdPhieuDichVuId: targetCaseId });
         this.logger.log(
           `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
         );
@@ -743,29 +862,23 @@ export class KgaraSyncService {
         gwCase.chiPhi = null;
         gwCase.loiNhuan = null;
       }
-      gwCase.ngayPhatSinh = caseData.NgayPhatSinhFull
-        ? new Date(caseData.NgayPhatSinhFull)
-        : caseData.NgayPhatSinh
-          ? new Date(caseData.NgayPhatSinh)
-          : null;
-      gwCase.ngayTiepNhan = caseData.NgayTiepNhan
-        ? new Date(caseData.NgayTiepNhan)
-        : null;
-      gwCase.ngayHoanThanhCongViec = caseData.NgayHoanThanhCongViec
-        ? new Date(caseData.NgayHoanThanhCongViec)
-        : null;
-      gwCase.ngayGiaoXeFull = caseData.NgayGiaoXeFull
-        ? new Date(caseData.NgayGiaoXeFull)
-        : null;
+      gwCase.ngayPhatSinh =
+        parseSafeDate(caseData.NgayPhatSinhFull) ||
+        parseSafeDate(caseData.NgayPhatSinh);
+      gwCase.ngayTiepNhan = parseSafeDate(caseData.NgayTiepNhan);
+      gwCase.ngayHoanThanhCongViec = parseSafeDate(
+        caseData.NgayHoanThanhCongViec,
+      );
+      gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
       gwCase.soKhung = caseData.SoKhung;
-      gwCase.dataAsOf = response.dataAsOf ? new Date(response.dataAsOf) : null;
+      gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
 
       // Restore case if it was previously soft-deleted
       if (gwCase.kgaraDeletedAt) {
         gwCase.kgaraDeletedAt = null;
         gwCase.kgaraDeleteCount = 0;
-        this.logger.log(`Case ${caseId} was restored from soft-delete.`);
+        this.logger.log(`Case ${targetCaseId} was restored from soft-delete.`);
       }
 
       await this.caseRepo.save(gwCase);
@@ -783,7 +896,7 @@ export class KgaraSyncService {
           if (!srv) {
             srv = new KgaraCaseService();
             srv.hdPhieuDichVuChiTietId = s.HdPhieuDichVuChiTietID;
-            srv.hdPhieuDichVuId = caseId;
+            srv.hdPhieuDichVuId = targetCaseId;
           }
 
           srv.noiDungChiTiet = s.NoiDungChiTiet;
@@ -818,7 +931,7 @@ export class KgaraSyncService {
         undefined,
         200,
       );
-      this.logger.log(`Finished syncing case detail for case ${caseId}.`);
+      this.logger.log(`Finished syncing case detail for case ${targetCaseId}.`);
       return caseData;
     } catch (error: any) {
       await this.closeSyncRun(run, GwSyncStatus.FAILED, 0, error.message);
@@ -837,12 +950,13 @@ export class KgaraSyncService {
       where: { branchExternalId, endpoint, status: GwSyncStatus.SUCCESS },
       order: { requestStartedAt: 'DESC' },
     });
-    if (!lastRun) return undefined;
+    if (!lastRun || !lastRun.requestStartedAt) return undefined;
+
+    const lastDate = parseSafeDate(lastRun.requestStartedAt);
+    if (!lastDate) return undefined;
 
     // Substract 10 minutes overlap as recommended
-    const watermark = new Date(
-      lastRun.requestStartedAt.getTime() - 10 * 60 * 1000,
-    );
+    const watermark = new Date(lastDate.getTime() - 10 * 60 * 1000);
     return watermark.toISOString();
   }
 
@@ -859,14 +973,31 @@ export class KgaraSyncService {
       `Running deletion detection for branch ${branchExternalId} from ${from} to ${to}...`,
     );
 
-    // Find all cases in ERP for this branch and date range
-    const erpCases = await this.caseRepo
+    const fromDate = parseSafeDate(from);
+    const toDate = parseSafeDate(to);
+
+    // Find all cases in ERP for this branch and date range (excluding manual external cases like OJ_NGOAI)
+    const qb = this.caseRepo
       .createQueryBuilder('case')
       .where('case.branchExternalId = :branchExternalId', { branchExternalId })
-      .andWhere('case.ngayPhatSinh >= :from', { from })
-      .andWhere('case.ngayPhatSinh <= :to', { to })
       .andWhere('case.kgaraDeletedAt IS NULL')
-      .getMany();
+      .andWhere(
+        '(case.classification != :ojNgoai OR case.classification IS NULL)',
+        { ojNgoai: 'OJ_NGOAI' },
+      );
+
+    if (fromDate) {
+      const fromStr = from.includes('T')
+        ? from
+        : `${from.split('T')[0]} 00:00:00`;
+      qb.andWhere('case.ngayPhatSinh >= :fromStr', { fromStr });
+    }
+    if (toDate) {
+      const toStr = to.includes('T') ? to : `${to.split('T')[0]} 23:59:59.999`;
+      qb.andWhere('case.ngayPhatSinh <= :toStr', { toStr });
+    }
+
+    const erpCases = await qb.getMany();
 
     const deletedCases = erpCases.filter(
       (c) => !syncedIds.has(c.hdPhieuDichVuId),

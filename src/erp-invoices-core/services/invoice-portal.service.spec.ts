@@ -217,6 +217,12 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
     });
   });
 
+  describe('checkTokenValid', () => {
+    it('should return false if token is empty', async () => {
+      expect(await service.checkTokenValid('')).toBe(false);
+    });
+  });
+
   describe('Relative Invoice Sync (Adjustment / Replacement)', () => {
     describe('fetchRelativeInvoice', () => {
       it('should return null immediately if taxInvoiceStatus is not 2 or 3', async () => {

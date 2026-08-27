@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
+import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
@@ -14,6 +15,7 @@ import { BusinessPartnersCoreModule } from './business-partners-core/business-pa
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { BomConfigModule } from './bom-config/bom-config.module';
+import { ModuleConfigModule } from './module-config/module-config.module';
 import { PurchaseRequestsCoreModule } from './purchase-requests-core/purchase-requests-core.module';
 import { PurchaseOrdersCoreModule } from './purchase-orders-core/purchase-orders-core.module';
 import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-core.module';
@@ -50,6 +52,7 @@ import { SinvoiceModule } from './sinvoice/sinvoice.module';
 import { EmailIngestModule } from './email-ingest/email-ingest.module';
 import { OperatingExpensesCoreModule } from './operating-expenses-core/operating-expenses-core.module';
 import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
+import { AppConfigModule } from './app-config/app-config.module';
 
 @Module({
   imports: [
@@ -67,7 +70,13 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
             type: 'postgres' as const,
             schema: 'public',
             url: databaseUrl,
-            entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
+            entities: [
+              CoreUser,
+              CoreUserPreference,
+              CoreRole,
+              CorePermission,
+              CoreUserRole,
+            ],
             synchronize: false,
             ssl: { rejectUnauthorized: false },
             autoLoadEntities: true,
@@ -83,7 +92,13 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
           username: configService.get<string>('DB_USER', 'postgres'),
           password: configService.get<string>('DB_PASSWORD', ''),
           database: configService.get<string>('DB_DATABASE', 'erp_core'),
-          entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
+          entities: [
+            CoreUser,
+            CoreUserPreference,
+            CoreRole,
+            CorePermission,
+            CoreUserRole,
+          ],
           synchronize: false,
           ssl:
             configService.get<string>('DB_SSL') === 'true'
@@ -103,6 +118,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
     ErpMfgCoreModule,
     BomCoreModule,
     BomConfigModule,
+    ModuleConfigModule,
     PurchaseRequestsCoreModule,
     PurchaseOrdersCoreModule,
     GoodsReceiptsCoreModule,
@@ -133,6 +149,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
     EmailIngestModule,
     OperatingExpensesCoreModule,
     VinfastPartsModule,
+    AppConfigModule,
   ],
   controllers: [AppController],
   providers: [

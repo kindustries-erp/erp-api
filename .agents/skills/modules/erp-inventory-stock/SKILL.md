@@ -25,6 +25,10 @@ Phân hệ `erp-inventory-stock` (gồm `inventory-stock-core` và `erp_inventor
   - Endpoint `column-options` hỗ trợ lấy danh sách giá trị lọc duy nhất theo từng cột (SKU, Tên hàng, Loại hàng, Kho, Tình trạng tồn).
 - **Xuất Báo cáo Tồn kho ra Excel (`exportExcel`)**:
   - Hỗ trợ xuất toàn bộ danh sách tồn kho theo bộ lọc hiện hành thành file `.xlsx` định dạng chuẩn kế toán.
+- **Chuẩn hóa UI/UX Bảng Sổ Tồn Kho (`OperationalInventoryPage.tsx` & `stockColumns.tsx`)**:
+  - Cột STT `#` cố định 40px ở đầu bảng, căn giữa tiêu chuẩn.
+  - Làm mờ hàng trạng thái ngừng hoạt động/hủy (`INACTIVE`, `CANCELLED`, `VOID`).
+  - Quick Actions chuẩn: "Xem chi tiết" (Icon `Eye`, view mode) và "Chỉnh sửa" (Icon `Pencil`, edit mode).
 
 ---
 

@@ -31,6 +31,10 @@ Phân hệ `erp-inventory-tracking` (thuộc `inventory-core`) đóng vai trò l
   - Chuyển trạng thái Serial xe từ `IN_STOCK` / `RESERVED` $\to$ `SOLD`.
 - **Truy xuất Nguồn gốc Linh kiện Lắp ráp (As-Built BOM Traceability)**:
   - Cho phép tra cứu bất kỳ Số Khung (VIN) nào để xem toàn bộ danh mục Serial của các linh kiện đã cấu thành nên chiếc xe đó (Pin, Động cơ, Khung, v.v.).
+- **Chuẩn hóa UI/UX Bảng Định danh & Tracking (`TrackedGoodsPage.tsx` & `TrackedGoodsDrawer.tsx`)**:
+  - Cột STT `#` cố định 40px ở đầu bảng, căn giữa.
+  - Chuẩn hóa cột Phiếu xuất kho (`goodsIssueNo`) và Đơn hàng (`soNo`) qua `TableText`, gỡ bỏ icon drawer rải rác.
+  - Action Menu: "Xem chi tiết" (Icon `Eye`), "Xem phiếu xuất kho" (Icon `PackageMinus`), "Xem đơn hàng" (Icon `FileText`) trong nhóm `TRA CỨU`, và "Chỉnh sửa" (Icon `Pencil` - mở `TrackedGoodsDrawer` với `initialMode="edit"`) trong nhóm `THAO TÁC`.
 
 ---
 

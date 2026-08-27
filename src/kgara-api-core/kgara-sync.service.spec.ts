@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraSyncService, parseSafeDate } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -42,11 +42,16 @@ describe('KgaraSyncService', () => {
     };
 
     const mockRepo = () => ({
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
       upsert: jest.fn().mockResolvedValue({ identifiers: [] }),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      }),
       manager: {
         transaction: jest.fn((cb) =>
           cb({
@@ -277,6 +282,28 @@ describe('KgaraSyncService', () => {
         }),
       );
     });
+
+    it('should exclude cases with classification OJ_NGOAI from soft-delete detection query', async () => {
+      const mockAndWhere = jest.fn().mockReturnThis();
+      const mockWhere = jest.fn().mockReturnThis();
+      caseRepo.createQueryBuilder = jest.fn().mockReturnValue({
+        where: mockWhere,
+        andWhere: mockAndWhere,
+        getMany: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.detectAndMarkDeletedCases(
+        'br-1',
+        '2026-07-01',
+        '2026-07-31',
+        new Set(['case-1']),
+      );
+
+      expect(mockAndWhere).toHaveBeenCalledWith(
+        '(case.classification != :ojNgoai OR case.classification IS NULL)',
+        { ojNgoai: 'OJ_NGOAI' },
+      );
+    });
   });
 
   describe('syncReceivables', () => {
@@ -321,6 +348,145 @@ describe('KgaraSyncService', () => {
       expect(payableRepo.save).toHaveBeenCalledTimes(1);
       expect(payableRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ taiKhoanId: 'pay-1', doiTacId: 'dt-1' }),
+      );
+    });
+  });
+
+  describe('parseSafeDate', () => {
+    it('should correctly parse valid ISO strings and Date objects', () => {
+      const now = new Date();
+      expect(parseSafeDate(now)).toEqual(now);
+      expect(parseSafeDate('2026-08-01T00:00:00Z')?.toISOString()).toEqual(
+        '2026-08-01T00:00:00.000Z',
+      );
+      expect(parseSafeDate('2026-08-05')?.toISOString().split('T')[0]).toEqual(
+        '2026-08-05',
+      );
+    });
+
+    it('should parse DD/MM/YYYY and DD/MM/YYYY HH:mm:ss format', () => {
+      const parsed = parseSafeDate('05/08/2026 14:30:00');
+      expect(parsed).not.toBeNull();
+      expect(parsed?.getFullYear()).toEqual(2026);
+      expect(parsed?.getMonth()).toEqual(7); // August (0-indexed)
+      expect(parsed?.getDate()).toEqual(5);
+    });
+
+    it('should safely return null for invalid or empty dates without returning Invalid Date', () => {
+      expect(parseSafeDate(null)).toBeNull();
+      expect(parseSafeDate(undefined)).toBeNull();
+      expect(parseSafeDate('')).toBeNull();
+      expect(parseSafeDate('null')).toBeNull();
+      expect(parseSafeDate('undefined')).toBeNull();
+      expect(parseSafeDate('0001-01-01T00:00:00')).toBeNull();
+      expect(parseSafeDate('1900-01-01T00:00:00')).toBeNull();
+      expect(parseSafeDate('0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN')).toBeNull();
+      expect(parseSafeDate('invalid-date-string')).toBeNull();
+      expect(parseSafeDate(new Date(NaN))).toBeNull();
+    });
+  });
+
+  describe('syncCasesForBranch with malformed date fields', () => {
+    it('should handle malformed date fields from KGara without throwing or storing NaN', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [
+          {
+            HdPhieuDichVuID: 'case-bad-date',
+            SoChungTu: 'PDV-001',
+            NgayPhatSinhFull: '0001-01-01T00:00:00',
+            NgayPhatSinh: 'invalid-date',
+            NgayTiepNhan: '0NaN-NaN-NaN',
+            NgayHoanThanhCongViec: null,
+            NgayGiaoXeFull: undefined,
+          },
+        ],
+        pagination: { totalPages: 1 },
+        dataAsOf: 'null',
+      });
+      caseRepo.findOne.mockResolvedValue(null);
+
+      const res = await service.syncCasesForBranch(
+        'br-1',
+        '2026-08-01',
+        '2026-08-05',
+      );
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-bad-date',
+          ngayPhatSinh: null,
+          ngayTiepNhan: null,
+          ngayHoanThanhCongViec: null,
+          ngayGiaoXeFull: null,
+          dataAsOf: null,
+        }),
+      );
+    });
+  });
+
+  describe('Preservation of ERP internal fields during sync', () => {
+    it('should preserve classification and erpNotes when syncing cases for branch', async () => {
+      clientService.getCases.mockResolvedValueOnce({
+        data: [
+          {
+            HdPhieuDichVuID: 'case-preserve-1',
+            SoChungTu: 'PDV-202608-001',
+            BienSoXe: '30A-12345',
+            TenTinhTrangDichVu: 'Đang sửa',
+            TinhTrangDichVu: 2,
+          },
+        ],
+        pagination: { totalPages: 1 },
+      });
+
+      const existingCase = {
+        id: 'uuid-1',
+        hdPhieuDichVuId: 'case-preserve-1',
+        soChungTu: 'PDV-202608-001',
+        classification: 'KY_GUI_NOI_BO',
+        erpNotes: 'Ghi chú quan trọng từ ERP',
+      };
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      await service.syncCasesForBranch('br-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-preserve-1',
+          classification: 'KY_GUI_NOI_BO',
+          erpNotes: 'Ghi chú quan trọng từ ERP',
+        }),
+      );
+    });
+
+    it('should preserve classification and erpNotes when syncing case detail', async () => {
+      clientService.getCaseDetail.mockResolvedValueOnce({
+        data: {
+          HdPhieuDichVuID: 'case-preserve-2',
+          SoChungTu: 'PDV-202608-002',
+          BienSoXe: '30B-99999',
+          TenTinhTrangDichVu: 'Hoàn tất',
+          TinhTrangDichVu: 3,
+        },
+      });
+
+      const existingCase = {
+        id: 'uuid-2',
+        hdPhieuDichVuId: 'case-preserve-2',
+        soChungTu: 'PDV-202608-002',
+        classification: 'OJ',
+        erpNotes: 'Gia công bên ngoài',
+      };
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      await service.syncCaseDetail('br-1', 'case-preserve-2');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'case-preserve-2',
+          classification: 'OJ',
+          erpNotes: 'Gia công bên ngoài',
+        }),
       );
     });
   });

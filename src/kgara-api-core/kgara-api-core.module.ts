@@ -12,6 +12,7 @@ import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
+import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
 
 import { CoreUser } from '../users/entities/core-user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -22,7 +23,10 @@ import { KgaraClientService } from './kgara-client.service';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
+import { GarageOpexService } from './services/garage-opex.service';
 import { KgaraApiCoreController } from './kgara-api-core.controller';
+import { GarageDashboardService } from './garage-dashboard.service';
+import { GarageDashboardController } from './garage-dashboard.controller';
 
 @Module({
   imports: [
@@ -37,6 +41,7 @@ import { KgaraApiCoreController } from './kgara-api-core.controller';
       KgaraCaseLinkedInvoice,
       KgaraGrossProfit,
       KgaraCaseSettlement,
+      KgaraOperatingExpense,
       CoreUser,
     ]),
     ConfigModule,
@@ -49,8 +54,16 @@ import { KgaraApiCoreController } from './kgara-api-core.controller';
     KgaraSyncService,
     KgaraSyncScheduler,
     GarageSmartSettlementService,
+    GarageOpexService,
+    GarageDashboardService,
   ],
-  controllers: [KgaraApiCoreController],
-  exports: [KgaraSyncService, KgaraClientService, GarageSmartSettlementService],
+  controllers: [KgaraApiCoreController, GarageDashboardController],
+  exports: [
+    KgaraSyncService,
+    KgaraClientService,
+    GarageSmartSettlementService,
+    GarageOpexService,
+    GarageDashboardService,
+  ],
 })
 export class KgaraApiCoreModule {}

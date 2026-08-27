@@ -8,8 +8,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBom } from '../../bom-core/entities/erp_bom.entity';
-import { ErpBomAttributeDef } from './erp_bom_attribute_def.entity';
+import type { ErpBom } from '../../bom-core/entities/erp_bom.entity';
+import type { ErpBomAttributeDef } from './erp_bom_attribute_def.entity';
 
 @Entity({ name: 'erp_bom_attribute_values' })
 @Index(['bomId', 'attrDefId'], { unique: true })
@@ -20,14 +20,14 @@ export class ErpBomAttributeValue {
   @Column({ type: 'uuid', name: 'bom_id' })
   bomId: string;
 
-  @ManyToOne(() => ErpBom, { onDelete: 'CASCADE' })
+  @ManyToOne('ErpBom', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'bom_id' })
   bom?: ErpBom;
 
   @Column({ type: 'uuid', name: 'attr_def_id' })
   attrDefId: string;
 
-  @ManyToOne(() => ErpBomAttributeDef, (def) => def.attributeValues, {
+  @ManyToOne('ErpBomAttributeDef', 'attributeValues', {
     onDelete: 'RESTRICT',
   })
   @JoinColumn({ name: 'attr_def_id' })

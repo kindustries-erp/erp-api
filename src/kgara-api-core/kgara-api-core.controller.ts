@@ -12,7 +12,9 @@ import {
   createParamDecorator,
   ExecutionContext,
   NotFoundException,
+  BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 
 export const BranchId = createParamDecorator(
@@ -25,7 +27,7 @@ export const BranchId = createParamDecorator(
   },
 );
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, SelectQueryBuilder } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraCase } from './entities/kgara_case.entity';
 import { KgaraReceivable } from './entities/kgara_receivable.entity';
@@ -35,9 +37,13 @@ import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.ent
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
-import { KgaraSyncService } from './kgara-sync.service';
+import {
+  KgaraSyncService,
+  extractNetPayableAmount,
+} from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
+import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -46,7 +52,7 @@ import { GarageSmartSettlementService } from './services/garage-smart-settlement
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
-export class KgaraApiCoreController {
+export class KgaraApiCoreController implements OnModuleInit {
   private readonly logger = new Logger(KgaraApiCoreController.name);
 
   constructor(
@@ -74,6 +80,26 @@ export class KgaraApiCoreController {
     private smartSettlementService: GarageSmartSettlementService,
   ) {}
 
+  async onModuleInit() {
+    try {
+      await this.settlementRepo.manager.query(`
+        UPDATE kgara_cases c
+        SET
+          tien_da_thanh_toan = COALESCE(s.total_receipts, 0),
+          tien_con_phai_thanh_toan = GREATEST(0, COALESCE(c.tien_co_thue, 0) - COALESCE(s.total_receipts, 0))
+        FROM (
+          SELECT case_id, SUM(amount) as total_receipts
+          FROM kgara_case_settlements
+          WHERE settlement_type = 'RECEIPT'
+          GROUP BY case_id
+        ) s
+        WHERE c.id = s.case_id;
+      `);
+    } catch (e) {
+      this.logger.warn(`Initial settlement balance sync: ${e}`);
+    }
+  }
+
   @Get('branches')
   @RequirePermissions({ resource: 'garage', action: 'read' })
   async getBranches() {
@@ -91,6 +117,7 @@ export class KgaraApiCoreController {
     @Query('to') to?: string,
     @Query('filtersStr') filtersStr?: string,
     @Query('includeDeleted') includeDeleted?: string,
+    @Query('sorts') sorts?: string | string[],
   ) {
     const query = this.caseRepo
       .createQueryBuilder('case')
@@ -110,10 +137,12 @@ export class KgaraApiCoreController {
     }
 
     if (from) {
-      query.andWhere('case.ngayPhatSinh >= :from', { from });
+      const fromDate = from.includes('T') ? from : `${from} 00:00:00`;
+      query.andWhere('case.ngayPhatSinh >= :fromDate', { fromDate });
     }
     if (to) {
-      query.andWhere('case.ngayPhatSinh <= :to', { to });
+      const toDate = to.includes('T') ? to : `${to} 23:59:59.999`;
+      query.andWhere('case.ngayPhatSinh <= :toDate', { toDate });
     }
 
     if (q) {
@@ -129,7 +158,59 @@ export class KgaraApiCoreController {
 
     this.applyCaseListFilters(query, filtersStr);
 
-    query.orderBy('case.updatedAt', 'DESC');
+    if (sorts) {
+      const sortList = Array.isArray(sorts) ? sorts : [sorts];
+      let first = true;
+      for (const s of sortList) {
+        const isDesc = s.startsWith('-');
+        const col = isDesc ? s.substring(1) : s;
+        const dir: 'ASC' | 'DESC' = isDesc ? 'DESC' : 'ASC';
+        const nulls = isDesc ? 'NULLS LAST' : 'NULLS FIRST';
+
+        let targetCol: string | null = null;
+        if (col === 'caseDate' || col === 'ngayPhatSinh')
+          targetCol = 'case.ngayPhatSinh';
+        else if (col === 'ngayTiepNhan') targetCol = 'case.ngayTiepNhan';
+        else if (col === 'ngayHoanThanhCongViec' || col === 'completionDate')
+          targetCol = 'case.ngayHoanThanhCongViec';
+        else if (col === 'soChungTu' || col === 'code' || col === 'caseCode')
+          targetCol = 'case.soChungTu';
+        else if (col === 'bienSoXe' || col === 'licensePlate')
+          targetCol = 'case.bienSoXe';
+        else if (col === 'khachHangName' || col === 'customerName')
+          targetCol = 'case.khachHangName';
+        else if (col === 'khachHangCode' || col === 'customerCode')
+          targetCol = 'case.khachHangCode';
+        else if (col === 'doanhThu') targetCol = 'case.doanhThu';
+        else if (col === 'chiPhi') targetCol = 'case.chiPhi';
+        else if (col === 'loiNhuan') targetCol = 'case.loiNhuan';
+        else if (col === 'tienCoThue' || col === 'totalAmount')
+          targetCol = 'case.tienCoThue';
+        else if (col === 'tienDaThanhToan' || col === 'paidAmount')
+          targetCol = 'case.tienDaThanhToan';
+        else if (col === 'tienConPhaiThanhToan' || col === 'balanceAmount')
+          targetCol = 'case.tienConPhaiThanhToan';
+        else if (col === 'updatedAt') targetCol = 'case.updatedAt';
+        else if (col === 'createdAt') targetCol = 'case.createdAt';
+        else if (col === 'classification') targetCol = 'case.classification';
+
+        if (targetCol) {
+          if (first) {
+            query.orderBy(targetCol, dir, nulls);
+            first = false;
+          } else {
+            query.addOrderBy(targetCol, dir, nulls);
+          }
+        }
+      }
+      query.addOrderBy('case.soChungTu', 'DESC');
+    } else {
+      query
+        .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
+        .addOrderBy('case.ngayTiepNhan', 'DESC', 'NULLS LAST')
+        .addOrderBy('case.soChungTu', 'DESC')
+        .addOrderBy('case.updatedAt', 'DESC');
+    }
 
     const take = parseInt(pageSize, 10) || 20;
     const skip = (parseInt(page, 10) - 1 || 0) * take;
@@ -137,6 +218,63 @@ export class KgaraApiCoreController {
     query.take(take).skip(skip);
 
     const [data, total] = await query.getManyAndCount();
+
+    const caseIds = data.map((item) => item.id).filter(Boolean);
+    const settlementsMap: Record<
+      string,
+      { receipts: number; payments: number }
+    > = {};
+    const linkedInvoiceCounts: Record<
+      string,
+      { total: number; outCount: number; inCount: number }
+    > = {};
+
+    if (caseIds.length > 0) {
+      const settlementRows = await this.settlementRepo
+        .createQueryBuilder('s')
+        .select('s.caseId', 'caseId')
+        .addSelect('s.settlementType', 'settlementType')
+        .addSelect('SUM(s.amount)', 'totalAmount')
+        .where('s.caseId IN (:...caseIds)', { caseIds })
+        .groupBy('s.caseId')
+        .addGroupBy('s.settlementType')
+        .getRawMany();
+
+      for (const row of settlementRows) {
+        if (!settlementsMap[row.caseId]) {
+          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+        }
+        if (row.settlementType === 'RECEIPT') {
+          settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+        } else if (row.settlementType === 'PAYMENT') {
+          settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
+        }
+      }
+
+      const linkRows = await this.linkedInvoiceRepo
+        .createQueryBuilder('l')
+        .select('l.caseDbId', 'caseId')
+        .addSelect('COUNT(*)', 'total')
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'OUT' THEN 1 ELSE 0 END)`,
+          'outCount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN l.linkType = 'IN' THEN 1 ELSE 0 END)`,
+          'inCount',
+        )
+        .where('l.caseDbId IN (:...caseIds)', { caseIds })
+        .groupBy('l.caseDbId')
+        .getRawMany();
+
+      for (const row of linkRows) {
+        linkedInvoiceCounts[row.caseId] = {
+          total: Number(row.total || 0),
+          outCount: Number(row.outCount || 0),
+          inCount: Number(row.inCount || 0),
+        };
+      }
+    }
 
     const enrichedData = data.map((item) => {
       const gp = (item as any).grossProfit;
@@ -147,12 +285,30 @@ export class KgaraApiCoreController {
         doanhThu && Number(doanhThu) > 0 && loiNhuan != null
           ? (Number(loiNhuan) / Number(doanhThu)) * 100
           : null;
+
+      const setInfo = settlementsMap[item.id];
+      const hasSettlement = setInfo !== undefined;
+      const targetRev = extractNetPayableAmount(item);
+      const totalPaid = hasSettlement
+        ? setInfo.receipts
+        : Number(item.tienDaThanhToan) || 0;
+      const remainingBal = Math.max(0, targetRev - totalPaid);
+      const paidCost = hasSettlement ? setInfo.payments : 0;
+      const linkInfo = linkedInvoiceCounts[item.id];
+
       return {
         ...item,
         doanhThu,
         chiPhi,
         loiNhuan,
         margin,
+        tienCoThue: targetRev,
+        tienDaThanhToan: totalPaid,
+        tienConPhaiThanhToan: remainingBal,
+        tienDaChi: paidCost,
+        linkedInvoiceCount: linkInfo?.total || 0,
+        linkedInvoiceOutCount: linkInfo?.outCount || 0,
+        linkedInvoiceInCount: linkInfo?.inCount || 0,
       };
     });
 
@@ -186,6 +342,11 @@ export class KgaraApiCoreController {
 
     const query = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hdPhieuDichVuId = case.hdPhieuDichVuId OR gp.vuViecCode = case.soChungTu',
+      )
       .select(`DISTINCT ${selectExpr}`, 'value');
 
     if (branchId) {
@@ -230,19 +391,39 @@ export class KgaraApiCoreController {
   private getCaseColumnSelectExpr(column: string): string | null {
     const mapping: Record<string, string> = {
       caseCode: '"case"."so_chung_tu"',
+      soChungTu: '"case"."so_chung_tu"',
       licensePlate: '"case"."bien_so_xe"',
+      bienSoXe: '"case"."bien_so_xe"',
       customerCode: '"case"."khach_hang_code"',
+      khachHangCode: '"case"."khach_hang_code"',
       customerName: '"case"."khach_hang_name"',
+      khachHangName: '"case"."khach_hang_name"',
       statusName: '"case"."ten_tinh_trang_dich_vu"',
+      classification: '"case"."classification"',
+      branchName: '"case"."branch_external_id"',
+      branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:
         "CASE WHEN COALESCE((\"case\".\"raw_data\" ->> 'XeLamBaoHiem')::boolean, false) THEN 'yes' ELSE 'no' END",
-      doanhThu: '"case"."doanh_thu"',
-      chiPhi: '"case"."chi_phi"',
-      loiNhuan: '"case"."loi_nhuan"',
+      doanhThu:
+        'COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")',
+      chiPhi: 'COALESCE("case"."chi_phi", "gp"."chi_phi")',
+      loiNhuan:
+        'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))',
+      margin:
+        'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
+      bienLoiNhuan:
+        'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
       totalAmount: '"case"."tien_co_thue"',
+      tienCoThue: '"case"."tien_co_thue"',
       paidAmount: '"case"."tien_da_thanh_toan"',
+      tienDaThanhToan: '"case"."tien_da_thanh_toan"',
       balanceAmount: '"case"."tien_con_phai_thanh_toan"',
-      caseDate: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      tienConPhaiThanhToan: '"case"."tien_con_phai_thanh_toan"',
+      caseDate:
+        'TO_CHAR(COALESCE("case"."ngay_tiep_nhan", "case"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
+      ngayPhatSinh: 'TO_CHAR("case"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      ngayTiepNhan:
+        'TO_CHAR(COALESCE("case"."ngay_tiep_nhan", "case"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
       ngayHoanThanhCongViec:
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       completionDate:
@@ -253,6 +434,239 @@ export class KgaraApiCoreController {
     };
 
     return mapping[column] || null;
+  }
+
+  private applySingleCaseColumnFilter(
+    qb: SelectQueryBuilder<KgaraCase>,
+    column: string,
+    values: string[],
+    paramPrefix: string,
+  ) {
+    if (!values || values.length === 0) return;
+
+    // 0. Xử lý khoảng ngày (Date Range: "YYYY-MM-DD..YYYY-MM-DD" hoặc "YYYY-MM-DD|YYYY-MM-DD")
+    if (
+      values.length === 1 &&
+      (values[0].includes('..') || values[0].includes('|'))
+    ) {
+      const separator = values[0].includes('..') ? '..' : '|';
+      const [fromDate, toDate] = values[0].split(separator);
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (filterExpr) {
+        if (fromDate) {
+          qb.andWhere(`${filterExpr} >= :${paramPrefix}_from_date`, {
+            [`${paramPrefix}_from_date`]: fromDate,
+          });
+        }
+        if (toDate) {
+          qb.andWhere(`${filterExpr} <= :${paramPrefix}_to_date`, {
+            [`${paramPrefix}_to_date`]: toDate,
+          });
+        }
+        return;
+      }
+    }
+
+    // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+    if (values[0] === '__ALL_MATCHING__') {
+      const searchStr = (values[1] || '').trim();
+      if (!searchStr) return;
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (filterExpr) {
+        applyMultiKeywordFilter(
+          qb,
+          `CAST(${filterExpr} AS TEXT)`,
+          searchStr,
+          `${paramPrefix}_search`,
+        );
+      }
+      return;
+    }
+
+    // 2. Cột đặc thù: collectionProgress (Tiến độ thu)
+    if (column === 'collectionProgress') {
+      const conditions: string[] = [];
+      if (values.includes('PAID')) {
+        conditions.push(
+          '(COALESCE(case.tienConPhaiThanhToan, 0) <= 0 AND COALESCE(case.tienDaThanhToan, 0) > 0)',
+        );
+      }
+      if (values.includes('PARTIAL')) {
+        conditions.push(
+          '(COALESCE(case.tienDaThanhToan, 0) > 0 AND COALESCE(case.tienConPhaiThanhToan, 0) > 0)',
+        );
+      }
+      if (values.includes('UNPAID')) {
+        conditions.push(
+          '(COALESCE(case.tienDaThanhToan, 0) <= 0 AND COALESCE(case.tienConPhaiThanhToan, 0) > 0)',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 3. Cột đặc thù: costProgress (Tiến độ chi)
+    if (column === 'costProgress') {
+      const conditions: string[] = [];
+      if (values.includes('PAID')) {
+        conditions.push(
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE(case.chiPhi, 0) <= COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
+        );
+      }
+      if (values.includes('PARTIAL')) {
+        conditions.push(
+          "(COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) > 0 AND COALESCE(case.chiPhi, 0) > COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0))",
+        );
+      }
+      if (values.includes('UNPAID')) {
+        conditions.push(
+          "(COALESCE(case.chiPhi, 0) > 0 AND COALESCE((SELECT SUM(amount) FROM kgara_case_settlements WHERE case_id = case.id AND settlement_type = 'PAYMENT'), 0) <= 0)",
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 4. Cột đặc thù: hasLinkedInvoice (Đã liên kết hóa đơn VAT)
+    if (column === 'hasLinkedInvoice') {
+      const conditions: string[] = [];
+      if (values.includes('YES')) {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+        );
+      }
+      if (values.includes('NO')) {
+        conditions.push(
+          'NOT EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 5. Cột đặc thù: statusTab (Table Switch: quotation, in_progress, completed)
+    if (column === 'statusTab') {
+      const conditions: string[] = [];
+      if (values.includes('quotation')) {
+        conditions.push(
+          '("case"."tinh_trang_dich_vu" = 1 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%báo giá%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%nháp%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%chờ%\')',
+        );
+      }
+      if (values.includes('in_progress')) {
+        conditions.push(
+          '(("case"."tinh_trang_dich_vu" IN (0, 2) OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang sửa%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang làm%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%tiếp nhận%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang xử lý%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kiểm tra%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%sửa chữa%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang%\') AND NOT ("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn thành%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hủy%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%từ chối%\'))',
+        );
+      }
+      if (values.includes('completed')) {
+        conditions.push(
+          '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn thành%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%giao xe%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%xong%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đã thanh toán%\')',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 4. Cột đặc thù: margin / bienLoiNhuan (Biên lợi nhuận)
+    if (column === 'margin' || column === 'bienLoiNhuan') {
+      const marginExpr = `(CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100) ELSE 0 END)`;
+
+      const conditions: string[] = [];
+      const hasBlank = values.includes('__BLANK__');
+      const numericVals: number[] = [];
+
+      for (const val of values) {
+        if (val === 'HIGH') {
+          conditions.push(`${marginExpr} >= 50`);
+        } else if (val === 'MID') {
+          conditions.push(`(${marginExpr} >= 20 AND ${marginExpr} < 50)`);
+        } else if (val === 'LOW') {
+          conditions.push(`(${marginExpr} >= 0 AND ${marginExpr} < 20)`);
+        } else if (val === 'NEGATIVE') {
+          conditions.push(`${marginExpr} < 0`);
+        } else if (val !== '__BLANK__') {
+          const num = Number(val);
+          if (!isNaN(num)) {
+            numericVals.push(num);
+          }
+        }
+      }
+
+      if (numericVals.length > 0) {
+        conditions.push(
+          `ROUND(${marginExpr}::numeric, 1) IN (:...${paramPrefix}_margin_vals)`,
+        );
+      }
+
+      if (hasBlank) {
+        conditions.push(
+          `(COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) <= 0)`,
+        );
+      }
+
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, {
+          [`${paramPrefix}_margin_vals`]: numericVals,
+        });
+      }
+      return;
+    }
+
+    // 5. Cột số tiền: doanhThu, chiPhi, loiNhuan
+    if (column === 'doanhThu' || column === 'chiPhi' || column === 'loiNhuan') {
+      const filterExpr = this.getCaseColumnSelectExpr(column);
+      if (!filterExpr) return;
+
+      const hasBlank = values.includes('__BLANK__');
+      const realVals = values.filter((v) => v !== '__BLANK__');
+      const numericVals = realVals
+        .map((v) => Number(v))
+        .filter((v) => !isNaN(v));
+
+      const conditions: string[] = [];
+      if (hasBlank) {
+        conditions.push(`(${filterExpr} IS NULL OR ${filterExpr} = 0)`);
+      }
+      if (numericVals.length > 0) {
+        conditions.push(`${filterExpr} IN (:...${paramPrefix}_num_vals)`);
+      }
+
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, {
+          [`${paramPrefix}_num_vals`]: numericVals,
+        });
+      }
+      return;
+    }
+
+    const filterExpr = this.getCaseColumnSelectExpr(column);
+    if (!filterExpr) return;
+
+    // 6. Xử lý __BLANK__ (Lọc giá trị trống / null)
+    const hasBlank = values.includes('__BLANK__');
+    const realVals = values.filter((v) => v !== '__BLANK__');
+
+    if (hasBlank && realVals.length > 0) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '' OR CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals))`,
+        { [`${paramPrefix}_vals`]: realVals },
+      );
+    } else if (hasBlank) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
+    } else {
+      qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
+        [`${paramPrefix}_vals`]: realVals,
+      });
+    }
   }
 
   private applyCaseOptionFilters(
@@ -269,12 +683,7 @@ export class KgaraApiCoreController {
         if (column === activeColumn) continue;
         if (!values || values.length === 0) continue;
 
-        const filterExpr = this.getCaseColumnSelectExpr(column);
-        if (!filterExpr) continue;
-
-        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
-          [`vals_${column}`]: values,
-        });
+        this.applySingleCaseColumnFilter(qb, column, values, `opt_${column}`);
       }
     } catch {
       // ignore malformed filter payloads
@@ -293,12 +702,7 @@ export class KgaraApiCoreController {
       for (const [column, values] of Object.entries(filters)) {
         if (!values || values.length === 0) continue;
 
-        const filterExpr = this.getCaseColumnSelectExpr(column);
-        if (!filterExpr) continue;
-
-        qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...vals_${column})`, {
-          [`vals_${column}`]: values,
-        });
+        this.applySingleCaseColumnFilter(qb, column, values, `list_${column}`);
       }
     } catch {
       // ignore malformed filter payloads
@@ -332,7 +736,9 @@ export class KgaraApiCoreController {
       query.andWhere('gp.reportTo <= :to', { to });
     }
 
-    query.orderBy('gp.updatedAt', 'DESC');
+    query
+      .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
+      .addOrderBy('gp.updatedAt', 'DESC');
 
     const results = await query.getMany();
 
@@ -434,6 +840,21 @@ export class KgaraApiCoreController {
       if (freshData) {
         const payload = freshData.data || freshData;
         caseData.rawData = { ...caseData.rawData, ...payload };
+        const netPayable = extractNetPayableAmount(payload);
+        if (netPayable > 0) {
+          caseData.tienCoThue = netPayable;
+          const settlements = await this.settlementRepo.find({
+            where: { caseId: caseData.id },
+          });
+          const totalReceipts = settlements
+            .filter((s) => s.settlementType === 'RECEIPT')
+            .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+          caseData.tienDaThanhToan = totalReceipts;
+          caseData.tienConPhaiThanhToan = Math.max(
+            0,
+            netPayable - totalReceipts,
+          );
+        }
         await this.caseRepo.save(caseData);
       }
     }
@@ -526,7 +947,10 @@ export class KgaraApiCoreController {
     const baselineDate = '2026-07-01';
     const effectiveFrom = from && from > baselineDate ? from : baselineDate;
 
-    const whereConditions: string[] = ['"case"."kgara_deleted_at" IS NULL'];
+    const whereConditions: string[] = [
+      '"case"."kgara_deleted_at" IS NULL',
+      '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" = \'Kết thúc\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\')',
+    ];
     const queryParams: any[] = [];
 
     whereConditions.push(
@@ -566,21 +990,82 @@ export class KgaraApiCoreController {
         >;
         for (const [col, values] of Object.entries(filters)) {
           if (!values || values.length === 0) continue;
+
+          // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchVal = (values[1] || '').trim();
+            if (!searchVal) continue; // Nếu không có searchVal thì không lọc (giữ toàn bộ data)
+            if (col === 'customerCode') {
+              whereConditions.push(
+                `"case"."khach_hang_code" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            } else if (col === 'customerName') {
+              whereConditions.push(
+                `"case"."khach_hang_name" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            } else if (col === 'branchName' || col === 'branchExternalId') {
+              whereConditions.push(
+                `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            }
+            continue;
+          }
+
+          // 2. Xử lý __BLANK__
+          const hasBlank = values.includes('__BLANK__');
+          const realVals = values.filter((v) => v !== '__BLANK__');
+
           if (col === 'customerCode') {
-            whereConditions.push(
-              `"case"."khach_hang_code" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."khach_hang_code" IS NULL OR "case"."khach_hang_code" = '' OR "case"."khach_hang_code" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."khach_hang_code" IS NULL OR "case"."khach_hang_code" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."khach_hang_code" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'customerName') {
-            whereConditions.push(
-              `"case"."khach_hang_name" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '' OR "case"."khach_hang_name" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."khach_hang_name" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'branchName' || col === 'branchExternalId') {
-            whereConditions.push(
-              `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
-            );
-            queryParams.push(values);
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."branch_external_id" IS NULL OR "case"."branch_external_id" = '' OR "case"."branch_external_id" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."branch_external_id" IS NULL OR "case"."branch_external_id" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."branch_external_id" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
           } else if (col === 'paymentProgress') {
             const subConds: string[] = [];
             if (values.includes('PAID')) {
@@ -620,6 +1105,34 @@ export class KgaraApiCoreController {
             if (subConds.length > 0) {
               havingConditions.push(`(${subConds.join(' OR ')})`);
             }
+          } else if (col === 'caseCount') {
+            const numVals = values
+              .map((v) => parseInt(v, 10))
+              .filter((v) => !isNaN(v));
+            if (numVals.length > 0) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(numVals);
+            }
+          } else if (col === 'totalAmount') {
+            const subConds: string[] = [];
+            const sumExpr = 'COALESCE(SUM("case"."tien_co_thue"), 0)';
+            if (values.includes('0-10m')) {
+              subConds.push(`(${sumExpr} < 10000000)`);
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${sumExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${sumExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${sumExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
           }
         }
       } catch {
@@ -650,6 +1163,23 @@ export class KgaraApiCoreController {
               `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
             );
             queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'caseCount') {
+            const num = parseInt(val.trim(), 10);
+            if (!isNaN(num)) {
+              havingConditions.push(
+                `COUNT("case"."id")::int = $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+          } else if (col === 'totalAmount') {
+            const cleaned = val.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM("case"."tien_co_thue"), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
           }
         }
       } catch {
@@ -823,9 +1353,14 @@ export class KgaraApiCoreController {
   ) {
     if (column === 'paymentProgress') {
       const options = ['PAID', 'PARTIAL', 'UNPAID'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -833,9 +1368,63 @@ export class KgaraApiCoreController {
     }
     if (column === 'maxAgingDays') {
       const options = ['0-30', '31-60', '61-90', '>90'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
       return {
-        items: options,
-        total: options.length,
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'caseCount') {
+      const branchCond = branchId
+        ? `AND "branch_external_id" = '${branchId.replace(/'/g, "''")}'`
+        : '';
+      const rawCounts = await this.caseRepo.manager.query(`
+        SELECT so_phieu::text AS value FROM (
+          SELECT COUNT("id") AS so_phieu
+          FROM "kgara_cases"
+          WHERE "kgara_deleted_at" IS NULL
+            AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
+            AND "ngay_phat_sinh" >= '2026-07-01'
+            ${branchCond}
+          GROUP BY COALESCE("khach_hang_code", 'UNKNOWN')
+        ) sub
+        GROUP BY so_phieu
+        ORDER BY so_phieu ASC
+      `);
+      const items = rawCounts.map((r: any) => String(r.value));
+      const filtered = search
+        ? items.filter((it: string) => it.includes(search))
+        : items;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+    if (column === 'totalAmount') {
+      const options = [
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.label.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered.map((f) => f.value),
+        total: filtered.length,
         page: 1,
         pageSize: 20,
         totalPages: 1,
@@ -859,11 +1448,100 @@ export class KgaraApiCoreController {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
     }
     query.andWhere('case.kgaraDeletedAt IS NULL');
+    query.andWhere(
+      '(case.tinhTrangDichVu = 3 OR case.tenTinhTrangDichVu = :stFinished OR case.tenTinhTrangDichVu ILIKE :stFinPattern OR case.tenTinhTrangDichVu ILIKE :stDonePattern)',
+      {
+        stFinished: 'Kết thúc',
+        stFinPattern: '%kết thúc%',
+        stDonePattern: '%hoàn tất%',
+      },
+    );
     query.andWhere('case.ngayPhatSinh >= :baselineDate', {
       baselineDate: '2026-07-01',
     });
     query.andWhere(`${selectExpr} IS NOT NULL`);
     query.andWhere(`CAST(${selectExpr} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, values] of Object.entries(filters)) {
+          if (col === column) continue;
+          if (!values || values.length === 0) continue;
+
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchVal = (values[1] || '').trim();
+            if (!searchVal) continue;
+            if (col === 'customerCode') {
+              query.andWhere('case.khachHangCode ILIKE :ccSearch', {
+                ccSearch: `%${searchVal}%`,
+              });
+            } else if (col === 'customerName') {
+              query.andWhere('case.khachHangName ILIKE :cnSearch', {
+                cnSearch: `%${searchVal}%`,
+              });
+            } else if (col === 'branchName' || col === 'branchExternalId') {
+              query.andWhere('case.branchExternalId ILIKE :brSearch', {
+                brSearch: `%${searchVal}%`,
+              });
+            }
+            continue;
+          }
+
+          const hasBlank = values.includes('__BLANK__');
+          const realVals = values.filter((v) => v !== '__BLANK__');
+
+          if (col === 'customerCode') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '' OR case.khachHangCode IN (:...ccVals))",
+                { ccVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.khachHangCode IS NULL OR case.khachHangCode = '')",
+              );
+            } else {
+              query.andWhere('case.khachHangCode IN (:...ccVals)', {
+                ccVals: realVals,
+              });
+            }
+          } else if (col === 'customerName') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '' OR case.khachHangName IN (:...cnVals))",
+                { cnVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '')",
+              );
+            } else {
+              query.andWhere('case.khachHangName IN (:...cnVals)', {
+                cnVals: realVals,
+              });
+            }
+          } else if (col === 'branchName' || col === 'branchExternalId') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '' OR case.branchExternalId IN (:...brVals))",
+                { brVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.branchExternalId IS NULL OR case.branchExternalId = '')",
+              );
+            } else {
+              query.andWhere('case.branchExternalId IN (:...brVals)', {
+                brVals: realVals,
+              });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     if (search) {
       query.andWhere(`CAST(${selectExpr} AS TEXT) ILIKE :search`, {
@@ -902,6 +1580,14 @@ export class KgaraApiCoreController {
     const query = this.caseRepo
       .createQueryBuilder('case')
       .where('case.kgaraDeletedAt IS NULL')
+      .andWhere(
+        '(case.tinhTrangDichVu = 3 OR case.tenTinhTrangDichVu = :stFinished OR case.tenTinhTrangDichVu ILIKE :stFinPattern OR case.tenTinhTrangDichVu ILIKE :stDonePattern)',
+        {
+          stFinished: 'Kết thúc',
+          stFinPattern: '%kết thúc%',
+          stDonePattern: '%hoàn tất%',
+        },
+      )
       .andWhere('case.ngayPhatSinh >= :baselineDate', {
         baselineDate: '2026-07-01',
       });
@@ -920,6 +1606,35 @@ export class KgaraApiCoreController {
 
     const cases = await query.getMany();
 
+    const caseIds = cases.map((item) => item.id).filter(Boolean);
+    const settlementsMap: Record<
+      string,
+      { receipts: number; payments: number }
+    > = {};
+
+    if (caseIds.length > 0) {
+      const settlementRows = await this.settlementRepo
+        .createQueryBuilder('s')
+        .select('s.caseId', 'caseId')
+        .addSelect('s.settlementType', 'settlementType')
+        .addSelect('SUM(s.amount)', 'totalAmount')
+        .where('s.caseId IN (:...caseIds)', { caseIds })
+        .groupBy('s.caseId')
+        .addGroupBy('s.settlementType')
+        .getRawMany();
+
+      for (const row of settlementRows) {
+        if (!settlementsMap[row.caseId]) {
+          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+        }
+        if (row.settlementType === 'RECEIPT') {
+          settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+        } else if (row.settlementType === 'PAYMENT') {
+          settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
+        }
+      }
+    }
+
     const enriched = cases.map((c) => {
       const pDate = c.ngayPhatSinh ? new Date(c.ngayPhatSinh) : null;
       const today = new Date();
@@ -928,12 +1643,20 @@ export class KgaraApiCoreController {
         const diffTime = Math.abs(today.getTime() - pDate.getTime());
         agingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
+      const setInfo = settlementsMap[c.id];
+      const hasSettlement = setInfo !== undefined;
+      const targetRev = extractNetPayableAmount(c);
+      const totalPaid = hasSettlement
+        ? setInfo.receipts
+        : Number(c.tienDaThanhToan) || 0;
+      const remainingBal = Math.max(0, targetRev - totalPaid);
+
       return {
         ...c,
         agingDays,
-        tienCoThue: Number(c.tienCoThue) || 0,
-        tienDaThanhToan: Number(c.tienDaThanhToan) || 0,
-        tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan) || 0,
+        tienCoThue: targetRev,
+        tienDaThanhToan: totalPaid,
+        tienConPhaiThanhToan: remainingBal,
       };
     });
 
@@ -1315,11 +2038,39 @@ export class KgaraApiCoreController {
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
   ) {
-    const caseData = await this.caseRepo.findOne({ where: { id } });
+    const caseData = await this.caseRepo.findOne({
+      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+    });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
     }
     caseData.erpNotes = body.erpNotes;
+    await this.caseRepo.save(caseData);
+    return caseData;
+  }
+
+  @Patch('cases/:id/config')
+  @RequirePermissions({ resource: 'garage', action: 'update' })
+  async updateCaseConfig(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      classification?: string | null;
+      erpNotes?: string | null;
+    },
+  ) {
+    const caseData = await this.caseRepo.findOne({
+      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+    });
+    if (!caseData) {
+      throw new NotFoundException(`Case with id ${id} not found`);
+    }
+    if (body.classification !== undefined) {
+      caseData.classification = body.classification;
+    }
+    if (body.erpNotes !== undefined) {
+      caseData.erpNotes = body.erpNotes;
+    }
     await this.caseRepo.save(caseData);
     return caseData;
   }
@@ -1434,28 +2185,32 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncCases(
     @BranchId() branchId: string,
-    @Body() body: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string },
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    return this.syncService.syncCasesForBranch(branchId, body.from, body.to);
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
+    return this.syncService.syncCasesForBranch(branchId, from, to);
   }
 
   @Post('sync/gross-profit')
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncGrossProfit(
     @BranchId() branchId: string,
-    @Body() body: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string },
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    return this.syncService.syncGrossProfitForBranch(
-      branchId,
-      body.from,
-      body.to,
-    );
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
+    return this.syncService.syncGrossProfitForBranch(branchId, from, to);
   }
 
   @Post('sync/cases/:id/detail')
@@ -1471,11 +2226,14 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncReceivables(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
+    @Body() body?: { from?: string; to?: string },
   ) {
     if (!branchId)
       return { success: false, message: 'Missing x-kgara-branch-id header' };
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
     await this.syncService.syncReceivables(branchId, from, to);
     return { success: true, message: 'Receivables synced successfully.' };
   }
@@ -1484,11 +2242,14 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async syncPayables(
     @BranchId() branchId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
+    @Body() body?: { from?: string; to?: string },
   ) {
     if (!branchId)
       return { success: false, message: 'Missing x-kgara-branch-id header' };
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
     await this.syncService.syncPayables(branchId, from, to);
     return { success: true, message: 'Payables synced successfully.' };
   }
@@ -1600,56 +2361,120 @@ export class KgaraApiCoreController {
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async addLinkedInvoice(
     @Param('id') id: string,
-    @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
+    @Body()
+    body:
+      | { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string }
+      | {
+          items: Array<{
+            invoiceId: string;
+            linkType: 'IN' | 'OUT';
+            note?: string;
+          }>;
+        }
+      | Array<{ invoiceId: string; linkType: 'IN' | 'OUT'; note?: string }>,
   ) {
-    const existing = await this.linkedInvoiceRepo.findOne({
-      where: { caseDbId: id, invoiceId: body.invoiceId },
-    });
-    let link = existing;
-    if (!existing) {
-      link = this.linkedInvoiceRepo.create({
-        caseDbId: id,
-        invoiceId: body.invoiceId,
-        linkType: body.linkType,
-        note: body.note,
-      });
-      link = await this.linkedInvoiceRepo.save(link);
-    }
+    const rawItems: Array<{
+      invoiceId: string;
+      linkType: 'IN' | 'OUT';
+      note?: string;
+    }> = Array.isArray(body)
+      ? body
+      : (body as any)?.items && Array.isArray((body as any).items)
+        ? (body as any).items
+        : [body as any];
 
-    // Auto-sync: If the case already has ON_SYSTEM settlements matching the linkType direction
-    try {
-      const isOut = body.linkType === 'OUT';
-      const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-      const settlements = await this.settlementRepo.find({
-        where: {
-          caseId: id,
-          sourceChannel: 'ON_SYSTEM',
-          settlementType: targetSettlementType,
-        },
+    const results: any[] = [];
+    for (const item of rawItems) {
+      if (!item?.invoiceId) continue;
+      const existing = await this.linkedInvoiceRepo.findOne({
+        where: { caseDbId: id, invoiceId: item.invoiceId },
       });
+      let link = existing;
+      if (!existing) {
+        link = this.linkedInvoiceRepo.create({
+          caseDbId: id,
+          invoiceId: item.invoiceId,
+          linkType: item.linkType || 'OUT',
+          note: item.note,
+        });
+        link = await this.linkedInvoiceRepo.save(link);
+      }
+      if (link) {
+        results.push(link);
+      }
 
-      for (const s of settlements) {
-        if (s.bankTransactionId) {
-          const netOff = await this.settlementRepo.manager.query(
-            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-            [body.invoiceId, s.bankTransactionId],
-          );
-          if (!netOff || netOff.length === 0) {
-            await this.settlementRepo.manager.query(
-              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-              [body.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
+      // Auto-sync 2 chiều khi liên kết Hóa đơn <-> Phiếu dịch vụ:
+      try {
+        const isOut = item.linkType === 'OUT';
+        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
+
+        // 1. Chiều Case -> Invoice: Nếu Case đã có sao kê ON_SYSTEM, cấn trừ sang Hóa đơn
+        const settlements = await this.settlementRepo.find({
+          where: {
+            caseId: id,
+            sourceChannel: 'ON_SYSTEM',
+            settlementType: targetSettlementType,
+          },
+        });
+
+        for (const s of settlements) {
+          if (s.bankTransactionId) {
+            const netOff = await this.settlementRepo.manager.query(
+              `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
+              [item.invoiceId, s.bankTransactionId],
             );
+            if (!netOff || netOff.length === 0) {
+              await this.settlementRepo.manager.query(
+                `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
+                 VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
+                [item.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
+              );
+            }
           }
         }
+
+        // 2. Chiều Invoice -> Case: Nếu Hóa đơn đã có cấn trừ sao kê sẵn, cấn trừ sang Phiếu dịch vụ
+        const invoiceNetOffs = await this.settlementRepo.manager.query(
+          `SELECT n.bank_transaction_id, n.net_off_amount, t.trans_date, t.correspondent_name, t.description
+           FROM erp_invoice_voucher_netoff n
+           LEFT JOIN erp_bank_transactions t ON t.id = n.bank_transaction_id
+           WHERE n.invoice_id = $1`,
+          [item.invoiceId],
+        );
+
+        for (const no of invoiceNetOffs) {
+          if (!no.bank_transaction_id) continue;
+          const existingCaseSettlement = await this.settlementRepo.findOne({
+            where: {
+              caseId: id,
+              bankTransactionId: no.bank_transaction_id,
+            },
+          });
+
+          if (!existingCaseSettlement) {
+            const newSettlement = this.settlementRepo.create({
+              caseId: id,
+              bankTransactionId: no.bank_transaction_id,
+              settlementType: targetSettlementType,
+              sourceChannel: 'ON_SYSTEM',
+              amount: Number(no.net_off_amount || 0),
+              transDate: no.trans_date,
+              partnerName: no.correspondent_name,
+              note: `Đồng bộ cấn trừ từ hóa đơn liên kết`,
+            });
+            await this.settlementRepo.save(newSettlement);
+          }
+        }
+
+        await this.recalculateCaseSettlementSummary(id);
+      } catch (syncErr) {
+        this.logger.warn(
+          `Could not sync bi-directional settlements and netoff: ${syncErr}`,
+        );
       }
-    } catch (syncErr) {
-      this.logger.warn(
-        `Could not sync case settlements to invoice netoff: ${syncErr}`,
-      );
     }
 
-    return link;
+    return Array.isArray(body) || (body as any)?.items ? results : results[0];
   }
 
   @Get('invoices/:invoiceId/linked-cases')
@@ -1707,6 +2532,7 @@ export class KgaraApiCoreController {
         this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
       }
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+      await this.recalculateCaseSettlementSummary(id);
     }
     return { success: true };
   }
@@ -1736,13 +2562,7 @@ export class KgaraApiCoreController {
     });
 
     const isCompleted = c.tinhTrangDichVu === 3;
-    const totalPayable = Number(
-      c.tienCoThue ??
-        c.rawData?.TongTienThanhToan ??
-        c.doanhThu ??
-        gp?.doanhThu ??
-        0,
-    );
+    const totalPayable = extractNetPayableAmount(c);
     const targetRevenue = totalPayable;
     const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
     const expectedProfit = isCompleted
@@ -1873,6 +2693,18 @@ export class KgaraApiCoreController {
     );
   }
 
+  @Get('cases/:id/smart-invoice-suggestions')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getSmartInvoiceSuggestions(
+    @Param('id') id: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.smartSettlementService.getInvoiceSuggestionsForCase(
+      id,
+      direction || 'OUT',
+    );
+  }
+
   @Post('cases/:id/settlements')
   @RequirePermissions({ resource: 'garage', action: 'create' })
   async addCaseSettlement(
@@ -1942,6 +2774,7 @@ export class KgaraApiCoreController {
       }
     }
 
+    await this.recalculateCaseSettlementSummary(id);
     return saved;
   }
 
@@ -1992,6 +2825,128 @@ export class KgaraApiCoreController {
     }
 
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
+    await this.recalculateCaseSettlementSummary(id);
     return { success: true };
+  }
+
+  @Patch('cases/:id/settlements/:settlementId')
+  @RequirePermissions({ resource: 'garage', action: 'update' })
+  async updateCaseSettlement(
+    @Param('id') id: string,
+    @Param('settlementId') settlementId: string,
+    @Body()
+    body: {
+      amount?: number;
+      category?: string;
+      note?: string;
+      transDate?: string;
+      partnerName?: string;
+    },
+  ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (
+      settlementId.startsWith('tmp-') ||
+      settlementId.startsWith('manual-tmp-') ||
+      id.startsWith('tmp-') ||
+      (process.env.NODE_ENV !== 'test' &&
+        (!uuidRegex.test(settlementId) || !uuidRegex.test(id)))
+    ) {
+      return { success: true, message: 'Ignored non-persisted temporary ID' };
+    }
+
+    const settlement = await this.settlementRepo.findOne({
+      where: { id: settlementId, caseId: id },
+    });
+
+    if (!settlement) {
+      throw new NotFoundException(
+        `Không tìm thấy cấn trừ ${settlementId} của vụ việc ${id}`,
+      );
+    }
+
+    if (settlement.sourceChannel === 'ON_SYSTEM') {
+      throw new BadRequestException(
+        'Sao kê ngân hàng chỉ có thể thêm hoặc xóa, không chỉnh sửa trực tiếp.',
+      );
+    }
+
+    const oldAmount = Number(settlement.amount || 0);
+
+    if (body.category !== undefined) settlement.category = body.category;
+    if (body.note !== undefined) settlement.note = body.note;
+    if (body.transDate !== undefined) settlement.transDate = body.transDate;
+    if (body.partnerName !== undefined)
+      settlement.partnerName = body.partnerName;
+    if (body.amount !== undefined) settlement.amount = Number(body.amount);
+
+    const saved = await this.settlementRepo.save(settlement);
+
+    if (
+      body.amount !== undefined &&
+      Number(body.amount) !== oldAmount &&
+      settlement.bankTransactionId
+    ) {
+      try {
+        const linkedInvoices = await this.linkedInvoiceRepo.query(
+          `SELECT DISTINCT i.id
+           FROM erp_invoices i
+           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
+           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
+             AND i.is_deleted = false`,
+          [id],
+        );
+        const invIds = linkedInvoices.map((i: any) => i.id).filter(Boolean);
+        if (invIds.length > 0) {
+          await this.settlementRepo.manager.query(
+            `UPDATE erp_invoice_voucher_netoff
+             SET net_off_amount = $1, updated_at = now()
+             WHERE bank_transaction_id = $2 AND invoice_id = ANY($3::uuid[])`,
+            [Number(body.amount), settlement.bankTransactionId, invIds],
+          );
+        }
+      } catch (updateSyncErr) {
+        this.logger.warn(
+          `Could not update invoice netoff on settlement update: ${updateSyncErr}`,
+        );
+      }
+    }
+
+    await this.recalculateCaseSettlementSummary(id);
+    return saved;
+  }
+
+  private async recalculateCaseSettlementSummary(caseId: string) {
+    try {
+      const c = await this.caseRepo.findOne({
+        where: [
+          { id: caseId },
+          { soChungTu: caseId },
+          { hdPhieuDichVuId: caseId },
+        ],
+      });
+      if (!c) return;
+
+      const settlements = await this.settlementRepo.find({
+        where: { caseId: c.id },
+      });
+
+      const totalReceipts = settlements
+        .filter((s) => s.settlementType === 'RECEIPT')
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
+      const targetRevenue = extractNetPayableAmount(c);
+      const remainingReceivable = Math.max(0, targetRevenue - totalReceipts);
+
+      await this.caseRepo.update(c.id, {
+        tienCoThue: targetRevenue,
+        tienDaThanhToan: totalReceipts,
+        tienConPhaiThanhToan: remainingReceivable,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to recalculate case settlement summary for ${caseId}: ${err}`,
+      );
+    }
   }
 }

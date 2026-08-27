@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -15,6 +16,7 @@ import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
 import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
 import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
 import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
@@ -59,6 +61,7 @@ import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_li
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../kgara-api-core/entities/kgara_case_settlement.entity';
+import { KgaraOperatingExpense } from '../kgara-api-core/entities/kgara_operating_expense.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -76,6 +79,7 @@ import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-cat
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 const entities = [
   CoreUser,
+  CoreUserPreference,
   CoreRefreshToken,
   CoreRole,
   CorePermission,
@@ -90,6 +94,7 @@ const entities = [
   ErpBomCategory,
   ErpBomAttributeDef,
   ErpBomAttributeValue,
+  ErpEntityAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,
   ErpPurchaseOrder,
@@ -133,6 +138,7 @@ const entities = [
   KgaraCaseLinkedInvoice,
   KgaraGrossProfit,
   KgaraCaseSettlement,
+  KgaraOperatingExpense,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,

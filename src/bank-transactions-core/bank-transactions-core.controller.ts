@@ -13,10 +13,14 @@ import {
   UploadedFiles,
   BadRequestException,
   Request,
+  Res,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import type { Express } from 'express';
+import type { Express, Response } from 'express';
+import { Observable } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -350,5 +354,90 @@ export class BankTransactionsCoreController {
   @Delete('statement-files/:id')
   deleteStatementFile(@Param('id') id: string) {
     return this.service.deleteStatementFile(id);
+  }
+
+  // --- Background Excel Export ---
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Post('export/excel/background')
+  startExportExcelBackground(
+    @Body() query: BankTransactionFilterDto,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('export/excel/background/history')
+  getExportExcelBackgroundHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.getExportExcelHistory(
+      req.user?.sub,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
+  }
+
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @Get('export/excel/background/:jobId/download')
+  async downloadBackgroundExport(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = this.service.getExportExcelBackgroundFile(
+      jobId,
+      req.user?.sub,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Sse('export/excel/progress/stream')
+  exportExcelProgressStream(@Request() req: any): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          current: 0,
+          total: 100,
+          isRunning: false,
+          completed: false,
+          ready: false,
+          failed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const snapshot = this.service.getExportExcelProgressSnapshot(
+        req.user?.sub,
+      );
+      if (snapshot) {
+        subscriber.next({
+          data: JSON.stringify(snapshot),
+        } as MessageEvent);
+      }
+
+      const sub = this.service.getExportExcelProgressStream().subscribe({
+        next: (event) => {
+          if (!event.userId || event.userId === req.user?.sub) {
+            subscriber.next({
+              data: JSON.stringify(event),
+            } as MessageEvent);
+          }
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => sub.unsubscribe();
+    });
   }
 }

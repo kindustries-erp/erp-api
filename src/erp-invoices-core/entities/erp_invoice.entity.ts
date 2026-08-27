@@ -6,10 +6,13 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { ErpInvoiceItem } from './erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
 import { ErpInvoiceAttachment } from './erp_invoice_attachment.entity';
+import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -18,6 +21,13 @@ export class ErpInvoice {
 
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpBomCategory | null;
 
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;

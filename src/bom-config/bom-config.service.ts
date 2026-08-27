@@ -66,7 +66,7 @@ export class BomConfigService {
    */
   async getCategories(): Promise<ErpBomCategory[]> {
     const categories = await this.categoryRepo.find({
-      where: { isDeleted: false },
+      where: { isDeleted: false, moduleKey: 'BOM' },
       order: { createdAt: 'ASC' },
       relations: {
         attributeDefs: true,
@@ -114,7 +114,7 @@ export class BomConfigService {
   async createCategory(dto: CreateBomCategoryDto): Promise<ErpBomCategory> {
     const code = dto.code.trim().toUpperCase();
     const existing = await this.categoryRepo.findOne({
-      where: { code: ILike(code), isDeleted: false },
+      where: { moduleKey: 'BOM', code: ILike(code), isDeleted: false },
     });
 
     if (existing) {
@@ -122,6 +122,7 @@ export class BomConfigService {
     }
 
     const cat = this.categoryRepo.create({
+      moduleKey: 'BOM',
       code,
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
@@ -342,7 +343,7 @@ export class BomConfigService {
       if (code !== def.code) {
         const existing = await this.attrDefRepo.findOne({
           where: {
-            categoryId: def.categoryId,
+            categoryId: def.categoryId!,
             code: ILike(code),
             isDeleted: false,
           },

@@ -17,6 +17,7 @@ import { TransactionImportService } from './services/transaction-import.service'
 import { TransactionQueryService } from './services/transaction-query.service';
 import { TransactionAnalyticsService } from './services/transaction-analytics.service';
 import { TransactionAccountingService } from './services/transaction-accounting.service';
+import { BankStatementExportBackgroundService } from './services/bank-statement-export-background.service';
 
 @Module({
   imports: [
@@ -41,7 +42,8 @@ import { TransactionAccountingService } from './services/transaction-accounting.
     TransactionQueryService,
     TransactionAnalyticsService,
     TransactionAccountingService,
+    BankStatementExportBackgroundService,
   ],
-  exports: [BankTransactionsCoreService],
+  exports: [BankTransactionsCoreService, BankStatementExportBackgroundService],
 })
 export class BankTransactionsCoreModule {}

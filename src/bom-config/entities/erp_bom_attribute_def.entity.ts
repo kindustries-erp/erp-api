@@ -9,8 +9,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from './erp_bom_category.entity';
-import { ErpBomAttributeValue } from './erp_bom_attribute_value.entity';
+import type { ErpBomCategory } from './erp_bom_category.entity';
+import type { ErpBomAttributeValue } from './erp_bom_attribute_value.entity';
 
 export type BomAttributeFieldType =
   | 'TEXT'
@@ -30,14 +30,26 @@ export class ErpBomAttributeDef {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', name: 'category_id' })
-  categoryId: string;
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, (cat) => cat.attributeDefs, {
+  @ManyToOne('ErpBomCategory', 'attributeDefs', {
     onDelete: 'CASCADE',
+    nullable: true,
   })
   @JoinColumn({ name: 'category_id' })
   category?: ErpBomCategory;
+
+  @Column({ type: 'boolean', name: 'is_global', default: false })
+  isGlobal: boolean;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'module_key_global',
+    nullable: true,
+  })
+  moduleKeyGlobal: string | null;
 
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;
@@ -69,7 +81,7 @@ export class ErpBomAttributeDef {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => ErpBomAttributeValue, (val) => val.attrDef)
+  @OneToMany('ErpBomAttributeValue', 'attrDef')
   attributeValues?: ErpBomAttributeValue[];
 
   // Non-persistent computed field

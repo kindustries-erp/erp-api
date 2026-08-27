@@ -191,4 +191,47 @@ describe('KgaraApiCoreController (Bidirectional Netoff & Financials)', () => {
       expect(settlementRepo.findOne).not.toHaveBeenCalled();
     });
   });
+
+  describe('updateCaseSettlement', () => {
+    it('should reject editing ON_SYSTEM settlement with BadRequestException', async () => {
+      settlementRepo.findOne.mockResolvedValue({
+        id: 'set-1',
+        caseId: 'case-1',
+        sourceChannel: 'ON_SYSTEM',
+        amount: 5000000,
+      });
+
+      await expect(
+        controller.updateCaseSettlement('case-1', 'set-1', {
+          amount: 6000000,
+        }),
+      ).rejects.toThrow('Sao kê ngân hàng chỉ có thể thêm hoặc xóa');
+    });
+
+    it('should update OFF_SYSTEM_MANUAL settlement fields successfully', async () => {
+      const existing = {
+        id: 'set-manual-1',
+        caseId: 'case-1',
+        sourceChannel: 'OFF_SYSTEM_MANUAL',
+        amount: 5000000,
+        category: 'Tiền mặt',
+        note: 'Ghi chú cũ',
+      };
+      settlementRepo.findOne.mockResolvedValue(existing);
+      settlementRepo.save.mockImplementation(async (item: any) => item);
+
+      const res = (await controller.updateCaseSettlement(
+        'case-1',
+        'set-manual-1',
+        {
+          amount: 5500000,
+          note: 'Ghi chú mới',
+        },
+      )) as any;
+
+      expect(res.amount).toBe(5500000);
+      expect(res.note).toBe('Ghi chú mới');
+      expect(settlementRepo.save).toHaveBeenCalled();
+    });
+  });
 });

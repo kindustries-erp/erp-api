@@ -39,14 +39,16 @@ describe('InvoiceQueryService', () => {
     jest.restoreAllMocks();
   });
 
-  it('exportExcel uses applyMultiKeywordFilter for invoiceNo column search', async () => {
+  it('exportExcel uses applyMultiKeywordMultiFieldFilter for invoiceNo column search across invoice_no and serial_no', async () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
-    const multiKeywordSpy = jest.spyOn(
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
+    const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
-      'applyMultiKeywordFilter',
+      'applyMultiKeywordMultiFieldFilter',
     );
 
     await service.exportExcel({
@@ -54,24 +56,21 @@ describe('InvoiceQueryService', () => {
       column_search: JSON.stringify({ invoiceNo: 'SO-123; SO-456' }),
     });
 
-    expect(multiKeywordSpy).toHaveBeenCalledWith(
+    expect(multiFieldSpy).toHaveBeenCalledWith(
       qb,
-      'inv.invoice_no',
+      ['inv.invoice_no', 'inv.serial_no'],
       'SO-123; SO-456',
       'invoiceNoSearch',
     );
-
-    const usedRawSimplePattern = qb.andWhere.mock.calls.some(
-      (call: any[]) => call[0] === 'inv.invoice_no ILIKE :invoiceNoSearch',
-    );
-    expect(usedRawSimplePattern).toBe(false);
   });
 
   it('exportExcel uses multi-field helper for partner search when direction is omitted', async () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
       'applyMultiKeywordMultiFieldFilter',
@@ -83,7 +82,13 @@ describe('InvoiceQueryService', () => {
 
     expect(multiFieldSpy).toHaveBeenCalledWith(
       qb,
-      ['inv.seller_name', 'inv.buyer_name'],
+      [
+        'inv.seller_name',
+        'inv.seller_tax_code',
+        'inv.buyer_name',
+        'inv.buyer_personal_name',
+        'inv.buyer_tax_code',
+      ],
       'A; B',
       'partnerSearch',
     );
@@ -126,7 +131,9 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -188,7 +195,9 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -248,7 +257,9 @@ describe('InvoiceQueryService', () => {
     ]);
 
     const repository = createRepositoryMock(qb) as any;
-    const service = new InvoiceQueryService(repository);
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
     const buffer = await service.exportExcel({ direction: 'OUT' });
 
     const workbook = new ExcelJS.Workbook();

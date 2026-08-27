@@ -10,6 +10,7 @@ import {
   IsUUID,
   Min,
   ValidateNested,
+  IsObject,
 } from 'class-validator';
 
 export class PostBankTransactionLineDto {
@@ -44,6 +45,18 @@ export class PostBankTransactionDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional()
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Dynamic attribute values map: attrDefId -> valueText',
+  })
+  @IsOptional()
+  @IsObject()
+  attributes?: Record<string, any>;
 
   @ApiProperty({ type: [PostBankTransactionLineDto] })
   @IsArray()

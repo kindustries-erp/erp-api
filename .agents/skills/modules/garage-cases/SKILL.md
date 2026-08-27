@@ -49,6 +49,7 @@ Các nghiệp vụ trọng tâm:
 | `so_khung` | `varchar(100)` | YES | `NULL` | Số khung / VIN của phương tiện |
 | `branch_external_id` | `varchar(100)` | YES | `NULL` | Mã chi nhánh KGara quản lý (**Index**) |
 | `data_as_of` | `timestamptz` | YES | `NULL` | Dấu mốc thời gian phản hồi từ máy chủ KGara |
+| `classification` | `varchar(100)` | YES | `NULL` | Phân loại nghiệp vụ ERP: `'KY_GUI_NOI_BO'`, `'SUA_CHUA_CHUNG'`, `'OJ'`, `'OJ_NGOAI'`, `'KHAC'` (**Index**) |
 | `erp_notes` | `varchar` | YES | `NULL` | Ghi chú nghiệp vụ nội bộ trên ERP |
 | `kgara_deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm đánh dấu phiếu bị xóa trên KGara (**Index**) |
 | `kgara_delete_count` | `integer` | NO | `0` | Bộ đếm số lần vắng mặt trong các kỳ sync (**Index**) |
@@ -222,32 +223,35 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
-| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường và lọc nâng cao |
+| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (bao gồm `hasLinkedInvoice`: `YES`/`NO`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`) và sắp xếp đa cột (mặc định: `ngayPhatSinh DESC`, `ngayTiepNhan DESC`, `soChungTu DESC`) |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
-| `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc |
+| `PATCH`| `/cases/:id/config` | `id`, Body: `{ classification?: string \| null, erpNotes?: string \| null }` | Cập nhật phân loại nghiệp vụ và ghi chú nội bộ của ERP cho vụ việc |
+| `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc (Legacy alias) |
 | `GET` | `/cases/:id/services` | `id` (`hd_phieu_dich_vu_id`) | Lấy danh sách chi tiết các dòng công việc và phụ tùng của vụ việc |
 | `GET` | `/cases/:id/payments` | `id` (`hd_phieu_dich_vu_id`) | Lấy lịch sử thanh toán của vụ việc (trả về mảng rỗng do KGara V2 quản lý qua receivable) |
 | `GET` | `/cases/:id/linked-invoices` | `id` (`caseDbId`) | Lấy danh sách hóa đơn điện tử (`erp_invoices`) đang liên kết với vụ việc |
-| `POST`| `/cases/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` | Gắn liên kết một hóa đơn điện tử vào vụ việc |
+| `POST`| `/cases/:id/linked-invoices` | `id`, Body: `{ invoiceId, linkType, note }` \| `{ items: [...] }` \| `Array<{ invoiceId, linkType, note }>` | Gắn liên kết một hoặc nhiều hóa đơn điện tử vào vụ việc (hỗ trợ batch insert và tự động tạo netoff) |
 | `DELETE`| `/cases/:id/linked-invoices/:linkedId` | `id`, `linkedId` | Xóa liên kết hóa đơn khỏi vụ việc |
 | `GET` | `/invoices/:invoiceId/linked-cases` | `invoiceId` (UUID ERP Invoice) | Tra cứu ngược danh sách các vụ việc dịch vụ đang liên kết với hóa đơn này |
 | `GET` | `/cases/:id/traceability-graph` | `id` (UUID Case) | Lấy cây phả hệ mạng lưới chứng từ liên đới (Phiếu DV -> Hóa đơn -> Sao kê/Sổ quỹ -> Sổ cái GL) |
 | `GET` | `/cases/:id/financial-summary` | `id` (UUID Case) | Ma trận tài chính 3 tầng (Doanh thu, Chi phí, Đã thu đa kênh, Còn phải thu, Lãi thực tế, Đối soát KGara) |
-| `GET` | `/cases/customers-debt` | `@BranchId()`, Query: `page`, `pageSize`, `q`, `from`, `to`, `sorts`, `column_filters`, `column_search` | Tổng hợp công nợ khách hàng theo phiếu DV, tính tuổi nợ (Aging 0-30, 31-60, 61-90, >90), phân bổ chi nhánh, lọc HAVING theo `paymentProgress` (PAID, PARTIAL, UNPAID) và `maxAgingDays` (0-30, 31-60, 61-90, >90), mốc baseline 07/2026 |
-| `GET` | `/cases/customers-debt/column-options` | `@BranchId()`, Query: `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách options phân trang distinct cho bộ lọc cột bảng công nợ khách hàng (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`) |
+| `GET` | `/cases/customers-debt` | `@BranchId()`, Query: `page`, `pageSize`, `q`, `from`, `to`, `sorts`, `column_filters`, `column_search` | Tổng hợp công nợ khách hàng theo phiếu DV, tính tuổi nợ (Aging 0-30, 31-60, 61-90, >90), phân bổ chi nhánh, lọc HAVING theo `paymentProgress` (PAID, PARTIAL, UNPAID), `maxAgingDays`, `caseCount` (số lượng phiếu), `totalAmount` (phân khoảng <10m, 10-20m, 20-50m, >50m), mốc baseline 07/2026 |
+| `GET` | `/cases/customers-debt/column-options` | `@BranchId()`, Query: `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách options phân trang distinct cho bộ lọc cột bảng công nợ khách hàng (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`) |
 | `GET` | `/cases/:id/smart-settlement-suggestions` | `id` (UUID Case), Query: `type` (`RECEIPT` \| `PAYMENT`) | Gợi ý đối soát sao kê thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ + Biển số xe + Khách hàng) |
+| `GET` | `/cases/:id/smart-invoice-suggestions` | `id` (UUID Case), Query: `direction` (`OUT` \| `IN`) | Gợi ý đối soát hóa đơn VAT thông minh từ DB cho Vụ việc (Khớp Tiền + Số chứng từ/Lệnh quyết toán + Biển số xe + Tên khách/Nhà cung cấp + Cùng tháng) |
 | `POST`| `/cases/:id/settlements` | `id`, Body: `{ bankTransactionId, settlementType, sourceChannel, category, amount, transDate, partnerName, note }` | Ghi nhận cấn trừ giao dịch dòng tiền (ERP hoặc ngoài sổ sách) |
+| `PATCH`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId`, Body: `{ amount?, category?, note?, transDate?, partnerName? }` | Cập nhật giao dịch cấn trừ ngoài sổ sách (`OFF_SYSTEM_MANUAL`), tự động cập nhật net-off hóa đơn liên kết nếu có và tính lại công nợ. Chặn sửa sao kê ngân hàng (`ON_SYSTEM`) |
 | `DELETE`| `/cases/:id/settlements/:settlementId` | `id`, `settlementId` | Xóa bản ghi thu/chi dòng tiền khỏi vụ việc |
 
 ### 4.2. Nhóm Lợi Nhuận Gộp & Đối Soát Báo Cáo
 | Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`) |
+| `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`), sắp xếp `ngayPhatSinh DESC` |
 | `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc |
-| `POST`| `/sync/gross-profit` | `@BranchId()`, Query: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
+| `POST`| `/sync/gross-profit` | `@BranchId()`, Query/Body: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
 | `GET` | `/reports/gross-profit-detail` | `@BranchId()`, Query: `from`, `to` | Proxy gọi trực tiếp API báo cáo chi tiết lợi nhuận gộp từ máy chủ KGara |
 | `GET` | `/reports/gross-profit-detail/journal` | `@BranchId()`, Query: `from`, `to`, `vuViecID` | Proxy lấy sổ nhật ký hạch toán chi phí/doanh thu chi tiết của vụ việc |
 | `GET` | `/gross-profit/:id/linked-invoices` | `id` (UUID `kgara_gross_profit`) | Lấy danh sách hóa đơn điện tử đang liên kết với bản ghi lợi nhuận gộp này |
@@ -259,11 +263,11 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | :--- | :--- | :--- | :--- |
 | `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
-| `POST`| `/sync/cases` | `@BranchId()`, Query: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày và thực hiện kiểm đếm xóa mềm |
+| `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
 | `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
-| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể |
-| `POST`| `/sync/receivables` | `@BranchId()`, Query: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
-| `POST`| `/sync/payables` | `@BranchId()`, Query: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
+| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id` \| `case.id` \| `so_chung_tu`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể (tự động phân giải ID và đảo đúng thứ tự tham số client) |
+| `POST`| `/sync/receivables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
+| `POST`| `/sync/payables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
 | `GET` | `/sync-runs` | `@BranchId()`, `take` (mặc định 50) | Lấy lịch sử nhật ký các lần chạy đồng bộ gần nhất |
 | `GET` | `/receivables` | `@BranchId()` | Lấy danh sách công nợ phải thu đã đồng bộ |
 | `GET` | `/payables` | `@BranchId()` | Lấy danh sách công nợ phải trả đã đồng bộ |
@@ -285,7 +289,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.3. Thuật toán Phát hiện Xóa Mềm Vụ việc (`detectAndMarkDeletedCases`)
 1. Khi đồng bộ theo khoảng ngày (`from`, `to`), hệ thống lấy toàn bộ danh sách `hd_phieu_dich_vu_id` trả về từ API KGara đưa vào tập hợp `syncedIds`.
-2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`).
+2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`), **loại trừ các bản ghi có phân loại nghiệp vụ ghi nhận ngoài (`classification = 'OJ_NGOAI'`)** để bảo vệ dữ liệu nội bộ không bị xóa nhầm.
 3. Xác định các vụ việc có trong ERP nhưng không xuất hiện trong `syncedIds`.
 4. Tăng bộ đếm `kgara_delete_count += 1`.
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.
@@ -324,24 +328,35 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
   - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
   1. **Chiều Phải Thu (Doanh thu / Khách hàng)**:
-     - Mục tiêu thu: Tổng tiền thanh toán có thuế (`tienCoThue` / `TongTienThanhToan`).
+     - Mục tiêu thu (`targetRevenue`): **Tổng tiền thanh toán có thuế** (`tienCoThue` / `TongTienThanhToan`), **tuyệt đối không fallback sang doanh thu chưa thuế** (`doanhThu`).
      - Đã thu thực tế (ERP): `totalCollected = directReceiptOnSystem + directReceiptOffSystem`.
-     - Còn phải thu: `Math.max(0, targetRevenue - totalCollected)`.
+     - Còn phải thu (`tienConPhaiThanhToan`): `Math.max(0, targetRevenue - totalCollected)`.
   2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
      - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
+- **Ma trận Quyền hạn Thao tác trên Dòng tiền**:
+  - `OFF_SYSTEM_MANUAL` (Sổ ngoài / Tiền mặt): Cho phép **Thêm**, **Sửa** (qua `PATCH /cases/:id/settlements/:settlementId`), và **Xóa**.
+  - `ON_SYSTEM` (Sao kê ngân hàng / Sổ quỹ ERP): Cho phép **Thêm** và **Xóa**; **Chặn Sửa** trực tiếp (nút Sửa hiển thị mờ kèm Tooltip giải thích; Backend guard trả về `400 BadRequestException`).
+  - `isViaInvoice` (Cấn trừ tự động từ Hóa đơn): **Khóa hoàn toàn** không cho Sửa/Xóa trực tiếp; hiển thị icon Khóa kèm Tooltip: _"Cấn trừ tự động từ hóa đơn liên kết. Để gỡ, hãy xóa liên kết hóa đơn tương ứng."_
 - **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
   - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
   - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
 
-### 5.9. Cơ chế Đồng bộ Cấn trừ Tự động 2 Chiều (Bidirectional Net-Off Sync)
+### 5.9. Cơ chế Đồng bộ Cấn trừ Tự động 2 Chiều Toàn Diện (Full Bidirectional Net-Off & Settlement Sync)
 - **Vụ việc → Hóa đơn**:
-  - Khi thêm giao dịch Sao kê ngân hàng (`ON_SYSTEM`) vào vụ việc qua `addCaseSettlement`: Backend tự động tìm các Hóa đơn VAT liên kết đang có và tạo bản ghi cấn trừ `erp_invoice_voucher_netoff` tương ứng (giới hạn theo tổng tiền hóa đơn).
-  - Khi gỡ giao dịch Sao kê khỏi vụ việc qua `removeCaseSettlement`: Backend tự động dọn dẹp các bản ghi `erp_invoice_voucher_netoff` liên quan.
+  - Khi thêm giao dịch Sao kê ngân hàng (`ON_SYSTEM`) vào vụ việc qua `addCaseSettlement`: Backend tự động tìm các Hóa đơn VAT liên kết đang có và tạo/cập nhật bản ghi cấn trừ `erp_invoice_voucher_netoff` tương ứng.
+  - Khi cập nhật số tiền giao dịch (`updateCaseSettlement`): Backend tự động cập nhật lại `net_off_amount` trên các hóa đơn liên kết tương ứng.
+  - Khi gỡ giao dịch Sao kê khỏi vụ việc qua `removeCaseSettlement`: Backend tự động dọn dẹp các bản ghi `erp_invoice_voucher_netoff` trên toàn bộ hóa đơn liên kết và tính lại công nợ.
 - **Hóa đơn → Vụ việc**:
-  - Khi liên kết Hóa đơn vào vụ việc qua `addLinkedInvoice`: Backend tự động tạo liên kết `erp_invoice_voucher_netoff` cho các giao dịch sao kê đã có sẵn trong vụ việc.
-  - Khi gỡ liên kết Hóa đơn khỏi vụ việc qua `removeLinkedInvoice`: Backend tự động xóa các bản ghi `erp_invoice_voucher_netoff` giữa hóa đơn đó và các giao dịch sao kê của vụ việc.
+  - Khi cấn trừ Sao kê với Hóa đơn qua `linkInvoiceToTransaction` trong `TransactionAccountingService`: Backend tự động quét các vụ việc đang liên kết với hóa đơn đó (`kgara_case_linked_invoice`), tự động tạo/cập nhật `kgara_case_settlements` và cập nhật giảm công nợ `tien_con_phai_thanh_toan` của vụ việc.
+  - Khi xóa/gỡ cấn trừ Sao kê khỏi Hóa đơn qua `removeInvoiceFromTransaction`: Backend tự động xóa settlement tương ứng trong `kgara_case_settlements` ở các vụ việc liên kết và tính lại công nợ.
+- **Khi Liên kết Hóa đơn $\leftrightarrow$ Vụ việc (`addLinkedInvoice`)**:
+  - Tự động đồng bộ 2 chiều: Nếu vụ việc đã có sao kê trước $\rightarrow$ cấn trừ sang Hóa đơn; Nếu Hóa đơn đã có sao kê trước $\rightarrow$ tự động tạo settlement cho vụ việc và tính lại số dư.
+  - Khi gỡ liên kết (`removeLinkedInvoice`): Tự động dọn dẹp các cấn trừ chéo giữa 2 bên.
+- **Gợi ý Đối soát Thông minh (`GarageSmartSettlementService`)**:
+  - Khi tính `remainingAmount` trong gợi ý sao kê cho vụ việc, tự động loại trừ net-off của chính các hóa đơn liên kết với vụ việc đó (`invoice_id NOT IN (...)`), tránh việc sao kê đã full net-off cho hóa đơn bị ẩn khỏi danh sách gợi ý.
+  - Tự động `LEFT JOIN` kiểm tra `already_settled` để sao kê đã là cấn trừ của vụ việc hiện tại luôn xuất hiện trong gợi ý (kèm cờ `alreadySettledForThisCase = true`, badge `ĐÃ CẤN TRỪ` và nút `Chọn lại cấn trừ`).
 
 ### 5.10. Quy tắc Gỡ liên kết Chứng từ trên Giao diện (Client-side Staging & Batch Save)
 - Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](file:///home/dev/repos/erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
@@ -349,24 +364,60 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
   - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.
 
-### 5.11. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
+### 5.11. Cơ chế Bộ Lọc Đa Chiều Nâng Cao (`__ALL_MATCHING__`, `__BLANK__` & Cascading Options)
+- **Chuẩn Lọc Toàn Diện trên Bảng Garage Cases (`/cases`) & Sổ Công Nợ Khách Hàng (`/cases/customers-debt`)**:
+  - `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm):
+    - Khi ô tìm kiếm rỗng (`searchStr = ""`): Hệ thống hiểu là chọn toàn bộ dữ liệu $\rightarrow$ Không áp điều kiện lọc WHERE để giữ trọn vẹn tập dữ liệu.
+    - Khi có từ khóa tìm kiếm: Sử dụng hàm chuẩn `applyMultiKeywordFilter` hỗ trợ tìm kiếm theo chuỗi con (`ILIKE`), tìm kiếm chính xác khi bọc dấu ngoặc kép (`"..."`), hoặc tìm kiếm nhiều từ khóa cách nhau bởi dấu chấm phẩy (`;`).
+  - `__BLANK__` (Lọc giá trị trống / Null / 0): Xử lý kết hợp `(column IS NULL OR CAST(column AS TEXT) = '' OR column IN (...))` cho phép người dùng lọc đồng thời giá trị rỗng cùng với các tùy chọn cụ thể khác.
+  - **Hỗ trợ Bộ Lọc 7 Cột / Tiêu Chí Trọng Tâm trên Bảng Phiếu Dịch Vụ**:
+    - **Tab trạng thái (`statusTab`)**: Hỗ trợ lọc server-side theo 3 nhóm trạng thái chính trên thanh Pill Tabs:
+      - `'quotation'`: Báo giá / Nháp / Chờ duyệt (`tinh_trang_dich_vu = 1` hoặc tên chứa `'báo giá'`, `'nháp'`, `'chờ'`).
+      - `'in_progress'`: Đang thực hiện (`tinh_trang_dich_vu IN (0, 2)` hoặc tên chứa `'đang sửa'`, `'đang làm'`, `'tiếp nhận'`, `'đang xử lý'`, `'kiểm tra'`, `'sửa chữa'` và không thuộc trạng thái kết thúc/hủy).
+      - `'completed'`: Hoàn tất / Đã giao xe (`tinh_trang_dich_vu = 3` hoặc tên chứa `'kết thúc'`, `'hoàn tất'`, `'hoàn thành'`, `'giao xe'`, `'xong'`, `'đã thanh toán'`).
+    - **Ngày tiếp nhận (`caseDate` / `ngayTiepNhan`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker dải ngày từ - đến.
+    - **Ngày kết thúc (`ngayHoanThanhCongViec`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker + Tùy chọn `(blank)` để lọc phiếu chưa kết thúc.
+    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")`, định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
+    - **Chi phí (`chiPhi`)**: Áp dụng `COALESCE("case"."chi_phi", "gp"."chi_phi")`, định dạng tiền tệ và lọc `__BLANK__`.
+    - **Lợi nhuận (`loiNhuan`)**: Áp dụng `COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", DoanhThu - ChiPhi)`, định dạng tiền tệ và lọc `__BLANK__`.
+    - **Biên LN (`margin`)**: Tính toán tỷ lệ % margin tức thời và hỗ trợ 4 phân khúc chọn nhanh: `'HIGH'` ($\ge 50\%$), `'MID'` ($20\% - 50\%$), `'LOW'` ($0\% - 20\%$), `'NEGATIVE'` ($< 0\%$) cùng lọc `__BLANK__`.
+  - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
+  - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí các Quick Actions thuận tiện:
+    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.
+    - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
+    - 🔄 **Đồng bộ từ KGara** (`RefreshCw` icon) $\rightarrow$ Kích hoạt đồng bộ chi tiết vụ việc trực tiếp từ KGara.
+    - ⚖️ **Cấn trừ sao kê** (`Scale` icon) $\rightarrow$ Mở modal cấn trừ giao dịch ngân hàng/sổ quỹ vào vụ việc.
+    - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.
+
+### 5.12. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
 - Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
   - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
   - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
 
-### 5.12. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
+### 5.13. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
 - **Mốc thời gian theo dõi**: Toàn bộ nghiệp vụ theo dõi công nợ đối tác xưởng Garage áp dụng mốc chặn dưới từ tháng 07/2026 (`>= 2026-07-01`).
-- **Công nợ Khách hàng (`GET /cases/customers-debt`)**:
+- **Công nợ Khách hàng (`GET /cases/customers-debt`, `GET /cases/customers-debt/column-options`, `GET /cases/by-customer/:customerCode`)**:
+  - **Quy tắc Phiếu Hoàn tất**: Dữ liệu công nợ khách hàng **chỉ tính toán và phản ánh các Phiếu dịch vụ đã kết thúc/hoàn tất** (`tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu = 'Kết thúc'`). Các phiếu đang báo giá, tiếp nhận, đang sửa hoặc đã hủy được tự động loại trừ.
   - Dữ liệu được nhóm và tính toán tổng hợp trực tiếp từ bảng `kgara_cases` theo `khach_hang_code`.
   - Phân bổ 4 nhóm tuổi nợ (Aging buckets): `0_30` ngày, `31_60` ngày, `61_90` ngày, và `over_90` ngày dựa trên khoảng cách giữa ngày phát sinh phiếu (`ngay_phat_sinh`) và ngày hiện tại.
   - Hỗ trợ phân trang, tìm kiếm đa trường (`q`), lọc theo dải ngày (`from`, `to`), bộ lọc popover cột (`filtersStr`, `column_filters`), và sắp xếp theo doanh thu, đã thu, còn phải thu, tuổi nợ.
-  - Endpoint `GET /cases/customers-debt/column-options`: Trả về danh sách phân trang các giá trị duy nhất phục vụ bộ lọc popover.
-  - Endpoint `GET /cases/by-customer/:customerCode`: Truy xuất toàn bộ danh sách phiếu dịch vụ phát sinh của khách hàng kèm tuổi nợ và chi tiết thanh toán từng phiếu.
+  - Tự động làm giàu dữ liệu và đồng bộ số dư `tien_da_thanh_toan`, `tien_con_phai_thanh_toan` từ bảng `kgara_case_settlements` khi thêm/xóa giao dịch cấn trừ và khi khởi tạo module (`onModuleInit`).
+  - Bảo toàn số tiền đã cấn trừ trên ERP khi đồng bộ dữ liệu định kỳ từ KGara (`kgara-sync.service.ts`).
+  - Giao diện Drawer "Hồ sơ công nợ khách hàng" (`GarageCustomerDetailDrawer.tsx`) chuẩn hóa theo `/standardize-table`, `variant="spreadsheet"`, kích thước cột tỉ lệ chuẩn kèm `minWidth={1210}`, các `DrawerSection` hỗ trợ collapsible, giới hạn chiều cao `max-h` kèm thanh cuộn mượt mà, và cột Tuổi nợ (Aging) trực quan đồng bộ 100% với trang `/garage-customers`.
 - **Công nợ Nhà cung cấp (`GET /payables/suppliers-debt`)**:
   - Dữ liệu được nhóm và tổng hợp từ sổ công nợ phải trả `kgara_payables` (tài khoản theo dõi 331) theo `doi_tac_id`.
   - Tính toán số dư đầu kỳ (`dk_no`, `dk_co`), số phát sinh trong kỳ (`ps_no`: đã thanh toán, `ps_co`: mua hàng/dịch vụ), số dư cuối kỳ (`ck_co - ck_no` = `balance_amount`) và tuổi nợ.
   - Endpoint `GET /payables/suppliers-debt/column-options`: Phục vụ bộ lọc popover cho mã/tên nhà cung cấp và tài khoản.
   - Endpoint `GET /payables/by-supplier/:supplierId/cases`: Lấy chi tiết các bút toán phát sinh và tự động kết nối với các phiếu dịch vụ `kgara_cases` liên đới qua mã chứng từ `maSoVuViec = soChungTu`.
+
+### 5.13. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
+- **Hàm tiện ích `parseSafeDate`**:
+  - Nhận diện và chuyển đổi an toàn các định dạng ngày từ KGara (`ISO`, `DD/MM/YYYY`, `DD-MM-YYYY`, `number timestamp`).
+  - Tự động bỏ qua các chuỗi không hợp lệ như `"0001-01-01T00:00:00"`, `"1900-01-01"`, `"0NaN"`, `"null"`, `"undefined"`, trả về `null` thay vì `Invalid Date` để chống lỗi `500 QueryFailedError (0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN)` khi TypeORM ghi xuống Postgres.
+- **Quy tắc Sắp xếp Thứ tự Vụ việc Đồng bộ BE/FE**:
+  - Mặc định ưu tiên sắp xếp:
+    $$\text{case.ngayPhatSinh DESC (NULLS LAST)} \longrightarrow \text{case.ngayTiepNhan DESC (NULLS LAST)} \longrightarrow \text{case.soChungTu DESC} \longrightarrow \text{case.updatedAt DESC}$$
+  - Hỗ trợ tham số query `sorts` linh hoạt đa cột (`+col` / `-col`).
 
 ---
 

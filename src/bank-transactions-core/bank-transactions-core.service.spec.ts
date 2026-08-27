@@ -19,6 +19,7 @@ describe('BankTransactionsCoreService - accounting delegation', () => {
       {} as any,
       {} as any,
       transactionAccountingService,
+      {} as any,
     );
   });
 

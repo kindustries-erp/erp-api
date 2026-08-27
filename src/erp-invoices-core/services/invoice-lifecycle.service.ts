@@ -21,6 +21,8 @@ import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-t
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
+import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
+
 @Injectable()
 export class InvoiceLifecycleService {
   private readonly logger = new Logger(InvoiceLifecycleService.name);
@@ -28,6 +30,8 @@ export class InvoiceLifecycleService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
@@ -38,17 +42,89 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async findOne(id: string) {
-    const data = await this.repository.findOne({
-      where: { id, isDeleted: false },
-      relations: [
-        'items',
-        'voucherNetOffs',
-        'voucherNetOffs.bankTransaction',
-        'attachments',
-        'attachments.attachment',
-      ],
-    });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+
+    const relations = [
+      'items',
+      'voucherNetOffs',
+      'voucherNetOffs.bankTransaction',
+      'attachments',
+      'attachments.attachment',
+      'category',
+    ];
+
+    let data: ErpInvoice | null = null;
+    if (isUuid) {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+    } else if (id.includes('_')) {
+      const [invoiceNo, ...serialParts] = id.split('_');
+      const serialNo = serialParts.join('_');
+      data = await this.repository.findOne({
+        where: {
+          invoiceNo,
+          ...(serialNo ? { serialNo } : {}),
+          isDeleted: false,
+        },
+        relations,
+      });
+    } else {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+      if (!data) {
+        data = await this.repository.findOne({
+          where: { invoiceNo: id, isDeleted: false },
+          relations,
+        });
+      }
+    }
+
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+
+    // Load custom attributes & global attributes
+    const entityAttrValues = await this.entityAttrValueRepo.find({
+      where: { entityType: 'INVOICE', entityId: data.id },
+      relations: ['attrDef'],
+    });
+
+    const attributes: Record<string, any> = {};
+    const globalAttributes: Record<string, any> = {};
+    for (const ev of entityAttrValues) {
+      if (ev.attrDef?.isGlobal) {
+        globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
+      } else {
+        attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
+      }
+    }
+
+    const attributeValues = entityAttrValues.map((ev) => ({
+      id: ev.id,
+      attrDefId: ev.attrDefId,
+      attrCode: ev.attrDef?.code,
+      attrName: ev.attrDef?.name,
+      fieldType: ev.attrDef?.fieldType,
+      valueText: ev.valueText,
+      isGlobal: ev.attrDef?.isGlobal || false,
+    }));
+
+    (data as any).attributes = attributes;
+    (data as any).globalAttributes = globalAttributes;
+    (data as any).customAttributes = attributes;
+    (data as any).attributeValues = attributeValues;
+
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
   }
 
@@ -57,8 +133,11 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateErpInvoiceDto) {
+    const createPayload: any = { ...dto };
+    delete createPayload.attributes;
+
     const invoice = this.repository.create({
-      ...dto,
+      ...createPayload,
       preVatAmount: String(dto.preVatAmount ?? 0),
       vatRate: dto.vatRate != null ? String(dto.vatRate) : null,
       vatAmount: String(dto.vatAmount ?? 0),
@@ -93,6 +172,7 @@ export class InvoiceLifecycleService {
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
     const updatePayload: any = { ...dto };
+    delete updatePayload.attributes;
     if (dto.preVatAmount != null)
       updatePayload.preVatAmount = String(dto.preVatAmount);
     if (dto.vatRate != null) updatePayload.vatRate = String(dto.vatRate);
