@@ -263,3 +263,38 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
    - `bunx jest src/bank-transactions-core/services/transaction-accounting.service.spec.ts`
    - `bunx jest src/bank-transactions-core/services/transaction-query.service.spec.ts`
 3. **Database Integrity**: Đảm bảo trường `debit_amount` và `credit_amount` luôn được lưu với kiểu `numeric(18,4)` để tránh sai số làm tròn tiền tệ.
+
+---
+
+## 8. Frontend UI (`erp-web`) — Chuẩn Thiết Kế Mới
+
+> Phân hệ này đã được refactor theo chuẩn **Atomic Module** và tích hợp hai tính năng mới:
+
+### 8.1. Switch nhanh Thu / Chi (`PillTabs` trong `customActionsNode`)
+- Component: `BankStatementsTab.tsx` → `customActionsNode` truyền vào `SpreadsheetPageTemplate`.
+- Ba trạng thái: **Tất cả** (`activeTransactionType = "ALL"`) / **Thu** (`"IN"`) / **Chi** (`"OUT"`).
+- Khi chọn, hook `useBankStatementsTabLogic.tsx` gọi `bankStatementApi.getTransactions({ transactionType: "IN" | "OUT" })` tương ứng với field **`transactionType?: 'IN' | 'OUT'`** trong `BankTransactionFilterDto` (backend).
+- Đồng bộ URL param `?txnType=IN|OUT` qua `usePageUrlState`.
+
+### 8.2. Chế độ xem Cột linh hoạt (ViewMode Presets)
+- Hai preset chuẩn (không xóa được, có thể Khôi phục mặc định):
+  - **`overview` — "Tổng quan"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `description`, `thu`, `chi`, `balance`, `branch`.
+  - **`audit` — "Kiểm toán / Đối soát"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `correspondentName`, `invoiceSubject`, `thu`, `chi`, `netOffAmount`, `remainingAmount`, `branch`.
+- Người dùng có thể **tạo Custom View** mới (đặt tên, chọn bật/tắt từng cột theo 4 nhóm), lưu vào `core_user_preferences`.
+
+### 8.3. Cấu trúc Module Atomic (`src/modules/bank-statements/`)
+```text
+src/modules/bank-statements/components/BankStatementsTab/
+├── utils.ts                                     # Preset configs, column groups, default visibility
+├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync)
+├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
+├── index.tsx                                    # Re-export entry
+├── components/
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions với header filters
+│   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
+│   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
+│   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+└── __tests__/
+    └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
+```
+
