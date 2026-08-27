@@ -339,6 +339,18 @@ src/erp-invoices-core/
   - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`.
   - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD).
 
+### 5.8. Quản lý, Bộ lọc & Tự động Tính toán Dòng Hàng Hóa Đơn (`findAllItems`, `getItemColumnOptions`)
+- **Truy vấn Dòng hàng (`findAllItems`)**:
+  - Hỗ trợ phân trang, lọc nâng cao theo `column_filters` (hỗ trợ chế độ `__ALL_MATCHING__`, `__BLANK__`), tìm kiếm đa cột qua `column_search`.
+  - Hỗ trợ lọc các cột số tiền & số lượng: `quantity`, `unitPrice`, `preVatAmount`, `vatAmount`, `discountAmount`, `totalAmount` cùng các cột diễn giải, đối tác, MST, mã hàng.
+  - **Cơ chế Tính toán Bù trừ Tự động (Dynamic Fallback Calculation)**:
+    - Khi dòng hàng từ cổng thuế GDT hoặc XML không có sẵn `vat_amount` (giá trị 0 trong DB): Tự động tính `vatAmount = Math.round(preVatAmount * vatRate)`.
+    - Khi `total_amount` bằng 0: Tự động tính `totalAmount = preVatAmount + vatAmount - discountAmount`.
+    - Áp dụng tính toán tức thời cho cả mảng `items`, tổng kết footer `summary` và file xuất Excel `exportItemsExcel`.
+- **Danh sách Tùy chọn Cột Dòng Hàng (`getItemColumnOptions`)**:
+  - Lấy distinct options cho tất cả các cột số tiền, số lượng, diễn giải, đối tác kèm lọc chéo phụ thuộc (`filtersStr`) để các popover tự động thu hẹp lựa chọn.
+  - Hỗ trợ loại bỏ dấu phân cách phần nghìn (`.`, `,`) khi tìm kiếm số tiền và số lượng.
+
 ---
 
 ## 6. Tích hợp Liên Module

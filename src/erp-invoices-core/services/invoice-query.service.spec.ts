@@ -401,4 +401,213 @@ describe('InvoiceQueryService', () => {
       { value: 'Lốp xe', label: 'Lốp xe', secondaryLabel: undefined },
     ]);
   });
+
+  it('findAllItems filters by description and amount column_filters', async () => {
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          total_quantity: '2',
+          total_pre_vat_amount: '500000',
+          total_vat_amount: '50000',
+          total_discount_amount: '0',
+          total_amount: '550000',
+        }),
+      }),
+      getCount: jest.fn().mockResolvedValue(1),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          id: 'item-uuid-2',
+          invoice_id: 'inv-uuid-2',
+          item_code: 'DV-01',
+          description: 'Bảo dưỡng định kỳ',
+          unit: 'Gói',
+          quantity: '1',
+          unit_price: '500000',
+          pre_vat_amount: '500000',
+          vat_rate: '10',
+          vat_amount: '50000',
+          discount_amount: '0',
+          total_amount: '550000',
+          invoice_subcategory: 'NORMAL',
+          invoice_no: '0000456',
+          serial_no: '1C24TAA',
+          invoice_date: '2026-08-25',
+          direction: 'IN',
+          status: 'CONFIRMED',
+          posting_status: 'POSTED',
+          seller_name: 'Garage A',
+          seller_tax_code: '0101234567',
+        },
+      ]),
+    };
+
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const result = await service.findAllItems({
+      direction: 'IN',
+      column_filters: JSON.stringify({
+        description: ['Bảo dưỡng định kỳ'],
+        preVatAmount: ['500000'],
+        totalAmount: ['550000'],
+      }),
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      'ii.description IN (:...vals_desc)',
+      { vals_desc: ['Bảo dưỡng định kỳ'] },
+    );
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      'CAST(ii.pre_vat_amount AS TEXT) IN (:...vals_preVat)',
+      { vals_preVat: ['500000'] },
+    );
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      'CAST(ii.total_amount AS TEXT) IN (:...vals_tot)',
+      { vals_tot: ['550000'] },
+    );
+    expect(result.total).toBe(1);
+    expect(result.items[0].description).toBe('Bảo dưỡng định kỳ');
+  });
+
+  it('getItemColumnOptions supports amount columns with search and filtersStr', async () => {
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue({
+        getCount: jest.fn().mockResolvedValue(1),
+      }),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([{ value: '1100000' }]),
+    };
+
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const res = await service.getItemColumnOptions(
+      'totalAmount',
+      '1,100,000',
+      1,
+      20,
+      JSON.stringify({ description: ['Lốp xe VinFast'] }),
+      'IN',
+    );
+
+    expect(itemQb.select).toHaveBeenCalledWith(
+      'DISTINCT ii.total_amount',
+      'value',
+    );
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :sClean",
+      { sClean: '%1100000%' },
+    );
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      'CAST(ii.description AS TEXT) IN (:...f_description)',
+      { f_description: ['Lốp xe VinFast'] },
+    );
+    expect(res.total).toBe(1);
+    expect(res.items).toEqual([
+      { value: '1100000', label: '1100000', secondaryLabel: undefined },
+    ]);
+  });
+
+  it('findAllItems dynamically computes vatAmount and totalAmount when DB values are 0', async () => {
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          total_quantity: '10',
+          total_pre_vat_amount: '100000',
+          total_vat_amount: '8000',
+          total_discount_amount: '0',
+          total_amount: '108000',
+        }),
+      }),
+      getCount: jest.fn().mockResolvedValue(1),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          id: 'item-fallback-1',
+          invoice_id: 'inv-1',
+          item_code: 'BAT-01',
+          description: 'Pin xe điện',
+          unit: 'Cái',
+          quantity: '1',
+          unit_price: '100000',
+          pre_vat_amount: '100000',
+          vat_rate: '0.08',
+          vat_amount: '0',
+          discount_amount: '0',
+          total_amount: '0',
+          invoice_subcategory: 'NORMAL',
+          invoice_no: '0000123',
+          serial_no: '1C24TAA',
+          invoice_date: '2026-08-25',
+          direction: 'IN',
+          status: 'CONFIRMED',
+          posting_status: 'UNPOSTED',
+          seller_name: 'VinFast',
+          seller_tax_code: '0101234567',
+        },
+      ]),
+    };
+
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const result = await service.findAllItems({
+      direction: 'IN',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.items[0].preVatAmount).toBe(100000);
+    expect(result.items[0].vatRate).toBe(0.08);
+    // vatAmount dynamically computed: 100000 * 0.08 = 8000
+    expect(result.items[0].vatAmount).toBe(8000);
+    // totalAmount dynamically computed: 100000 + 8000 - 0 = 108000
+    expect(result.items[0].totalAmount).toBe(108000);
+  });
 });
