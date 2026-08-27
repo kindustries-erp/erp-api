@@ -19,6 +19,11 @@ Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra 
   - Endpoint `column-options` tự động trích xuất danh sách giá trị distinct của từng cột trên toàn bộ các bảng chứng từ tham gia (Mã chứng từ, Loại phiếu, Đối tác/Khách hàng/NCC, Trạng thái, Ngày ghi sổ, Số lượng tổng).
 - **Xem Chi Tiết Chứng Từ Tức Thời (Voucher Detail Drawer)**:
   - Mở xem chi tiết toàn bộ các dòng mặt hàng (line items), số lượng, đơn giá, mã định danh Serial/VIN đính kèm mà không cần chuyển trang.
+- **Chuẩn hóa UI/UX Bảng Chứng Từ Kho (`ErpWarehouseTab.tsx`)**:
+  - Cột STT `#` cố định 40px ở đầu bảng, căn giữa.
+  - Hàng tổng cộng (`summaryRow`): tự động cộng dồn SL Nhập (`qtyReceipt`), SL Xuất (`qtyIssue`), và SL Điều chỉnh (`qtyAdjustment`).
+  - Làm mờ hàng trạng thái phiếu hủy (`CANCELLED`, `VOID`).
+  - Action Menu: "Xem chi tiết" (Icon `Eye`), "Xem đơn mua hàng" / "Xem đơn bán hàng" (Icon `FileText`), và "Chỉnh sửa" (Icon `Pencil`, mở thẳng form edit theo loại phiếu). Cột chứng từ dùng `TableText` gọn gàng.
 
 ---
 

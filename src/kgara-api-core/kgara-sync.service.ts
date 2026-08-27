@@ -57,6 +57,33 @@ export function parseSafeDate(value: any): Date | null {
   return null;
 }
 
+/**
+ * Safely extract net total payable amount from case data / raw payload
+ * Prioritizes TongTienThanhToan / TienThanhToanKH / (TienCoThue - TienChietKhau)
+ */
+export function extractNetPayableAmount(item: any): number {
+  if (!item) return 0;
+  const raw = item.rawData || item;
+
+  const tongTienThanhToan = Number(raw.TongTienThanhToan);
+  if (!isNaN(tongTienThanhToan) && tongTienThanhToan > 0) {
+    return tongTienThanhToan;
+  }
+
+  const tienThanhToanKH = Number(raw.TienThanhToanKH);
+  if (!isNaN(tienThanhToanKH) && tienThanhToanKH > 0) {
+    return tienThanhToanKH;
+  }
+
+  const tienCoThue = Number(raw.TienCoThue ?? item.tienCoThue ?? 0);
+  const tienChietKhau = Number(raw.TienChietKhau ?? 0);
+  if (tienChietKhau > 0 && tienCoThue > tienChietKhau) {
+    return tienCoThue - tienChietKhau;
+  }
+
+  return isNaN(tienCoThue) ? 0 : tienCoThue;
+}
+
 @Injectable()
 export class KgaraSyncService {
   private readonly logger = new Logger(KgaraSyncService.name);
@@ -201,15 +228,19 @@ export class KgaraSyncService {
           const newStatus = c.TinhTrangDichVu;
 
           // Typed mappings - ERP fields are explicitly omitted (not overwritten)
+          const netPayable = extractNetPayableAmount(c);
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
           gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
-          gwCase.tienCoThue = c.TienCoThue;
+          gwCase.tienCoThue = netPayable;
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
-          gwCase.tienConPhaiThanhToan = c.TienConPhaiThanhToan;
+          gwCase.tienConPhaiThanhToan = Math.max(
+            0,
+            netPayable - Number(c.TienDaThanhToan || 0),
+          );
 
           if (gwCase.id) {
             const existingSettlements = await this.settlementRepo.find({
@@ -219,11 +250,10 @@ export class KgaraSyncService {
               const totalReceipts = existingSettlements
                 .filter((s) => s.settlementType === 'RECEIPT')
                 .reduce((sum, s) => sum + Number(s.amount || 0), 0);
-              const targetRevenue = Number(c.TienCoThue ?? c.DoanhThu ?? 0);
               gwCase.tienDaThanhToan = totalReceipts;
               gwCase.tienConPhaiThanhToan = Math.max(
                 0,
-                targetRevenue - totalReceipts,
+                netPayable - totalReceipts,
               );
             }
           }
@@ -763,15 +793,19 @@ export class KgaraSyncService {
       const newStatus = caseData.TinhTrangDichVu;
 
       // Selective mappings
+      const netPayable = extractNetPayableAmount(caseData);
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
       gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
       gwCase.tinhTrangDichVu = newStatus;
       gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
-      gwCase.tienCoThue = caseData.TienCoThue;
+      gwCase.tienCoThue = netPayable;
       gwCase.tienDaThanhToan = caseData.TienDaThanhToan;
-      gwCase.tienConPhaiThanhToan = caseData.TienConPhaiThanhToan;
+      gwCase.tienConPhaiThanhToan = Math.max(
+        0,
+        netPayable - Number(caseData.TienDaThanhToan || 0),
+      );
 
       if (gwCase.id) {
         const existingSettlements = await this.settlementRepo.find({
@@ -781,14 +815,8 @@ export class KgaraSyncService {
           const totalReceipts = existingSettlements
             .filter((s) => s.settlementType === 'RECEIPT')
             .reduce((sum, s) => sum + Number(s.amount || 0), 0);
-          const targetRevenue = Number(
-            caseData.TienCoThue ?? caseData.DoanhThu ?? 0,
-          );
           gwCase.tienDaThanhToan = totalReceipts;
-          gwCase.tienConPhaiThanhToan = Math.max(
-            0,
-            targetRevenue - totalReceipts,
-          );
+          gwCase.tienConPhaiThanhToan = Math.max(0, netPayable - totalReceipts);
         }
       }
 

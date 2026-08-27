@@ -228,6 +228,21 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   - Khi `vals` chứa `'__BLANK__'`: Sinh điều kiện `(field IN (:...realVals) OR field IS NULL OR CAST(field AS TEXT) = '')`.
   - Riêng trường Đối tượng HĐ (`invoiceSubject`): Áp dụng `NOT EXISTS (SELECT 1 FROM erp_invoice_voucher_netoff ...)` để tra cứu các giao dịch chưa từng cấn trừ hóa đơn.
 
+### 5.4. Xuất Báo Cáo Excel Ngầm & SSE Realtime Stream (`BankStatementExportBackgroundService`)
+- **Kiến trúc Chạy Nền (Non-blocking Background Jobs)**:
+  - Xử lý xuất báo cáo Excel sao kê ngân hàng và sổ quỹ tiền mặt dưới nền mà không làm nghẽn Event Loop.
+  - Tự động kiểm tra trùng lặp bộ lọc (Deduplication / Reused): Nếu cùng một người dùng yêu cầu xuất cùng bộ lọc trong vòng 24 giờ và file vẫn còn hạn trong bộ nhớ đệm, hệ thống trả về ngay file có sẵn (`reused: true`).
+- **Đặt Tên File Thông Minh Theo Số Tài Khoản / Tên Sổ Quỹ**:
+  - Khi xuất tài khoản ngân hàng cụ thể: `Sao_ke_[SoTaiKhoan]_[YYYYMMDD_HHmm].xlsx` (vd: `Sao_ke_0391000123456_20260826_1815.xlsx`).
+  - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
+  - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
+  - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **API Endpoints Xuất Excel**:
+  - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
+  - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
+  - `GET /api/v1/bank-transactions-core/export/excel/background/:jobId/download`: Tải file `.xlsx` trực tiếp theo jobId.
+  - `GET /api/v1/bank-transactions-core/export/excel/progress/stream`: Server-Sent Events (SSE) phát tiến độ `0% -> 100%`, trạng thái `ready` và tên file cho client tự động tải xuống.
+
 ---
 
 ## 6. Tích hợp Liên Module

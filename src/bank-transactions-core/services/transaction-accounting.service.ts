@@ -534,7 +534,7 @@ export class TransactionAccountingService {
            )
            UPDATE kgara_cases
            SET tien_da_thanh_toan = sums.total_receipts,
-               tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, doanh_thu, 0) - sums.total_receipts),
+               tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
                updated_at = now()
            FROM sums
            WHERE id = $1`,
@@ -601,7 +601,7 @@ export class TransactionAccountingService {
              )
              UPDATE kgara_cases
              SET tien_da_thanh_toan = sums.total_receipts,
-                 tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, doanh_thu, 0) - sums.total_receipts),
+                 tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
                  updated_at = now()
              FROM sums
              WHERE id = $1`,

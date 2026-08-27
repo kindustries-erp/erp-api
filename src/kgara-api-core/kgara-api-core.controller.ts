@@ -37,7 +37,10 @@ import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.ent
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
-import { KgaraSyncService } from './kgara-sync.service';
+import {
+  KgaraSyncService,
+  extractNetPayableAmount,
+} from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
@@ -83,7 +86,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         UPDATE kgara_cases c
         SET
           tien_da_thanh_toan = COALESCE(s.total_receipts, 0),
-          tien_con_phai_thanh_toan = GREATEST(0, COALESCE(c.tien_co_thue, c.doanh_thu, 0) - COALESCE(s.total_receipts, 0))
+          tien_con_phai_thanh_toan = GREATEST(0, COALESCE(c.tien_co_thue, 0) - COALESCE(s.total_receipts, 0))
         FROM (
           SELECT case_id, SUM(amount) as total_receipts
           FROM kgara_case_settlements
@@ -285,15 +288,11 @@ export class KgaraApiCoreController implements OnModuleInit {
 
       const setInfo = settlementsMap[item.id];
       const hasSettlement = setInfo !== undefined;
-      const targetRev = Number(
-        item.tienCoThue ?? item.rawData?.TongTienThanhToan ?? doanhThu ?? 0,
-      );
+      const targetRev = extractNetPayableAmount(item);
       const totalPaid = hasSettlement
         ? setInfo.receipts
         : Number(item.tienDaThanhToan) || 0;
-      const remainingBal = hasSettlement
-        ? Math.max(0, targetRev - totalPaid)
-        : Number(item.tienConPhaiThanhToan) || 0;
+      const remainingBal = Math.max(0, targetRev - totalPaid);
       const paidCost = hasSettlement ? setInfo.payments : 0;
       const linkInfo = linkedInvoiceCounts[item.id];
 
@@ -303,6 +302,7 @@ export class KgaraApiCoreController implements OnModuleInit {
         chiPhi,
         loiNhuan,
         margin,
+        tienCoThue: targetRev,
         tienDaThanhToan: totalPaid,
         tienConPhaiThanhToan: remainingBal,
         tienDaChi: paidCost,
@@ -542,6 +542,30 @@ export class KgaraApiCoreController implements OnModuleInit {
       if (values.includes('NO')) {
         conditions.push(
           'NOT EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 5. Cột đặc thù: statusTab (Table Switch: quotation, in_progress, completed)
+    if (column === 'statusTab') {
+      const conditions: string[] = [];
+      if (values.includes('quotation')) {
+        conditions.push(
+          '("case"."tinh_trang_dich_vu" = 1 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%báo giá%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%nháp%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%chờ%\')',
+        );
+      }
+      if (values.includes('in_progress')) {
+        conditions.push(
+          '(("case"."tinh_trang_dich_vu" IN (0, 2) OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang sửa%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang làm%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%tiếp nhận%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang xử lý%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kiểm tra%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%sửa chữa%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đang%\') AND NOT ("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn thành%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hủy%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%từ chối%\'))',
+        );
+      }
+      if (values.includes('completed')) {
+        conditions.push(
+          '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn thành%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%giao xe%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%xong%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%đã thanh toán%\')',
         );
       }
       if (conditions.length > 0) {
@@ -816,6 +840,21 @@ export class KgaraApiCoreController implements OnModuleInit {
       if (freshData) {
         const payload = freshData.data || freshData;
         caseData.rawData = { ...caseData.rawData, ...payload };
+        const netPayable = extractNetPayableAmount(payload);
+        if (netPayable > 0) {
+          caseData.tienCoThue = netPayable;
+          const settlements = await this.settlementRepo.find({
+            where: { caseId: caseData.id },
+          });
+          const totalReceipts = settlements
+            .filter((s) => s.settlementType === 'RECEIPT')
+            .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+          caseData.tienDaThanhToan = totalReceipts;
+          caseData.tienConPhaiThanhToan = Math.max(
+            0,
+            netPayable - totalReceipts,
+          );
+        }
         await this.caseRepo.save(caseData);
       }
     }
@@ -1606,20 +1645,16 @@ export class KgaraApiCoreController implements OnModuleInit {
       }
       const setInfo = settlementsMap[c.id];
       const hasSettlement = setInfo !== undefined;
-      const targetRev = Number(
-        c.tienCoThue ?? c.rawData?.TongTienThanhToan ?? c.doanhThu ?? 0,
-      );
+      const targetRev = extractNetPayableAmount(c);
       const totalPaid = hasSettlement
         ? setInfo.receipts
         : Number(c.tienDaThanhToan) || 0;
-      const remainingBal = hasSettlement
-        ? Math.max(0, targetRev - totalPaid)
-        : Number(c.tienConPhaiThanhToan) || 0;
+      const remainingBal = Math.max(0, targetRev - totalPaid);
 
       return {
         ...c,
         agingDays,
-        tienCoThue: Number(c.tienCoThue) || 0,
+        tienCoThue: targetRev,
         tienDaThanhToan: totalPaid,
         tienConPhaiThanhToan: remainingBal,
       };
@@ -2527,13 +2562,7 @@ export class KgaraApiCoreController implements OnModuleInit {
     });
 
     const isCompleted = c.tinhTrangDichVu === 3;
-    const totalPayable = Number(
-      c.tienCoThue ??
-        c.rawData?.TongTienThanhToan ??
-        c.doanhThu ??
-        gp?.doanhThu ??
-        0,
-    );
+    const totalPayable = extractNetPayableAmount(c);
     const targetRevenue = totalPayable;
     const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
     const expectedProfit = isCompleted
@@ -2906,12 +2935,11 @@ export class KgaraApiCoreController implements OnModuleInit {
         .filter((s) => s.settlementType === 'RECEIPT')
         .reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
-      const targetRevenue = Number(
-        c.tienCoThue ?? c.rawData?.TongTienThanhToan ?? c.doanhThu ?? 0,
-      );
+      const targetRevenue = extractNetPayableAmount(c);
       const remainingReceivable = Math.max(0, targetRevenue - totalReceipts);
 
       await this.caseRepo.update(c.id, {
+        tienCoThue: targetRevenue,
         tienDaThanhToan: totalReceipts,
         tienConPhaiThanhToan: remainingReceivable,
       });

@@ -430,3 +430,24 @@ src/modules/erp-invoices-core/components/ErpInvoicesTab/
 Bảng hóa đơn được tối ưu hóa hiển thị với thứ tự trực quan:
 `Ngày HĐ` $\to$ `Số / Ký hiệu HĐ` (120px) $\to$ `Bên bán / MST` (250px) $\to$ `Loại HĐ` $\to$ `Diễn giải` (250px, 2 dòng) $\to$ `Trước GTGT` $\to$ `Thuế GTGT` $\to$ `Thành tiền` $\to$ **`Chiết khấu`** $\to$ **`Thuế suất GTGT`** $\to$ **`Trạng thái (GDT)`** $\to$ **`KQ Kiểm tra`** $\to$ `Cấn trừ` $\to$ `Còn lại` $\to$ `Hạch toán` $\to$ `Chi nhánh` $\to$ `Chứng từ`.
 
+### 8.2. Drawer Chi Tiết Hóa Đơn (`ErpInvoiceInternalDrawer`) & Thứ Tự 7 Top Tabs
+Drawer chi tiết hóa đơn sử dụng `StandardFormDrawer` với 7 Tabs điều hướng trên cùng (`resolvedDrawerTabs`):
+1. **`invoice_details`** (`t("tabDetails", "Chi tiết")` - icon `FileText`): Form hóa đơn & Template xem trước XML/PDF chi tiết.
+2. **`partner`** (`t("tabTransactions", "Giao dịch")` - icon `Building2`, `hideRightPanel: true`): Hồ sơ đối tác & Bảng danh sách hóa đơn liên quan dạng 2 cột.
+3. **`financials`** (`t("tabFinancials", "Tài chính")` - icon `Wallet`): Cấn trừ sao kê ngân hàng & Sổ quỹ tiền mặt (`ErpInvoiceSettlementTab`).
+4. **`linked_docs`** (`t("tabLinkedDocs", "Chứng từ liên kết")` - icon `Link2`, `hideRightPanel: true`): Sơ đồ mạng lưới chứng từ liên kết đa chặng Canvas Graph (`DrawerDocumentTraceability`).
+5. **`attachments`** (`t("tabAttachments", "Tài liệu đính kèm")` - icon `Paperclip`): Quản lý danh sách file PDF đính kèm & Tải lên tệp mới (`ErpInvoicePdfUpload`).
+6. **`accounting`** (`t("tabAccounting", "Hạch toán kế toán")` - icon `BookOpen`): Bút toán sổ cái & Định khoản kế toán kép (`PostingSection`).
+7. **`history`** (`t("tabHistory", "Lịch sử & Kiểm duyệt")` - icon `History`): Nhật ký kiểm toán & Timeline trạng thái (`DrawerAuditTimeline`).
+
+### 8.3. Cấu Trúc Tab "Giao dịch" (`ErpInvoicePartnerTab`) - Layout 2 Cột
+Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối ưu không gian và không bị nested scroll:
+- **Cột Trái (Main Content)**:
+  - Bọc bằng `<DrawerSection title={t("partnerInvoicesList", "Danh sách hóa đơn")} collapsible fitViewportHeight className="mb-0 h-full flex flex-col">`.
+  - Bên trong là `<StandardTable variant="spreadsheet" minWidth={550}>` hiển thị 4 cột tinh gọn: `Ngày HĐ`, `Số HĐ & Ký hiệu` (`InvoiceNoCell`), `Tổng tiền`, `Diễn giải`.
+  - Tự động kích hoạt thanh cuộn dọc nội bộ của bảng, không bị tràn ra ngoài Drawer Section.
+- **Cột Phải (Sidebar ~340px, Sticky)**:
+  - Section 1: `<DrawerSection title={t("partnerProfile", "Hồ sơ đối tác")} collapsible>` (Tên đối tác + copy, Role badge, MST + copy, Địa chỉ, Ngân hàng).
+  - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
+
+
