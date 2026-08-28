@@ -24,7 +24,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
-import type { ErpInvoiceQuery } from './erp-invoices-core.service';
+import type {
+  ErpInvoiceQuery,
+  ErpInvoiceItemQuery,
+} from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -54,6 +57,54 @@ export class ErpInvoicesCoreController {
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
   // ---------------------------------------------------------------------------
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('items')
+  @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'pageSize', required: false })
+  findAllItems(@Query() query: ErpInvoiceItemQuery) {
+    return this.service.findAllItems(query);
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('items/column-options')
+  getItemColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.service.getItemColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      direction,
+    );
+  }
+
+  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @Get('items/export/excel')
+  async exportItemsExcel(
+    @Query() query: ErpInvoiceItemQuery,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportItemsExcel(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=invoice-lines-${query.direction || 'all'}.xlsx`,
+    );
+    res.send(buffer);
+  }
 
   @RequirePermissions({ resource: 'invoices', action: 'read' })
   @Get()

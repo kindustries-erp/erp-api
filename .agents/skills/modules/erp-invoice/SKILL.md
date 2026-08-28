@@ -173,6 +173,7 @@ src/erp-invoices-core/
 | Method | Endpoint | Resource | Action | Mô tả chi tiết |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/erp-invoices` | `invoices` | `read` | Lấy danh sách hóa đơn phân trang, tìm kiếm đa trường, lọc ngày, lọc chiều (`IN`/`OUT`) |
+| `GET` | `/erp-invoices/items` | `invoices` | `read` | Lấy danh sách chi tiết các dòng diễn giải mặt hàng hóa đơn phân trang, tìm kiếm đa trường, lọc theo phân loại dòng (`invoice_subcategory`), lọc ngày, đối tác và thống kê KPI dòng tiền/thuế |
 | `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
@@ -337,6 +338,20 @@ src/erp-invoices-core/
 - **`InvoiceQueryService._applyColumnSearch` & `_applyColumnFilters`**:
   - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`.
   - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD).
+
+### 5.8. Quản lý, Bộ lọc & Tự động Tính toán Dòng Hàng Hóa Đơn (`findAllItems`, `getItemColumnOptions`)
+- **Truy vấn Dòng hàng (`findAllItems`)**:
+  - Hỗ trợ phân trang, lọc nâng cao theo `column_filters` (hỗ trợ chế độ `__ALL_MATCHING__`, `__BLANK__`), tìm kiếm đa cột qua `column_search`.
+  - Hỗ trợ lọc các cột số tiền & số lượng: `quantity`, `unitPrice`, `preVatAmount`, `vatAmount`, `discountAmount`, `totalAmount` cùng các cột diễn giải, đối tác, MST, mã hàng, `taxInvoiceStatus`, `branchId` / `branchName`.
+  - Hỗ trợ lọc thẻ nhãn qua `tag_id` (`sys_entity_tags`), lọc `seller_name`, `buyer_name`.
+  - `leftJoin('erp_branches', 'b', 'b.id = inv.branch_id')` để lấy thông tin chi nhánh cho từng dòng hàng.
+  - **Cơ chế Tính toán Bù trừ Tự động (Dynamic Fallback Calculation)**:
+    - Khi dòng hàng từ cổng thuế GDT hoặc XML không có sẵn `vat_amount` (giá trị 0 trong DB): Tự động tính `vatAmount = Math.round(preVatAmount * vatRate)`.
+    - Khi `total_amount` bằng 0: Tự động tính `totalAmount = preVatAmount + vatAmount - discountAmount`.
+    - Áp dụng tính toán tức thời cho cả mảng `items`, tổng kết footer `summary` và file xuất Excel `exportItemsExcel`.
+- **Danh sách Tùy chọn Cột Dòng Hàng (`getItemColumnOptions`)**:
+  - Lấy distinct options cho tất cả các cột số tiền, số lượng, diễn giải, đối tác, trạng thái GĐT (`taxInvoiceStatus`), chi nhánh (`branchId`) kèm lọc chéo phụ thuộc (`filtersStr`) để các popover tự động thu hẹp lựa chọn.
+  - Hỗ trợ loại bỏ dấu phân cách phần nghìn (`.`, `,`) khi tìm kiếm số tiền và số lượng.
 
 ---
 

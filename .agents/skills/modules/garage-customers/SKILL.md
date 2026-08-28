@@ -93,8 +93,10 @@ src/kgara-api-core/
 │   ├── kgara_case.entity.ts               # Entity vụ việc / phiếu dịch vụ (chứa khachHangCode, khachHangName, ...)
 │   ├── kgara_case_settlement.entity.ts    # Entity cấn trừ giao dịch dòng tiền (RECEIPT / PAYMENT)
 │   └── kgara_branch.entity.ts             # Entity chi nhánh xưởng dịch vụ
-├── kgara-api-core.controller.ts           # Controller chứa endpoints /cases/customers-debt, column-options, by-customer
-└── kgara-api-core.module.ts               # Module NestJS đăng ký Providers và Repositories
+├── controllers/
+│   ├── kgara-customers.controller.ts      # Controller chứa endpoints /cases/customers-debt, column-options, by-customer
+│   └── kgara-suppliers.controller.ts      # Controller chứa endpoints /payables/suppliers-debt, column-options, by-supplier
+└── kgara-api-core.module.ts               # Module NestJS đăng ký Sub-Controllers, Providers và Repositories
 
 # FRONTEND (erp-web)
 src/modules/garage/

@@ -14,6 +14,7 @@ Các nghiệp vụ trọng tâm:
 - **Không Gây Trễ API (Non-blocking Async Batch Buffering)**: Sử dụng hàng đợi đệm trong RAM (In-Memory Queue) tự động gom 50 bản ghi hoặc flush định kỳ mỗi 2 giây vào PostgreSQL, giảm độ trễ ghi log của API xuống **~0ms overhead**.
 - **Bảo vệ Dữ liệu Nhạy cảm & Chống Phình to DB (Sanitizer & Payload Capping)**: Đệ quy mask các trường nhạy cảm (`password`, `token`, `secret`, `apiKey`, `cvv`, `pin`, `authorization`) thành `[REDACTED]`, tự động cắt ngắn chuỗi lớn (>5000 ký tự) và tóm tắt mảng lớn (>20 items) để bảo vệ TOAST table.
 - **Tự Động Dọn Dẹp Định Kỳ (Retention Scheduler)**: Tự động chạy hàng ngày lúc 02:00 AM để xóa các bản ghi cũ hơn số ngày quy định (`AUDIT_LOG_RETENTION_DAYS`, mặc định 30 ngày) bằng các lô nhỏ không khóa bảng.
+- **Cấu hình Bật/Tắt Linh Hoạt (Feature Toggle `ENABLE_AUDIT_LOG`)**: Cho phép bật/tắt toàn bộ việc ghi log, flush DB, interceptor và retention cronjob thông qua biến môi trường `ENABLE_AUDIT_LOG` (mặc định `true`). Khi gán `false`, hệ thống tự động bypass toàn bộ ghi log và trả về danh sách rỗng an toàn mà không gây trễ hoặc lỗi DB.
 - **Truy Xuất Dòng Thời Gian Đối Tượng (Entity Timeline Graph)**: Cung cấp API truy vấn lịch sử biến động theo từng chứng từ (`entityType`, `entityId`) phục vụ các Drawer chi tiết trên Frontend.
 
 ---
@@ -130,6 +131,15 @@ Cung cấp phương thức `buildDiff(beforePayload, afterPayload)` trả về d
 const diff = auditCoreService.buildDiff(before, after);
 // Output: { status: { before: 'PENDING', after: 'CONFIRMED' } }
 ```
+
+### 5.5. Cơ Chế Feature Toggle & Graceful Fallback (`ENABLE_AUDIT_LOG`)
+- **Biến môi trường**: `ENABLE_AUDIT_LOG=true|false` (mặc định `true` nếu không chỉ định).
+- **Hành vi khi `ENABLE_AUDIT_LOG=false`**:
+  - `GlobalAuditInterceptor`: Bỏ qua ngay ở đầu hàm `intercept()` mà không xử lý payload.
+  - `AuditCoreService.recordAction()`: Bỏ qua ngay lập tức, không đưa bản ghi vào RAM buffer.
+  - `AuditCoreService.onModuleInit()`: Không khởi chạy `flushTimer`.
+  - `AuditRetentionScheduler.handleRetentionCleanup()`: Bỏ qua chu kỳ dọn dẹp hàng ngày.
+  - `findAll()` / `getEntityTimeline()`: Trả về `{ data: [], total: 0 }` hoặc `[]` một cách an toàn mà không bắn query lỗi đến PostgreSQL.
 
 ---
 

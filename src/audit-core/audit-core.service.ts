@@ -4,7 +4,9 @@ import {
   OnApplicationShutdown,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpAuditLog } from './entities/erp-audit-log.entity';
@@ -48,10 +50,21 @@ export class AuditCoreService
   constructor(
     @InjectRepository(ErpAuditLog)
     private readonly auditRepository: Repository<ErpAuditLog>,
+    @Optional()
+    private readonly configService?: ConfigService,
   ) {}
 
+  public get isEnabled(): boolean {
+    if (this.configService) {
+      return this.configService.get<string>('ENABLE_AUDIT_LOG') !== 'false';
+    }
+    return process.env.ENABLE_AUDIT_LOG !== 'false';
+  }
+
   onModuleInit() {
-    this.startFlushTimer();
+    if (this.isEnabled) {
+      this.startFlushTimer();
+    }
   }
 
   async onModuleDestroy() {
@@ -85,6 +98,9 @@ export class AuditCoreService
    * Non-blocking record action. Sanitizes payload and pushes to in-memory buffer.
    */
   async recordAction(input: RecordActionInput): Promise<void> {
+    if (!this.isEnabled) {
+      return;
+    }
     try {
       const sanitizedBefore = input.beforeSnapshot
         ? sanitizeAuditPayload(input.beforeSnapshot)
@@ -132,7 +148,7 @@ export class AuditCoreService
    * Flush pending audit logs in buffer to PostgreSQL database.
    */
   async flush(): Promise<void> {
-    if (this.isFlushing || this.buffer.length === 0) {
+    if (this.isFlushing || this.buffer.length === 0 || !this.isEnabled) {
       return;
     }
 
@@ -162,6 +178,11 @@ export class AuditCoreService
   async findAll(query: AuditLogCoreQueryDto) {
     const page = query.page || 1;
     const pageSize = query.pageSize || 20;
+
+    if (!this.isEnabled) {
+      return { data: [], total: 0, page, pageSize };
+    }
+
     const qb = this.auditRepository.createQueryBuilder('log');
 
     if (query.module)
@@ -209,6 +230,10 @@ export class AuditCoreService
   }
 
   async getEntityTimeline(entityType: string, entityId: string) {
+    if (!this.isEnabled) {
+      return [];
+    }
+
     return this.auditRepository.find({
       where: { entityType, entityId },
       order: { createdAt: 'ASC' },
