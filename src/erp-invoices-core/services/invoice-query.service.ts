@@ -41,6 +41,7 @@ export interface ErpInvoiceItemQuery {
   date_to?: string;
   status?: string;
   posting_status?: string;
+  tag_id?: string;
   page?: number;
   pageSize?: number;
   sort_by?: string;
@@ -1951,6 +1952,7 @@ export class InvoiceQueryService {
     const qb = itemRepo
       .createQueryBuilder('ii')
       .innerJoin(ErpInvoice, 'inv', 'inv.id = ii.invoice_id')
+      .leftJoin('erp_branches', 'b', 'b.id = inv.branch_id')
       .where('inv.is_deleted = false');
 
     if (query.direction) {
@@ -1985,6 +1987,28 @@ export class InvoiceQueryService {
           ? `${query.date_to} 23:59:59.999`
           : query.date_to;
       qb.andWhere('inv.invoice_date <= :dateTo', { dateTo: effectiveDateTo });
+    }
+
+    if (query.tag_id) {
+      qb.andWhere(
+        `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
+        { tagId: query.tag_id },
+      );
+    }
+
+    if (query.seller_name) {
+      qb.andWhere('inv.seller_name ILIKE :sellerName', {
+        sellerName: `%${query.seller_name.trim()}%`,
+      });
+    }
+
+    if (query.buyer_name) {
+      qb.andWhere(
+        '(inv.buyer_name ILIKE :buyerName OR inv.buyer_personal_name ILIKE :buyerName)',
+        {
+          buyerName: `%${query.buyer_name.trim()}%`,
+        },
+      );
     }
 
     // Global Search
@@ -2242,6 +2266,41 @@ export class InvoiceQueryService {
         qb.andWhere('inv.posting_status IN (:...vals_postStatus)', {
           vals_postStatus: vals,
         });
+      } else if (col === 'taxInvoiceStatus') {
+        const numericVals = vals.map((v) => Number(v)).filter((v) => !isNaN(v));
+        const hasNull = vals.includes('__BLANK__') || vals.includes('null');
+        if (numericVals.length > 0 && hasNull) {
+          qb.andWhere(
+            '(inv.tax_invoice_status IN (:...vals_taxStatus) OR inv.tax_invoice_status IS NULL)',
+            { vals_taxStatus: numericVals },
+          );
+        } else if (numericVals.length > 0) {
+          qb.andWhere('inv.tax_invoice_status IN (:...vals_taxStatus)', {
+            vals_taxStatus: numericVals,
+          });
+        } else if (hasNull) {
+          qb.andWhere('inv.tax_invoice_status IS NULL');
+        }
+      } else if (col === 'branchId' || col === 'branchName') {
+        const hasBlank =
+          vals.includes('__BLANK__') ||
+          vals.includes('null') ||
+          vals.includes('');
+        const realVals = vals.filter(
+          (v) => v !== '__BLANK__' && v !== 'null' && v !== '',
+        );
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            '(inv.branch_id IN (:...vals_branch) OR inv.branch_id IS NULL)',
+            { vals_branch: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere('inv.branch_id IS NULL');
+        } else if (realVals.length > 0) {
+          qb.andWhere('inv.branch_id IN (:...vals_branch)', {
+            vals_branch: realVals,
+          });
+        }
       } else if (col === 'licensePlate') {
         qb.andWhere('inv.license_plate IN (:...vals_lp)', { vals_lp: vals });
       } else if (col === 'settlementOrder') {
@@ -2291,6 +2350,9 @@ export class InvoiceQueryService {
         invoiceSubcategory: 'ii.invoice_subcategory',
         status: 'inv.status',
         postingStatus: 'inv.posting_status',
+        taxInvoiceStatus: 'inv.tax_invoice_status',
+        branchId: 'inv.branch_id',
+        branchName: 'b.name',
         licensePlate: 'inv.license_plate',
         settlementOrder: 'inv.settlement_order',
         createdAt: 'ii.created_at',
@@ -2338,6 +2400,8 @@ export class InvoiceQueryService {
         'inv.license_plate AS license_plate',
         'inv.settlement_order AS settlement_order',
         'inv.branch_id AS branch_id',
+        'inv.tax_invoice_status AS tax_invoice_status',
+        'b.name AS branch_name',
       ])
       .offset((page - 1) * pageSize)
       .limit(pageSize)
@@ -2383,6 +2447,11 @@ export class InvoiceQueryService {
         licensePlate: r.license_plate,
         settlementOrder: r.settlement_order,
         branchId: r.branch_id,
+        taxInvoiceStatus:
+          r.tax_invoice_status !== null && r.tax_invoice_status !== undefined
+            ? Number(r.tax_invoice_status)
+            : null,
+        branchName: r.branch_name || null,
         itemCode: r.item_code,
         description: r.description,
         unit: r.unit,
@@ -2484,6 +2553,10 @@ export class InvoiceQueryService {
       selectField = 'ii.invoice_subcategory';
     else if (column === 'status') selectField = 'inv.status';
     else if (column === 'postingStatus') selectField = 'inv.posting_status';
+    else if (column === 'taxInvoiceStatus')
+      selectField = 'inv.tax_invoice_status';
+    else if (column === 'branchId' || column === 'branchName')
+      selectField = 'inv.branch_id';
     else if (column === 'licensePlate') selectField = 'inv.license_plate';
     else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
@@ -2567,6 +2640,10 @@ export class InvoiceQueryService {
             filterField = 'ii.invoice_subcategory';
           else if (col === 'status') filterField = 'inv.status';
           else if (col === 'postingStatus') filterField = 'inv.posting_status';
+          else if (col === 'taxInvoiceStatus')
+            filterField = 'inv.tax_invoice_status';
+          else if (col === 'branchId' || col === 'branchName')
+            filterField = 'inv.branch_id';
           else if (col === 'licensePlate') filterField = 'inv.license_plate';
           else if (col === 'settlementOrder')
             filterField = 'inv.settlement_order';
@@ -2677,6 +2754,25 @@ export class InvoiceQueryService {
       views: [{ showGridLines: true }],
     });
 
+    const formatTaxInvoiceStatus = (val?: number | null) => {
+      switch (val) {
+        case 1:
+          return 'Mới';
+        case 2:
+          return 'Thay thế';
+        case 3:
+          return 'Điều chỉnh';
+        case 4:
+          return 'Bị thay thế';
+        case 5:
+          return 'Bị điều chỉnh';
+        case 6:
+          return 'Bị hủy';
+        default:
+          return val?.toString() || '—';
+      }
+    };
+
     worksheet.columns = [
       { header: 'STT', key: 'stt', width: 8 },
       { header: 'Số HĐ', key: 'invoiceNo', width: 16 },
@@ -2702,9 +2798,8 @@ export class InvoiceQueryService {
       { header: 'Tiền thuế VAT', key: 'vatAmount', width: 16 },
       { header: 'Chiết khấu', key: 'discountAmount', width: 16 },
       { header: 'Tổng thanh toán', key: 'totalAmount', width: 20 },
-      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 16 },
-      { header: 'Trạng thái', key: 'status', width: 14 },
-      { header: 'Ghi sổ', key: 'postingStatus', width: 14 },
+      { header: 'Chi nhánh', key: 'branchName', width: 22 },
+      { header: 'Trạng thái GĐT', key: 'taxInvoiceStatus', width: 16 },
     ];
 
     // Style Header Row
@@ -2742,9 +2837,8 @@ export class InvoiceQueryService {
         vatAmount: item.vatAmount,
         discountAmount: item.discountAmount,
         totalAmount: item.totalAmount,
-        invoiceSubcategory: item.invoiceSubcategory || 'NORMAL',
-        status: item.status || '',
-        postingStatus: item.postingStatus || '',
+        branchName: item.branchName || '',
+        taxInvoiceStatus: formatTaxInvoiceStatus(item.taxInvoiceStatus),
       });
 
       row.getCell('stt').alignment = { horizontal: 'center' };

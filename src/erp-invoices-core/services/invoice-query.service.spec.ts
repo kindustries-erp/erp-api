@@ -287,6 +287,7 @@ describe('InvoiceQueryService', () => {
   it('findAllItems queries items and returns paginated result with summary', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
@@ -405,6 +406,7 @@ describe('InvoiceQueryService', () => {
   it('findAllItems filters by description and amount column_filters', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       clone: jest.fn().mockReturnValue({
@@ -542,6 +544,7 @@ describe('InvoiceQueryService', () => {
   it('findAllItems dynamically computes vatAmount and totalAmount when DB values are 0', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       clone: jest.fn().mockReturnValue({
