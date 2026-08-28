@@ -21,6 +21,17 @@ export class AuditRetentionScheduler {
    */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleRetentionCleanup(): Promise<number> {
+    const isAuditEnabled =
+      this.configService.get<string>('ENABLE_AUDIT_LOG') !== 'false' &&
+      process.env.ENABLE_AUDIT_LOG !== 'false';
+
+    if (!isAuditEnabled) {
+      this.logger.log(
+        'Audit log is disabled (ENABLE_AUDIT_LOG=false). Skipping retention cleanup.',
+      );
+      return 0;
+    }
+
     if (this.isRunning) {
       this.logger.warn(
         'Audit retention cleanup is already running. Skipping this cycle.',

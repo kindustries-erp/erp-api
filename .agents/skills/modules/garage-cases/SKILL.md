@@ -200,14 +200,32 @@ src/kgara-api-core/
 │   ├── kgara_payable.entity.ts             # Entity bảng kgara_payables (sổ công nợ phải trả 331)
 │   ├── kgara_receivable.entity.ts          # Entity bảng kgara_receivables (sổ công nợ phải thu)
 │   └── kgara_sync_run.entity.ts            # Entity bảng kgara_sync_runs (nhật ký đồng bộ)
-├── kgara-api-core.controller.ts            # Controller định tuyến API /api/v1/greenway
-├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM và Providers
+├── controllers/
+│   ├── kgara-cases.controller.ts           # Controller danh sách, chi tiết, filter, options & lãi gộp vụ việc
+│   ├── kgara-case-financial.controller.ts  # Controller tài chính vụ việc, cấn trừ sao kê & liên kết hóa đơn
+│   ├── kgara-customers.controller.ts       # Controller công nợ khách hàng & lịch sử theo khách
+│   ├── kgara-suppliers.controller.ts       # Controller công nợ nhà cung cấp & theo NCC
+│   ├── kgara-gross-profit.controller.ts    # Controller hóa đơn liên kết lãi gộp
+│   ├── kgara-sync.controller.ts            # Controller kích hoạt sync dữ liệu KGara
+│   └── kgara-reports.controller.ts         # Controller báo cáo, dashboard, raw receivables/payables
+├── decorators/
+│   └── branch-id.decorator.ts              # Custom parameter decorator @BranchId()
+├── utils/
+│   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
+├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
+├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
 ├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
 ├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
-├── kgara-sync.service.ts                   # Service xử lý nghiệp vụ sync, phân trang, watermark, soft-delete & gross profit
+├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
+    ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
+    ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
+    ├── sync-debt.service.ts                # Sub-Service đồng bộ sổ nợ phải thu (AR) & phải trả NCC 331 (AP)
+    ├── sync-deletion.service.ts            # Sub-Service thuật toán phát hiện và đánh dấu xóa mềm
+    ├── sync-run-logger.service.ts          # Sub-Service quản lý audit log (GwSyncRun) & incremental watermark
+    ├── kgara-case-query.service.ts         # Query engine & recalculateCaseSettlementSummary helper
     ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)
     └── garage-smart-settlement.service.spec.ts # Unit tests cho gợi ý cấn trừ vụ việc
 ```
@@ -223,9 +241,9 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
-| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (bao gồm `hasLinkedInvoice`: `YES`/`NO`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`) và sắp xếp đa cột (mặc định: `ngayPhatSinh DESC`, `ngayTiepNhan DESC`, `soChungTu DESC`) |
-| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng |
-| `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP |
+| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`) và hỗ trợ sắp xếp đa cột server-side qua `sorts` |
+| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
+| `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
 | `PATCH`| `/cases/:id/config` | `id`, Body: `{ classification?: string \| null, erpNotes?: string \| null }` | Cập nhật phân loại nghiệp vụ và ghi chú nội bộ của ERP cho vụ việc |

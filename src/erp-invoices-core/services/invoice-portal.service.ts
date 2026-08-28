@@ -1474,21 +1474,35 @@ export class InvoicePortalService implements OnModuleInit {
 
       const json = await res.json();
 
-      const items = (json.hdhhdvu || []).map((i: any) => ({
-        description: i.ten,
-        unit: i.dvtinh,
-        quantity: i.sluong != null ? Number(i.sluong) : undefined,
-        unitPrice: i.dgia != null ? Number(i.dgia) : undefined,
-        preVatAmount: i.thtien != null ? Number(i.thtien) : 0,
-        vatRate:
-          i.tsuat != null
-            ? typeof i.tsuat === 'string'
-              ? parseFloat(i.tsuat)
-              : Number(i.tsuat)
-            : undefined,
-        vatAmount: i.tthue != null ? Number(i.tthue) : 0,
-        discountAmount: i.stckhau != null ? Number(i.stckhau) : 0,
-      }));
+      const items = (json.hdhhdvu || []).map((i: any) => {
+        const preVat = i.thtien != null ? Number(i.thtien) : 0;
+        let vRate: number | undefined = undefined;
+        if (i.tsuat != null) {
+          const n =
+            typeof i.tsuat === 'string' ? parseFloat(i.tsuat) : Number(i.tsuat);
+          if (!isNaN(n)) vRate = n;
+        }
+        const decimalRate =
+          vRate != null ? (Math.abs(vRate) > 1 ? vRate / 100 : vRate) : 0;
+        let vatAmt = i.tthue != null ? Number(i.tthue) : 0;
+        if (!vatAmt && decimalRate && preVat) {
+          vatAmt = Math.round(preVat * decimalRate);
+        }
+        const disc = i.stckhau != null ? Number(i.stckhau) : 0;
+        const total = preVat + vatAmt - disc;
+
+        return {
+          description: i.ten,
+          unit: i.dvtinh,
+          quantity: i.sluong != null ? Number(i.sluong) : undefined,
+          unitPrice: i.dgia != null ? Number(i.dgia) : undefined,
+          preVatAmount: preVat,
+          vatRate: vRate,
+          vatAmount: vatAmt,
+          discountAmount: disc,
+          totalAmount: total,
+        };
+      });
 
       const invoiceLineCount = items.length;
 
