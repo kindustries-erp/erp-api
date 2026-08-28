@@ -57,6 +57,10 @@ export class KgaraCaseQueryService {
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       completionDate:
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
+      hasInvoice:
+        'CASE WHEN (("case"."raw_data" ->> \'TienThueKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThueKH\')::numeric > 0) THEN \'YES\' ELSE \'NO\' END',
+      hasLinkedInvoice:
+        'CASE WHEN EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id) THEN \'YES\' ELSE \'NO\' END',
       updatedAt: 'TO_CHAR("case"."updated_at", \'YYYY-MM-DD\')',
       dataAsOf: 'TO_CHAR("case"."data_as_of", \'YYYY-MM-DD\')',
       createdAt: 'TO_CHAR("case"."created_at", \'YYYY-MM-DD\')',
@@ -160,7 +164,26 @@ export class KgaraCaseQueryService {
       return;
     }
 
-    // 4. Cột đặc thù: hasLinkedInvoice (Đã liên kết hóa đơn VAT)
+    // 4. Cột đặc thù: hasInvoice / vatInvoice (Có hóa đơn VAT theo thuế KGara)
+    if (column === 'hasInvoice' || column === 'vatInvoice') {
+      const conditions: string[] = [];
+      if (values.includes('YES') || values.includes('WITH_INVOICE')) {
+        conditions.push(
+          '("case"."raw_data"->>\'TienThueKH\' IS NOT NULL AND ("case"."raw_data"->>\'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThueKH\')::numeric > 0)',
+        );
+      }
+      if (values.includes('NO') || values.includes('NO_INVOICE')) {
+        conditions.push(
+          'NOT ("case"."raw_data"->>\'TienThueKH\' IS NOT NULL AND ("case"."raw_data"->>\'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThueKH\')::numeric > 0)',
+        );
+      }
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`);
+      }
+      return;
+    }
+
+    // 5. Cột đặc thù: hasLinkedInvoice (Đã liên kết hóa đơn điện tử trong ERP)
     if (column === 'hasLinkedInvoice') {
       const conditions: string[] = [];
       if (values.includes('YES')) {
@@ -179,7 +202,7 @@ export class KgaraCaseQueryService {
       return;
     }
 
-    // 5. Cột đặc thù: statusTab (Table Switch: quotation, in_progress, completed)
+    // 6. Cột đặc thù: statusTab (Table Switch: quotation, in_progress, completed)
     if (column === 'statusTab') {
       const conditions: string[] = [];
       if (values.includes('quotation')) {

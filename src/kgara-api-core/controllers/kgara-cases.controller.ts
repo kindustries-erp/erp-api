@@ -513,10 +513,55 @@ export class KgaraCasesController {
     };
   }
 
+  @Get('cases/external/:externalId')
+  @RequirePermissions({ resource: 'garage', action: 'read' })
+  async getCaseByExternalId(
+    @Param('externalId') externalId: string,
+    @BranchId() branchId: string,
+  ) {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        externalId,
+      );
+    const whereConditions = isUuid
+      ? [{ id: externalId }, { hdPhieuDichVuId: externalId }]
+      : [{ hdPhieuDichVuId: externalId }, { soChungTu: externalId }];
+
+    let caseData = await this.caseRepo.findOne({
+      where: whereConditions,
+    });
+    if (!caseData && branchId) {
+      const freshData = await this.client.getCaseDetail(externalId, branchId);
+      if (freshData) {
+        const payload = freshData.data || freshData;
+        caseData = this.caseRepo.create({
+          hdPhieuDichVuId: externalId,
+          branchExternalId: branchId,
+          rawData: payload,
+        });
+        await this.caseRepo.save(caseData);
+      }
+    }
+    if (!caseData) {
+      throw new NotFoundException(
+        `Case with externalId ${externalId} not found`,
+      );
+    }
+    return caseData;
+  }
+
   @Get('cases/:id')
   @RequirePermissions({ resource: 'garage', action: 'read' })
   async getCaseById(@Param('id') id: string) {
-    const caseData = await this.caseRepo.findOne({ where: { id } });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+    const whereConditions = isUuid
+      ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
+      : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
+
+    const caseData = await this.caseRepo.findOne({ where: whereConditions });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
     }
@@ -529,8 +574,16 @@ export class KgaraCasesController {
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
   ) {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+    const whereConditions = isUuid
+      ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
+      : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
+
     const caseData = await this.caseRepo.findOne({
-      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+      where: whereConditions,
     });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
@@ -550,8 +603,16 @@ export class KgaraCasesController {
       erpNotes?: string | null;
     },
   ) {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+    const whereConditions = isUuid
+      ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
+      : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
+
     const caseData = await this.caseRepo.findOne({
-      where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
+      where: whereConditions,
     });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
@@ -563,35 +624,6 @@ export class KgaraCasesController {
       caseData.erpNotes = body.erpNotes;
     }
     await this.caseRepo.save(caseData);
-    return caseData;
-  }
-
-  @Get('cases/external/:externalId')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
-  async getCaseByExternalId(
-    @Param('externalId') externalId: string,
-    @BranchId() branchId: string,
-  ) {
-    let caseData = await this.caseRepo.findOne({
-      where: [{ id: externalId }, { hdPhieuDichVuId: externalId }],
-    });
-    if (!caseData && branchId) {
-      const freshData = await this.client.getCaseDetail(externalId, branchId);
-      if (freshData) {
-        const payload = freshData.data || freshData;
-        caseData = this.caseRepo.create({
-          hdPhieuDichVuId: externalId,
-          branchExternalId: branchId,
-          rawData: payload,
-        });
-        await this.caseRepo.save(caseData);
-      }
-    }
-    if (!caseData) {
-      throw new NotFoundException(
-        `Case with externalId ${externalId} not found`,
-      );
-    }
     return caseData;
   }
 }

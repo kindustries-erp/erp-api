@@ -80,13 +80,13 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
   controllers: [
     KgaraApiCoreController,
     GarageDashboardController,
-    KgaraCasesController,
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
-    KgaraSyncController,
     KgaraReportsController,
+    KgaraSyncController,
     KgaraCaseFinancialController,
+    KgaraCasesController,
   ],
   exports: [
     KgaraSyncService,
