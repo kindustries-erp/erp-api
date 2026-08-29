@@ -114,6 +114,17 @@ Khi xuất kho số lượng $\text{qtyOut}$:
 5. Cập nhật lại $\text{inventoryValue} = \text{qtyOnHand}_{\text{new}} \times \text{avgUnitCost}$.
 6. Ghi bản ghi đối ứng vào `erp_inventory_transactions`.
 
+### 5.3. Multi-Keyword Search & Header Filter Engine
+1. **Multi-Keyword Search (`applyMultiKeywordFilter`)**:
+   - Sử dụng helper chuẩn `applyMultiKeywordFilter` phân tách từ khóa qua dấu chấm phẩy `;` (điều kiện `OR`).
+   - Khớp chính xác tuyệt đối khi từ khóa nằm trong cặp ngoặc kép `""` (`isExact`).
+   - Hỗ trợ toàn diện cho tất cả các cột trong `findAll` (`searches`): `item_code`, `item_name`, `item_type`, `status`, `unit`, `on_hand_qty`, `reserved_qty`, `received_qty`, `issued_qty`, `adjusted_qty`, `last`.
+2. **Xử lý Bộ lọc Cột Đặc biệt**:
+   - `__ALL_MATCHING__`: Khi người dùng chọn tất cả kết quả tìm kiếm trong popover, backend tự động áp dụng điều kiện multi-keyword search tương ứng.
+   - `__BLANK__`: Hỗ trợ lọc các dòng có giá trị NULL hoặc chuỗi rỗng.
+3. **Đồng bộ Dropdown Options (`getColumnOptions`)**:
+   - Tìm kiếm options hỗ trợ multi-keyword search động với SQL parameter binding an toàn.
+
 ---
 
 ## 6. Tích hợp Liên Module
