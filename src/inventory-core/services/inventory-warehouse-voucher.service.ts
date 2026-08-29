@@ -2,6 +2,52 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { WarehouseVoucherQueryDto } from '../dto/warehouse-voucher-query.dto';
 
+interface KeywordCondition {
+  isExact: boolean;
+  keyword: string;
+}
+
+function parseMultiKeywordSearch(searchString: string): KeywordCondition[] {
+  if (!searchString) return [];
+  return searchString
+    .split(';')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0)
+    .map((k) => {
+      let isExact = false;
+      let cleanKw = k;
+      if (k.startsWith('"') && k.endsWith('"') && k.length >= 2) {
+        isExact = true;
+        cleanKw = k.slice(1, -1);
+      }
+      return { isExact, keyword: cleanKw };
+    });
+}
+
+function buildRawMultiKeywordSql(
+  fields: string[],
+  searchString: string,
+  params: any[],
+  getPIndex: () => number,
+): string {
+  const kws = parseMultiKeywordSearch(searchString);
+  if (kws.length === 0) return '';
+
+  const kwClauses = kws.map((kw) => {
+    const pVal = kw.isExact ? kw.keyword : `%${kw.keyword}%`;
+    const fieldClauses = fields.map((f) => {
+      const idx = getPIndex();
+      params.push(pVal);
+      return `${f} ILIKE $${idx}`;
+    });
+    return fieldClauses.length === 1
+      ? fieldClauses[0]
+      : `(${fieldClauses.join(' OR ')})`;
+  });
+
+  return `(${kwClauses.join(' OR ')})`;
+}
+
 @Injectable()
 export class InventoryWarehouseVoucherService {
   constructor(private readonly dataSource: DataSource) {}
@@ -49,13 +95,223 @@ export class InventoryWarehouseVoucherService {
       params.push(query.partnerId);
       pIndex++;
     }
+
+    const applyColSearchToWhere = (key: string, value: string) => {
+      if (typeof value !== 'string' || !value.trim()) return;
+
+      if (key === 'voucherNo') {
+        const rc = buildRawMultiKeywordSql(
+          ['g.receipt_no'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['g.issue_no'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ac = buildRawMultiKeywordSql(
+          ['g.adjustment_no'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        if (ac) adjustmentWhere += ` AND ${ac}`;
+      } else if (key === 'poNo') {
+        const rc = buildRawMultiKeywordSql(
+          ['po.po_no'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['so.so_no'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        adjustmentWhere += ` AND 1 = 0`;
+      } else if (key === 'partnerName') {
+        const rc = buildRawMultiKeywordSql(
+          ['bp.name', 'bp.display_name'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['bp.name', 'bp.display_name'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        adjustmentWhere += ` AND 1 = 0`;
+      } else if (key === 'remarks') {
+        const rc = buildRawMultiKeywordSql(
+          ['g.remarks'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['g.remarks'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ac = buildRawMultiKeywordSql(
+          ['g.remarks'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        if (ac) adjustmentWhere += ` AND ${ac}`;
+      } else if (key === 'date') {
+        const rc = buildRawMultiKeywordSql(
+          ["TO_CHAR(g.receipt_date, 'YYYY-MM-DD')"],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ["TO_CHAR(g.issue_date, 'YYYY-MM-DD')"],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ac = buildRawMultiKeywordSql(
+          ["TO_CHAR(g.adjustment_date, 'YYYY-MM-DD')"],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        if (ac) adjustmentWhere += ` AND ${ac}`;
+      } else if (key === 'qtyReceipt') {
+        const rc = buildRawMultiKeywordSql(
+          [
+            '(SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text',
+          ],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        issueWhere += ` AND 1 = 0`;
+        adjustmentWhere += ` AND 1 = 0`;
+      } else if (key === 'qtyIssue') {
+        receiptWhere += ` AND 1 = 0`;
+        const ic = buildRawMultiKeywordSql(
+          [
+            '(SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text',
+          ],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (ic) issueWhere += ` AND ${ic}`;
+        adjustmentWhere += ` AND 1 = 0`;
+      } else if (key === 'qtyAdjustment') {
+        receiptWhere += ` AND 1 = 0`;
+        issueWhere += ` AND 1 = 0`;
+        const ac = buildRawMultiKeywordSql(
+          [
+            '(SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text',
+          ],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (ac) adjustmentWhere += ` AND ${ac}`;
+      } else if (key === 'status') {
+        const rc = buildRawMultiKeywordSql(
+          ['g.status'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['g.status'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ac = buildRawMultiKeywordSql(
+          ['g.status'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
+        if (ac) adjustmentWhere += ` AND ${ac}`;
+      } else if (key === 'type') {
+        const kws = parseMultiKeywordSearch(value);
+        let matchReceipt = false;
+        let matchIssue = false;
+        let matchAdjustment = false;
+        for (const kw of kws) {
+          const s_raw = kw.keyword.toLowerCase();
+          if (
+            'receipt'.includes(s_raw) ||
+            'nhập kho'.includes(s_raw) ||
+            'nhap kho'.includes(s_raw) ||
+            'nhap'.includes(s_raw)
+          )
+            matchReceipt = true;
+          if (
+            'issue'.includes(s_raw) ||
+            'xuất kho'.includes(s_raw) ||
+            'xuat kho'.includes(s_raw) ||
+            'xuat'.includes(s_raw)
+          )
+            matchIssue = true;
+          if (
+            'adjustment'.includes(s_raw) ||
+            'điều chỉnh'.includes(s_raw) ||
+            'dieu chinh'.includes(s_raw)
+          )
+            matchAdjustment = true;
+        }
+        if (!matchReceipt) receiptWhere += ' AND 1 = 0';
+        if (!matchIssue) issueWhere += ' AND 1 = 0';
+        if (!matchAdjustment) adjustmentWhere += ' AND 1 = 0';
+      }
+    };
+
     if (query.search) {
-      const s = `%${query.search}%`;
-      receiptWhere += ` AND (g.receipt_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
-      issueWhere += ` AND (g.issue_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex} OR bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
-      adjustmentWhere += ` AND (g.adjustment_no ILIKE $${pIndex} OR g.remarks ILIKE $${pIndex})`;
-      params.push(s);
-      pIndex++;
+      const s = query.search;
+      const receiptSearch = buildRawMultiKeywordSql(
+        ['g.receipt_no', 'g.remarks', 'bp.name', 'bp.display_name'],
+        s,
+        params,
+        () => pIndex++,
+      );
+      const issueSearch = buildRawMultiKeywordSql(
+        ['g.issue_no', 'g.remarks', 'bp.name', 'bp.display_name'],
+        s,
+        params,
+        () => pIndex++,
+      );
+      const adjustmentSearch = buildRawMultiKeywordSql(
+        ['g.adjustment_no', 'g.remarks'],
+        s,
+        params,
+        () => pIndex++,
+      );
+      receiptWhere += ` AND ${receiptSearch}`;
+      issueWhere += ` AND ${issueSearch}`;
+      adjustmentWhere += ` AND ${adjustmentSearch}`;
     }
 
     // Process column_search
@@ -63,83 +319,7 @@ export class InventoryWarehouseVoucherService {
       try {
         const colSearch = JSON.parse(query.column_search);
         for (const [key, value] of Object.entries(colSearch)) {
-          if (typeof value !== 'string' || !value.trim()) continue;
-          const s = `%${value.trim()}%`;
-          if (key === 'voucherNo') {
-            receiptWhere += ` AND g.receipt_no ILIKE $${pIndex}`;
-            issueWhere += ` AND g.issue_no ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND g.adjustment_no ILIKE $${pIndex}`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'poNo') {
-            receiptWhere += ` AND po.po_no ILIKE $${pIndex}`;
-            issueWhere += ` AND so.so_no ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND 1 = 0`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'partnerName') {
-            receiptWhere += ` AND (bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
-            issueWhere += ` AND (bp.name ILIKE $${pIndex} OR bp.display_name ILIKE $${pIndex})`;
-            adjustmentWhere += ` AND 1 = 0`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'remarks') {
-            receiptWhere += ` AND g.remarks ILIKE $${pIndex}`;
-            issueWhere += ` AND g.remarks ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND g.remarks ILIKE $${pIndex}`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'date') {
-            // handle date search (e.g., partial date match)
-            receiptWhere += ` AND TO_CHAR(g.receipt_date, 'YYYY-MM-DD') ILIKE $${pIndex}`;
-            issueWhere += ` AND TO_CHAR(g.issue_date, 'YYYY-MM-DD') ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND TO_CHAR(g.adjustment_date, 'YYYY-MM-DD') ILIKE $${pIndex}`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'qtyReceipt') {
-            receiptWhere += ` AND (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text ILIKE $${pIndex}`;
-            issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND 1 = 0`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'qtyIssue') {
-            receiptWhere += ` AND 1 = 0`;
-            issueWhere += ` AND (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND 1 = 0`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'qtyAdjustment') {
-            receiptWhere += ` AND 1 = 0`;
-            issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text ILIKE $${pIndex}`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'status') {
-            receiptWhere += ` AND g.status ILIKE $${pIndex}`;
-            issueWhere += ` AND g.status ILIKE $${pIndex}`;
-            adjustmentWhere += ` AND g.status ILIKE $${pIndex}`;
-            params.push(s);
-            pIndex++;
-          } else if (key === 'type') {
-            const s_raw = value.trim().toLowerCase();
-            const matchReceipt =
-              'receipt'.includes(s_raw) ||
-              'nhập kho'.includes(s_raw) ||
-              'nhap kho'.includes(s_raw) ||
-              'nhap'.includes(s_raw);
-            const matchIssue =
-              'issue'.includes(s_raw) ||
-              'xuất kho'.includes(s_raw) ||
-              'xuat kho'.includes(s_raw) ||
-              'xuat'.includes(s_raw);
-            const matchAdjustment =
-              'adjustment'.includes(s_raw) ||
-              'điều chỉnh'.includes(s_raw) ||
-              'dieu chinh'.includes(s_raw);
-            if (!matchReceipt) receiptWhere += ' AND 1 = 0';
-            if (!matchIssue) issueWhere += ' AND 1 = 0';
-            if (!matchAdjustment) adjustmentWhere += ' AND 1 = 0';
-          }
+          applyColSearchToWhere(key, value as string);
         }
       } catch (e) {
         // ignore JSON parse error
@@ -153,65 +333,73 @@ export class InventoryWarehouseVoucherService {
         for (const [key, values] of Object.entries(colFilters)) {
           if (!Array.isArray(values) || values.length === 0) continue;
 
+          // 1. Check __ALL_MATCHING__
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchStr = values[1] || '';
+            if (searchStr) {
+              applyColSearchToWhere(key, searchStr);
+            }
+            continue;
+          }
+
+          // 2. Check __BLANK__
+          const hasBlank = values.includes('__BLANK__');
+          const nonBlank = values.filter((v) => v !== '__BLANK__');
+
+          const applyAnyOrBlank = (fieldSql: string): string => {
+            if (hasBlank && nonBlank.length > 0) {
+              const idx = pIndex++;
+              params.push(nonBlank);
+              return `(${fieldSql} = ANY($${idx}) OR ${fieldSql} IS NULL OR ${fieldSql}::text = '')`;
+            } else if (hasBlank) {
+              return `(${fieldSql} IS NULL OR ${fieldSql}::text = '')`;
+            } else {
+              const idx = pIndex++;
+              params.push(nonBlank);
+              return `${fieldSql} = ANY($${idx})`;
+            }
+          };
+
           if (key === 'voucherNo') {
-            receiptWhere += ` AND g.receipt_no = ANY($${pIndex})`;
-            issueWhere += ` AND g.issue_no = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.adjustment_no = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.receipt_no')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.issue_no')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.adjustment_no')}`;
           } else if (key === 'type') {
             if (!values.includes('receipt')) receiptWhere += ' AND 1 = 0';
             if (!values.includes('issue')) issueWhere += ' AND 1 = 0';
             if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
-            receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
-            issueWhere += ` AND so.so_no = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('po.po_no')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('so.so_no')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values);
-            pIndex++;
           } else if (key === 'partnerName') {
-            receiptWhere += ` AND COALESCE(bp.display_name, bp.name) = ANY($${pIndex})`;
-            issueWhere += ` AND COALESCE(bp.display_name, bp.name) = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values);
-            pIndex++;
           } else if (key === 'remarks') {
-            receiptWhere += ` AND g.remarks = ANY($${pIndex})`;
-            issueWhere += ` AND g.remarks = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.remarks = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
           } else if (key === 'status') {
-            receiptWhere += ` AND g.status = ANY($${pIndex})`;
-            issueWhere += ` AND g.status = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.status = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.status')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.status')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.status')}`;
           } else if (key === 'date') {
-            receiptWhere += ` AND TO_CHAR(g.receipt_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            issueWhere += ` AND TO_CHAR(g.issue_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            adjustmentWhere += ` AND TO_CHAR(g.adjustment_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.receipt_date, 'YYYY-MM-DD')")}`;
+            issueWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.issue_date, 'YYYY-MM-DD')")}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.adjustment_date, 'YYYY-MM-DD')")}`;
           } else if (key === 'qtyReceipt') {
-            receiptWhere += ` AND (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text')}`;
             issueWhere += ` AND 1 = 0`;
             adjustmentWhere += ` AND 1 = 0`;
-            // Note: quantity values are usually numbers, but filter values from frontend are strings. We cast to text.
-            params.push(values.map((v) => String(v)));
-            pIndex++;
           } else if (key === 'qtyIssue') {
             receiptWhere += ` AND 1 = 0`;
-            issueWhere += ` AND (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text = ANY($${pIndex})`;
+            issueWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values.map((v) => String(v)));
-            pIndex++;
           } else if (key === 'qtyAdjustment') {
             receiptWhere += ` AND 1 = 0`;
             issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
-            params.push(values.map((v) => String(v)));
-            pIndex++;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text')}`;
           }
         }
       } catch (e) {
@@ -386,64 +574,193 @@ export class InventoryWarehouseVoucherService {
           if (!Array.isArray(values) || values.length === 0) continue;
           if (key === column) continue; // don't filter on the column being queried
 
+          // 1. Check __ALL_MATCHING__
+          if (values[0] === '__ALL_MATCHING__') {
+            const searchStr = values[1] || '';
+            if (searchStr) {
+              if (key === 'voucherNo') {
+                const rc = buildRawMultiKeywordSql(
+                  ['g.receipt_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['g.issue_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ac = buildRawMultiKeywordSql(
+                  ['g.adjustment_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                if (ac) adjustmentWhere += ` AND ${ac}`;
+              } else if (key === 'poNo') {
+                const rc = buildRawMultiKeywordSql(
+                  ['po.po_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['so.so_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                adjustmentWhere += ` AND 1 = 0`;
+              } else if (key === 'partnerName') {
+                const rc = buildRawMultiKeywordSql(
+                  ['bp.name', 'bp.display_name'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['bp.name', 'bp.display_name'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                adjustmentWhere += ` AND 1 = 0`;
+              } else if (key === 'remarks') {
+                const rc = buildRawMultiKeywordSql(
+                  ['g.remarks'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['g.remarks'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ac = buildRawMultiKeywordSql(
+                  ['g.remarks'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                if (ac) adjustmentWhere += ` AND ${ac}`;
+              } else if (key === 'date') {
+                const rc = buildRawMultiKeywordSql(
+                  ["TO_CHAR(g.receipt_date, 'YYYY-MM-DD')"],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ["TO_CHAR(g.issue_date, 'YYYY-MM-DD')"],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ac = buildRawMultiKeywordSql(
+                  ["TO_CHAR(g.adjustment_date, 'YYYY-MM-DD')"],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                if (ac) adjustmentWhere += ` AND ${ac}`;
+              } else if (key === 'status') {
+                const rc = buildRawMultiKeywordSql(
+                  ['g.status'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['g.status'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ac = buildRawMultiKeywordSql(
+                  ['g.status'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                if (ac) adjustmentWhere += ` AND ${ac}`;
+              }
+            }
+            continue;
+          }
+
+          // 2. Check __BLANK__
+          const hasBlank = values.includes('__BLANK__');
+          const nonBlank = values.filter((v) => v !== '__BLANK__');
+
+          const applyAnyOrBlank = (fieldSql: string): string => {
+            if (hasBlank && nonBlank.length > 0) {
+              const idx = pIndex++;
+              params.push(nonBlank);
+              return `(${fieldSql} = ANY($${idx}) OR ${fieldSql} IS NULL OR ${fieldSql}::text = '')`;
+            } else if (hasBlank) {
+              return `(${fieldSql} IS NULL OR ${fieldSql}::text = '')`;
+            } else {
+              const idx = pIndex++;
+              params.push(nonBlank);
+              return `${fieldSql} = ANY($${idx})`;
+            }
+          };
+
           if (key === 'voucherNo') {
-            receiptWhere += ` AND g.receipt_no = ANY($${pIndex})`;
-            issueWhere += ` AND g.issue_no = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.adjustment_no = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.receipt_no')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.issue_no')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.adjustment_no')}`;
           } else if (key === 'type') {
             if (!values.includes('receipt')) receiptWhere += ' AND 1 = 0';
             if (!values.includes('issue')) issueWhere += ' AND 1 = 0';
             if (!values.includes('adjustment')) adjustmentWhere += ' AND 1 = 0';
           } else if (key === 'poNo') {
-            receiptWhere += ` AND po.po_no = ANY($${pIndex})`;
-            issueWhere += ` AND so.so_no = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('po.po_no')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('so.so_no')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values);
-            pIndex++;
           } else if (key === 'partnerName') {
-            receiptWhere += ` AND COALESCE(bp.display_name, bp.name) = ANY($${pIndex})`;
-            issueWhere += ` AND COALESCE(bp.display_name, bp.name) = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values);
-            pIndex++;
           } else if (key === 'remarks') {
-            receiptWhere += ` AND g.remarks = ANY($${pIndex})`;
-            issueWhere += ` AND g.remarks = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.remarks = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
           } else if (key === 'status') {
-            receiptWhere += ` AND g.status = ANY($${pIndex})`;
-            issueWhere += ` AND g.status = ANY($${pIndex})`;
-            adjustmentWhere += ` AND g.status = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank('g.status')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('g.status')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('g.status')}`;
           } else if (key === 'date') {
-            receiptWhere += ` AND TO_CHAR(g.receipt_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            issueWhere += ` AND TO_CHAR(g.issue_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            adjustmentWhere += ` AND TO_CHAR(g.adjustment_date, 'YYYY-MM-DD') = ANY($${pIndex})`;
-            params.push(values);
-            pIndex++;
+            receiptWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.receipt_date, 'YYYY-MM-DD')")}`;
+            issueWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.issue_date, 'YYYY-MM-DD')")}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank("TO_CHAR(g.adjustment_date, 'YYYY-MM-DD')")}`;
           } else if (key === 'qtyReceipt') {
-            receiptWhere += ` AND (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text = ANY($${pIndex})`;
+            receiptWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text')}`;
             issueWhere += ` AND 1 = 0`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values.map((v) => String(v)));
-            pIndex++;
           } else if (key === 'qtyIssue') {
             receiptWhere += ` AND 1 = 0`;
-            issueWhere += ` AND (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text = ANY($${pIndex})`;
+            issueWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text')}`;
             adjustmentWhere += ` AND 1 = 0`;
-            params.push(values.map((v) => String(v)));
-            pIndex++;
           } else if (key === 'qtyAdjustment') {
             receiptWhere += ` AND 1 = 0`;
             issueWhere += ` AND 1 = 0`;
-            adjustmentWhere += ` AND (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text = ANY($${pIndex})`;
-            params.push(values.map((v) => String(v)));
-            pIndex++;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('(SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text')}`;
           }
         }
       } catch (e) {
@@ -528,9 +845,15 @@ export class InventoryWarehouseVoucherService {
     `;
 
     if (search) {
-      unionQuery += ` AND val::text ILIKE $${pIndex}`;
-      params.push(`%${search}%`);
-      pIndex++;
+      const cond = buildRawMultiKeywordSql(
+        ['val::text'],
+        search,
+        params,
+        () => pIndex++,
+      );
+      if (cond) {
+        unionQuery += ` AND ${cond}`;
+      }
     }
 
     const countQuery = `SELECT COUNT(DISTINCT val) as total FROM (${unionQuery}) as sq`;
