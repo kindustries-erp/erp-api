@@ -6,6 +6,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
+import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class InventoryStockCoreService {
@@ -62,25 +63,71 @@ export class InventoryStockCoreService {
       );
     }
 
+    const applyColumnSearch = (
+      col: string,
+      val: string,
+      prefix = 'colSearch',
+    ) => {
+      if (!val) return;
+      if (col === 'item_code')
+        applyMultiKeywordFilter(qb, 'item.sku', val, `${prefix}_sku`);
+      else if (col === 'item_name')
+        applyMultiKeywordFilter(qb, 'item.itemName', val, `${prefix}_name`);
+      else if (col === 'item_type')
+        applyMultiKeywordFilter(qb, 'itemType.code', val, `${prefix}_type`);
+      else if (col === 'status')
+        applyMultiKeywordFilter(qb, 'item.status', val, `${prefix}_status`);
+      else if (col === 'unit')
+        applyMultiKeywordFilter(qb, 'uom.name', val, `${prefix}_unit`);
+      else if (col === 'on_hand_qty')
+        applyMultiKeywordFilter(
+          qb,
+          'CAST(b.qtyOnHand AS TEXT)',
+          val,
+          `${prefix}_onhand`,
+        );
+      else if (col === 'reserved_qty')
+        applyMultiKeywordFilter(
+          qb,
+          'CAST(b.qtyReserved AS TEXT)',
+          val,
+          `${prefix}_reserved`,
+        );
+      else if (col === 'received_qty')
+        applyMultiKeywordFilter(
+          qb,
+          'CAST((SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) AS TEXT)',
+          val,
+          `${prefix}_received`,
+        );
+      else if (col === 'issued_qty')
+        applyMultiKeywordFilter(
+          qb,
+          'CAST((SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) AS TEXT)',
+          val,
+          `${prefix}_issued`,
+        );
+      else if (col === 'adjusted_qty')
+        applyMultiKeywordFilter(
+          qb,
+          `CAST((SELECT COALESCE(SUM(CASE WHEN txn.transaction_type IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in - txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) AS TEXT)`,
+          val,
+          `${prefix}_adjusted`,
+        );
+      else if (col === 'last')
+        applyMultiKeywordFilter(
+          qb,
+          'CAST(b.updatedAt AS TEXT)',
+          val,
+          `${prefix}_last`,
+        );
+    };
+
     if (query.searches) {
       try {
         const searches = JSON.parse(query.searches) as Record<string, string>;
         for (const [col, val] of Object.entries(searches)) {
-          if (!val) continue;
-          if (col === 'item_code')
-            qb.andWhere('item.sku ILIKE :val', { val: `%${val}%` });
-          else if (col === 'item_name')
-            qb.andWhere('item.itemName ILIKE :val', { val: `%${val}%` });
-          else if (col === 'item_type')
-            qb.andWhere('itemType.code ILIKE :val', { val: `%${val}%` });
-          else if (col === 'status')
-            qb.andWhere('item.status ILIKE :val', { val: `%${val}%` });
-          else if (col === 'unit')
-            qb.andWhere('uom.name ILIKE :val', { val: `%${val}%` });
-          else if (col === 'on_hand_qty' && !isNaN(Number(val)))
-            qb.andWhere('b.qtyOnHand = :val', { val: Number(val) });
-          else if (col === 'reserved_qty' && !isNaN(Number(val)))
-            qb.andWhere('b.qtyReserved = :val', { val: Number(val) });
+          applyColumnSearch(col, val, `search_${col}`);
         }
       } catch (e) {}
     }
@@ -90,48 +137,75 @@ export class InventoryStockCoreService {
         const filters = JSON.parse(query.filters) as Record<string, string[]>;
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
+
+          // 1. Support __ALL_MATCHING__
+          if (vals[0] === '__ALL_MATCHING__') {
+            const searchStr = vals[1] || '';
+            if (searchStr) {
+              applyColumnSearch(col, searchStr, `allMatch_${col}`);
+            }
+            continue;
+          }
+
+          // 2. Support __BLANK__
+          const hasBlank = vals.includes('__BLANK__');
+          const nonBlankVals = vals.filter((v) => v !== '__BLANK__');
+
+          const applyInCondition = (
+            field: string,
+            paramKey: string,
+            castNum = false,
+          ) => {
+            const paramValues = castNum
+              ? nonBlankVals.map(Number)
+              : nonBlankVals;
+            if (hasBlank && nonBlankVals.length > 0) {
+              qb.andWhere(
+                new Brackets((sqb) => {
+                  sqb
+                    .where(`${field} IN (:...${paramKey})`, {
+                      [paramKey]: paramValues,
+                    })
+                    .orWhere(`${field} IS NULL`)
+                    .orWhere(`CAST(${field} AS TEXT) = ''`);
+                }),
+              );
+            } else if (hasBlank) {
+              qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+            } else {
+              qb.andWhere(`${field} IN (:...${paramKey})`, {
+                [paramKey]: paramValues,
+              });
+            }
+          };
+
           if (col === 'item_type')
-            qb.andWhere(`itemType.code IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('itemType.code', `vals_${col}`);
           else if (col === 'status')
-            qb.andWhere(`item.status IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.status', `vals_${col}`);
           else if (col === 'item_code')
-            qb.andWhere(`item.sku IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.sku', `vals_${col}`);
           else if (col === 'item_name')
-            qb.andWhere(`item.itemName IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
-          else if (col === 'unit')
-            qb.andWhere(`uom.name IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.itemName', `vals_${col}`);
+          else if (col === 'unit') applyInCondition('uom.name', `vals_${col}`);
           else if (col === 'on_hand_qty')
-            qb.andWhere(`b.qtyOnHand IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals.map(Number),
-            });
+            applyInCondition('b.qtyOnHand', `vals_${col}`, true);
           else if (col === 'reserved_qty')
-            qb.andWhere(`b.qtyReserved IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals.map(Number),
-            });
+            applyInCondition('b.qtyReserved', `vals_${col}`, true);
           else if (col === 'received_qty')
-            qb.andWhere(
-              `(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
-              { [`vals_${col}`]: vals.map(Number) },
+            applyInCondition(
+              '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              `vals_${col}`,
+              true,
             );
           else if (col === 'issued_qty')
-            qb.andWhere(
-              `(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
-              { [`vals_${col}`]: vals.map(Number) },
+            applyInCondition(
+              '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              `vals_${col}`,
+              true,
             );
           else if (col === 'last')
-            qb.andWhere(`CAST(b.updatedAt AS TEXT) IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('CAST(b.updatedAt AS TEXT)', `vals_${col}`);
         }
       } catch (e) {}
     }
@@ -332,56 +406,104 @@ export class InventoryStockCoreService {
           if (!vals || vals.length === 0) continue;
           if (col === column) continue; // DO NOT apply filter for the column we are querying options for!
 
+          // 1. Support __ALL_MATCHING__
+          if (vals[0] === '__ALL_MATCHING__') {
+            const searchStr = vals[1] || '';
+            if (searchStr) {
+              let targetField = '';
+              if (col === 'item_code') targetField = 'item.sku';
+              else if (col === 'item_name') targetField = 'item.itemName';
+              else if (col === 'item_type') targetField = 'itemType.code';
+              else if (col === 'status') targetField = 'item.status';
+              else if (col === 'unit') targetField = 'uom.name';
+              else if (col === 'on_hand_qty')
+                targetField = 'CAST(b.qtyOnHand AS TEXT)';
+              else if (col === 'reserved_qty')
+                targetField = 'CAST(b.qtyReserved AS TEXT)';
+              else if (col === 'last')
+                targetField = 'CAST(b.updatedAt AS TEXT)';
+              if (targetField) {
+                applyMultiKeywordFilter(
+                  qb,
+                  targetField,
+                  searchStr,
+                  `optAllMatch_${col}`,
+                );
+              }
+            }
+            continue;
+          }
+
+          // 2. Support __BLANK__
+          const hasBlank = vals.includes('__BLANK__');
+          const nonBlankVals = vals.filter((v) => v !== '__BLANK__');
+
+          const applyInCondition = (
+            field: string,
+            paramKey: string,
+            castNum = false,
+          ) => {
+            const paramValues = castNum
+              ? nonBlankVals.map(Number)
+              : nonBlankVals;
+            if (hasBlank && nonBlankVals.length > 0) {
+              qb.andWhere(
+                new Brackets((sqb) => {
+                  sqb
+                    .where(`${field} IN (:...${paramKey})`, {
+                      [paramKey]: paramValues,
+                    })
+                    .orWhere(`${field} IS NULL`)
+                    .orWhere(`CAST(${field} AS TEXT) = ''`);
+                }),
+              );
+            } else if (hasBlank) {
+              qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+            } else {
+              qb.andWhere(`${field} IN (:...${paramKey})`, {
+                [paramKey]: paramValues,
+              });
+            }
+          };
+
           if (col === 'item_type')
-            qb.andWhere(`itemType.code IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('itemType.code', `vals_${col}`);
           else if (col === 'status')
-            qb.andWhere(`item.status IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.status', `vals_${col}`);
           else if (col === 'item_code')
-            qb.andWhere(`item.sku IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.sku', `vals_${col}`);
           else if (col === 'item_name')
-            qb.andWhere(`item.itemName IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
-          else if (col === 'unit')
-            qb.andWhere(`uom.name IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('item.itemName', `vals_${col}`);
+          else if (col === 'unit') applyInCondition('uom.name', `vals_${col}`);
           else if (col === 'on_hand_qty')
-            qb.andWhere(`b.qtyOnHand IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals.map(Number),
-            });
+            applyInCondition('b.qtyOnHand', `vals_${col}`, true);
           else if (col === 'reserved_qty')
-            qb.andWhere(`b.qtyReserved IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals.map(Number),
-            });
+            applyInCondition('b.qtyReserved', `vals_${col}`, true);
           else if (col === 'received_qty')
-            qb.andWhere(
-              `(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
-              { [`vals_${col}`]: vals.map(Number) },
+            applyInCondition(
+              '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              `vals_${col}`,
+              true,
             );
           else if (col === 'issued_qty')
-            qb.andWhere(
-              `(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) IN (:...vals_${col})`,
-              { [`vals_${col}`]: vals.map(Number) },
+            applyInCondition(
+              '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              `vals_${col}`,
+              true,
             );
           else if (col === 'last')
-            qb.andWhere(`CAST(b.updatedAt AS TEXT) IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
+            applyInCondition('CAST(b.updatedAt AS TEXT)', `vals_${col}`);
         }
       } catch (e) {}
     }
 
     if (search) {
-      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
-        search: `%${search}%`,
-      });
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${selectField} AS TEXT)`,
+        search,
+        'colOptSearch',
+      );
     }
 
     qb.orderBy('value', 'ASC');

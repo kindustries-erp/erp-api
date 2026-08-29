@@ -39,6 +39,26 @@ export class BusinessPartnersCoreController {
   }
 
   @RequirePermissions({ resource: 'business_partners', action: 'read' })
+  @Get('column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+    @Query('partnerType') partnerType?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filters,
+      partnerType,
+    );
+  }
+
+  @RequirePermissions({ resource: 'business_partners', action: 'read' })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);

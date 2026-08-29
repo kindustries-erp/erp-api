@@ -122,6 +122,7 @@ export class InvoiceQueryService {
           "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
     } else if (column === 'description') selectField = 'inv.description';
     else if (column === 'preVatAmount') selectField = 'inv.pre_vat_amount';
+    else if (column === 'vatRate') selectField = 'inv.vat_rate';
     else if (column === 'vatAmount') selectField = 'inv.vat_amount';
     else if (column === 'discountAmount') selectField = 'inv.discount_amount';
     else if (column === 'totalAmount') selectField = 'inv.total_amount';
@@ -199,6 +200,7 @@ export class InvoiceQueryService {
                 "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
           } else if (col === 'description') filterField = 'inv.description';
           else if (col === 'preVatAmount') filterField = 'inv.pre_vat_amount';
+          else if (col === 'vatRate') filterField = 'inv.vat_rate';
           else if (col === 'vatAmount') filterField = 'inv.vat_amount';
           else if (col === 'discountAmount')
             filterField = 'inv.discount_amount';
@@ -358,6 +360,7 @@ export class InvoiceQueryService {
         serialNo: ['inv.serialNo', 'serialNo'],
         description: ['inv.description', 'description'],
         preVatAmount: ['inv.preVatAmount', 'preVatAmount'],
+        vatRate: ['inv.vatRate', 'vatRate'],
         vatAmount: ['inv.vatAmount', 'vatAmount'],
         discountAmount: ['inv.discountAmount', 'discountAmount'],
         licensePlate: ['inv.licensePlate', 'licensePlate'],
@@ -1537,6 +1540,7 @@ export class InvoiceQueryService {
       serialNo: 'inv.serialNo',
       description: 'inv.description',
       preVatAmount: 'inv.preVatAmount',
+      vatRate: 'inv.vatRate',
       vatAmount: 'inv.vatAmount',
       discountAmount: 'inv.discountAmount',
       licensePlate: 'inv.licensePlate',
@@ -1631,6 +1635,13 @@ export class InvoiceQueryService {
           "REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '')",
           val.replace(/[,.]/g, ''),
           'preVatSearch',
+        );
+      } else if (key === 'vatRate') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(inv.vat_rate AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'vatRateSearch',
         );
       } else if (key === 'vatAmount') {
         applyMultiKeywordFilter(
@@ -1847,6 +1858,10 @@ export class InvoiceQueryService {
       } else if (key === 'preVatAmount') {
         qb.andWhere('CAST(inv.pre_vat_amount AS TEXT) IN (:...preVatVals)', {
           preVatVals: vals,
+        });
+      } else if (key === 'vatRate') {
+        qb.andWhere('CAST(inv.vat_rate AS TEXT) IN (:...vatRateVals)', {
+          vatRateVals: vals,
         });
       } else if (key === 'vatAmount') {
         qb.andWhere('CAST(inv.vat_amount AS TEXT) IN (:...vatVals)', {
