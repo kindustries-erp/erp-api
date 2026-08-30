@@ -8,13 +8,15 @@ description: Skill hỗ trợ Agent phân loại ý định (generate schema, ru
 Dự án `erp-api` sử dụng TypeORM (`src/db/data-source.cli.ts`) và lưu file migration tại `src/migrations/`.
 Bất cứ khi nào User yêu cầu làm việc với Database liên quan đến migration hay copy/sync dữ liệu, bạn **PHẢI** tuân theo các quy tắc nghiêm ngặt dưới đây.
 
-## 0. Quy tắc Neon URL (bắt buộc)
+## 0. Quy tắc Database Connection & Neon URL (bắt buộc)
 
-- Nếu `DATABASE_URL` là Neon host chứa `-pooler` thì **không dùng trực tiếp cho migration/schema sync**.
-- Runner sẽ tự chuẩn hóa URL theo nguyên tắc:
+- **Ưu tiên DATABASE_URL:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định.
+- **Fallback DB_HOST / DB_PORT:** Nếu file `.env` không có `DATABASE_URL` (hoặc bị comment) nhưng có cấu hình `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, `DB_SSL`, runner sẽ tự động ghép chuỗi kết nối chuẩn `postgresql://USER:PASS@HOST:PORT/DB?sslmode=...`.
+- **Neon Pooler Guard:** Nếu URL kết nối đến Neon host chứa `-pooler` thì runner tự động chuẩn hóa:
   - `ep-xxx-pooler...` -> `ep-xxx...`
   - bỏ `channel_binding=require` khỏi query string nếu có
-- Lý do: tránh lỗi ngắt kết nối/transaction khi chạy DDL qua pooler, dễ gây API 500 sau migrate không trọn vẹn.
+- **Lý do:** Tránh lỗi ngắt kết nối/transaction khi chạy DDL qua pooler và hỗ trợ linh hoạt cả môi trường Neon cloud lẫn PostgreSQL nội bộ / local (`DB_HOST`).
+
 
 ## 1. Xác định Intent (3 Mode Hoạt Động)
 

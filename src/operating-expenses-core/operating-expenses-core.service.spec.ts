@@ -23,6 +23,9 @@ describe('OperatingExpensesCoreService', () => {
     select: jest.fn().mockReturnThis(),
     distinct: jest.fn().mockReturnThis(),
     clone: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected: 1 }),
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
     getRawOne: jest.fn().mockResolvedValue({ totalAmountSum: '15000000' }),
     getRawMany: jest.fn().mockResolvedValue([]),
@@ -35,7 +38,14 @@ describe('OperatingExpensesCoreService', () => {
     const mockRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
       findOne: jest.fn(),
-      save: jest.fn(),
+      save: jest
+        .fn()
+        .mockImplementation((payload) =>
+          Promise.resolve({ id: 'uuid-1', ...payload }),
+        ),
+      create: jest
+        .fn()
+        .mockImplementation((payload) => ({ id: 'new-uuid', ...payload })),
       find: jest.fn(),
     };
 
@@ -45,6 +55,9 @@ describe('OperatingExpensesCoreService', () => {
           getRepository: () => mockRepo,
         }),
       ),
+      manager: {
+        getRepository: () => mockRepo,
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -78,8 +91,11 @@ describe('OperatingExpensesCoreService', () => {
         {
           id: '1',
           expenseNo: 'EXP-202608-001',
-          title: 'Tiền thuê nhà xưởng',
+          title: 'Tiền thuê văn phòng',
           totalAmount: 15000000,
+          periodYear: 2026,
+          periodMonth: 8,
+          costGroup: 'OPEX',
         },
       ];
       mockQueryBuilder.getManyAndCount.mockResolvedValue([mockExpenses, 1]);
@@ -90,17 +106,19 @@ describe('OperatingExpensesCoreService', () => {
       const result = await service.findAll({
         page: 1,
         pageSize: 20,
+        cost_group: 'OPEX',
         search: 'thuê',
         column_search: JSON.stringify({ title: 'thuê' }),
         column_filters: JSON.stringify({
-          expense_category: ['Chi phí mặt bằng'],
+          period: ['08/2026'],
         }),
         date_from: '2026-08-01',
         date_to: '2026-08-31',
-        sorts: ['-documentDate'],
+        sorts: ['-period'],
       });
 
-      expect(result.data).toEqual(mockExpenses);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].period).toBe('08/2026');
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
       expect(result.meta.totalAmountSum).toBe(15000000);
@@ -132,15 +150,10 @@ describe('OperatingExpensesCoreService', () => {
     });
 
     it('should query distinct options for a valid column', async () => {
-      mockQueryBuilder.getRawMany
-        .mockResolvedValueOnce([
-          { value: 'Chi phí mặt bằng' },
-          { value: 'Lương' },
-        ]) // total query
-        .mockResolvedValueOnce([
-          { value: 'Chi phí mặt bằng' },
-          { value: 'Lương' },
-        ]); // items query
+      mockQueryBuilder.getRawMany.mockResolvedValueOnce([
+        { value: 'Chi phí văn phòng' },
+        { value: 'Lương' },
+      ]);
 
       const result = await service.getColumnOptions(
         'expense_category',
@@ -150,18 +163,25 @@ describe('OperatingExpensesCoreService', () => {
         JSON.stringify({ status: ['CONFIRMED'] }),
       );
 
-      expect(result.items).toEqual(['Chi phí mặt bằng', 'Lương']);
+      expect(result.items).toEqual(['Chi phí văn phòng', 'Lương']);
       expect(result.total).toBe(2);
     });
   });
 
   describe('findOne', () => {
     it('should return expense when found', async () => {
-      const mockExpense = { id: 'uuid-1', expenseNo: 'EXP-001' };
+      const mockExpense = {
+        id: 'uuid-1',
+        expenseNo: 'EXP-001',
+        periodYear: 2026,
+        periodMonth: 8,
+        totalAmount: 5000000,
+      };
       repo.findOne.mockResolvedValue(mockExpense as any);
 
       const res = await service.findOne('uuid-1');
-      expect(res.data).toEqual(mockExpense);
+      expect(res.data.id).toBe('uuid-1');
+      expect(res.data.period).toBe('08/2026');
     });
 
     it('should throw NotFoundException when not found', async () => {
@@ -172,27 +192,51 @@ describe('OperatingExpensesCoreService', () => {
     });
   });
 
-  describe('update', () => {
-    it('should update fields and save', async () => {
+  describe('create', () => {
+    it('should create new expense and format period', async () => {
+      const res = await service.create({
+        title: 'Tiền mạng Internet',
+        totalAmount: 1000000,
+        periodYear: 2026,
+        periodMonth: 8,
+        costGroup: 'OPEX',
+        categoryKey: 'DIEN_NUOC_NET',
+      });
+
+      expect(res.message).toBe('Tạo khoản chi thành công');
+      expect(res.data.period).toBe('08/2026');
+      expect(res.data.totalAmount).toBe(1000000);
+    });
+  });
+
+  describe('applyRecurring', () => {
+    it('should update this record when scope is this', async () => {
       const existing = {
         id: 'uuid-1',
-        title: 'Old Title',
+        title: 'Tiền thuê VP',
+        totalAmount: 10000000,
+        periodYear: 2026,
+        periodMonth: 8,
+        recurrenceType: 'MONTHLY',
         isDeleted: false,
       };
       repo.findOne.mockResolvedValue(existing as any);
-      repo.save.mockResolvedValue({ ...existing, title: 'New Title' } as any);
 
-      const res = await service.update('uuid-1', { title: 'New Title' });
-      expect(res.message).toBe('Cập nhật khoản chi thành công');
-      expect(res.data.title).toBe('New Title');
+      const res = await service.applyRecurring('uuid-1', {
+        applyScope: 'this',
+        amount: 12000000,
+        title: 'Tiền thuê VP tăng giá',
+      });
+
+      expect(res.updated).toBe(1);
+      expect(res.item.totalAmount).toBe(12000000);
     });
   });
 
   describe('softDelete', () => {
-    it('should set isDeleted to true', async () => {
+    it('should set isDeleted to true for single delete', async () => {
       const existing = { id: 'uuid-1', isDeleted: false };
       repo.findOne.mockResolvedValue(existing as any);
-      repo.save.mockResolvedValue({ ...existing, isDeleted: true } as any);
 
       const res = await service.softDelete('uuid-1');
       expect(res.message).toBe('Xóa khoản chi thành công');
