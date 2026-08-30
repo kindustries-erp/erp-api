@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, DeepPartial, Repository, Not } from 'typeorm';
+import { DataSource, DeepPartial, Repository, Not, Brackets } from 'typeorm';
 import { ErpOperatingExpense } from './entities/erp_operating_expense.entity';
 import { CreateOperatingExpenseDto } from './dto/create-operating-expense.dto';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
+import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
 
 @Injectable()
 export class OperatingExpensesCoreService {
@@ -62,22 +63,63 @@ export class OperatingExpensesCoreService {
     });
   }
 
-  async findAll(query: OperationalQueryDto) {
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+  private mapColumnToSqlField(column: string): string | null {
+    const map: Record<string, string> = {
+      expenseNo: 'exp.expenseNo',
+      expense_no: 'exp.expenseNo',
+      doc_no: 'exp.expenseNo',
+      title: 'exp.title',
+      expenseCategory: 'exp.expenseCategory',
+      expense_category: 'exp.expenseCategory',
+      status: 'exp.status',
+      paymentStatus: 'exp.paymentStatus',
+      payment_status: 'exp.paymentStatus',
+      invoiceStatus: 'exp.invoiceStatus',
+      invoice_status: 'exp.invoiceStatus',
+      recurrenceType: 'exp.recurrenceType',
+      recurrence_type: 'exp.recurrenceType',
+      recurrenceInterval: 'exp.recurrenceInterval',
+      recurrence_interval: 'exp.recurrenceInterval',
+      supplierNameSnapshot: 'exp.supplierNameSnapshot',
+      supplier_name_snapshot: 'exp.supplierNameSnapshot',
+      notes: 'exp.notes',
+      documentDate: 'exp.documentDate',
+      document_date: 'exp.documentDate',
+      nextDueDate: 'exp.nextDueDate',
+      next_due_date: 'exp.nextDueDate',
+      dueDate: 'exp.dueDate',
+      due_date: 'exp.dueDate',
+      totalAmount: 'exp.totalAmount',
+      total_amount: 'exp.totalAmount',
+      createdAt: 'exp.createdAt',
+      created_at: 'exp.createdAt',
+    };
+    return map[column] || null;
+  }
+
+  async findAll(query: any) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
     const qb = this.repository.createQueryBuilder('exp');
 
     qb.where('exp.isDeleted = false');
 
-    if (query.branch_id) {
-      qb.andWhere('exp.branchId = :branchId', { branchId: query.branch_id });
+    if (query.branch_id || query.branchId) {
+      qb.andWhere('exp.branchId = :branchId', {
+        branchId: query.branch_id || query.branchId,
+      });
     }
     if (query.status) {
       qb.andWhere('exp.status = :status', { status: query.status });
     }
-    if (query.payment_status) {
+    if (query.payment_status || query.paymentStatus) {
       qb.andWhere('exp.paymentStatus = :paymentStatus', {
-        paymentStatus: query.payment_status,
+        paymentStatus: query.payment_status || query.paymentStatus,
+      });
+    }
+    if (query.recurrence_type || query.recurrenceType) {
+      qb.andWhere('exp.recurrenceType = :recurrenceType', {
+        recurrenceType: query.recurrence_type || query.recurrenceType,
       });
     }
     if (query.search) {
@@ -86,8 +128,150 @@ export class OperatingExpensesCoreService {
       });
     }
 
-    qb.orderBy('exp.documentDate', 'DESC');
-    qb.addOrderBy('exp.createdAt', 'DESC');
+    // Column Search (exact "" or multi-keyword ;)
+    if (query.column_search) {
+      try {
+        const colSearches: Record<string, string> =
+          typeof query.column_search === 'string'
+            ? JSON.parse(query.column_search)
+            : query.column_search;
+
+        Object.entries(colSearches).forEach(([colKey, searchVal], idx) => {
+          if (searchVal && searchVal.trim()) {
+            const sqlField = this.mapColumnToSqlField(colKey);
+            if (sqlField) {
+              applyMultiKeywordFilter(
+                qb,
+                `CAST(${sqlField} AS text)`,
+                searchVal.trim(),
+                `col_search_${idx}`,
+              );
+            }
+          }
+        });
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    // Column Filters (array of values or __BLANK__ or __ALL_MATCHING__)
+    if (query.column_filters) {
+      try {
+        const colFilters: Record<string, string[]> =
+          typeof query.column_filters === 'string'
+            ? JSON.parse(query.column_filters)
+            : query.column_filters;
+
+        Object.entries(colFilters).forEach(([colKey, values], idx) => {
+          if (Array.isArray(values) && values.length > 0) {
+            const sqlField = this.mapColumnToSqlField(colKey);
+            if (sqlField) {
+              // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+              if (values[0] === '__ALL_MATCHING__') {
+                const searchStr = (values[1] || '').trim();
+                if (searchStr) {
+                  applyMultiKeywordFilter(
+                    qb,
+                    `CAST(${sqlField} AS text)`,
+                    searchStr,
+                    `col_flt_all_${idx}`,
+                  );
+                }
+                return;
+              }
+
+              const hasBlank = values.includes('__BLANK__');
+              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
+              const pName = `col_filter_${idx}`;
+
+              if (hasBlank && nonBlankValues.length > 0) {
+                qb.andWhere(
+                  new Brackets((sqb) => {
+                    sqb
+                      .where(`CAST(${sqlField} AS text) IN (:...${pName})`, {
+                        [pName]: nonBlankValues,
+                      })
+                      .orWhere(
+                        `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                      );
+                  }),
+                );
+              } else if (hasBlank) {
+                qb.andWhere(
+                  `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                );
+              } else {
+                qb.andWhere(`CAST(${sqlField} AS text) IN (:...${pName})`, {
+                  [pName]: nonBlankValues,
+                });
+              }
+            }
+          }
+        });
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    // Date Range Filters
+    const dateFrom = query.date_from || query.dateFrom;
+    const dateTo = query.date_to || query.dateTo;
+    const dateField = query.date_field
+      ? this.mapColumnToSqlField(query.date_field) || 'exp.documentDate'
+      : 'exp.documentDate';
+
+    if (dateFrom) {
+      qb.andWhere(`${dateField} >= :dateFrom`, { dateFrom });
+    }
+    if (dateTo) {
+      qb.andWhere(`${dateField} <= :dateTo`, { dateTo });
+    }
+
+    // Calculate sum of total_amount before applying orderBy/pagination
+    const sumResult = await qb
+      .clone()
+      .orderBy()
+      .select('COALESCE(SUM(exp.totalAmount), 0)', 'totalAmountSum')
+      .getRawOne();
+    const totalAmountSum = Number(sumResult?.totalAmountSum || 0);
+
+    // Sorting
+    let sortsArr: string[] = [];
+    if (Array.isArray(query.sorts)) {
+      sortsArr = query.sorts;
+    } else if (typeof query.sorts === 'string' && query.sorts.trim()) {
+      sortsArr = [query.sorts.trim()];
+    } else if (Array.isArray(query['sorts[]'])) {
+      sortsArr = query['sorts[]'];
+    } else if (
+      typeof query['sorts[]'] === 'string' &&
+      query['sorts[]'].trim()
+    ) {
+      sortsArr = [query['sorts[]'].trim()];
+    }
+
+    if (sortsArr.length > 0) {
+      sortsArr.forEach((s: string, idx: number) => {
+        const isDesc = s.startsWith('-');
+        const cleanKey = isDesc ? s.substring(1) : s;
+        const sqlField = this.mapColumnToSqlField(cleanKey);
+        if (sqlField) {
+          if (idx === 0) {
+            qb.orderBy(sqlField, isDesc ? 'DESC' : 'ASC');
+          } else {
+            qb.addOrderBy(sqlField, isDesc ? 'DESC' : 'ASC');
+          }
+        }
+      });
+    } else if (query.sortField) {
+      const sqlField = this.mapColumnToSqlField(query.sortField);
+      if (sqlField) {
+        const dir = query.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        qb.orderBy(sqlField, dir);
+      }
+    } else {
+      qb.orderBy('exp.createdAt', 'DESC');
+    }
 
     const [data, total] = await qb
       .skip((page - 1) * pageSize)
@@ -96,9 +280,127 @@ export class OperatingExpensesCoreService {
 
     return {
       data,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
       meta: {
         filter_count: total,
+        totalAmountSum,
       },
+    };
+  }
+
+  async getColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    branchId?: string,
+  ) {
+    const rawSqlField = this.mapColumnToSqlField(column);
+    if (!rawSqlField) {
+      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    const qb = this.repository.createQueryBuilder('exp');
+    qb.where('exp.isDeleted = false');
+
+    if (branchId) {
+      qb.andWhere('exp.branchId = :branchId', { branchId });
+    }
+
+    // Cross-filtering
+    if (filtersStr) {
+      try {
+        const filters: Record<string, string[]> =
+          typeof filtersStr === 'string' ? JSON.parse(filtersStr) : filtersStr;
+        Object.entries(filters).forEach(([key, values], idx) => {
+          if (key !== column && Array.isArray(values) && values.length > 0) {
+            const sqlField = this.mapColumnToSqlField(key);
+            if (sqlField) {
+              if (values[0] === '__ALL_MATCHING__') {
+                const searchStr = (values[1] || '').trim();
+                if (searchStr) {
+                  applyMultiKeywordFilter(
+                    qb,
+                    `CAST(${sqlField} AS text)`,
+                    searchStr,
+                    `c_opt_flt_all_${idx}`,
+                  );
+                }
+                return;
+              }
+
+              const hasBlank = values.includes('__BLANK__');
+              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
+              const pName = `c_opt_flt_${idx}`;
+
+              if (hasBlank && nonBlankValues.length > 0) {
+                qb.andWhere(
+                  new Brackets((sqb) => {
+                    sqb
+                      .where(`CAST(${sqlField} AS text) IN (:...${pName})`, {
+                        [pName]: nonBlankValues,
+                      })
+                      .orWhere(
+                        `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                      );
+                  }),
+                );
+              } else if (hasBlank) {
+                qb.andWhere(
+                  `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                );
+              } else {
+                qb.andWhere(`CAST(${sqlField} AS text) IN (:...${pName})`, {
+                  [pName]: nonBlankValues,
+                });
+              }
+            }
+          }
+        });
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    // Search within this column
+    if (search && search.trim()) {
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${rawSqlField} AS text)`,
+        search.trim(),
+        'col_opt_search',
+      );
+    }
+
+    // Distinct query with safe cast to text
+    qb.select(`CAST(${rawSqlField} AS text)`, 'value')
+      .distinct(true)
+      .andWhere(`${rawSqlField} IS NOT NULL`)
+      .andWhere(`CAST(${rawSqlField} AS text) != ''`)
+      .orderBy('value', 'ASC');
+
+    const totalRaw = await qb.getRawMany();
+    const total = totalRaw.length;
+
+    const rawItems = await qb
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getRawMany();
+
+    const items = rawItems
+      .map((r) => r.value)
+      .filter((v) => v !== null && v !== undefined && v !== '');
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     };
   }
 
