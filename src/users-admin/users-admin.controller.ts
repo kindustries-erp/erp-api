@@ -44,6 +44,23 @@ export class UsersAdminController {
     return this.usersAdminService.listUsers(query);
   }
 
+  @Get('column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.usersAdminService.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filters,
+    );
+  }
+
   @Get(':id')
   getOne(@Param('id') id: string) {
     return this.usersAdminService.getUser(id);

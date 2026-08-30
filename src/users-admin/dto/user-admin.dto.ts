@@ -82,4 +82,28 @@ export class ListUsersAdminDto {
   @IsBoolean()
   @Type(() => Boolean)
   linkedEmployee?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  sorts?: string | string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_filters?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date_from?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date_to?: string;
 }

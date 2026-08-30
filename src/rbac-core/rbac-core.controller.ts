@@ -16,6 +16,7 @@ import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import {
   CreateCoreRoleDto,
+  ListCoreRolesDto,
   UpdateCoreRoleDto,
   UpdateCoreRolePermissionsDto,
   UpdateCoreRoleUsersDto,
@@ -29,10 +30,26 @@ export class RbacCoreController {
   constructor(private readonly rbacCoreService: RbacCoreService) {}
 
   @RequirePermissions({ resource: 'admin_users', action: 'manage' })
-  @Get('roles')
-  async getRoles(
-    @Query() query: { page?: string; pageSize?: string; search?: string },
+  @Get('roles/column-options')
+  async getRolesColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
   ) {
+    return this.rbacCoreService.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filters,
+    );
+  }
+
+  @RequirePermissions({ resource: 'admin_users', action: 'manage' })
+  @Get('roles')
+  async getRoles(@Query() query: ListCoreRolesDto) {
     return this.rbacCoreService.getRolesPaginated(query);
   }
 

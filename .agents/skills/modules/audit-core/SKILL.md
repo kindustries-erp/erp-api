@@ -92,7 +92,8 @@ Controller Base Route: `/api/v1/audit-core`
 
 | Method | Endpoint | Auth Guard | Query / Params | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/audit-core` | `JwtAuthGuard` | `AuditLogCoreQueryDto` (`module`, `actionType`, `entityType`, `entityId`, `actorUserId`, `status`, `dateFrom`, `dateTo`, `search`, `page`, `pageSize`) | Danh sách audit logs phân trang, hỗ trợ tìm kiếm đa trường |
+| `GET` | `/api/v1/audit-core` | `JwtAuthGuard` | `AuditLogCoreQueryDto` (`module`, `actionType`, `entityType`, `entityId`, `actorUserId`, `status`, `dateFrom`, `dateTo`, `search`, `column_search`, `column_filters`, `page`, `pageSize`) | Danh sách audit logs phân trang, hỗ trợ tìm kiếm nâng cao & lọc cột |
+| `GET` | `/api/v1/audit-core/column-options` | `JwtAuthGuard` | `columnKey`, `search`, `page`, `pageSize`, `filters` | Trả về danh sách options phân trang và hỗ trợ cross-column filtering |
 | `GET` | `/api/v1/audit-core/timeline/:entityType/:entityId` | `JwtAuthGuard` | Params: `entityType`, `entityId` | Lấy toàn bộ timeline lịch sử biến động của một thực thể theo thứ tự thời gian tăng dần |
 
 ---
