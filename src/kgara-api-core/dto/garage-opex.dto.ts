@@ -194,6 +194,10 @@ export class ListGarageOpexQueryDto {
 
   @IsOptional()
   @IsString()
+  cost_group?: string;
+
+  @IsOptional()
+  @IsString()
   column_filters?: string;
 
   @IsOptional()
