@@ -246,6 +246,7 @@ export class InventoryItemsController {
     @Query('page') page: string,
     @Query('pageSize') pageSize: string,
     @Query('column_filters') filtersStr?: string,
+    @Query('trackingPolicy') trackingPolicy?: string,
   ) {
     return this.service.getSerialColumnOptions(
       column,
@@ -253,6 +254,7 @@ export class InventoryItemsController {
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
       filtersStr,
+      trackingPolicy,
     );
   }
 
