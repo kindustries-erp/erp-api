@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InventoryAdjustmentsCoreService } from './inventory-adjustments-core.service';
 import { CreateInventoryAdjustmentDto } from './dto/create-inventory-adjustment.dto';
 import { UpdateInventoryAdjustmentDto } from './dto/update-inventory-adjustment.dto';
@@ -26,14 +27,20 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 export class InventoryAdjustmentsCoreController {
   constructor(private readonly service: InventoryAdjustmentsCoreService) {}
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.CREATE,
+  })
   @Post()
   @ApiOperation({ summary: 'Create new inventory adjustment' })
   create(@Body() dto: CreateInventoryAdjustmentDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.READ,
+  })
   @Get()
   @ApiOperation({ summary: 'List inventory adjustments' })
   findAll(@Query() query: PaginationDto) {
@@ -46,14 +53,20 @@ export class InventoryAdjustmentsCoreController {
     return this.service.getNextAdjustmentNo(date);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   @ApiOperation({ summary: 'Get adjustment details' })
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   @ApiOperation({ summary: 'Update adjustment' })
   update(
@@ -63,7 +76,10 @@ export class InventoryAdjustmentsCoreController {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/post')
   @ApiOperation({ summary: 'Post adjustment to inventory' })
   postAdjustment(
@@ -73,14 +89,20 @@ export class InventoryAdjustmentsCoreController {
     return this.service.postAdjustment(id, dto);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel posted adjustment' })
   cancelAdjustment(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancelAdjustment(id);
   }
 
-  @RequirePermissions({ resource: 'inventory_adjustments', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ADJUSTMENTS,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   @ApiOperation({ summary: 'Delete draft adjustment' })
   remove(@Param('id', new ParseUUIDPipe()) id: string) {

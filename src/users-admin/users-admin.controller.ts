@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import {
   CreateUserAdminDto,
   LinkEmployeeDto,
@@ -26,7 +27,10 @@ import { UsersAdminService } from './users-admin.service';
 @ApiTags('admin-users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@RequirePermissions({ resource: 'admin_users', action: 'manage' })
+@RequirePermissions({
+  resource: ErpResource.ADMIN_USERS,
+  action: ErpAction.MANAGE,
+})
 @Controller('admin/users')
 export class UsersAdminController {
   constructor(private readonly usersAdminService: UsersAdminService) {}

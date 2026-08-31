@@ -17,6 +17,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ListProductionDto } from './dto/list-production.dto';
 import { StartProductionDto } from './dto/start-production.dto';
@@ -30,26 +31,38 @@ import { ProductionCoreService } from './production-core.service';
 export class ProductionCoreController {
   constructor(private readonly service: ProductionCoreService) {}
 
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('orders')
   findOrders(@Query() query: ListProductionDto) {
     return this.service.findOrders(query);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.CREATE,
+  })
   @Post('execute')
   execute(@Body() dto: ExecuteProductionDto) {
     return this.service.execute(dto);
   }
 
   /** Must be declared before orders/:id to avoid NestJS routing ambiguity */
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('orders/next-reference-no')
   getNextReferenceNo() {
     return this.service.generateProductionReferenceNo();
   }
 
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('orders/column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -67,7 +80,10 @@ export class ProductionCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('explode-preview')
   explodePreview(
     @Query('bomId', new ParseUUIDPipe()) bomId: string,
@@ -76,13 +92,19 @@ export class ProductionCoreController {
     return this.service.explodePreview(bomId, qtyToProduce || 1);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('orders/:id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.READ,
+  })
   @Get('orders/:id/export-xlsx')
   async exportXlsx(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -101,13 +123,19 @@ export class ProductionCoreController {
     res.end(buffer);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Patch('orders/:id')
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -116,19 +144,28 @@ export class ProductionCoreController {
     return this.service.updateDraft(id, dto);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.DELETE,
+  })
   @Delete('orders/:id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/confirm')
   confirm(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.confirmOrder(id);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Post('orders/:id/start')
   startProduction(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -137,7 +174,10 @@ export class ProductionCoreController {
     return this.service.startProduction(id, dto);
   }
 
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Post('orders/:id/complete')
   completeProduction(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -147,7 +187,10 @@ export class ProductionCoreController {
   }
 
   // --- Shop Floor APIs ---
-  @RequirePermissions({ resource: 'production', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
   @Post('shop-floor/scan')
   shopFloorScan(@Body() dto: any) {
     return this.service.handleShopFloorScan(dto);

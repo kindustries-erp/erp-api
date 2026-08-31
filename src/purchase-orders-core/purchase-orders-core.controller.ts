@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -27,25 +28,37 @@ import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 export class PurchaseOrdersCoreController {
   constructor(private readonly service: PurchaseOrdersCoreService) {}
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreatePurchaseOrderDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: OperationalQueryDto) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextPoNo(date);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   async getColumnOptions(
     @Query('column') column: string,
@@ -63,19 +76,28 @@ export class PurchaseOrdersCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id/receipts')
   getReceipts(@Param('id') id: string) {
     return this.service.getReceiptTimeline(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id/connections')
   getConnections(@Param('id') id: string) {
     return this.service.getConnections(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id/export/excel')
   async exportExcel(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.service.exportPoExcel(id);
@@ -93,43 +115,64 @@ export class PurchaseOrdersCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id/invoices')
   getLinkedInvoices(@Param('id') id: string) {
     return this.service.getLinkedInvoices(id);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/link-invoices')
   linkInvoices(@Param('id') id: string, @Body() dto: { invoiceIds: string[] }) {
     return this.service.linkInvoices(id, dto.invoiceIds);
   }
 
-  @RequirePermissions({ resource: 'purchase_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Delete(':id/invoices/:invoiceId')
   unlinkInvoice(
     @Param('id') id: string,

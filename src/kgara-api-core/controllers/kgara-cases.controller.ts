@@ -22,6 +22,7 @@ import { extractNetPayableAmount } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -45,13 +46,13 @@ export class KgaraCasesController {
   ) {}
 
   @Get('branches')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getBranches() {
     return this.branchRepo.find({ order: { name: 'ASC' } });
   }
 
   @Get('cases')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCases(
     @BranchId() branchId: string,
     @Query('page') page: string = '1',
@@ -267,7 +268,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/column-options')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseColumnOptions(
     @BranchId() branchId: string,
     @Query('column') column: string,
@@ -333,7 +334,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/gross-profit-report')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitReport(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -411,7 +412,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/by-code/:code')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseByCode(@Param('code') code: string) {
     let caseData = await this.caseRepo.findOne({ where: { soChungTu: code } });
     if (!caseData) {
@@ -451,7 +452,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/by-code/:code/gross-profit')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitByCode(@Param('code') code: string) {
     const grossProfit = await this.grossProfitRepo.findOne({
       where: { vuViecCode: code },
@@ -514,7 +515,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/external/:externalId')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseByExternalId(
     @Param('externalId') externalId: string,
     @BranchId() branchId: string,
@@ -551,7 +552,7 @@ export class KgaraCasesController {
   }
 
   @Get('cases/:id')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseById(@Param('id') id: string) {
     const isUuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -569,7 +570,10 @@ export class KgaraCasesController {
   }
 
   @Patch('cases/:id/erp-notes')
-  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
   async updateErpNotes(
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
@@ -594,7 +598,10 @@ export class KgaraCasesController {
   }
 
   @Patch('cases/:id/config')
-  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
   async updateCaseConfig(
     @Param('id') id: string,
     @Body()

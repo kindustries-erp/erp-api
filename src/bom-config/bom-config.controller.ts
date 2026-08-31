@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BomConfigService } from './bom-config.service';
 import { CreateBomCategoryDto } from './dto/create-bom-category.dto';
 import { UpdateBomCategoryDto } from './dto/update-bom-category.dto';
@@ -29,19 +30,19 @@ export class BomConfigController {
 
   // ================= Categories =================
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get('categories')
   getCategories() {
     return this.service.getCategories();
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Post('categories')
   createCategory(@Body() dto: CreateBomCategoryDto) {
     return this.service.createCategory(dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Patch('categories/:id')
   updateCategory(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -50,7 +51,7 @@ export class BomConfigController {
     return this.service.updateCategory(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Delete('categories/:id')
   deleteCategory(@Param('id', new ParseUUIDPipe()) id: string): Promise<any> {
     return this.service.deleteCategory(id);
@@ -58,19 +59,19 @@ export class BomConfigController {
 
   // ================= Attribute Defs =================
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get('attribute-defs')
   getAttributeDefs(@Query('categoryId') categoryId?: string) {
     return this.service.getAttributeDefs(categoryId);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Post('attribute-defs')
   createAttributeDef(@Body() dto: CreateBomAttributeDefDto) {
     return this.service.createAttributeDef(dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Patch('attribute-defs/:id')
   updateAttributeDef(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -79,7 +80,7 @@ export class BomConfigController {
     return this.service.updateAttributeDef(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Delete('attribute-defs/:id')
   deleteAttributeDef(
     @Param('id', new ParseUUIDPipe()) id: string,

@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageOpexService } from './services/garage-opex.service';
 import {
@@ -35,7 +36,7 @@ export class GarageDashboardController {
     private readonly opexService: GarageOpexService,
   ) {}
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('stats')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -46,13 +47,13 @@ export class GarageDashboardController {
     return this.service.getDashboardStats(dateFrom, dateTo);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('checkpoint-kpis')
   getCheckpointKpis() {
     return this.service.getCheckpointKpis();
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('checkpoint-cases')
   @ApiQuery({ name: 'date_from', required: true })
   @ApiQuery({ name: 'date_to', required: true })
@@ -72,7 +73,7 @@ export class GarageDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('customers')
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
@@ -107,7 +108,7 @@ export class GarageDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('export')
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -132,13 +133,13 @@ export class GarageDashboardController {
 
   // ===================== OPERATING EXPENSES (CP VẬN HÀNH) =====================
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('opex')
   getOpexList(@Query() query: ListGarageOpexQueryDto) {
     return this.opexService.getList(query);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('opex/column-options')
   @ApiQuery({ name: 'column', required: true })
   @ApiQuery({ name: 'search', required: false })
@@ -161,25 +162,34 @@ export class GarageDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('opex/:id')
   getOpexById(@Param('id') id: string) {
     return this.opexService.getById(id);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   @Post('opex')
   createOpex(@Body() dto: CreateGarageOpexDto, @Req() req: any) {
     return this.opexService.create(dto, req.user?.id);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
   @Put('opex/:id')
   updateOpex(@Param('id') id: string, @Body() dto: UpdateGarageOpexDto) {
     return this.opexService.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
   @Post('opex/:id/apply-recurring')
   applyRecurringOpex(
     @Param('id') id: string,
@@ -189,7 +199,10 @@ export class GarageDashboardController {
     return this.opexService.applyRecurring(id, dto, req.user?.id);
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.DELETE,
+  })
   @Delete('opex/:id')
   deleteOpex(@Param('id') id: string) {
     return this.opexService.delete(id);
@@ -197,7 +210,7 @@ export class GarageDashboardController {
 
   // ===================== P&L REPORT =====================
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('pnl-report')
   @ApiQuery({ name: 'year', required: false })
   @ApiQuery({ name: 'month', required: false })
@@ -208,7 +221,7 @@ export class GarageDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('pnl-report/export')
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

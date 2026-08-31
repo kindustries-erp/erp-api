@@ -18,6 +18,7 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ErpAttachmentsCoreService } from './erp-attachments-core.service';
 import type { Response } from 'express';
@@ -30,13 +31,19 @@ import { ErpAttachment } from './entities/erp_attachment.entity';
 export class ErpAttachmentsCoreController {
   constructor(private readonly service: ErpAttachmentsCoreService) {}
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: any) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -54,7 +61,10 @@ export class ErpAttachmentsCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('upload')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -90,7 +100,10 @@ export class ErpAttachmentsCoreController {
     return { success: true, attachments };
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

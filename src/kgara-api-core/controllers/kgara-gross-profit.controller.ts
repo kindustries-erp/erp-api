@@ -13,6 +13,7 @@ import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.en
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -23,7 +24,7 @@ export class KgaraGrossProfitController {
   ) {}
 
   @Get('gross-profit/:id/linked-invoices')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.find({
       where: { grossProfitId: id },
@@ -32,7 +33,10 @@ export class KgaraGrossProfitController {
   }
 
   @Post('gross-profit/:id/linked-invoices')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async addGrossProfitLinkedInvoice(
     @Param('id') id: string,
     @Body() body: { invoiceId: string; linkType: 'IN' | 'OUT'; note?: string },
@@ -47,7 +51,10 @@ export class KgaraGrossProfitController {
   }
 
   @Delete('gross-profit/:id/linked-invoices/:linkedId')
-  @RequirePermissions({ resource: 'garage', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.DELETE,
+  })
   async removeGrossProfitLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
