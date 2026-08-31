@@ -37,9 +37,6 @@ export class RbacCoreService {
   ): Promise<boolean> {
     const permissions = await this.getUserPermissions(userId);
     const matchResources = [resource, '*'];
-    if (resource === 'garage') {
-      matchResources.push('greenway_integration', 'kgara_integration');
-    }
     return permissions.some(
       (p) =>
         matchResources.includes(p.resource) &&
@@ -452,7 +449,6 @@ export class RbacCoreService {
       { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
       { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
-      { resource: 'greenway_integration', label: 'Garage / Kgara (Legacy)' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
@@ -468,10 +464,6 @@ export class RbacCoreService {
         label: 'Purchase Requests / Yêu cầu mua hàng',
       },
       { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
-      {
-        resource: 'kgara_integration',
-        label: 'Kgara Integration (Garage)',
-      },
       {
         resource: 'vinfast',
         label: 'Vinfast (Phụ tùng & Xưởng)',
