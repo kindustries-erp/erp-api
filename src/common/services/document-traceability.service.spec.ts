@@ -11,6 +11,8 @@ describe('DocumentTraceabilityService', () => {
     };
     mockRbacService = {
       hasPermission: jest.fn().mockResolvedValue(true),
+      hasAnyPermission: jest.fn().mockResolvedValue(true),
+      hasAllPermissions: jest.fn().mockResolvedValue(true),
     };
     service = new DocumentTraceabilityService(mockDataSource, mockRbacService);
   });

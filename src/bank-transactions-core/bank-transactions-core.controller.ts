@@ -23,7 +23,10 @@ import type { Express, Response } from 'express';
 import { Observable } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
-import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../auth/decorators/require-permissions.decorator';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import {
@@ -57,7 +60,10 @@ export class BankTransactionsCoreController {
     private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('transactions/:id/traceability-graph')
   getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
     return this.traceabilityService.getBankTransactionTraceabilityGraph(
@@ -67,7 +73,7 @@ export class BankTransactionsCoreController {
   }
 
   // --- Bank Accounts ---
-  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
   @Get('bank-accounts')
   getBankAccounts(
     @Query('branchId') branchId?: string,
@@ -77,13 +83,13 @@ export class BankTransactionsCoreController {
     return this.service.getBankAccounts(branchId, startDate, endDate);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('bank-accounts')
   createBankAccount(@Body() dto: CreateBankAccountDto) {
     return this.service.createBankAccount(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
   @Patch('bank-accounts/:id')
   updateBankAccount(
     @Param('id') id: string,
@@ -92,14 +98,14 @@ export class BankTransactionsCoreController {
     return this.service.updateBankAccount(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
   @Delete('bank-accounts/:id')
   deleteBankAccount(@Param('id') id: string) {
     return this.service.deleteBankAccount(id);
   }
 
   // --- Cash Books ---
-  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'read' })
   @Get('cash-books')
   getCashBooks(
     @Query('branchId') branchId?: string,
@@ -109,26 +115,29 @@ export class BankTransactionsCoreController {
     return this.service.getCashBooks(branchId, startDate, endDate);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'create' })
   @Post('cash-books')
   createCashBook(@Body() dto: CreateCashBookDto) {
     return this.service.createCashBook(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'update' })
   @Patch('cash-books/:id')
   updateCashBook(@Param('id') id: string, @Body() dto: UpdateCashBookDto) {
     return this.service.updateCashBook(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'delete' })
   @Delete('cash-books/:id')
   deleteCashBook(@Param('id') id: string) {
     return this.service.deleteCashBook(id);
   }
 
   // --- Transactions ---
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('transactions/column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -148,43 +157,64 @@ export class BankTransactionsCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('transactions/:id')
   getTransaction(@Param('id') id: string) {
     return this.service.getTransaction(id);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('transactions/:id/posting')
   getTransactionPosting(@Param('id') id: string) {
     return this.service.getTransactionPosting(id);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('transactions')
   getTransactions(@Query() filter: BankTransactionFilterDto) {
     return this.service.getTransactions(filter);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('dashboard-stats')
   getDashboardStats(@Query() filter: BankTransactionFilterDto) {
     return this.service.getDashboardStats(filter);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('partner-stats')
   getPartnerStats(@Query() filter: BankTransactionFilterDto) {
     return this.service.getPartnerStats(filter);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'create' },
+    { resource: 'cash_statements', action: 'create' },
+  )
   @Post('transactions/manual')
   createManualTransaction(@Body() dto: CreateBankTransactionDto) {
     return this.service.createManualTransaction(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'update' },
+    { resource: 'cash_statements', action: 'update' },
+  )
   @Patch('transactions/:id')
   updateTransaction(
     @Param('id') id: string,
@@ -193,7 +223,10 @@ export class BankTransactionsCoreController {
     return this.service.updateTransaction(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'update' },
+    { resource: 'cash_statements', action: 'update' },
+  )
   @Post('transactions/:id/post')
   postTransaction(
     @Param('id') id: string,
@@ -202,13 +235,19 @@ export class BankTransactionsCoreController {
     return this.service.postTransaction(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'update' },
+    { resource: 'cash_statements', action: 'update' },
+  )
   @Post('transactions/:id/unpost')
   unpostTransaction(@Param('id') id: string) {
     return this.service.unpostTransaction(id);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'update' },
+    { resource: 'cash_statements', action: 'update' },
+  )
   @Post('transactions/:id/net-off-invoices')
   linkInvoice(
     @Param('id') id: string,
@@ -217,13 +256,19 @@ export class BankTransactionsCoreController {
     return this.service.linkInvoiceToTransaction(id, body);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'update' },
+    { resource: 'cash_statements', action: 'update' },
+  )
   @Delete('transactions/:id/net-off-invoices/:netOffId')
   removeInvoice(@Param('id') id: string, @Param('netOffId') netOffId: string) {
     return this.service.removeInvoiceFromTransaction(id, netOffId);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'create' },
+    { resource: 'cash_statements', action: 'create' },
+  )
   @Post('transactions/import')
   @UseInterceptors(FilesInterceptor('files', 5))
   @ApiConsumes('multipart/form-data')
@@ -258,14 +303,17 @@ export class BankTransactionsCoreController {
     return this.service.importFiles(files, branchId, bankAccountId, cashBookId);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'delete' },
+    { resource: 'cash_statements', action: 'delete' },
+  )
   @Delete('transactions/batch/:batchId')
   rollbackBatch(@Param('batchId') batchId: string) {
     return this.service.rollbackBatch(batchId);
   }
 
   // --- Balances ---
-  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
   @Get('bank-account-balances')
   getBankAccountBalances(@Query('bankAccountId') bankAccountId: string) {
     if (!bankAccountId)
@@ -273,13 +321,13 @@ export class BankTransactionsCoreController {
     return this.service.getBankAccountBalances(bankAccountId);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
   @Post('bank-account-balances')
   createBankAccountBalance(@Body() dto: CreateBankAccountBalanceDto) {
     return this.service.createBankAccountBalance(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'update' })
   @Patch('bank-account-balances/:id')
   updateBankAccountBalance(
     @Param('id') id: string,
@@ -288,26 +336,26 @@ export class BankTransactionsCoreController {
     return this.service.updateBankAccountBalance(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
   @Delete('bank-account-balances/:id')
   deleteBankAccountBalance(@Param('id') id: string) {
     return this.service.deleteBankAccountBalance(id);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'read' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'read' })
   @Get('cash-book-balances')
   getCashBookBalances(@Query('cashBookId') cashBookId: string) {
     if (!cashBookId) throw new BadRequestException('cashBookId is required');
     return this.service.getCashBookBalances(cashBookId);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'create' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'create' })
   @Post('cash-book-balances')
   createCashBookBalance(@Body() dto: CreateCashBookBalanceDto) {
     return this.service.createCashBookBalance(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'update' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'update' })
   @Patch('cash-book-balances/:id')
   updateCashBookBalance(
     @Param('id') id: string,
@@ -316,14 +364,17 @@ export class BankTransactionsCoreController {
     return this.service.updateCashBookBalance(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bank_accounts', action: 'delete' })
+  @RequirePermissions({ resource: 'cash_statements', action: 'delete' })
   @Delete('cash-book-balances/:id')
   deleteCashBookBalance(@Param('id') id: string) {
     return this.service.deleteCashBookBalance(id);
   }
 
   // --- Statement Files ---
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('statement-files')
   getStatementFiles(
     @Query('page') page?: string,
@@ -341,7 +392,10 @@ export class BankTransactionsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'create' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'create' },
+    { resource: 'cash_statements', action: 'create' },
+  )
   @Post('statement-files')
   createStatementFile(
     @Body()
@@ -350,14 +404,20 @@ export class BankTransactionsCoreController {
     return this.service.createStatementFile(dto);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'delete' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'delete' },
+    { resource: 'cash_statements', action: 'delete' },
+  )
   @Delete('statement-files/:id')
   deleteStatementFile(@Param('id') id: string) {
     return this.service.deleteStatementFile(id);
   }
 
   // --- Background Excel Export ---
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Post('export/excel/background')
   startExportExcelBackground(
     @Body() query: BankTransactionFilterDto,
@@ -366,7 +426,10 @@ export class BankTransactionsCoreController {
     return this.service.startExportExcelBackground(query, req.user?.sub);
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('export/excel/background/history')
   getExportExcelBackgroundHistory(
     @Request() req: any,
@@ -380,7 +443,10 @@ export class BankTransactionsCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'bank_statements', action: 'read' })
+  @RequireAnyPermissions(
+    { resource: 'bank_statements', action: 'read' },
+    { resource: 'cash_statements', action: 'read' },
+  )
   @Get('export/excel/background/:jobId/download')
   async downloadBackgroundExport(
     @Param('jobId') jobId: string,

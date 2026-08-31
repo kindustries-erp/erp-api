@@ -16,6 +16,7 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '../common/utils/query-builder.util';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @Injectable()
 export class RbacCoreService {
@@ -32,15 +33,56 @@ export class RbacCoreService {
 
   async hasPermission(
     userId: string,
-    resource: string,
-    action: string,
+    resource: ErpResource | string,
+    action: ErpAction | string,
   ): Promise<boolean> {
     const permissions = await this.getUserPermissions(userId);
-    const matchResources = [resource, '*'];
-    return permissions.some(
+    return this.checkPermissionMatch(permissions, resource, action);
+  }
+
+  async hasAnyPermission(
+    userId: string,
+    requiredPermissions: Array<{
+      resource: ErpResource | string;
+      action: ErpAction | string;
+    }>,
+  ): Promise<boolean> {
+    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    const permissions = await this.getUserPermissions(userId);
+    return requiredPermissions.some((req) =>
+      this.checkPermissionMatch(permissions, req.resource, req.action),
+    );
+  }
+
+  async hasAllPermissions(
+    userId: string,
+    requiredPermissions: Array<{
+      resource: ErpResource | string;
+      action: ErpAction | string;
+    }>,
+  ): Promise<boolean> {
+    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    const permissions = await this.getUserPermissions(userId);
+    return requiredPermissions.every((req) =>
+      this.checkPermissionMatch(permissions, req.resource, req.action),
+    );
+  }
+
+  private checkPermissionMatch(
+    userPermissions: CorePermission[],
+    resource: ErpResource | string,
+    action: ErpAction | string,
+  ): boolean {
+    const matchResources: string[] = [
+      String(resource),
+      String(ErpResource.SUPER_ADMIN),
+      '*',
+    ];
+    const matchActions: string[] = [String(action), String(ErpAction.ALL), '*'];
+    return userPermissions.some(
       (p) =>
-        matchResources.includes(p.resource) &&
-        (p.action === action || p.action === '*'),
+        matchResources.includes(String(p.resource)) &&
+        matchActions.includes(String(p.action)),
     );
   }
 
@@ -434,7 +476,6 @@ export class RbacCoreService {
       { resource: '*', label: 'All Resources (Super Admin)' },
       { resource: 'admin_users', label: 'Admin Users' },
       { resource: 'employees', label: 'Employees' },
-      { resource: 'cash_funds', label: 'Cash Funds' },
       { resource: 'business_partners', label: 'Business Partners' },
       { resource: 'purchase_orders', label: 'Purchase Orders' },
       { resource: 'sales_orders', label: 'Sales Orders' },
@@ -457,8 +498,14 @@ export class RbacCoreService {
       { resource: 'sales_reports', label: 'Sales Reports' },
       { resource: 'purchasing_reports', label: 'Purchasing Reports' },
       { resource: 'sys_tags', label: 'Tags' },
-      { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
-      { resource: 'bank_statements', label: 'Bank Statements (Import)' },
+      {
+        resource: 'bank_statements',
+        label: 'Bank Statements & Accounts (Ngân hàng)',
+      },
+      {
+        resource: 'cash_statements',
+        label: 'Cash Statements & Books (Sổ quỹ tiền mặt)',
+      },
       {
         resource: 'purchase_requests',
         label: 'Purchase Requests / Yêu cầu mua hàng',

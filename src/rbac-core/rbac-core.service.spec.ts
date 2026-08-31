@@ -1,9 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { RbacCoreService } from './rbac-core.service';
-import { CoreRole } from './entities/core-role.entity';
-import { CorePermission } from './entities/core-permission.entity';
-import { CoreUserRole } from './entities/core-user-role.entity';
+import {
+  RbacCoreService,
+  CoreRole,
+  CorePermission,
+  CoreUserRole,
+  ErpResource,
+  ErpAction,
+} from '@/rbac-core';
 
 describe('RbacCoreService', () => {
   let service: RbacCoreService;
@@ -125,14 +129,129 @@ describe('RbacCoreService', () => {
       );
       expect(result).toBe(false);
     });
+
+    it('should support ErpResource and ErpAction enums', async () => {
+      userRoleRepo.find.mockResolvedValue([
+        {
+          userId: 'user-bank',
+          role: {
+            isActive: true,
+            permissions: [
+              { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.hasPermission(
+        'user-bank',
+        ErpResource.BANK_STATEMENTS,
+        ErpAction.READ,
+      );
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('hasAnyPermission', () => {
+    it('should return true if user has at least one of the required permissions', async () => {
+      userRoleRepo.find.mockResolvedValue([
+        {
+          userId: 'user-cash',
+          role: {
+            isActive: true,
+            permissions: [
+              { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.hasAnyPermission('user-cash', [
+        { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+        { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+      ]);
+      expect(result).toBe(true);
+    });
+
+    it('should return false if user has none of the required permissions', async () => {
+      userRoleRepo.find.mockResolvedValue([
+        {
+          userId: 'user-sales',
+          role: {
+            isActive: true,
+            permissions: [
+              { resource: ErpResource.SALES_ORDERS, action: ErpAction.READ },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.hasAnyPermission('user-sales', [
+        { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+        { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+      ]);
+      expect(result).toBe(false);
+    });
+
+    it('should return true if required permissions list is empty', async () => {
+      const result = await service.hasAnyPermission('user-1', []);
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('hasAllPermissions', () => {
+    it('should return true if user has all of the required permissions', async () => {
+      userRoleRepo.find.mockResolvedValue([
+        {
+          userId: 'user-accountant',
+          role: {
+            isActive: true,
+            permissions: [
+              { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+              { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.hasAllPermissions('user-accountant', [
+        { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+        { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+      ]);
+      expect(result).toBe(true);
+    });
+
+    it('should return false if user only has some but not all required permissions', async () => {
+      userRoleRepo.find.mockResolvedValue([
+        {
+          userId: 'user-bank-only',
+          role: {
+            isActive: true,
+            permissions: [
+              { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.hasAllPermissions('user-bank-only', [
+        { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+        { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+      ]);
+      expect(result).toBe(false);
+    });
   });
 
   describe('getAvailableResources', () => {
-    it('should list "garage" and exclude legacy "greenway_integration" and "kgara_integration"', async () => {
+    it('should list "garage", "bank_statements", "cash_statements" and exclude legacy resources', async () => {
       const resources = await service.getAvailableResources();
       const resourceKeys = resources.map((r) => r.resource);
 
       expect(resourceKeys).toContain('garage');
+      expect(resourceKeys).toContain('bank_statements');
+      expect(resourceKeys).toContain('cash_statements');
+      expect(resourceKeys).not.toContain('cash_funds');
+      expect(resourceKeys).not.toContain('bank_accounts');
       expect(resourceKeys).not.toContain('greenway_integration');
       expect(resourceKeys).not.toContain('kgara_integration');
     });

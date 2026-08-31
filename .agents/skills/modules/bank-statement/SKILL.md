@@ -156,35 +156,34 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Phân nhóm | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
-| **Bank Accounts** | `GET` | `/bank-accounts` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách tài khoản ngân hàng (kèm lọc chi nhánh) |
-| | `POST` | `/bank-accounts` | `{ resource: 'bank_accounts', action: 'create' }` | Tạo mới tài khoản ngân hàng |
-| | `PATCH`| `/bank-accounts/:id` | `{ resource: 'bank_accounts', action: 'update' }` | Cập nhật thông tin tài khoản |
-| | `DELETE`| `/bank-accounts/:id` | `{ resource: 'bank_accounts', action: 'delete' }` | Xóa mềm tài khoản ngân hàng |
-| **Cash Books** | `GET` | `/cash-books` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách sổ quỹ tiền mặt |
-| | `POST` | `/cash-books` | `{ resource: 'bank_accounts', action: 'create' }` | Tạo mới sổ quỹ tiền mặt |
-| | `PATCH`| `/cash-books/:id` | `{ resource: 'bank_accounts', action: 'update' }` | Cập nhật sổ quỹ |
-| | `DELETE`| `/cash-books/:id` | `{ resource: 'bank_accounts', action: 'delete' }` | Xóa mềm sổ quỹ |
-| **Transactions** | `GET` | `/transactions` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
-| | `GET` | `/transactions/:id` | `{ resource: 'bank_statements', action: 'read' }` | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
-| | `GET` | `/transactions/:id/traceability-graph` | `{ resource: 'bank_statements', action: 'read' }` | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
-| | `GET` | `/transactions/:id/posting` | `{ resource: 'bank_statements', action: 'read' }` | Lấy thông tin bút toán kế toán hiện thời |
-| | `POST` | `/transactions/:id/net-off-invoices` | `{ resource: 'bank_statements', action: 'update' }` | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
-| | `DELETE`| `/transactions/:id/net-off-invoices/:netOffId` | `{ resource: 'bank_statements', action: 'update' }` | Gỡ bỏ liên kết cấn trừ hóa đơn |
-| | `GET` | `/transactions/column-options` | `{ resource: 'bank_statements', action: 'read' }` | Lấy danh sách options duy nhất cho bộ lọc dropdown |
-
-| | `POST` | `/transactions/manual` | `{ resource: 'bank_statements', action: 'create' }` | Tạo giao dịch thu/chi thủ công |
-| | `PATCH`| `/transactions/:id` | `{ resource: 'bank_statements', action: 'update' }` | Cập nhật ghi chú/thông tin đối tác giao dịch |
-| | `POST` | `/transactions/:id/post` | `{ resource: 'bank_statements', action: 'update' }` | Hạch toán ghi nhận bút toán kế toán |
-| | `POST` | `/transactions/:id/unpost` | `{ resource: 'bank_statements', action: 'update' }` | Hủy hạch toán bút toán kế toán |
-| | `POST` | `/transactions/import` | `{ resource: 'bank_statements', action: 'create' }` | Upload file sao kê (Multipart: tối đa 5 file .csv/.xlsx) |
-| | `DELETE`| `/transactions/batch/:batchId` | `{ resource: 'bank_statements', action: 'delete' }` | Rollback (xóa) toàn bộ giao dịch theo lô import |
-| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng |
-| | `POST` | `/bank-account-balances` | `{ resource: 'bank_accounts', action: 'create' }` | Thiết lập số dư đầu kỳ tài khoản ngân hàng |
-| | `GET` | `/cash-book-balances` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ |
-| | `POST` | `/cash-book-balances` | `{ resource: 'bank_accounts', action: 'create' }` | Thiết lập số dư đầu kỳ sổ quỹ |
-| **Statement Files** | `GET` | `/statement-files` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách file sao kê đã tải lên |
-| | `POST` | `/statement-files` | `{ resource: 'bank_statements', action: 'create' }` | Ghi nhận metadata file sao kê |
-| | `DELETE`| `/statement-files/:id` | `{ resource: 'bank_statements', action: 'delete' }` | Xóa file sao kê |
+| **Bank Accounts** | `GET` | `/bank-accounts` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách tài khoản ngân hàng (kèm lọc chi nhánh) |
+| | `POST` | `/bank-accounts` | `{ resource: 'bank_statements', action: 'create' }` | Tạo mới tài khoản ngân hàng |
+| | `PATCH`| `/bank-accounts/:id` | `{ resource: 'bank_statements', action: 'update' }` | Cập nhật thông tin tài khoản |
+| | `DELETE`| `/bank-accounts/:id` | `{ resource: 'bank_statements', action: 'delete' }` | Xóa mềm tài khoản ngân hàng |
+| **Cash Books** | `GET` | `/cash-books` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách sổ quỹ tiền mặt |
+| | `POST` | `/cash-books` | `{ resource: 'cash_statements', action: 'create' }` | Tạo mới sổ quỹ tiền mặt |
+| | `PATCH`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'update' }` | Cập nhật sổ quỹ |
+| | `DELETE`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'delete' }` | Xóa mềm sổ quỹ |
+| **Transactions** | `GET` | `/transactions` | `bank_statements` OR `cash_statements` (`read`) | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
+| | `GET` | `/transactions/:id` | `bank_statements` OR `cash_statements` (`read`) | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
+| | `GET` | `/transactions/:id/traceability-graph` | `bank_statements` OR `cash_statements` (`read`) | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
+| | `GET` | `/transactions/:id/posting` | `bank_statements` OR `cash_statements` (`read`) | Lấy thông tin bút toán kế toán hiện thời |
+| | `POST` | `/transactions/:id/net-off-invoices` | `bank_statements` OR `cash_statements` (`update`) | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
+| | `DELETE`| `/transactions/:id/net-off-invoices/:netOffId` | `bank_statements` OR `cash_statements` (`update`) | Gỡ bỏ liên kết cấn trừ hóa đơn |
+| | `GET` | `/transactions/column-options` | `bank_statements` OR `cash_statements` (`read`) | Lấy danh sách options duy nhất cho bộ lọc dropdown |
+| | `POST` | `/transactions/manual` | `bank_statements` OR `cash_statements` (`create`) | Tạo giao dịch thu/chi thủ công |
+| | `PATCH`| `/transactions/:id` | `bank_statements` OR `cash_statements` (`update`) | Cập nhật ghi chú/thông tin đối tác giao dịch |
+| | `POST` | `/transactions/:id/post` | `bank_statements` OR `cash_statements` (`update`) | Hạch toán ghi nhận bút toán kế toán |
+| | `POST` | `/transactions/:id/unpost` | `bank_statements` OR `cash_statements` (`update`) | Hủy hạch toán bút toán kế toán |
+| | `POST` | `/transactions/import` | `bank_statements` OR `cash_statements` (`create`) | Upload file sao kê (Multipart: tối đa 5 file .csv/.xlsx) |
+| | `DELETE`| `/transactions/batch/:batchId` | `bank_statements` OR `cash_statements` (`delete`) | Rollback (xóa) toàn bộ giao dịch theo lô import |
+| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng |
+| | `POST` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'create' }` | Thiết lập số dư đầu kỳ tài khoản ngân hàng |
+| | `GET` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ |
+| | `POST` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'create' }` | Thiết lập số dư đầu kỳ sổ quỹ |
+| **Statement Files** | `GET` | `/statement-files` | `bank_statements` OR `cash_statements` (`read`) | Danh sách file sao kê đã tải lên |
+| | `POST` | `/statement-files` | `bank_statements` OR `cash_statements` (`create`) | Ghi nhận metadata file sao kê |
+| | `DELETE`| `/statement-files/:id` | `bank_statements` OR `cash_statements` (`delete`) | Xóa file sao kê |
 
 ---
 
