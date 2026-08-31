@@ -7,6 +7,7 @@ import { extractNetPayableAmount } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -20,7 +21,7 @@ export class KgaraCustomersController {
   ) {}
 
   @Get('cases/customers-debt')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCustomersDebt(
     @BranchId() branchId: string,
     @Query('page') page: string = '1',
@@ -435,7 +436,7 @@ export class KgaraCustomersController {
   }
 
   @Get('cases/customers-debt/column-options')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCustomersDebtColumnOptions(
     @BranchId() branchId: string,
     @Query('column') column: string,
@@ -665,7 +666,7 @@ export class KgaraCustomersController {
   }
 
   @Get('cases/by-customer/:customerCode')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCasesByCustomer(
     @BranchId() branchId: string,
     @Param('customerCode') customerCode: string,

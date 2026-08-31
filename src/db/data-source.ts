@@ -77,6 +77,7 @@ import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.enti
 import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
 import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
+import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -86,6 +87,7 @@ const entities = [
   CoreUserRole,
   ErpEmployee,
   ErpBusinessPartner,
+  ErpOperatingExpense,
   ErpInventoryItem,
   ErpInventoryTransaction,
   ErpInventoryBalance,
@@ -159,6 +161,12 @@ const entities = [
 
 const databaseUrl = process.env.DATABASE_URL;
 
+const isSslDisabled =
+  process.env.DB_SSL === 'false' ||
+  (databaseUrl &&
+    (databaseUrl.includes('sslmode=disable') ||
+      databaseUrl.includes('ssl=false')));
+
 export default new DataSource(
   databaseUrl
     ? {
@@ -171,7 +179,7 @@ export default new DataSource(
           __dirname + '/../migrations/**/*{.ts,.js}',
         ],
         synchronize: false,
-        ssl: { rejectUnauthorized: false },
+        ssl: isSslDisabled ? false : { rejectUnauthorized: false },
       }
     : {
         type: 'postgres',

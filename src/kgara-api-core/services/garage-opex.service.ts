@@ -60,6 +60,29 @@ export class GarageOpexService {
       );
     }
 
+    // Filter cost_group (OPEX | COGS | COMMISSION)
+    if (query.cost_group && query.cost_group !== 'ALL') {
+      if (query.cost_group === 'OPEX') {
+        qb.andWhere('opex.category_key NOT IN (:...cogsAndComm)', {
+          cogsAndComm: [
+            'HOA_HONG_TRUC_TIEP',
+            'CHI_PHI_TRUC_TIEP_KHAC',
+            'HOA_HONG_SALE',
+            'HOA_HONG_DV',
+            'HOA_HONG_KHAC',
+          ],
+        });
+      } else if (query.cost_group === 'COGS') {
+        qb.andWhere('opex.category_key IN (:...cogs)', {
+          cogs: ['HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC'],
+        });
+      } else if (query.cost_group === 'COMMISSION') {
+        qb.andWhere('opex.category_key IN (:...comm)', {
+          comm: ['HOA_HONG_SALE', 'HOA_HONG_DV', 'HOA_HONG_KHAC'],
+        });
+      }
+    }
+
     // Column Filters
     if (query.column_filters) {
       try {
@@ -97,6 +120,72 @@ export class GarageOpexService {
             qb.andWhere('opex.category_name IN (:...catNames)', {
               catNames: values,
             });
+          } else if (col === 'costGroup') {
+            const opexGroupCats = [
+              'NHAN_SU',
+              'THUE_MAT_BANG',
+              'DIEN_NUOC',
+              'VAT_TU_TIEU_HAO',
+              'BAO_TRI',
+              'KHAU_HAO',
+              'KHAC',
+            ];
+            const cogsGroupCats = [
+              'HOA_HONG_TRUC_TIEP',
+              'CHI_PHI_TRUC_TIEP_KHAC',
+            ];
+            const commGroupCats = [
+              'HOA_HONG_SALE',
+              'HOA_HONG_DV',
+              'HOA_HONG_KHAC',
+            ];
+            const targetCats: string[] = [];
+            if (values.includes('OPEX')) targetCats.push(...opexGroupCats);
+            if (values.includes('COGS')) targetCats.push(...cogsGroupCats);
+            if (values.includes('COMMISSION'))
+              targetCats.push(...commGroupCats);
+            if (targetCats.length > 0) {
+              qb.andWhere('opex.category_key IN (:...cgCats)', {
+                cgCats: targetCats,
+              });
+            }
+          } else if (col === 'amount') {
+            const numAmounts = values
+              .map(Number)
+              .filter((n) => !Number.isNaN(n));
+            if (numAmounts.length > 0) {
+              qb.andWhere('opex.amount IN (:...numAmounts)', { numAmounts });
+            }
+          } else if (col === 'recurrenceType') {
+            const hasBlank = values.includes('__BLANK__');
+            const cleanValues = values.filter((v) => v !== '__BLANK__');
+            if (hasBlank && cleanValues.length > 0) {
+              qb.andWhere(
+                "(opex.recurrence_type IN (:...recTypes) OR opex.recurrence_type IS NULL OR opex.recurrence_type = '')",
+                { recTypes: cleanValues },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(opex.recurrence_type IS NULL OR opex.recurrence_type = '')",
+              );
+            } else if (cleanValues.length > 0) {
+              qb.andWhere('opex.recurrence_type IN (:...recTypes)', {
+                recTypes: cleanValues,
+              });
+            }
+          } else if (col === 'note') {
+            const hasBlank = values.includes('__BLANK__');
+            const cleanValues = values.filter((v) => v !== '__BLANK__');
+            if (hasBlank && cleanValues.length > 0) {
+              qb.andWhere(
+                "(opex.note IN (:...notes) OR opex.note IS NULL OR opex.note = '')",
+                { notes: cleanValues },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(opex.note IS NULL OR opex.note = '')");
+            } else if (cleanValues.length > 0) {
+              qb.andWhere('opex.note IN (:...notes)', { notes: cleanValues });
+            }
           } else if (col === 'period') {
             // format MM/YYYY
             const periodConditions = values.map((p, idx) => {
@@ -114,6 +203,34 @@ export class GarageOpexService {
             );
             if (periodConditions.length > 0) {
               qb.andWhere(`(${periodConditions.join(' OR ')})`, periodParams);
+            }
+          } else if (col === 'recurrenceUntil') {
+            const hasBlank = values.includes('__BLANK__');
+            const validPeriods = values.filter((v) => v !== '__BLANK__');
+            const untilConditions = validPeriods.map((p, idx) => {
+              const [m, y] = p.split('/').map(Number);
+              return `(opex.recurrence_until_month = :ruMonth_${idx} AND opex.recurrence_until_year = :ruYear_${idx})`;
+            });
+            const untilParams = validPeriods.reduce(
+              (acc, p, idx) => {
+                const [m, y] = p.split('/').map(Number);
+                acc[`ruMonth_${idx}`] = m;
+                acc[`ruYear_${idx}`] = y;
+                return acc;
+              },
+              {} as Record<string, number>,
+            );
+            if (hasBlank && untilConditions.length > 0) {
+              qb.andWhere(
+                `(${untilConditions.join(' OR ')} OR opex.recurrence_until_year IS NULL OR opex.recurrence_until_month IS NULL)`,
+                untilParams,
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                '(opex.recurrence_until_year IS NULL OR opex.recurrence_until_month IS NULL)',
+              );
+            } else if (untilConditions.length > 0) {
+              qb.andWhere(`(${untilConditions.join(' OR ')})`, untilParams);
             }
           }
         }
@@ -140,9 +257,17 @@ export class GarageOpexService {
             qb.andWhere('opex.category_name ILIKE :cSearchName', {
               cSearchName: searchVal,
             });
+          } else if (col === 'amount') {
+            qb.andWhere('CAST(opex.amount AS TEXT) ILIKE :cSearchAmt', {
+              cSearchAmt: searchVal,
+            });
           } else if (col === 'note') {
             qb.andWhere('opex.note ILIKE :cSearchNote', {
               cSearchNote: searchVal,
+            });
+          } else if (col === 'recurrenceType') {
+            qb.andWhere('opex.recurrence_type ILIKE :cSearchRec', {
+              cSearchRec: searchVal,
             });
           }
         }
@@ -172,6 +297,16 @@ export class GarageOpexService {
           qb.addOrderBy('opex.category_name', direction);
         } else if (field === 'amount') {
           qb.addOrderBy('opex.amount', direction);
+        } else if (field === 'recurrenceType') {
+          qb.addOrderBy('opex.recurrence_type', direction);
+        } else if (
+          field === 'recurrenceUntil' ||
+          field === 'recurrenceUntilYear'
+        ) {
+          qb.addOrderBy('opex.recurrence_until_year', direction);
+          qb.addOrderBy('opex.recurrence_until_month', direction);
+        } else if (field === 'note') {
+          qb.addOrderBy('opex.note', direction);
         } else if (field === 'createdAt') {
           qb.addOrderBy('opex.created_at', direction);
         }
@@ -244,6 +379,14 @@ export class GarageOpexService {
       distinctField = 'opex.category_name';
     } else if (columnKey === 'period') {
       distinctField = `LPAD(opex.period_month::text, 2, '0') || '/' || opex.period_year::text`;
+    } else if (columnKey === 'recurrenceType') {
+      distinctField = 'opex.recurrence_type';
+    } else if (columnKey === 'recurrenceUntil') {
+      distinctField = `LPAD(opex.recurrence_until_month::text, 2, '0') || '/' || opex.recurrence_until_year::text`;
+    } else if (columnKey === 'amount') {
+      distinctField = 'opex.amount::text';
+    } else if (columnKey === 'note') {
+      distinctField = 'opex.note';
     }
 
     qb.select(`DISTINCT (${distinctField})`, fieldAlias);

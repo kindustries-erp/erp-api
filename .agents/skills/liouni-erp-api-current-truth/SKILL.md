@@ -58,7 +58,7 @@ Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, 
   - **Tài chính, Dòng tiền, Hóa đơn & Tài khoản**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-dashboard`, `settings-accounts`
   - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
   - **Dịch vụ Garage & Sửa chữa xe**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-gross-profit`
-  - **Hệ thống, Cấu hình & Nhật ký**: `app-config`, `audit-core`, `module-config`
+  - **Hệ thống, Cấu hình, Phân quyền & Nhật ký**: `app-config`, `audit-core`, `module-config`, `rbac-core`
 - Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
 
 ## Team-scale reminders

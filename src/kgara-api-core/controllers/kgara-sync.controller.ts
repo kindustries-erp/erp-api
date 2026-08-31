@@ -14,6 +14,7 @@ import { KgaraSyncService } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -26,7 +27,10 @@ export class KgaraSyncController {
   ) {}
 
   @Post('sync/all')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncAll(@BranchId() branchId: string) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
@@ -77,14 +81,20 @@ export class KgaraSyncController {
   }
 
   @Post('sync/branches')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncBranches() {
     await this.syncService.syncBranches();
     return { success: true, message: 'Branches synced successfully.' };
   }
 
   @Post('sync/cases/incremental')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncCasesIncremental(@BranchId() branchId: string) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
@@ -107,7 +117,10 @@ export class KgaraSyncController {
   }
 
   @Post('sync/cases')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncCases(
     @BranchId() branchId: string,
     @Body() body?: { from?: string; to?: string },
@@ -123,7 +136,10 @@ export class KgaraSyncController {
   }
 
   @Post('sync/gross-profit')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncGrossProfit(
     @BranchId() branchId: string,
     @Body() body?: { from?: string; to?: string },
@@ -139,7 +155,10 @@ export class KgaraSyncController {
   }
 
   @Post('sync/cases/:id/detail')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncCaseDetail(@Param('id') id: string, @BranchId() branchId: string) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
@@ -148,7 +167,10 @@ export class KgaraSyncController {
   }
 
   @Post('sync/receivables')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncReceivables(
     @BranchId() branchId: string,
     @Query('from') queryFrom?: string,
@@ -164,7 +186,10 @@ export class KgaraSyncController {
   }
 
   @Post('sync/payables')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async syncPayables(
     @BranchId() branchId: string,
     @Query('from') queryFrom?: string,
@@ -180,7 +205,7 @@ export class KgaraSyncController {
   }
 
   @Get('sync-runs')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getSyncRuns(
     @BranchId() branchId: string,
     @Query('take') take: string = '50',

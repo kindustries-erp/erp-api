@@ -33,19 +33,46 @@ read_database_url_from_env() {
   local env_file="$1"
   [[ -f "$env_file" ]] || die "Env file not found: $env_file"
 
+  # 1. Try to read active DATABASE_URL (excluding comments)
   local line
-  line="$(grep -E '^DATABASE_URL=' "$env_file" | tail -n1 || true)"
-  [[ -n "$line" ]] || die "DATABASE_URL not found in $env_file"
+  line="$(grep -E '^[[:space:]]*DATABASE_URL=' "$env_file" | tail -n1 || true)"
+  if [[ -n "$line" ]]; then
+    local value="${line#*DATABASE_URL=}"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    value="$(echo "$value" | tr -d '[:space:]')"
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  fi
 
-  local value="${line#DATABASE_URL=}"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
+  # 2. Fallback: Construct URL from DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE, DB_SSL
+  local host user pass port db ssl
+  host="$(grep -E '^[[:space:]]*DB_HOST=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+  user="$(grep -E '^[[:space:]]*DB_USER=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+  pass="$(grep -E '^[[:space:]]*DB_PASSWORD=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+  port="$(grep -E '^[[:space:]]*DB_PORT=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+  db="$(grep -E '^[[:space:]]*DB_DATABASE=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+  ssl="$(grep -E '^[[:space:]]*DB_SSL=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
 
-  [[ -n "$value" ]] || die "DATABASE_URL is empty in $env_file"
-  printf '%s' "$value"
+  if [[ -n "$host" && -n "$db" ]]; then
+    user="${user:-postgres}"
+    port="${port:-5432}"
+    local ssl_param="?sslmode=disable"
+    if [[ "$ssl" == "true" ]]; then
+      ssl_param="?sslmode=require"
+    fi
+    echo "INFO: DATABASE_URL not set in $env_file. Constructed from DB_HOST=$host, DB_PORT=$port, DB_DATABASE=$db." >&2
+    printf 'postgresql://%s:%s@%s:%s/%s%s' "$user" "$pass" "$host" "$port" "$db" "$ssl_param"
+    return 0
+  fi
+
+  die "Neither active DATABASE_URL nor DB_HOST/DB_DATABASE found in $env_file"
 }
+
 
 normalize_neon_url_for_migration() {
   local raw_url="$1"

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { RbacCoreService } from '../../rbac-core/rbac-core.service';
+import { RbacCoreService } from '@/rbac-core/rbac-core.service';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import {
   TraceabilityGraphDto,
   TraceabilityNodeDto,
@@ -173,11 +174,18 @@ export class DocumentTraceabilityService {
       // Root node permission is already guaranteed by Controller Guard
       let hasPerm = isCurrent;
       if (!hasPerm && userId) {
-        hasPerm = await this.rbacService.hasPermission(
-          userId,
-          requiredResource,
-          'read',
-        );
+        if (rawNode.docType === 'BANK_TXN') {
+          hasPerm = await this.rbacService.hasAnyPermission(userId, [
+            { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+            { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+          ]);
+        } else {
+          hasPerm = await this.rbacService.hasPermission(
+            userId,
+            requiredResource,
+            ErpAction.READ,
+          );
+        }
       } else if (!hasPerm && !userId) {
         // Fallback for unauthenticated/system tasks
         hasPerm = true;
@@ -1094,25 +1102,25 @@ export class DocumentTraceabilityService {
     }
   }
 
-  private getResourceForDocType(docType: TraceabilityNodeType): string {
+  private getResourceForDocType(docType: TraceabilityNodeType): ErpResource {
     switch (docType) {
       case 'INVOICE':
-        return 'invoices';
+        return ErpResource.INVOICES;
       case 'BANK_TXN':
-        return 'bank_statements';
+        return ErpResource.BANK_STATEMENTS;
       case 'PURCHASE_ORDER':
-        return 'purchase_orders';
+        return ErpResource.PURCHASE_ORDERS;
       case 'SALES_ORDER':
-        return 'sales_orders';
+        return ErpResource.SALES_ORDERS;
       case 'GOODS_RECEIPT':
       case 'GOODS_ISSUE':
-        return 'inventory_items';
+        return ErpResource.INVENTORY_ITEMS;
       case 'JOURNAL_ENTRY':
-        return 'journal_entries';
+        return ErpResource.JOURNAL_ENTRIES;
       case 'GARAGE_CASE':
-        return 'garage';
+        return ErpResource.GARAGE;
       default:
-        return '*';
+        return ErpResource.SUPER_ADMIN;
     }
   }
 }

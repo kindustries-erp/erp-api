@@ -11,6 +11,70 @@ import { Subject } from 'rxjs';
 import { VINFAST_CAR_PART_CODES } from '../reports-core/vinfast-car-part-codes';
 import { FifoUnitRow } from './dto/fifo-unit-row.dto';
 
+function buildRawMultiKeywordSql(
+  sqlField: string,
+  searchString: string,
+  startIndex: number,
+  params: any[],
+): { sql: string; nextIndex: number } {
+  if (!searchString) return { sql: '', nextIndex: startIndex };
+
+  const keywords = searchString
+    .split(';')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0);
+
+  if (keywords.length === 0) return { sql: '', nextIndex: startIndex };
+
+  const parts: string[] = [];
+  let idx = startIndex;
+
+  for (const kw of keywords) {
+    if (kw === '__BLANK__') {
+      parts.push(`(${sqlField} IS NULL OR ${sqlField} = '')`);
+    } else if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+      const clean = kw.slice(1, -1);
+      parts.push(`${sqlField} ILIKE $${idx}`);
+      params.push(clean);
+      idx++;
+    } else {
+      parts.push(`${sqlField} ILIKE $${idx}`);
+      params.push(`%${kw}%`);
+      idx++;
+    }
+  }
+
+  const sql = ` AND (${parts.join(' OR ')})`;
+  return { sql, nextIndex: idx };
+}
+
+function buildRawColumnFilterSql(
+  sqlField: string,
+  vals: string[],
+  startIndex: number,
+  params: any[],
+): { sql: string; nextIndex: number } {
+  if (!vals || vals.length === 0) return { sql: '', nextIndex: startIndex };
+
+  const hasBlank = vals.includes('__BLANK__');
+  const nonBlankVals = vals.filter((v) => v !== '__BLANK__');
+  const conditions: string[] = [];
+  let idx = startIndex;
+
+  if (nonBlankVals.length > 0) {
+    conditions.push(`${sqlField} = ANY($${idx})`);
+    params.push(nonBlankVals);
+    idx++;
+  }
+  if (hasBlank) {
+    conditions.push(`(${sqlField} IS NULL OR ${sqlField} = '')`);
+  }
+
+  if (conditions.length === 0) return { sql: '', nextIndex: idx };
+  const sql = ` AND (${conditions.join(' OR ')})`;
+  return { sql, nextIndex: idx };
+}
+
 @Injectable()
 export class VinfastPartsService {
   private readonly logger = new Logger(VinfastPartsService.name);
@@ -421,23 +485,43 @@ export class VinfastPartsService {
         const parsed = JSON.parse(columnSearch);
         for (const [col, val] of Object.entries(parsed)) {
           if (!val) continue;
-          const strVal = val as string;
+          const strVal = typeof val === 'string' ? val : JSON.stringify(val);
           if (col === 'sku') {
-            cSearchFilter += ` AND c.sku ILIKE $${paramIndex}`;
-            params.push(`%${strVal}%`);
-            paramIndex++;
+            const res = buildRawMultiKeywordSql(
+              'c.sku',
+              strVal,
+              paramIndex,
+              params,
+            );
+            cSearchFilter += res.sql;
+            paramIndex = res.nextIndex;
           } else if (col === 'name') {
-            cSearchFilter += ` AND c.name ILIKE $${paramIndex}`;
-            params.push(`%${strVal}%`);
-            paramIndex++;
+            const res = buildRawMultiKeywordSql(
+              'c.name',
+              strVal,
+              paramIndex,
+              params,
+            );
+            cSearchFilter += res.sql;
+            paramIndex = res.nextIndex;
           } else if (col === 'uom') {
-            cSearchFilter += ` AND c.uom ILIKE $${paramIndex}`;
-            params.push(`%${strVal}%`);
-            paramIndex++;
+            const res = buildRawMultiKeywordSql(
+              'c.uom',
+              strVal,
+              paramIndex,
+              params,
+            );
+            cSearchFilter += res.sql;
+            paramIndex = res.nextIndex;
           } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-            havingSearchFilter += ` AND CAST("${col}" AS TEXT) ILIKE $${paramIndex}`;
-            params.push(`%${strVal}%`);
-            paramIndex++;
+            const res = buildRawMultiKeywordSql(
+              `CAST("${col}" AS TEXT)`,
+              strVal,
+              paramIndex,
+              params,
+            );
+            havingSearchFilter += res.sql;
+            paramIndex = res.nextIndex;
           }
         }
       } catch (e) {}
@@ -452,17 +536,32 @@ export class VinfastPartsService {
           const arr = vals as string[];
           if (!arr || arr.length === 0) continue;
           if (col === 'sku') {
-            cFiltersSql += ` AND c.sku = ANY($${paramIndex})`;
-            params.push(arr);
-            paramIndex++;
+            const res = buildRawColumnFilterSql(
+              'c.sku',
+              arr,
+              paramIndex,
+              params,
+            );
+            cFiltersSql += res.sql;
+            paramIndex = res.nextIndex;
           } else if (col === 'name') {
-            cFiltersSql += ` AND c.name = ANY($${paramIndex})`;
-            params.push(arr);
-            paramIndex++;
+            const res = buildRawColumnFilterSql(
+              'c.name',
+              arr,
+              paramIndex,
+              params,
+            );
+            cFiltersSql += res.sql;
+            paramIndex = res.nextIndex;
           } else if (col === 'uom') {
-            cFiltersSql += ` AND c.uom = ANY($${paramIndex})`;
-            params.push(arr);
-            paramIndex++;
+            const res = buildRawColumnFilterSql(
+              'c.uom',
+              arr,
+              paramIndex,
+              params,
+            );
+            cFiltersSql += res.sql;
+            paramIndex = res.nextIndex;
           } else if (col === 'vehicleType') {
             const isCar = arr.includes('CAR');
             const isMoto = arr.includes('MOTORBIKE');
@@ -472,10 +571,14 @@ export class VinfastPartsService {
               cFiltersSql += ` AND c.sku NOT IN (${carCodesStr})`;
             }
           } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-            // numeric array filtering might require type casting
-            havingFiltersSql += ` AND CAST("${col}" AS TEXT) = ANY($${paramIndex})`;
-            params.push(arr);
-            paramIndex++;
+            const res = buildRawColumnFilterSql(
+              `CAST("${col}" AS TEXT)`,
+              arr,
+              paramIndex,
+              params,
+            );
+            havingFiltersSql += res.sql;
+            paramIndex = res.nextIndex;
           }
         }
       } catch (e) {}
@@ -609,21 +712,41 @@ export class VinfastPartsService {
             }
           } else if (col !== columnKey) {
             if (col === 'sku') {
-              cFiltersSql += ` AND c.sku = ANY($${paramIndex})`;
-              params.push(arr);
-              paramIndex++;
+              const res = buildRawColumnFilterSql(
+                'c.sku',
+                arr,
+                paramIndex,
+                params,
+              );
+              cFiltersSql += res.sql;
+              paramIndex = res.nextIndex;
             } else if (col === 'name') {
-              cFiltersSql += ` AND c.name = ANY($${paramIndex})`;
-              params.push(arr);
-              paramIndex++;
+              const res = buildRawColumnFilterSql(
+                'c.name',
+                arr,
+                paramIndex,
+                params,
+              );
+              cFiltersSql += res.sql;
+              paramIndex = res.nextIndex;
             } else if (col === 'uom') {
-              cFiltersSql += ` AND c.uom = ANY($${paramIndex})`;
-              params.push(arr);
-              paramIndex++;
+              const res = buildRawColumnFilterSql(
+                'c.uom',
+                arr,
+                paramIndex,
+                params,
+              );
+              cFiltersSql += res.sql;
+              paramIndex = res.nextIndex;
             } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-              havingFiltersSql += ` AND CAST("${col}" AS TEXT) = ANY($${paramIndex})`;
-              params.push(arr);
-              paramIndex++;
+              const res = buildRawColumnFilterSql(
+                `CAST("${col}" AS TEXT)`,
+                arr,
+                paramIndex,
+                params,
+              );
+              havingFiltersSql += res.sql;
+              paramIndex = res.nextIndex;
             }
           }
         }
@@ -634,21 +757,41 @@ export class VinfastPartsService {
     let havingSearchSql = '';
     if (search) {
       if (columnKey === 'sku') {
-        searchSql = ` AND c.sku ILIKE $${paramIndex}`;
-        params.push(`%${search}%`);
-        paramIndex++;
+        const res = buildRawMultiKeywordSql(
+          'c.sku',
+          search,
+          paramIndex,
+          params,
+        );
+        searchSql += res.sql;
+        paramIndex = res.nextIndex;
       } else if (columnKey === 'name') {
-        searchSql = ` AND c.name ILIKE $${paramIndex}`;
-        params.push(`%${search}%`);
-        paramIndex++;
+        const res = buildRawMultiKeywordSql(
+          'c.name',
+          search,
+          paramIndex,
+          params,
+        );
+        searchSql += res.sql;
+        paramIndex = res.nextIndex;
       } else if (columnKey === 'uom') {
-        searchSql = ` AND c.uom ILIKE $${paramIndex}`;
-        params.push(`%${search}%`);
-        paramIndex++;
+        const res = buildRawMultiKeywordSql(
+          'c.uom',
+          search,
+          paramIndex,
+          params,
+        );
+        searchSql += res.sql;
+        paramIndex = res.nextIndex;
       } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(columnKey)) {
-        havingSearchSql = ` AND CAST("${columnKey}" AS TEXT) ILIKE $${paramIndex}`;
-        params.push(`%${search}%`);
-        paramIndex++;
+        const res = buildRawMultiKeywordSql(
+          `CAST("${columnKey}" AS TEXT)`,
+          search,
+          paramIndex,
+          params,
+        );
+        havingSearchSql += res.sql;
+        paramIndex = res.nextIndex;
       }
     }
 

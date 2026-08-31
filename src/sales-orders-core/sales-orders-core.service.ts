@@ -253,27 +253,115 @@ export class SalesOrdersCoreService {
         const filters = JSON.parse(query.column_filters);
         for (const [col, vals] of Object.entries(filters)) {
           if (Array.isArray(vals) && vals.length > 0) {
-            if (col === 'soNo')
+            if (vals[0] === '__ALL_MATCHING__') {
+              const searchStr = (vals[1] || '').trim();
+              if (searchStr) {
+                const kws = searchStr
+                  .split(';')
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                if (kws.length > 0) {
+                  const matchIdx = Math.random().toString(36).substring(7);
+                  qb.andWhere(
+                    new Brackets((sqb) => {
+                      kws.forEach((kw, i) => {
+                        let isExact = false;
+                        let cleanKw = kw;
+                        if (
+                          kw.startsWith('"') &&
+                          kw.endsWith('"') &&
+                          kw.length >= 2
+                        ) {
+                          isExact = true;
+                          cleanKw = kw.slice(1, -1);
+                        }
+                        const op = isExact ? '=' : 'ILIKE';
+                        const p = {
+                          [`allm_${matchIdx}_${i}`]: isExact
+                            ? cleanKw
+                            : `%${cleanKw}%`,
+                        };
+                        if (col === 'soNo')
+                          sqb.orWhere(
+                            `so.so_no ${op} :allm_${matchIdx}_${i}`,
+                            p,
+                          );
+                        else if (col === 'status')
+                          sqb.orWhere(
+                            `so.status ${op} :allm_${matchIdx}_${i}`,
+                            p,
+                          );
+                        else if (col === 'remarks')
+                          sqb.orWhere(
+                            `so.remarks ${op} :allm_${matchIdx}_${i}`,
+                            p,
+                          );
+                        else if (col === 'customerName')
+                          sqb.orWhere(
+                            `bp.name ${op} :allm_${matchIdx}_${i} OR bp.code ${op} :allm_${matchIdx}_${i}`,
+                            p,
+                          );
+                      });
+                    }),
+                  );
+                }
+              }
+              continue;
+            }
+
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+
+            if (col === 'soNo') {
               qb.andWhere('so.so_no IN (:...soNos)', { soNos: vals });
-            else if (col === 'status')
+            } else if (col === 'status') {
               qb.andWhere('so.status IN (:...cStatuses)', { cStatuses: vals });
-            else if (col === 'remarks')
-              qb.andWhere('so.remarks IN (:...remarks)', { remarks: vals });
-            else if (col === 'customerName')
-              qb.andWhere('bp.name IN (:...customerNames)', {
-                customerNames: vals,
-              });
-            else if (col === 'orderDate')
+            } else if (col === 'remarks') {
+              if (hasBlank && realVals.length > 0) {
+                qb.andWhere(
+                  "(so.remarks IS NULL OR so.remarks = '' OR so.remarks IN (:...remarks))",
+                  { remarks: realVals },
+                );
+              } else if (hasBlank) {
+                qb.andWhere("(so.remarks IS NULL OR so.remarks = '')");
+              } else {
+                qb.andWhere('so.remarks IN (:...remarks)', {
+                  remarks: realVals,
+                });
+              }
+            } else if (col === 'customerName') {
+              if (hasBlank && realVals.length > 0) {
+                qb.andWhere(
+                  "(bp.name IS NULL OR bp.name = '' OR bp.name IN (:...customerNames))",
+                  { customerNames: realVals },
+                );
+              } else if (hasBlank) {
+                qb.andWhere("(bp.name IS NULL OR bp.name = '')");
+              } else {
+                qb.andWhere('bp.name IN (:...customerNames)', {
+                  customerNames: realVals,
+                });
+              }
+            } else if (col === 'orderDate') {
               qb.andWhere(
                 "TO_CHAR(so.order_date, 'YYYY-MM-DD') IN (:...orderDates)",
                 { orderDates: vals },
               );
-            else if (col === 'expectedDeliveryDate')
-              qb.andWhere(
-                "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') IN (:...expDates)",
-                { expDates: vals },
-              );
-            else if (col === 'totalQty') {
+            } else if (col === 'expectedDeliveryDate') {
+              if (hasBlank && realVals.length > 0) {
+                qb.andWhere(
+                  "(so.expected_delivery_date IS NULL OR TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') IN (:...expDates))",
+                  { expDates: realVals },
+                );
+              } else if (hasBlank) {
+                qb.andWhere('so.expected_delivery_date IS NULL');
+              } else {
+                qb.andWhere(
+                  "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD') IN (:...expDates)",
+                  { expDates: realVals },
+                );
+              }
+            } else if (col === 'totalQty') {
               qb.andWhere(
                 (sqb) => {
                   const subQuery = sqb
@@ -311,15 +399,22 @@ export class SalesOrdersCoreService {
           qb.andWhere(
             new Brackets((sqb) => {
               kws.forEach((kw) => {
-                const p = { [`csw${idx}`]: `%${kw}%` };
-                if (col === 'soNo') sqb.orWhere(`so.so_no ILIKE :csw${idx}`, p);
+                let isExact = false;
+                let cleanKw = kw;
+                if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+                  isExact = true;
+                  cleanKw = kw.slice(1, -1);
+                }
+                const op = isExact ? '=' : 'ILIKE';
+                const p = { [`csw${idx}`]: isExact ? cleanKw : `%${cleanKw}%` };
+                if (col === 'soNo') sqb.orWhere(`so.so_no ${op} :csw${idx}`, p);
                 else if (col === 'status')
-                  sqb.orWhere(`so.status ILIKE :csw${idx}`, p);
+                  sqb.orWhere(`so.status ${op} :csw${idx}`, p);
                 else if (col === 'remarks')
-                  sqb.orWhere(`so.remarks ILIKE :csw${idx}`, p);
+                  sqb.orWhere(`so.remarks ${op} :csw${idx}`, p);
                 else if (col === 'customerName')
                   sqb.orWhere(
-                    `bp.name ILIKE :csw${idx} OR bp.code ILIKE :csw${idx}`,
+                    `bp.name ${op} :csw${idx} OR bp.code ${op} :csw${idx}`,
                     p,
                   );
                 else if (col === 'orderDate') {
@@ -1326,9 +1421,50 @@ export class SalesOrdersCoreService {
           }
 
           if (filterField) {
-            const placeholders = vals.map(() => `$${paramIdx++}`).join(', ');
-            filterConditions += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
-            params.push(...vals);
+            if (vals[0] === '__ALL_MATCHING__') {
+              const searchStr = (vals[1] || '').trim();
+              if (searchStr) {
+                const kws = searchStr
+                  .split(';')
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                if (kws.length > 0) {
+                  const orConds = kws.map((kw) => {
+                    if (
+                      kw.startsWith('"') &&
+                      kw.endsWith('"') &&
+                      kw.length >= 2
+                    ) {
+                      params.push(kw.slice(1, -1));
+                      return `CAST(${filterField} AS TEXT) = $${paramIdx++}`;
+                    } else {
+                      params.push(`%${kw}%`);
+                      return `CAST(${filterField} AS TEXT) ILIKE $${paramIdx++}`;
+                    }
+                  });
+                  filterConditions += ` AND (${orConds.join(' OR ')})`;
+                }
+              }
+              continue;
+            }
+
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && realVals.length > 0) {
+              const placeholders = realVals
+                .map(() => `$${paramIdx++}`)
+                .join(', ');
+              filterConditions += ` AND (${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '' OR CAST(${filterField} AS TEXT) IN (${placeholders}))`;
+              params.push(...realVals);
+            } else if (hasBlank) {
+              filterConditions += ` AND (${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`;
+            } else {
+              const placeholders = realVals
+                .map(() => `$${paramIdx++}`)
+                .join(', ');
+              filterConditions += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+              params.push(...realVals);
+            }
           }
         }
       } catch (e) {}

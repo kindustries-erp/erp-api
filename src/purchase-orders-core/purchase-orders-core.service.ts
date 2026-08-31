@@ -19,6 +19,9 @@ import {
   LessThanOrEqual,
   In,
   Not,
+  IsNull,
+  Or,
+  Equal,
 } from 'typeorm';
 import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
@@ -122,6 +125,41 @@ export class PurchaseOrdersCoreService {
         const filters = JSON.parse(filtersStr);
         Object.entries(filters).forEach(([key, values]) => {
           if (Array.isArray(values) && values.length > 0) {
+            if (values[0] === '__ALL_MATCHING__') {
+              const searchStr = (values[1] || '').trim();
+              if (searchStr) {
+                const kws = searchStr
+                  .split(';')
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                if (kws.length > 0) {
+                  const orConds: string[] = [];
+                  const pms: Record<string, any> = {};
+                  kws.forEach((kw, i) => {
+                    const pn = `am_${key}_${i}`;
+                    if (
+                      kw.startsWith('"') &&
+                      kw.endsWith('"') &&
+                      kw.length >= 2
+                    ) {
+                      pms[pn] = kw.slice(1, -1);
+                      if (key === 'supplierNameSnapshot')
+                        orConds.push(`supplier.name = :${pn}`);
+                      else orConds.push(`po.${key} = :${pn}`);
+                    } else {
+                      pms[pn] = `%${kw}%`;
+                      if (key === 'supplierNameSnapshot')
+                        orConds.push(`supplier.name ILIKE :${pn}`);
+                      else orConds.push(`po.${key} ILIKE :${pn}`);
+                    }
+                  });
+                  if (orConds.length > 0) {
+                    qb.andWhere(`(${orConds.join(' OR ')})`, pms);
+                  }
+                }
+              }
+              return;
+            }
             const paramName = `filter_${key}`;
             if (key === 'poNo')
               qb.andWhere(`po.poNo IN (:${paramName})`, {
@@ -144,22 +182,169 @@ export class PurchaseOrdersCoreService {
                 `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:${paramName})`,
                 { [paramName]: values },
               );
-            else if (key === 'expectedDate')
-              qb.andWhere(
-                `TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName})`,
-                { [paramName]: values },
-              );
-            else if (key === 'title')
+            else if (key === 'expectedDate') {
+              const hasBlank = values.includes('__BLANK__');
+              const realVals = values.filter((v) => v !== '__BLANK__');
+              if (hasBlank && realVals.length > 0) {
+                qb.andWhere(
+                  `(po.expectedDate IS NULL OR TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName}))`,
+                  { [paramName]: realVals },
+                );
+              } else if (hasBlank) {
+                qb.andWhere(`po.expectedDate IS NULL`);
+              } else {
+                qb.andWhere(
+                  `TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName})`,
+                  { [paramName]: realVals },
+                );
+              }
+            } else if (key === 'title')
               qb.andWhere(`po.title IN (:${paramName})`, {
                 [paramName]: values,
               });
-            else if (key === 'totalAmount')
+            else if (key === 'remarks') {
+              const hasBlank = values.includes('__BLANK__');
+              const realVals = values.filter((v) => v !== '__BLANK__');
+              if (hasBlank && realVals.length > 0) {
+                qb.andWhere(
+                  `(po.remarks IS NULL OR po.remarks = '' OR po.remarks IN (:${paramName}))`,
+                  { [paramName]: realVals },
+                );
+              } else if (hasBlank) {
+                qb.andWhere(`(po.remarks IS NULL OR po.remarks = '')`);
+              } else {
+                qb.andWhere(`po.remarks IN (:${paramName})`, {
+                  [paramName]: realVals,
+                });
+              }
+            } else if (key === 'inventoryStatus') {
+              const conds: string[] = [];
+              if (values.includes('RECEIVED'))
+                conds.push("po.status IN ('RECEIVED', 'FULLY_RECEIVED')");
+              if (values.includes('PARTIAL_RECEIVED'))
+                conds.push("po.status = 'PARTIAL_RECEIVED'");
+              if (values.includes('NOT_RECEIVED'))
+                conds.push(
+                  "po.status NOT IN ('RECEIVED', 'FULLY_RECEIVED', 'PARTIAL_RECEIVED')",
+                );
+              if (conds.length > 0) {
+                qb.andWhere(`(${conds.join(' OR ')})`);
+              }
+            } else if (key === 'totalAmount')
               qb.andWhere(`po.totalAmount IN (:${paramName})`, {
                 [paramName]: values,
               });
           }
         });
       } catch (e) {}
+    }
+
+    if (column === 'inventoryStatus') {
+      const statusMap: { key: string; vi: string; en: string }[] = [
+        { key: 'NOT_RECEIVED', vi: 'Chưa nhập', en: 'Not received' },
+        {
+          key: 'PARTIAL_RECEIVED',
+          vi: 'Nhập một phần',
+          en: 'Partially received',
+        },
+        { key: 'RECEIVED', vi: 'Đã nhập', en: 'Received' },
+      ];
+      let filtered = statusMap;
+      if (search) {
+        const s = search.toLowerCase();
+        filtered = statusMap.filter(
+          (item) =>
+            item.key.toLowerCase().includes(s) ||
+            item.vi.toLowerCase().includes(s) ||
+            item.en.toLowerCase().includes(s),
+        );
+      }
+      const items = filtered.map((f) => f.key);
+      return {
+        items,
+        total: items.length,
+        page,
+        pageSize,
+        totalPages: Math.ceil(items.length / pageSize),
+      };
+    }
+
+    if (column === 'totalQty') {
+      const qb = this.repository
+        .createQueryBuilder('po')
+        .leftJoin('po.lines', 'line')
+        .leftJoin('po.supplier', 'supplier')
+        .where('po.isDeleted = false');
+
+      if (filtersStr) {
+        try {
+          const filters = JSON.parse(filtersStr);
+          let pIdx = 0;
+          Object.entries(filters).forEach(([key, values]) => {
+            if (Array.isArray(values) && values.length > 0) {
+              const pName = `qty_filt_${pIdx++}`;
+              if (key === 'poNo')
+                qb.andWhere(`po.poNo IN (:${pName})`, { [pName]: values });
+              else if (key === 'status')
+                qb.andWhere(`po.status IN (:${pName})`, { [pName]: values });
+              else if (key === 'paymentStatus')
+                qb.andWhere(`po.paymentStatus IN (:${pName})`, {
+                  [pName]: values,
+                });
+              else if (key === 'supplierNameSnapshot')
+                qb.andWhere(`supplier.name IN (:${pName})`, {
+                  [pName]: values,
+                });
+            }
+          });
+        } catch (e) {}
+      }
+
+      qb.select('CAST(ROUND(SUM(line.qtyOrdered), 0) AS TEXT)', 'val');
+      qb.groupBy('po.id');
+      qb.having('SUM(line.qtyOrdered) IS NOT NULL');
+      if (search) {
+        const kws = String(search)
+          .split(';')
+          .map((k) => k.trim())
+          .filter(Boolean);
+        if (kws.length > 0) {
+          const orConds: string[] = [];
+          const params: Record<string, any> = {};
+          kws.forEach((kw, i) => {
+            const pName = `qkw_${i}`;
+            if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+              params[pName] = kw.slice(1, -1);
+              orConds.push(
+                `CAST(ROUND(SUM(line.qtyOrdered), 0) AS TEXT) = :${pName}`,
+              );
+            } else {
+              params[pName] = `%${kw}%`;
+              orConds.push(
+                `CAST(ROUND(SUM(line.qtyOrdered), 0) AS TEXT) ILIKE :${pName}`,
+              );
+            }
+          });
+          qb.andHaving(`(${orConds.join(' OR ')})`, params);
+        }
+      }
+      qb.orderBy('val', 'ASC');
+      const raw = await qb.getRawMany();
+      const distinctVals = Array.from(
+        new Set(raw.map((r) => r.val).filter(Boolean)),
+      ).sort((a: any, b: any) => Number(a) - Number(b));
+      const total = distinctVals.length;
+      const paginated = distinctVals.slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
+      return {
+        items: paginated,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
     }
 
     let field = '';
@@ -204,14 +389,40 @@ export class PurchaseOrdersCoreService {
     const selectExpr = isDate ? `TO_CHAR(${field}, 'YYYY-MM-DD')` : field;
     qb.select(`DISTINCT ${selectExpr}`, 'val');
     qb.andWhere(`${field} IS NOT NULL`);
+    if (!isNumeric && !isDate) {
+      qb.andWhere(`CAST(${field} AS TEXT) != ''`);
+    }
 
     if (search) {
-      if (isNumeric) {
-        qb.andWhere(`CAST(${field} AS TEXT) ILIKE :search`, {
-          search: `%${search}%`,
+      const kws = String(search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter(Boolean);
+
+      if (kws.length > 0) {
+        const orConds: string[] = [];
+        const params: Record<string, any> = {};
+        kws.forEach((kw, i) => {
+          const pName = `kw_${i}`;
+          if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+            params[pName] = kw.slice(1, -1);
+            if (isNumeric) {
+              orConds.push(`CAST(${field} AS TEXT) = :${pName}`);
+            } else {
+              orConds.push(`${selectExpr} = :${pName}`);
+            }
+          } else {
+            params[pName] = `%${kw}%`;
+            if (isNumeric) {
+              orConds.push(`CAST(${field} AS TEXT) ILIKE :${pName}`);
+            } else {
+              orConds.push(`${selectExpr} ILIKE :${pName}`);
+            }
+          }
         });
-      } else {
-        qb.andWhere(`${selectExpr} ILIKE :search`, { search: `%${search}%` });
+        if (orConds.length > 0) {
+          qb.andWhere(`(${orConds.join(' OR ')})`, params);
+        }
       }
     }
 
@@ -220,14 +431,16 @@ export class PurchaseOrdersCoreService {
     qb.offset((page - 1) * pageSize);
 
     const raw = await qb.getRawMany();
-    const items = raw.map((r) => {
-      const val = (r as Record<string, unknown>).val;
-      if (typeof val === 'string') return val;
-      if (typeof val === 'number') return val.toString();
-      if (typeof val === 'boolean') return val ? 'true' : 'false';
-      if (val instanceof Date) return val.toISOString();
-      return '';
-    });
+    const items = raw
+      .map((r) => {
+        const val = (r as Record<string, unknown>).val;
+        if (typeof val === 'string') return val;
+        if (typeof val === 'number') return val.toString();
+        if (typeof val === 'boolean') return val ? 'true' : 'false';
+        if (val instanceof Date) return val.toISOString();
+        return '';
+      })
+      .filter((v) => v !== '');
 
     // Get total
     const countQb = qb.clone();
@@ -256,21 +469,78 @@ export class PurchaseOrdersCoreService {
     if (query.column_search) {
       try {
         const searches = JSON.parse(query.column_search);
-        Object.entries(searches).forEach(([key, val]) => {
+        for (const [key, val] of Object.entries(searches)) {
           if (val) {
             const strVal = val as string;
-            if (key === 'poNo') where.poNo = ILike(`%${strVal}%`);
+            const kws = strVal
+              .split(';')
+              .map((k) => k.trim())
+              .filter(Boolean);
+            const buildCondition = () => {
+              if (kws.length === 1 && !kws[0].startsWith('"')) {
+                return ILike(`%${kws[0]}%`);
+              }
+              const orConditions = kws.map((kw) => {
+                if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+                  return Equal(kw.slice(1, -1));
+                }
+                return ILike(`%${kw}%`);
+              });
+              return Or(...orConditions);
+            };
+
+            if (key === 'poNo') where.poNo = buildCondition();
             else if (key === 'supplierNameSnapshot')
               where.supplier = {
                 ...where.supplier,
-                name: ILike(`%${strVal}%`),
+                name: buildCondition(),
               };
-            else if (key === 'status') where.status = ILike(`%${strVal}%`);
+            else if (key === 'status') where.status = buildCondition();
             else if (key === 'paymentStatus')
-              where.paymentStatus = ILike(`%${strVal}%`);
-            else if (key === 'title') where.title = ILike(`%${strVal}%`);
-            else if (key === 'remarks') where.remarks = ILike(`%${strVal}%`);
-            else if (key === 'orderDate' || key === 'expectedDate') {
+              where.paymentStatus = buildCondition();
+            else if (key === 'title') where.title = buildCondition();
+            else if (key === 'remarks') where.remarks = buildCondition();
+            else if (key === 'inventoryStatus') {
+              const upper = strVal.toUpperCase();
+              if (
+                upper.includes('CHƯA') ||
+                upper.includes('NOT') ||
+                upper.includes('CHUA')
+              ) {
+                where.status = Not(
+                  In(['RECEIVED', 'FULLY_RECEIVED', 'PARTIAL_RECEIVED']),
+                );
+              } else if (
+                upper.includes('PHẦN') ||
+                upper.includes('PARTIAL') ||
+                upper.includes('PHAN')
+              ) {
+                where.status = 'PARTIAL_RECEIVED';
+              } else if (
+                upper.includes('ĐÃ') ||
+                upper.includes('RECEIVED') ||
+                upper.includes('DA')
+              ) {
+                where.status = In(['RECEIVED', 'FULLY_RECEIVED']);
+              }
+            } else if (key === 'totalQty') {
+              const num = Number(strVal);
+              if (!Number.isNaN(num)) {
+                const matching = await this.lineRepository
+                  .createQueryBuilder('line')
+                  .select('line.purchaseOrderId', 'id')
+                  .groupBy('line.purchaseOrderId')
+                  .having('ROUND(SUM(line.qtyOrdered), 0) = :qtyVal', {
+                    qtyVal: num,
+                  })
+                  .getRawMany();
+                const matchingIds = matching.map((r) => r.id);
+                where.id =
+                  matchingIds.length > 0
+                    ? In(matchingIds)
+                    : In(['00000000-0000-0000-0000-000000000000']);
+              }
+            } else if (key === 'orderDate' || key === 'expectedDate') {
               if (strVal.includes('|')) {
                 const [from, to] = strVal.split('|');
                 if (from && to) {
@@ -290,27 +560,145 @@ export class PurchaseOrdersCoreService {
               }
             }
           }
-        });
+        }
       } catch (e) {}
     }
 
     if (query.column_filters) {
       try {
         const filters = JSON.parse(query.column_filters);
-        Object.entries(filters).forEach(([key, values]) => {
+        for (const [key, values] of Object.entries(filters)) {
           if (Array.isArray(values) && values.length > 0) {
+            if (values[0] === '__ALL_MATCHING__') {
+              const searchStr = (values[1] || '').trim();
+              if (searchStr) {
+                const kws = searchStr
+                  .split(';')
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                const buildCond = () => {
+                  if (kws.length === 1 && !kws[0].startsWith('"')) {
+                    return ILike(`%${kws[0]}%`);
+                  }
+                  const orConditions = kws.map((kw) => {
+                    if (
+                      kw.startsWith('"') &&
+                      kw.endsWith('"') &&
+                      kw.length >= 2
+                    ) {
+                      return Equal(kw.slice(1, -1));
+                    }
+                    return ILike(`%${kw}%`);
+                  });
+                  return Or(...orConditions);
+                };
+
+                if (key === 'poNo') where.poNo = buildCond();
+                else if (key === 'supplierNameSnapshot')
+                  where.supplier = {
+                    ...where.supplier,
+                    name: buildCond(),
+                  };
+                else if (key === 'status') where.status = buildCond();
+                else if (key === 'paymentStatus')
+                  where.paymentStatus = buildCond();
+                else if (key === 'title') where.title = buildCond();
+                else if (key === 'remarks') where.remarks = buildCond();
+                else if (key === 'totalQty') {
+                  const num = Number(searchStr);
+                  if (!Number.isNaN(num)) {
+                    const matching = await this.lineRepository
+                      .createQueryBuilder('line')
+                      .select('line.purchaseOrderId', 'id')
+                      .groupBy('line.purchaseOrderId')
+                      .having('ROUND(SUM(line.qtyOrdered), 0) = :qtyVal', {
+                        qtyVal: num,
+                      })
+                      .getRawMany();
+                    const matchingIds = matching.map((r) => r.id);
+                    where.id =
+                      matchingIds.length > 0
+                        ? In(matchingIds)
+                        : In(['00000000-0000-0000-0000-000000000000']);
+                  }
+                }
+              }
+              continue;
+            }
+
+            const hasBlank = values.includes('__BLANK__');
+            const realVals = values.filter((v) => v !== '__BLANK__');
+
             if (key === 'poNo') where.poNo = In(values);
             else if (key === 'status') where.status = In(values);
             else if (key === 'paymentStatus') where.paymentStatus = In(values);
             else if (key === 'supplierNameSnapshot')
               where.supplier = { ...where.supplier, name: In(values) };
-            else if (key === 'title') where.title = In(values);
-            else if (key === 'remarks') where.remarks = In(values);
-            // orderDate, expectedDate, totalAmount can be handled dynamically using query builder,
-            // but for simplicity with findAndCount we map exact values.
-            // Note: date fields require special handling if they have time.
+            else if (key === 'title') {
+              if (hasBlank && realVals.length > 0) {
+                where.title = Or(IsNull(), In(realVals));
+              } else if (hasBlank) {
+                where.title = IsNull();
+              } else {
+                where.title = In(realVals);
+              }
+            } else if (key === 'remarks') {
+              if (hasBlank && realVals.length > 0) {
+                where.remarks = Or(IsNull(), In(realVals));
+              } else if (hasBlank) {
+                where.remarks = IsNull();
+              } else {
+                where.remarks = In(realVals);
+              }
+            } else if (key === 'expectedDate') {
+              if (hasBlank && realVals.length > 0) {
+                where.expectedDate = Or(
+                  IsNull(),
+                  In(realVals.map((d: string) => new Date(d))),
+                );
+              } else if (hasBlank) {
+                where.expectedDate = IsNull();
+              }
+            } else if (key === 'inventoryStatus') {
+              const statusMatches: any[] = [];
+              if (values.includes('RECEIVED')) {
+                statusMatches.push(In(['RECEIVED', 'FULLY_RECEIVED']));
+              }
+              if (values.includes('PARTIAL_RECEIVED')) {
+                statusMatches.push('PARTIAL_RECEIVED');
+              }
+              if (values.includes('NOT_RECEIVED')) {
+                statusMatches.push(
+                  Not(In(['RECEIVED', 'FULLY_RECEIVED', 'PARTIAL_RECEIVED'])),
+                );
+              }
+              if (statusMatches.length === 1) {
+                where.status = statusMatches[0];
+              } else if (statusMatches.length > 1) {
+                where.status = Or(...statusMatches);
+              }
+            } else if (key === 'totalQty') {
+              const numVals = values
+                .map((v) => Number(v))
+                .filter((v) => !Number.isNaN(v));
+              if (numVals.length > 0) {
+                const matching = await this.lineRepository
+                  .createQueryBuilder('line')
+                  .select('line.purchaseOrderId', 'id')
+                  .groupBy('line.purchaseOrderId')
+                  .having('ROUND(SUM(line.qtyOrdered), 0) IN (:...qtyVals)', {
+                    qtyVals: numVals,
+                  })
+                  .getRawMany();
+                const matchingIds = matching.map((r) => r.id);
+                where.id =
+                  matchingIds.length > 0
+                    ? In(matchingIds)
+                    : In(['00000000-0000-0000-0000-000000000000']);
+              }
+            }
           }
-        });
+        }
       } catch (e) {}
     }
 
@@ -402,25 +790,53 @@ export class PurchaseOrdersCoreService {
         'status',
         'paymentStatus',
         'supplierId',
+        'remarks',
+        'totalAmount',
       ],
       columnMap: {
         created_at: 'createdAt',
         order_date: 'orderDate',
+        orderDate: 'orderDate',
         expected_date: 'expectedDate',
+        expectedDate: 'expectedDate',
         due_date: 'expectedDate',
         po_no: 'poNo',
+        purchase_no: 'poNo',
+        poNo: 'poNo',
         payment_status: 'paymentStatus',
+        paymentStatus: 'paymentStatus',
         supplier_id: 'supplierId',
+        supplierId: 'supplierId',
+        status: 'status',
+        remarks: 'remarks',
       },
       defaultOrder: { orderDate: 'DESC', createdAt: 'DESC' },
     });
 
     let finalWhere: any = where;
     if (query.search) {
-      finalWhere = [
-        { ...where, poNo: ILike(`%${query.search}%`) },
-        { ...where, supplierInvoiceNo: ILike(`%${query.search}%`) },
-      ];
+      const keywords = String(query.search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter(Boolean);
+
+      if (keywords.length > 0) {
+        finalWhere = keywords.flatMap((kw) => {
+          let cond: any;
+          if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+            cond = Equal(kw.slice(1, -1));
+          } else {
+            cond = ILike(`%${kw}%`);
+          }
+          return [
+            { ...where, poNo: cond },
+            { ...where, supplierInvoiceNo: cond },
+            { ...where, supplier: { ...where.supplier, name: cond } },
+            { ...where, remarks: cond },
+            { ...where, title: cond },
+          ];
+        });
+      }
     }
 
     const [items, total] = await this.repository.findAndCount({

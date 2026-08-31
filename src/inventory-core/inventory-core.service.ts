@@ -167,6 +167,7 @@ export class InventoryItemsService {
     page: number = 1,
     pageSize: number = 20,
     filtersStr?: string,
+    trackingPolicy?: string,
   ) {
     return this.inventorySerialService.getSerialColumnOptions(
       column,
@@ -174,6 +175,7 @@ export class InventoryItemsService {
       page,
       pageSize,
       filtersStr,
+      trackingPolicy,
     );
   }
 

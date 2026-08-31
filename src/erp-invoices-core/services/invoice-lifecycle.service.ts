@@ -62,27 +62,57 @@ export class InvoiceLifecycleService {
         where: { id, isDeleted: false },
         relations,
       });
-    } else if (id.includes('_')) {
-      const [invoiceNo, ...serialParts] = id.split('_');
-      const serialNo = serialParts.join('_');
+    } else if (id.includes('_') || id.includes('-')) {
+      const sep = id.includes('_') ? '_' : '-';
+      const parts = id.split(sep);
+      const first = parts[0];
+      const rest = parts.slice(1).join(sep);
+
+      // Thử 1: Ký hiệu _ Số hóa đơn (serialNo = first, invoiceNo = rest)
       data = await this.repository.findOne({
         where: {
-          invoiceNo,
-          ...(serialNo ? { serialNo } : {}),
+          serialNo: first,
+          invoiceNo: rest,
           isDeleted: false,
         },
         relations,
       });
-    } else {
-      data = await this.repository.findOne({
-        where: { id, isDeleted: false },
-        relations,
-      });
+
+      // Thử 2: Số hóa đơn _ Ký hiệu (invoiceNo = first, serialNo = rest)
       if (!data) {
         data = await this.repository.findOne({
-          where: { invoiceNo: id, isDeleted: false },
+          where: {
+            invoiceNo: first,
+            serialNo: rest,
+            isDeleted: false,
+          },
           relations,
         });
+      }
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { invoiceNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { serialNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data && !isUuid) {
+      try {
+        data = await this.repository.findOne({
+          where: { id, isDeleted: false },
+          relations,
+        });
+      } catch {
+        // Ignore DB UUID syntax error if any
       }
     }
 

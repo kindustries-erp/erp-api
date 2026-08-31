@@ -114,13 +114,26 @@ src/kgara-api-core/
 
 | Phương thức | Endpoint | DTO / Query | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/greenway/dashboard/opex` | `ListGarageOpexQueryDto` | Lấy danh sách CP vận hành có phân trang, sort và server-side filter theo kỳ/nhóm/mã |
-| `GET` | `/greenway/dashboard/opex/column-options`| `columnKey`, `search` | Lấy danh sách options duy nhất phục vụ Filter Popover trên Data Table |
+| `GET` | `/greenway/dashboard/opex` | `ListGarageOpexQueryDto` | Lấy danh sách CP vận hành có phân trang, sort (`period`, `amount`, `categoryKey`, `recurrenceType`,...) và filter đa chiều (`cost_group`, `column_filters`, `column_search`) |
+| `GET` | `/greenway/dashboard/opex/column-options`| `columnKey`, `search`, `filtersStr` | Lấy danh sách options duy nhất (`categoryKey`, `categoryName`, `period`, `recurrenceType`, `recurrenceUntil`, `amount`, `note`) phục vụ Header Filter Popover trên Data Table |
 | `GET` | `/greenway/dashboard/opex/:id` | — | Lấy thông tin chi tiết 1 bản ghi chi phí |
 | `POST`| `/greenway/dashboard/opex` | `CreateGarageOpexDto` | Tạo mới bản ghi chi phí (hỗ trợ tạo chuỗi định kỳ nếu có `recurrenceType = 'monthly'`) |
 | `PUT` | `/greenway/dashboard/opex/:id` | `UpdateGarageOpexDto` | Chỉnh sửa bản ghi chi phí đơn lẻ |
 | `POST`| `/greenway/dashboard/opex/:id/apply-recurring` | `ApplyRecurringOpexDto` | Chỉnh sửa/Áp dụng biến động chuỗi định kỳ (`scope: 'this' \| 'this_and_future'`) |
 | `DELETE` | `/greenway/dashboard/opex/:id` | `scope` (query) | Xóa bản ghi (`this` hoặc `this_and_future`) |
+
+---
+
+## 6. Logic Nghiệp Vụ Trọng Tâm & Frontend Integration
+
+### 6.0. Chuẩn Bảng Dữ Liệu Frontend (`GarageOpex.tsx`)
+- Tích hợp `<SpreadsheetPageTemplate>` với `tableId="garage-opex-table"`.
+- Toolbar `<PillTabs>` lọc nhanh 4 nhóm chi phí (`ALL`, `OPEX`, `COGS`, `COMMISSION`) qua query param `cost_group`, cách ly độc lập với column filters.
+- 100% tiêu đề cột căn giữa (`headerClassName: "text-center"`, `align: "center"`).
+- Cột **Nhóm chi phí** có badge fixed-width `w-[110px]` kèm ellipsis + `<Tooltip>` và filter popover client.
+- Cột **Số tiền** có filter popover tự động format phân tách hàng nghìn `đ`.
+- Cột **Loại chi phí** gắn icon xem chi tiết Drawer (`TableText` with `onDetailClick`).
+- Bổ sung 2 cột: **Chu kỳ lặp** (`recurrenceType`) và **Hạn kết thúc** (`recurrenceUntil`).
 
 ---
 

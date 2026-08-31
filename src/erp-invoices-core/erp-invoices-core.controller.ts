@@ -23,6 +23,7 @@ import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type {
   ErpInvoiceQuery,
@@ -48,7 +49,10 @@ export class ErpInvoicesCoreController {
     private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get(':id/traceability-graph')
   getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
     return this.traceabilityService.getInvoiceTraceabilityGraph(id, req.user);
@@ -58,7 +62,10 @@ export class ErpInvoicesCoreController {
   // CRUD cơ bản
   // ---------------------------------------------------------------------------
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('items')
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
@@ -68,7 +75,10 @@ export class ErpInvoicesCoreController {
     return this.service.findAllItems(query);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('items/column-options')
   getItemColumnOptions(
     @Query('column') column: string,
@@ -88,7 +98,10 @@ export class ErpInvoicesCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('items/export/excel')
   async exportItemsExcel(
     @Query() query: ErpInvoiceItemQuery,
@@ -106,7 +119,10 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get()
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
@@ -122,7 +138,10 @@ export class ErpInvoicesCoreController {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -142,7 +161,10 @@ export class ErpInvoicesCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export/excel')
   async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
     const buffer = await this.service.exportExcel(query);
@@ -154,7 +176,10 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Post('export/excel/background')
   startExportExcelBackground(
     @Body() query: ErpInvoiceQuery,
@@ -163,7 +188,10 @@ export class ErpInvoicesCoreController {
     return this.service.startExportExcelBackground(query, req.user?.sub);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export/excel/background/history')
   getExportExcelBackgroundHistory(
     @Request() req: any,
@@ -178,7 +206,10 @@ export class ErpInvoicesCoreController {
   }
 
   // Compatibility alias for clients using legacy path variant.
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Post('export/background/excel')
   startExportExcelBackgroundAlias(
     @Body() query: ErpInvoiceQuery,
@@ -187,7 +218,10 @@ export class ErpInvoicesCoreController {
     return this.service.startExportExcelBackground(query, req.user?.sub);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export/excel/background/:jobId/download')
   async downloadBackgroundExport(
     @Param('jobId') jobId: string,
@@ -261,7 +295,10 @@ export class ErpInvoicesCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('stats')
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'dateFrom', required: false })
@@ -274,73 +311,109 @@ export class ErpInvoicesCoreController {
     return this.service.getStats(direction, dateFrom, dateTo);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Post('bulk-net-offs')
   getBulkNetOffs(@Body('ids') ids: string[]) {
     return this.service.getBulkNetOffs(ids);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Post('smart-net-off-suggestions')
   getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
     return this.service.getSmartNetOffSuggestions(invoiceIds);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/post')
   postInvoice(@Param('id') id: string, @Body() dto: PostInvoiceDto) {
     return this.service.postInvoice(id, dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/unpost')
   unpostInvoice(@Param('id') id: string) {
     return this.service.unpostInvoice(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/auto-post-standard')
   autoPostStandard(@Param('id') id: string) {
     return this.service.autoPostStandard(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch('bulk-set-branch')
   bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
     return this.service.bulkSetBranch(body.ids, body.branchId);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch('bulk-set-notes')
   bulkSetNotes(@Body() body: { ids: string[]; notes: string }) {
     return this.service.bulkSetNotes(body.ids, body.notes);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
@@ -351,7 +424,10 @@ export class ErpInvoicesCoreController {
     return this.service.syncDetailFromPortal(id, token);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/net-off-vouchers')
   linkVouchers(
     @Param('id') id: string,
@@ -360,7 +436,10 @@ export class ErpInvoicesCoreController {
     return this.service.linkVouchersToInvoice(id, payload);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Delete(':id/net-off-vouchers/:voucherId')
   removeVoucherLink(
     @Param('id') id: string,
@@ -373,7 +452,10 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/sync')
   async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
     try {
@@ -413,7 +495,10 @@ export class ErpInvoicesCoreController {
     }
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id/validate')
   async validateInvoice(
     @Param('id') id: string,
@@ -428,7 +513,10 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/bulk-download-xml
    * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
    */
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
     @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
@@ -440,25 +528,37 @@ export class ErpInvoicesCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Get('portal/captcha')
   async getPortalCaptcha() {
     return await this.service.getPortalCaptcha();
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/login')
   async loginPortal(@Body() dto: PortalLoginDto) {
     return await this.service.loginPortalWithCaptcha(dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Get('portal/token')
   async getPortalToken() {
     return await this.service.getPortalConfig();
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/token')
   async savePortalToken(
     @Body()
@@ -671,7 +771,10 @@ export class ErpInvoicesCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/attachments/link')
   linkAttachment(
     @Param('id') id: string,
@@ -680,7 +783,10 @@ export class ErpInvoicesCoreController {
     return this.service.linkAttachment(id, body.attachmentId);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Delete(':id/attachments/:attachmentId')
   unlinkAttachment(
     @Param('id') id: string,
