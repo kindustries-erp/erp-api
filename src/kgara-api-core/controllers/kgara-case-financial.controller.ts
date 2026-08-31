@@ -26,6 +26,7 @@ import { extractNetPayableAmount } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -47,7 +48,7 @@ export class KgaraCaseFinancialController {
   ) {}
 
   @Get('cases/:id/linked-invoices')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -68,7 +69,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/linked-invoices')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async addLinkedInvoice(
     @Param('id') id: string,
     @Body()
@@ -188,7 +192,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('invoices/:invoiceId/linked-cases')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getLinkedCases(@Param('invoiceId') invoiceId: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -204,7 +208,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Delete('cases/:id/linked-invoices/:linkedId')
-  @RequirePermissions({ resource: 'garage', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.DELETE,
+  })
   async removeLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
@@ -248,7 +255,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/traceability-graph')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseTraceabilityGraph(@Param('id') id: string, @Req() req: any) {
     return this.traceabilityService.getGarageCaseTraceabilityGraph(
       id,
@@ -257,7 +264,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/financial-summary')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseFinancialSummary(@Param('id') id: string) {
     const c = await this.caseRepo.findOne({
       where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
@@ -361,7 +368,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/settlements')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseSettlements(@Param('id') id: string) {
     return this.settlementRepo.query(
       `SELECT s.id::text as "id", 
@@ -392,7 +399,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/smart-settlement-suggestions')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getSmartSettlementSuggestions(
     @Param('id') id: string,
     @Query('type') type?: 'RECEIPT' | 'PAYMENT',
@@ -404,7 +411,7 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/smart-invoice-suggestions')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getSmartInvoiceSuggestions(
     @Param('id') id: string,
     @Query('direction') direction?: 'IN' | 'OUT',
@@ -416,7 +423,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/settlements')
-  @RequirePermissions({ resource: 'garage', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
   async addCaseSettlement(
     @Param('id') id: string,
     @Body()
@@ -489,7 +499,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Delete('cases/:id/settlements/:settlementId')
-  @RequirePermissions({ resource: 'garage', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.DELETE,
+  })
   async removeCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,
@@ -540,7 +553,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Patch('cases/:id/settlements/:settlementId')
-  @RequirePermissions({ resource: 'garage', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
   async updateCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,

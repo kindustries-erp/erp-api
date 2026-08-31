@@ -124,10 +124,10 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/inventory/serials` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách Serial/VIN (phân trang, search, lọc theo status, itemId, SO line, thiếu serial) |
-| `GET` | `/api/v1/inventory/serials/:id` | `{ resource: 'inventory_items', action: 'read' }` | Lấy chi tiết serial kèm thông tin xe (VIN, Engine No), đơn bán và vòng đời bảo hành |
-| `PATCH` | `/api/v1/inventory/serials/:id` | `{ resource: 'inventory_items', action: 'update' }` | Cập nhật thông tin serial/lot/ghi chú |
-| `GET` | `/api/v1/inventory/serials/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy options distinct theo cột cho header bảng Serial |
+| `GET` | `/api/v1/inventory/serials` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách Serial/VIN (phân trang, search, lọc theo status, trackingPolicy, itemId, SO line, exact search `""`, multi-search `;`, blank filter `__BLANK__` / `(blank)`) |
+| `GET` | `/api/v1/inventory/serials/:idOrCode` | `{ resource: 'inventory_items', action: 'read' }` | Lấy chi tiết serial kèm thông tin xe (VIN, Engine No), đơn bán và vòng đời bảo hành (hỗ trợ tra cứu linh hoạt qua UUID, `serial_no`, `lot_no`, `vin_no`, `engine_no`) |
+| `PATCH` | `/api/v1/inventory/serials/:idOrCode` | `{ resource: 'inventory_items', action: 'update' }` | Cập nhật thông tin serial/lot/ghi chú (hỗ trợ tra cứu qua UUID hoặc mã định danh) |
+| `GET` | `/api/v1/inventory/serials/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy options distinct theo cột cho header bảng Serial (hỗ trợ param `trackingPolicy`, exact/multi/blank search) |
 | `POST` | `/api/v1/inventory/serials/confirm-delivery-bulk` | `{ resource: 'sales_orders', action: 'update' }` | Bàn giao xe hàng loạt: chuyển trạng thái `SOLD`, cập nhật khách hàng & kích hoạt bảo hành |
 | `GET` | `/api/v1/inventory/serial-lifecycles` | `{ resource: 'sales_orders', action: 'read' }` | Danh sách hồ sơ vòng đời và bảo hành xe |
 | `PATCH` | `/api/v1/inventory/serial-lifecycles/:id` | `{ resource: 'sales_orders', action: 'update' }` | Cập nhật thông tin khách hàng hoặc điều chỉnh hạn bảo hành |

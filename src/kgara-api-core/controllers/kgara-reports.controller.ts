@@ -8,6 +8,7 @@ import { KgaraClientService } from '../kgara-client.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -24,7 +25,7 @@ export class KgaraReportsController {
   ) {}
 
   @Get('reports/gross-profit-detail')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitDetail(
     @BranchId() branchId: string,
     @Query('from') from: string,
@@ -36,7 +37,7 @@ export class KgaraReportsController {
   }
 
   @Get('reports/gross-profit-detail/journal')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitJournal(
     @BranchId() branchId: string,
     @Query('from') from: string,
@@ -49,7 +50,7 @@ export class KgaraReportsController {
   }
 
   @Get('dashboard')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getDashboard(
     @BranchId() branchId: string,
     @Query('from') from?: string,
@@ -61,7 +62,7 @@ export class KgaraReportsController {
   }
 
   @Get('receivables')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getReceivables(@BranchId() branchId: string) {
     const where: any = {};
     if (branchId) where.branchExternalId = branchId;
@@ -69,7 +70,7 @@ export class KgaraReportsController {
   }
 
   @Get('payables')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getPayables(@BranchId() branchId: string) {
     const where: any = {};
     if (branchId) where.branchExternalId = branchId;
@@ -77,13 +78,13 @@ export class KgaraReportsController {
   }
 
   @Get('cases/:id/services')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseServices(@Param('id') id: string) {
     return this.caseServiceRepo.find({ where: { hdPhieuDichVuId: id } });
   }
 
   @Get('cases/:id/payments')
-  @RequirePermissions({ resource: 'garage', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCasePayments(@Param('id') id: string) {
     // Return empty array since KGara V2 sync doesn't fetch detailed payment transactions.
     return [];

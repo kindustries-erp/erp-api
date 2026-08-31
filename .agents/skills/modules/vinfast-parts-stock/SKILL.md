@@ -127,6 +127,11 @@ Tags: `VinFast Parts`
 - Tạo fingerprint băm từ câu query (`buildQueryFingerprint`) để phát hiện và tái sử dụng ngay kết quả xuất trước đó (`findReusableCompletedJob`), giảm tải tối đa cho cơ sở dữ liệu.
 - Định dạng xuất: File `.xlsx` đa sheet (Sheet Tổng hợp + Sheet Chi tiết FIFO từng mã) sử dụng thư viện `exceljs`.
 
+### 5.5. Filter Engine Nâng Cao (`column_search` & `column_filters`)
+- **Multi-keyword (`;`)**: Tách chuỗi từ khóa qua dấu chấm phẩy và tạo điều kiện `OR` an toàn bằng `buildRawMultiKeywordSql`.
+- **Exact Search (`""`)**: Phát hiện chuỗi trong ngoặc kép và match chính xác tuyệt đối không kèm `%`.
+- **Blank Filter (`__BLANK__`)**: Xử lý `__BLANK__` trong `columnFilters` và `column_search` thành điều kiện `(field IS NULL OR field = '')`.
+
 ---
 
 ## 6. Tích hợp Liên Module
