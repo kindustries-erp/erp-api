@@ -465,4 +465,33 @@ Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối
   - Section 1: `<DrawerSection title={t("partnerProfile", "Hồ sơ đối tác")} collapsible>` (Tên đối tác + copy, Role badge, MST + copy, Địa chỉ, Ngân hàng).
   - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
 
+### 8.4. Cấu Trúc Atomic Tab "Tài chính" (`ErpInvoiceSettlementTab`) & Drawer Đối Soát Dòng Tiền (`VoucherNetoffSelectionModal`)
+Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `erp-atomic-refactor`:
 
+```
+src/modules/erp-invoices-core/components/
+├── ErpInvoiceSettlementTab/                     # Tab Tài chính trong Drawer Chi tiết HĐ
+│   ├── index.ts                                 # Barrel export
+│   ├── types.ts                                 # Types & ActiveVoucherItem
+│   ├── ErpInvoiceSettlementTab.tsx              # Main Container (< 60 LoC)
+│   ├── hooks/useErpInvoiceSettlementLogic.ts    # Logic tính toán tiến độ, nợ còn lại, link/unlink voucher
+│   └── components/
+│       ├── SettlementProgressCard.tsx           # KPI theo dõi tiến độ thanh toán & nợ còn lại
+│       └── SettlementVoucherList.tsx            # Danh sách chứng từ thanh toán/thu tiền đã cấn trừ
+│
+└── VoucherNetoffSelectionModal/                 # Drawer Đối soát Dòng tiền (Sao kê & Sổ quỹ)
+    ├── index.ts                                 # Barrel export
+    ├── types.ts                                 # Enums (SettlementType, ManualCategory, TabKey)
+    ├── utils.ts                                 # Pure calculation helpers (Net-off sum, remaining debt)
+    ├── VoucherNetoffSelectionModal.tsx          # Main Container (< 120 LoC)
+    ├── hooks/
+    │   ├── useVoucherNetoffSelectionLogic.ts    # State multi-select, query sao kê, smart suggestions, submit
+    │   └── useVoucherNetoffTabs.tsx             # Cấu trúc DrawerTopTabBar (Tab 1: Sao kê, Tab 2: Sổ quỹ Sắp ra mắt)
+    └── components/
+        ├── AllBankTransactionsTable.tsx         # Bảng danh sách sao kê ngân hàng & bộ lọc đa chiều
+        ├── SelectedBankTransactionsTable.tsx    # Bảng giao dịch đã chọn (STT 1-based, 100% i18n keys)
+        ├── NetOffRightPanel.tsx                 # Cột phải 4 section (Chiều đối soát, Tiến độ tài chính, Gợi ý, Lịch sử)
+        ├── OffSystemManualSection.tsx           # Form ghi nhận dòng tiền ngoài sổ sách
+        ├── ComingSoonTabContent.tsx             # Placeholder Sắp ra mắt cho tab Sổ quỹ
+        └── NetOffInput.tsx                      # Input số tiền cấn trừ có kiểm soát validation
+```
