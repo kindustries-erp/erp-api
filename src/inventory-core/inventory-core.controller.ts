@@ -348,7 +348,7 @@ export class InventoryItemsController {
     action: ErpAction.READ,
   })
   @Get('serials/:id')
-  getSerial(@Param('id', new ParseUUIDPipe()) id: string) {
+  getSerial(@Param('id') id: string) {
     return this.service.getSerial(id);
   }
 
@@ -357,10 +357,7 @@ export class InventoryItemsController {
     action: ErpAction.UPDATE,
   })
   @Patch('serials/:id')
-  updateSerial(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateInventorySerialDto,
-  ) {
+  updateSerial(@Param('id') id: string, @Body() dto: UpdateInventorySerialDto) {
     return this.service.updateSerial(id, dto);
   }
 

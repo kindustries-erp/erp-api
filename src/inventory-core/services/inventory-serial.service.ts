@@ -448,12 +448,51 @@ export class InventorySerialService {
     };
   }
 
-  async getSerial(id: string) {
-    const serial = await this.serialRepository.findOne({
-      where: { id },
-    });
-    if (!serial)
-      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
+  private async findSerialEntity(
+    idOrCode: string,
+  ): Promise<ErpInventoryTrackingSerial> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        idOrCode,
+      );
+
+    let serial: ErpInventoryTrackingSerial | null = null;
+    if (isUuid) {
+      serial = await this.serialRepository.findOne({
+        where: { id: idOrCode },
+      });
+    }
+
+    if (!serial) {
+      serial = await this.serialRepository.findOne({
+        where: [{ serialNo: idOrCode }, { lotNo: idOrCode }],
+      });
+    }
+
+    if (!serial) {
+      // Thử tìm qua VIN hoặc Engine No trong erp_vehicles
+      const vinVehicles = await this.serialRepository.manager.query(
+        `SELECT id FROM erp_vehicles WHERE vin_no = $1 OR engine_no = $1 LIMIT 1`,
+        [idOrCode],
+      );
+      if (vinVehicles.length > 0) {
+        serial = await this.serialRepository.findOne({
+          where: { vinId: vinVehicles[0].id },
+        });
+      }
+    }
+
+    if (!serial) {
+      throw new NotFoundException(
+        `Tracking serial '${idOrCode}' không tồn tại`,
+      );
+    }
+
+    return serial;
+  }
+
+  async getSerial(idOrCode: string) {
+    const serial = await this.findSerialEntity(idOrCode);
 
     // Fetch related item manually since it's not a direct TypeORM relation mapping yet
     const itemRaw = await this.serialRepository.manager.query(
@@ -510,7 +549,9 @@ export class InventorySerialService {
 
     const lifecycleRepo =
       this.serialRepository.manager.getRepository(ErpSerialLifecycle);
-    const lifecycle = await lifecycleRepo.findOne({ where: { serialId: id } });
+    const lifecycle = await lifecycleRepo.findOne({
+      where: { serialId: serial.id },
+    });
     if (lifecycle) {
       result.lifecycle = lifecycle;
     }
@@ -518,11 +559,8 @@ export class InventorySerialService {
     return result;
   }
 
-  async updateSerial(id: string, dto: UpdateInventorySerialDto) {
-    const serial = await this.serialRepository.findOne({ where: { id } });
-    if (!serial) {
-      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
-    }
+  async updateSerial(idOrCode: string, dto: UpdateInventorySerialDto) {
+    const serial = await this.findSerialEntity(idOrCode);
     if (dto.notes !== undefined) serial.notes = dto.notes;
     if (dto.attributes !== undefined) serial.attributes = dto.attributes;
     await this.serialRepository.save(serial);
