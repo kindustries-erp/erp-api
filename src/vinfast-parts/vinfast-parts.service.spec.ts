@@ -95,6 +95,82 @@ describe('VinfastPartsService Filter & Search Specs', () => {
     });
   });
 
+  describe('getPartsStock with stockTab (IN_STOCK, OUT_OF_STOCK, NEGATIVE, ALL)', () => {
+    it('should filter qtyBalance > 0 when stockTab is IN_STOCK', async () => {
+      await service.getPartsStock(
+        'oto',
+        1,
+        20,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'IN_STOCK',
+      );
+
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
+      expect(calledQuery).toContain('AND "qtyBalance" > 0');
+    });
+
+    it('should filter qtyBalance = 0 when stockTab is OUT_OF_STOCK', async () => {
+      await service.getPartsStock(
+        'oto',
+        1,
+        20,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'OUT_OF_STOCK',
+      );
+
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
+      expect(calledQuery).toContain('AND "qtyBalance" = 0');
+    });
+
+    it('should filter qtyBalance < 0 when stockTab is NEGATIVE', async () => {
+      await service.getPartsStock(
+        'oto',
+        1,
+        20,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'NEGATIVE',
+      );
+
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
+      expect(calledQuery).toContain('AND "qtyBalance" < 0');
+    });
+
+    it('should not add stock filter when stockTab is ALL or undefined', async () => {
+      await service.getPartsStock(
+        'oto',
+        1,
+        20,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'ALL',
+      );
+
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
+      expect(calledQuery).not.toContain('AND "qtyBalance" > 0');
+      expect(calledQuery).not.toContain('AND "qtyBalance" = 0');
+      expect(calledQuery).not.toContain('AND "qtyBalance" < 0');
+    });
+  });
+
   describe('getStockColumnOptions with search & filters', () => {
     it('should apply multi-keyword search in getStockColumnOptions', async () => {
       const res = await service.getStockColumnOptions(
@@ -109,6 +185,21 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       expect(res.total).toBe(5);
       const calledParams = catalogRepo.query.mock.calls[0][1];
       expect(calledParams).toEqual(expect.arrayContaining(['%VF5%', '%VF8%']));
+    });
+
+    it('should apply stockTab filter in getStockColumnOptions', async () => {
+      await service.getStockColumnOptions(
+        'sku',
+        undefined,
+        1,
+        20,
+        undefined,
+        'oto',
+        'IN_STOCK',
+      );
+
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
+      expect(calledQuery).toContain('AND "qtyBalance" > 0');
     });
   });
 });

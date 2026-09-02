@@ -457,6 +457,7 @@ export class VinfastPartsService {
     sorts?: string,
     columnSearch?: string,
     columnFilters?: string,
+    stockTab?: string,
   ) {
     const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
     const params: any[] = [];
@@ -584,6 +585,18 @@ export class VinfastPartsService {
       } catch (e) {}
     }
 
+    if (stockTab === 'IN_STOCK') {
+      havingFiltersSql += ' AND "qtyBalance" > 0';
+    } else if (stockTab === 'OUT_OF_STOCK') {
+      havingFiltersSql += ' AND "qtyBalance" = 0';
+    } else if (stockTab === 'NEGATIVE') {
+      havingFiltersSql += ' AND "qtyBalance" < 0';
+    } else if (stockTab === 'IN') {
+      havingFiltersSql += ' AND "qtyIn" > 0';
+    } else if (stockTab === 'OUT') {
+      havingFiltersSql += ' AND "qtyOut" > 0';
+    }
+
     let orderSql = 'ORDER BY "qtyBalance" DESC, sku ASC';
     if (sorts) {
       try {
@@ -680,6 +693,7 @@ export class VinfastPartsService {
     limit: number = 20,
     filtersStr?: string,
     vehicleType?: string,
+    stockTab?: string,
   ) {
     const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
     const params: any[] = [];
@@ -793,6 +807,18 @@ export class VinfastPartsService {
         havingSearchSql += res.sql;
         paramIndex = res.nextIndex;
       }
+    }
+
+    if (stockTab === 'IN_STOCK') {
+      havingFiltersSql += ' AND "qtyBalance" > 0';
+    } else if (stockTab === 'OUT_OF_STOCK') {
+      havingFiltersSql += ' AND "qtyBalance" = 0';
+    } else if (stockTab === 'NEGATIVE') {
+      havingFiltersSql += ' AND "qtyBalance" < 0';
+    } else if (stockTab === 'IN') {
+      havingFiltersSql += ' AND "qtyIn" > 0';
+    } else if (stockTab === 'OUT') {
+      havingFiltersSql += ' AND "qtyOut" > 0';
     }
 
     let selectCol = 'sku';

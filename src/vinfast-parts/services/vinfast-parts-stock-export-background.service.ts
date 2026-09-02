@@ -17,6 +17,7 @@ export type VinfastPartsStockExportQuery = {
   columnSearch?: string;
   columnFilters?: string;
   vehicleType?: string;
+  stockTab?: string;
 };
 
 export type VinfastPartsStockExportProgressEvent = {
