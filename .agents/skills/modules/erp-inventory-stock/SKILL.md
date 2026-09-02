@@ -88,7 +88,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/inventory/stock` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách số dư tồn kho (phân trang, search, lọc theo kho/loại hàng, sort) |
+| `GET` | `/api/v1/inventory/stock` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách số dư tồn kho (phân trang, search, `stock_tab` = `ALL` \| `IN_STOCK` \| `OUT_OF_STOCK` \| `NEGATIVE`, lọc theo kho/loại hàng, sort) |
 | `GET` | `/api/v1/inventory/stock/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách options distinct cho bộ lọc header từng cột |
 | `GET` | `/api/v1/inventory/stock/export/excel` | `{ resource: 'inventory_items', action: 'read' }` | Xuất bảng kê tồn kho ra file Excel `.xlsx` |
 

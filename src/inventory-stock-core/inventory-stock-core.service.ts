@@ -22,6 +22,8 @@ export class InventoryStockCoreService {
   async findAll(
     query: PaginationDto & {
       item_type?: string;
+      stock_tab?: string;
+      stockTab?: string;
       search?: string;
       searches?: string;
       filters?: string;
@@ -34,6 +36,19 @@ export class InventoryStockCoreService {
     qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
     qb.leftJoinAndSelect('item.uom', 'uom');
     qb.leftJoinAndSelect('item.itemType', 'itemType');
+
+    const effectiveStockTab = (
+      query.stock_tab ||
+      query.stockTab ||
+      ''
+    ).toUpperCase();
+    if (effectiveStockTab === 'IN_STOCK') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) > 0');
+    } else if (effectiveStockTab === 'OUT_OF_STOCK') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) = 0');
+    } else if (effectiveStockTab === 'NEGATIVE') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) < 0');
+    }
 
     if (query.item_type && query.search) {
       qb.where(
@@ -370,11 +385,21 @@ export class InventoryStockCoreService {
     page: number,
     pageSize: number,
     filtersStr?: string,
+    stockTab?: string,
   ) {
     const qb = this.itemRepository.createQueryBuilder('item');
     qb.leftJoin('item.itemType', 'itemType');
     qb.leftJoin('item.uom', 'uom');
     qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
+
+    const effectiveStockTab = (stockTab || '').toUpperCase();
+    if (effectiveStockTab === 'IN_STOCK') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) > 0');
+    } else if (effectiveStockTab === 'OUT_OF_STOCK') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) = 0');
+    } else if (effectiveStockTab === 'NEGATIVE') {
+      qb.andWhere('COALESCE(b.qtyOnHand, 0) < 0');
+    }
 
     let selectField = '';
     if (column === 'item_code') selectField = 'item.sku';
@@ -530,6 +555,8 @@ export class InventoryStockCoreService {
   async exportExcel(
     query: PaginationDto & {
       item_type?: string;
+      stock_tab?: string;
+      stockTab?: string;
       search?: string;
       searches?: string;
       filters?: string;
