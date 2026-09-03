@@ -21,6 +21,7 @@ import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { QueryPurchaseOrderItemsDto } from './dto/query-purchase-order-items.dto';
+import { ExportPurchaseOrdersRangeDto } from './dto/export-purchase-orders-range.dto';
 
 @ApiTags('erp_purchase_orders')
 @ApiBearerAuth()
@@ -125,6 +126,28 @@ export class PurchaseOrdersCoreController {
   @Get(':id/receipts')
   getReceipts(@Param('id') id: string) {
     return this.service.getReceiptTimeline(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
+  @Get('export/excel/range')
+  async exportExcelRange(
+    @Query() query: ExportPurchaseOrdersRangeDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportPoExcelRange(query);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const filename = `bang-ke-mua-hang-theo-ky_${timestamp}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
   }
 
   @RequirePermissions({

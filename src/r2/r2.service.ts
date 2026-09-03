@@ -36,6 +36,7 @@ export class R2Service {
     this.client = new S3Client({
       region: 'auto',
       endpoint: resolveS3Endpoint(this.config),
+      forcePathStyle: Boolean(this.config.get('R2_ENDPOINT')),
       credentials: {
         accessKeyId: this.config.getOrThrow<string>('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.config.getOrThrow<string>('R2_SECRET_ACCESS_KEY'),

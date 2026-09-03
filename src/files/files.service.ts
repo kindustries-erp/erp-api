@@ -29,6 +29,7 @@ export class FilesService {
     this.s3Client = new S3Client({
       region: 'auto',
       endpoint: resolveS3Endpoint(this.configService),
+      forcePathStyle: Boolean(this.configService.get('R2_ENDPOINT')),
       credentials: {
         accessKeyId: this.configService.getOrThrow<string>('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.getOrThrow<string>(
