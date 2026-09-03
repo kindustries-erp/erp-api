@@ -106,7 +106,10 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 | `POST` | `/api/v1/purchase-orders` | `purchase_orders:create` | Tạo mới đơn mua hàng (kèm tự sinh mã `PO-YYYYMM-xxx` và lưu mảng `lines`) |
 | `GET` | `/api/v1/purchase-orders` | `purchase_orders:read` | Lấy danh sách PO (hỗ trợ phân trang, lọc đa cột `column_filters`, tìm kiếm, lọc theo NCC, trạng thái, chỉ lấy đơn có thể nhận hàng `only_receivable`) |
 | `GET` | `/api/v1/purchase-orders/next-no` | `purchase_orders:read` | Dự báo mã số đơn mua hàng tiếp theo trong tháng |
-| `GET` | `/api/v1/purchase-orders/column-options` | `purchase_orders:read` | Lấy danh sách giá trị distinct cho dropdown lọc của bảng dữ liệu |
+| `GET` | `/api/v1/purchase-orders/column-options` | `purchase_orders:read` | Lấy danh sách giá trị distinct cho dropdown lọc của bảng đơn PO |
+| `GET` | `/api/v1/purchase-orders/items` | `purchase_orders:read` | Lấy danh sách dòng hàng PO chi tiết (hỗ trợ phân trang, lọc theo NCC, tìm kiếm đa cột, sort) |
+| `GET` | `/api/v1/purchase-orders/items/column-options` | `purchase_orders:read` | Lấy danh sách distinct options cho bộ lọc các cột bảng dòng hàng PO |
+| `GET` | `/api/v1/purchase-orders/supplier-stats/:supplierId` | `purchase_orders:read` | Lấy thống kê tổng hợp số đơn, chi tiêu, đã nhận, tỷ lệ hoàn tất theo nhà cung cấp |
 | `GET` | `/api/v1/purchase-orders/:id` | `purchase_orders:read` | Lấy chi tiết đơn mua hàng kèm danh sách dòng hàng và timeline nhập kho |
 | `PATCH`| `/api/v1/purchase-orders/:id` | `purchase_orders:update` | Cập nhật thông tin chung và đồng bộ mảng lines của PO |
 | `DELETE`| `/api/v1/purchase-orders/:id` | `purchase_orders:delete` | Xóa mềm đơn mua hàng (chỉ cho phép khi ở trạng thái `DRAFT`) |

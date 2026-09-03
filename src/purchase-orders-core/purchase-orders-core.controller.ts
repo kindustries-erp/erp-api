@@ -20,6 +20,7 @@ import { OperationalQueryDto } from '../operational-documents/dto/operational-do
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
+import { QueryPurchaseOrderItemsDto } from './dto/query-purchase-order-items.dto';
 
 @ApiTags('erp_purchase_orders')
 @ApiBearerAuth()
@@ -74,6 +75,47 @@ export class PurchaseOrdersCoreController {
       parseInt(pageSize, 10),
       filters,
     );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
+  @Get('items/column-options')
+  async getItemsColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+    @Query('supplier_id') supplierId?: string,
+  ) {
+    return this.service.getItemsColumnOptions(
+      column,
+      search,
+      parseInt(page, 10),
+      parseInt(pageSize, 10),
+      filters,
+      supplierId,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
+  @Get('items')
+  findAllItems(@Query() query: QueryPurchaseOrderItemsDto) {
+    return this.service.findAllItems(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.PURCHASE_ORDERS,
+    action: ErpAction.READ,
+  })
+  @Get('supplier-stats/:supplierId')
+  getSupplierStats(@Param('supplierId') supplierId: string) {
+    return this.service.getSupplierStats(supplierId);
   }
 
   @RequirePermissions({

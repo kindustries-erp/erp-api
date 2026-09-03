@@ -11,6 +11,19 @@ import {
   PutObjectCommand as PutObjectCmd,
 } from '@aws-sdk/client-s3';
 
+interface S3EndpointConfig {
+  get(propertyPath: string): string | undefined;
+  getOrThrow(propertyPath: string): string;
+}
+
+export function resolveS3Endpoint(config: S3EndpointConfig): string {
+  const endpoint = config.get('R2_ENDPOINT');
+  if (endpoint) return endpoint;
+
+  const accountId = config.getOrThrow('R2_ACCOUNT_ID');
+  return `https://${accountId}.r2.cloudflarestorage.com`;
+}
+
 @Injectable()
 export class R2Service {
   private readonly logger = new Logger(R2Service.name);
@@ -18,12 +31,11 @@ export class R2Service {
   private readonly bucket: string;
 
   constructor(private readonly config: ConfigService) {
-    const accountId = this.config.getOrThrow<string>('R2_ACCOUNT_ID');
     this.bucket = this.config.getOrThrow<string>('R2_BUCKET_NAME');
 
     this.client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint: resolveS3Endpoint(this.config),
       credentials: {
         accessKeyId: this.config.getOrThrow<string>('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.config.getOrThrow<string>('R2_SECRET_ACCESS_KEY'),

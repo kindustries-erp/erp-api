@@ -28,6 +28,7 @@ import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
+import { QueryPurchaseOrderItemsDto } from './dto/query-purchase-order-items.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
@@ -161,25 +162,29 @@ export class PurchaseOrdersCoreService {
               return;
             }
             const paramName = `filter_${key}`;
-            if (key === 'poNo')
-              qb.andWhere(`po.poNo IN (:${paramName})`, {
+            if (key === 'supplierId' || key === 'supplier_id')
+              qb.andWhere(`po.supplierId IN (:...${paramName})`, {
+                [paramName]: values,
+              });
+            else if (key === 'poNo')
+              qb.andWhere(`po.poNo IN (:...${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'status')
-              qb.andWhere(`po.status IN (:${paramName})`, {
+              qb.andWhere(`po.status IN (:...${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'paymentStatus')
-              qb.andWhere(`po.paymentStatus IN (:${paramName})`, {
+              qb.andWhere(`po.paymentStatus IN (:...${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'supplierNameSnapshot')
-              qb.andWhere(`supplier.name IN (:${paramName})`, {
+              qb.andWhere(`supplier.name IN (:...${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'orderDate')
               qb.andWhere(
-                `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:${paramName})`,
+                `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:...${paramName})`,
                 { [paramName]: values },
               );
             else if (key === 'expectedDate') {
@@ -187,19 +192,19 @@ export class PurchaseOrdersCoreService {
               const realVals = values.filter((v) => v !== '__BLANK__');
               if (hasBlank && realVals.length > 0) {
                 qb.andWhere(
-                  `(po.expectedDate IS NULL OR TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName}))`,
+                  `(po.expectedDate IS NULL OR TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:...${paramName}))`,
                   { [paramName]: realVals },
                 );
               } else if (hasBlank) {
                 qb.andWhere(`po.expectedDate IS NULL`);
               } else {
                 qb.andWhere(
-                  `TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:${paramName})`,
+                  `TO_CHAR(po.expectedDate, 'YYYY-MM-DD') IN (:...${paramName})`,
                   { [paramName]: realVals },
                 );
               }
             } else if (key === 'title')
-              qb.andWhere(`po.title IN (:${paramName})`, {
+              qb.andWhere(`po.title IN (:...${paramName})`, {
                 [paramName]: values,
               });
             else if (key === 'remarks') {
@@ -207,13 +212,13 @@ export class PurchaseOrdersCoreService {
               const realVals = values.filter((v) => v !== '__BLANK__');
               if (hasBlank && realVals.length > 0) {
                 qb.andWhere(
-                  `(po.remarks IS NULL OR po.remarks = '' OR po.remarks IN (:${paramName}))`,
+                  `(po.remarks IS NULL OR po.remarks = '' OR po.remarks IN (:...${paramName}))`,
                   { [paramName]: realVals },
                 );
               } else if (hasBlank) {
                 qb.andWhere(`(po.remarks IS NULL OR po.remarks = '')`);
               } else {
-                qb.andWhere(`po.remarks IN (:${paramName})`, {
+                qb.andWhere(`po.remarks IN (:...${paramName})`, {
                   [paramName]: realVals,
                 });
               }
@@ -230,10 +235,7 @@ export class PurchaseOrdersCoreService {
               if (conds.length > 0) {
                 qb.andWhere(`(${conds.join(' OR ')})`);
               }
-            } else if (key === 'totalAmount')
-              qb.andWhere(`po.totalAmount IN (:${paramName})`, {
-                [paramName]: values,
-              });
+            }
           }
         });
       } catch (e) {}
@@ -283,16 +285,20 @@ export class PurchaseOrdersCoreService {
           Object.entries(filters).forEach(([key, values]) => {
             if (Array.isArray(values) && values.length > 0) {
               const pName = `qty_filt_${pIdx++}`;
-              if (key === 'poNo')
-                qb.andWhere(`po.poNo IN (:${pName})`, { [pName]: values });
+              if (key === 'supplierId' || key === 'supplier_id')
+                qb.andWhere(`po.supplierId IN (:...${pName})`, {
+                  [pName]: values,
+                });
+              else if (key === 'poNo')
+                qb.andWhere(`po.poNo IN (:...${pName})`, { [pName]: values });
               else if (key === 'status')
-                qb.andWhere(`po.status IN (:${pName})`, { [pName]: values });
+                qb.andWhere(`po.status IN (:...${pName})`, { [pName]: values });
               else if (key === 'paymentStatus')
-                qb.andWhere(`po.paymentStatus IN (:${pName})`, {
+                qb.andWhere(`po.paymentStatus IN (:...${pName})`, {
                   [pName]: values,
                 });
               else if (key === 'supplierNameSnapshot')
-                qb.andWhere(`supplier.name IN (:${pName})`, {
+                qb.andWhere(`supplier.name IN (:...${pName})`, {
                   [pName]: values,
                 });
             }
@@ -322,6 +328,93 @@ export class PurchaseOrdersCoreService {
               params[pName] = `%${kw}%`;
               orConds.push(
                 `CAST(ROUND(SUM(line.qtyOrdered), 0) AS TEXT) ILIKE :${pName}`,
+              );
+            }
+          });
+          qb.andHaving(`(${orConds.join(' OR ')})`, params);
+        }
+      }
+      qb.orderBy('val', 'ASC');
+      const raw = await qb.getRawMany();
+      const distinctVals = Array.from(
+        new Set(raw.map((r) => r.val).filter(Boolean)),
+      ).sort((a: any, b: any) => Number(a) - Number(b));
+      const total = distinctVals.length;
+      const paginated = distinctVals.slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
+      return {
+        items: paginated,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    }
+
+    if (column === 'totalAmount') {
+      const qb = this.repository
+        .createQueryBuilder('po')
+        .leftJoin('po.lines', 'line')
+        .leftJoin('po.supplier', 'supplier')
+        .where('po.isDeleted = false');
+
+      if (filtersStr) {
+        try {
+          const filters = JSON.parse(filtersStr);
+          let pIdx = 0;
+          Object.entries(filters).forEach(([key, values]) => {
+            if (Array.isArray(values) && values.length > 0) {
+              const pName = `amt_filt_${pIdx++}`;
+              if (key === 'supplierId' || key === 'supplier_id')
+                qb.andWhere(`po.supplierId IN (:...${pName})`, {
+                  [pName]: values,
+                });
+              else if (key === 'poNo')
+                qb.andWhere(`po.poNo IN (:...${pName})`, { [pName]: values });
+              else if (key === 'status')
+                qb.andWhere(`po.status IN (:...${pName})`, { [pName]: values });
+              else if (key === 'paymentStatus')
+                qb.andWhere(`po.paymentStatus IN (:...${pName})`, {
+                  [pName]: values,
+                });
+              else if (key === 'supplierNameSnapshot')
+                qb.andWhere(`supplier.name IN (:...${pName})`, {
+                  [pName]: values,
+                });
+            }
+          });
+        } catch (e) {}
+      }
+
+      qb.select(
+        'CAST(ROUND(SUM(COALESCE(line.amount, line.qtyOrdered * line.unitPrice, 0)), 0) AS TEXT)',
+        'val',
+      );
+      qb.groupBy('po.id');
+      qb.having(
+        'SUM(COALESCE(line.amount, line.qtyOrdered * line.unitPrice, 0)) IS NOT NULL',
+      );
+      if (search) {
+        const kws = String(search)
+          .split(';')
+          .map((k) => k.trim())
+          .filter(Boolean);
+        if (kws.length > 0) {
+          const orConds: string[] = [];
+          const params: Record<string, any> = {};
+          kws.forEach((kw, i) => {
+            const pName = `akw_${i}`;
+            if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+              params[pName] = kw.slice(1, -1);
+              orConds.push(
+                `CAST(ROUND(SUM(COALESCE(line.amount, line.qtyOrdered * line.unitPrice, 0)), 0) AS TEXT) = :${pName}`,
+              );
+            } else {
+              params[pName] = `%${kw}%`;
+              orConds.push(
+                `CAST(ROUND(SUM(COALESCE(line.amount, line.qtyOrdered * line.unitPrice, 0)), 0) AS TEXT) ILIKE :${pName}`,
               );
             }
           });
@@ -377,10 +470,6 @@ export class PurchaseOrdersCoreService {
         break;
       case 'remarks':
         field = 'po.remarks';
-        break;
-      case 'totalAmount':
-        field = 'po.totalAmount';
-        isNumeric = true;
         break;
       default:
         return { items: [], total: 0, page, pageSize, totalPages: 0 };
@@ -1975,6 +2064,456 @@ export class PurchaseOrdersCoreService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  async findAllItems(query: QueryPurchaseOrderItemsDto) {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.pageSize) || 20;
+
+    const qb = this.lineRepository
+      .createQueryBuilder('line')
+      .innerJoinAndSelect('line.purchaseOrder', 'po')
+      .leftJoinAndSelect('po.supplier', 'supplier')
+      .where('po.isDeleted = false');
+
+    if (query.supplier_id) {
+      qb.andWhere('po.supplierId = :supplierId', {
+        supplierId: query.supplier_id,
+      });
+    }
+
+    if (query.purchase_order_id) {
+      qb.andWhere('line.purchaseOrderId = :poId', {
+        poId: query.purchase_order_id,
+      });
+    }
+
+    if (query.status) {
+      qb.andWhere('po.status = :status', { status: query.status });
+    }
+
+    if (query.date_from) {
+      qb.andWhere('po.orderDate >= :dateFrom', {
+        dateFrom: new Date(`${query.date_from}T00:00:00.000+07:00`),
+      });
+    }
+
+    if (query.date_to) {
+      qb.andWhere('po.orderDate <= :dateTo', {
+        dateTo: new Date(`${query.date_to}T23:59:59.999+07:00`),
+      });
+    }
+
+    if (query.search) {
+      const keywords = String(query.search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (keywords.length > 0) {
+        qb.andWhere(
+          `(${keywords
+            .map(
+              (_, i) =>
+                `(line.itemCode ILIKE :kw_${i} OR line.itemName ILIKE :kw_${i} OR line.description ILIKE :kw_${i} OR po.poNo ILIKE :kw_${i})`,
+            )
+            .join(' OR ')})`,
+          keywords.reduce(
+            (acc, kw, i) => ({ ...acc, [`kw_${i}`]: `%${kw}%` }),
+            {},
+          ),
+        );
+      }
+    }
+
+    if (query.column_search) {
+      try {
+        const searches = JSON.parse(query.column_search) as Record<
+          string,
+          unknown
+        >;
+        for (const [key, val] of Object.entries(searches)) {
+          if (typeof val === 'string' && val.trim()) {
+            const strVal = val.trim();
+            if (key === 'itemCode') {
+              qb.andWhere('line.itemCode ILIKE :c_itemCode', {
+                c_itemCode: `%${strVal}%`,
+              });
+            } else if (key === 'itemName') {
+              qb.andWhere('line.itemName ILIKE :c_itemName', {
+                c_itemName: `%${strVal}%`,
+              });
+            } else if (key === 'description') {
+              qb.andWhere('line.description ILIKE :c_desc', {
+                c_desc: `%${strVal}%`,
+              });
+            } else if (key === 'poNo') {
+              qb.andWhere('po.poNo ILIKE :c_poNo', { c_poNo: `%${strVal}%` });
+            } else if (key === 'status') {
+              qb.andWhere('po.status ILIKE :c_status', {
+                c_status: `%${strVal}%`,
+              });
+            } else if (key === 'orderDate') {
+              qb.andWhere("TO_CHAR(po.orderDate, 'YYYY-MM-DD') ILIKE :c_od", {
+                c_od: `%${strVal}%`,
+              });
+            } else if (key === 'qtyOrdered') {
+              qb.andWhere('CAST(line.qtyOrdered AS TEXT) ILIKE :c_qo', {
+                c_qo: `%${strVal}%`,
+              });
+            } else if (key === 'qtyReceived') {
+              qb.andWhere('CAST(line.qtyReceived AS TEXT) ILIKE :c_qr', {
+                c_qr: `%${strVal}%`,
+              });
+            } else if (key === 'unitPrice') {
+              qb.andWhere('CAST(line.unitPrice AS TEXT) ILIKE :c_up', {
+                c_up: `%${strVal}%`,
+              });
+            } else if (key === 'amount') {
+              qb.andWhere('CAST(line.amount AS TEXT) ILIKE :c_amt', {
+                c_amt: `%${strVal}%`,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters);
+        for (const [key, values] of Object.entries(filters)) {
+          if (Array.isArray(values) && values.length > 0) {
+            if (key === 'status') {
+              qb.andWhere('po.status IN (:...f_statuses)', {
+                f_statuses: values,
+              });
+            } else if (key === 'itemCode') {
+              qb.andWhere('line.itemCode IN (:...f_itemCodes)', {
+                f_itemCodes: values,
+              });
+            } else if (key === 'itemName') {
+              qb.andWhere('line.itemName IN (:...f_itemNames)', {
+                f_itemNames: values,
+              });
+            } else if (key === 'poNo') {
+              qb.andWhere('po.poNo IN (:...f_poNos)', {
+                f_poNos: values,
+              });
+            } else if (key === 'orderDate') {
+              qb.andWhere(
+                "TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:...f_ods)",
+                {
+                  f_ods: values,
+                },
+              );
+            } else if (key === 'qtyOrdered') {
+              qb.andWhere(
+                'CAST(ROUND(line.qtyOrdered, 0) AS TEXT) IN (:...f_qos)',
+                { f_qos: values },
+              );
+            } else if (key === 'qtyReceived') {
+              qb.andWhere(
+                'CAST(ROUND(line.qtyReceived, 0) AS TEXT) IN (:...f_qrs)',
+                { f_qrs: values },
+              );
+            } else if (key === 'unitPrice') {
+              qb.andWhere(
+                'CAST(ROUND(line.unitPrice, 0) AS TEXT) IN (:...f_ups)',
+                { f_ups: values },
+              );
+            } else if (key === 'amount') {
+              qb.andWhere(
+                'CAST(ROUND(line.amount, 0) AS TEXT) IN (:...f_amts)',
+                { f_amts: values },
+              );
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const total = await qb.getCount();
+
+    const orderDirection =
+      String(query.sort_order || 'DESC').toUpperCase() === 'ASC'
+        ? 'ASC'
+        : 'DESC';
+    const sortBy = query.sort_by;
+
+    if (sortBy === 'itemCode') {
+      qb.orderBy('line.itemCode', orderDirection);
+    } else if (sortBy === 'itemName') {
+      qb.orderBy('line.itemName', orderDirection);
+    } else if (sortBy === 'qtyOrdered') {
+      qb.orderBy('line.qtyOrdered', orderDirection);
+    } else if (sortBy === 'qtyReceived') {
+      qb.orderBy('line.qtyReceived', orderDirection);
+    } else if (sortBy === 'unitPrice') {
+      qb.orderBy('line.unitPrice', orderDirection);
+    } else if (sortBy === 'amount') {
+      qb.orderBy('line.amount', orderDirection);
+    } else if (sortBy === 'poNo') {
+      qb.orderBy('po.poNo', orderDirection);
+    } else if (sortBy === 'status') {
+      qb.orderBy('po.status', orderDirection);
+    } else if (sortBy === 'orderDate') {
+      qb.orderBy('po.orderDate', orderDirection);
+    } else {
+      qb.orderBy('po.orderDate', orderDirection)
+        .addOrderBy('po.createdAt', 'DESC')
+        .addOrderBy('line.lineNo', 'ASC');
+    }
+
+    const lines = await qb
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getMany();
+
+    const items = lines.map((line) => {
+      const po = line.purchaseOrder;
+      return {
+        id: line.id,
+        purchaseOrderId: line.purchaseOrderId,
+        poNo: po?.poNo || '—',
+        orderDate: po?.orderDate || null,
+        expectedDate: po?.expectedDate || null,
+        supplierId: po?.supplierId || null,
+        supplierName: po?.supplier?.name || '—',
+        itemId: line.itemId || null,
+        itemCode: line.itemCode || null,
+        itemName: line.itemName || line.description || '—',
+        description: line.description || null,
+        qtyOrdered: String(line.qtyOrdered ?? '0'),
+        qtyReceived: String(line.qtyReceived ?? '0'),
+        unitPrice: line.unitPrice != null ? String(line.unitPrice) : null,
+        amount: line.amount != null ? String(line.amount) : null,
+        lineNo: line.lineNo,
+        status: po?.status || 'ACTIVE',
+      };
+    });
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getItemsColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    supplierId?: string,
+  ) {
+    const qb = this.lineRepository.createQueryBuilder('line');
+    qb.innerJoin('line.purchaseOrder', 'po');
+    qb.where('po.isDeleted = false');
+
+    if (supplierId) {
+      qb.andWhere('po.supplierId = :opt_supplierId', {
+        opt_supplierId: supplierId,
+      });
+    }
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr);
+        let fIdx = 0;
+        Object.entries(filters).forEach(([key, values]) => {
+          if (Array.isArray(values) && values.length > 0) {
+            const pName = `f_item_opt_${fIdx++}`;
+            if (key === 'status') {
+              qb.andWhere(`po.status IN (:...${pName})`, { [pName]: values });
+            } else if (key === 'poNo') {
+              qb.andWhere(`po.poNo IN (:...${pName})`, { [pName]: values });
+            } else if (key === 'itemCode') {
+              qb.andWhere(`line.itemCode IN (:...${pName})`, {
+                [pName]: values,
+              });
+            } else if (key === 'itemName') {
+              qb.andWhere(`line.itemName IN (:...${pName})`, {
+                [pName]: values,
+              });
+            } else if (key === 'orderDate') {
+              qb.andWhere(
+                `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:...${pName})`,
+                {
+                  [pName]: values,
+                },
+              );
+            } else if (key === 'qtyOrdered') {
+              qb.andWhere(
+                `CAST(ROUND(line.qtyOrdered, 0) AS TEXT) IN (:...${pName})`,
+                {
+                  [pName]: values,
+                },
+              );
+            } else if (key === 'qtyReceived') {
+              qb.andWhere(
+                `CAST(ROUND(line.qtyReceived, 0) AS TEXT) IN (:...${pName})`,
+                {
+                  [pName]: values,
+                },
+              );
+            } else if (key === 'unitPrice') {
+              qb.andWhere(
+                `CAST(ROUND(line.unitPrice, 0) AS TEXT) IN (:...${pName})`,
+                {
+                  [pName]: values,
+                },
+              );
+            } else if (key === 'amount') {
+              qb.andWhere(
+                `CAST(ROUND(line.amount, 0) AS TEXT) IN (:...${pName})`,
+                {
+                  [pName]: values,
+                },
+              );
+            }
+          }
+        });
+      } catch (e) {}
+    }
+
+    let selectExpr = '';
+    let isNumeric = false;
+    let isDate = false;
+
+    switch (column) {
+      case 'orderDate':
+        selectExpr = `TO_CHAR(po.orderDate, 'YYYY-MM-DD')`;
+        isDate = true;
+        break;
+      case 'poNo':
+        selectExpr = 'po.poNo';
+        break;
+      case 'itemCode':
+        selectExpr = 'line.itemCode';
+        break;
+      case 'itemName':
+        selectExpr = 'line.itemName';
+        break;
+      case 'status':
+        selectExpr = 'po.status';
+        break;
+      case 'qtyOrdered':
+        selectExpr = 'CAST(ROUND(line.qtyOrdered, 0) AS TEXT)';
+        isNumeric = true;
+        break;
+      case 'qtyReceived':
+        selectExpr = 'CAST(ROUND(line.qtyReceived, 0) AS TEXT)';
+        isNumeric = true;
+        break;
+      case 'unitPrice':
+        selectExpr = 'CAST(ROUND(line.unitPrice, 0) AS TEXT)';
+        isNumeric = true;
+        break;
+      case 'amount':
+        selectExpr = 'CAST(ROUND(line.amount, 0) AS TEXT)';
+        isNumeric = true;
+        break;
+      default:
+        return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+
+    qb.select(`DISTINCT ${selectExpr}`, 'val');
+    qb.andWhere(`${selectExpr} IS NOT NULL`);
+    if (!isNumeric && !isDate) {
+      qb.andWhere(`CAST(${selectExpr} AS TEXT) != ''`);
+    }
+
+    if (search) {
+      const kws = String(search)
+        .split(';')
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (kws.length > 0) {
+        const orConds: string[] = [];
+        const params: Record<string, any> = {};
+        kws.forEach((kw, i) => {
+          const pName = `ikw_${i}`;
+          if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+            params[pName] = kw.slice(1, -1);
+            orConds.push(`${selectExpr} = :${pName}`);
+          } else {
+            params[pName] = `%${kw}%`;
+            orConds.push(`${selectExpr} ILIKE :${pName}`);
+          }
+        });
+        qb.andWhere(`(${orConds.join(' OR ')})`, params);
+      }
+    }
+
+    qb.orderBy('val', 'ASC');
+    const raw = await qb.getRawMany();
+    let distinctVals = raw.map((r) => r.val).filter(Boolean);
+    if (isNumeric) {
+      distinctVals = Array.from(new Set(distinctVals)).sort(
+        (a: any, b: any) => Number(a) - Number(b),
+      );
+    } else {
+      distinctVals = Array.from(new Set(distinctVals));
+    }
+
+    const total = distinctVals.length;
+    const paginated = distinctVals.slice(
+      (page - 1) * pageSize,
+      page * pageSize,
+    );
+
+    return {
+      items: paginated,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  async getSupplierStats(supplierId: string) {
+    const pos = await this.repository.find({
+      where: { supplierId, isDeleted: false },
+      relations: ['lines'],
+      order: { orderDate: 'DESC' },
+    });
+
+    const totalOrders = pos.length;
+    let totalSpend = 0;
+    let totalReceivedAmount = 0;
+
+    for (const po of pos) {
+      const poTotal =
+        po.lines?.reduce((sum, line) => {
+          const lineAmt =
+            Number(line.amount) ||
+            Number(line.qtyOrdered || 0) * Number(line.unitPrice || 0);
+          const receivedAmt =
+            Number(line.qtyReceived || 0) * Number(line.unitPrice || 0);
+          totalReceivedAmount += receivedAmt;
+          return sum + lineAmt;
+        }, 0) || 0;
+      totalSpend += poTotal;
+    }
+
+    const pendingAmount = Math.max(0, totalSpend - totalReceivedAmount);
+    const completionRate =
+      totalSpend > 0
+        ? Math.round((totalReceivedAmount / totalSpend) * 1000) / 10
+        : 0;
+
+    return {
+      supplierId,
+      totalOrders,
+      totalSpend,
+      totalReceivedAmount,
+      pendingAmount,
+      completionRate,
+      lastOrderDate: pos[0]?.orderDate || null,
+    };
   }
 }
 
