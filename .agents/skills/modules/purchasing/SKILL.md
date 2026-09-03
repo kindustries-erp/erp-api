@@ -1,6 +1,6 @@
 ---
 name: purchasing
-description: Module tri thức Quản lý Mua hàng (Purchase Orders & Purchase Requests) trong erp-api. Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic sinh mã tự động PO-YYYYMM-xxx, quản lý dòng vật tư, theo dõi tiến độ nhập kho (Receipt Timeline), liên kết hóa đơn VAT và kiểm tra ràng buộc chứng từ.
+description: Module tri thức Quản lý Mua hàng (Purchase Orders & Purchase Requests) trong erp-api. Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic sinh mã tự động PO-YYYYMMDD-xxx, quản lý dòng vật tư, theo dõi tiến độ nhập kho (Receipt Timeline), liên kết hóa đơn VAT và kiểm tra ràng buộc chứng từ.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Mua Hàng (Purchasing / PO & PR) - Backend (`erp-api`)
@@ -12,7 +12,7 @@ Phân hệ Quản lý Mua hàng (bao gồm `purchase-orders-core` và `purchase-
 Các nghiệp vụ trọng tâm:
 - **Yêu cầu Mua hàng (Purchase Requests - PR)**: Tiếp nhận đề xuất mua sắm từ các bộ phận/nhân viên, quản lý phê duyệt và chuyển đổi sang đơn mua hàng.
 - **Đơn Mua hàng (Purchase Orders - PO)**: Lập và quản lý đơn đặt hàng gửi đến Nhà cung cấp (NCC), quản lý đơn giá, số lượng, điều khoản và lịch giao hàng dự kiến.
-- **Sinh mã chứng từ tự động theo tháng**: Sinh mã `PO-YYYYMM-xxx` hoặc `PR-YYYYMM-xxx` có cơ chế transaction khóa an toàn tránh trùng mã.
+- **Sinh mã chứng từ tự động theo ngày/tháng**: Sinh mã `PO-YYYYMMDD-xxx` hoặc `PR-YYYYMM-xxx` có cơ chế transaction khóa an toàn tránh trùng mã.
 - **Theo dõi Tiến độ Nhập kho (Receipt Timeline)**: Giám sát số lượng đã nhận (`qty_received`) so với số lượng đặt mua (`qty_ordered`) theo thời gian thực kết nối với Phiếu Nhập Kho (`erp_goods_receipts`).
 - **Liên kết Hóa đơn Đầu vào (`erp_invoices`)**: Cho phép gán/hủy liên kết các hóa đơn điện tử đầu vào của nhà cung cấp vào đơn mua hàng tương ứng.
 - **Đồ thị Kết nối Chứng từ (Connection Graph)**: Truy vết đa chiều từ Đơn mua hàng đến các Phiếu nhập kho (GR), Hóa đơn (Invoices) và Phiếu chi/Ủy nhiệm chi (Payment Vouchers).

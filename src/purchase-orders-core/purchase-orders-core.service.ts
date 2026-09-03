@@ -47,11 +47,12 @@ export class PurchaseOrdersCoreService {
     private readonly companyProfileService: CompanyProfileService,
   ) {}
 
-  private async generateMonthlyPoNo(manager: any, orderDate?: string) {
+  private async generateDailyPoNo(manager: any, orderDate?: string) {
     const baseDate = orderDate ? new Date(orderDate) : new Date();
-    const year = baseDate.getUTCFullYear();
-    const month = String(baseDate.getUTCMonth() + 1).padStart(2, '0');
-    const prefix = `PO-${year}${month}-`;
+    const year = baseDate.getFullYear();
+    const month = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const day = String(baseDate.getDate()).padStart(2, '0');
+    const prefix = `PO-${year}${month}${day}-`;
     const latest = await manager
       .getRepository(ErpPurchaseOrder)
       .createQueryBuilder('po')
@@ -65,7 +66,7 @@ export class PurchaseOrdersCoreService {
 
   async getNextPoNo(date?: string): Promise<{ nextNo: string }> {
     const nextNo = await this.dataSource.transaction((manager) =>
-      this.generateMonthlyPoNo(manager, date),
+      this.generateDailyPoNo(manager, date),
     );
     return { nextNo };
   }
@@ -78,7 +79,7 @@ export class PurchaseOrdersCoreService {
       const lineRepo = manager.getRepository(ErpPurchaseOrderLine);
       const poNo =
         header.poNo?.trim() ||
-        (await this.generateMonthlyPoNo(manager, header.orderDate));
+        (await this.generateDailyPoNo(manager, header.orderDate));
       const headerPayload: DeepPartial<ErpPurchaseOrder> = {
         ...header,
         poNo,
@@ -855,6 +856,7 @@ export class PurchaseOrdersCoreService {
         .where(
           'CAST(line.qtyOrdered AS NUMERIC) > CAST(line.qtyReceived AS NUMERIC)',
         )
+        .andWhere('line.itemId IS NOT NULL')
         .getRawMany();
 
       const receivablePoIds = receivableLines.map((l) => l.purchaseOrderId);
