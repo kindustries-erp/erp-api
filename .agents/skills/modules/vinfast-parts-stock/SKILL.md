@@ -83,8 +83,8 @@ Tags: `VinFast Parts`
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/vinfast-parts/sync-catalog` | Đồng bộ danh mục phụ tùng từ toàn bộ hóa đơn mua hàng VinFast |
 | `POST` | `/api/v1/vinfast-parts/sync-ledger` | Khởi chạy đồng bộ sổ cái IN/OUT theo dải ngày (`dateFrom`, `dateTo`, `clearDb`) |
-| `GET` | `/api/v1/vinfast-parts/stock` | Lấy danh sách số dư tồn kho phụ tùng (`vehicleType`, `search`, `sortBy`, `sortDir`, `column_filters`, phân trang) |
-| `GET` | `/api/v1/vinfast-parts/stock/column-options` | Lấy danh sách giá trị distinct cho bộ lọc cột của bảng tồn kho |
+| `GET` | `/api/v1/vinfast-parts/stock` | Lấy danh sách số dư tồn kho phụ tùng (`vehicleType`, `stockTab` [`ALL`, `IN_STOCK`, `OUT_OF_STOCK`, `NEGATIVE`], `search`, `sortBy`, `sortDir`, `column_filters`, phân trang) |
+| `GET` | `/api/v1/vinfast-parts/stock/column-options` | Lấy danh sách giá trị distinct cho bộ lọc cột của bảng tồn kho (hỗ trợ lọc theo `stockTab`) |
 | `GET` | `/api/v1/vinfast-parts/ledger/:sku` | Lấy lịch sử giao dịch sổ cái theo mã SKU (truy vết dòng tiền & luân chuyển) |
 | `GET` | `/api/v1/vinfast-parts/fifo-rows/:sku` | Lấy bảng kê phân rã đơn vị FIFO (mapping từng đơn vị nhập với xuất/tồn) |
 | `GET` | `/api/v1/vinfast-parts/sync/progress` | **SSE Stream**: Theo dõi tiến độ đồng bộ danh mục và sổ cái |

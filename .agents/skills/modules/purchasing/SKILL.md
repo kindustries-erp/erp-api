@@ -1,6 +1,6 @@
 ---
 name: purchasing
-description: Module tri thức Quản lý Mua hàng (Purchase Orders & Purchase Requests) trong erp-api. Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic sinh mã tự động PO-YYYYMM-xxx, quản lý dòng vật tư, theo dõi tiến độ nhập kho (Receipt Timeline), liên kết hóa đơn VAT và kiểm tra ràng buộc chứng từ.
+description: Module tri thức Quản lý Mua hàng (Purchase Orders & Purchase Requests) trong erp-api. Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic sinh mã tự động PO-YYYYMMDD-xxx, quản lý dòng vật tư, theo dõi tiến độ nhập kho (Receipt Timeline), liên kết hóa đơn VAT và kiểm tra ràng buộc chứng từ.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Mua Hàng (Purchasing / PO & PR) - Backend (`erp-api`)
@@ -12,7 +12,7 @@ Phân hệ Quản lý Mua hàng (bao gồm `purchase-orders-core` và `purchase-
 Các nghiệp vụ trọng tâm:
 - **Yêu cầu Mua hàng (Purchase Requests - PR)**: Tiếp nhận đề xuất mua sắm từ các bộ phận/nhân viên, quản lý phê duyệt và chuyển đổi sang đơn mua hàng.
 - **Đơn Mua hàng (Purchase Orders - PO)**: Lập và quản lý đơn đặt hàng gửi đến Nhà cung cấp (NCC), quản lý đơn giá, số lượng, điều khoản và lịch giao hàng dự kiến.
-- **Sinh mã chứng từ tự động theo tháng**: Sinh mã `PO-YYYYMM-xxx` hoặc `PR-YYYYMM-xxx` có cơ chế transaction khóa an toàn tránh trùng mã.
+- **Sinh mã chứng từ tự động theo ngày/tháng**: Sinh mã `PO-YYYYMMDD-xxx` hoặc `PR-YYYYMM-xxx` có cơ chế transaction khóa an toàn tránh trùng mã.
 - **Theo dõi Tiến độ Nhập kho (Receipt Timeline)**: Giám sát số lượng đã nhận (`qty_received`) so với số lượng đặt mua (`qty_ordered`) theo thời gian thực kết nối với Phiếu Nhập Kho (`erp_goods_receipts`).
 - **Liên kết Hóa đơn Đầu vào (`erp_invoices`)**: Cho phép gán/hủy liên kết các hóa đơn điện tử đầu vào của nhà cung cấp vào đơn mua hàng tương ứng.
 - **Đồ thị Kết nối Chứng từ (Connection Graph)**: Truy vết đa chiều từ Đơn mua hàng đến các Phiếu nhập kho (GR), Hóa đơn (Invoices) và Phiếu chi/Ủy nhiệm chi (Payment Vouchers).
@@ -75,6 +75,7 @@ src/
 │   ├── dto/
 │   │   ├── create-purchase-order.dto.ts       # DTO tạo PO kèm mảng nested lines
 │   │   ├── create-purchase-order-line.dto.ts  # DTO chi tiết từng dòng mặt hàng
+│   │   ├── export-purchase-orders-range.dto.ts# DTO lọc xuất Excel bảng kê theo kỳ
 │   │   └── update-purchase-order.dto.ts       # DTO cập nhật PO
 │   ├── entities/
 │   │   ├── erp_purchase_order.entity.ts       # TypeORM entity bảng erp_purchase_orders
@@ -106,7 +107,10 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 | `POST` | `/api/v1/purchase-orders` | `purchase_orders:create` | Tạo mới đơn mua hàng (kèm tự sinh mã `PO-YYYYMM-xxx` và lưu mảng `lines`) |
 | `GET` | `/api/v1/purchase-orders` | `purchase_orders:read` | Lấy danh sách PO (hỗ trợ phân trang, lọc đa cột `column_filters`, tìm kiếm, lọc theo NCC, trạng thái, chỉ lấy đơn có thể nhận hàng `only_receivable`) |
 | `GET` | `/api/v1/purchase-orders/next-no` | `purchase_orders:read` | Dự báo mã số đơn mua hàng tiếp theo trong tháng |
-| `GET` | `/api/v1/purchase-orders/column-options` | `purchase_orders:read` | Lấy danh sách giá trị distinct cho dropdown lọc của bảng dữ liệu |
+| `GET` | `/api/v1/purchase-orders/column-options` | `purchase_orders:read` | Lấy danh sách giá trị distinct cho dropdown lọc của bảng đơn PO |
+| `GET` | `/api/v1/purchase-orders/items` | `purchase_orders:read` | Lấy danh sách dòng hàng PO chi tiết (hỗ trợ phân trang, lọc theo NCC, tìm kiếm đa cột, sort) |
+| `GET` | `/api/v1/purchase-orders/items/column-options` | `purchase_orders:read` | Lấy danh sách distinct options cho bộ lọc các cột bảng dòng hàng PO |
+| `GET` | `/api/v1/purchase-orders/supplier-stats/:supplierId` | `purchase_orders:read` | Lấy thống kê tổng hợp số đơn, chi tiêu, đã nhận, tỷ lệ hoàn tất theo nhà cung cấp |
 | `GET` | `/api/v1/purchase-orders/:id` | `purchase_orders:read` | Lấy chi tiết đơn mua hàng kèm danh sách dòng hàng và timeline nhập kho |
 | `PATCH`| `/api/v1/purchase-orders/:id` | `purchase_orders:update` | Cập nhật thông tin chung và đồng bộ mảng lines của PO |
 | `DELETE`| `/api/v1/purchase-orders/:id` | `purchase_orders:delete` | Xóa mềm đơn mua hàng (chỉ cho phép khi ở trạng thái `DRAFT`) |
@@ -116,7 +120,8 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 | `GET` | `/api/v1/purchase-orders/:id/invoices` | `purchase_orders:read` | Lấy danh sách các hóa đơn điện tử được liên kết với đơn PO này |
 | `POST` | `/api/v1/purchase-orders/:id/link-invoices` | `purchase_orders:update` | Gán danh sách ID hóa đơn vào đơn mua hàng |
 | `DELETE`| `/api/v1/purchase-orders/:id/invoices/:invoiceId` | `purchase_orders:update` | Hủy liên kết một hóa đơn khỏi đơn mua hàng |
-| `GET` | `/api/v1/purchase-orders/:id/export/excel` | `purchase_orders:read` | Xuất file Excel Bảng kê mua hàng (Mẫu 06-VT) hoặc Phiếu đề xuất mua hàng (Draft) |
+| `GET` | `/api/v1/purchase-orders/:id/export/excel` | `purchase_orders:read` | Xuất file Excel Bảng kê mua hàng (Mẫu 06-VT) hoặc Phiếu đề xuất mua hàng (Draft) cho 1 đơn PO |
+| `GET` | `/api/v1/purchase-orders/export/excel/range` | `purchase_orders:read` | Xuất file Excel bảng kê 2 sheet (TongQuan và ChiTietDong) theo kỳ, lọc theo NCC và trạng thái |
 
 ### 4.2. Yêu Cầu Mua Hàng (`/api/v1/purchase-requests`)
 | Method | Endpoint | RBAC Permission | Mô tả |

@@ -66,7 +66,13 @@ read_database_url_from_env() {
       ssl_param="?sslmode=require"
     fi
     echo "INFO: DATABASE_URL not set in $env_file. Constructed from DB_HOST=$host, DB_PORT=$port, DB_DATABASE=$db." >&2
-    printf 'postgresql://%s:%s@%s:%s/%s%s' "$user" "$pass" "$host" "$port" "$db" "$ssl_param"
+    # Percent-encode credentials because PostgreSQL URLs cannot safely carry
+    # raw passwords containing reserved characters such as @, :, /, or #.
+    # Keep the resulting URL in-process only; never log it.
+    local encoded_user encoded_pass
+    encoded_user="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$user")"
+    encoded_pass="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$pass")"
+    printf 'postgresql://%s:%s@%s:%s/%s%s' "$encoded_user" "$encoded_pass" "$host" "$port" "$db" "$ssl_param"
     return 0
   fi
 

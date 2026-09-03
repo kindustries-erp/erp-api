@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { SysFile } from './entities/sys-file.entity';
-import { R2Service } from '../r2/r2.service';
+import { R2Service, resolveS3Endpoint } from '../r2/r2.service';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
 
@@ -24,12 +24,12 @@ export class FilesService {
     private readonly r2Service: R2Service,
     private readonly configService: ConfigService,
   ) {
-    const accountId = this.configService.getOrThrow<string>('R2_ACCOUNT_ID');
     this.bucket = this.configService.getOrThrow<string>('R2_BUCKET_NAME');
 
     this.s3Client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint: resolveS3Endpoint(this.configService),
+      forcePathStyle: Boolean(this.configService.get('R2_ENDPOINT')),
       credentials: {
         accessKeyId: this.configService.getOrThrow<string>('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.getOrThrow<string>(

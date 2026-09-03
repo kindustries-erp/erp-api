@@ -35,6 +35,8 @@ export class InventoryStockCoreController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('filters') filters?: string,
+    @Query('stock_tab') stockTabSnake?: string,
+    @Query('stockTab') stockTab?: string,
   ) {
     return this.service.getColumnOptions(
       column,
@@ -42,6 +44,7 @@ export class InventoryStockCoreController {
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
       filters,
+      stockTabSnake || stockTab,
     );
   }
 
