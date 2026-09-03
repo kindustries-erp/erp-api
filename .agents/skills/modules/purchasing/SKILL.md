@@ -75,6 +75,7 @@ src/
 │   ├── dto/
 │   │   ├── create-purchase-order.dto.ts       # DTO tạo PO kèm mảng nested lines
 │   │   ├── create-purchase-order-line.dto.ts  # DTO chi tiết từng dòng mặt hàng
+│   │   ├── export-purchase-orders-range.dto.ts# DTO lọc xuất Excel bảng kê theo kỳ
 │   │   └── update-purchase-order.dto.ts       # DTO cập nhật PO
 │   ├── entities/
 │   │   ├── erp_purchase_order.entity.ts       # TypeORM entity bảng erp_purchase_orders
@@ -119,7 +120,8 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 | `GET` | `/api/v1/purchase-orders/:id/invoices` | `purchase_orders:read` | Lấy danh sách các hóa đơn điện tử được liên kết với đơn PO này |
 | `POST` | `/api/v1/purchase-orders/:id/link-invoices` | `purchase_orders:update` | Gán danh sách ID hóa đơn vào đơn mua hàng |
 | `DELETE`| `/api/v1/purchase-orders/:id/invoices/:invoiceId` | `purchase_orders:update` | Hủy liên kết một hóa đơn khỏi đơn mua hàng |
-| `GET` | `/api/v1/purchase-orders/:id/export/excel` | `purchase_orders:read` | Xuất file Excel Bảng kê mua hàng (Mẫu 06-VT) hoặc Phiếu đề xuất mua hàng (Draft) |
+| `GET` | `/api/v1/purchase-orders/:id/export/excel` | `purchase_orders:read` | Xuất file Excel Bảng kê mua hàng (Mẫu 06-VT) hoặc Phiếu đề xuất mua hàng (Draft) cho 1 đơn PO |
+| `GET` | `/api/v1/purchase-orders/export/excel/range` | `purchase_orders:read` | Xuất file Excel bảng kê 2 sheet (TongQuan và ChiTietDong) theo kỳ, lọc theo NCC và trạng thái |
 
 ### 4.2. Yêu Cầu Mua Hàng (`/api/v1/purchase-requests`)
 | Method | Endpoint | RBAC Permission | Mô tả |

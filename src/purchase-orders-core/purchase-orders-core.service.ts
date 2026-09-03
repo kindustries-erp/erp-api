@@ -29,6 +29,7 @@ import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity'
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { QueryPurchaseOrderItemsDto } from './dto/query-purchase-order-items.dto';
+import { ExportPurchaseOrdersRangeDto } from './dto/export-purchase-orders-range.dto';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '../goods-receipts-core/entities/erp_goods_receipt_line.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
@@ -2063,6 +2064,485 @@ export class PurchaseOrdersCoreService {
       });
       sheet.getRow(signRow2.number).height = 65;
     }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  async exportPoExcelRange(dto: ExportPurchaseOrdersRangeDto): Promise<Buffer> {
+    const companyProfile = await this.companyProfileService.getProfile();
+
+    const qb = this.repository
+      .createQueryBuilder('po')
+      .leftJoinAndSelect('po.supplier', 'supplier')
+      .leftJoinAndSelect('po.lines', 'lines')
+      .where('po.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (dto.date_from) {
+      qb.andWhere('po.orderDate >= :dateFrom', {
+        dateFrom: `${dto.date_from} 00:00:00`,
+      });
+    }
+    if (dto.date_to) {
+      qb.andWhere('po.orderDate <= :dateTo', {
+        dateTo: `${dto.date_to} 23:59:59`,
+      });
+    }
+    if (dto.supplier_id) {
+      qb.andWhere('po.supplierId = :supplierId', {
+        supplierId: dto.supplier_id,
+      });
+    }
+    if (dto.status && dto.status !== 'ALL') {
+      qb.andWhere('po.status = :status', { status: dto.status });
+    }
+
+    qb.orderBy('po.orderDate', 'ASC')
+      .addOrderBy('po.poNo', 'ASC')
+      .addOrderBy('lines.lineNo', 'ASC');
+
+    const pos = await qb.getMany();
+
+    // Map UOM
+    const allItemIds = new Set<string>();
+    for (const po of pos) {
+      if (po.lines) {
+        for (const l of po.lines) {
+          if (l.itemId) allItemIds.add(l.itemId);
+        }
+      }
+    }
+    const itemUomMap = new Map<string, string>();
+    if (allItemIds.size > 0) {
+      const items = await this.dataSource.getRepository(ErpInventoryItem).find({
+        where: { id: In(Array.from(allItemIds)) },
+        relations: ['uom'],
+      });
+      for (const it of items) {
+        if (it.uom) {
+          itemUomMap.set(it.id, it.uom.name || it.uom.code);
+        }
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const defaultFont = { name: 'Times New Roman', size: 11 };
+    const headerFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' },
+    };
+    const headerFont = {
+      name: 'Times New Roman',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+
+    // -------------------------------------------------------------
+    // SHEET 1: TỔNG QUAN
+    // -------------------------------------------------------------
+    const sheet1 = workbook.addWorksheet('TongQuan', {
+      pageSetup: { paperSize: 9, orientation: 'landscape' },
+    });
+
+    sheet1.columns = [
+      { key: 'stt', width: 8 },
+      { key: 'poNo', width: 28 },
+      { key: 'orderDate', width: 16 },
+      { key: 'expectedDate', width: 16 },
+      { key: 'supplierName', width: 42 },
+      { key: 'lineCount', width: 16 },
+      { key: 'totalQtyOrdered', width: 18 },
+      { key: 'totalQtyReceived', width: 18 },
+      { key: 'totalAmount', width: 22 },
+      { key: 'status', width: 18 },
+      { key: 'paymentStatus', width: 18 },
+      { key: 'remarks', width: 36 },
+    ];
+
+    const compRow1 = sheet1.addRow([
+      `Đơn vị: ${companyProfile?.company_name || 'CÔNG TY TNHH LIOUNI'}`,
+    ]);
+    sheet1.mergeCells(`A${compRow1.number}:L${compRow1.number}`);
+    compRow1.getCell('A').font = { ...defaultFont, bold: true, size: 11 };
+    compRow1.height = 22;
+
+    const compRow2 = sheet1.addRow([
+      `Địa chỉ: ${companyProfile?.address || ''}`,
+    ]);
+    sheet1.mergeCells(`A${compRow2.number}:L${compRow2.number}`);
+    compRow2.getCell('A').font = { ...defaultFont, italic: true, size: 10 };
+    compRow2.height = 20;
+
+    const blank1 = sheet1.addRow([]);
+    blank1.height = 10;
+
+    const title1 = sheet1.addRow(['BẢNG KÊ TỔNG QUAN ĐƠN MUA HÀNG']);
+    sheet1.mergeCells(`A${title1.number}:L${title1.number}`);
+    title1.getCell('A').font = { ...defaultFont, bold: true, size: 16 };
+    title1.getCell('A').alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+    title1.height = 36;
+
+    const dateFromStr = dto.date_from
+      ? format(new Date(dto.date_from), 'dd/MM/yyyy')
+      : '...';
+    const dateToStr = dto.date_to
+      ? format(new Date(dto.date_to), 'dd/MM/yyyy')
+      : '...';
+    const periodRow1 = sheet1.addRow([
+      `Kỳ báo cáo: Từ ngày ${dateFromStr} đến ngày ${dateToStr}`,
+    ]);
+    sheet1.mergeCells(`A${periodRow1.number}:L${periodRow1.number}`);
+    periodRow1.getCell('A').font = { ...defaultFont, italic: true, size: 11 };
+    periodRow1.getCell('A').alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+    periodRow1.height = 22;
+
+    const blank2 = sheet1.addRow([]);
+    blank2.height = 10;
+
+    // Header Table 1
+    const th1 = sheet1.addRow([
+      'STT',
+      'MÃ ĐƠN HÀNG',
+      'NGÀY ĐẶT',
+      'NGÀY HẸN GIAO',
+      'NHÀ CUNG CẤP',
+      'SỐ MẶT HÀNG',
+      'SL ĐẶT',
+      'SL ĐÃ NHẬN',
+      'TỔNG TIỀN (VNĐ)',
+      'TRẠNG THÁI',
+      'THANH TOÁN',
+      'GHI CHÚ',
+    ]);
+    th1.height = 38;
+    th1.eachCell((cell) => {
+      cell.fill = headerFill;
+      cell.font = headerFont;
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+      cell.border = thinBorder;
+    });
+
+    let s1TotalQtyOrdered = 0;
+    let s1TotalQtyReceived = 0;
+    let s1TotalAmount = 0;
+
+    pos.forEach((po, index) => {
+      let poQtyOrdered = 0;
+      let poQtyReceived = 0;
+      let poAmount = 0;
+
+      if (po.lines) {
+        for (const line of po.lines) {
+          const qOrder = parseFloat(line.qtyOrdered) || 0;
+          const qRecv = parseFloat(line.qtyReceived) || 0;
+          const amt =
+            parseFloat(line.amount || '0') ||
+            parseFloat(line.unitPrice || '0') * qOrder ||
+            0;
+          poQtyOrdered += qOrder;
+          poQtyReceived += qRecv;
+          poAmount += amt;
+        }
+      }
+
+      s1TotalQtyOrdered += poQtyOrdered;
+      s1TotalQtyReceived += poQtyReceived;
+      s1TotalAmount += poAmount;
+
+      const oDate = po.orderDate
+        ? format(new Date(po.orderDate), 'dd/MM/yyyy')
+        : '-';
+      const expDate = po.expectedDate
+        ? format(new Date(po.expectedDate), 'dd/MM/yyyy')
+        : '-';
+
+      const row = sheet1.addRow([
+        index + 1,
+        po.poNo || '',
+        oDate,
+        expDate,
+        po.supplier?.name || '',
+        po.lines?.length || 0,
+        poQtyOrdered,
+        poQtyReceived,
+        poAmount,
+        po.status || '',
+        po.paymentStatus || '',
+        po.remarks || '',
+      ]);
+      row.height = 26;
+
+      row.eachCell((cell, colNum) => {
+        cell.font = defaultFont;
+        cell.border = thinBorder;
+        if (
+          colNum === 1 ||
+          colNum === 3 ||
+          colNum === 4 ||
+          colNum === 10 ||
+          colNum === 11
+        ) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (colNum === 2) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.font = { ...defaultFont, bold: true };
+        } else if (colNum === 6) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0';
+        } else if (colNum === 7 || colNum === 8) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0.00';
+        } else if (colNum === 9) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '#,##0';
+        } else {
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'left',
+            wrapText: true,
+          };
+        }
+      });
+    });
+
+    // Summary Row Sheet 1
+    const sumRow1 = sheet1.addRow([
+      'Tổng cộng',
+      '',
+      '',
+      '',
+      '',
+      pos.reduce((sum, p) => sum + (p.lines?.length || 0), 0),
+      s1TotalQtyOrdered,
+      s1TotalQtyReceived,
+      s1TotalAmount,
+      '',
+      '',
+      '',
+    ]);
+    sumRow1.height = 30;
+    sheet1.mergeCells(`A${sumRow1.number}:E${sumRow1.number}`);
+    sumRow1.eachCell((cell, colNum) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.border = thinBorder;
+      if (colNum === 1) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNum === 6) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0';
+      } else if (colNum === 7 || colNum === 8) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+      } else if (colNum === 9) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0';
+      }
+    });
+
+    // -------------------------------------------------------------
+    // SHEET 2: CHI TIẾT TỪNG DÒNG
+    // -------------------------------------------------------------
+    const sheet2 = workbook.addWorksheet('ChiTietDong', {
+      pageSetup: { paperSize: 9, orientation: 'landscape' },
+    });
+
+    sheet2.columns = [
+      { key: 'stt', width: 8 },
+      { key: 'poNo', width: 28 },
+      { key: 'orderDate', width: 16 },
+      { key: 'supplierName', width: 40 },
+      { key: 'itemCode', width: 26 },
+      { key: 'itemName', width: 44 },
+      { key: 'uom', width: 14 },
+      { key: 'qtyOrdered', width: 18 },
+      { key: 'qtyReceived', width: 18 },
+      { key: 'unitPrice', width: 20 },
+      { key: 'amount', width: 22 },
+      { key: 'status', width: 18 },
+      { key: 'description', width: 36 },
+    ];
+
+    const s2CompRow1 = sheet2.addRow([
+      `Đơn vị: ${companyProfile?.company_name || 'CÔNG TY TNHH LIOUNI'}`,
+    ]);
+    sheet2.mergeCells(`A${s2CompRow1.number}:M${s2CompRow1.number}`);
+    s2CompRow1.getCell('A').font = { ...defaultFont, bold: true, size: 11 };
+    s2CompRow1.height = 22;
+
+    const s2CompRow2 = sheet2.addRow([
+      `Địa chỉ: ${companyProfile?.address || ''}`,
+    ]);
+    sheet2.mergeCells(`A${s2CompRow2.number}:M${s2CompRow2.number}`);
+    s2CompRow2.getCell('A').font = { ...defaultFont, italic: true, size: 10 };
+    s2CompRow2.height = 20;
+
+    const s2Blank1 = sheet2.addRow([]);
+    s2Blank1.height = 10;
+
+    const title2 = sheet2.addRow(['BẢNG KÊ CHI TIẾT DÒNG ĐƠN MUA HÀNG']);
+    sheet2.mergeCells(`A${title2.number}:M${title2.number}`);
+    title2.getCell('A').font = { ...defaultFont, bold: true, size: 16 };
+    title2.getCell('A').alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+    title2.height = 36;
+
+    const periodRow2 = sheet2.addRow([
+      `Kỳ báo cáo: Từ ngày ${dateFromStr} đến ngày ${dateToStr}`,
+    ]);
+    sheet2.mergeCells(`A${periodRow2.number}:M${periodRow2.number}`);
+    periodRow2.getCell('A').font = { ...defaultFont, italic: true, size: 11 };
+    periodRow2.getCell('A').alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+    periodRow2.height = 22;
+
+    const s2Blank2 = sheet2.addRow([]);
+    s2Blank2.height = 10;
+
+    // Header Table 2
+    const th2 = sheet2.addRow([
+      'STT',
+      'MÃ ĐƠN HÀNG',
+      'NGÀY ĐẶT',
+      'NHÀ CUNG CẤP',
+      'MÃ MẶT HÀNG',
+      'TÊN MẶT HÀNG',
+      'ĐVT',
+      'SL ĐẶT',
+      'SL ĐÃ NHẬN',
+      'ĐƠN GIÁ (VNĐ)',
+      'THÀNH TIỀN (VNĐ)',
+      'TRẠNG THÁI',
+      'GHI CHÚ DÒNG',
+    ]);
+    th2.height = 38;
+    th2.eachCell((cell) => {
+      cell.fill = headerFill;
+      cell.font = headerFont;
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+      cell.border = thinBorder;
+    });
+
+    let s2TotalQtyOrdered = 0;
+    let s2TotalQtyReceived = 0;
+    let s2TotalAmount = 0;
+    let lineGlobalIndex = 1;
+
+    for (const po of pos) {
+      const oDate = po.orderDate
+        ? format(new Date(po.orderDate), 'dd/MM/yyyy')
+        : '-';
+      if (po.lines && po.lines.length > 0) {
+        for (const line of po.lines) {
+          const qOrder = parseFloat(line.qtyOrdered) || 0;
+          const qRecv = parseFloat(line.qtyReceived) || 0;
+          const uPrice = parseFloat(line.unitPrice || '0') || 0;
+          const amt = parseFloat(line.amount || '0') || uPrice * qOrder;
+          const uomName = (line.itemId && itemUomMap.get(line.itemId)) || '';
+
+          s2TotalQtyOrdered += qOrder;
+          s2TotalQtyReceived += qRecv;
+          s2TotalAmount += amt;
+
+          const row = sheet2.addRow([
+            lineGlobalIndex++,
+            po.poNo || '',
+            oDate,
+            po.supplier?.name || '',
+            line.itemCode || '',
+            line.itemName || '',
+            uomName,
+            qOrder,
+            qRecv,
+            uPrice,
+            amt,
+            po.status || '',
+            line.description || '',
+          ]);
+          row.height = 26;
+
+          row.eachCell((cell, colNum) => {
+            cell.font = defaultFont;
+            cell.border = thinBorder;
+            if (colNum === 1 || colNum === 3 || colNum === 7 || colNum === 12) {
+              cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            } else if (colNum === 2 || colNum === 5) {
+              cell.alignment = { vertical: 'middle', horizontal: 'center' };
+              cell.font = { ...defaultFont, bold: true };
+            } else if (colNum === 8 || colNum === 9) {
+              cell.alignment = { vertical: 'middle', horizontal: 'right' };
+              cell.numFmt = '#,##0.00';
+            } else if (colNum === 10 || colNum === 11) {
+              cell.alignment = { vertical: 'middle', horizontal: 'right' };
+              cell.numFmt = '#,##0';
+            } else {
+              cell.alignment = {
+                vertical: 'middle',
+                horizontal: 'left',
+                wrapText: true,
+              };
+            }
+          });
+        }
+      }
+    }
+
+    // Summary Row Sheet 2
+    const sumRow2 = sheet2.addRow([
+      'Tổng cộng',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      s2TotalQtyOrdered,
+      s2TotalQtyReceived,
+      '',
+      s2TotalAmount,
+      '',
+      '',
+    ]);
+    sumRow2.height = 30;
+    sheet2.mergeCells(`A${sumRow2.number}:G${sumRow2.number}`);
+    sumRow2.eachCell((cell, colNum) => {
+      cell.font = { ...defaultFont, bold: true };
+      cell.border = thinBorder;
+      if (colNum === 1) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNum === 8 || colNum === 9) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+      } else if (colNum === 11) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0';
+      }
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
