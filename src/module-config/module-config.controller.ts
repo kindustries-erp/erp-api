@@ -85,6 +85,11 @@ export class ModuleConfigController {
     return this.service.updateAttributeDef(id, dto);
   }
 
+  @Get('attribute-defs/:id/options-usage')
+  getAttributeOptionsUsage(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getAttributeOptionsUsage(id);
+  }
+
   @Delete('attribute-defs/:id')
   deleteAttributeDef(
     @Param('id', new ParseUUIDPipe()) id: string,

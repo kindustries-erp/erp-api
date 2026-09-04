@@ -538,6 +538,27 @@ export class ModuleConfigService {
       if (def.fieldType === 'SELECT' || dto.fieldType === 'SELECT') {
         this.validateSelectOptions(dto.options);
       }
+
+      // Kiểm tra xem có option nào bị xóa mà đang có dữ liệu sử dụng không (áp dụng cho cả System và Custom)
+      if (def.options && def.options.length > 0) {
+        const nextValues = new Set(dto.options.map((o) => o.value));
+        const removedOptions = def.options.filter(
+          (o) => !nextValues.has(o.value),
+        );
+
+        if (removedOptions.length > 0) {
+          const usageMap = await this.getAttributeOptionsUsage(id);
+          for (const rem of removedOptions) {
+            const usedCount = usageMap[rem.value] || 0;
+            if (usedCount > 0) {
+              throw new ConflictException(
+                `Tùy chọn "${rem.label || rem.value}" (${rem.value}) của thuộc tính "${def.name}" đang được sử dụng trong ${usedCount} bản ghi, không thể xóa.`,
+              );
+            }
+          }
+        }
+      }
+
       def.options = dto.options;
     }
     if (dto.sortOrder !== undefined) {
@@ -588,6 +609,60 @@ export class ModuleConfigService {
 
     def.isDeleted = true;
     await this.attrDefRepo.save(def);
+  }
+
+  /**
+   * Đếm số lượng bản ghi đang sử dụng từng option value của một thuộc tính
+   */
+  async getAttributeOptionsUsage(
+    attrDefId: string,
+  ): Promise<Record<string, number>> {
+    const def = await this.attrDefRepo.findOne({
+      where: { id: attrDefId, isDeleted: false },
+    });
+    if (!def) {
+      throw new NotFoundException(`Không tìm thấy thuộc tính ID ${attrDefId}`);
+    }
+
+    const usageMap: Record<string, number> = {};
+    for (const opt of def.options || []) {
+      usageMap[opt.value] = 0;
+    }
+
+    const [entityRows, bomRows] = await Promise.all([
+      this.entityAttrValueRepo
+        .createQueryBuilder('eav')
+        .select('eav.valueText', 'value')
+        .addSelect('COUNT(*)', 'count')
+        .where('eav.attrDefId = :attrDefId', { attrDefId })
+        .andWhere('eav.valueText IS NOT NULL')
+        .groupBy('eav.valueText')
+        .getRawMany<{ value: string; count: string }>(),
+      this.attrValueRepo
+        .createQueryBuilder('bav')
+        .select('bav.valueText', 'value')
+        .addSelect('COUNT(*)', 'count')
+        .where('bav.attrDefId = :attrDefId', { attrDefId })
+        .andWhere('bav.valueText IS NOT NULL')
+        .groupBy('bav.valueText')
+        .getRawMany<{ value: string; count: string }>(),
+    ]);
+
+    for (const row of entityRows) {
+      if (row.value) {
+        usageMap[row.value] =
+          (usageMap[row.value] || 0) + Number(row.count || 0);
+      }
+    }
+
+    for (const row of bomRows) {
+      if (row.value) {
+        usageMap[row.value] =
+          (usageMap[row.value] || 0) + Number(row.count || 0);
+      }
+    }
+
+    return usageMap;
   }
 
   /**

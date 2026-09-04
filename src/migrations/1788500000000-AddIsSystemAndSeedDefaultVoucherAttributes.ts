@@ -10,13 +10,13 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
       ADD COLUMN IF NOT EXISTS "is_system" boolean NOT NULL DEFAULT false;
     `);
 
-    // 2. GOODS_RECEIPT: Ensure default system attribute "receipt_type" or mark existing "type" as system
+    // 2. GOODS_RECEIPT: Ensure default system attribute "type_inventory_receipt"
     const existingGrType = await queryRunner.query(`
       SELECT id, code, options FROM "erp_bom_attribute_defs"
       WHERE "module_key_global" = 'GOODS_RECEIPT'
         AND "is_global" = true
         AND "is_deleted" = false
-        AND "code" IN ('type', 'receipt_type')
+        AND "code" IN ('type', 'receipt_type', 'type_inventory_receipt')
       LIMIT 1;
     `);
 
@@ -33,6 +33,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
         `
         UPDATE "erp_bom_attribute_defs"
         SET "is_system" = true,
+            "code" = 'type_inventory_receipt',
             "name" = 'Loại nhập kho',
             "field_type" = 'SELECT',
             "options" = COALESCE("options", $1::jsonb)
@@ -47,7 +48,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
           "id", "is_global", "module_key_global", "code", "name", 
           "field_type", "options", "sort_order", "is_required", "is_active", "is_system", "is_deleted"
         ) VALUES (
-          gen_random_uuid(), true, 'GOODS_RECEIPT', 'receipt_type', 'Loại nhập kho',
+          gen_random_uuid(), true, 'GOODS_RECEIPT', 'type_inventory_receipt', 'Loại nhập kho',
           'SELECT', $1::jsonb, 0, false, true, true, false
         );
       `,
@@ -55,13 +56,13 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
       );
     }
 
-    // 3. GOODS_ISSUE: Ensure default system attribute "issue_type"
+    // 3. GOODS_ISSUE: Ensure default system attribute "type_inventory_issue"
     const existingGiType = await queryRunner.query(`
       SELECT id, code FROM "erp_bom_attribute_defs"
       WHERE "module_key_global" = 'GOODS_ISSUE'
         AND "is_global" = true
         AND "is_deleted" = false
-        AND "code" IN ('type', 'issue_type')
+        AND "code" IN ('type', 'issue_type', 'type_inventory_issue')
       LIMIT 1;
     `);
 
@@ -78,6 +79,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
         `
         UPDATE "erp_bom_attribute_defs"
         SET "is_system" = true,
+            "code" = 'type_inventory_issue',
             "name" = 'Loại xuất kho',
             "field_type" = 'SELECT',
             "options" = COALESCE("options", $1::jsonb)
@@ -92,7 +94,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
           "id", "is_global", "module_key_global", "code", "name", 
           "field_type", "options", "sort_order", "is_required", "is_active", "is_system", "is_deleted"
         ) VALUES (
-          gen_random_uuid(), true, 'GOODS_ISSUE', 'issue_type', 'Loại xuất kho',
+          gen_random_uuid(), true, 'GOODS_ISSUE', 'type_inventory_issue', 'Loại xuất kho',
           'SELECT', $1::jsonb, 0, false, true, true, false
         );
       `,
@@ -100,13 +102,13 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
       );
     }
 
-    // 4. INVENTORY_ADJUSTMENT: Ensure default system attribute "adjustment_reason"
+    // 4. INVENTORY_ADJUSTMENT: Ensure default system attribute "type_inventory_adjustment"
     const existingIaType = await queryRunner.query(`
       SELECT id, code FROM "erp_bom_attribute_defs"
       WHERE "module_key_global" = 'INVENTORY_ADJUSTMENT'
         AND "is_global" = true
         AND "is_deleted" = false
-        AND "code" IN ('reason', 'adjustment_reason', 'type', 'xk')
+        AND "code" IN ('reason', 'adjustment_reason', 'type', 'xk', 'type_inventory_adjustment')
       LIMIT 1;
     `);
 
@@ -123,6 +125,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
         `
         UPDATE "erp_bom_attribute_defs"
         SET "is_system" = true,
+            "code" = 'type_inventory_adjustment',
             "name" = 'Lý do điều chỉnh',
             "field_type" = 'SELECT',
             "options" = COALESCE("options", $1::jsonb)
@@ -137,7 +140,7 @@ export class AddIsSystemAndSeedDefaultVoucherAttributes1788500000000 implements 
           "id", "is_global", "module_key_global", "code", "name", 
           "field_type", "options", "sort_order", "is_required", "is_active", "is_system", "is_deleted"
         ) VALUES (
-          gen_random_uuid(), true, 'INVENTORY_ADJUSTMENT', 'adjustment_reason', 'Lý do điều chỉnh',
+          gen_random_uuid(), true, 'INVENTORY_ADJUSTMENT', 'type_inventory_adjustment', 'Lý do điều chỉnh',
           'SELECT', $1::jsonb, 0, false, true, true, false
         );
       `,

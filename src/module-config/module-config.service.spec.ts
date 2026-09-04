@@ -37,6 +37,7 @@ describe('ModuleConfigService', () => {
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue([]),
     })),
@@ -49,6 +50,7 @@ describe('ModuleConfigService', () => {
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue([]),
     })),
@@ -353,6 +355,161 @@ describe('ModuleConfigService', () => {
       const res = await service.getGlobalAttributeDefs('INVOICE');
       expect(res.length).toBe(1);
       expect(res[0].code).toBe('note');
+    });
+  });
+
+  describe('Options Usage & Guard', () => {
+    it('should return correct options usage map for an attribute', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'RETURN', label: 'Nhập trả' },
+          { value: 'OTHER', label: 'Nhập khác' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { value: 'PO', count: '5' },
+          { value: 'OTHER', count: '2' },
+        ]),
+      })) as any;
+
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '3' }]),
+      })) as any;
+
+      const usage = await service.getAttributeOptionsUsage('attr-select-1');
+      expect(usage).toEqual({
+        PO: 8, // 5 (entity) + 3 (bom)
+        RETURN: 0,
+        OTHER: 2,
+      });
+    });
+
+    it('should throw ConflictException when removing an option that is in use (for system attribute)', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'RETURN', label: 'Nhập trả' },
+        ],
+      });
+
+      // Mock getAttributeOptionsUsage logic via repos
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '10' }]),
+      })) as any;
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Update options removing PO (which has 10 usages)
+      await expect(
+        service.updateAttributeDef('attr-select-1', {
+          options: [{ value: 'RETURN', label: 'Nhập trả' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw ConflictException when removing an option that is in use (for custom attribute)', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-custom-1',
+        name: 'Màu sắc tùy chỉnh',
+        fieldType: 'SELECT',
+        isSystem: false,
+        options: [
+          { value: 'RED', label: 'Đỏ' },
+          { value: 'BLUE', label: 'Xanh' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'RED', count: '3' }]),
+      })) as any;
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Removing RED which is in use
+      await expect(
+        service.updateAttributeDef('attr-custom-1', {
+          options: [{ value: 'BLUE', label: 'Xanh' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should allow removing an option when it has 0 usages', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'UNUSED', label: 'Chưa dùng' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '5' }]),
+      })) as any;
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Removing UNUSED which has 0 usages
+      const updated = await service.updateAttributeDef('attr-select-1', {
+        options: [{ value: 'PO', label: 'Đơn mua hàng' }],
+      });
+      expect(updated).toBeDefined();
+      expect(mockAttrDefRepo.save).toHaveBeenCalled();
     });
   });
 });
