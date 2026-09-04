@@ -120,7 +120,8 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách mặt hàng (phân trang, search, lọc theo itemTypeId, trackingPolicy) |
+| `GET` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách mặt hàng (phân trang, search, lọc theo itemTypeId, trackingPolicy, column_search, column_filters, sort) |
+| `GET` | `/api/v1/inventory/items/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách distinct options phục vụ filter đa chiều cho các cột DataTable |
 | `GET` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'read' }` | Lấy chi tiết mặt hàng theo ID |
 | `POST` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'create' }` | Tạo mới mặt hàng (tự động khởi tạo bản ghi `erp_inventory_balances` ban đầu) |
 | `PATCH` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'update' }` | Cập nhật thông tin mặt hàng |
