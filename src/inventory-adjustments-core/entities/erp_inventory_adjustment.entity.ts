@@ -3,9 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
 
 @Entity({ name: 'erp_inventory_adjustments' })
 export class ErpInventoryAdjustment {
@@ -15,6 +18,13 @@ export class ErpInventoryAdjustment {
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, name: 'adjustment_no' })
   adjustmentNo: string;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpBomCategory | null;
 
   @Column({ type: 'timestamptz', name: 'adjustment_date' })
   adjustmentDate: Date;

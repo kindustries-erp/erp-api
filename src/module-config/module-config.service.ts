@@ -387,6 +387,7 @@ export class ModuleConfigService {
         sortOrder: dto.sortOrder ?? 0,
         isRequired: dto.isRequired ?? false,
         isActive: dto.isActive ?? true,
+        isSystem: dto.isSystem ?? false,
       });
 
       const saved = await this.attrDefRepo.save(def);
@@ -437,6 +438,7 @@ export class ModuleConfigService {
       sortOrder: dto.sortOrder ?? 0,
       isRequired: dto.isRequired ?? false,
       isActive: dto.isActive ?? true,
+      isSystem: dto.isSystem ?? false,
     });
 
     const saved = await this.attrDefRepo.save(def);
@@ -462,6 +464,20 @@ export class ModuleConfigService {
       this.entityAttrValueRepo.count({ where: { attrDefId: id } }),
     ]);
     const usageCount = bomUsage + entityUsage;
+
+    // Thuộc tính hệ thống: không cho phép đổi code và fieldType
+    if (def.isSystem) {
+      if (dto.code && dto.code.trim().toLowerCase() !== def.code) {
+        throw new ConflictException(
+          'Thuộc tính mặc định của hệ thống không thể thay đổi mã thuộc tính.',
+        );
+      }
+      if (dto.fieldType && dto.fieldType !== def.fieldType) {
+        throw new ConflictException(
+          'Thuộc tính mặc định của hệ thống không thể thay đổi kiểu dữ liệu.',
+        );
+      }
+    }
 
     // Nếu đã có dữ liệu sử dụng, chặn đổi code và fieldType
     if (usageCount > 0) {
@@ -515,7 +531,7 @@ export class ModuleConfigService {
     if (dto.name !== undefined) {
       def.name = dto.name.trim();
     }
-    if (dto.fieldType !== undefined && usageCount === 0) {
+    if (dto.fieldType !== undefined && usageCount === 0 && !def.isSystem) {
       def.fieldType = dto.fieldType;
     }
     if (dto.options !== undefined) {
@@ -533,6 +549,9 @@ export class ModuleConfigService {
     if (dto.isActive !== undefined) {
       def.isActive = dto.isActive;
     }
+    if (dto.isSystem !== undefined) {
+      def.isSystem = dto.isSystem;
+    }
 
     const saved = await this.attrDefRepo.save(def);
     return { ...saved, usageCount };
@@ -547,6 +566,12 @@ export class ModuleConfigService {
     });
     if (!def) {
       throw new NotFoundException(`Không tìm thấy thuộc tính ID ${id}`);
+    }
+
+    if (def.isSystem) {
+      throw new BadRequestException(
+        'Thuộc tính mặc định của hệ thống không thể xóa.',
+      );
     }
 
     const [bomUsage, entityUsage] = await Promise.all([
@@ -588,6 +613,27 @@ export class ModuleConfigService {
     } else if (upperType === 'BOM') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_boms WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_goods_receipts WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_goods_issues WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (
+      upperType === 'INVENTORY_ADJUSTMENT' ||
+      upperType === 'ADJUSTMENT'
+    ) {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_inventory_adjustments WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
@@ -716,6 +762,24 @@ export class ModuleConfigService {
       } else if (upperType === 'BOM') {
         await manager.query(
           `UPDATE erp_boms SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+        await manager.query(
+          `UPDATE erp_goods_receipts SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+        await manager.query(
+          `UPDATE erp_goods_issues SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (
+        upperType === 'INVENTORY_ADJUSTMENT' ||
+        upperType === 'ADJUSTMENT'
+      ) {
+        await manager.query(
+          `UPDATE erp_inventory_adjustments SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
       }

@@ -96,4 +96,12 @@ export class CreateModuleAttrDefDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Is system default attribute',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isSystem?: boolean;
 }

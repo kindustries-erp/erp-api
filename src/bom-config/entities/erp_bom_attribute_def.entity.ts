@@ -72,6 +72,9 @@ export class ErpBomAttributeDef {
   @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ type: 'boolean', name: 'is_system', default: false })
+  isSystem: boolean;
+
   @Column({ type: 'boolean', name: 'is_deleted', default: false })
   isDeleted: boolean;
 

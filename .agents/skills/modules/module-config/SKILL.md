@@ -46,6 +46,7 @@ Module `module-config` cung cấp cơ chế **Dynamic Custom Fields Engine (EAV)
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
 | `options` | `jsonb` | YES | Array of `{ value: string, label: string }` | Danh sách options khi `field_type = 'SELECT'` |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
+| `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa, cố định `code` và `field_type`) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái hoạt động |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
@@ -120,6 +121,9 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
    - Validate toàn bộ thuộc tính chung có `isRequired = true` trong module xem đã được điền chưa (bất kể có chọn category hay không).
    - Nếu có `categoryId`: Validate các thuộc tính có `isRequired = true` trong danh mục đó.
    - Chạy transaction: Cập nhật `category_id` trên bảng thực thể (`erp_invoices`, `erp_bank_transactions`, `erp_boms`), xóa các giá trị cũ của `(entity_type, entity_id)` và chèn các giá trị mới cho cả `attributes` và `globalAttributes`.
+4. **Bảo vệ Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
+   - Thuộc tính có `is_system = true` (như loại phiếu nhập/xuất/lý do điều chỉnh kho) **tuyệt đối không thể xóa** (`BadRequestException`).
+   - Cố định trường `code` và `fieldType`, chỉ cho phép cập nhật Tên hiển thị (`name`), Ràng buộc bắt buộc (`isRequired`), và Danh sách tùy chọn (`options`).
 
 ---
 

@@ -276,7 +276,7 @@ describe('ModuleConfigService', () => {
           categoryId: 'cat-1',
           attributes: {},
         }),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     it('should validate and save global attributes without category', async () => {
@@ -315,7 +315,7 @@ describe('ModuleConfigService', () => {
         service.saveEntityValues('INVOICE', 'inv-123', {
           globalAttributes: {},
         }),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
   });
 
