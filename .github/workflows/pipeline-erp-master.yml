@@ -152,8 +152,27 @@ jobs:
             -H "X-Api-Secret: $KOMODO_API_SECRET" \
             -H "Content-Type: application/json" \
             --data '{"procedure":"erp-demo-api-release"}' > komodo-procedure.json
-          jq -e . komodo-procedure.json >/dev/null
-          jq '{id,success,error,result}' komodo-procedure.json
+          procedure_update_id="$(jq -r '.id // ._id."$oid" // empty' komodo-procedure.json)"
+          test -n "$procedure_update_id" || { echo "Komodo did not return a procedure update id"; jq . komodo-procedure.json; exit 1; }
+          for i in $(seq 1 60); do
+            curl --fail-with-body --silent --show-error \
+              -X POST "${KOMODO_URL}/read/GetUpdate" \
+              -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+              -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H "Content-Type: application/json" \
+              --data "$(jq -nc --arg id "$procedure_update_id" '{id:$id}')" > komodo-procedure-update.json
+            status="$(jq -r '.status // empty' komodo-procedure-update.json)"
+            success="$(jq -r '.success // false' komodo-procedure-update.json)"
+            echo "Komodo procedure attempt $i/60: status=$status success=$success"
+            if [ "$status" = "Complete" ]; then
+              [ "$success" = "true" ] || { jq . komodo-procedure-update.json; exit 1; }
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Komodo procedure did not complete within timeout"
+          jq . komodo-procedure-update.json
+          exit 1
 
       - name: Verify API runtime
         run: |
