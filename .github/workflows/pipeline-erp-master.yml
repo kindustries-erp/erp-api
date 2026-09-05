@@ -125,7 +125,7 @@ jobs:
             --data "$payload" > komodo-write.json
           jq -e . komodo-write.json >/dev/null
 
-      - name: Pull API image through Komodo
+      - name: Run Komodo API release procedure
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
@@ -133,29 +133,13 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error \
-            -X POST "${KOMODO_URL}/execute/PullStack" \
+            -X POST "${KOMODO_URL}/execute/RunProcedure" \
             -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
             -H "X-Api-Secret: $KOMODO_API_SECRET" \
             -H "Content-Type: application/json" \
-            --data '{"stack":"erp-master-demo-api"}' > komodo-pull.json
-          jq -e . komodo-pull.json >/dev/null
-          jq '{id,success,error,result}' komodo-pull.json
-
-      - name: Deploy API through Komodo
-        env:
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ vars.KOMODO_URL }}
-        run: |
-          set -euo pipefail
-          curl --fail-with-body --silent --show-error \
-            -X POST "${KOMODO_URL}/execute/DeployStack" \
-            -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
-            -H "X-Api-Secret: $KOMODO_API_SECRET" \
-            -H "Content-Type: application/json" \
-            --data '{"stack":"erp-master-demo-api"}' > komodo-deploy.json
-          jq -e . komodo-deploy.json >/dev/null
-          jq '{id,success,error,result}' komodo-deploy.json
+            --data '{"procedure":"erp-demo-api-release"}' > komodo-procedure.json
+          jq -e . komodo-procedure.json >/dev/null
+          jq '{id,success,error,result}' komodo-procedure.json
 
       - name: Verify API runtime
         run: |
