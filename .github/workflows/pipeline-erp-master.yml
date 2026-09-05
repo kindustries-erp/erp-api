@@ -103,7 +103,7 @@ jobs:
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_URL: ${{ vars.KOMODO_URL }}
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
         run: |
@@ -119,7 +119,7 @@ jobs:
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error \
@@ -135,7 +135,7 @@ jobs:
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error \
@@ -151,7 +151,7 @@ jobs:
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
