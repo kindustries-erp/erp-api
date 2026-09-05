@@ -80,100 +80,92 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to Head
+    name: Deploy erp-master-demo API through Komodo MAIN
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: false # github.event_name == 'push'
+    if: github.event_name == 'push'
+    concurrency:
+      group: erp-master-demo-komodo-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
 
     steps:
-      - name: Connect Tailscale
+      - name: Connect Tailscale to Komodo MAIN
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Guard deploy secrets
-        run: |
-          test -n "${{ secrets.GHCR_PAT }}" || (echo "GHCR_PAT missing" && exit 1)
-          test -n "${{ secrets.HEAD_PASSWORD }}" || (echo "HEAD_PASSWORD missing" && exit 1)
-
-      - name: Write .env to Head
+      - name: Guard Komodo secrets
         env:
-          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "mkdir -p /home/dev/opt/stacks/erp/erp-api-master && cat > /home/dev/opt/stacks/erp/erp-api-master/.env" \
-            <<< "${{ secrets.MASTER_API_ENV }}
-          R2_ACCOUNT_ID=${{ secrets.MASTER_R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID=${{ secrets.MASTER_R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY=${{ secrets.MASTER_R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME=${{ secrets.MASTER_R2_BUCKET_NAME }}"
+          set -euo pipefail
+          test -n "$KOMODO_API_KEY" || (echo "KOMODO_API_KEY missing" && exit 1)
+          test -n "$KOMODO_API_SECRET" || (echo "KOMODO_API_SECRET missing" && exit 1)
+          test -n "$KOMODO_URL" || (echo "KOMODO_URL missing" && exit 1)
+          test -n "$TS_OAUTH_CLIENT_ID" || (echo "TS_OAUTH_CLIENT_ID missing" && exit 1)
+          test -n "$TS_OAUTH_CLIENT_SECRET" || (echo "TS_OAUTH_CLIENT_SECRET missing" && exit 1)
+          timeout 10 bash -c 'cat < /dev/null > /dev/tcp/100.72.115.106/9120'
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Transfer Image to Head
+      - name: Pull images through Komodo
         env:
-          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.sha }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
         run: |
-          TMP_TAR="/tmp/api-image-master-${IMAGE_TAG}.tar.gz"
-          docker pull ${{ env.IMAGE_NAME }}:${IMAGE_TAG}
-          echo "Saving and compressing image..."
-          docker save ${{ env.IMAGE_NAME }}:${IMAGE_TAG} | gzip > image.tar.gz
-          echo "Transferring image..."
-          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ vars.HEAD_PORT }} image.tar.gz ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }}:${TMP_TAR}
-          echo "Loading image on Head..."
-          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ vars.HEAD_PORT }} ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} "docker load -i ${TMP_TAR} && rm -f ${TMP_TAR}"
-          rm -f image.tar.gz
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST "${KOMODO_URL}/execute/PullStack" \
+            -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+            -H "X-Api-Secret: $KOMODO_API_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{"stack":"erp-master-demo"}' > komodo-pull.json
+          jq -e . komodo-pull.json >/dev/null
+          jq '{id,success,error,result}' komodo-pull.json
 
-      - name: Run deploy script
+      - name: Deploy stack through Komodo
         env:
-          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            "HOST_PORT=\$(grep -E '^HOST_PORT=' /home/dev/opt/stacks/erp/erp-api-master/.env | cut -d '=' -f2 | tr -d '\r' | tr -d ' ' || true) ; \
-             if [ -z \"\$HOST_PORT\" ]; then HOST_PORT=10010; fi ; \
-             docker rm -f erp-api-master || true ; \
-             docker rm -f liouni-erp-core-api || true ; \
-             docker ps -q --filter publish=\$HOST_PORT | xargs -r docker rm -f || true ; \
-             docker run -d --name erp-api-master --restart always --pull never --env-file /home/dev/opt/stacks/erp/erp-api-master/.env -e PORT=3000 -p \$HOST_PORT:3000 ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.sha }}"
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST "${KOMODO_URL}/execute/DeployStack" \
+            -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+            -H "X-Api-Secret: $KOMODO_API_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{"stack":"erp-master-demo"}' > komodo-deploy.json
+          jq -e . komodo-deploy.json >/dev/null
+          jq '{id,success,error,result}' komodo-deploy.json
 
-      - name: Health check
+      - name: Verify erp-master-demo service
         env:
-          SSHPASS: ${{ secrets.HEAD_PASSWORD }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no \
-            -p ${{ vars.HEAD_PORT }} \
-            ${{ vars.HEAD_USER }}@${{ vars.HEAD_HOST }} \
-            '
-              HOST_PORT=$(grep -E "^HOST_PORT=" /home/dev/opt/stacks/erp/erp-api-master/.env | cut -d "=" -f2 | tr -d "\r" | tr -d " " || true)
-              if [ -z "$HOST_PORT" ]; then HOST_PORT=10010; fi
-              echo "🔍 Health check on port $HOST_PORT (waiting 15s for container warm-up...)"
-              sleep 15
-              for i in $(seq 1 30); do
-                code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$HOST_PORT/api/v1/auth/profile || true)
-                if [ "$code" = "401" ] || [ "$code" = "200" ]; then
-                  echo "✅ API health OK (attempt $i)"
-                  docker image prune -af
-                  exit 0
-                fi
-                echo "Attempt $i/30: got $code, retrying in 5s..."
-                sleep 5
-              done
-              echo "❌ Health check failed after 30 attempts ($(( 15 + 30 * 5 ))s total)"
-              docker logs --tail 50 erp-api-master || true
-              exit 1
-            '
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl --fail-with-body --silent --show-error \
+              -X POST "${KOMODO_URL}/read/GetStack" \
+              -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+              -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H "Content-Type: application/json" \
+              --data '{"stack":"erp-master-demo"}' > komodo-stack.json
+            if jq -e '.name == "erp-master-demo" and .info.state == "running"' komodo-stack.json >/dev/null; then
+              jq '{name,info:{server_name:.info.server_name,state:.info.state,status:.info.status,services:.info.services}}' komodo-stack.json
+              exit 0
+            fi
+            sleep 5
+          done
+          jq '{name,info:{server_name:.info.server_name,state:.info.state,status:.info.status,services:.info.services}}' komodo-stack.json
+          exit 1
