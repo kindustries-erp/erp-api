@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { InvoicePortalService } from './invoice-portal.service';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
 import { safeDecrypt } from '../../common/utils/encrypt.util';
@@ -193,7 +194,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       expect(result?.token).toEqual('recovered_jwt_token_attempt_2');
     });
 
-    it('should return null when all 3 retry attempts fail', async () => {
+    it('should return null when all 3 retry attempts fail for non-401 errors', async () => {
       await service.savePortalConfig(
         'old_token',
         'old_cookies',
@@ -209,10 +210,33 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
       const loginSpy = jest
         .spyOn(service, 'loginWithCaptcha')
-        .mockRejectedValue(new Error('Invalid credentials'));
+        .mockRejectedValue(new Error('Network timeout'));
 
       const result = await service.autoReloginWithRetry(3, 10);
       expect(loginSpy).toHaveBeenCalledTimes(3);
+      expect(result).toBeNull();
+    });
+
+    it('should NOT retry if login fails with 401 Unauthorized to prevent account lockout', async () => {
+      await service.savePortalConfig(
+        'old_token',
+        'old_cookies',
+        '0318334886',
+        'wrong_pass',
+      );
+
+      jest.spyOn(service, 'getCaptcha').mockResolvedValue({
+        content: '<svg>...</svg>',
+        key: 'captcha_key_123',
+        text: 'WRONG1',
+      });
+
+      const loginSpy = jest
+        .spyOn(service, 'loginWithCaptcha')
+        .mockRejectedValue(new UnauthorizedException('HTTP 401 Unauthorized'));
+
+      const result = await service.autoReloginWithRetry(3, 10);
+      expect(loginSpy).toHaveBeenCalledTimes(1);
       expect(result).toBeNull();
     });
   });

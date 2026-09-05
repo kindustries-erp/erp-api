@@ -168,6 +168,7 @@ export class ModuleConfigService {
       moduleKey,
       code,
       name: dto.name.trim(),
+      nameEn: dto.nameEn ? dto.nameEn.trim() : null,
       description: dto.description?.trim() || null,
       isActive: dto.isActive ?? true,
     });
@@ -232,6 +233,9 @@ export class ModuleConfigService {
     }
     if (dto.name !== undefined) {
       cat.name = dto.name.trim();
+    }
+    if (dto.nameEn !== undefined) {
+      cat.nameEn = dto.nameEn ? dto.nameEn.trim() : null;
     }
     if (dto.description !== undefined) {
       cat.description = dto.description?.trim() || null;
@@ -382,11 +386,13 @@ export class ModuleConfigService {
         categoryId: null,
         code,
         name: dto.name.trim(),
+        nameEn: dto.nameEn ? dto.nameEn.trim() : null,
         fieldType: dto.fieldType,
         options: dto.options || null,
         sortOrder: dto.sortOrder ?? 0,
         isRequired: dto.isRequired ?? false,
         isActive: dto.isActive ?? true,
+        isSystem: dto.isSystem ?? false,
       });
 
       const saved = await this.attrDefRepo.save(def);
@@ -432,11 +438,13 @@ export class ModuleConfigService {
       categoryId: dto.categoryId,
       code,
       name: dto.name.trim(),
+      nameEn: dto.nameEn ? dto.nameEn.trim() : null,
       fieldType: dto.fieldType,
       options: dto.options || null,
       sortOrder: dto.sortOrder ?? 0,
       isRequired: dto.isRequired ?? false,
       isActive: dto.isActive ?? true,
+      isSystem: dto.isSystem ?? false,
     });
 
     const saved = await this.attrDefRepo.save(def);
@@ -462,6 +470,20 @@ export class ModuleConfigService {
       this.entityAttrValueRepo.count({ where: { attrDefId: id } }),
     ]);
     const usageCount = bomUsage + entityUsage;
+
+    // Thuộc tính hệ thống: không cho phép đổi code và fieldType
+    if (def.isSystem) {
+      if (dto.code && dto.code.trim().toLowerCase() !== def.code) {
+        throw new ConflictException(
+          'Thuộc tính mặc định của hệ thống không thể thay đổi mã thuộc tính.',
+        );
+      }
+      if (dto.fieldType && dto.fieldType !== def.fieldType) {
+        throw new ConflictException(
+          'Thuộc tính mặc định của hệ thống không thể thay đổi kiểu dữ liệu.',
+        );
+      }
+    }
 
     // Nếu đã có dữ liệu sử dụng, chặn đổi code và fieldType
     if (usageCount > 0) {
@@ -515,13 +537,57 @@ export class ModuleConfigService {
     if (dto.name !== undefined) {
       def.name = dto.name.trim();
     }
-    if (dto.fieldType !== undefined && usageCount === 0) {
+    if (dto.nameEn !== undefined) {
+      def.nameEn = dto.nameEn ? dto.nameEn.trim() : null;
+    }
+    if (dto.fieldType !== undefined && usageCount === 0 && !def.isSystem) {
       def.fieldType = dto.fieldType;
     }
     if (dto.options !== undefined) {
       if (def.fieldType === 'SELECT' || dto.fieldType === 'SELECT') {
         this.validateSelectOptions(dto.options);
       }
+
+      // Kiểm tra xem có option nào bị xóa mà đang có dữ liệu sử dụng không (áp dụng cho cả System và Custom)
+      if (def.options && def.options.length > 0) {
+        const nextValues = new Set(dto.options.map((o) => o.value));
+        const removedOptions = def.options.filter(
+          (o) => !nextValues.has(o.value),
+        );
+
+        if (removedOptions.length > 0) {
+          const usageMap = await this.getAttributeOptionsUsage(id);
+          for (const rem of removedOptions) {
+            const usedCount = usageMap[rem.value] || 0;
+            if (usedCount > 0) {
+              throw new ConflictException(
+                `Tùy chọn "${rem.label || rem.value}" (${rem.value}) của thuộc tính "${def.name}" đang được sử dụng trong ${usedCount} bản ghi, không thể xóa.`,
+              );
+            }
+            if (def.isSystem) {
+              const coreCodes = [
+                'PO',
+                'SALE',
+                'PRODUCTION',
+                'PERIODIC',
+                'DAMAGED',
+                'COUNT_ERROR',
+                'RECLASSIFY',
+                'RETURN',
+                'WARRANTY',
+                'SCRAP',
+                'OTHER',
+              ];
+              if (coreCodes.includes(rem.value)) {
+                throw new ConflictException(
+                  `Tùy chọn cốt lõi "${rem.label || rem.value}" (${rem.value}) của thuộc tính hệ thống không thể xóa.`,
+                );
+              }
+            }
+          }
+        }
+      }
+
       def.options = dto.options;
     }
     if (dto.sortOrder !== undefined) {
@@ -532,6 +598,9 @@ export class ModuleConfigService {
     }
     if (dto.isActive !== undefined) {
       def.isActive = dto.isActive;
+    }
+    if (dto.isSystem !== undefined) {
+      def.isSystem = dto.isSystem;
     }
 
     const saved = await this.attrDefRepo.save(def);
@@ -549,6 +618,12 @@ export class ModuleConfigService {
       throw new NotFoundException(`Không tìm thấy thuộc tính ID ${id}`);
     }
 
+    if (def.isSystem) {
+      throw new BadRequestException(
+        'Thuộc tính mặc định của hệ thống không thể xóa.',
+      );
+    }
+
     const [bomUsage, entityUsage] = await Promise.all([
       this.attrValueRepo.count({ where: { attrDefId: id } }),
       this.entityAttrValueRepo.count({ where: { attrDefId: id } }),
@@ -563,6 +638,119 @@ export class ModuleConfigService {
 
     def.isDeleted = true;
     await this.attrDefRepo.save(def);
+  }
+
+  /**
+   * Đếm số lượng bản ghi đang sử dụng từng option value của một thuộc tính
+   */
+  async getAttributeOptionsUsage(
+    attrDefId: string,
+  ): Promise<Record<string, number>> {
+    const def = await this.attrDefRepo.findOne({
+      where: { id: attrDefId, isDeleted: false },
+    });
+    if (!def) {
+      throw new NotFoundException(`Không tìm thấy thuộc tính ID ${attrDefId}`);
+    }
+
+    const usageMap: Record<string, number> = {};
+    for (const opt of def.options || []) {
+      usageMap[opt.value] = 0;
+    }
+
+    const [entityRows, bomRows] = await Promise.all([
+      this.entityAttrValueRepo
+        .createQueryBuilder('eav')
+        .select('eav.valueText', 'value')
+        .addSelect('COUNT(*)', 'count')
+        .where('eav.attrDefId = :attrDefId', { attrDefId })
+        .andWhere('eav.valueText IS NOT NULL')
+        .groupBy('eav.valueText')
+        .getRawMany<{ value: string; count: string }>(),
+      this.attrValueRepo
+        .createQueryBuilder('bav')
+        .select('bav.valueText', 'value')
+        .addSelect('COUNT(*)', 'count')
+        .where('bav.attrDefId = :attrDefId', { attrDefId })
+        .andWhere('bav.valueText IS NOT NULL')
+        .groupBy('bav.valueText')
+        .getRawMany<{ value: string; count: string }>(),
+    ]);
+
+    for (const row of entityRows) {
+      if (row.value) {
+        usageMap[row.value] =
+          (usageMap[row.value] || 0) + Number(row.count || 0);
+      }
+    }
+
+    for (const row of bomRows) {
+      if (row.value) {
+        usageMap[row.value] =
+          (usageMap[row.value] || 0) + Number(row.count || 0);
+      }
+    }
+
+    // 3. Quét các bảng thực thể nếu là thuộc tính hệ thống hoặc liên kết trực tiếp
+    const modKey = (def.moduleKeyGlobal || '').toUpperCase();
+    const attrCode = (def.code || '').toLowerCase();
+
+    if (
+      modKey === 'GOODS_RECEIPT' ||
+      ['type_inventory_receipt', 'receipt_type', 'type'].includes(attrCode)
+    ) {
+      try {
+        const [poCountRow, prodCountRow, otherCountRow] = await Promise.all([
+          this.dataSource.query(
+            `SELECT COUNT(*)::int as count FROM erp_goods_receipts WHERE purchase_order_id IS NOT NULL AND is_deleted = false`,
+          ),
+          this.dataSource.query(
+            `SELECT COUNT(*)::int as count FROM erp_goods_receipts WHERE production_order_id IS NOT NULL AND is_deleted = false`,
+          ),
+          this.dataSource.query(
+            `SELECT COUNT(*)::int as count FROM erp_goods_receipts WHERE purchase_order_id IS NULL AND production_order_id IS NULL AND is_deleted = false`,
+          ),
+        ]);
+        if (poCountRow?.[0]?.count && usageMap['PO'] !== undefined) {
+          usageMap['PO'] = (usageMap['PO'] || 0) + Number(poCountRow[0].count);
+        }
+        if (prodCountRow?.[0]?.count && usageMap['PRODUCTION'] !== undefined) {
+          usageMap['PRODUCTION'] =
+            (usageMap['PRODUCTION'] || 0) + Number(prodCountRow[0].count);
+        }
+        if (otherCountRow?.[0]?.count && usageMap['OTHER'] !== undefined) {
+          usageMap['OTHER'] =
+            (usageMap['OTHER'] || 0) + Number(otherCountRow[0].count);
+        }
+      } catch (e) {
+        // Safe catch if table doesn't exist during certain tests
+      }
+    } else if (
+      modKey === 'GOODS_ISSUE' ||
+      ['type_inventory_issue', 'issue_type', 'type'].includes(attrCode)
+    ) {
+      try {
+        const issueRows = await this.dataSource.query(
+          `SELECT issue_type as value, COUNT(*)::int as count FROM erp_goods_issues WHERE is_deleted = false GROUP BY issue_type`,
+        );
+        for (const row of issueRows || []) {
+          if (row.value) {
+            const key = String(row.value).toUpperCase();
+            if (usageMap[key] !== undefined) {
+              usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+            }
+            if (key === 'LOSS' && usageMap['SCRAP'] !== undefined) {
+              usageMap['SCRAP'] =
+                (usageMap['SCRAP'] || 0) + Number(row.count || 0);
+            }
+          }
+        }
+      } catch (e) {
+        // Safe catch
+      }
+    }
+
+    return usageMap;
   }
 
   /**
@@ -588,6 +776,27 @@ export class ModuleConfigService {
     } else if (upperType === 'BOM') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_boms WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_goods_receipts WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_goods_issues WHERE id = $1`,
+        [entityId],
+      );
+      categoryId = rows[0]?.category_id || null;
+    } else if (
+      upperType === 'INVENTORY_ADJUSTMENT' ||
+      upperType === 'ADJUSTMENT'
+    ) {
+      const rows = await this.dataSource.query(
+        `SELECT category_id FROM erp_inventory_adjustments WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
@@ -660,6 +869,7 @@ export class ModuleConfigService {
         attrDefId: ev.attrDefId,
         attrCode: ev.attrDef?.code,
         attrName: ev.attrDef?.name,
+        nameEn: ev.attrDef?.nameEn,
         fieldType: ev.attrDef?.fieldType,
         valueText: ev.valueText,
         isGlobal: ev.attrDef?.isGlobal || globalDefIds.has(ev.attrDefId),
@@ -685,11 +895,19 @@ export class ModuleConfigService {
           isGlobal: true,
           moduleKeyGlobal: upperType,
           isDeleted: false,
-          isActive: true,
         },
       });
 
+      const globalDefMap = new Map<string, string>();
+      for (const d of globalDefs) {
+        globalDefMap.set(d.id, d.id);
+        if (d.code) {
+          globalDefMap.set(d.code.toLowerCase(), d.id);
+        }
+      }
+
       // 2. Check required CATEGORY attributes nếu có categoryId
+      let catDefMap = new Map<string, string>();
       if (categoryId) {
         const cat = await manager.findOne(ErpBomCategory, {
           where: { id: categoryId, isDeleted: false },
@@ -699,6 +917,14 @@ export class ModuleConfigService {
           throw new NotFoundException(
             `Không tìm thấy danh mục ID ${categoryId}`,
           );
+        }
+        for (const d of cat.attributeDefs || []) {
+          if (!d.isDeleted) {
+            catDefMap.set(d.id, d.id);
+            if (d.code) {
+              catDefMap.set(d.code.toLowerCase(), d.id);
+            }
+          }
         }
       }
 
@@ -714,8 +940,51 @@ export class ModuleConfigService {
           [categoryId || null, entityId],
         );
       } else if (upperType === 'BOM') {
+        const prodOrderCount = await manager.query(
+          `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = (SELECT finished_good_item_id FROM erp_boms WHERE id = $1)))`,
+          [entityId],
+        );
+        if ((parseInt(prodOrderCount[0]?.count, 10) || 0) > 0) {
+          throw new BadRequestException(
+            'BOM đã phát sinh lệnh sản xuất, không thể chỉnh sửa thuộc tính.',
+          );
+        }
         await manager.query(
           `UPDATE erp_boms SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+        if (globalAttributes && typeof globalAttributes === 'object') {
+          const versionAttrId = globalDefMap.get('version');
+          const versionVal =
+            globalAttributes.version ??
+            (versionAttrId ? globalAttributes[versionAttrId] : undefined);
+          if (
+            versionVal !== undefined &&
+            versionVal !== null &&
+            String(versionVal).trim() !== ''
+          ) {
+            await manager.query(
+              `UPDATE erp_boms SET version = $1, updated_at = now() WHERE id = $2`,
+              [String(versionVal).trim(), entityId],
+            );
+          }
+        }
+      } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+        await manager.query(
+          `UPDATE erp_goods_receipts SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+        await manager.query(
+          `UPDATE erp_goods_issues SET category_id = $1, updated_at = now() WHERE id = $2`,
+          [categoryId || null, entityId],
+        );
+      } else if (
+        upperType === 'INVENTORY_ADJUSTMENT' ||
+        upperType === 'ADJUSTMENT'
+      ) {
+        await manager.query(
+          `UPDATE erp_inventory_adjustments SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
       }
@@ -731,8 +1000,10 @@ export class ModuleConfigService {
 
       // Category attributes
       if (categoryId && attributes && Object.keys(attributes).length > 0) {
-        for (const [attrDefId, val] of Object.entries(attributes)) {
+        for (const [key, val] of Object.entries(attributes)) {
           if (val !== undefined && val !== null && val !== '') {
+            const attrDefId =
+              catDefMap.get(key) || catDefMap.get(key.toLowerCase()) || key;
             const entityVal = manager.create(ErpEntityAttributeValue, {
               entityType: upperType,
               entityId,
@@ -747,8 +1018,12 @@ export class ModuleConfigService {
 
       // Global attributes (categoryId = null)
       if (globalAttributes && Object.keys(globalAttributes).length > 0) {
-        for (const [attrDefId, val] of Object.entries(globalAttributes)) {
+        for (const [key, val] of Object.entries(globalAttributes)) {
           if (val !== undefined && val !== null && val !== '') {
+            const attrDefId =
+              globalDefMap.get(key) ||
+              globalDefMap.get(key.toLowerCase()) ||
+              key;
             const entityVal = manager.create(ErpEntityAttributeValue, {
               entityType: upperType,
               entityId,

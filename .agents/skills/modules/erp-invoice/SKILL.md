@@ -11,7 +11,7 @@ Phân hệ Quản lý Hóa đơn Điện tử (`erp-invoices-core`) là trung t�
 
 Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
-- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` tự động đồng bộ hóa đơn trong tháng hiện tại theo chu kỳ ngẫu nhiên (30-45 phút) và gửi thông báo qua `NotificationsService`.
+- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts` (mặc định tạm khóa/tắt để setup mật khẩu mới và bảo trì). Khi được kích hoạt, cron chỉ chạy trong khung giờ 00:00 - 03:59 (Asia/Ho_Chi_Minh). Hệ thống tích hợp cơ chế chống khóa tài khoản: nếu Cổng Thuế GDT hoặc Viettel SInvoice trả về lỗi HTTP 401/403 ở lần đăng nhập đầu tiên, tiến trình lập tức dừng retry.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
 - **Trích xuất Metadata Tự động & Subscribers**: Tự động nhận diện biển số xe (`license_plate`), số lệnh quyết toán / sửa chữa (`settlement_order`), mã phụ tùng VinFast (`BAT21001011`, `EEP73110011AP`,...) qua `ErpInvoiceItemSubscriber`.
 - **Hạch toán Kế toán Kép (Post / Unpost Journal Entries)**: Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).

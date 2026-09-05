@@ -196,6 +196,27 @@ export class InventoryWarehouseVoucherService {
         );
         if (rc) receiptWhere += ` AND ${rc}`;
         if (ic) issueWhere += ` AND ${ic}`;
+      } else if (key === 'category' || key === 'categoryName') {
+        const rc = buildRawMultiKeywordSql(
+          ['cat.name', 'cat.code'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ic = buildRawMultiKeywordSql(
+          ['cat.name', 'cat.code'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        const ac = buildRawMultiKeywordSql(
+          ['cat.name', 'cat.code'],
+          value,
+          params,
+          () => pIndex++,
+        );
+        if (rc) receiptWhere += ` AND ${rc}`;
+        if (ic) issueWhere += ` AND ${ic}`;
         if (ac) adjustmentWhere += ` AND ${ac}`;
       } else if (key === 'qtyReceipt') {
         const rc = buildRawMultiKeywordSql(
@@ -380,6 +401,10 @@ export class InventoryWarehouseVoucherService {
             receiptWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
             issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
             adjustmentWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
+          } else if (key === 'category' || key === 'categoryName') {
+            receiptWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
           } else if (key === 'status') {
             receiptWhere += ` AND ${applyAnyOrBlank('g.status')}`;
             issueWhere += ` AND ${applyAnyOrBlank('g.status')}`;
@@ -425,10 +450,14 @@ export class InventoryWarehouseVoucherService {
                po.po_no as "poNo",
                g.purchase_order_id as "purchaseOrderId",
                NULL as "salesOrderId",
+               g.category_id as "categoryId",
+               cat.name as "categoryName",
+               cat.code as "categoryCode",
                (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id) as "totalQty"
         FROM public.erp_goods_receipts g
         LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
         LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id
+        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
         WHERE ${receiptWhere}
       `);
     }
@@ -441,10 +470,14 @@ export class InventoryWarehouseVoucherService {
                so.so_no as "poNo",
                NULL as "purchaseOrderId",
                g.sales_order_id as "salesOrderId",
+               g.category_id as "categoryId",
+               cat.name as "categoryName",
+               cat.code as "categoryCode",
                (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id) as "totalQty"
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         LEFT JOIN public.erp_sales_orders so ON g.sales_order_id = so.id
+        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
         WHERE ${issueWhere}
       `);
     }
@@ -457,8 +490,12 @@ export class InventoryWarehouseVoucherService {
                NULL as "poNo",
                NULL as "purchaseOrderId",
                NULL as "salesOrderId",
+               g.category_id as "categoryId",
+               cat.name as "categoryName",
+               cat.code as "categoryCode",
                (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
         FROM public.erp_inventory_adjustments g
+        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
         WHERE ${adjustmentWhere}
       `);
     }
@@ -490,6 +527,8 @@ export class InventoryWarehouseVoucherService {
         poNo: '"poNo"',
         partnerName: '"partnerName"',
         remarks: 'remarks',
+        category: '"categoryName"',
+        categoryName: '"categoryName"',
         qtyReceipt: '"totalQty"',
         qtyIssue: '"totalQty"',
         qtyAdjustment: '"totalQty"',
@@ -593,6 +632,28 @@ export class InventoryWarehouseVoucherService {
                 );
                 const ac = buildRawMultiKeywordSql(
                   ['g.adjustment_no'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                if (ic) issueWhere += ` AND ${ic}`;
+                if (ac) adjustmentWhere += ` AND ${ac}`;
+              } else if (key === 'category' || key === 'categoryName') {
+                const rc = buildRawMultiKeywordSql(
+                  ['cat.name', 'cat.code'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ic = buildRawMultiKeywordSql(
+                  ['cat.name', 'cat.code'],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                const ac = buildRawMultiKeywordSql(
+                  ['cat.name', 'cat.code'],
                   searchStr,
                   params,
                   () => pIndex++,
@@ -737,6 +798,10 @@ export class InventoryWarehouseVoucherService {
             receiptWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
             issueWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
             adjustmentWhere += ` AND 1 = 0`;
+          } else if (key === 'category' || key === 'categoryName') {
+            receiptWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            issueWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            adjustmentWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
           } else if (key === 'remarks') {
             receiptWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
             issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
@@ -802,6 +867,14 @@ export class InventoryWarehouseVoucherService {
         ${includeReceipts ? `SELECT COALESCE(bp.display_name, bp.name) as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id WHERE ${receiptWhere}` : ''}
         ${includeReceipts && includeIssues ? 'UNION ALL' : ''}
         ${includeIssues ? `SELECT COALESCE(bp.display_name, bp.name) as val FROM public.erp_goods_issues g LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id WHERE ${issueWhere}` : ''}
+      `;
+    } else if (column === 'category' || column === 'categoryName') {
+      selectExpr = `
+        ${includeReceipts ? `SELECT cat.name as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${receiptWhere}` : ''}
+        ${includeReceipts && includeIssues ? 'UNION ALL' : ''}
+        ${includeIssues ? `SELECT cat.name as val FROM public.erp_goods_issues g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${issueWhere}` : ''}
+        ${(includeReceipts || includeIssues) && includeAdjustments ? 'UNION ALL' : ''}
+        ${includeAdjustments ? `SELECT cat.name as val FROM public.erp_inventory_adjustments g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${adjustmentWhere}` : ''}
       `;
     } else if (column === 'remarks') {
       selectExpr = `

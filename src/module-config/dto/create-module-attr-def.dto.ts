@@ -18,8 +18,14 @@ export type BomAttributeFieldType =
   | 'CHECKBOX';
 
 export interface BomAttributeOption {
-  label: string;
   value: string;
+  label: string;
+  labelEn?: string;
+  labels?: {
+    vi?: string;
+    en?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 export class CreateModuleAttrDefDto {
@@ -59,6 +65,15 @@ export class CreateModuleAttrDefDto {
   @MaxLength(255)
   name: string;
 
+  @ApiPropertyOptional({
+    description: 'Attribute name (English)',
+    example: 'Color',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  nameEn?: string;
+
   @ApiProperty({
     description: 'Field type',
     enum: ['TEXT', 'NUMBER', 'SELECT', 'DATE', 'CHECKBOX'],
@@ -96,4 +111,12 @@ export class CreateModuleAttrDefDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Is system default attribute',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isSystem?: boolean;
 }

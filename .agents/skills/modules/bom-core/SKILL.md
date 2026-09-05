@@ -8,9 +8,12 @@ description: Module tri thức Định mức vật tư (BOM - Bill of Materials)
 ## 1. Tổng quan Nghiệp vụ
 
 Module BOM quản lý cấu trúc định mức nguyên vật liệu (Bill of Materials) cần thiết để sản xuất một đơn vị thành phẩm (Finished Good). BOM hỗ trợ:
-- **Cấu hình Danh mục & Thuộc tính động (BOM Config)**:
-  - Phân loại BOM theo Danh mục (Category) như Xe điện, Phụ kiện, Bán thành phẩm...
-  - Mỗi danh mục có thể định nghĩa tập thuộc tính động riêng biệt (Màu sắc, Phiên bản, Kích thước, Đời xe...).
+- **Cấu hình Danh mục & Thuộc tính động (BOM Config & EAV)**:
+  - Phân loại BOM theo Danh mục (Category) hoặc dùng Thuộc tính mặc định toàn hệ thống (`color`, `version`).
+  - Hệ thống tích hợp với bảng EAV dùng chung `erp_entity_attribute_values` (`entity_type = 'BOM'`), hỗ trợ `globalAttributes`.
+  - 2 Thuộc tính mặc định hệ thống:
+    - `color` (`SELECT` - 9 màu xe chuẩn hỗ trợ song ngữ)
+    - `version` (`NUMBER` - mặc định 1.0, đồng bộ 2 chiều với trường `erp_boms.version`).
   - Hỗ trợ đa dạng kiểu dữ liệu: `TEXT` (Văn bản), `NUMBER` (Số), `SELECT` (Combobox với cặp key/value label), `DATE` (Ngày tháng), `CHECKBOX` (Đúng/Sai).
   - Vòng đời **Deactivate an toàn**: Không cho phép xóa hay chỉnh sửa mã nếu đã có BOM sử dụng (`usageCount > 0`), chỉ cho phép vô hiệu hóa (`is_active = false`).
 - **Bảo vệ toàn vẹn khi Đã Phát Sinh Sản Xuất (`hasProduction`)**:

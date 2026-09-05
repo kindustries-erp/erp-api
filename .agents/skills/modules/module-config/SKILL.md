@@ -42,10 +42,12 @@ Module `module-config` cung cấp cơ chế **Dynamic Custom Fields Engine (EAV)
 | `is_global` | `boolean` | NO | Default `false` | Cờ xác định thuộc tính chung toàn module |
 | `module_key_global` | `varchar(50)` | YES | Index `(module_key_global, code)` | Phân hệ của thuộc tính chung khi `is_global = true` |
 | `code` | `varchar(100)` | NO | Unique theo category hoặc module | Mã thuộc tính viết thường/snake_case |
-| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback) |
+| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
+| `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string }` | Danh sách options khi `field_type = 'SELECT'` |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string> }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ động) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
+| `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa, cố định `code` và `field_type`) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái hoạt động |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
@@ -101,7 +103,8 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
 | `GET` | `/global-attribute-defs` | `query: { moduleKey: string }` | Lấy danh sách thuộc tính chung (Global) của 1 module |
 | `GET` | `/attribute-defs` | `query: { categoryId?: string, isGlobal?: boolean, moduleKey?: string }` | Lấy danh sách thuộc tính |
 | `POST` | `/attribute-defs` | `CreateModuleAttrDefDto` | Tạo thuộc tính (`isGlobal`, `moduleKeyGlobal`, `categoryId`, `code`, `name`, `fieldType`, `options`, `isRequired`) |
-| `PATCH` | `/attribute-defs/:id` | `UpdateModuleAttrDefDto` | Cập nhật thuộc tính (chặn đổi `fieldType` nếu đã có dữ liệu nhập) |
+| `PATCH` | `/attribute-defs/:id` | `UpdateModuleAttrDefDto` | Cập nhật thuộc tính (chặn đổi `fieldType` nếu đã có dữ liệu nhập, chặn xóa option đang được sử dụng) |
+| `GET` | `/attribute-defs/:id/options-usage` | `id: UUID` | Lấy thống kê số lượng bản ghi đang dùng theo từng option value (`Record<string, number>`) |
 | `DELETE` | `/attribute-defs/:id` | `id: UUID` | Xóa mềm thuộc tính (chặn xóa nếu thuộc tính đang được sử dụng) |
 | `GET` | `/values/:entityType/:entityId` | `params: { entityType, entityId }` | Lấy danh mục, category attributes, global attributes và danh sách global defs của 1 thực thể |
 | `PUT` | `/values/:entityType/:entityId` | `SaveEntityValuesDto` (`categoryId`, `attributes`, `globalAttributes`) | Validate các trường `isRequired` (cả global và category), cập nhật `category_id` và upsert giá trị thuộc tính |
@@ -116,10 +119,14 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
 2. **Kiểm tra an toàn kiểu dữ liệu (Data Integrity Guard)**:
    - Khi `fieldType === 'SELECT'`, options trong JSONB phải có `value` và `label` hợp lệ, không được trùng lặp `value`.
    - Không cho phép đổi `fieldType` hoặc `code` của thuộc tính nếu `usageCount > 0` (tính cả `erp_bom_attribute_values` và `erp_entity_attribute_values`).
+   - **Option Usage Guard (Chặn xóa tùy chọn đang dùng)**: Khi cập nhật danh sách `options` (cả System lẫn Custom attributes), hệ thống tự động đối chiếu với dữ liệu thực tế (`erp_entity_attribute_values` và `erp_bom_attribute_values`). Nếu có option value bị loại bỏ mà đang có `usageCount > 0`, backend ném `ConflictException`. Người dùng được phép chỉnh sửa tên hiển thị (`label`) của option nhưng giữ nguyên mã (`value`).
 3. **Transaction lưu trữ thực thể (`saveEntityValues`)**:
    - Validate toàn bộ thuộc tính chung có `isRequired = true` trong module xem đã được điền chưa (bất kể có chọn category hay không).
    - Nếu có `categoryId`: Validate các thuộc tính có `isRequired = true` trong danh mục đó.
    - Chạy transaction: Cập nhật `category_id` trên bảng thực thể (`erp_invoices`, `erp_bank_transactions`, `erp_boms`), xóa các giá trị cũ của `(entity_type, entity_id)` và chèn các giá trị mới cho cả `attributes` và `globalAttributes`.
+4. **Bảo vệ Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
+   - Thuộc tính có `is_system = true` (như `type_inventory_receipt` cho phiếu nhập kho, `type_inventory_issue` cho phiếu xuất kho, `type_inventory_adjustment` cho phiếu kiểm kê/điều chỉnh) **tuyệt đối không thể xóa** (`BadRequestException`).
+   - Cố định trường `code` và `fieldType`, chỉ cho phép tùy chỉnh Tên hiển thị (`name`), Ràng buộc bắt buộc (`isRequired`), và Danh sách tùy chọn (`options`).
 
 ---
 

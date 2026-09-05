@@ -47,6 +47,22 @@ export class InventoryItemsService {
     return this.inventoryItemsQueryService.findAll(query);
   }
 
+  getColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    return this.inventoryItemsQueryService.getColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+    );
+  }
+
   getBalances(idsString?: string) {
     return this.inventoryItemsQueryService.getBalances(idsString);
   }

@@ -10,7 +10,7 @@ import { SinvoiceService } from './sinvoice.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
-import { isCronEnabled } from '../common/utils/cron.util';
+import { isInvoiceCronEnabled } from '../common/utils/cron.util';
 
 @Injectable()
 export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
@@ -27,9 +27,9 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    if (!isCronEnabled()) {
+    if (!isInvoiceCronEnabled()) {
       this.logger.log(
-        'Sinvoice draft auto-sync cron is disabled in this environment.',
+        'Sinvoice draft auto-sync cron is disabled in this environment (ENABLE_INVOICE_CRON is not true).',
       );
       return;
     }
@@ -61,6 +61,13 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
   }
 
   async autoSyncDrafts() {
+    if (!isInvoiceCronEnabled()) {
+      this.logger.log(
+        'Sinvoice draft auto-sync skipped: cron is disabled in this environment.',
+      );
+      return;
+    }
+
     this.logger.log('Auto-sync draft started.');
 
     try {
@@ -74,7 +81,21 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
         await this.notifySyncSuccess(res.synced, res.added, res.removed);
       }
     } catch (e: any) {
-      this.logger.error('Error during draft auto-sync', e);
+      const isAuthError =
+        e?.status === 401 ||
+        e?.status === 403 ||
+        e?.name === 'UnauthorizedException' ||
+        e?.message?.includes('401') ||
+        e?.message?.includes('403');
+
+      if (isAuthError) {
+        this.logger.error(
+          'Đăng nhập Viettel trả về lỗi xác thực (401/403). Dừng tiến trình và không retry để tránh khóa tài khoản.',
+          e?.message || e,
+        );
+      } else {
+        this.logger.error('Error during draft auto-sync', e);
+      }
     }
   }
 

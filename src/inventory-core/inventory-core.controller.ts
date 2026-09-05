@@ -82,6 +82,27 @@ export class InventoryItemsController {
     resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.READ,
   })
+  @Get('items/column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filters,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ITEMS,
+    action: ErpAction.READ,
+  })
   @Get('items/balances')
   getBalances(@Query('ids') ids: string) {
     return this.service.getBalances(ids);
