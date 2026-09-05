@@ -24,6 +24,9 @@ export class ErpBomCategory {
   @Column({ type: 'varchar', length: 255, name: 'name' })
   name: string;
 
+  @Column({ type: 'varchar', length: 255, name: 'name_en', nullable: true })
+  nameEn: string | null;
+
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 

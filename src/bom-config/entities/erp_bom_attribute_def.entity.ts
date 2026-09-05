@@ -20,8 +20,14 @@ export type BomAttributeFieldType =
   | 'CHECKBOX';
 
 export interface BomAttributeOption {
-  label: string;
   value: string;
+  label: string;
+  labelEn?: string;
+  labels?: {
+    vi?: string;
+    en?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 @Entity({ name: 'erp_bom_attribute_defs' })
@@ -56,6 +62,9 @@ export class ErpBomAttributeDef {
 
   @Column({ type: 'varchar', length: 255, name: 'name' })
   name: string;
+
+  @Column({ type: 'varchar', length: 255, name: 'name_en', nullable: true })
+  nameEn: string | null;
 
   @Column({ type: 'varchar', length: 50, name: 'field_type', default: 'TEXT' })
   fieldType: BomAttributeFieldType;

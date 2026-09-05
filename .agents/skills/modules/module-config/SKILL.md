@@ -42,9 +42,10 @@ Module `module-config` cung cấp cơ chế **Dynamic Custom Fields Engine (EAV)
 | `is_global` | `boolean` | NO | Default `false` | Cờ xác định thuộc tính chung toàn module |
 | `module_key_global` | `varchar(50)` | YES | Index `(module_key_global, code)` | Phân hệ của thuộc tính chung khi `is_global = true` |
 | `code` | `varchar(100)` | NO | Unique theo category hoặc module | Mã thuộc tính viết thường/snake_case |
-| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback) |
+| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
+| `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string }` | Danh sách options khi `field_type = 'SELECT'` |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string> }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ động) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
 | `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa, cố định `code` và `field_type`) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |

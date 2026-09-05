@@ -18,8 +18,14 @@ export type BomAttributeFieldType =
   | 'CHECKBOX';
 
 export interface BomAttributeOption {
-  label: string;
   value: string;
+  label: string;
+  labelEn?: string;
+  labels?: {
+    vi?: string;
+    en?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 export class CreateModuleAttrDefDto {
@@ -58,6 +64,15 @@ export class CreateModuleAttrDefDto {
   @IsNotEmpty()
   @MaxLength(255)
   name: string;
+
+  @ApiPropertyOptional({
+    description: 'Attribute name (English)',
+    example: 'Color',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  nameEn?: string;
 
   @ApiProperty({
     description: 'Field type',

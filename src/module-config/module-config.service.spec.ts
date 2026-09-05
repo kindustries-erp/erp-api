@@ -511,5 +511,86 @@ describe('ModuleConfigService', () => {
       expect(updated).toBeDefined();
       expect(mockAttrDefRepo.save).toHaveBeenCalled();
     });
+
+    it('should throw ConflictException when removing a core system option even with 0 usage', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'PRODUCTION', label: 'Nhập sản xuất' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Cố tình xóa option PO (Core option)
+      await expect(
+        service.updateAttributeDef('attr-select-1', {
+          options: [{ value: 'PRODUCTION', label: 'Nhập sản xuất' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should query entity tables for GOODS_RECEIPT and count PO / PRODUCTION usages', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-gr-type',
+        code: 'type_inventory_receipt',
+        name: 'Loại nhập kho',
+        moduleKeyGlobal: 'GOODS_RECEIPT',
+        isGlobal: true,
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'PRODUCTION', label: 'Nhập sản xuất' },
+          { value: 'OTHER', label: 'Nhập khác' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      mockDataSource.query = jest
+        .fn()
+        .mockResolvedValueOnce([{ count: '12' }]) // PO count
+        .mockResolvedValueOnce([{ count: '3' }]) // PRODUCTION count
+        .mockResolvedValueOnce([{ count: '5' }]); // OTHER count
+
+      const usage = await service.getAttributeOptionsUsage('attr-gr-type');
+      expect(usage.PO).toBe(12);
+      expect(usage.PRODUCTION).toBe(3);
+      expect(usage.OTHER).toBe(5);
+    });
   });
 });
