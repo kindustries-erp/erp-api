@@ -147,25 +147,16 @@ jobs:
           jq -e . komodo-deploy.json >/dev/null
           jq '{id,success,error,result}' komodo-deploy.json
 
-      - name: Verify erp-master-demo service
-        env:
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ vars.KOMODO_URL }}
+      - name: Verify erp-master-demo API runtime
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
-            curl --fail-with-body --silent --show-error \
-              -X POST "${KOMODO_URL}/read/GetStack" \
-              -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
-              -H "X-Api-Secret: $KOMODO_API_SECRET" \
-              -H "Content-Type: application/json" \
-              --data '{"stack":"erp-master-demo"}' > komodo-stack.json
-            if jq -e '.name == "erp-master-demo" and .info.state == "running"' komodo-stack.json >/dev/null; then
-              jq '{name,info:{server_name:.info.server_name,state:.info.state,status:.info.status,services:.info.services}}' komodo-stack.json
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' http://100.69.94.117:10020/api/v1/auth/profile || true)"
+            if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+              echo "API runtime healthy: HTTP $code (attempt $i)"
               exit 0
             fi
+            echo "API attempt $i/30: HTTP $code"
             sleep 5
           done
-          jq '{name,info:{server_name:.info.server_name,state:.info.state,status:.info.status,services:.info.services}}' komodo-stack.json
           exit 1
