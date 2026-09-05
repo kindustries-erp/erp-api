@@ -9,6 +9,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-master
+  MIGRATE_IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-migrate
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -79,6 +80,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push migration image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.migrate
+          push: true
+          tags: |
+            ${{ env.MIGRATE_IMAGE_NAME }}:latest
+            ${{ env.MIGRATE_IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
     name: Deploy API SHA through Komodo
     runs-on: ubuntu-latest
@@ -115,8 +128,9 @@ jobs:
           IMAGE_SHA: ${{ needs.build-and-push.outputs.sha }}
         run: |
           set -euo pipefail
-          image="${{ env.IMAGE_NAME }}:${IMAGE_SHA}"
-          payload="$(jq -n --arg stack "erp-master-demo-api" --arg image "$image" '{stack:$stack,file_path:".env",contents:("ERP_API_IMAGE=" + $image + "\n")}')"
+          api_image="${{ env.IMAGE_NAME }}:${IMAGE_SHA}"
+          migrate_image="${{ env.MIGRATE_IMAGE_NAME }}:${IMAGE_SHA}"
+          payload="$(jq -n --arg stack "erp-master-demo-api" --arg api "$api_image" --arg migrate "$migrate_image" '{stack:$stack,file_path:".env",contents:("ERP_API_IMAGE=" + $api + "\nERP_MIGRATE_IMAGE=" + $migrate + "\n")}')"
           curl --fail-with-body --silent --show-error \
             -X POST "${KOMODO_URL}/write/WriteStackFileContents" \
             -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
