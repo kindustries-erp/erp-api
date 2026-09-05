@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -286,6 +287,22 @@ export class InvoicePortalService implements OnModuleInit {
         this.logger.warn(
           `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
         );
+
+        // Chặn retry nếu gặp lỗi 401/403 Unauthorized để tránh bị Cổng Thuế khóa tài khoản
+        const isAuthError =
+          err?.status === 401 ||
+          err?.status === 403 ||
+          err instanceof UnauthorizedException ||
+          err?.message?.includes('401') ||
+          err?.message?.includes('403');
+
+        if (isAuthError) {
+          this.logger.error(
+            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
+          );
+          break;
+        }
+
         if (attempt < maxRetries) {
           this.logger.log(
             `Chờ ${Math.round(retryDelayMs / 1000)}s trước khi thử lại đăng nhập...`,
@@ -394,6 +411,11 @@ export class InvoicePortalService implements OnModuleInit {
             `Đăng nhập thất bại (HTTP ${res.status})`;
         } catch {
           errMessage = `Đăng nhập thất bại (HTTP ${res.status})`;
+        }
+        if (res.status === 401 || res.status === 403) {
+          throw new UnauthorizedException(
+            `Đăng nhập Cổng Thuế thất bại (HTTP ${res.status}): ${errMessage}. Sai tài khoản/mật khẩu hoặc tài khoản bị khóa.`,
+          );
         }
         throw new BadRequestException(errMessage);
       }
