@@ -940,10 +940,35 @@ export class ModuleConfigService {
           [categoryId || null, entityId],
         );
       } else if (upperType === 'BOM') {
+        const prodOrderCount = await manager.query(
+          `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = (SELECT finished_good_item_id FROM erp_boms WHERE id = $1)))`,
+          [entityId],
+        );
+        if ((parseInt(prodOrderCount[0]?.count, 10) || 0) > 0) {
+          throw new BadRequestException(
+            'BOM đã phát sinh lệnh sản xuất, không thể chỉnh sửa thuộc tính.',
+          );
+        }
         await manager.query(
           `UPDATE erp_boms SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
+        if (globalAttributes && typeof globalAttributes === 'object') {
+          const versionAttrId = globalDefMap.get('version');
+          const versionVal =
+            globalAttributes.version ??
+            (versionAttrId ? globalAttributes[versionAttrId] : undefined);
+          if (
+            versionVal !== undefined &&
+            versionVal !== null &&
+            String(versionVal).trim() !== ''
+          ) {
+            await manager.query(
+              `UPDATE erp_boms SET version = $1, updated_at = now() WHERE id = $2`,
+              [String(versionVal).trim(), entityId],
+            );
+          }
+        }
       } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
         await manager.query(
           `UPDATE erp_goods_receipts SET category_id = $1, updated_at = now() WHERE id = $2`,

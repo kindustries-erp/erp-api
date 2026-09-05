@@ -35,6 +35,13 @@ export class CreateBomDto {
   @IsOptional()
   attributes?: Record<string, string>;
 
+  @ApiPropertyOptional({
+    description:
+      'Global attributes map for BOM: attrDefId or code -> valueText',
+  })
+  @IsOptional()
+  globalAttributes?: Record<string, any>;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

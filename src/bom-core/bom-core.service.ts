@@ -55,7 +55,7 @@ export class BomCoreService {
   }
 
   async create(dto: CreateBomDto) {
-    const { lines = [], attributes, ...header } = dto;
+    const { lines = [], attributes, globalAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       if (header.categoryId) {
         await this.validateRequiredAttributes(
@@ -65,12 +65,25 @@ export class BomCoreService {
         );
       }
 
+      let initialVersion = header.version?.trim() || '1.0';
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const vCandidate =
+          globalAttributes.version ?? globalAttributes['version'];
+        if (
+          vCandidate !== undefined &&
+          vCandidate !== null &&
+          String(vCandidate).trim() !== ''
+        ) {
+          initialVersion = String(vCandidate).trim();
+        }
+      }
+
       const headerRepo = manager.getRepository(ErpBom);
       const lineRepo = manager.getRepository(ErpBomLine);
       const data = await headerRepo.save(
         headerRepo.create({
           status: header.status ?? 'ACTIVE',
-          version: header.version?.trim() || '1.0',
+          version: initialVersion,
           ...header,
         } as DeepPartial<ErpBom>),
       );
@@ -121,9 +134,48 @@ export class BomCoreService {
         }
       }
 
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const globalDefs = await manager.query(
+          `SELECT id, code FROM erp_bom_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+        );
+        const globalDefMap = new Map<string, string>();
+        for (const gd of globalDefs) {
+          globalDefMap.set(gd.id, gd.id);
+          if (gd.code) {
+            globalDefMap.set(gd.code.toLowerCase(), gd.id);
+          }
+        }
+        const gAttrs = (globalAttributes || {}) as Record<string, unknown>;
+        for (const [key, rawVal] of Object.entries(gAttrs)) {
+          const valStr =
+            typeof rawVal === 'string'
+              ? rawVal.trim()
+              : typeof rawVal === 'number' || typeof rawVal === 'boolean'
+                ? String(rawVal).trim()
+                : '';
+          if (valStr !== '') {
+            const defId =
+              globalDefMap.get(key) ||
+              globalDefMap.get(key.toLowerCase()) ||
+              key;
+            await manager.query(
+              `INSERT INTO erp_entity_attribute_values (id, entity_type, entity_id, attr_def_id, value_text, created_at, updated_at)
+               VALUES (gen_random_uuid(), 'BOM', $1, $2, $3, NOW(), NOW())
+               ON CONFLICT (entity_type, entity_id, attr_def_id) DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = NOW()`,
+              [data.id, defId, valStr],
+            );
+          }
+        }
+      }
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: savedLines, attributes: attributes || {} },
+        data: {
+          ...data,
+          lines: savedLines,
+          attributes: attributes || {},
+          globalAttributes: globalAttributes || {},
+        },
       };
     });
   }
@@ -204,6 +256,22 @@ export class BomCoreService {
     (data as any).attributes = attrMap;
     (data as any).categoryCode = data.category?.code || null;
     (data as any).categoryName = data.category?.name || null;
+
+    // Load global attributes from erp_entity_attribute_values
+    const entityAttrRows = await this.dataSource.query(
+      `SELECT eav.attr_def_id, eav.value_text, def.code, def.is_global
+       FROM erp_entity_attribute_values eav
+       JOIN erp_bom_attribute_defs def ON def.id = eav.attr_def_id
+       WHERE eav.entity_type = 'BOM' AND eav.entity_id = $1 AND def.is_deleted = false`,
+      [id],
+    );
+    const globalAttrsMap: Record<string, any> = {};
+    for (const row of entityAttrRows) {
+      if (row.is_global) {
+        globalAttrsMap[row.attr_def_id] = row.value_text;
+      }
+    }
+    (data as any).globalAttributes = globalAttrsMap;
 
     // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
     const prodOrderCount = await this.dataSource.query(
@@ -288,7 +356,7 @@ export class BomCoreService {
       return this.findOne(id);
     }
 
-    const { lines, attributes, ...header } = dto as any;
+    const { lines, attributes, globalAttributes, ...header } = dto as any;
     await this.dataSource.transaction(async (manager) => {
       const targetCategoryId =
         header.categoryId !== undefined
@@ -300,6 +368,18 @@ export class BomCoreService {
           targetCategoryId,
           attributes,
         );
+      }
+
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const vCandidate =
+          globalAttributes.version ?? globalAttributes['version'];
+        if (
+          vCandidate !== undefined &&
+          vCandidate !== null &&
+          String(vCandidate).trim() !== ''
+        ) {
+          header.version = String(vCandidate).trim();
+        }
       }
 
       const headerRepo = manager.getRepository(ErpBom);
@@ -357,6 +437,47 @@ export class BomCoreService {
                 );
               }
             }
+          }
+        }
+      }
+
+      if (
+        globalAttributes !== undefined &&
+        typeof globalAttributes === 'object'
+      ) {
+        const globalDefs = await manager.query(
+          `SELECT id, code FROM erp_bom_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+        );
+        const globalDefMap = new Map<string, string>();
+        for (const gd of globalDefs) {
+          globalDefMap.set(gd.id, gd.id);
+          if (gd.code) {
+            globalDefMap.set(gd.code.toLowerCase(), gd.id);
+          }
+        }
+        await manager.query(
+          `DELETE FROM erp_entity_attribute_values WHERE entity_type = 'BOM' AND entity_id = $1`,
+          [id],
+        );
+        const gAttrs = (globalAttributes || {}) as Record<string, unknown>;
+        for (const [key, rawVal] of Object.entries(gAttrs)) {
+          const valStr =
+            typeof rawVal === 'string'
+              ? rawVal.trim()
+              : typeof rawVal === 'number' || typeof rawVal === 'boolean'
+                ? String(rawVal).trim()
+                : '';
+          if (valStr !== '') {
+            const defId =
+              globalDefMap.get(key) ||
+              globalDefMap.get(key.toLowerCase()) ||
+              key;
+            await manager.query(
+              `INSERT INTO erp_entity_attribute_values (id, entity_type, entity_id, attr_def_id, value_text, created_at, updated_at)
+               VALUES (gen_random_uuid(), 'BOM', $1, $2, $3, NOW(), NOW())
+               ON CONFLICT (entity_type, entity_id, attr_def_id) DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = NOW()`,
+              [id, defId, valStr],
+            );
           }
         }
       }
