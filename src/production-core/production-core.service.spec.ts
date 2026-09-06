@@ -560,4 +560,100 @@ describe('ProductionCoreService', () => {
       motor_power: '800W',
     });
   });
+
+  it('updates produced vehicle identifiers and notes correctly', async () => {
+    const existingVehicle = {
+      id: 'veh-1',
+      productionOrderId: 'po-1',
+      vinNo: 'OLD-VIN',
+      engineNo: 'OLD-ENG',
+      notes: 'Old note',
+    };
+
+    const existingSerial = {
+      id: 'ser-1',
+      vinId: 'veh-1',
+      serialNo: 'SN-OLD',
+      attributes: { vehicleSerialNo: 'SN-OLD-TEM' },
+      notes: 'Old note',
+    };
+
+    const vehicleRepo = {
+      findOne: jest.fn().mockResolvedValue(existingVehicle),
+      save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+    };
+    const serialRepo = {
+      findOne: jest.fn().mockResolvedValue(existingSerial),
+      save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+    };
+    const orderRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'po-1', isDeleted: false }),
+    };
+
+    const manager = {
+      getRepository: (entity: any) => {
+        const name = entity?.name || entity;
+        if (name === 'ErpVehicle') return vehicleRepo;
+        if (name === 'ErpInventoryTrackingSerial') return serialRepo;
+        if (name === 'ErpProductionOrder') return orderRepo;
+        return {
+          findOne: jest.fn().mockResolvedValue(null),
+          save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+        };
+      },
+    } as any;
+
+    const dataSource = {
+      transaction: jest.fn(async (cb) => cb(manager)),
+      getRepository: (entity: any) => manager.getRepository(entity),
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.updateProducedVehicles('po-1', {
+      vehicles: [
+        {
+          id: 'veh-1',
+          vinNo: 'NEW-VIN-001',
+          engineNo: 'NEW-ENG-001',
+          serialNo: 'NEW-TEM-001',
+          notes: 'Đã cập nhật ghi chú',
+        },
+      ],
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].vinNo).toBe('NEW-VIN-001');
+    expect(result.data[0].engineNo).toBe('NEW-ENG-001');
+    expect(result.data[0].notes).toBe('Đã cập nhật ghi chú');
+
+    expect(vehicleRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vinNo: 'NEW-VIN-001',
+        engineNo: 'NEW-ENG-001',
+        notes: 'Đã cập nhật ghi chú',
+      }),
+    );
+
+    expect(serialRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: { vehicleSerialNo: 'NEW-TEM-001' },
+        notes: 'Đã cập nhật ghi chú',
+      }),
+    );
+  });
 });

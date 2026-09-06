@@ -34,6 +34,7 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
+import { UpdateProducedVehiclesDto } from './dto/update-produced-vehicles.dto';
 import { ErpProductionOrderSerialAssignment } from './entities/erp_production_order_serial_assignment.entity';
 
 import { ListProductionDto } from './dto/list-production.dto';
@@ -2543,5 +2544,80 @@ export class ProductionCoreService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async updateProducedVehicles(id: string, dto: UpdateProducedVehiclesDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const vehicleRepo = manager.getRepository(ErpVehicle);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+      const productionRepo = manager.getRepository(ErpProductionOrder);
+
+      const order = await productionRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+      if (!order) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+
+      const vehicles = dto.vehicles || [];
+      if (vehicles.length === 0) {
+        return { message: 'Không có xe nào cần cập nhật', data: [] };
+      }
+
+      const updatedResults: Array<{
+        id: string;
+        vinNo: string;
+        engineNo: string;
+        notes: string | null;
+      }> = [];
+
+      for (const item of vehicles) {
+        const vehicle = await vehicleRepo.findOne({
+          where: { id: item.id, productionOrderId: id },
+        });
+        if (!vehicle) continue;
+
+        if (item.vinNo?.trim()) vehicle.vinNo = item.vinNo.trim();
+        if (item.engineNo?.trim()) vehicle.engineNo = item.engineNo.trim();
+        if (item.notes !== undefined)
+          vehicle.notes = item.notes?.trim() || null;
+
+        await vehicleRepo.save(vehicle);
+
+        // Update corresponding serial tracking record if exists
+        const serialRecord = await serialRepo.findOne({
+          where: { vinId: vehicle.id },
+        });
+        if (serialRecord) {
+          const currentAttrs = (serialRecord.attributes || {}) as Record<
+            string,
+            any
+          >;
+          if (item.serialNo !== undefined) {
+            if (item.serialNo.trim()) {
+              currentAttrs['vehicleSerialNo'] = item.serialNo.trim();
+            } else {
+              delete currentAttrs['vehicleSerialNo'];
+            }
+          }
+          if (item.notes !== undefined) {
+            serialRecord.notes = item.notes?.trim() || null;
+          }
+          serialRecord.attributes =
+            Object.keys(currentAttrs).length > 0 ? currentAttrs : null;
+          await serialRepo.save(serialRecord);
+        }
+
+        updatedResults.push({
+          id: vehicle.id,
+          vinNo: vehicle.vinNo,
+          engineNo: vehicle.engineNo,
+          notes: vehicle.notes,
+        });
+      }
+
+      return {
+        message: `Cập nhật thông tin ${updatedResults.length} xe thành công`,
+        data: updatedResults,
+      };
+    });
   }
 }
