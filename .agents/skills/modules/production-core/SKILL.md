@@ -160,13 +160,13 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 ### 5.3. Giai đoạn 2: Hoàn thành sản xuất & Nhập kho Thành phẩm (`completeProduction`)
 1. Kiểm tra toàn bộ NVL định mức của lệnh đã được xuất kho đủ 100% chưa.
 2. Kiểm tra Tracking Policy của mặt hàng thành phẩm:
-   - `VEHICLE`: Bắt buộc nhập đủ số VIN, Số máy, Số serial, Mã màu hợp lệ (`DEN`, `TRANG`, `DO`, `XANH`, `XAM`, `BAC`). Validate chống trùng lặp VIN và Số máy trong toàn bộ hệ thống.
-   - `SERIAL`: Bắt buộc nhập danh sách Serial number.
+   - `VEHICLE`: Bắt buộc nhập Số khung (VIN) và Số máy. Số serial (tùy chọn, tự động fallback theo Số máy/Số khung nếu để trống), Ghi chú (tùy chọn). Tự động trích xuất và kế thừa toàn bộ thuộc tính kỹ thuật từ BOM snapshot (`bomAttributes`, `bomGlobalAttributes`, `bomAttributeDetails`) và lưu vào cột `attributes` (JSONB) của `erp_inventory_tracking_serials`. Validate chống trùng lặp VIN và Số máy trong toàn bộ hệ thống.
+   - `SERIAL`: Bắt buộc nhập danh sách Serial number. Kế thừa thuộc tính BOM vào `attributes`.
    - `LOT`: Bắt buộc nhập Lot number.
    - `NONE`: Không bắt buộc định danh.
 3. Tự động sinh số phiếu nhập kho `NK-YYYYMMxxx` (loại `RECEIPT`, docType `GOODS_RECEIPT`).
 4. Tạo `erp_goods_receipts` và `erp_goods_receipt_lines`.
-5. Tạo xe thành phẩm trong `erp_vehicles` và serial thành phẩm trong `erp_inventory_tracking_serials` (`status = 'IN_STOCK'`, liên kết `vinId`).
+5. Tạo xe thành phẩm trong `erp_vehicles` và serial thành phẩm trong `erp_inventory_tracking_serials` (`status = 'IN_STOCK'`, liên kết `vinId`, lưu `attributes` từ BOM).
 6. **Thuật toán FIFO As-Built BOM**:
    - Quét các linh kiện trong BOM có tracking policy là `SERIAL` hoặc `CUSTOM`.
    - Tìm các serial linh kiện đang `IN_STOCK` có ngày tạo cũ nhất (`createdAt ASC`).
