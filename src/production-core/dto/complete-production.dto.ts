@@ -30,6 +30,13 @@ export class ProductionIdentifierDto {
   @IsString()
   serialNo?: string;
 
+  @ApiPropertyOptional({
+    description: 'Serial nội bộ quản lý ERP (internalSerialNo)',
+  })
+  @IsOptional()
+  @IsString()
+  internalSerialNo?: string;
+
   @ApiPropertyOptional({ description: 'Lot number nếu tracking policy = LOT' })
   @IsOptional()
   @IsString()

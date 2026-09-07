@@ -26,6 +26,7 @@ import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { format } from 'date-fns';
 
 @Injectable()
@@ -641,17 +642,67 @@ export class GoodsReceiptsCoreService {
             }
           }
 
+          const vehicleRepo = manager?.getRepository
+            ? manager.getRepository(ErpVehicle)
+            : null;
+
           for (const d of declared.slice(0, qty)) {
+            let vinId: string | null = null;
+            const vinNo = d.vinNo?.trim() || d.attributes?.vinNo?.trim();
+            const engineNo =
+              d.engineNo?.trim() || d.attributes?.engineNo?.trim();
+            const internalSerialNo =
+              d.internalSerialNo?.trim() ||
+              d.attributes?.internalSerialNo?.trim();
+
+            if (
+              trackingCode === 'VEHICLE' &&
+              vinNo &&
+              engineNo &&
+              vehicleRepo
+            ) {
+              let vehicle = await vehicleRepo.findOne({
+                where: { vinNo },
+              });
+              if (!vehicle) {
+                const newVehicle = vehicleRepo.create({
+                  vinNo,
+                  engineNo,
+                  finishedGoodItemId: line.itemId ?? null,
+                  assemblyDate: receipt.receiptDate || null,
+                  status: 'ASSEMBLED',
+                  notes: d.notes || null,
+                } as any);
+                vehicle = (await vehicleRepo.save(
+                  newVehicle,
+                )) as unknown as ErpVehicle;
+              }
+              if (vehicle) {
+                vinId = vehicle.id;
+              }
+            }
+
+            const finalAttributes = {
+              ...(d.attributes || {}),
+              ...(vinNo ? { vinNo } : {}),
+              ...(engineNo ? { engineNo } : {}),
+              ...(d.serialNo ? { vehicleSerialNo: d.serialNo.trim() } : {}),
+              ...(internalSerialNo ? { internalSerialNo } : {}),
+            };
+
             serialsToInsert.push({
               itemId: line.itemId ?? null,
               serialNo: d.serialNo.trim(),
               status: 'IN_STOCK',
-              vinId: null,
+              vinId,
               customId: null,
               receiptLineId: line.id,
               lotNo: d.lotNo || null,
               notes: d.notes || null,
-              attributes: d.attributes || null,
+              attributes:
+                Object.keys(finalAttributes).length > 0
+                  ? finalAttributes
+                  : null,
             });
           }
           line.serialsGenerated = true;

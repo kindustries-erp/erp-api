@@ -160,7 +160,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 ### 5.3. Giai đoạn 2: Hoàn thành sản xuất & Nhập kho Thành phẩm (`completeProduction`)
 1. Kiểm tra toàn bộ NVL định mức của lệnh đã được xuất kho đủ 100% chưa.
 2. Kiểm tra Tracking Policy của mặt hàng thành phẩm:
-   - `VEHICLE`: Bắt buộc nhập Số khung (VIN) và Số máy. Số serial (tùy chọn, tự động fallback theo Số máy/Số khung nếu để trống), Ghi chú (tùy chọn). Tự động trích xuất và kế thừa toàn bộ thuộc tính kỹ thuật từ BOM snapshot (`bomAttributes`, `bomGlobalAttributes`, `bomAttributeDetails`) và lưu vào cột `attributes` (JSONB) của `erp_inventory_tracking_serials`. Validate chống trùng lặp VIN và Số máy trong toàn bộ hệ thống.
+   - `VEHICLE`: Bắt buộc nhập đầy đủ **4 trường định danh**: **Số khung (VIN)** (`vinNo`), **Số máy (Engine No)** (`engineNo`), **Số Serial xe** (`serialNo` / `vehicleSerialNo`) và **Số Serial nội bộ** (`internalSerialNo`). Tự động trích xuất và kế thừa toàn bộ thuộc tính kỹ thuật từ BOM snapshot (`bomAttributes`, `bomGlobalAttributes`, `bomAttributeDetails`) và lưu vào cột `attributes` (JSONB) của `erp_inventory_tracking_serials` cũng như lưu trực tiếp vào `declaredSerials` của `erp_goods_receipt_lines`. Validate chống trùng lặp toàn diện VIN, Số máy, Serial xe và Serial nội bộ trong toàn bộ hệ thống.
    - `SERIAL`: Bắt buộc nhập danh sách Serial number. Kế thừa thuộc tính BOM vào `attributes`.
    - `LOT`: Bắt buộc nhập Lot number.
    - `NONE`: Không bắt buộc định danh.

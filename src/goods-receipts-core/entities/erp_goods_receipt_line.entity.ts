@@ -32,6 +32,9 @@ export class ErpGoodsReceiptLine {
   @Column({ type: 'jsonb', name: 'declared_serials', nullable: true })
   declaredSerials: Array<{
     serialNo: string;
+    vinNo?: string | null;
+    engineNo?: string | null;
+    internalSerialNo?: string | null;
     notes?: string | null;
     lotNo?: string | null;
     attributes?: Record<string, string> | null;

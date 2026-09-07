@@ -877,10 +877,24 @@ export class ProductionCoreService {
       [id],
     );
     const producedSerials = await this.dataSource.query(
-      `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt"
+      `SELECT id, serial_no AS "serialNo", lot_no AS "lotNo", notes, created_at AS "createdAt", attributes
        FROM public.erp_inventory_tracking_serials
        WHERE production_order_id = $1::uuid
        ORDER BY created_at ASC`,
+      [id],
+    );
+    const serialAssignments = await this.dataSource.query(
+      `SELECT a.id, a.vehicle_id AS "vehicleId", a.bom_line_id AS "bomLineId", a.serial_id AS "serialId",
+              a.assigned_at AS "assignedAt", a.assignment_source AS "assignmentSource",
+              v.vin_no AS "vinNo", v.engine_no AS "engineNo",
+              s.serial_no AS "componentSerialNo",
+              i.id AS "componentItemId", i.sku AS "componentSku", i.item_name AS "componentItemName"
+       FROM public.erp_production_order_serial_assignments a
+       LEFT JOIN public.erp_vehicles v ON v.id = a.vehicle_id
+       LEFT JOIN public.erp_inventory_tracking_serials s ON s.id = a.serial_id
+       LEFT JOIN public.erp_inventory_items i ON i.id = s.item_id
+       WHERE a.production_order_id = $1::uuid
+       ORDER BY a.assigned_at ASC`,
       [id],
     );
 
@@ -969,6 +983,7 @@ export class ProductionCoreService {
           : null,
         producedVehicles,
         producedSerials,
+        serialAssignments,
         materials,
       },
     };
@@ -1794,17 +1809,28 @@ export class ProductionCoreService {
       if (trackingPolicy === 'VEHICLE') {
         const seenVins = new Set<string>();
         const seenEngineNos = new Set<string>();
+        const seenSerials = new Set<string>();
+        const seenInternalSerials = new Set<string>();
         identifiers.forEach((identifier, index) => {
           const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
+          const serialNo = identifier.serialNo?.trim();
+          const internalSerialNo = identifier.internalSerialNo?.trim();
 
-          if (!vinNo || !engineNo) {
+          if (!vinNo || !engineNo || !serialNo || !internalSerialNo) {
+            const missing: string[] = [];
+            if (!vinNo) missing.push('Số khung (VIN)');
+            if (!engineNo) missing.push('Số máy');
+            if (!serialNo) missing.push('Số Serial xe');
+            if (!internalSerialNo) missing.push('Số Serial nội bộ');
             throw new BadRequestException(
-              `Thiếu Số khung (VIN) hoặc Số máy tại dòng thứ ${index + 1}`,
+              `Dòng ${index + 1} còn thiếu: ${missing.join(', ')} (Bắt buộc phải có đủ 4 trường định danh)`,
             );
           }
           const vinKey = vinNo.toUpperCase();
           const engineKey = engineNo.toUpperCase();
+          const serialKey = serialNo.toUpperCase();
+          const internalKey = internalSerialNo.toUpperCase();
           if (seenVins.has(vinKey)) {
             throw new BadRequestException(
               `Số khung (VIN) bị trùng trong danh sách: ${vinNo}`,
@@ -1815,10 +1841,24 @@ export class ProductionCoreService {
               `Số máy bị trùng trong danh sách: ${engineNo}`,
             );
           }
+          if (seenSerials.has(serialKey)) {
+            throw new BadRequestException(
+              `Số Serial xe bị trùng trong danh sách: ${serialNo}`,
+            );
+          }
+          if (seenInternalSerials.has(internalKey)) {
+            throw new BadRequestException(
+              `Số Serial nội bộ bị trùng trong danh sách: ${internalSerialNo}`,
+            );
+          }
           seenVins.add(vinKey);
           seenEngineNos.add(engineKey);
+          seenSerials.add(serialKey);
+          seenInternalSerials.add(internalKey);
           identifier.vinNo = vinNo;
           identifier.engineNo = engineNo;
+          identifier.serialNo = serialNo;
+          identifier.internalSerialNo = internalSerialNo;
         });
 
         const existingVehicles = await vehicleRepo
@@ -1854,7 +1894,7 @@ export class ProductionCoreService {
       }
       if (trackingPolicy === 'SERIAL') {
         identifiers.forEach((identifier, index) => {
-          if (!identifier.serialNo) {
+          if (!identifier.serialNo && !identifier.internalSerialNo) {
             throw new BadRequestException(
               `Thiếu serial number tại mã định danh ${index + 1}`,
             );
@@ -1893,19 +1933,6 @@ export class ProductionCoreService {
         } as any),
       )) as unknown as ErpGoodsReceipt;
 
-      const unitCost = Number(dto.unitCost ?? 0);
-      const savedGrLine = (await grLineRepo.save(
-        grLineRepo.create({
-          goodsReceiptId: gr.id,
-          lineNo: 1,
-          itemId: order.finishedGoodItemId,
-          qtyReceived: qtyFinished.toFixed(3),
-          unitCost: unitCost.toFixed(3),
-          amount: (qtyFinished * unitCost).toFixed(3),
-          purchaseOrderLineId: null,
-        } as any),
-      )) as unknown as ErpGoodsReceiptLine;
-
       // Extract attributes from BOM snapshot
       const bomAttributes = (order.outputMetadata?.bomAttributes ??
         {}) as Record<string, any>;
@@ -1935,6 +1962,84 @@ export class ProductionCoreService {
           mergedBomAttributes[item.code] = item.value;
         }
       }
+
+      // Build declaredSerials array for the goods receipt line
+      const declaredSerials: Array<{
+        serialNo: string;
+        vinNo?: string | null;
+        engineNo?: string | null;
+        internalSerialNo?: string | null;
+        notes?: string | null;
+        lotNo?: string | null;
+        attributes?: Record<string, string> | null;
+      }> = [];
+
+      if (trackingPolicy === 'VEHICLE') {
+        for (const identifier of identifiers) {
+          const finalAttributes: Record<string, any> = {
+            ...mergedBomAttributes,
+            ...(identifier.attributes ?? {}),
+            vinNo: identifier.vinNo?.trim() || '',
+            engineNo: identifier.engineNo?.trim() || '',
+            vehicleSerialNo: identifier.serialNo?.trim() || '',
+            internalSerialNo: identifier.internalSerialNo?.trim() || '',
+          };
+          declaredSerials.push({
+            serialNo: identifier.serialNo?.trim() || '',
+            vinNo: identifier.vinNo?.trim() || null,
+            engineNo: identifier.engineNo?.trim() || null,
+            internalSerialNo: identifier.internalSerialNo?.trim() || null,
+            notes: identifier.notes ?? null,
+            attributes:
+              Object.keys(finalAttributes).length > 0 ? finalAttributes : null,
+          });
+        }
+      } else if (trackingPolicy === 'SERIAL') {
+        for (const identifier of identifiers) {
+          const finalAttributes: Record<string, any> = {
+            ...mergedBomAttributes,
+            ...(identifier.attributes ?? {}),
+            internalSerialNo: identifier.internalSerialNo?.trim() || '',
+          };
+          declaredSerials.push({
+            serialNo:
+              identifier.serialNo?.trim() ||
+              identifier.internalSerialNo?.trim() ||
+              '',
+            internalSerialNo: identifier.internalSerialNo?.trim() || null,
+            notes: identifier.notes ?? null,
+            lotNo: identifier.lotNo ?? null,
+            attributes:
+              Object.keys(finalAttributes).length > 0 ? finalAttributes : null,
+          });
+        }
+      } else if (trackingPolicy === 'LOT') {
+        for (const identifier of identifiers) {
+          declaredSerials.push({
+            serialNo: identifier.lotNo?.trim() || '',
+            lotNo: identifier.lotNo?.trim() || null,
+            notes: identifier.notes ?? null,
+            attributes:
+              Object.keys(mergedBomAttributes).length > 0
+                ? mergedBomAttributes
+                : null,
+          });
+        }
+      }
+
+      const unitCost = Number(dto.unitCost ?? 0);
+      const savedGrLine = (await grLineRepo.save(
+        grLineRepo.create({
+          goodsReceiptId: gr.id,
+          lineNo: 1,
+          itemId: order.finishedGoodItemId,
+          qtyReceived: qtyFinished.toFixed(3),
+          unitCost: unitCost.toFixed(3),
+          amount: (qtyFinished * unitCost).toFixed(3),
+          purchaseOrderLineId: null,
+          declaredSerials: declaredSerials.length > 0 ? declaredSerials : null,
+        } as any),
+      )) as unknown as ErpGoodsReceiptLine;
 
       const vehiclesCreatedThisBatch: any[] = [];
       if (trackingPolicy === 'VEHICLE') {
@@ -2551,6 +2656,7 @@ export class ProductionCoreService {
       const vehicleRepo = manager.getRepository(ErpVehicle);
       const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
       const productionRepo = manager.getRepository(ErpProductionOrder);
+      const grLineRepo = manager.getRepository(ErpGoodsReceiptLine);
 
       const order = await productionRepo.findOne({
         where: { id, isDeleted: false },
@@ -2573,8 +2679,74 @@ export class ProductionCoreService {
         const vehicle = await vehicleRepo.findOne({
           where: { id: item.id, productionOrderId: id },
         });
-        if (!vehicle) continue;
 
+        if (!vehicle) {
+          // Check if item.id matches a tracking serial directly (for non-vehicle policy)
+          const serialItem = await serialRepo.findOne({
+            where: { id: item.id, productionOrderId: id },
+          });
+          if (!serialItem) continue;
+
+          const currentAttrs = (serialItem.attributes || {}) as Record<
+            string,
+            any
+          >;
+          if (item.internalSerialNo !== undefined) {
+            if (item.internalSerialNo.trim()) {
+              currentAttrs['internalSerialNo'] = item.internalSerialNo.trim();
+            } else {
+              delete currentAttrs['internalSerialNo'];
+            }
+          }
+          if (item.serialNo !== undefined && item.serialNo.trim()) {
+            serialItem.serialNo = item.serialNo.trim();
+          } else if (
+            item.internalSerialNo !== undefined &&
+            item.internalSerialNo.trim()
+          ) {
+            serialItem.serialNo = item.internalSerialNo.trim();
+          }
+          if (item.notes !== undefined) {
+            serialItem.notes = item.notes?.trim() || null;
+          }
+          serialItem.attributes =
+            Object.keys(currentAttrs).length > 0 ? currentAttrs : null;
+          await serialRepo.save(serialItem);
+
+          if (serialItem.receiptLineId) {
+            const grLine = await grLineRepo.findOne({
+              where: { id: serialItem.receiptLineId },
+            });
+            if (grLine && Array.isArray(grLine.declaredSerials)) {
+              grLine.declaredSerials = grLine.declaredSerials.map((ds) => {
+                if (
+                  ds.serialNo === serialItem.serialNo ||
+                  ds.attributes?.internalSerialNo ===
+                    currentAttrs['internalSerialNo']
+                ) {
+                  return {
+                    ...ds,
+                    serialNo: serialItem.serialNo,
+                    notes: serialItem.notes,
+                    attributes: serialItem.attributes as any,
+                  };
+                }
+                return ds;
+              });
+              await grLineRepo.save(grLine);
+            }
+          }
+
+          updatedResults.push({
+            id: serialItem.id,
+            vinNo: '',
+            engineNo: '',
+            notes: serialItem.notes,
+          });
+          continue;
+        }
+
+        const oldVin = vehicle.vinNo;
         if (item.vinNo?.trim()) vehicle.vinNo = item.vinNo.trim();
         if (item.engineNo?.trim()) vehicle.engineNo = item.engineNo.trim();
         if (item.notes !== undefined)
@@ -2598,12 +2770,79 @@ export class ProductionCoreService {
               delete currentAttrs['vehicleSerialNo'];
             }
           }
+          if (item.internalSerialNo !== undefined) {
+            if (item.internalSerialNo.trim()) {
+              currentAttrs['internalSerialNo'] = item.internalSerialNo.trim();
+            } else {
+              delete currentAttrs['internalSerialNo'];
+            }
+          }
+          if (item.vinNo?.trim()) {
+            currentAttrs['vinNo'] = item.vinNo.trim();
+          }
+          if (item.engineNo?.trim()) {
+            currentAttrs['engineNo'] = item.engineNo.trim();
+          }
           if (item.notes !== undefined) {
             serialRecord.notes = item.notes?.trim() || null;
           }
           serialRecord.attributes =
             Object.keys(currentAttrs).length > 0 ? currentAttrs : null;
           await serialRepo.save(serialRecord);
+
+          // Synchronize with Goods Receipt Line declaredSerials
+          if (serialRecord.receiptLineId) {
+            const grLine = await grLineRepo.findOne({
+              where: { id: serialRecord.receiptLineId },
+            });
+            if (grLine && Array.isArray(grLine.declaredSerials)) {
+              grLine.declaredSerials = grLine.declaredSerials.map((ds) => {
+                const attrs = ds.attributes || {};
+                const matchVin =
+                  attrs.vinNo &&
+                  (attrs.vinNo === oldVin || attrs.vinNo === vehicle.vinNo);
+                const matchSerial =
+                  ds.serialNo &&
+                  (ds.serialNo === serialRecord.serialNo ||
+                    ds.serialNo === oldVin);
+                if (matchVin || matchSerial) {
+                  const nextAttrs = {
+                    ...attrs,
+                    ...(item.vinNo?.trim() ? { vinNo: item.vinNo.trim() } : {}),
+                    ...(item.engineNo?.trim()
+                      ? { engineNo: item.engineNo.trim() }
+                      : {}),
+                    ...(item.serialNo !== undefined
+                      ? item.serialNo.trim()
+                        ? { vehicleSerialNo: item.serialNo.trim() }
+                        : {}
+                      : {}),
+                    ...(item.internalSerialNo !== undefined
+                      ? item.internalSerialNo.trim()
+                        ? { internalSerialNo: item.internalSerialNo.trim() }
+                        : {}
+                      : {}),
+                  };
+                  return {
+                    ...ds,
+                    serialNo:
+                      item.serialNo?.trim() ||
+                      item.vinNo?.trim() ||
+                      vehicle.vinNo ||
+                      ds.serialNo,
+                    notes:
+                      item.notes !== undefined
+                        ? item.notes?.trim() || null
+                        : ds.notes,
+                    attributes:
+                      Object.keys(nextAttrs).length > 0 ? nextAttrs : null,
+                  };
+                }
+                return ds;
+              });
+              await grLineRepo.save(grLine);
+            }
+          }
         }
 
         updatedResults.push({

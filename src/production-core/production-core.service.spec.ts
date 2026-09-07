@@ -535,14 +535,15 @@ describe('ProductionCoreService', () => {
       {} as any,
     );
 
-    // Call completeProduction with only vinNo and engineNo
+    // Call completeProduction with all 4 required vehicle fields
     await service.completeProduction('po-1', {
       qtyFinished: 1,
       identifiers: [
         {
           vinNo: 'VIN-TEST-001',
           engineNo: 'ENG-TEST-001',
-          // serialNo is not provided
+          serialNo: 'SER-TEST-001',
+          internalSerialNo: 'SN-TEST-001',
           notes: 'Xe thử nghiệm',
         },
       ],
@@ -553,12 +554,86 @@ describe('ProductionCoreService', () => {
     expect(savedVehicles[0].engineNo).toBe('ENG-TEST-001');
 
     expect(savedSerials).toHaveLength(1);
-    expect(savedSerials[0].serialNo).toBe('ENG-TEST-001'); // fallback to engineNo
+    expect(savedSerials[0].serialNo).toBe('SER-TEST-001');
     expect(savedSerials[0].attributes).toMatchObject({
       color: 'DO',
       version: '1.0',
       motor_power: '800W',
     });
+  });
+
+  it('rejects VEHICLE production if any of the 4 required fields is missing', async () => {
+    const dataSource = {
+      transaction: jest.fn(async (cb) => {
+        const manager = {
+          getRepository: jest.fn((entity) => {
+            if (entity.name === 'ErpProductionOrder') {
+              return {
+                findOne: jest.fn().mockResolvedValue({
+                  id: 'po-1',
+                  referenceNo: 'LSX-001',
+                  status: 'IN_PROGRESS',
+                  qtyToProduce: '5',
+                  qtyProduced: '0',
+                  finishedGoodItemId: 'fg-1',
+                  isDeleted: false,
+                }),
+              };
+            }
+            if (entity.name === 'ErpProductionOrderMaterial') {
+              return { find: jest.fn().mockResolvedValue([]) };
+            }
+            if (entity.name === 'ErpInventoryItem') {
+              return {
+                findOne: jest.fn().mockResolvedValue({
+                  id: 'fg-1',
+                  trackingPolicy: { code: 'VEHICLE' },
+                }),
+              };
+            }
+            return {
+              findOne: jest.fn().mockResolvedValue(null),
+              createQueryBuilder: jest.fn(() => ({
+                select: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                orWhere: jest.fn().mockReturnThis(),
+                getRawMany: jest.fn().mockResolvedValue([]),
+              })),
+            };
+          }),
+        };
+        return cb(manager);
+      }),
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    // Missing serialNo and internalSerialNo
+    await expect(
+      service.completeProduction('po-1', {
+        qtyFinished: 1,
+        identifiers: [
+          {
+            vinNo: 'VIN-TEST-001',
+            engineNo: 'ENG-TEST-001',
+          },
+        ],
+      }),
+    ).rejects.toThrow('còn thiếu: Số Serial xe, Số Serial nội bộ');
   });
 
   it('updates produced vehicle identifiers and notes correctly', async () => {
@@ -651,7 +726,11 @@ describe('ProductionCoreService', () => {
 
     expect(serialRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        attributes: { vehicleSerialNo: 'NEW-TEM-001' },
+        attributes: expect.objectContaining({
+          vehicleSerialNo: 'NEW-TEM-001',
+          vinNo: 'NEW-VIN-001',
+          engineNo: 'NEW-ENG-001',
+        }),
         notes: 'Đã cập nhật ghi chú',
       }),
     );

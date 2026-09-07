@@ -29,6 +29,16 @@ export class UpdateProducedVehicleItemDto {
   @IsString()
   serialNo?: string;
 
+  @ApiPropertyOptional({ description: 'Số Serial nội bộ ERP (tùy chọn)' })
+  @IsOptional()
+  @IsString()
+  internalSerialNo?: string;
+
+  @ApiPropertyOptional({ description: 'Số Lô (tùy chọn)' })
+  @IsOptional()
+  @IsString()
+  lotNo?: string;
+
   @ApiPropertyOptional({ description: 'Ghi chú' })
   @IsOptional()
   @IsString()
