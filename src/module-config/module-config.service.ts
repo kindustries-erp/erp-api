@@ -761,7 +761,11 @@ export class ModuleConfigService {
 
     // 1. Lấy categoryId từ entity table nếu có
     let categoryId: string | null = null;
-    if (upperType === 'INVOICE') {
+    if (
+      upperType === 'INVOICE' ||
+      upperType === 'INVOICE_IN' ||
+      upperType === 'INVOICE_OUT'
+    ) {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_invoices WHERE id = $1`,
         [entityId],
@@ -929,7 +933,11 @@ export class ModuleConfigService {
       }
 
       // 3. Cập nhật category_id trên entity table
-      if (upperType === 'INVOICE') {
+      if (
+        upperType === 'INVOICE' ||
+        upperType === 'INVOICE_IN' ||
+        upperType === 'INVOICE_OUT'
+      ) {
         await manager.query(
           `UPDATE erp_invoices SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],

@@ -319,6 +319,62 @@ describe('ModuleConfigService', () => {
         }),
       ).resolves.toBeUndefined();
     });
+
+    it('should update erp_invoices table when entityType is INVOICE_IN or INVOICE_OUT', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([]);
+      mockManager.query = jest.fn().mockResolvedValue([]);
+
+      await service.saveEntityValues('INVOICE_IN', 'inv-in-1', {
+        categoryId: 'cat-in-1',
+        attributes: {},
+        globalAttributes: {},
+      });
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE erp_invoices SET category_id = $1'),
+        ['cat-in-1', 'inv-in-1'],
+      );
+
+      await service.saveEntityValues('INVOICE_OUT', 'inv-out-1', {
+        categoryId: 'cat-out-1',
+        attributes: {},
+        globalAttributes: {},
+      });
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE erp_invoices SET category_id = $1'),
+        ['cat-out-1', 'inv-out-1'],
+      );
+    });
+
+    it('should query erp_invoices table in getEntityValues when entityType is INVOICE_IN or INVOICE_OUT', async () => {
+      mockDataSource.query = jest
+        .fn()
+        .mockResolvedValue([{ category_id: 'cat-in-1' }]);
+      mockEntityAttrValueRepo.find = jest.fn().mockResolvedValue([]);
+      mockCategoryRepo.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'cat-in-1', attributeDefs: [] });
+      mockAttrDefRepo.find = jest.fn().mockResolvedValue([]);
+
+      const resIn = await service.getEntityValues('INVOICE_IN', 'inv-in-1');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'SELECT category_id FROM erp_invoices WHERE id = $1',
+        ),
+        ['inv-in-1'],
+      );
+      expect(resIn.categoryId).toBe('cat-in-1');
+
+      const resOut = await service.getEntityValues('INVOICE_OUT', 'inv-out-1');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'SELECT category_id FROM erp_invoices WHERE id = $1',
+        ),
+        ['inv-out-1'],
+      );
+      expect(resOut.categoryId).toBe('cat-in-1');
+    });
   });
 
   describe('Global attributes management', () => {

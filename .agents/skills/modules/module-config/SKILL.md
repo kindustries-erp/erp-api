@@ -125,7 +125,7 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
    - Nếu có `categoryId`: Validate các thuộc tính có `isRequired = true` trong danh mục đó.
    - Chạy transaction: Cập nhật `category_id` trên bảng thực thể (`erp_invoices`, `erp_bank_transactions`, `erp_boms`), xóa các giá trị cũ của `(entity_type, entity_id)` và chèn các giá trị mới cho cả `attributes` và `globalAttributes`.
 4. **Bảo vệ Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
-   - Thuộc tính có `is_system = true` (như `type_inventory_receipt` cho phiếu nhập kho, `type_inventory_issue` cho phiếu xuất kho, `type_inventory_adjustment` cho phiếu kiểm kê/điều chỉnh) **tuyệt đối không thể xóa** (`BadRequestException`).
+   - Thuộc tính có `is_system = true` (như `type_invoice_in` cho hóa đơn mua vào, `type_invoice_out` cho hóa đơn bán ra, `type_inventory_receipt` cho phiếu nhập kho, `type_inventory_issue` cho phiếu xuất kho, `type_inventory_adjustment` cho phiếu kiểm kê/điều chỉnh) **tuyệt đối không thể xóa** (`BadRequestException`).
    - Cố định trường `code` và `fieldType`, chỉ cho phép tùy chỉnh Tên hiển thị (`name`), Ràng buộc bắt buộc (`isRequired`), và Danh sách tùy chọn (`options`).
 
 ---
