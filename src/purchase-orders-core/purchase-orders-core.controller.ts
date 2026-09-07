@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
-import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
+import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
@@ -44,7 +44,7 @@ export class PurchaseOrdersCoreController {
     action: ErpAction.READ,
   })
   @Get()
-  findAll(@Query() query: OperationalQueryDto) {
+  findAll(@Query() query: QueryPurchaseOrdersDto) {
     return this.service.findAll(query);
   }
 

@@ -148,21 +148,29 @@ Resource RBAC: `garage`
 
 ## 5. Logic Nghiệp vụ & Thuật toán Trọng tâm
 
-### 5.1. Công thức Báo cáo Lợi nhuận (P&L):
+### 5.1. Công thức Báo cáo Lợi nhuận (P&L) & Tính Tự Động Hoa Hồng:
 1. **Doanh thu ($R$)**:
    $$\sum \text{COALESCE}(gp.\text{doanh\_thu}, c.\text{doanh\_thu}, c.\text{tien\_co\_thue}, 0)$$
    áp dụng cho các phiếu hoàn thành trong tháng `TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM') = :periodStr`.
 2. **Chi phí giá vốn ($C_{COGS}$)**:
    $$C_{COGS} = \sum \text{COALESCE}(gp.\text{chi\_phi}, c.\text{chi\_phi}, 0) + \sum \text{DirectCosts}_{\text{nhập tay}}$$
    với $\text{DirectCosts}$ là các khoản OPEX có `category_key IN ('HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC')`.
-3. **Lợi nhuận gộp ($GP$)**:
-   $$GP = R - C_{COGS}, \quad \text{Gross Margin} = \frac{GP}{R} \times 100\%$$
+3. **Lợi nhuận gộp ($GP$) & Phân loại Phiếu dịch vụ (`c.classification`)**:
+   - $GP = R - C_{COGS}, \quad \text{Gross Margin} = \frac{GP}{R} \times 100\%$
+   - **Lợi nhuận gộp Ký gửi ($GP_{kg}$)**: Doanh thu - Chi phí của các phiếu có `c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')` hoàn thành trong kỳ.
+   - **Tỷ lệ lãi gộp ký gửi ($R_{kg}$)**:
+     $$R_{kg} = \begin{cases} \frac{GP_{kg}}{GP} \times 100\% & \text{khi } GP > 0 \text{ và } GP_{kg} > 0 \\ 0\% & \text{ngược lại} \end{cases}$$
 4. **Chi phí vận hành ($OPEX$)**:
    Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key NOT LIKE 'HOA_HONG_%'` và `category_key NOT IN ('CHI_PHI_TRUC_TIEP_KHAC')` trong kỳ.
 5. **Lợi nhuận ròng trước hoa hồng ($NP_{pre}$)**:
    $$NP_{pre} = GP - OPEX$$
-6. **Hoa hồng ($COMM$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key LIKE 'HOA_HONG_%'` và `category_key != 'HOA_HONG_TRUC_TIEP'` trong kỳ.
+6. **Hoa hồng tự động ($COMM$)**:
+   - **Hoa hồng cho Sale (10%)**:
+     $$\text{Comm}_{sale} = \begin{cases} \text{round}(NP_{pre} \times R_{kg} \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
+   - **Hoa hồng cho Dịch vụ (10%)**:
+     $$\text{Comm}_{dv} = \begin{cases} \text{round}((NP_{pre} - \text{Comm}_{sale}) \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
+   - **Tổng Hoa hồng**:
+     $$COMM = \text{Comm}_{sale} + \text{Comm}_{dv} + \sum \text{Manual Commissions (HOA\_HONG\_KHAC)}$$
 7. **Lợi nhuận ròng sau hoa hồng ($NP_{post}$)**:
    $$NP_{post} = NP_{pre} - COMM, \quad \text{Net Margin} = \frac{NP_{post}}{R} \times 100\%$$
 

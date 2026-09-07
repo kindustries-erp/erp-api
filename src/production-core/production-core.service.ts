@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   DeepPartial,
+  EntityManager,
   ILike,
   In,
   Repository,
@@ -33,6 +34,7 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
+import { UpdateProducedVehiclesDto } from './dto/update-produced-vehicles.dto';
 import { ErpProductionOrderSerialAssignment } from './entities/erp_production_order_serial_assignment.entity';
 
 import { ListProductionDto } from './dto/list-production.dto';
@@ -207,6 +209,193 @@ export class ProductionCoreService {
     };
   }
 
+  async getBomDetailsWithAttributes(
+    bomId: string,
+    manager?: EntityManager,
+  ): Promise<{
+    id: string;
+    bomCode: string;
+    bomName: string;
+    version: string;
+    status: string;
+    categoryId: string | null;
+    categoryCode: string | null;
+    categoryName: string | null;
+    attributes: Record<string, string>;
+    globalAttributes: Record<string, any>;
+    attributeDetails: Array<{
+      id: string;
+      code: string;
+      name: string;
+      nameEn?: string | null;
+      fieldType: string;
+      value: any;
+      label: string;
+      options?: any[] | null;
+      isRequired: boolean;
+      isGlobal: boolean;
+      sortOrder: number;
+    }>;
+  }> {
+    const ds = manager || this.dataSource;
+    const bomRows = await ds.query(
+      `SELECT b.id, b.bom_code, b.bom_name, b.version, b.status, b.category_id,
+              c.code as category_code, c.name as category_name
+       FROM public.erp_boms b
+       LEFT JOIN public.erp_bom_categories c ON b.category_id = c.id
+       WHERE b.id = $1::uuid AND b.is_deleted = false`,
+      [bomId],
+    );
+    if (!bomRows || bomRows.length === 0) {
+      throw new NotFoundException('Không tìm thấy BOM');
+    }
+    const bom = bomRows[0];
+
+    // 1. Load category attribute defs & values (exclude global defs)
+    const attrRows = bom.category_id
+      ? await ds.query(
+          `SELECT def.id, def.code, def.name, def.name_en, def.field_type, def.options, def.is_required, def.sort_order, def.is_global,
+                  COALESCE(eav.value_text, val.value_text) as value_text
+           FROM public.erp_bom_attribute_defs def
+           LEFT JOIN public.erp_entity_attribute_values eav ON eav.attr_def_id = def.id AND eav.entity_id = $1::uuid AND eav.entity_type = 'BOM'
+           LEFT JOIN public.erp_bom_attribute_values val ON val.attr_def_id = def.id AND val.bom_id = $1::uuid
+           WHERE def.category_id = $2::uuid AND (def.is_global = false OR def.is_global IS NULL) AND def.is_deleted = false AND def.is_active = true
+           ORDER BY def.sort_order ASC, def.created_at ASC`,
+          [bomId, bom.category_id],
+        )
+      : [];
+
+    // 2. Load global attribute defs & values
+    const globalRows = await ds.query(
+      `SELECT def.id, def.code, def.name, def.name_en, def.field_type, def.options, def.is_required, def.sort_order, def.is_global,
+              COALESCE(eav.value_text, val.value_text) as value_text
+       FROM public.erp_bom_attribute_defs def
+       LEFT JOIN public.erp_entity_attribute_values eav ON eav.attr_def_id = def.id AND eav.entity_id = $1::uuid AND eav.entity_type = 'BOM'
+       LEFT JOIN public.erp_bom_attribute_values val ON val.attr_def_id = def.id AND val.bom_id = $1::uuid
+       WHERE def.module_key_global = 'BOM' AND def.is_global = true AND def.is_deleted = false AND def.is_active = true
+       ORDER BY def.sort_order ASC, def.created_at ASC`,
+      [bomId],
+    );
+
+    const attributesMap: Record<string, string> = {};
+    const globalAttributesMap: Record<string, any> = {};
+    const attributeDetails: any[] = [];
+    const seenCodes = new Set<string>();
+    const seenIds = new Set<string>();
+
+    const formatLabel = (def: any, val: any) => {
+      if (val === undefined || val === null || val === '') return '—';
+      if (def.field_type === 'CHECKBOX') {
+        return val === true || val === 'true' ? 'Có' : 'Không';
+      }
+      if (def.field_type === 'SELECT' && Array.isArray(def.options)) {
+        const matched = def.options.find((opt: any) => opt.value === val);
+        if (matched) {
+          return matched.label || matched.value;
+        }
+      }
+      return String(val);
+    };
+
+    for (const row of globalRows) {
+      const val =
+        row.value_text ?? (row.code === 'version' ? bom.version : null);
+      if (val !== null && val !== undefined && val !== '') {
+        globalAttributesMap[row.id] = val;
+        if (row.code) {
+          globalAttributesMap[row.code] = val;
+        }
+      }
+      const codeKey = (row.code || '').toLowerCase();
+      if (codeKey) seenCodes.add(codeKey);
+      seenIds.add(row.id);
+
+      attributeDetails.push({
+        id: row.id,
+        code: row.code,
+        name: row.name,
+        nameEn: row.name_en ?? null,
+        fieldType: row.field_type,
+        value: val,
+        label: formatLabel(row, val),
+        options: row.options ?? null,
+        isRequired: row.is_required ?? false,
+        isGlobal: true,
+        sortOrder: row.sort_order ?? 0,
+      });
+    }
+
+    for (const row of attrRows) {
+      const val =
+        row.value_text ?? (row.code === 'version' ? bom.version : null);
+      if (val !== null && val !== undefined && val !== '') {
+        attributesMap[row.id] = val;
+        if (row.code) {
+          attributesMap[row.code] = val;
+        }
+      }
+      const codeKey = (row.code || '').toLowerCase();
+
+      // Deduplicate if already present from globalRows or previous row
+      if (seenIds.has(row.id) || (codeKey && seenCodes.has(codeKey))) {
+        const existing = attributeDetails.find(
+          (d) =>
+            d.id === row.id ||
+            (codeKey && (d.code || '').toLowerCase() === codeKey),
+        );
+        if (existing) {
+          if (
+            (existing.value === null ||
+              existing.value === undefined ||
+              existing.value === '') &&
+            val !== null &&
+            val !== undefined &&
+            val !== ''
+          ) {
+            existing.value = val;
+            existing.label = formatLabel(row, val);
+          }
+          if (!existing.options && row.options) {
+            existing.options = row.options;
+            existing.label = formatLabel(row, existing.value);
+          }
+        }
+        continue;
+      }
+
+      if (codeKey) seenCodes.add(codeKey);
+      seenIds.add(row.id);
+
+      attributeDetails.push({
+        id: row.id,
+        code: row.code,
+        name: row.name,
+        nameEn: row.name_en ?? null,
+        fieldType: row.field_type,
+        value: val,
+        label: formatLabel(row, val),
+        options: row.options ?? null,
+        isRequired: row.is_required ?? false,
+        isGlobal: false,
+        sortOrder: row.sort_order ?? 0,
+      });
+    }
+
+    return {
+      id: bom.id,
+      bomCode: bom.bom_code,
+      bomName: bom.bom_name,
+      version: bom.version,
+      status: bom.status,
+      categoryId: bom.category_id ?? null,
+      categoryCode: bom.category_code ?? null,
+      categoryName: bom.category_name ?? null,
+      attributes: attributesMap,
+      globalAttributes: globalAttributesMap,
+      attributeDetails,
+    };
+  }
+
   async explodePreview(bomId: string, qtyToProduce: number) {
     const bomRepo = this.dataSource.getRepository(ErpBom);
     const bomLineRepo = this.dataSource.getRepository(ErpBomLine);
@@ -275,9 +464,27 @@ export class ProductionCoreService {
       };
     });
 
+    let bomDetails: any = null;
+    try {
+      bomDetails = await this.getBomDetailsWithAttributes(bom.id);
+    } catch {
+      bomDetails = {
+        id: bom.id,
+        bomCode: bom.bomCode,
+        bomName: bom.bomName,
+        version: bom.version,
+        status: bom.status,
+        categoryId: bom.categoryId,
+        attributes: {},
+        globalAttributes: {},
+        attributeDetails: [],
+      };
+    }
+
     return {
       flatMaterials: materialsWithDetails,
       explosionTree,
+      bom: bomDetails,
     };
   }
 
@@ -461,6 +668,28 @@ export class ProductionCoreService {
           }
         }
       }
+      let bomDetails: any = null;
+      try {
+        bomDetails = await this.getBomDetailsWithAttributes(
+          rootBom.id,
+          manager,
+        );
+      } catch {
+        bomDetails = {
+          id: rootBom.id,
+          bomCode: rootBom.bomCode,
+          bomName: rootBom.bomName,
+          version: rootBom.version,
+          status: rootBom.status,
+          categoryId: rootBom.categoryId,
+          categoryCode: null,
+          categoryName: null,
+          attributes: {},
+          globalAttributes: {},
+          attributeDetails: [],
+        };
+      }
+
       const referenceNo =
         dto.referenceNo?.trim() || (await this.generateProductionReferenceNo());
       const productionPayload: DeepPartial<ErpProductionOrder> = {
@@ -474,6 +703,15 @@ export class ProductionCoreService {
           materialOverrides: dto.materialOverrides ?? [],
           explosionTree,
           bomId: rootBom.id,
+          bomCode: bomDetails.bomCode,
+          bomName: bomDetails.bomName,
+          bomVersion: bomDetails.version,
+          bomCategoryId: bomDetails.categoryId,
+          bomCategoryCode: bomDetails.categoryCode,
+          bomCategoryName: bomDetails.categoryName,
+          bomAttributes: bomDetails.attributes,
+          bomGlobalAttributes: bomDetails.globalAttributes,
+          bomAttributeDetails: bomDetails.attributeDetails,
         } as any,
         plannedStartDate: dto.plannedStartDate ?? null,
         plannedEndDate: dto.plannedEndDate ?? null,
@@ -558,6 +796,50 @@ export class ProductionCoreService {
       where: { id, isDeleted: false },
     });
     if (!data) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+
+    if (
+      data.outputMetadata?.bomId &&
+      !data.outputMetadata?.bomAttributeDetails
+    ) {
+      try {
+        const bomDetails = await this.getBomDetailsWithAttributes(
+          data.outputMetadata.bomId,
+        );
+        data.outputMetadata = {
+          ...data.outputMetadata,
+          bomCode: data.outputMetadata.bomCode ?? bomDetails.bomCode,
+          bomName: data.outputMetadata.bomName ?? bomDetails.bomName,
+          bomVersion: data.outputMetadata.bomVersion ?? bomDetails.version,
+          bomCategoryId:
+            data.outputMetadata.bomCategoryId ?? bomDetails.categoryId,
+          bomCategoryCode:
+            data.outputMetadata.bomCategoryCode ?? bomDetails.categoryCode,
+          bomCategoryName:
+            data.outputMetadata.bomCategoryName ?? bomDetails.categoryName,
+          bomAttributes:
+            data.outputMetadata.bomAttributes ?? bomDetails.attributes,
+          bomGlobalAttributes:
+            data.outputMetadata.bomGlobalAttributes ??
+            bomDetails.globalAttributes,
+          bomAttributeDetails: bomDetails.attributeDetails,
+        };
+      } catch {
+        // ignore fallback errors
+      }
+    } else if (
+      data.outputMetadata?.bomAttributeDetails &&
+      Array.isArray(data.outputMetadata.bomAttributeDetails)
+    ) {
+      const seen = new Set<string>();
+      data.outputMetadata.bomAttributeDetails =
+        data.outputMetadata.bomAttributeDetails.filter((item: any) => {
+          const key = (item.code || item.id || '').toLowerCase();
+          if (!key) return true;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    }
 
     const materials = await this.productionMaterialRepository.find({
       where: { productionOrderId: id },
@@ -1025,6 +1307,25 @@ export class ProductionCoreService {
 
       const savedMaterialEntities = await materialRepo.save(materialPayloads);
 
+      let bomDetails: any = null;
+      try {
+        bomDetails = await this.getBomDetailsWithAttributes(bom.id, manager);
+      } catch {
+        bomDetails = {
+          id: bom.id,
+          bomCode: bom.bomCode,
+          bomName: bom.bomName,
+          version: bom.version,
+          status: bom.status,
+          categoryId: bom.categoryId,
+          categoryCode: null,
+          categoryName: null,
+          attributes: {},
+          globalAttributes: {},
+          attributeDetails: [],
+        };
+      }
+
       existing.referenceNo = dto.referenceNo?.trim() || existing.referenceNo;
       existing.finishedGoodItemId = dto.finishedGoodItemId;
       existing.qtyToProduce = qtyToProduce.toFixed(3) as any;
@@ -1037,6 +1338,15 @@ export class ProductionCoreService {
         materialOverrides: dto.materialOverrides ?? [],
         explosionTree,
         bomId: bom.id,
+        bomCode: bomDetails.bomCode,
+        bomName: bomDetails.bomName,
+        bomVersion: bomDetails.version,
+        bomCategoryId: bomDetails.categoryId,
+        bomCategoryCode: bomDetails.categoryCode,
+        bomCategoryName: bomDetails.categoryName,
+        bomAttributes: bomDetails.attributes,
+        bomGlobalAttributes: bomDetails.globalAttributes,
+        bomAttributeDetails: bomDetails.attributeDetails,
       } as any;
       existing.status = 'DRAFT';
 
@@ -1487,19 +1797,17 @@ export class ProductionCoreService {
         identifiers.forEach((identifier, index) => {
           const vinNo = identifier.vinNo?.trim();
           const engineNo = identifier.engineNo?.trim();
-          const serialNo = identifier.serialNo?.trim();
-          const color = identifier.attributes?.color?.trim();
 
-          if (!vinNo || !engineNo || !serialNo || !color) {
+          if (!vinNo || !engineNo) {
             throw new BadRequestException(
-              `Thiếu Số seri, Số VIN, Số máy, hoặc Mã màu tại mã định danh ${index + 1}`,
+              `Thiếu Số khung (VIN) hoặc Số máy tại dòng thứ ${index + 1}`,
             );
           }
           const vinKey = vinNo.toUpperCase();
           const engineKey = engineNo.toUpperCase();
           if (seenVins.has(vinKey)) {
             throw new BadRequestException(
-              `Số VIN bị trùng trong danh sách: ${vinNo}`,
+              `Số khung (VIN) bị trùng trong danh sách: ${vinNo}`,
             );
           }
           if (seenEngineNos.has(engineKey)) {
@@ -1598,6 +1906,36 @@ export class ProductionCoreService {
         } as any),
       )) as unknown as ErpGoodsReceiptLine;
 
+      // Extract attributes from BOM snapshot
+      const bomAttributes = (order.outputMetadata?.bomAttributes ??
+        {}) as Record<string, any>;
+      const bomGlobalAttributes = (order.outputMetadata?.bomGlobalAttributes ??
+        {}) as Record<string, any>;
+      const bomAttributeDetails = (order.outputMetadata?.bomAttributeDetails ??
+        []) as Array<any>;
+
+      const mergedBomAttributes: Record<string, any> = {};
+      for (const [k, v] of Object.entries(bomGlobalAttributes)) {
+        if (v !== null && v !== undefined && v !== '') {
+          mergedBomAttributes[k] = v;
+        }
+      }
+      for (const [k, v] of Object.entries(bomAttributes)) {
+        if (v !== null && v !== undefined && v !== '') {
+          mergedBomAttributes[k] = v;
+        }
+      }
+      for (const item of bomAttributeDetails) {
+        if (
+          item.code &&
+          item.value !== null &&
+          item.value !== undefined &&
+          item.value !== ''
+        ) {
+          mergedBomAttributes[item.code] = item.value;
+        }
+      }
+
       const vehiclesCreatedThisBatch: any[] = [];
       if (trackingPolicy === 'VEHICLE') {
         for (const identifier of identifiers) {
@@ -1614,10 +1952,18 @@ export class ProductionCoreService {
           )) as unknown as ErpVehicle;
           vehiclesCreatedThisBatch.push(vehicle);
 
+          const finalAttributes = {
+            ...mergedBomAttributes,
+            ...(identifier.attributes ?? {}),
+          };
+
           await serialRepo.save(
             serialRepo.create({
               itemId: order.finishedGoodItemId,
-              serialNo: identifier.serialNo?.trim() || identifier.engineNo,
+              serialNo:
+                identifier.serialNo?.trim() ||
+                identifier.engineNo?.trim() ||
+                identifier.vinNo?.trim(),
               status: 'IN_STOCK',
               vinId: vehicle.id,
               receiptLineId: savedGrLine.id,
@@ -1625,7 +1971,10 @@ export class ProductionCoreService {
               salesOrderLineId: null,
               goodsIssueLineId: null,
               notes: identifier.notes ?? null,
-              attributes: identifier.attributes ?? null,
+              attributes:
+                Object.keys(finalAttributes).length > 0
+                  ? finalAttributes
+                  : null,
             } as any),
           );
         }
@@ -1719,6 +2068,10 @@ export class ProductionCoreService {
 
       if (trackingPolicy === 'SERIAL') {
         for (const identifier of identifiers) {
+          const finalAttributes = {
+            ...mergedBomAttributes,
+            ...(identifier.attributes ?? {}),
+          };
           await serialRepo.save(
             serialRepo.create({
               itemId: order.finishedGoodItemId,
@@ -1730,7 +2083,10 @@ export class ProductionCoreService {
               salesOrderLineId: null,
               goodsIssueLineId: null,
               notes: identifier.notes ?? null,
-              attributes: identifier.attributes ?? null,
+              attributes:
+                Object.keys(finalAttributes).length > 0
+                  ? finalAttributes
+                  : null,
             } as any),
           );
         }
@@ -2188,5 +2544,80 @@ export class ProductionCoreService {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  async updateProducedVehicles(id: string, dto: UpdateProducedVehiclesDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const vehicleRepo = manager.getRepository(ErpVehicle);
+      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+      const productionRepo = manager.getRepository(ErpProductionOrder);
+
+      const order = await productionRepo.findOne({
+        where: { id, isDeleted: false },
+      });
+      if (!order) throw new NotFoundException('Không tìm thấy lệnh sản xuất');
+
+      const vehicles = dto.vehicles || [];
+      if (vehicles.length === 0) {
+        return { message: 'Không có xe nào cần cập nhật', data: [] };
+      }
+
+      const updatedResults: Array<{
+        id: string;
+        vinNo: string;
+        engineNo: string;
+        notes: string | null;
+      }> = [];
+
+      for (const item of vehicles) {
+        const vehicle = await vehicleRepo.findOne({
+          where: { id: item.id, productionOrderId: id },
+        });
+        if (!vehicle) continue;
+
+        if (item.vinNo?.trim()) vehicle.vinNo = item.vinNo.trim();
+        if (item.engineNo?.trim()) vehicle.engineNo = item.engineNo.trim();
+        if (item.notes !== undefined)
+          vehicle.notes = item.notes?.trim() || null;
+
+        await vehicleRepo.save(vehicle);
+
+        // Update corresponding serial tracking record if exists
+        const serialRecord = await serialRepo.findOne({
+          where: { vinId: vehicle.id },
+        });
+        if (serialRecord) {
+          const currentAttrs = (serialRecord.attributes || {}) as Record<
+            string,
+            any
+          >;
+          if (item.serialNo !== undefined) {
+            if (item.serialNo.trim()) {
+              currentAttrs['vehicleSerialNo'] = item.serialNo.trim();
+            } else {
+              delete currentAttrs['vehicleSerialNo'];
+            }
+          }
+          if (item.notes !== undefined) {
+            serialRecord.notes = item.notes?.trim() || null;
+          }
+          serialRecord.attributes =
+            Object.keys(currentAttrs).length > 0 ? currentAttrs : null;
+          await serialRepo.save(serialRecord);
+        }
+
+        updatedResults.push({
+          id: vehicle.id,
+          vinNo: vehicle.vinNo,
+          engineNo: vehicle.engineNo,
+          notes: vehicle.notes,
+        });
+      }
+
+      return {
+        message: `Cập nhật thông tin ${updatedResults.length} xe thành công`,
+        data: updatedResults,
+      };
+    });
   }
 }

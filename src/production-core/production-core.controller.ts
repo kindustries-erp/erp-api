@@ -22,6 +22,7 @@ import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ListProductionDto } from './dto/list-production.dto';
 import { StartProductionDto } from './dto/start-production.dto';
 import { CompleteProductionDto } from './dto/complete-production.dto';
+import { UpdateProducedVehiclesDto } from './dto/update-produced-vehicles.dto';
 import { ProductionCoreService } from './production-core.service';
 
 @ApiTags('erp_production')
@@ -184,6 +185,18 @@ export class ProductionCoreController {
     @Body() dto: CompleteProductionDto,
   ) {
     return this.service.completeProduction(id, dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.PRODUCTION,
+    action: ErpAction.UPDATE,
+  })
+  @Patch('orders/:id/vehicles')
+  updateProducedVehicles(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateProducedVehiclesDto,
+  ) {
+    return this.service.updateProducedVehicles(id, dto);
   }
 
   // --- Shop Floor APIs ---
