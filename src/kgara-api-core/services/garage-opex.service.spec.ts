@@ -23,11 +23,11 @@ describe('GarageOpexService', () => {
       id: 'uuid-2',
       periodYear: 2026,
       periodMonth: 8,
-      categoryKey: 'HOA_HONG_DV',
-      categoryName: 'Hoa hồng DV (10%)',
+      categoryKey: 'HOA_HONG_KHAC',
+      categoryName: 'Hoa hồng khác',
       amount: 5621059,
       ojAmount: 1200000,
-      note: 'Hoa hồng dịch vụ',
+      note: 'Hoa hồng khác / điều chỉnh',
       createdAt: new Date(),
     },
     {
@@ -174,5 +174,39 @@ describe('GarageOpexService', () => {
   it('should delete opex item', async () => {
     const result = await service.delete('uuid-1');
     expect(result.success).toBe(true);
+  });
+
+  it('should throw BadRequestException when trying to manually create HOA_HONG_SALE or HOA_HONG_DV', async () => {
+    await expect(
+      service.create({
+        periodYear: 2026,
+        periodMonth: 8,
+        categoryKey: 'HOA_HONG_SALE',
+        categoryName: 'Hoa hồng Sale',
+        amount: 5000000,
+      }),
+    ).rejects.toThrow(
+      'Hoa hồng Sale và Hoa hồng Dịch vụ được hệ thống tự động tính toán',
+    );
+
+    await expect(
+      service.create({
+        periodYear: 2026,
+        periodMonth: 8,
+        categoryKey: 'HOA_HONG_DV',
+        categoryName: 'Hoa hồng DV',
+        amount: 5000000,
+      }),
+    ).rejects.toThrow(
+      'Hoa hồng Sale và Hoa hồng Dịch vụ được hệ thống tự động tính toán',
+    );
+  });
+
+  it('should throw BadRequestException when trying to edit auto commission virtual id', async () => {
+    await expect(
+      service.update('auto-sale-2026-08', {
+        amount: 5000000,
+      }),
+    ).rejects.toThrow('Hoa hồng tự động không thể chỉnh sửa trực tiếp');
   });
 });
