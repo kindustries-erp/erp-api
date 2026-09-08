@@ -9,8 +9,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreateGoodsIssueLineDto } from './create-goods-issue-line.dto';
+import { BaseEntityCustomFieldsDto } from '../../module-config/dto/base-entity-custom-fields.dto';
 
-export class CreateGoodsIssueDto {
+export class CreateGoodsIssueDto extends BaseEntityCustomFieldsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -16,6 +16,7 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { Logger } from '@nestjs/common';
 import { getGMT7YearMonthDayString } from '../common/utils/date.util';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class InventoryAdjustmentsCoreService {
@@ -66,7 +67,7 @@ export class InventoryAdjustmentsCoreService {
   }
 
   async create(dto: CreateInventoryAdjustmentDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], customAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpInventoryAdjustment);
       const lineRepo = manager.getRepository(ErpInventoryAdjustmentLine);
@@ -92,9 +93,27 @@ export class InventoryAdjustmentsCoreService {
         });
       }
       const savedLines = await lineRepo.save(linesPayload);
+
+      // Lưu customAttributes nguyên tử trong transaction
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'INVENTORY_ADJUSTMENT',
+          data.id,
+          customAttributes,
+        );
+      }
+
+      const result = { ...data, lines: savedLines };
+      await EntityCustomFieldsHelper.enrichOne(
+        manager,
+        'INVENTORY_ADJUSTMENT',
+        result,
+      );
+
       return {
         message: 'Tạo phiếu điều chỉnh thành công',
-        data: { ...data, lines: savedLines },
+        data: result,
       };
     });
   }
@@ -121,6 +140,13 @@ export class InventoryAdjustmentsCoreService {
       take: pageSize,
       order,
     });
+
+    await EntityCustomFieldsHelper.enrichMany(
+      this.dataSource,
+      'INVENTORY_ADJUSTMENT',
+      items,
+    );
+
     return {
       items,
       total,
@@ -136,9 +162,16 @@ export class InventoryAdjustmentsCoreService {
       where: { adjustmentId: id },
       order: { lineNo: 'ASC' },
     });
+    const result = { ...data, lines };
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'INVENTORY_ADJUSTMENT',
+      result,
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, lines },
+      data: result,
     };
   }
 
@@ -149,14 +182,14 @@ export class InventoryAdjustmentsCoreService {
         'Chỉ được sửa phiếu điều chỉnh ở trạng thái nháp',
       );
     }
-    const { lines, ...header } = dto as any;
+    const { lines, customAttributes, ...header } = dto as any;
     if (header.adjustmentNo === '') {
       delete header.adjustmentNo;
     }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpInventoryAdjustmentLine);
         await lineRepo.delete({ adjustmentId: id });
         const linesPayload: DeepPartial<ErpInventoryAdjustmentLine>[] = [];
@@ -174,8 +207,16 @@ export class InventoryAdjustmentsCoreService {
         if (linesPayload.length > 0) {
           await lineRepo.save(linesPayload);
         }
-      });
-    }
+      }
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'INVENTORY_ADJUSTMENT',
+          id,
+          customAttributes,
+        );
+      }
+    });
     return this.findOne(id);
   }
 

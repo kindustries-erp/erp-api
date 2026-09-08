@@ -28,6 +28,7 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { format } from 'date-fns';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -130,7 +131,7 @@ export class GoodsIssuesCoreService {
   }
 
   async create(dto: CreateGoodsIssueDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], customAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsIssue);
       const lineRepo = manager.getRepository(ErpGoodsIssueLine);
@@ -161,9 +162,26 @@ export class GoodsIssuesCoreService {
         const saved = await lineRepo.save(linePayload);
         savedLines.push(saved);
       }
+
+      // Lưu customAttributes nguyên tử trong transaction
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_ISSUE',
+          data.id,
+          customAttributes,
+        );
+      }
+
+      const result = {
+        ...data,
+        lines: await this.enrichLines(savedLines, manager),
+      };
+      await EntityCustomFieldsHelper.enrichOne(manager, 'GOODS_ISSUE', result);
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: await this.enrichLines(savedLines, manager) },
+        data: result,
       };
     });
   }
@@ -202,6 +220,12 @@ export class GoodsIssuesCoreService {
         : null,
     }));
 
+    await EntityCustomFieldsHelper.enrichMany(
+      this.dataSource,
+      'GOODS_ISSUE',
+      enrichedItems,
+    );
+
     return {
       items: enrichedItems,
       total,
@@ -223,14 +247,27 @@ export class GoodsIssuesCoreService {
       where: { goodsIssueId: id },
       order: { lineNo: 'ASC' },
     });
+    const result = {
+      ...data,
+      customerName,
+      lines: await this.enrichLines(lines),
+    };
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'GOODS_ISSUE',
+      result,
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, customerName, lines: await this.enrichLines(lines) },
+      data: result,
     };
   }
 
   async update(id: string, dto: UpdateGoodsIssueDto) {
     const existing = await this.getIssueOrThrow(this.repository, id);
+    const { lines, customAttributes, ...header } = dto as any;
+
     if (existing.status !== 'DRAFT') {
       const { remarks } = dto as any;
       if (remarks !== undefined) {
@@ -238,25 +275,31 @@ export class GoodsIssuesCoreService {
         await this.dataSource
           .getRepository(ErpInventoryTransaction)
           .update({ documentId: id }, { notes: remarks });
-        return { message: 'Cập nhật ghi chú thành công' };
       }
-      throw new BadRequestException(
-        'Chỉ được sửa phiếu xuất ở trạng thái nháp',
-      );
+      if (customAttributes) {
+        await this.dataSource.transaction(async (manager) => {
+          await EntityCustomFieldsHelper.saveInTx(
+            manager,
+            'GOODS_ISSUE',
+            id,
+            customAttributes,
+          );
+        });
+      }
+      return this.findOne(id);
     }
     if (existing.productionOrderId) {
       throw new BadRequestException(
         'Phiếu xuất kho đã gắn với lệnh sản xuất, không được phép sửa',
       );
     }
-    const { lines, ...header } = dto as any;
     if (header.issueNo === '') {
       delete header.issueNo;
     }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpGoodsIssueLine);
         await lineRepo.delete({ goodsIssueId: id });
         let lineNo = 1;
@@ -275,8 +318,16 @@ export class GoodsIssuesCoreService {
           };
           await lineRepo.save(linePayload);
         }
-      });
-    }
+      }
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_ISSUE',
+          id,
+          customAttributes,
+        );
+      }
+    });
     return this.findOne(id);
   }
 

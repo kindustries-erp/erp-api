@@ -7,11 +7,11 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { ErpBomAttributeDef } from './erp_bom_attribute_def.entity';
+import type { ErpModuleAttributeDef } from './erp_module_attribute_def.entity';
 
-@Entity({ name: 'erp_bom_categories' })
+@Entity({ name: 'erp_module_categories' })
 @Index(['moduleKey', 'code'], { unique: true })
-export class ErpBomCategory {
+export class ErpModuleCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -42,6 +42,6 @@ export class ErpBomCategory {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany('ErpBomAttributeDef', 'category')
-  attributeDefs?: ErpBomAttributeDef[];
+  @OneToMany('ErpModuleAttributeDef', 'category')
+  attributeDefs?: ErpModuleAttributeDef[];
 }

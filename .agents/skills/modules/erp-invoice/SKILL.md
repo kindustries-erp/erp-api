@@ -57,7 +57,7 @@ Các nghiệp vụ trọng tâm:
 | `description` | `text` | YES | `NULL` | Trích yếu / Diễn giải hóa đơn |
 | `invoice_type` | `varchar(255)` | YES | `NULL` | Phân loại nghiệp vụ (vd: `VINFAST_PARTS`, `INSURANCE`,...) |
 | `invoice_category` | `varchar(255)` | YES | `NULL` | Danh mục hóa đơn (legacy text field) |
-| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_bom_categories.id` (`module_key = 'INVOICE'`) |
+| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_module_categories.id` (`module_key = 'INVOICE'`) |
 | `pre_vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền trước thuế (VNĐ) |
 | `vat_rate` | `numeric(9,4)` | YES | `NULL` | Thuế suất VAT chung (nếu đồng nhất) |
 | `vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền thuế GTGT (VNĐ) |
@@ -301,7 +301,7 @@ src/erp-invoices-core/
 
 ### 5.5. Tích hợp Thuộc tính Động & Thuộc tính Chung (Dynamic Custom & Global Attributes)
 - **Tự động nhúng trong DTO response**: Toàn bộ endpoint lấy danh sách (`GET /api/v1/erp-invoices`) và chi tiết (`GET /api/v1/erp-invoices/:id`) đều tự động nạp và trả về:
-  - `category`: Thông tin chi tiết danh mục (`erp_bom_categories`).
+  - `category`: Thông tin chi tiết danh mục (`erp_module_categories`).
   - `categoryId`: ID danh mục liên kết.
   - `attributes`: Key-value map các thuộc tính theo danh mục.
   - `globalAttributes`: Key-value map các thuộc tính chung toàn phân hệ (`module_key = 'INVOICE'`).

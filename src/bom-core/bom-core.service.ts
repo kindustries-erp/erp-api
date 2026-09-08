@@ -11,7 +11,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
 import { ListBomDto } from './dto/list-bom.dto';
@@ -34,7 +34,7 @@ export class BomCoreService {
   ) {
     if (!categoryId) return;
     const requiredDefs = await manager.query(
-      `SELECT id, name, field_type FROM erp_bom_attribute_defs 
+      `SELECT id, name, field_type FROM erp_module_attribute_defs 
        WHERE category_id = $1 AND is_required = true AND is_active = true AND is_deleted = false`,
       [categoryId],
     );
@@ -115,7 +115,7 @@ export class BomCoreService {
       }
 
       if (attributes && typeof attributes === 'object') {
-        const attrValRepo = manager.getRepository(ErpBomAttributeValue);
+        const attrValRepo = manager.getRepository(ErpEntityAttributeValue);
         const attrMap = attributes as Record<string, string | number | boolean>;
         for (const [attrDefId, rawVal] of Object.entries(attrMap)) {
           if (rawVal !== undefined && rawVal !== null) {
@@ -124,7 +124,9 @@ export class BomCoreService {
             if (valStr !== '') {
               await attrValRepo.save(
                 attrValRepo.create({
-                  bomId: data.id,
+                  entityType: 'BOM',
+                  entityId: data.id,
+                  categoryId: data.categoryId,
                   attrDefId,
                   valueText: valStr,
                 }),
@@ -136,7 +138,7 @@ export class BomCoreService {
 
       if (globalAttributes && typeof globalAttributes === 'object') {
         const globalDefs = await manager.query(
-          `SELECT id, code FROM erp_bom_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+          `SELECT id, code FROM erp_module_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
         );
         const globalDefMap = new Map<string, string>();
         for (const gd of globalDefs) {
@@ -247,31 +249,27 @@ export class BomCoreService {
       line.uom = line.uom?.name || '';
     });
 
-    const attrMap: Record<string, string> = {};
-    if (data.attributeValues) {
-      data.attributeValues.forEach((val) => {
-        attrMap[val.attrDefId] = val.valueText || '';
-      });
-    }
-    (data as any).attributes = attrMap;
-    (data as any).categoryCode = data.category?.code || null;
-    (data as any).categoryName = data.category?.name || null;
-
-    // Load global attributes from erp_entity_attribute_values
+    // Load all attributes (category & global) from erp_entity_attribute_values
     const entityAttrRows = await this.dataSource.query(
       `SELECT eav.attr_def_id, eav.value_text, def.code, def.is_global
        FROM erp_entity_attribute_values eav
-       JOIN erp_bom_attribute_defs def ON def.id = eav.attr_def_id
+       JOIN erp_module_attribute_defs def ON def.id = eav.attr_def_id
        WHERE eav.entity_type = 'BOM' AND eav.entity_id = $1 AND def.is_deleted = false`,
       [id],
     );
+    const attrMap: Record<string, string> = {};
     const globalAttrsMap: Record<string, any> = {};
     for (const row of entityAttrRows) {
       if (row.is_global) {
         globalAttrsMap[row.attr_def_id] = row.value_text;
+      } else {
+        attrMap[row.attr_def_id] = row.value_text;
       }
     }
+    (data as any).attributes = attrMap;
     (data as any).globalAttributes = globalAttrsMap;
+    (data as any).categoryCode = data.category?.code || null;
+    (data as any).categoryName = data.category?.name || null;
 
     // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
     const prodOrderCount = await this.dataSource.query(
@@ -416,8 +414,8 @@ export class BomCoreService {
       }
 
       if (attributes !== undefined) {
-        const attrValRepo = manager.getRepository(ErpBomAttributeValue);
-        await attrValRepo.delete({ bomId: id });
+        const attrValRepo = manager.getRepository(ErpEntityAttributeValue);
+        await attrValRepo.delete({ entityType: 'BOM', entityId: id });
         if (attributes && typeof attributes === 'object') {
           const attrMap = attributes as Record<
             string,
@@ -430,7 +428,9 @@ export class BomCoreService {
               if (valStr !== '') {
                 await attrValRepo.save(
                   attrValRepo.create({
-                    bomId: id,
+                    entityType: 'BOM',
+                    entityId: id,
+                    categoryId: targetCategoryId || null,
                     attrDefId,
                     valueText: valStr,
                   }),
@@ -446,7 +446,7 @@ export class BomCoreService {
         typeof globalAttributes === 'object'
       ) {
         const globalDefs = await manager.query(
-          `SELECT id, code FROM erp_bom_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+          `SELECT id, code FROM erp_module_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
         );
         const globalDefMap = new Map<string, string>();
         for (const gd of globalDefs) {

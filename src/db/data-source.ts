@@ -13,9 +13,8 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
@@ -93,9 +92,8 @@ const entities = [
   ErpInventoryBalance,
   ErpBom,
   ErpBomLine,
-  ErpBomCategory,
-  ErpBomAttributeDef,
-  ErpBomAttributeValue,
+  ErpModuleCategory,
+  ErpModuleAttributeDef,
   ErpEntityAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,

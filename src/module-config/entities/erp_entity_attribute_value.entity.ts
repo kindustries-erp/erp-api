@@ -8,8 +8,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../../bom-config/entities/erp_bom_attribute_def.entity';
+import { ErpModuleCategory } from './erp_module_category.entity';
+import { ErpModuleAttributeDef } from './erp_module_attribute_def.entity';
 
 @Entity({ name: 'erp_entity_attribute_values' })
 @Index(['entityType', 'entityId', 'attrDefId'], { unique: true })
@@ -28,16 +28,16 @@ export class ErpEntityAttributeValue {
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'category_id' })
-  category: ErpBomCategory | null;
+  category: ErpModuleCategory | null;
 
   @Column({ type: 'uuid', name: 'attr_def_id' })
   attrDefId: string;
 
-  @ManyToOne(() => ErpBomAttributeDef, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ErpModuleAttributeDef, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'attr_def_id' })
-  attrDef: ErpBomAttributeDef;
+  attrDef: ErpModuleAttributeDef;
 
   @Column({ type: 'text', name: 'value_text', nullable: true })
   valueText: string | null;

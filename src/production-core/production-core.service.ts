@@ -242,7 +242,7 @@ export class ProductionCoreService {
       `SELECT b.id, b.bom_code, b.bom_name, b.version, b.status, b.category_id,
               c.code as category_code, c.name as category_name
        FROM public.erp_boms b
-       LEFT JOIN public.erp_bom_categories c ON b.category_id = c.id
+       LEFT JOIN public.erp_module_categories c ON b.category_id = c.id
        WHERE b.id = $1::uuid AND b.is_deleted = false`,
       [bomId],
     );
@@ -255,10 +255,9 @@ export class ProductionCoreService {
     const attrRows = bom.category_id
       ? await ds.query(
           `SELECT def.id, def.code, def.name, def.name_en, def.field_type, def.options, def.is_required, def.sort_order, def.is_global,
-                  COALESCE(eav.value_text, val.value_text) as value_text
-           FROM public.erp_bom_attribute_defs def
+                  eav.value_text as value_text
+           FROM public.erp_module_attribute_defs def
            LEFT JOIN public.erp_entity_attribute_values eav ON eav.attr_def_id = def.id AND eav.entity_id = $1::uuid AND eav.entity_type = 'BOM'
-           LEFT JOIN public.erp_bom_attribute_values val ON val.attr_def_id = def.id AND val.bom_id = $1::uuid
            WHERE def.category_id = $2::uuid AND (def.is_global = false OR def.is_global IS NULL) AND def.is_deleted = false AND def.is_active = true
            ORDER BY def.sort_order ASC, def.created_at ASC`,
           [bomId, bom.category_id],
@@ -268,10 +267,9 @@ export class ProductionCoreService {
     // 2. Load global attribute defs & values
     const globalRows = await ds.query(
       `SELECT def.id, def.code, def.name, def.name_en, def.field_type, def.options, def.is_required, def.sort_order, def.is_global,
-              COALESCE(eav.value_text, val.value_text) as value_text
-       FROM public.erp_bom_attribute_defs def
+              eav.value_text as value_text
+       FROM public.erp_module_attribute_defs def
        LEFT JOIN public.erp_entity_attribute_values eav ON eav.attr_def_id = def.id AND eav.entity_id = $1::uuid AND eav.entity_type = 'BOM'
-       LEFT JOIN public.erp_bom_attribute_values val ON val.attr_def_id = def.id AND val.bom_id = $1::uuid
        WHERE def.module_key_global = 'BOM' AND def.is_global = true AND def.is_deleted = false AND def.is_active = true
        ORDER BY def.sort_order ASC, def.created_at ASC`,
       [bomId],

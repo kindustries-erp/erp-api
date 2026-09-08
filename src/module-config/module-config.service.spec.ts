@@ -7,9 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ModuleConfigService } from './module-config.service';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpModuleCategory } from './entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from './entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
 
 describe('ModuleConfigService', () => {
@@ -29,18 +28,6 @@ describe('ModuleConfigService', () => {
     create: jest.fn((dto) => dto),
     save: jest.fn((entity) => Promise.resolve({ id: 'def-1', ...entity })),
     update: jest.fn(),
-  };
-
-  const mockAttrValueRepo = {
-    count: jest.fn().mockResolvedValue(0),
-    createQueryBuilder: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([]),
-    })),
   };
 
   const mockEntityAttrValueRepo = {
@@ -78,16 +65,12 @@ describe('ModuleConfigService', () => {
       providers: [
         ModuleConfigService,
         {
-          provide: getRepositoryToken(ErpBomCategory),
+          provide: getRepositoryToken(ErpModuleCategory),
           useValue: mockCategoryRepo,
         },
         {
-          provide: getRepositoryToken(ErpBomAttributeDef),
+          provide: getRepositoryToken(ErpModuleAttributeDef),
           useValue: mockAttrDefRepo,
-        },
-        {
-          provide: getRepositoryToken(ErpBomAttributeValue),
-          useValue: mockAttrValueRepo,
         },
         {
           provide: getRepositoryToken(ErpEntityAttributeValue),
@@ -188,7 +171,7 @@ describe('ModuleConfigService', () => {
   describe('deleteAttributeDef', () => {
     it('should throw ConflictException if attribute is in use', async () => {
       mockAttrDefRepo.findOne.mockResolvedValue({ id: 'def-1', code: 'dept' });
-      mockAttrValueRepo.count.mockResolvedValue(3);
+      mockEntityAttrValueRepo.count.mockResolvedValue(3);
 
       await expect(service.deleteAttributeDef('def-1')).rejects.toThrow(
         ConflictException,
@@ -201,7 +184,7 @@ describe('ModuleConfigService', () => {
         code: 'dept',
         isDeleted: false,
       });
-      mockAttrValueRepo.count.mockResolvedValue(0);
+      mockEntityAttrValueRepo.count.mockResolvedValue(0);
 
       await service.deleteAttributeDef('def-1');
       expect(mockAttrDefRepo.save).toHaveBeenCalledWith(
@@ -434,23 +417,14 @@ describe('ModuleConfigService', () => {
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { value: 'PO', count: '5' },
+          { value: 'PO', count: '8' },
           { value: 'OTHER', count: '2' },
         ]),
       })) as any;
 
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '3' }]),
-      })) as any;
-
       const usage = await service.getAttributeOptionsUsage('attr-select-1');
       expect(usage).toEqual({
-        PO: 8, // 5 (entity) + 3 (bom)
+        PO: 8,
         RETURN: 0,
         OTHER: 2,
       });
@@ -476,14 +450,6 @@ describe('ModuleConfigService', () => {
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '10' }]),
-      })) as any;
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
       })) as any;
 
       // Update options removing PO (which has 10 usages)
@@ -514,14 +480,6 @@ describe('ModuleConfigService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([{ value: 'RED', count: '3' }]),
       })) as any;
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      })) as any;
 
       // Removing RED which is in use
       await expect(
@@ -551,14 +509,6 @@ describe('ModuleConfigService', () => {
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '5' }]),
       })) as any;
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      })) as any;
 
       // Removing UNUSED which has 0 usages
       const updated = await service.updateAttributeDef('attr-select-1', {
@@ -581,14 +531,6 @@ describe('ModuleConfigService', () => {
       });
 
       mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      })) as any;
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -621,14 +563,6 @@ describe('ModuleConfigService', () => {
       });
 
       mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      })) as any;
-      mockAttrValueRepo.createQueryBuilder = jest.fn(() => ({
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
