@@ -7,8 +7,6 @@ import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
-import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
-import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 import {
@@ -91,32 +89,16 @@ export class InventoryItemsService {
     return this.inventoryMastersService.listTrackingPolicies(query);
   }
 
-  listTrackingCategories(query: InventoryMasterQueryDto) {
-    return this.inventoryMastersService.listTrackingCategories(query);
-  }
-
   createItemType(dto: CreateItemTypeDto) {
     return this.inventoryMastersService.createItemType(dto);
-  }
-
-  createTrackingCategory(dto: CreateTrackingCategoryDto) {
-    return this.inventoryMastersService.createTrackingCategory(dto);
   }
 
   updateItemType(id: string, dto: UpdateItemTypeDto) {
     return this.inventoryMastersService.updateItemType(id, dto);
   }
 
-  updateTrackingCategory(id: string, dto: UpdateTrackingCategoryDto) {
-    return this.inventoryMastersService.updateTrackingCategory(id, dto);
-  }
-
   softDeleteItemType(id: string) {
     return this.inventoryMastersService.softDeleteItemType(id);
-  }
-
-  softDeleteTrackingCategory(id: string) {
-    return this.inventoryMastersService.softDeleteTrackingCategory(id);
   }
 
   getMovements(id: string) {

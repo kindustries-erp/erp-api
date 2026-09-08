@@ -25,8 +25,6 @@ import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
-import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
-import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 import {
@@ -167,29 +165,11 @@ export class InventoryItemsController {
 
   @RequirePermissions({
     resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.READ,
-  })
-  @Get('tracking-categories')
-  listTrackingCategories(@Query() query: InventoryMasterQueryDto) {
-    return this.service.listTrackingCategories(query);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.CREATE,
   })
   @Post('item-types')
   createItemType(@Body() dto: CreateItemTypeDto) {
     return this.service.createItemType(dto);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.CREATE,
-  })
-  @Post('tracking-categories')
-  createTrackingCategory(@Body() dto: CreateTrackingCategoryDto) {
-    return this.service.createTrackingCategory(dto);
   }
 
   @RequirePermissions({
@@ -206,32 +186,11 @@ export class InventoryItemsController {
 
   @RequirePermissions({
     resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.UPDATE,
-  })
-  @Patch('tracking-categories/:id')
-  updateTrackingCategory(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateTrackingCategoryDto,
-  ) {
-    return this.service.updateTrackingCategory(id, dto);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.DELETE,
   })
   @Delete('item-types/:id')
   removeItemType(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.softDeleteItemType(id);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.DELETE,
-  })
-  @Delete('tracking-categories/:id')
-  removeTrackingCategory(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.softDeleteTrackingCategory(id);
   }
 
   @RequirePermissions({

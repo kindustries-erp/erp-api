@@ -38,9 +38,6 @@ export class InventoryItemsQueryService {
       case 'trackingPolicy':
       case 'tracking_policy':
         return 'trackingPolicy.name';
-      case 'trackingCategory':
-      case 'tracking_category':
-        return 'trackingCategory.name';
       case 'status':
         return 'item.status';
       case 'createdAt':
@@ -59,7 +56,6 @@ export class InventoryItemsQueryService {
     qb.leftJoinAndSelect('item.uom', 'uom');
     qb.leftJoinAndSelect('item.itemType', 'itemType');
     qb.leftJoinAndSelect('item.trackingPolicy', 'trackingPolicy');
-    qb.leftJoinAndSelect('item.trackingCategory', 'trackingCategory');
     qb.where('item.isDeleted = false');
 
     if (query.status) {
@@ -226,7 +222,6 @@ export class InventoryItemsQueryService {
     qb.leftJoin('item.uom', 'uom');
     qb.leftJoin('item.itemType', 'itemType');
     qb.leftJoin('item.trackingPolicy', 'trackingPolicy');
-    qb.leftJoin('item.trackingCategory', 'trackingCategory');
     qb.where('item.isDeleted = false');
 
     // Apply cross-column filters if provided

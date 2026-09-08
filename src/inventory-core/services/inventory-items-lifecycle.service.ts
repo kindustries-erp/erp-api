@@ -33,7 +33,6 @@ export class InventoryItemsLifecycleService {
       status: dto.status || 'ACTIVE',
       note: dto.note || undefined,
       trackingPolicyId: dto.trackingPolicyId || null,
-      trackingCategoryId: dto.trackingCategoryId || null,
       attributes: dto.attributes || [],
     } as Partial<ErpInventoryItem>);
     const data = await this.repository.save(entity);
@@ -43,7 +42,7 @@ export class InventoryItemsLifecycleService {
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id },
-      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
+      relations: ['uom', 'itemType', 'trackingPolicy'],
     });
     if (!data) throw new NotFoundException('Không tìm thấy item');
     const serialCountRes = await this.dataSource.query(
@@ -83,14 +82,12 @@ export class InventoryItemsLifecycleService {
       }
       item.trackingPolicyId = dto.trackingPolicyId || null;
     }
-    if (dto.trackingCategoryId !== undefined)
-      item.trackingCategoryId = dto.trackingCategoryId;
     if (dto.attributes !== undefined) item.attributes = dto.attributes;
 
     await this.repository.save(item);
     const data = await this.repository.findOne({
       where: { id },
-      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
+      relations: ['uom', 'itemType', 'trackingPolicy'],
     });
     return { message: 'Cập nhật thành công', data };
   }

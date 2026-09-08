@@ -37,13 +37,6 @@ export class CreateInventoryItemDto {
   @IsUUID()
   trackingPolicyId?: string;
 
-  @ApiPropertyOptional({
-    description: 'UUID của tracking category (erp_tracking_categories.id)',
-  })
-  @IsOptional()
-  @IsUUID()
-  trackingCategoryId?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()

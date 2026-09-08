@@ -691,6 +691,75 @@ export class ModuleConfigService {
       } catch (e) {
         // Safe catch
       }
+    } else if (modKey === 'INVENTORY_ITEM') {
+      try {
+        if (attrCode === 'uom') {
+          const uomRows = await this.dataSource.query(
+            `SELECT u.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_uom u ON i.uom_id = u.id 
+             WHERE i.is_deleted = false 
+             GROUP BY u.code`,
+          );
+          for (const row of uomRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'item_type') {
+          const typeRows = await this.dataSource.query(
+            `SELECT it.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_item_types it ON i.item_type_id = it.id 
+             WHERE i.is_deleted = false 
+             GROUP BY it.code`,
+          );
+          for (const row of typeRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'tracking_policy') {
+          const policyRows = await this.dataSource.query(
+            `SELECT tp.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id 
+             WHERE i.is_deleted = false 
+             GROUP BY tp.code`,
+          );
+          for (const row of policyRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'item_features') {
+          const featureRows = await this.dataSource.query(
+            `SELECT unnest(attributes) as value, COUNT(*)::int as count 
+             FROM erp_inventory_items 
+             WHERE is_deleted = false AND attributes IS NOT NULL AND array_length(attributes, 1) > 0 
+             GROUP BY value`,
+          );
+          for (const row of featureRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Safe catch
+      }
     }
 
     return usageMap;
