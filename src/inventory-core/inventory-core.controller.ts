@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import { InventoryItemQueryDto } from './dto/inventory-item-query.dto';
 import { InventoryItemsService } from './inventory-core.service';
 import { CreateInventoryItemDto } from './dto/create-item.dto';
@@ -47,6 +49,7 @@ export class InventoryItemsController {
     private readonly service: InventoryItemsService,
     private readonly lotService: InventoryLotService,
     private readonly customService: InventoryCustomService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
 
   @RequirePermissions({
@@ -206,9 +209,15 @@ export class InventoryItemsController {
     resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.READ,
   })
-  @Get('items/:id/connections')
-  getConnections(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.getItemConnections(id);
+  @Get('items/:id/traceability-graph')
+  getTraceabilityGraph(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Request() req: any,
+  ) {
+    return this.traceabilityService.getInventoryItemTraceabilityGraph(
+      id,
+      req.user,
+    );
   }
 
   @RequirePermissions({

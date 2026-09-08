@@ -71,8 +71,13 @@ export class EntityCustomFieldsHelper {
 
     for (const [key, rawValue] of Object.entries(customAttributes)) {
       if (rawValue === undefined || rawValue === null) continue;
-      const strVal = String(rawValue).trim();
-      if (strVal === '') continue;
+      let strVal = '';
+      if (typeof rawValue === 'object') {
+        strVal = JSON.stringify(rawValue);
+      } else {
+        strVal = String(rawValue).trim();
+      }
+      if (strVal === '' || strVal === '[]' || strVal === '{}') continue;
 
       let matchedDef = defMapById.get(key);
       if (!matchedDef) {
@@ -186,10 +191,25 @@ export class EntityCustomFieldsHelper {
         }
         const entry = map[row.entityId];
 
-        // Map cả Def ID và Def Code vào customAttributes
-        entry.customAttributes[row.attrDefId] = row.valueText;
+        // Map cả Def ID và Def Code vào customAttributes, tự động parse JSON nếu là mảng/đối tượng
+        let parsedVal: any = row.valueText;
+        if (typeof row.valueText === 'string') {
+          const trimmed = row.valueText.trim();
+          if (
+            (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+            (trimmed.startsWith('{') && trimmed.endsWith('}'))
+          ) {
+            try {
+              parsedVal = JSON.parse(trimmed);
+            } catch {
+              parsedVal = row.valueText;
+            }
+          }
+        }
+
+        entry.customAttributes[row.attrDefId] = parsedVal;
         if (row.attrCode) {
-          entry.customAttributes[row.attrCode] = row.valueText;
+          entry.customAttributes[row.attrCode] = parsedVal;
         }
 
         entry.attributeValues.push({
@@ -208,12 +228,26 @@ export class EntityCustomFieldsHelper {
         const found = map[item.id];
         if (found) {
           (item as any).customAttributes = found.customAttributes;
-          (item as any).attributes = found.customAttributes; // Tương thích ngược
           (item as any).attributeValues = found.attributeValues;
+
+          // Xử lý tương thích ngược an toàn cho trường attributes
+          if (Array.isArray((item as any).attributes)) {
+            if (found.customAttributes.item_features) {
+              (item as any).attributes = Array.isArray(
+                found.customAttributes.item_features,
+              )
+                ? found.customAttributes.item_features
+                : [found.customAttributes.item_features];
+            }
+          } else {
+            (item as any).attributes = found.customAttributes;
+          }
         } else {
           (item as any).customAttributes = {};
-          (item as any).attributes = {};
           (item as any).attributeValues = [];
+          if (!Array.isArray((item as any).attributes)) {
+            (item as any).attributes = {};
+          }
         }
       }
     } catch (err) {
@@ -221,8 +255,10 @@ export class EntityCustomFieldsHelper {
       for (const item of entities) {
         if (!(item as any).customAttributes) {
           (item as any).customAttributes = {};
-          (item as any).attributes = {};
           (item as any).attributeValues = [];
+          if (!Array.isArray((item as any).attributes)) {
+            (item as any).attributes = {};
+          }
         }
       }
     }

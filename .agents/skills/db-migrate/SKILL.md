@@ -173,6 +173,10 @@ Dưới đây là quy trình chuẩn từng bước để tiến hành migrate C
    - Đổi tên bảng `erp_bom_attribute_defs` ➔ `erp_module_attribute_defs`.
    - Cập nhật các quan hệ khóa ngoại (Foreign Keys) và Indexes.
    - Drop an toàn bảng thừa legacy `erp_bom_attribute_values` (dữ liệu BOM đã chuyển sang `erp_entity_attribute_values`).
+4. `src/migrations/1788900000000-MigrateInventoryItemAttributesToModuleConfig.ts`
+   - Bổ sung các options còn thiếu trong `erp_module_attribute_defs` (`uom`, `item_type`).
+   - Migrate mảng `attributes: text[]` sang `item_features` trong `erp_entity_attribute_values`.
+   - Đồng bộ `uom`, `item_type` (chuẩn hoá alias `RAW` $\to$ `RAW_MATERIAL`, `FG` $\to$ `FINISHED_GOODS`) và `tracking_policy` sang EAV.
 
 ---
 

@@ -77,13 +77,14 @@ erDiagram
     erp_module_categories ||--o{ erp_goods_receipts : "categorizes"
     erp_module_categories ||--o{ erp_goods_issues : "categorizes"
     erp_module_categories ||--o{ erp_inventory_adjustments : "categorizes"
+    erp_module_categories ||--o{ erp_inventory_items : "categorizes"
 ```
 
 ### A. Bảng Danh mục Module: `erp_module_categories`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `PK`, `gen_random_uuid()` | Khóa chính |
-| `module_key` | `varchar(50)` | NO | Default `'BOM'` | Phân hệ nghiệp vụ (`'BOM'`, `'INVOICE'`, `'BANK_TXN'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`) |
+| `module_key` | `varchar(50)` | NO | Default `'BOM'` | Phân hệ nghiệp vụ (`'INVENTORY_ITEM'`, `'BOM'`, `'INVOICE'`, `'BANK_TXN'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`) |
 | `code` | `varchar(50)` | NO | Composite Unique `(module_key, code)` | Mã danh mục viết hoa (vd: `EXPENSE`, `INTERNAL`, `MOTORCYCLE`) |
 | `name` | `varchar(255)` | NO | | Tên hiển thị danh mục (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên hiển thị tiếng Anh |
@@ -117,7 +118,7 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `PK`, `gen_random_uuid()` | Khóa chính |
-| `entity_type` | `varchar(50)` | NO | Index | Phân loại module (`'INVOICE_IN'`, `'INVOICE_OUT'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`, `'BOM'`, `'PRODUCTION'`, `'BANK_TXN'`) |
+| `entity_type` | `varchar(50)` | NO | Index | Phân loại module (`'INVENTORY_ITEM'`, `'INVOICE_IN'`, `'INVOICE_OUT'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`, `'BOM'`, `'PRODUCTION'`, `'BANK_TXN'`) |
 | `entity_id` | `uuid` | NO | Index `(entity_type, entity_id)` | Khóa chính của bản ghi thực thể |
 | `category_id` | `uuid` | YES | `FK -> erp_module_categories(id) ON DELETE SET NULL` | ID Danh mục (NULL đối với Global Attributes) |
 | `attr_def_id` | `uuid` | NO | `FK -> erp_module_attribute_defs(id) ON DELETE CASCADE` | ID Định nghĩa thuộc tính |

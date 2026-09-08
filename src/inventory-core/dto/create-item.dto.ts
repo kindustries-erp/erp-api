@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUUID, IsArray } from 'class-validator';
+import { BaseEntityCustomFieldsDto } from '../../module-config/dto/base-entity-custom-fields.dto';
 
-export class CreateInventoryItemDto {
+export class CreateInventoryItemDto extends BaseEntityCustomFieldsDto {
   @ApiProperty()
   @IsString()
   sku: string;
@@ -12,13 +13,18 @@ export class CreateInventoryItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   uomId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   itemTypeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -31,10 +37,10 @@ export class CreateInventoryItemDto {
   note?: string;
 
   @ApiPropertyOptional({
-    description: 'UUID của tracking policy (erp_tracking_policies.id)',
+    description: 'Code hoặc UUID của tracking policy (erp_tracking_policies)',
   })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   trackingPolicyId?: string;
 
   @ApiPropertyOptional()

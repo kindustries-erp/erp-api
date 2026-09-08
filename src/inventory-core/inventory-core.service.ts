@@ -105,10 +105,6 @@ export class InventoryItemsService {
     return this.inventoryItemsLifecycleService.getMovements(id);
   }
 
-  getItemConnections(id: string) {
-    return this.inventoryItemsLifecycleService.getItemConnections(id);
-  }
-
   findOne(id: string) {
     return this.inventoryItemsLifecycleService.findOne(id);
   }

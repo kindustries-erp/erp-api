@@ -63,4 +63,8 @@ export class ErpInventoryItem {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  categoryId?: string | null;
+  attributeValues?: any[];
+  customAttributes?: Record<string, any>;
 }

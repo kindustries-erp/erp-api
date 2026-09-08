@@ -8,6 +8,7 @@ import {
 } from '../../common/utils/query-builder.util';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpInventoryBalance } from '../entities/erp_inventory_balance.entity';
+import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class InventoryItemsQueryService {
@@ -193,9 +194,15 @@ export class InventoryItemsQueryService {
       }
     });
 
-    qb.skip((page - 1) * pageSize).take(pageSize);
-
     const [items, total] = await qb.getManyAndCount();
+
+    if (items.length > 0) {
+      await EntityCustomFieldsHelper.enrichMany(
+        this.repository.manager,
+        'INVENTORY_ITEM',
+        items,
+      );
+    }
 
     return {
       items,
