@@ -81,46 +81,42 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
-      - name: Guard deployment configuration
+      - name: Guard Komodo deployment configuration
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
           KOMODO_URL: ${{ vars.KOMODO_URL }}
-          API_ENV: ${{ secrets.GREENWAY_PRODUCTION_API_ENV }}
         run: |
           set -euo pipefail
           test -n "$KOMODO_API_KEY"
           test -n "$KOMODO_API_SECRET"
           test -n "$KOMODO_URL"
-          test -n "$API_ENV"
-      - name: Write release references and runtime settings
+      - name: Update immutable image references only
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
           KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
           KOMODO_URL: ${{ vars.KOMODO_URL }}
           IMAGE_SHA: ${{ needs.build-and-push.outputs.sha }}
-          API_ENV: ${{ secrets.GREENWAY_PRODUCTION_API_ENV }}
-          R2_ACCOUNT_ID: ${{ secrets.GREENWAY_PRODUCTION_R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.GREENWAY_PRODUCTION_R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.GREENWAY_PRODUCTION_R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: ${{ secrets.GREENWAY_PRODUCTION_R2_BUCKET_NAME }}
         run: |
           set -euo pipefail
-          call() {
-            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
-              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
-              -H 'Content-Type: application/json' --data "$2"
+          write_image_ref() {
+            local stack="$1"
+            local key="$2"
+            local image="$3"
+            local payload
+            payload="$(jq -n \
+              --arg stack "$stack" \
+              --arg contents "${key}=${image}"$'\n' \
+              '{stack: $stack, file_path: ".env", contents: $contents}')"
+            curl --fail-with-body --silent --show-error \
+              -X POST "$KOMODO_URL/write/WriteStackFileContents" \
+              -H "X-Api-Key: $KOMODO_API_KEY" \
+              -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' \
+              --data "$payload" >/dev/null
           }
-          runtime_env="$API_ENV
-          R2_ACCOUNT_ID=$R2_ACCOUNT_ID
-          R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID
-          R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY
-          R2_BUCKET_NAME=$R2_BUCKET_NAME"
-          api_image="${IMAGE_NAME}:${IMAGE_SHA}"
-          migrate_image="${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
-          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "ERP_GREENWAY_API_IMAGE=$api_image\n" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
-          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "$runtime_env" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
-          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" --arg contents "ERP_GREENWAY_MIGRATE_IMAGE=$migrate_image\n" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          write_image_ref "$KOMODO_API_STACK" ERP_GREENWAY_API_IMAGE "${IMAGE_NAME}:${IMAGE_SHA}"
+          write_image_ref "$KOMODO_MIGRATE_STACK" ERP_GREENWAY_MIGRATE_IMAGE "${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
       - name: Run DB migration gate through Komodo
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
@@ -129,20 +125,26 @@ jobs:
         run: |
           set -euo pipefail
           call() {
-            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
-              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
-              -H 'Content-Type: application/json' --data "$2"
+            curl --fail-with-body --silent --show-error \
+              -X POST "$KOMODO_URL$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" \
+              -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' \
+              --data "$2"
           }
-          call /execute/PullStack "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" '{stack:$stack}')" >/dev/null
-          update="$(call /execute/RunStackService "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
+          call /execute/PullStack "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" '{stack: $stack}')" >/dev/null
+          update="$(call /execute/RunStackService "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" '{stack: $stack, service: "migrate"}')")"
           update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
           test -n "$update_id"
           for i in $(seq 1 90); do
-            state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
+            state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id: $id}')")"
             status="$(jq -r '.status // empty' <<<"$state")"
             success="$(jq -r '.success // false' <<<"$state")"
             echo "migration $i/90: status=$status success=$success"
-            if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
+            if [ "$status" = Complete ]; then
+              test "$success" = true
+              exit 0
+            fi
             sleep 5
           done
           exit 1
@@ -153,19 +155,25 @@ jobs:
           KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
-          call() {
-            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
-              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
-              -H 'Content-Type: application/json' --data "$2"
-          }
-          call /execute/PullStack "$(jq -n --arg stack "$KOMODO_API_STACK" '{stack:$stack}')" >/dev/null
-          call /execute/DeployStack "$(jq -n --arg stack "$KOMODO_API_STACK" '{stack:$stack}')" >/dev/null
+          for path in PullStack DeployStack; do
+            payload="$(jq -n --arg stack "$KOMODO_API_STACK" '{stack: $stack}')"
+            curl --fail-with-body --silent --show-error \
+              -X POST "$KOMODO_URL/execute/$path" \
+              -H "X-Api-Key: $KOMODO_API_KEY" \
+              -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' \
+              --data "$payload" >/dev/null
+          done
       - name: Verify API on Elite Tailscale endpoint
         run: |
           set -euo pipefail
           for i in $(seq 1 36); do
-            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$ELITE_API_URL/api/v1/auth/profile" || true)"
-            if [ "$code" = 401 ] || [ "$code" = 200 ]; then echo "API healthy: HTTP $code"; exit 0; fi
-            echo "API attempt $i/36: HTTP $code"; sleep 5
+            code="$(curl --connect-timeout 10 --silent --output /dev/null --write-out '%{http_code}' "$ELITE_API_URL/api/v1/auth/profile" || true)"
+            if [ "$code" = 401 ] || [ "$code" = 200 ]; then
+              echo "API healthy: HTTP $code"
+              exit 0
+            fi
+            echo "API attempt $i/36: HTTP $code"
+            sleep 5
           done
           exit 1
