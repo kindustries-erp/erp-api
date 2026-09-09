@@ -769,7 +769,15 @@ export class ModuleConfigService {
    * Lấy cấu hình custom fields (category + attributes + globalAttributes + values) của một entity bất kỳ
    */
   async getEntityValues(entityType: string, entityId: string) {
-    const upperType = entityType.trim().toUpperCase();
+    const rawUpperType = (entityType || '').trim().toUpperCase();
+    const upperType =
+      rawUpperType === 'RECEIPT'
+        ? 'GOODS_RECEIPT'
+        : rawUpperType === 'ISSUE'
+          ? 'GOODS_ISSUE'
+          : rawUpperType === 'ADJUSTMENT'
+            ? 'INVENTORY_ADJUSTMENT'
+            : rawUpperType;
 
     // 1. Lấy categoryId từ entity table nếu có
     let categoryId: string | null = null;
@@ -795,22 +803,19 @@ export class ModuleConfigService {
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+    } else if (upperType === 'GOODS_RECEIPT') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_goods_receipts WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+    } else if (upperType === 'GOODS_ISSUE') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_goods_issues WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (
-      upperType === 'INVENTORY_ADJUSTMENT' ||
-      upperType === 'ADJUSTMENT'
-    ) {
+    } else if (upperType === 'INVENTORY_ADJUSTMENT') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_inventory_adjustments WHERE id = $1`,
         [entityId],
@@ -819,8 +824,18 @@ export class ModuleConfigService {
     }
 
     // 2. Lấy giá trị thuộc tính từ erp_entity_attribute_values
+    const entityTypesToQuery = [upperType];
+    if (rawUpperType !== upperType) {
+      entityTypesToQuery.push(rawUpperType);
+    }
+    if (upperType === 'INVOICE_IN' || upperType === 'INVOICE_OUT') {
+      if (!entityTypesToQuery.includes('INVOICE')) {
+        entityTypesToQuery.push('INVOICE');
+      }
+    }
+
     const entityValues = await this.entityAttrValueRepo.find({
-      where: { entityType: upperType, entityId },
+      where: { entityType: In(entityTypesToQuery), entityId },
       relations: { attrDef: true },
     });
 
@@ -848,11 +863,18 @@ export class ModuleConfigService {
 
     // 4. Global Attribute Defs for this module
     const globalAttributeDefs = await this.attrDefRepo.find({
-      where: {
-        isGlobal: true,
-        moduleKeyGlobal: upperType,
-        isDeleted: false,
-      },
+      where: [
+        { isGlobal: true, moduleKeyGlobal: upperType, isDeleted: false },
+        ...(rawUpperType !== upperType
+          ? [
+              {
+                isGlobal: true,
+                moduleKeyGlobal: rawUpperType,
+                isDeleted: false,
+              },
+            ]
+          : []),
+      ],
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
 
@@ -864,8 +886,14 @@ export class ModuleConfigService {
     for (const ev of entityValues) {
       if (globalDefIds.has(ev.attrDefId) || ev.attrDef?.isGlobal) {
         globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
       } else {
         attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
       }
     }
 
@@ -901,29 +929,45 @@ export class ModuleConfigService {
     entityId: string,
     dto: SaveEntityValuesDto,
   ) {
-    const upperType = entityType.trim().toUpperCase();
+    const rawUpperType = (entityType || '').trim().toUpperCase();
+    const upperType =
+      rawUpperType === 'RECEIPT'
+        ? 'GOODS_RECEIPT'
+        : rawUpperType === 'ISSUE'
+          ? 'GOODS_ISSUE'
+          : rawUpperType === 'ADJUSTMENT'
+            ? 'INVENTORY_ADJUSTMENT'
+            : rawUpperType;
+
     const { categoryId, attributes = {}, globalAttributes = {} } = dto;
 
     return this.dataSource.transaction(async (manager) => {
       // 1. Check required GLOBAL attributes (Soft check without throwing exception)
       const globalDefs = await manager.find(ErpModuleAttributeDef, {
-        where: {
-          isGlobal: true,
-          moduleKeyGlobal: upperType,
-          isDeleted: false,
-        },
+        where: [
+          { isGlobal: true, moduleKeyGlobal: upperType, isDeleted: false },
+          ...(rawUpperType !== upperType
+            ? [
+                {
+                  isGlobal: true,
+                  moduleKeyGlobal: rawUpperType,
+                  isDeleted: false,
+                },
+              ]
+            : []),
+        ],
       });
 
       const globalDefMap = new Map<string, string>();
       for (const d of globalDefs) {
         globalDefMap.set(d.id, d.id);
         if (d.code) {
-          globalDefMap.set(d.code.toLowerCase(), d.id);
+          globalDefMap.set(d.code.trim().toLowerCase(), d.id);
         }
       }
 
       // 2. Check required CATEGORY attributes nếu có categoryId
-      let catDefMap = new Map<string, string>();
+      const catDefMap = new Map<string, string>();
       if (categoryId) {
         const cat = await manager.findOne(ErpModuleCategory, {
           where: { id: categoryId, isDeleted: false },
@@ -938,7 +982,7 @@ export class ModuleConfigService {
           if (!d.isDeleted) {
             catDefMap.set(d.id, d.id);
             if (d.code) {
-              catDefMap.set(d.code.toLowerCase(), d.id);
+              catDefMap.set(d.code.trim().toLowerCase(), d.id);
             }
           }
         }
@@ -989,20 +1033,17 @@ export class ModuleConfigService {
             );
           }
         }
-      } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+      } else if (upperType === 'GOODS_RECEIPT') {
         await manager.query(
           `UPDATE erp_goods_receipts SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
-      } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+      } else if (upperType === 'GOODS_ISSUE') {
         await manager.query(
           `UPDATE erp_goods_issues SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
-      } else if (
-        upperType === 'INVENTORY_ADJUSTMENT' ||
-        upperType === 'ADJUSTMENT'
-      ) {
+      } else if (upperType === 'INVENTORY_ADJUSTMENT') {
         await manager.query(
           `UPDATE erp_inventory_adjustments SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
@@ -1014,46 +1055,96 @@ export class ModuleConfigService {
         entityType: upperType,
         entityId,
       });
+      if (rawUpperType !== upperType) {
+        await manager.delete(ErpEntityAttributeValue, {
+          entityType: rawUpperType,
+          entityId,
+        });
+      }
+      if (upperType === 'INVOICE_IN' || upperType === 'INVOICE_OUT') {
+        await manager.delete(ErpEntityAttributeValue, {
+          entityType: 'INVOICE',
+          entityId,
+        });
+      }
 
-      // 5. Lưu các giá trị mới
-      const newEntities: ErpEntityAttributeValue[] = [];
+      // 5. Lưu các giá trị mới (Deduplicated theo attrDefId để tránh duplicate key constraint)
+      const isUuid = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          str,
+        );
+
+      const valuesByAttrDefId = new Map<
+        string,
+        { categoryId: string | null; valueText: string }
+      >();
 
       // Category attributes
-      if (categoryId && attributes && Object.keys(attributes).length > 0) {
-        for (const [key, val] of Object.entries(attributes)) {
-          if (val !== undefined && val !== null && val !== '') {
-            const attrDefId =
-              catDefMap.get(key) || catDefMap.get(key.toLowerCase()) || key;
-            const entityVal = manager.create(ErpEntityAttributeValue, {
-              entityType: upperType,
-              entityId,
+      if (categoryId && attributes && typeof attributes === 'object') {
+        for (const [key, rawVal] of Object.entries(attributes)) {
+          if (rawVal === undefined || rawVal === null) continue;
+          let strVal = '';
+          if (typeof rawVal === 'object') {
+            strVal = JSON.stringify(rawVal);
+          } else {
+            strVal = String(rawVal).trim();
+          }
+          if (strVal === '' || strVal === '[]' || strVal === '{}') continue;
+
+          const attrDefId =
+            catDefMap.get(key) ||
+            catDefMap.get(key.trim().toLowerCase()) ||
+            globalDefMap.get(key) ||
+            globalDefMap.get(key.trim().toLowerCase()) ||
+            (isUuid(key) ? key : null);
+
+          if (attrDefId) {
+            valuesByAttrDefId.set(attrDefId, {
               categoryId,
-              attrDefId,
-              valueText: String(val),
+              valueText: strVal,
             });
-            newEntities.push(entityVal);
           }
         }
       }
 
       // Global attributes (categoryId = null)
-      if (globalAttributes && Object.keys(globalAttributes).length > 0) {
-        for (const [key, val] of Object.entries(globalAttributes)) {
-          if (val !== undefined && val !== null && val !== '') {
-            const attrDefId =
-              globalDefMap.get(key) ||
-              globalDefMap.get(key.toLowerCase()) ||
-              key;
-            const entityVal = manager.create(ErpEntityAttributeValue, {
-              entityType: upperType,
-              entityId,
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        for (const [key, rawVal] of Object.entries(globalAttributes)) {
+          if (rawVal === undefined || rawVal === null) continue;
+          let strVal = '';
+          if (typeof rawVal === 'object') {
+            strVal = JSON.stringify(rawVal);
+          } else {
+            strVal = String(rawVal).trim();
+          }
+          if (strVal === '' || strVal === '[]' || strVal === '{}') continue;
+
+          const attrDefId =
+            globalDefMap.get(key) ||
+            globalDefMap.get(key.trim().toLowerCase()) ||
+            catDefMap.get(key) ||
+            catDefMap.get(key.trim().toLowerCase()) ||
+            (isUuid(key) ? key : null);
+
+          if (attrDefId) {
+            valuesByAttrDefId.set(attrDefId, {
               categoryId: null,
-              attrDefId,
-              valueText: String(val),
+              valueText: strVal,
             });
-            newEntities.push(entityVal);
           }
         }
+      }
+
+      const newEntities: ErpEntityAttributeValue[] = [];
+      for (const [attrDefId, item] of valuesByAttrDefId.entries()) {
+        const entityVal = manager.create(ErpEntityAttributeValue, {
+          entityType: upperType,
+          entityId,
+          categoryId: item.categoryId,
+          attrDefId,
+          valueText: item.valueText,
+        });
+        newEntities.push(entityVal);
       }
 
       if (newEntities.length > 0) {

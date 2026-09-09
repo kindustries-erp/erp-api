@@ -358,6 +358,87 @@ describe('ModuleConfigService', () => {
       );
       expect(resOut.categoryId).toBe('cat-in-1');
     });
+
+    it('should deduplicate attribute values when both UUID and code are present in globalAttributes to prevent unique constraint violations', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: '181efcb3-aabb-4885-91c3-817d3e6b7a7b',
+          code: 'type_invoice_out',
+          name: 'Phân loại hóa đơn bán ra',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE_OUT',
+          isDeleted: false,
+        },
+      ]);
+      mockManager.save = jest
+        .fn()
+        .mockImplementation((entity, list) => Promise.resolve(list));
+
+      await service.saveEntityValues(
+        'INVOICE_OUT',
+        '920b8499-b37a-4b82-8445-cca01ea82953',
+        {
+          categoryId: null,
+          attributes: {},
+          globalAttributes: {
+            '181efcb3-aabb-4885-91c3-817d3e6b7a7b': 'SALE_SERVICE',
+            type_invoice_out: 'SALE_SERVICE',
+          },
+        },
+      );
+
+      expect(mockManager.save).toHaveBeenCalledTimes(1);
+      const savedEntities = (mockManager.save as jest.Mock).mock.calls[0][1];
+      expect(savedEntities).toHaveLength(1);
+      expect(savedEntities[0]).toMatchObject({
+        entityType: 'INVOICE_OUT',
+        entityId: '920b8499-b37a-4b82-8445-cca01ea82953',
+        attrDefId: '181efcb3-aabb-4885-91c3-817d3e6b7a7b',
+        valueText: 'SALE_SERVICE',
+      });
+    });
+
+    it('should safely handle JSON serialization for objects/arrays and ignore empty/invalid non-UUID keys', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          code: 'tags',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE_OUT',
+          isDeleted: false,
+        },
+      ]);
+      mockManager.save = jest
+        .fn()
+        .mockImplementation((entity, list) => Promise.resolve(list));
+
+      await service.saveEntityValues('INVOICE_OUT', 'inv-123', {
+        categoryId: null,
+        attributes: {},
+        globalAttributes: {
+          tags: ['A', 'B'],
+          invalid_non_existent_key: 'value',
+          '22222222-2222-2222-2222-222222222222': 'valid-uuid-direct',
+          empty_key: '',
+        },
+      });
+
+      expect(mockManager.save).toHaveBeenCalledTimes(1);
+      const savedEntities = (mockManager.save as jest.Mock).mock.calls[0][1];
+      expect(savedEntities).toHaveLength(2);
+      expect(savedEntities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            attrDefId: '11111111-1111-1111-1111-111111111111',
+            valueText: JSON.stringify(['A', 'B']),
+          }),
+          expect.objectContaining({
+            attrDefId: '22222222-2222-2222-2222-222222222222',
+            valueText: 'valid-uuid-direct',
+          }),
+        ]),
+      );
+    });
   });
 
   describe('Global attributes management', () => {
