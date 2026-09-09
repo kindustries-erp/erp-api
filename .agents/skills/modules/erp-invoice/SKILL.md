@@ -495,3 +495,17 @@ src/modules/erp-invoices-core/components/
         ├── ComingSoonTabContent.tsx             # Placeholder Sắp ra mắt cho tab Sổ quỹ
         └── NetOffInput.tsx                      # Input số tiền cấn trừ có kiểm soát validation
 ```
+
+### 8.5. Cơ chế Gợi Ý Đối Soát Sao Kê Thông Minh (Smart Net-Off Engine)
+`InvoiceSmartNetOffService` (`POST /erp-invoices/smart-net-off-suggestions`) sử dụng thuật toán tính điểm đa tín hiệu (Multi-Signal Scoring):
+1. **Lọc từ dừng tiếng Việt (Stop Words Filter)**: Loại bỏ các từ quá phổ biến (`công ty`, `tnhh`, `cổ phần`, `việt nam`, `chi nhánh`,...) trước khi sinh từ khóa tìm kiếm SQL để tránh chiếm trọn hạn mức `LIMIT` quota của database.
+2. **Khớp đa chiều (Multi-Signal Matchers)**:
+   - Số hóa đơn chuẩn hóa (bỏ leading zeros, vd: `0001234` -> `1234`).
+   - Ký hiệu hóa đơn (`serialNo`), Mã số thuế bên bán/mua (`taxCode`).
+   - Biển số xe (`licensePlate`), Số quyết toán vụ việc (`settlementOrder`).
+   - So khớp số tiền: Đối soát đồng thời trên cả tổng tiền hóa đơn (`totalAmount`) và số tiền nợ còn lại sau cấn trừ (`remainingDebt`).
+3. **Phân cấp Badge độ tin cậy**:
+   - `PERFECT` (Khớp tuyệt đối): Khớp cả số tiền và số hóa đơn.
+   - `HIGH` (Khớp cao): Khớp số tiền và tên/MST đối tác hoặc biển số xe.
+   - `LIKELY` / `POSSIBLE`: Khớp một phần từ khóa diễn giải.
+
