@@ -57,7 +57,6 @@ export class InventorySerialService {
         'i.item_name as i_item_name',
         'i.item_type_id as i_item_type',
         'i.tracking_policy_id as i_tracking_policy_id',
-        'i.tracking_category_id as i_tracking_category_id',
         'v.vin_no as v_vin_no',
         'v.engine_no as v_engine_no',
         'tp.name as tp_name',
@@ -424,7 +423,6 @@ export class InventorySerialService {
         itemName: raw.i_item_name,
         itemType: raw.i_item_type,
         trackingPolicyId: raw.i_tracking_policy_id,
-        trackingCategoryId: raw.i_tracking_category_id,
         trackingPolicyName: raw.tp_name,
       },
       lifecycle: {
@@ -497,7 +495,7 @@ export class InventorySerialService {
     // Fetch related item manually since it's not a direct TypeORM relation mapping yet
     const itemRaw = await this.serialRepository.manager.query(
       `
-      SELECT i.id, i.sku, i.item_name, i.item_type_id, i.tracking_policy_id, i.tracking_category_id, tp.name as tp_name
+      SELECT i.id, i.sku, i.item_name, i.item_type_id, i.tracking_policy_id, tp.name as tp_name
       FROM erp_inventory_items i
       LEFT JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id
       WHERE i.id = $1
@@ -525,7 +523,6 @@ export class InventorySerialService {
           itemName: itemRaw[0].item_name,
           itemType: itemRaw[0].item_type_id,
           trackingPolicyId: itemRaw[0].tracking_policy_id,
-          trackingCategoryId: itemRaw[0].tracking_category_id,
           trackingPolicyName: itemRaw[0].tp_name,
         }
       : null;

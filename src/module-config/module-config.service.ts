@@ -6,12 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, In, Repository } from 'typeorm';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
+import { ErpModuleCategory } from './entities/erp_module_category.entity';
 import {
-  BomAttributeOption,
-  ErpBomAttributeDef,
-} from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+  ModuleAttributeOption,
+  ErpModuleAttributeDef,
+} from './entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
 import { CreateModuleCategoryDto } from './dto/create-module-category.dto';
 import { UpdateModuleCategoryDto } from './dto/update-module-category.dto';
@@ -22,12 +21,10 @@ import { SaveEntityValuesDto } from './dto/save-entity-values.dto';
 @Injectable()
 export class ModuleConfigService {
   constructor(
-    @InjectRepository(ErpBomCategory)
-    private readonly categoryRepo: Repository<ErpBomCategory>,
-    @InjectRepository(ErpBomAttributeDef)
-    private readonly attrDefRepo: Repository<ErpBomAttributeDef>,
-    @InjectRepository(ErpBomAttributeValue)
-    private readonly attrValueRepo: Repository<ErpBomAttributeValue>,
+    @InjectRepository(ErpModuleCategory)
+    private readonly categoryRepo: Repository<ErpModuleCategory>,
+    @InjectRepository(ErpModuleAttributeDef)
+    private readonly attrDefRepo: Repository<ErpModuleAttributeDef>,
     @InjectRepository(ErpEntityAttributeValue)
     private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
     private readonly dataSource: DataSource,
@@ -36,7 +33,7 @@ export class ModuleConfigService {
   /**
    * Helper validate unique options keys for SELECT field type
    */
-  private validateSelectOptions(options?: BomAttributeOption[] | null) {
+  private validateSelectOptions(options?: ModuleAttributeOption[] | null) {
     if (!options || options.length === 0) {
       throw new BadRequestException(
         'Thuộc tính dạng Combobox (SELECT) cần ít nhất 1 option lựa chọn.',
@@ -67,35 +64,20 @@ export class ModuleConfigService {
   }
 
   /**
-   * Helper tính toán usageCount tổng hợp từ cả BOM và Entity Attribute Values
+   * Helper tính toán usageCount tổng hợp từ Entity Attribute Values
    */
   private async getUsageCounts(defIds: string[]): Promise<Map<string, number>> {
     if (defIds.length === 0) return new Map();
 
-    const [bomCounts, entityCounts] = await Promise.all([
-      this.attrValueRepo
-        .createQueryBuilder('val')
-        .select('val.attr_def_id', 'attrDefId')
-        .addSelect('COUNT(DISTINCT val.bom_id)', 'count')
-        .where('val.attr_def_id IN (:...defIds)', { defIds })
-        .groupBy('val.attr_def_id')
-        .getRawMany<{ attrDefId: string; count: string }>(),
-      this.entityAttrValueRepo
-        .createQueryBuilder('val')
-        .select('val.attr_def_id', 'attrDefId')
-        .addSelect('COUNT(DISTINCT val.entity_id)', 'count')
-        .where('val.attr_def_id IN (:...defIds)', { defIds })
-        .groupBy('val.attr_def_id')
-        .getRawMany<{ attrDefId: string; count: string }>(),
-    ]);
+    const entityCounts = await this.entityAttrValueRepo
+      .createQueryBuilder('val')
+      .select('val.attr_def_id', 'attrDefId')
+      .addSelect('COUNT(DISTINCT val.entity_id)', 'count')
+      .where('val.attr_def_id IN (:...defIds)', { defIds })
+      .groupBy('val.attr_def_id')
+      .getRawMany<{ attrDefId: string; count: string }>();
 
     const usageMap = new Map<string, number>();
-    for (const row of bomCounts) {
-      usageMap.set(
-        row.attrDefId,
-        (usageMap.get(row.attrDefId) || 0) + (parseInt(row.count, 10) || 0),
-      );
-    }
     for (const row of entityCounts) {
       usageMap.set(
         row.attrDefId,
@@ -109,7 +91,7 @@ export class ModuleConfigService {
   /**
    * Lấy danh sách Categories theo moduleKey kèm theo AttributeDefs và usageCount cho từng Def
    */
-  async getCategories(moduleKey?: string): Promise<ErpBomCategory[]> {
+  async getCategories(moduleKey?: string): Promise<ErpModuleCategory[]> {
     const where: any = { isDeleted: false };
     if (moduleKey) {
       where.moduleKey = moduleKey.trim().toUpperCase();
@@ -148,32 +130,38 @@ export class ModuleConfigService {
   }
 
   /**
-   * Tạo Category mới theo moduleKey
+   * Tạo Category mới
    */
-  async createCategory(dto: CreateModuleCategoryDto): Promise<ErpBomCategory> {
-    const moduleKey = (dto.moduleKey || 'BOM').trim().toUpperCase();
+  async createCategory(
+    dto: CreateModuleCategoryDto,
+  ): Promise<ErpModuleCategory> {
     const code = dto.code.trim().toUpperCase();
+    const moduleKey = (dto.moduleKey || 'BOM').trim().toUpperCase();
 
+    // Check duplicate code in same moduleKey
     const existing = await this.categoryRepo.findOne({
-      where: { moduleKey, code: ILike(code), isDeleted: false },
+      where: {
+        code,
+        moduleKey,
+        isDeleted: false,
+      },
     });
-
     if (existing) {
       throw new ConflictException(
-        `Mã danh mục "${code}" đã tồn tại trong module "${moduleKey}".`,
+        `Mã danh mục "${code}" đã tồn tại trong phân hệ "${moduleKey}".`,
       );
     }
 
-    const cat = this.categoryRepo.create({
-      moduleKey,
+    const category = this.categoryRepo.create({
       code,
+      moduleKey,
       name: dto.name.trim(),
       nameEn: dto.nameEn ? dto.nameEn.trim() : null,
-      description: dto.description?.trim() || null,
-      isActive: dto.isActive ?? true,
+      description: dto.description ? dto.description.trim() : null,
+      isActive: dto.isActive !== undefined ? dto.isActive : true,
     });
 
-    return this.categoryRepo.save(cat);
+    return this.categoryRepo.save(category);
   }
 
   /**
@@ -182,115 +170,139 @@ export class ModuleConfigService {
   async updateCategory(
     id: string,
     dto: UpdateModuleCategoryDto,
-  ): Promise<ErpBomCategory> {
-    const cat = await this.categoryRepo.findOne({
+  ): Promise<ErpModuleCategory> {
+    const category = await this.categoryRepo.findOne({
       where: { id, isDeleted: false },
-      relations: { attributeDefs: true },
     });
-    if (!cat) {
+    if (!category) {
       throw new NotFoundException(`Không tìm thấy danh mục ID ${id}`);
     }
 
-    // Kiểm tra xem danh mục có thuộc tính nào đang có dữ liệu dùng không
-    const defs = (cat.attributeDefs || []).filter((d) => !d.isDeleted);
-    let inUseCount = 0;
-    if (defs.length > 0) {
-      const defIds = defs.map((d) => d.id);
-      const usageMap = await this.getUsageCounts(defIds);
-      inUseCount = Array.from(usageMap.values()).reduce((a, b) => a + b, 0);
-    }
-
-    const targetModuleKey = dto.moduleKey
-      ? dto.moduleKey.trim().toUpperCase()
-      : cat.moduleKey;
-
     if (dto.code) {
       const code = dto.code.trim().toUpperCase();
-      if (code !== cat.code || targetModuleKey !== cat.moduleKey) {
-        if (inUseCount > 0) {
-          throw new ConflictException(
-            'Danh mục đang có dữ liệu sử dụng, không thể thay đổi mã danh mục.',
-          );
-        }
+      if (code !== category.code) {
         const existing = await this.categoryRepo.findOne({
           where: {
-            moduleKey: targetModuleKey,
-            code: ILike(code),
+            code,
+            moduleKey: category.moduleKey,
             isDeleted: false,
           },
         });
         if (existing && existing.id !== id) {
           throw new ConflictException(
-            `Mã danh mục "${code}" đã tồn tại trong module "${targetModuleKey}".`,
+            `Mã danh mục "${code}" đã tồn tại trong phân hệ "${category.moduleKey}".`,
           );
         }
-        cat.code = code;
+        category.code = code;
       }
     }
 
-    if (dto.moduleKey !== undefined) {
-      cat.moduleKey = targetModuleKey;
-    }
     if (dto.name !== undefined) {
-      cat.name = dto.name.trim();
+      category.name = dto.name.trim();
     }
     if (dto.nameEn !== undefined) {
-      cat.nameEn = dto.nameEn ? dto.nameEn.trim() : null;
+      category.nameEn = dto.nameEn ? dto.nameEn.trim() : null;
     }
     if (dto.description !== undefined) {
-      cat.description = dto.description?.trim() || null;
+      category.description = dto.description ? dto.description.trim() : null;
     }
     if (dto.isActive !== undefined) {
-      cat.isActive = dto.isActive;
+      category.isActive = dto.isActive;
     }
 
-    return this.categoryRepo.save(cat);
+    return this.categoryRepo.save(category);
   }
 
   /**
    * Xóa Category (soft-delete)
    */
   async deleteCategory(id: string): Promise<void> {
-    const cat = await this.categoryRepo.findOne({
+    const category = await this.categoryRepo.findOne({
       where: { id, isDeleted: false },
       relations: { attributeDefs: true },
     });
-    if (!cat) {
+    if (!category) {
       throw new NotFoundException(`Không tìm thấy danh mục ID ${id}`);
     }
 
-    // Kiểm tra xem có attributeDef nào có usageCount > 0 không
-    const defs = (cat.attributeDefs || []).filter((d) => !d.isDeleted);
-    if (defs.length > 0) {
-      const defIds = defs.map((d) => d.id);
-      const usageMap = await this.getUsageCounts(defIds);
-      const totalUsed = Array.from(usageMap.values()).reduce(
-        (a, b) => a + b,
-        0,
+    // Check if category is used by any BOM
+    const bomCount = await this.dataSource.query(
+      `SELECT COUNT(*)::int as count FROM erp_boms WHERE category_id = $1 AND is_deleted = false`,
+      [id],
+    );
+    if (bomCount?.[0]?.count > 0) {
+      throw new ConflictException(
+        `Danh mục đang được sử dụng trong ${bomCount[0].count} BOM, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động.`,
       );
-
-      if (totalUsed > 0) {
-        throw new ConflictException(
-          'Danh mục có dữ liệu đang sử dụng, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động (Deactivate).',
-        );
-      }
-
-      // Soft delete all defs
-      await this.attrDefRepo.update({ categoryId: id }, { isDeleted: true });
     }
 
-    cat.isDeleted = true;
-    await this.categoryRepo.save(cat);
+    // Check if category is used by any Invoices
+    const invoiceCount = await this.dataSource.query(
+      `SELECT COUNT(*)::int as count FROM erp_invoices WHERE category_id = $1 AND is_deleted = false`,
+      [id],
+    );
+    if (invoiceCount?.[0]?.count > 0) {
+      throw new ConflictException(
+        `Danh mục đang được sử dụng trong ${invoiceCount[0].count} Hóa đơn, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động.`,
+      );
+    }
+
+    // Check if category is used in erp_entity_attribute_values
+    const entityValueCount = await this.entityAttrValueRepo.count({
+      where: { categoryId: id },
+    });
+    if (entityValueCount > 0) {
+      throw new ConflictException(
+        `Danh mục đang được sử dụng trong ${entityValueCount} bản ghi thực thể, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động.`,
+      );
+    }
+
+    // Soft delete all child attribute defs
+    if (category.attributeDefs && category.attributeDefs.length > 0) {
+      const defIds = category.attributeDefs.map((d) => d.id);
+      await this.attrDefRepo.update({ id: In(defIds) }, { isDeleted: true });
+    }
+
+    category.isDeleted = true;
+    await this.categoryRepo.save(category);
   }
 
   /**
-   * Lấy AttributeDefs (kèm usageCount)
+   * Lấy danh sách Global Attribute Defs cho một phân hệ cụ thể
+   */
+  async getGlobalAttributeDefs(
+    moduleKey: string,
+  ): Promise<ErpModuleAttributeDef[]> {
+    const upperKey = (moduleKey || '').trim().toUpperCase();
+    const defs = await this.attrDefRepo.find({
+      where: {
+        isGlobal: true,
+        moduleKeyGlobal: upperKey,
+        isDeleted: false,
+      },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+
+    if (defs.length > 0) {
+      const defIds = defs.map((d) => d.id);
+      const usageMap = await this.getUsageCounts(defIds);
+      return defs.map((d) => ({
+        ...d,
+        usageCount: usageMap.get(d.id) || 0,
+      }));
+    }
+
+    return [];
+  }
+
+  /**
+   * Lấy danh sách AttributeDefs theo categoryId hoặc isGlobal
    */
   async getAttributeDefs(
     categoryId?: string,
     isGlobal?: boolean,
     moduleKey?: string,
-  ): Promise<ErpBomAttributeDef[]> {
+  ): Promise<ErpModuleAttributeDef[]> {
     const where: any = { isDeleted: false };
     if (isGlobal !== undefined) {
       where.isGlobal = isGlobal;
@@ -305,127 +317,77 @@ export class ModuleConfigService {
     const defs = await this.attrDefRepo.find({
       where,
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
-      relations: { category: true },
     });
 
-    if (defs.length === 0) return [];
+    if (defs.length > 0) {
+      const defIds = defs.map((d) => d.id);
+      const usageMap = await this.getUsageCounts(defIds);
+      return defs.map((d) => ({
+        ...d,
+        usageCount: usageMap.get(d.id) || 0,
+      }));
+    }
 
-    const defIds = defs.map((d) => d.id);
-    const usageMap = await this.getUsageCounts(defIds);
-
-    return defs.map((d) => ({
-      ...d,
-      usageCount: usageMap.get(d.id) || 0,
-    }));
+    return [];
   }
 
   /**
-   * Lấy danh sách Global AttributeDefs cho một module cụ thể
-   */
-  async getGlobalAttributeDefs(
-    moduleKey: string,
-  ): Promise<ErpBomAttributeDef[]> {
-    const upperKey = moduleKey.trim().toUpperCase();
-    const defs = await this.attrDefRepo.find({
-      where: {
-        isGlobal: true,
-        moduleKeyGlobal: upperKey,
-        isDeleted: false,
-      },
-      order: { sortOrder: 'ASC', createdAt: 'ASC' },
-    });
-
-    if (defs.length === 0) return [];
-
-    const defIds = defs.map((d) => d.id);
-    const usageMap = await this.getUsageCounts(defIds);
-
-    return defs.map((d) => ({
-      ...d,
-      usageCount: usageMap.get(d.id) || 0,
-    }));
-  }
-
-  /**
-   * Tạo AttributeDef mới (hỗ trợ cả Category Attribute và Global Attribute)
+   * Tạo AttributeDef mới
    */
   async createAttributeDef(
     dto: CreateModuleAttrDefDto,
-  ): Promise<ErpBomAttributeDef> {
-    const isGlobal = dto.isGlobal ?? false;
+  ): Promise<ErpModuleAttributeDef> {
+    const isGlobal = dto.isGlobal === true;
     const code = dto.code.trim().toLowerCase();
 
     if (isGlobal) {
       if (!dto.moduleKeyGlobal) {
         throw new BadRequestException(
-          'Thuộc tính chung (Global) cần chỉ định Phân hệ nghiệp vụ (moduleKeyGlobal).',
+          'Thuộc tính chung (isGlobal = true) bắt buộc phải chỉ định phân hệ (moduleKeyGlobal).',
         );
       }
-      const moduleKeyGlobal = dto.moduleKeyGlobal.trim().toUpperCase();
+      const upperModuleKey = dto.moduleKeyGlobal.trim().toUpperCase();
+
       const existing = await this.attrDefRepo.findOne({
         where: {
           isGlobal: true,
-          moduleKeyGlobal,
+          moduleKeyGlobal: upperModuleKey,
           code: ILike(code),
           isDeleted: false,
         },
       });
       if (existing) {
         throw new ConflictException(
-          `Mã thuộc tính chung "${code}" đã tồn tại trong phân hệ "${moduleKeyGlobal}".`,
+          `Mã thuộc tính chung "${code}" đã tồn tại trong phân hệ "${upperModuleKey}".`,
+        );
+      }
+    } else {
+      if (!dto.categoryId) {
+        throw new BadRequestException(
+          'Thuộc tính theo danh mục bắt buộc phải có categoryId.',
+        );
+      }
+      const category = await this.categoryRepo.findOne({
+        where: { id: dto.categoryId, isDeleted: false },
+      });
+      if (!category) {
+        throw new NotFoundException(
+          `Không tìm thấy danh mục ID ${dto.categoryId}`,
         );
       }
 
-      if (dto.fieldType === 'SELECT') {
-        this.validateSelectOptions(dto.options);
-      }
-
-      const def = this.attrDefRepo.create({
-        isGlobal: true,
-        moduleKeyGlobal,
-        categoryId: null,
-        code,
-        name: dto.name.trim(),
-        nameEn: dto.nameEn ? dto.nameEn.trim() : null,
-        fieldType: dto.fieldType,
-        options: dto.options || null,
-        sortOrder: dto.sortOrder ?? 0,
-        isRequired: dto.isRequired ?? false,
-        isActive: dto.isActive ?? true,
-        isSystem: dto.isSystem ?? false,
+      const existing = await this.attrDefRepo.findOne({
+        where: {
+          categoryId: dto.categoryId,
+          code: ILike(code),
+          isDeleted: false,
+        },
       });
-
-      const saved = await this.attrDefRepo.save(def);
-      return { ...saved, usageCount: 0 };
-    }
-
-    // Non-global attribute: categoryId is required
-    if (!dto.categoryId) {
-      throw new BadRequestException(
-        'Thuộc tính theo danh mục cần chỉ định Danh mục (categoryId).',
-      );
-    }
-
-    const category = await this.categoryRepo.findOne({
-      where: { id: dto.categoryId, isDeleted: false },
-    });
-    if (!category) {
-      throw new NotFoundException(
-        `Không tìm thấy danh mục ID ${dto.categoryId}`,
-      );
-    }
-
-    const existing = await this.attrDefRepo.findOne({
-      where: {
-        categoryId: dto.categoryId,
-        code: ILike(code),
-        isDeleted: false,
-      },
-    });
-    if (existing) {
-      throw new ConflictException(
-        `Mã thuộc tính "${code}" đã tồn tại trong danh mục này.`,
-      );
+      if (existing) {
+        throw new ConflictException(
+          `Mã thuộc tính "${code}" đã tồn tại trong danh mục này.`,
+        );
+      }
     }
 
     if (dto.fieldType === 'SELECT') {
@@ -433,18 +395,20 @@ export class ModuleConfigService {
     }
 
     const def = this.attrDefRepo.create({
-      isGlobal: false,
-      moduleKeyGlobal: null,
-      categoryId: dto.categoryId,
+      categoryId: isGlobal ? null : dto.categoryId,
+      isGlobal,
+      moduleKeyGlobal: isGlobal
+        ? dto.moduleKeyGlobal!.trim().toUpperCase()
+        : null,
       code,
       name: dto.name.trim(),
       nameEn: dto.nameEn ? dto.nameEn.trim() : null,
-      fieldType: dto.fieldType,
-      options: dto.options || null,
-      sortOrder: dto.sortOrder ?? 0,
-      isRequired: dto.isRequired ?? false,
-      isActive: dto.isActive ?? true,
-      isSystem: dto.isSystem ?? false,
+      fieldType: dto.fieldType || 'TEXT',
+      options: dto.fieldType === 'SELECT' ? dto.options || [] : null,
+      sortOrder: dto.sortOrder || 0,
+      isRequired: dto.isRequired !== undefined ? dto.isRequired : false,
+      isActive: dto.isActive !== undefined ? dto.isActive : true,
+      isSystem: dto.isSystem !== undefined ? dto.isSystem : false,
     });
 
     const saved = await this.attrDefRepo.save(def);
@@ -457,7 +421,7 @@ export class ModuleConfigService {
   async updateAttributeDef(
     id: string,
     dto: UpdateModuleAttrDefDto,
-  ): Promise<ErpBomAttributeDef> {
+  ): Promise<ErpModuleAttributeDef> {
     const def = await this.attrDefRepo.findOne({
       where: { id, isDeleted: false },
     });
@@ -465,11 +429,9 @@ export class ModuleConfigService {
       throw new NotFoundException(`Không tìm thấy thuộc tính ID ${id}`);
     }
 
-    const [bomUsage, entityUsage] = await Promise.all([
-      this.attrValueRepo.count({ where: { attrDefId: id } }),
-      this.entityAttrValueRepo.count({ where: { attrDefId: id } }),
-    ]);
-    const usageCount = bomUsage + entityUsage;
+    const usageCount = await this.entityAttrValueRepo.count({
+      where: { attrDefId: id },
+    });
 
     // Thuộc tính hệ thống: không cho phép đổi code và fieldType
     if (def.isSystem) {
@@ -624,11 +586,9 @@ export class ModuleConfigService {
       );
     }
 
-    const [bomUsage, entityUsage] = await Promise.all([
-      this.attrValueRepo.count({ where: { attrDefId: id } }),
-      this.entityAttrValueRepo.count({ where: { attrDefId: id } }),
-    ]);
-    const usageCount = bomUsage + entityUsage;
+    const usageCount = await this.entityAttrValueRepo.count({
+      where: { attrDefId: id },
+    });
 
     if (usageCount > 0) {
       throw new ConflictException(
@@ -658,33 +618,16 @@ export class ModuleConfigService {
       usageMap[opt.value] = 0;
     }
 
-    const [entityRows, bomRows] = await Promise.all([
-      this.entityAttrValueRepo
-        .createQueryBuilder('eav')
-        .select('eav.valueText', 'value')
-        .addSelect('COUNT(*)', 'count')
-        .where('eav.attrDefId = :attrDefId', { attrDefId })
-        .andWhere('eav.valueText IS NOT NULL')
-        .groupBy('eav.valueText')
-        .getRawMany<{ value: string; count: string }>(),
-      this.attrValueRepo
-        .createQueryBuilder('bav')
-        .select('bav.valueText', 'value')
-        .addSelect('COUNT(*)', 'count')
-        .where('bav.attrDefId = :attrDefId', { attrDefId })
-        .andWhere('bav.valueText IS NOT NULL')
-        .groupBy('bav.valueText')
-        .getRawMany<{ value: string; count: string }>(),
-    ]);
+    const entityRows = await this.entityAttrValueRepo
+      .createQueryBuilder('eav')
+      .select('eav.valueText', 'value')
+      .addSelect('COUNT(*)', 'count')
+      .where('eav.attrDefId = :attrDefId', { attrDefId })
+      .andWhere('eav.valueText IS NOT NULL')
+      .groupBy('eav.valueText')
+      .getRawMany<{ value: string; count: string }>();
 
     for (const row of entityRows) {
-      if (row.value) {
-        usageMap[row.value] =
-          (usageMap[row.value] || 0) + Number(row.count || 0);
-      }
-    }
-
-    for (const row of bomRows) {
       if (row.value) {
         usageMap[row.value] =
           (usageMap[row.value] || 0) + Number(row.count || 0);
@@ -748,6 +691,75 @@ export class ModuleConfigService {
       } catch (e) {
         // Safe catch
       }
+    } else if (modKey === 'INVENTORY_ITEM') {
+      try {
+        if (attrCode === 'uom') {
+          const uomRows = await this.dataSource.query(
+            `SELECT u.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_uom u ON i.uom_id = u.id 
+             WHERE i.is_deleted = false 
+             GROUP BY u.code`,
+          );
+          for (const row of uomRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'item_type') {
+          const typeRows = await this.dataSource.query(
+            `SELECT it.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_item_types it ON i.item_type_id = it.id 
+             WHERE i.is_deleted = false 
+             GROUP BY it.code`,
+          );
+          for (const row of typeRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'tracking_policy') {
+          const policyRows = await this.dataSource.query(
+            `SELECT tp.code as value, COUNT(i.id)::int as count 
+             FROM erp_inventory_items i 
+             JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id 
+             WHERE i.is_deleted = false 
+             GROUP BY tp.code`,
+          );
+          for (const row of policyRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        } else if (attrCode === 'item_features') {
+          const featureRows = await this.dataSource.query(
+            `SELECT unnest(attributes) as value, COUNT(*)::int as count 
+             FROM erp_inventory_items 
+             WHERE is_deleted = false AND attributes IS NOT NULL AND array_length(attributes, 1) > 0 
+             GROUP BY value`,
+          );
+          for (const row of featureRows || []) {
+            if (row.value) {
+              const key = String(row.value).toUpperCase();
+              if (usageMap[key] !== undefined) {
+                usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Safe catch
+      }
     }
 
     return usageMap;
@@ -757,11 +769,23 @@ export class ModuleConfigService {
    * Lấy cấu hình custom fields (category + attributes + globalAttributes + values) của một entity bất kỳ
    */
   async getEntityValues(entityType: string, entityId: string) {
-    const upperType = entityType.trim().toUpperCase();
+    const rawUpperType = (entityType || '').trim().toUpperCase();
+    const upperType =
+      rawUpperType === 'RECEIPT'
+        ? 'GOODS_RECEIPT'
+        : rawUpperType === 'ISSUE'
+          ? 'GOODS_ISSUE'
+          : rawUpperType === 'ADJUSTMENT'
+            ? 'INVENTORY_ADJUSTMENT'
+            : rawUpperType;
 
     // 1. Lấy categoryId từ entity table nếu có
     let categoryId: string | null = null;
-    if (upperType === 'INVOICE') {
+    if (
+      upperType === 'INVOICE' ||
+      upperType === 'INVOICE_IN' ||
+      upperType === 'INVOICE_OUT'
+    ) {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_invoices WHERE id = $1`,
         [entityId],
@@ -779,22 +803,19 @@ export class ModuleConfigService {
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+    } else if (upperType === 'GOODS_RECEIPT') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_goods_receipts WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+    } else if (upperType === 'GOODS_ISSUE') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_goods_issues WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
-    } else if (
-      upperType === 'INVENTORY_ADJUSTMENT' ||
-      upperType === 'ADJUSTMENT'
-    ) {
+    } else if (upperType === 'INVENTORY_ADJUSTMENT') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_inventory_adjustments WHERE id = $1`,
         [entityId],
@@ -803,8 +824,18 @@ export class ModuleConfigService {
     }
 
     // 2. Lấy giá trị thuộc tính từ erp_entity_attribute_values
+    const entityTypesToQuery = [upperType];
+    if (rawUpperType !== upperType) {
+      entityTypesToQuery.push(rawUpperType);
+    }
+    if (upperType === 'INVOICE_IN' || upperType === 'INVOICE_OUT') {
+      if (!entityTypesToQuery.includes('INVOICE')) {
+        entityTypesToQuery.push('INVOICE');
+      }
+    }
+
     const entityValues = await this.entityAttrValueRepo.find({
-      where: { entityType: upperType, entityId },
+      where: { entityType: In(entityTypesToQuery), entityId },
       relations: { attrDef: true },
     });
 
@@ -817,7 +848,7 @@ export class ModuleConfigService {
     }
 
     // 3. Category và Category Attribute Defs
-    let category: ErpBomCategory | null = null;
+    let category: ErpModuleCategory | null = null;
     if (categoryId) {
       category = await this.categoryRepo.findOne({
         where: { id: categoryId, isDeleted: false },
@@ -832,11 +863,18 @@ export class ModuleConfigService {
 
     // 4. Global Attribute Defs for this module
     const globalAttributeDefs = await this.attrDefRepo.find({
-      where: {
-        isGlobal: true,
-        moduleKeyGlobal: upperType,
-        isDeleted: false,
-      },
+      where: [
+        { isGlobal: true, moduleKeyGlobal: upperType, isDeleted: false },
+        ...(rawUpperType !== upperType
+          ? [
+              {
+                isGlobal: true,
+                moduleKeyGlobal: rawUpperType,
+                isDeleted: false,
+              },
+            ]
+          : []),
+      ],
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
 
@@ -848,8 +886,14 @@ export class ModuleConfigService {
     for (const ev of entityValues) {
       if (globalDefIds.has(ev.attrDefId) || ev.attrDef?.isGlobal) {
         globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
       } else {
         attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
       }
     }
 
@@ -885,31 +929,47 @@ export class ModuleConfigService {
     entityId: string,
     dto: SaveEntityValuesDto,
   ) {
-    const upperType = entityType.trim().toUpperCase();
+    const rawUpperType = (entityType || '').trim().toUpperCase();
+    const upperType =
+      rawUpperType === 'RECEIPT'
+        ? 'GOODS_RECEIPT'
+        : rawUpperType === 'ISSUE'
+          ? 'GOODS_ISSUE'
+          : rawUpperType === 'ADJUSTMENT'
+            ? 'INVENTORY_ADJUSTMENT'
+            : rawUpperType;
+
     const { categoryId, attributes = {}, globalAttributes = {} } = dto;
 
     return this.dataSource.transaction(async (manager) => {
       // 1. Check required GLOBAL attributes (Soft check without throwing exception)
-      const globalDefs = await manager.find(ErpBomAttributeDef, {
-        where: {
-          isGlobal: true,
-          moduleKeyGlobal: upperType,
-          isDeleted: false,
-        },
+      const globalDefs = await manager.find(ErpModuleAttributeDef, {
+        where: [
+          { isGlobal: true, moduleKeyGlobal: upperType, isDeleted: false },
+          ...(rawUpperType !== upperType
+            ? [
+                {
+                  isGlobal: true,
+                  moduleKeyGlobal: rawUpperType,
+                  isDeleted: false,
+                },
+              ]
+            : []),
+        ],
       });
 
       const globalDefMap = new Map<string, string>();
       for (const d of globalDefs) {
         globalDefMap.set(d.id, d.id);
         if (d.code) {
-          globalDefMap.set(d.code.toLowerCase(), d.id);
+          globalDefMap.set(d.code.trim().toLowerCase(), d.id);
         }
       }
 
       // 2. Check required CATEGORY attributes nếu có categoryId
-      let catDefMap = new Map<string, string>();
+      const catDefMap = new Map<string, string>();
       if (categoryId) {
-        const cat = await manager.findOne(ErpBomCategory, {
+        const cat = await manager.findOne(ErpModuleCategory, {
           where: { id: categoryId, isDeleted: false },
           relations: { attributeDefs: true },
         });
@@ -922,14 +982,18 @@ export class ModuleConfigService {
           if (!d.isDeleted) {
             catDefMap.set(d.id, d.id);
             if (d.code) {
-              catDefMap.set(d.code.toLowerCase(), d.id);
+              catDefMap.set(d.code.trim().toLowerCase(), d.id);
             }
           }
         }
       }
 
       // 3. Cập nhật category_id trên entity table
-      if (upperType === 'INVOICE') {
+      if (
+        upperType === 'INVOICE' ||
+        upperType === 'INVOICE_IN' ||
+        upperType === 'INVOICE_OUT'
+      ) {
         await manager.query(
           `UPDATE erp_invoices SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
@@ -969,20 +1033,17 @@ export class ModuleConfigService {
             );
           }
         }
-      } else if (upperType === 'GOODS_RECEIPT' || upperType === 'RECEIPT') {
+      } else if (upperType === 'GOODS_RECEIPT') {
         await manager.query(
           `UPDATE erp_goods_receipts SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
-      } else if (upperType === 'GOODS_ISSUE' || upperType === 'ISSUE') {
+      } else if (upperType === 'GOODS_ISSUE') {
         await manager.query(
           `UPDATE erp_goods_issues SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
         );
-      } else if (
-        upperType === 'INVENTORY_ADJUSTMENT' ||
-        upperType === 'ADJUSTMENT'
-      ) {
+      } else if (upperType === 'INVENTORY_ADJUSTMENT') {
         await manager.query(
           `UPDATE erp_inventory_adjustments SET category_id = $1, updated_at = now() WHERE id = $2`,
           [categoryId || null, entityId],
@@ -994,46 +1055,96 @@ export class ModuleConfigService {
         entityType: upperType,
         entityId,
       });
+      if (rawUpperType !== upperType) {
+        await manager.delete(ErpEntityAttributeValue, {
+          entityType: rawUpperType,
+          entityId,
+        });
+      }
+      if (upperType === 'INVOICE_IN' || upperType === 'INVOICE_OUT') {
+        await manager.delete(ErpEntityAttributeValue, {
+          entityType: 'INVOICE',
+          entityId,
+        });
+      }
 
-      // 5. Lưu các giá trị mới
-      const newEntities: ErpEntityAttributeValue[] = [];
+      // 5. Lưu các giá trị mới (Deduplicated theo attrDefId để tránh duplicate key constraint)
+      const isUuid = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          str,
+        );
+
+      const valuesByAttrDefId = new Map<
+        string,
+        { categoryId: string | null; valueText: string }
+      >();
 
       // Category attributes
-      if (categoryId && attributes && Object.keys(attributes).length > 0) {
-        for (const [key, val] of Object.entries(attributes)) {
-          if (val !== undefined && val !== null && val !== '') {
-            const attrDefId =
-              catDefMap.get(key) || catDefMap.get(key.toLowerCase()) || key;
-            const entityVal = manager.create(ErpEntityAttributeValue, {
-              entityType: upperType,
-              entityId,
+      if (categoryId && attributes && typeof attributes === 'object') {
+        for (const [key, rawVal] of Object.entries(attributes)) {
+          if (rawVal === undefined || rawVal === null) continue;
+          let strVal = '';
+          if (typeof rawVal === 'object') {
+            strVal = JSON.stringify(rawVal);
+          } else {
+            strVal = String(rawVal).trim();
+          }
+          if (strVal === '' || strVal === '[]' || strVal === '{}') continue;
+
+          const attrDefId =
+            catDefMap.get(key) ||
+            catDefMap.get(key.trim().toLowerCase()) ||
+            globalDefMap.get(key) ||
+            globalDefMap.get(key.trim().toLowerCase()) ||
+            (isUuid(key) ? key : null);
+
+          if (attrDefId) {
+            valuesByAttrDefId.set(attrDefId, {
               categoryId,
-              attrDefId,
-              valueText: String(val),
+              valueText: strVal,
             });
-            newEntities.push(entityVal);
           }
         }
       }
 
       // Global attributes (categoryId = null)
-      if (globalAttributes && Object.keys(globalAttributes).length > 0) {
-        for (const [key, val] of Object.entries(globalAttributes)) {
-          if (val !== undefined && val !== null && val !== '') {
-            const attrDefId =
-              globalDefMap.get(key) ||
-              globalDefMap.get(key.toLowerCase()) ||
-              key;
-            const entityVal = manager.create(ErpEntityAttributeValue, {
-              entityType: upperType,
-              entityId,
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        for (const [key, rawVal] of Object.entries(globalAttributes)) {
+          if (rawVal === undefined || rawVal === null) continue;
+          let strVal = '';
+          if (typeof rawVal === 'object') {
+            strVal = JSON.stringify(rawVal);
+          } else {
+            strVal = String(rawVal).trim();
+          }
+          if (strVal === '' || strVal === '[]' || strVal === '{}') continue;
+
+          const attrDefId =
+            globalDefMap.get(key) ||
+            globalDefMap.get(key.trim().toLowerCase()) ||
+            catDefMap.get(key) ||
+            catDefMap.get(key.trim().toLowerCase()) ||
+            (isUuid(key) ? key : null);
+
+          if (attrDefId) {
+            valuesByAttrDefId.set(attrDefId, {
               categoryId: null,
-              attrDefId,
-              valueText: String(val),
+              valueText: strVal,
             });
-            newEntities.push(entityVal);
           }
         }
+      }
+
+      const newEntities: ErpEntityAttributeValue[] = [];
+      for (const [attrDefId, item] of valuesByAttrDefId.entries()) {
+        const entityVal = manager.create(ErpEntityAttributeValue, {
+          entityType: upperType,
+          entityId,
+          categoryId: item.categoryId,
+          attrDefId,
+          valueText: item.valueText,
+        });
+        newEntities.push(entityVal);
       }
 
       if (newEntities.length > 0) {

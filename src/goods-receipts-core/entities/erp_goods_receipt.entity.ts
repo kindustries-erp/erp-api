@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 
 @Entity({ name: 'erp_goods_receipts' })
 export class ErpGoodsReceipt {
@@ -22,9 +22,9 @@ export class ErpGoodsReceipt {
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'category_id' })
-  category: ErpBomCategory | null;
+  category: ErpModuleCategory | null;
 
   @Column({ type: 'uuid', name: 'purchase_order_id', nullable: true })
   purchaseOrderId: string | null;

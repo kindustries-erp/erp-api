@@ -9,8 +9,9 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateGoodsReceiptLineDto } from './create-goods-receipt-line.dto';
+import { BaseEntityCustomFieldsDto } from '../../module-config/dto/base-entity-custom-fields.dto';
 
-export class CreateGoodsReceiptDto {
+export class CreateGoodsReceiptDto extends BaseEntityCustomFieldsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

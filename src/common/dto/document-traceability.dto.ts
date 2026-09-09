@@ -6,7 +6,10 @@ export type TraceabilityNodeType =
   | 'GOODS_RECEIPT'
   | 'GOODS_ISSUE'
   | 'JOURNAL_ENTRY'
-  | 'GARAGE_CASE';
+  | 'GARAGE_CASE'
+  | 'INVENTORY_ITEM'
+  | 'PRODUCTION_ORDER'
+  | 'BOM';
 
 export type TraceabilityRelationType =
   | 'NET_OFF'
@@ -16,7 +19,9 @@ export type TraceabilityRelationType =
   | 'ISSUE_OF'
   | 'JOURNAL_POSTED'
   | 'REPLACED_BY'
-  | 'CASE_ATTACHED';
+  | 'CASE_ATTACHED'
+  | 'MATERIAL_FOR'
+  | 'OUTPUT_OF';
 
 export interface TraceabilityNodeDto {
   id: string;

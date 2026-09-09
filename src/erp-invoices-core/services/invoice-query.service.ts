@@ -583,7 +583,10 @@ export class InvoiceQueryService {
 
     try {
       const attrValues = await this.entityAttrValueRepo.find({
-        where: { entityType: 'INVOICE', entityId: In(invoiceIds) },
+        where: {
+          entityType: In(['INVOICE', 'INVOICE_IN', 'INVOICE_OUT']),
+          entityId: In(invoiceIds),
+        },
         relations: ['attrDef'],
       });
 

@@ -9,8 +9,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { ErpBomCategory } from './erp_bom_category.entity';
-import type { ErpBomAttributeValue } from './erp_bom_attribute_value.entity';
+import type { ErpModuleCategory } from './erp_module_category.entity';
+import type { ErpEntityAttributeValue } from './erp_entity_attribute_value.entity';
 
 export type BomAttributeFieldType =
   | 'TEXT'
@@ -18,6 +18,8 @@ export type BomAttributeFieldType =
   | 'SELECT'
   | 'DATE'
   | 'CHECKBOX';
+
+export type ModuleAttributeFieldType = BomAttributeFieldType;
 
 export interface BomAttributeOption {
   value: string;
@@ -30,21 +32,23 @@ export interface BomAttributeOption {
   };
 }
 
-@Entity({ name: 'erp_bom_attribute_defs' })
+export type ModuleAttributeOption = BomAttributeOption;
+
+@Entity({ name: 'erp_module_attribute_defs' })
 @Index(['categoryId', 'code'], { unique: true })
-export class ErpBomAttributeDef {
+export class ErpModuleAttributeDef {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne('ErpBomCategory', 'attributeDefs', {
+  @ManyToOne('ErpModuleCategory', 'attributeDefs', {
     onDelete: 'CASCADE',
     nullable: true,
   })
   @JoinColumn({ name: 'category_id' })
-  category?: ErpBomCategory;
+  category?: ErpModuleCategory;
 
   @Column({ type: 'boolean', name: 'is_global', default: false })
   isGlobal: boolean;
@@ -67,10 +71,10 @@ export class ErpBomAttributeDef {
   nameEn: string | null;
 
   @Column({ type: 'varchar', length: 50, name: 'field_type', default: 'TEXT' })
-  fieldType: BomAttributeFieldType;
+  fieldType: ModuleAttributeFieldType;
 
   @Column({ type: 'jsonb', name: 'options', nullable: true })
-  options: BomAttributeOption[] | null;
+  options: ModuleAttributeOption[] | null;
 
   @Column({ type: 'int', name: 'sort_order', default: 0 })
   sortOrder: number;
@@ -93,8 +97,8 @@ export class ErpBomAttributeDef {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany('ErpBomAttributeValue', 'attrDef')
-  attributeValues?: ErpBomAttributeValue[];
+  @OneToMany('ErpEntityAttributeValue', 'attrDef')
+  attributeValues?: ErpEntityAttributeValue[];
 
   // Non-persistent computed field
   usageCount?: number;

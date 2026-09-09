@@ -26,7 +26,9 @@ import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
+import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { format } from 'date-fns';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
@@ -212,7 +214,7 @@ export class GoodsReceiptsCoreService {
   }
 
   async create(dto: CreateGoodsReceiptDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], customAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsReceipt);
       const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
@@ -241,9 +243,27 @@ export class GoodsReceiptsCoreService {
         const saved = await lineRepo.save(linePayload);
         savedLines.push(saved);
       }
+
+      // Lưu customAttributes nguyên tử trong transaction
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_RECEIPT',
+          data.id,
+          customAttributes,
+        );
+      }
+
+      const result = { ...data, lines: savedLines };
+      await EntityCustomFieldsHelper.enrichOne(
+        manager,
+        'GOODS_RECEIPT',
+        result,
+      );
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: savedLines },
+        data: result,
       };
     });
   }
@@ -282,6 +302,12 @@ export class GoodsReceiptsCoreService {
         : null,
     }));
 
+    await EntityCustomFieldsHelper.enrichMany(
+      this.dataSource,
+      'GOODS_RECEIPT',
+      enrichedItems,
+    );
+
     return {
       items: enrichedItems,
       total,
@@ -303,14 +329,23 @@ export class GoodsReceiptsCoreService {
       where: { goodsReceiptId: id },
       order: { lineNo: 'ASC' },
     });
+    const result = { ...data, supplierName, lines };
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'GOODS_RECEIPT',
+      result,
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, supplierName, lines },
+      data: result,
     };
   }
 
   async update(id: string, dto: UpdateGoodsReceiptDto) {
     const existing = await this.getReceiptOrThrow(this.repository, id);
+    const { lines, customAttributes, ...header } = dto as any;
+
     if (existing.status !== 'DRAFT') {
       const { remarks } = dto as any;
       if (remarks !== undefined) {
@@ -322,17 +357,26 @@ export class GoodsReceiptsCoreService {
             { notes: remarks },
           );
       }
+      if (customAttributes) {
+        await this.dataSource.transaction(async (manager) => {
+          await EntityCustomFieldsHelper.saveInTx(
+            manager,
+            'GOODS_RECEIPT',
+            id,
+            customAttributes,
+          );
+        });
+      }
       return this.findOne(id);
     }
 
-    const { lines, ...header } = dto as any;
     if (header.receiptNo === '') {
       delete header.receiptNo;
     }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
         await lineRepo.delete({ goodsReceiptId: id });
         let lineNo = 1;
@@ -349,8 +393,16 @@ export class GoodsReceiptsCoreService {
           };
           await lineRepo.save(linePayload);
         }
-      });
-    }
+      }
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_RECEIPT',
+          id,
+          customAttributes,
+        );
+      }
+    });
     return this.findOne(id);
   }
 
@@ -641,17 +693,67 @@ export class GoodsReceiptsCoreService {
             }
           }
 
+          const vehicleRepo = manager?.getRepository
+            ? manager.getRepository(ErpVehicle)
+            : null;
+
           for (const d of declared.slice(0, qty)) {
+            let vinId: string | null = null;
+            const vinNo = d.vinNo?.trim() || d.attributes?.vinNo?.trim();
+            const engineNo =
+              d.engineNo?.trim() || d.attributes?.engineNo?.trim();
+            const internalSerialNo =
+              d.internalSerialNo?.trim() ||
+              d.attributes?.internalSerialNo?.trim();
+
+            if (
+              trackingCode === 'VEHICLE' &&
+              vinNo &&
+              engineNo &&
+              vehicleRepo
+            ) {
+              let vehicle = await vehicleRepo.findOne({
+                where: { vinNo },
+              });
+              if (!vehicle) {
+                const newVehicle = vehicleRepo.create({
+                  vinNo,
+                  engineNo,
+                  finishedGoodItemId: line.itemId ?? null,
+                  assemblyDate: receipt.receiptDate || null,
+                  status: 'ASSEMBLED',
+                  notes: d.notes || null,
+                } as any);
+                vehicle = (await vehicleRepo.save(
+                  newVehicle,
+                )) as unknown as ErpVehicle;
+              }
+              if (vehicle) {
+                vinId = vehicle.id;
+              }
+            }
+
+            const finalAttributes = {
+              ...(d.attributes || {}),
+              ...(vinNo ? { vinNo } : {}),
+              ...(engineNo ? { engineNo } : {}),
+              ...(d.serialNo ? { vehicleSerialNo: d.serialNo.trim() } : {}),
+              ...(internalSerialNo ? { internalSerialNo } : {}),
+            };
+
             serialsToInsert.push({
               itemId: line.itemId ?? null,
               serialNo: d.serialNo.trim(),
               status: 'IN_STOCK',
-              vinId: null,
+              vinId,
               customId: null,
               receiptLineId: line.id,
               lotNo: d.lotNo || null,
               notes: d.notes || null,
-              attributes: d.attributes || null,
+              attributes:
+                Object.keys(finalAttributes).length > 0
+                  ? finalAttributes
+                  : null,
             });
           }
           line.serialsGenerated = true;

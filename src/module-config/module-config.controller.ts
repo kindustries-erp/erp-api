@@ -23,7 +23,7 @@ import { SaveEntityValuesDto } from './dto/save-entity-values.dto';
 @ApiTags('erp_module_config')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('module-config')
+@Controller(['module-config', 'bom-config'])
 export class ModuleConfigController {
   constructor(private readonly service: ModuleConfigService) {}
 

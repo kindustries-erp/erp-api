@@ -1,39 +1,25 @@
 ---
 name: erp-inventory-items
-description: Module tri thức Danh mục Mặt hàng & Master Data Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_items, erp_uom, erp_item_types, erp_tracking_policies, erp_tracking_categories), DTOs, API endpoints, quy trình quản lý SKU, ràng buộc xóa mềm và sơ đồ kết nối phụ thuộc (connections/movements).
+description: Module tri thức Danh mục Mặt hàng & Master Data Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_items, erp_uoms, erp_item_types, erp_tracking_policies, erp_entity_attribute_values), Module Config EAV engine, DTOs, API endpoints, quy trình quản lý SKU, migration runbook và tích hợp đa module.
 ---
 
 # 📦 Module Tri Thức: Danh Mục Mặt Hàng & Dữ Liệu Gốc Kho (`erp-inventory-items`)
 
-## 1. Tổng quan Nghiệp vụ
+## 1. Tổng quan Nghiệp vụ & Kiến trúc Module Config EAV
 
 Module `erp-inventory-items` (thuộc phân hệ `inventory-core`) quản lý toàn bộ danh mục vật tư, phụ tùng, linh kiện và thành phẩm trong hệ thống Liouni ERP. Đây là master data nền tảng cho mọi hoạt động Mua hàng (PO), Bán hàng (SO), Sản xuất (BOM & MO), Quản lý Kho và Kế toán giá vốn.
 
-### 1.1. Các tính năng cốt lõi:
-- **Quản lý Danh mục Mặt hàng (SKU Catalog)**:
-  - Mã SKU duy nhất toàn hệ thống (`sku` unique index).
-  - Tên mặt hàng (`itemName`), ghi chú kỹ thuật (`note`), trạng thái hoạt động (`status = 'ACTIVE' | 'INACTIVE'`).
-  - Phân loại đơn vị tính (`uom_id` FK $\to$ `erp_uom`).
-  - Phân loại nhóm hàng (`item_type_id` FK $\to$ `erp_item_types` như NVL, Bán thành phẩm, Thành phẩm, Phụ tùng, Dịch vụ).
-- **Chính sách Theo dõi Định danh (Tracking Policies)**:
-  - `NONE`: Hàng hóa thông thường, chỉ quản lý số lượng tổng (`qtyOnHand`).
-  - `SERIAL`: Quản lý từng mã Serial đơn lẻ của sản phẩm.
-  - `LOT`: Quản lý theo số Lô sản xuất / nhập hàng (`lot_no`).
-  - `CUSTOM`: Quản lý theo mã barcode/mã quản lý nội bộ tùy chỉnh.
-  - `VEHICLE`: Quản lý xe thành phẩm gồm 3 định danh độc lập: Số Khung (VIN), Số Máy (Engine No), và Số Serial xe (COC số 3).
-- **Phân nhóm Theo dõi (Tracking Categories)**:
-  - Phân loại nhóm quản lý định danh (vd: Khung xe, Động cơ, Pin Lithium, ECU, v.v.).
-- **Sơ đồ Kết nối Phụ thuộc (`getItemConnections`)**:
-  - Tra cứu trực quan toàn bộ chứng từ phát sinh liên quan đến mặt hàng: Đơn mua hàng (PO), Đơn bán hàng (SO), Phiếu nhập kho (GR), Phiếu xuất kho (GI), Định mức kỹ thuật (BOM), Lệnh sản xuất (MO), Phiếu điều chỉnh (Adjustment).
-- **Nhật ký Biến động Mặt hàng (`getMovements`)**:
-  - Lịch sử chi tiết từng lần Nhập, Xuất, Điều chỉnh số lượng và đơn giá của mặt hàng theo dòng thời gian.
-- **Ràng buộc Xóa An toàn (Safe Soft-Delete)**:
-  - Cơ chế xóa mềm (`is_deleted = true`).
-  - Chặn xóa mặt hàng nếu đã phát sinh giao dịch kho (`erp_inventory_transactions`), serials (`erp_inventory_tracking_serials`) hoặc có trong định mức BOM đang hoạt động.
+Phân hệ đã được **chuẩn hóa 100% theo kiến trúc Module Config Engine (EAV)**:
+1. **Master Data & Ràng buộc toàn vẹn**:
+   - `uom_id` (FK $\to$ `erp_uoms`), `item_type_id` (FK $\to$ `erp_item_types`), `tracking_policy_id` (FK $\to$ `erp_tracking_policies`) được duy trì trên bảng vật lý `erp_inventory_items` nhằm bảo toàn hiệu năng và ràng buộc Foreign Key toàn hệ thống.
+2. **Dynamic Custom Fields & System Attributes**:
+   - Thuộc tính checklist tính năng (`item_features`: `CAN_BE_SOLD`, `CAN_BE_PURCHASED`, `CAN_BE_MANUFACTURED`) cùng mọi trường tùy chỉnh động do quản trị viên cấu hình (như Màu sắc, Kích thước, Thông số kỹ thuật...) được lưu trữ và quản lý thống nhất trong bảng EAV `erp_entity_attribute_values` (`entity_type = 'INVENTORY_ITEM'`).
+3. **Đồng nhất API Response 3 trường & Dual-Key Access**:
+   - Mọi API truy vấn (`findOne`, `findAll`) tự động trả về 3 trường chuẩn: `attributeValues` (Metadata), `customAttributes` (Key-Value Map hỗ trợ cả Def ID lẫn Code), và `attributes` (Alias tương thích ngược bảo toàn mảng tag) thông qua `EntityCustomFieldsHelper`.
 
 ---
 
-## 2. Database Schema & Quan hệ Dữ liệu
+## 2. Database Schema & Bảng Ánh Xạ
 
 ### 2.1. Bảng `erp_inventory_items` (Mặt hàng / SKU)
 
@@ -42,30 +28,33 @@ Module `erp-inventory-items` (thuộc phân hệ `inventory-core`) quản lý to
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (Primary Key) |
 | `sku` | `varchar(255)` | NO | | Mã SKU duy nhất (Unique Index `idx_inventory_items_sku`) |
 | `item_name` | `varchar(255)` | NO | | Tên mặt hàng |
-| `uom_id` | `uuid` | NO | | FK $\to$ `erp_uom.id` (Đơn vị tính) |
+| `uom_id` | `uuid` | NO | | FK $\to$ `erp_uoms.id` (Đơn vị tính) |
 | `item_type_id` | `uuid` | NO | | FK $\to$ `erp_item_types.id` (Loại mặt hàng) |
 | `tracking_policy_id` | `uuid` | YES | `NULL` | FK $\to$ `erp_tracking_policies.id` (Chính sách tracking) |
-| `tracking_category_id` | `uuid` | YES | `NULL` | FK $\to$ `erp_tracking_categories.id` (Nhóm tracking) |
 | `status` | `varchar(255)` | NO | `'ACTIVE'` | Trạng thái: `ACTIVE`, `INACTIVE` |
 | `note` | `text` | YES | `NULL` | Ghi chú mô tả mặt hàng |
-| `attributes` | `text[]` | NO | `'{}'` | Mảng thuộc tính mở rộng (màu sắc, thông số) |
+| `attributes` | `text[]` | NO | `'{}'` | Cột mảng lưu tags nghiệp vụ (`CAN_BE_SOLD`, `CAN_BE_MANUFACTURED`...) |
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm (Soft delete) |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
-### 2.2. Các Bảng Master Data Danh Mục Liên Quan
+### 2.2. Bảng Master Data & Bảng Lưu Trữ EAV
+- `erp_uoms`: Chứa các ĐVT: `CAI` (Cái), `BO` (Bộ), `CUON` (Cuốn), `CON` (Con), `GRAM` (Gram), `SOI` (Sợi), `CONG` (Công), `PCS` (Piece), `KG`, `LIT`, `MET`, `CHIEC`, `HOP`, `BINH`, `GOI`.
+- `erp_item_types`: Chứa phân loại mặt hàng gốc (`RAW` - Linh kiện, `FG` - Thành phẩm, `SERVICE` - Dịch vụ).
+- `erp_tracking_policies`: Chứa chính sách định danh (`NONE`, `SERIAL`, `LOT`, `VEHICLE`, `CUSTOM`).
+- `erp_entity_attribute_values`: Lưu trữ toàn bộ EAV của SKU (`entity_type = 'INVENTORY_ITEM'`).
 
-#### Bảng `erp_uom` (Đơn vị tính)
-- `id` (`uuid`), `code` (`varchar(100)` unique: vd `CAI`, `BO`, `KG`, `LIT`), `name` (`varchar(255)`), `description` (`text`), `is_active` (`boolean`), `is_deleted` (`boolean`).
+### 2.3. Bảng Ánh Xạ Chuẩn Hóa Code & Alias (Normalization Table)
 
-#### Bảng `erp_item_types` (Loại mặt hàng)
-- `id` (`uuid`), `code` (`varchar(100)` unique: vd `RAW_MATERIAL`, `FINISHED_GOODS`, `SPARE_PART`, `SERVICE`), `name` (`varchar(255)`), `description` (`text`), `is_active` (`boolean`), `is_deleted` (`boolean`).
-
-#### Bảng `erp_tracking_policies` (Chính sách theo dõi)
-- `id` (`uuid`), `code` (`varchar(50)` unique: `NONE`, `SERIAL`, `LOT`, `CUSTOM`, `VEHICLE`), `name` (`varchar(255)`), `description` (`text`), `is_active` (`boolean`), `is_deleted` (`boolean`).
-
-#### Bảng `erp_tracking_categories` (Nhóm phân loại định danh)
-- `id` (`uuid`), `code` (`varchar(100)` unique), `name` (`varchar(255)`), `description` (`text`), `is_active` (`boolean`), `is_deleted` (`boolean`).
+| Field | Mã Trong EAV / Module Config | Mã Gốc / Alias Trong Hệ Thống | Diễn Giải Tiếng Việt |
+| :--- | :--- | :--- | :--- |
+| **Loại Item** | `RAW_MATERIAL` | `RAW` | Nguyên vật liệu / Linh kiện |
+| **Loại Item** | `FINISHED_GOODS` | `FG`, `FINISHED` | Thành phẩm xe / Pin / Cụm lắp ráp |
+| **Loại Item** | `SPARE_PART` | `PART` | Phụ tùng / Linh kiện thay thế |
+| **Loại Item** | `SERVICE` | `SERVICE` | Dịch vụ sửa chữa / Nhân công |
+| **Loại Item** | `SEMI_FINISHED` | `SEMI_FINISHED` | Bán thành phẩm |
+| **Loại Item** | `CONSUMABLE` | `CONSUMABLE` | Vật tư tiêu hao (keo, mỡ, ốc...) |
+| **Thuộc tính** | `item_features` | `attributes` | `CAN_BE_SOLD`, `CAN_BE_PURCHASED`, `CAN_BE_MANUFACTURED` |
 
 ---
 
@@ -75,40 +64,33 @@ Module `erp-inventory-items` (thuộc phân hệ `inventory-core`) quản lý to
 ```text
 src/inventory-core/
 ├── entities/
-│   ├── erp_inventory_item.entity.ts          # Entity SKU mặt hàng
-│   ├── erp_uom.entity.ts                     # Entity Đơn vị tính
-│   ├── erp_item_type.entity.ts               # Entity Loại mặt hàng
-│   ├── erp_tracking_policy.entity.ts         # Entity Chính sách tracking
-│   └── erp_tracking_category.entity.ts       # Entity Nhóm tracking
+│   ├── erp_inventory_item.entity.ts          # Entity SKU mặt hàng (hỗ trợ customAttributes & attributeValues)
+│   ├── erp_uom.entity.ts                     # Entity Đơn vị tính (bảng erp_uoms)
+│   ├── erp_item_type.entity.ts               # Entity Loại mặt hàng (bảng erp_item_types)
+│   └── erp_tracking_policy.entity.ts         # Entity Chính sách tracking (bảng erp_tracking_policies)
 ├── dto/
-│   ├── create-item.dto.ts                    # DTO tạo SKU (sku, itemName, uomId, itemTypeId, trackingPolicyId, etc.)
+│   ├── create-item.dto.ts                    # DTO tạo SKU (kế thừa BaseEntityCustomFieldsDto)
 │   ├── update-item.dto.ts                    # DTO sửa SKU
-│   ├── inventory-item-query.dto.ts           # DTO phân trang & lọc danh sách SKU
-│   ├── create-uom.dto.ts / update-uom.dto.ts # DTOs đơn vị tính
-│   └── create-item-type.dto.ts               # DTOs loại mặt hàng
+│   └── inventory-item-query.dto.ts           # DTO phân trang & lọc danh sách SKU
 ├── services/
-│   ├── inventory-items-query.service.ts      # Service truy vấn tìm kiếm, filter, phân trang SKU
-│   ├── inventory-items-lifecycle.service.ts  # Service CRUD mặt hàng, soft-delete guards, connections, movements
+│   ├── inventory-items-query.service.ts      # Service query & batch enrichment (EntityCustomFieldsHelper.enrichMany)
+│   ├── inventory-items-lifecycle.service.ts  # Service CRUD mặt hàng (EntityCustomFieldsHelper.saveInTx & enrichOne)
 │   └── inventory-masters.service.ts          # Service quản lý Master Data (UOM, Item Types, Tracking Policies)
 ├── inventory-core.controller.ts              # Controller các routes /api/v1/inventory/*
-└── inventory-core.service.ts                 # Facade service tích hợp các domain services
+└── inventory-core.module.ts                  # Module NestJS
 ```
 
 ### 3.2. Frontend (`erp-web`)
 ```text
 src/
 ├── pages/
-│   ├── MfgItems.tsx                          # Trang Quản lý Danh mục Vật tư / Mặt hàng chuẩn
-│   └── inventory/
-│       ├── InventoryUomPage.tsx              # Trang Quản lý Đơn vị tính (UOM)
-│       ├── InventoryItemTypesPage.tsx        # Trang Quản lý Loại mặt hàng
-│       └── InventoryTrackingCategoriesPage.tsx # Trang Quản lý Nhóm Tracking
+│   ├── MfgItems.tsx                          # Trang Quản lý Danh mục Mặt hàng chuẩn
+│   └── inventory/InventoryStockPage.tsx      # Sổ tổng hợp tồn kho
 └── modules/inventory-core/
-    ├── api/inventoryCoreApi.ts               # Client API calls cho Items và Master data
-    ├── components/
-    │   ├── InventoryItemFormDrawer.tsx       # StandardFormDrawer tạo/sửa thông tin mặt hàng
-    │   └── InventoryStockLedgerSection.tsx   # Hiển thị lịch sử xuất nhập và tồn kho của mặt hàng
-    └── hooks/useInventoryGraph.ts            # Hook vẽ sơ đồ quan hệ phụ thuộc chứng từ (connections)
+    ├── api/inventoryCoreApi.ts               # Client API calls cho Items (hỗ trợ customAttributes)
+    └── components/
+        ├── InventoryItemFormDrawer.tsx       # StandardFormDrawer tích hợp Module Config, tự động normalize code & load masters
+        └── InventoryStockLedgerSection.tsx   # Lịch sử xuất nhập và tồn kho của mặt hàng
 ```
 
 ---
@@ -120,50 +102,56 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách mặt hàng (phân trang, search, lọc theo itemTypeId, trackingPolicy, column_search, column_filters, sort) |
-| `GET` | `/api/v1/inventory/items/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách distinct options phục vụ filter đa chiều cho các cột DataTable |
-| `GET` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'read' }` | Lấy chi tiết mặt hàng theo ID |
-| `POST` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'create' }` | Tạo mới mặt hàng (tự động khởi tạo bản ghi `erp_inventory_balances` ban đầu) |
-| `PATCH` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'update' }` | Cập nhật thông tin mặt hàng |
+| `GET` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách mặt hàng (tự động nhúng `customAttributes`, `attributeValues`) |
+| `GET` | `/api/v1/inventory/items/column-options` | `{ resource: 'inventory_items', action: 'read' }` | Lấy danh sách distinct options phục vụ filter đa chiều cho DataTable |
+| `GET` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'read' }` | Lấy chi tiết mặt hàng theo ID (nhúng đầy đủ 3 trường Module Config) |
+| `GET` | `/api/v1/inventory/items/:id/traceability-graph` | `{ resource: 'inventory_items', action: 'read' }` | Lấy cây đồ thị mạng lưới chứng từ liên kết đa tầng (Traceability Graph Data) giữa Item $\leftrightarrow$ NK $\leftrightarrow$ XK $\leftrightarrow$ MO $\leftrightarrow$ PO $\leftrightarrow$ SO $\leftrightarrow$ BOM |
+| `POST` | `/api/v1/inventory/items` | `{ resource: 'inventory_items', action: 'create' }` | Tạo mới mặt hàng (hỗ trợ cả Code, Alias lẫn UUID, lưu `customAttributes` qua Transaction EAV) |
+| `PATCH` | `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'update' }` | Cập nhật mặt hàng & đồng bộ `customAttributes` |
 | `DELETE`| `/api/v1/inventory/items/:id` | `{ resource: 'inventory_items', action: 'delete' }` | Xóa mềm mặt hàng (có kiểm tra an toàn dữ liệu) |
-| `GET` | `/api/v1/inventory/items/:id/connections` | `{ resource: 'inventory_items', action: 'read' }` | Lấy sơ đồ quan hệ chứng từ phụ thuộc (PO, SO, GR, GI, MO, BOM) |
-| `GET` | `/api/v1/inventory/items/:id/movements` | `{ resource: 'inventory_items', action: 'read' }` | Lấy dòng lịch sử xuất nhập tồn của mặt hàng |
-| `GET` | `/api/v1/inventory/items/balances` | `{ resource: 'inventory_items', action: 'read' }` | Lấy số dư tồn kho tức thời cho danh sách ID mặt hàng |
-| `GET` | `/api/v1/inventory/uoms` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách đơn vị tính |
-| `POST` | `/api/v1/inventory/uoms` | `{ resource: 'inventory_items', action: 'create' }` | Tạo mới đơn vị tính |
-| `PATCH` | `/api/v1/inventory/uoms/:id` | `{ resource: 'inventory_items', action: 'update' }` | Sửa đơn vị tính |
-| `DELETE`| `/api/v1/inventory/uoms/:id` | `{ resource: 'inventory_items', action: 'delete' }` | Xóa mềm đơn vị tính |
-| `GET` | `/api/v1/inventory/item-types` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách loại mặt hàng |
-| `GET` | `/api/v1/inventory/tracking-policies` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách chính sách theo dõi định danh |
-| `GET` | `/api/v1/inventory/tracking-categories` | `{ resource: 'inventory_items', action: 'read' }` | Danh sách nhóm phân loại tracking |
 
 ---
 
-## 5. Logic Nghiệp vụ Trọng tâm
+## 5. Hướng Dẫn & Runbook Migration Từ Cơ Chế Cũ Sang Cơ Chế Mới
 
-### 5.1. Quy trình Tạo Mặt Hàng Mới (`create`)
-1. Kiểm tra tính hợp lệ của mã SKU (không trùng với SKU khác chưa bị xóa).
-2. Kiểm tra sự tồn tại của `uomId` và `itemTypeId`.
-3. Lưu bản ghi vào bảng `erp_inventory_items`.
-4. Tự động khởi tạo bản ghi số dư ban đầu trong `erp_inventory_balances` với `warehouse_code = 'MAIN'`, `qty_on_hand = 0`, `qty_reserved = 0`, `avg_unit_cost = 0`.
+### 5.1. Quy trình Chạy Migration TypeORM
+Khi triển khai trên database mới hoặc cập nhật môi trường staging/production:
 
-### 5.2. Quy trình Xóa Mềm An Toàn (`softDeleteItem`)
-1. Kiểm tra tồn tại mặt hàng trong DB.
-2. Kiểm tra xem mặt hàng đã phát sinh số lượng tồn kho $> 0$ trong `erp_inventory_balances` hay chưa.
-3. Kiểm tra số lượng Serial đã tạo trong `erp_inventory_tracking_serials`.
-4. Nếu mặt hàng đã có phát sinh giao dịch nghiệp vụ: Cập nhật `is_deleted = true` và `status = 'INACTIVE'`, giữ nguyên dữ liệu lịch sử để đảm bảo tính toàn vẹn kiểm toán (Audit Trail).
+1. **Chạy TypeORM Migration Runner**:
+   ```bash
+   cd /home/dev/repos/erp/erp-api
+   bun run migration:run
+   ```
+2. **File Migration Chính**: `src/migrations/1788900000000-MigrateInventoryItemAttributesToModuleConfig.ts`.
+3. **Các Bước Migration Thực Hiện Tự Động**:
+   - Bổ sung toàn bộ options còn thiếu trong `erp_module_attribute_defs` (`code = 'uom'`, `code = 'item_type'`).
+   - Đọc mảng `attributes: text[]` hiện có trên `erp_inventory_items` và insert vào `erp_entity_attribute_values` dưới dạng JSON array chuỗi (`["CAN_BE_SOLD", "CAN_BE_MANUFACTURED"]`).
+   - Tự động map và đồng bộ mã UOM (`erp_uoms.code`), Loại Item (`RAW` $\to$ `RAW_MATERIAL`, `FG` $\to$ `FINISHED_GOODS`) và Tracking Policy (`erp_tracking_policies.code`) sang bảng EAV.
+   - Thao tác là hoàn toàn Idempotent (không insert trùng lặp).
+
+### 5.2. Nguyên Tắc Lập Trình (Best Practices)
+- **Backend Lifecycle Service**:
+  - Khi client gửi `itemTypeId`, `uomId`, hoặc `trackingPolicyId` dưới dạng Code string (`RAW_MATERIAL`, `CAI`, `VEHICLE`) hoặc UUID, service tự động phân giải qua `normalizeItemTypeCode` và gán ID vào bảng chính, đồng thời gọi `EntityCustomFieldsHelper.saveInTx` để lưu EAV nguyên tử.
+- **Backend Query Service**:
+  - Dùng `EntityCustomFieldsHelper.enrichMany` (Batch 1 query) để nhúng `customAttributes` & `attributeValues` cho danh sách mặt hàng.
+  - Tự động parse JSON string cho các giá trị mảng như `item_features`.
+  - Không bao giờ ghi đè `(item as any).attributes = {}` làm mất mảng tags nghiệp vụ của PostgreSQL entity.
+- **Frontend Form Drawer**:
+  - Chỉ gọi `moduleConfigApi.getGlobalAttributeDefs("INVENTORY_ITEM")` 1 lần duy nhất trong `loadMasters`.
+  - Không gọi lại các API cũ (`listUoms`, `listItemTypes`, `listTrackingPolicies`).
+  - Trong `buildForm(item)`: Sử dụng `normalizeItemTypeCode` để khớp mã `item_type` với danh sách options từ Module Config.
+  - Hỗ trợ đa tầng fallback cho `item_features`: `customAttributes.item_features` $\to$ `attributeValues` $\to$ `attributes` array.
 
 ---
 
-## 6. Tích hợp Liên Module
+## 6. Quy tắc Kiểm thử & Báo cáo Chất lượng (QC Mandate)
 
-- **`purchase-orders-core` & `goods-receipts-core`**: Dùng SKU để tạo dòng đơn mua và phiếu nhập kho.
-- **`sales-orders-core` & `goods-issues-core`**: Dùng SKU để tạo đơn bán và phiếu xuất kho giao khách.
-- **`bom-core` & `production-core`**: Dùng SKU làm thành phẩm hoặc nguyên vật liệu định mức trong lệnh sản xuất.
-
----
-
-## 7. Quy tắc Kiểm thử & Báo cáo Chất lượng (QC Mandate)
-
-1. **TypeCheck**: Chạy `bun run check:ci` trong `erp-api/` và `erp-web/`.
-2. **Unit Tests**: Chạy `bunx jest src/inventory-core/services/inventory-items-query.service.spec.ts --forceExit`.
+1. **Backend Tests & CI Check**:
+   ```bash
+   cd /home/dev/repos/erp/erp-api && bun test src/inventory-core
+   cd /home/dev/repos/erp/erp-api && bun run check:ci
+   ```
+2. **Frontend Type Check**:
+   ```bash
+   cd /home/dev/repos/erp/erp-web && bun run type:check
+   ```

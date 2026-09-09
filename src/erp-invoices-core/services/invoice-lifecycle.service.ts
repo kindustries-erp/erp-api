@@ -120,7 +120,10 @@ export class InvoiceLifecycleService {
 
     // Load custom attributes & global attributes
     const entityAttrValues = await this.entityAttrValueRepo.find({
-      where: { entityType: 'INVOICE', entityId: data.id },
+      where: {
+        entityType: In(['INVOICE', 'INVOICE_IN', 'INVOICE_OUT']),
+        entityId: data.id,
+      },
       relations: ['attrDef'],
     });
 

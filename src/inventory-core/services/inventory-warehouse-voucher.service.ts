@@ -457,7 +457,7 @@ export class InventoryWarehouseVoucherService {
         FROM public.erp_goods_receipts g
         LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
         LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id
-        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
         WHERE ${receiptWhere}
       `);
     }
@@ -477,7 +477,7 @@ export class InventoryWarehouseVoucherService {
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         LEFT JOIN public.erp_sales_orders so ON g.sales_order_id = so.id
-        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
         WHERE ${issueWhere}
       `);
     }
@@ -495,7 +495,7 @@ export class InventoryWarehouseVoucherService {
                cat.code as "categoryCode",
                (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
         FROM public.erp_inventory_adjustments g
-        LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
         WHERE ${adjustmentWhere}
       `);
     }
@@ -870,11 +870,11 @@ export class InventoryWarehouseVoucherService {
       `;
     } else if (column === 'category' || column === 'categoryName') {
       selectExpr = `
-        ${includeReceipts ? `SELECT cat.name as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${receiptWhere}` : ''}
+        ${includeReceipts ? `SELECT cat.name as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${receiptWhere}` : ''}
         ${includeReceipts && includeIssues ? 'UNION ALL' : ''}
-        ${includeIssues ? `SELECT cat.name as val FROM public.erp_goods_issues g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${issueWhere}` : ''}
+        ${includeIssues ? `SELECT cat.name as val FROM public.erp_goods_issues g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${issueWhere}` : ''}
         ${(includeReceipts || includeIssues) && includeAdjustments ? 'UNION ALL' : ''}
-        ${includeAdjustments ? `SELECT cat.name as val FROM public.erp_inventory_adjustments g LEFT JOIN public.erp_bom_categories cat ON g.category_id = cat.id WHERE ${adjustmentWhere}` : ''}
+        ${includeAdjustments ? `SELECT cat.name as val FROM public.erp_inventory_adjustments g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${adjustmentWhere}` : ''}
       `;
     } else if (column === 'remarks') {
       selectExpr = `

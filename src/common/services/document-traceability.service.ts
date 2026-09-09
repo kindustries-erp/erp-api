@@ -74,6 +74,16 @@ export class DocumentTraceabilityService {
   }
 
   /**
+   * Main entry point to get Traceability Graph starting from an Inventory Item (SKU)
+   */
+  async getInventoryItemTraceabilityGraph(
+    itemId: string,
+    user?: any,
+  ): Promise<TraceabilityGraphDto> {
+    return this.buildGraph('INVENTORY_ITEM', itemId, user);
+  }
+
+  /**
    * Universal Multi-hop BFS Traceability Graph Builder
    */
   async buildGraph(
@@ -101,6 +111,10 @@ export class DocumentTraceabilityService {
           'Không tìm thấy phiếu dịch vụ / sổ báo giá',
         );
       rawNodesMap.set(c.id, { ...c, depth: 0 });
+    } else if (rootType === 'INVENTORY_ITEM') {
+      const item = await this.fetchInventoryItem(rootId);
+      if (!item) throw new NotFoundException('Không tìm thấy mặt hàng kho');
+      rawNodesMap.set(item.id, { ...item, depth: 0 });
     }
 
     // 2. Discover Direct & Transitive Relationships (BFS Traversal)
@@ -153,6 +167,15 @@ export class DocumentTraceabilityService {
         );
       } else if (current.type === 'GARAGE_CASE') {
         await this.expandGarageCaseNode(
+          current.id,
+          current.depth,
+          rawNodesMap,
+          rawEdgesMap,
+          queue,
+          visited,
+        );
+      } else if (current.type === 'INVENTORY_ITEM') {
+        await this.expandInventoryItemNode(
           current.id,
           current.depth,
           rawNodesMap,
@@ -820,8 +843,10 @@ export class DocumentTraceabilityService {
   ) {
     // Expand Goods Receipts of PO (Phiếu nhập kho)
     const grRows = await this.dataSource.query(
-      `SELECT id, receipt_no, receipt_date, status, total_amount FROM erp_goods_receipts
-       WHERE purchase_order_id = $1 AND is_deleted = false`,
+      `SELECT gr.id, gr.receipt_no, gr.receipt_date, gr.status,
+              COALESCE((SELECT SUM(amount) FROM erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = gr.id), 0) as total_amount
+       FROM erp_goods_receipts gr
+       WHERE gr.purchase_order_id = $1 AND gr.is_deleted = false`,
       [poId],
     );
 
@@ -864,8 +889,10 @@ export class DocumentTraceabilityService {
   ) {
     // Expand Goods Issues of SO (Phiếu xuất kho)
     const giRows = await this.dataSource.query(
-      `SELECT id, issue_no, issue_date, status, total_amount FROM erp_goods_issues
-       WHERE sales_order_id = $1 AND is_deleted = false`,
+      `SELECT gi.id, gi.issue_no, gi.issue_date, gi.status,
+              COALESCE((SELECT SUM(amount) FROM erp_goods_issue_lines il WHERE il.goods_issue_id = gi.id), 0) as total_amount
+       FROM erp_goods_issues gi
+       WHERE gi.sales_order_id = $1 AND gi.is_deleted = false`,
       [soId],
     );
 
@@ -1102,6 +1129,225 @@ export class DocumentTraceabilityService {
     }
   }
 
+  private async fetchInventoryItem(id: string): Promise<RawNodeItem | null> {
+    const rows = await this.dataSource.query(
+      `SELECT i.id, i.sku, i.item_name, i.status, u.name as uom_name, it.name as item_type_name
+       FROM erp_inventory_items i
+       LEFT JOIN erp_uoms u ON u.id = i.uom_id
+       LEFT JOIN erp_item_types it ON it.id = i.item_type_id
+       WHERE i.id = $1 AND i.is_deleted = false LIMIT 1`,
+      [id],
+    );
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      docType: 'INVENTORY_ITEM',
+      docNo: r.sku,
+      title: r.item_name,
+      status: r.status,
+      partnerName:
+        `${r.item_type_name || ''}${r.uom_name ? ' — ĐVT: ' + r.uom_name : ''}`.trim(),
+      depth: 0,
+      metadata: {
+        sku: r.sku,
+        itemName: r.item_name,
+      },
+    };
+  }
+
+  private async expandInventoryItemNode(
+    itemId: string,
+    currentDepth: number,
+    nodes: Map<string, RawNodeItem>,
+    edges: Map<string, RawEdgeItem>,
+    queue: { id: string; type: TraceabilityNodeType; depth: number }[],
+    visited: Set<string>,
+  ) {
+    // 1. Goods Receipts có chứa item này
+    const grRows = await this.dataSource.query(
+      `SELECT gr.id, gr.receipt_no, gr.receipt_date, gr.status, gr.purchase_order_id, gr.production_order_id,
+              SUM(l.qty_received) as item_qty,
+              COALESCE(SUM(l.amount), 0) as item_amount
+       FROM erp_goods_receipt_lines l
+       JOIN erp_goods_receipts gr ON gr.id = l.goods_receipt_id
+       WHERE l.item_id = $1 AND gr.is_deleted = false
+       GROUP BY gr.id, gr.receipt_no, gr.receipt_date, gr.status, gr.purchase_order_id, gr.production_order_id
+       ORDER BY gr.receipt_date DESC LIMIT 15`,
+      [itemId],
+    );
+
+    for (const gr of grRows) {
+      if (!nodes.has(gr.id)) {
+        nodes.set(gr.id, {
+          id: gr.id,
+          docType: 'GOODS_RECEIPT',
+          docNo: gr.receipt_no,
+          title: `Phiếu nhập kho (${gr.receipt_no})`,
+          date: gr.receipt_date
+            ? new Date(gr.receipt_date).toISOString().slice(0, 10)
+            : null,
+          amount: Number(gr.item_amount || 0),
+          status: gr.status,
+          statusVariant:
+            gr.status === 'CONFIRMED' || gr.status === 'POSTED'
+              ? 'default'
+              : 'secondary',
+          partnerName: `SL nhập: +${Number(gr.item_qty || 0)}`,
+          depth: currentDepth + 1,
+          metadata: {
+            purchaseOrderId: gr.purchase_order_id,
+            productionOrderId: gr.production_order_id,
+          },
+        });
+
+        if (!visited.has(gr.id)) {
+          visited.add(gr.id);
+          queue.push({
+            id: gr.id,
+            type: 'GOODS_RECEIPT',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      const edgeId = `e-gr-${gr.id}-item-${itemId}`;
+      if (!edges.has(edgeId)) {
+        edges.set(edgeId, {
+          id: edgeId,
+          source: gr.id,
+          target: itemId,
+          relationType: 'RECEIPT_OF',
+          label: `Nhập kho (+${Number(gr.item_qty || 0)})`,
+          amount: Number(gr.item_qty || 0),
+          isTransitive: currentDepth > 0,
+        });
+      }
+    }
+
+    // 2. Goods Issues có chứa item này
+    const giRows = await this.dataSource.query(
+      `SELECT gi.id, gi.issue_no, gi.issue_date, gi.status, gi.sales_order_id, gi.production_order_id,
+              SUM(l.qty_issued) as item_qty,
+              COALESCE(SUM(l.amount), 0) as item_amount
+       FROM erp_goods_issue_lines l
+       JOIN erp_goods_issues gi ON gi.id = l.goods_issue_id
+       WHERE l.item_id = $1 AND gi.is_deleted = false
+       GROUP BY gi.id, gi.issue_no, gi.issue_date, gi.status, gi.sales_order_id, gi.production_order_id
+       ORDER BY gi.issue_date DESC LIMIT 15`,
+      [itemId],
+    );
+
+    for (const gi of giRows) {
+      if (!nodes.has(gi.id)) {
+        nodes.set(gi.id, {
+          id: gi.id,
+          docType: 'GOODS_ISSUE',
+          docNo: gi.issue_no,
+          title: `Phiếu xuất kho (${gi.issue_no})`,
+          date: gi.issue_date
+            ? new Date(gi.issue_date).toISOString().slice(0, 10)
+            : null,
+          amount: Number(gi.item_amount || 0),
+          status: gi.status,
+          statusVariant:
+            gi.status === 'CONFIRMED' || gi.status === 'POSTED'
+              ? 'default'
+              : 'secondary',
+          partnerName: `SL xuất: -${Number(gi.item_qty || 0)}`,
+          depth: currentDepth + 1,
+          metadata: {
+            salesOrderId: gi.sales_order_id,
+            productionOrderId: gi.production_order_id,
+          },
+        });
+
+        if (!visited.has(gi.id)) {
+          visited.add(gi.id);
+          queue.push({
+            id: gi.id,
+            type: 'GOODS_ISSUE',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      const edgeId = `e-item-${itemId}-gi-${gi.id}`;
+      if (!edges.has(edgeId)) {
+        edges.set(edgeId, {
+          id: edgeId,
+          source: itemId,
+          target: gi.id,
+          relationType: 'ISSUE_OF',
+          label: `Xuất kho (-${Number(gi.item_qty || 0)})`,
+          amount: Number(gi.item_qty || 0),
+          isTransitive: currentDepth > 0,
+        });
+      }
+    }
+
+    // 3. Production Orders (Thành phẩm hoặc Nguyên vật liệu)
+    const poRows = await this.dataSource.query(
+      `SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty
+       FROM erp_production_orders p
+       WHERE p.finished_good_item_id = $1 AND p.is_deleted = false
+       UNION
+       SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty
+       FROM erp_production_orders p
+       JOIN erp_production_order_materials m ON p.id = m.production_order_id
+       WHERE m.item_id = $1 AND p.is_deleted = false
+       GROUP BY p.id, p.reference_no, p.planned_start_date, p.status
+       ORDER BY "orderDate" DESC LIMIT 15`,
+      [itemId],
+    );
+
+    for (const po of poRows) {
+      if (!nodes.has(po.id)) {
+        nodes.set(po.id, {
+          id: po.id,
+          docType: 'PRODUCTION_ORDER',
+          docNo: po.orderNo || `PO-${po.id.slice(0, 8)}`,
+          title: `Lệnh sản xuất (${po.orderNo || ''})`,
+          date: po.orderDate
+            ? new Date(po.orderDate).toISOString().slice(0, 10)
+            : null,
+          amount: Number(po.qty || 0),
+          status: po.status,
+          statusVariant: po.status === 'COMPLETED' ? 'default' : 'secondary',
+          partnerName:
+            po.role === 'FG'
+              ? `Thành phẩm: ${po.qty}`
+              : `Nguyên vật liệu: ${po.qty}`,
+          depth: currentDepth + 1,
+        });
+
+        if (!visited.has(po.id)) {
+          visited.add(po.id);
+          queue.push({
+            id: po.id,
+            type: 'PRODUCTION_ORDER',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      const isFg = po.role === 'FG';
+      const edgeId = isFg
+        ? `e-po-${po.id}-item-${itemId}`
+        : `e-item-${itemId}-po-${po.id}`;
+      if (!edges.has(edgeId)) {
+        edges.set(edgeId, {
+          id: edgeId,
+          source: isFg ? po.id : itemId,
+          target: isFg ? itemId : po.id,
+          relationType: isFg ? 'OUTPUT_OF' : 'MATERIAL_FOR',
+          label: isFg ? 'Thành phẩm sản xuất' : 'Vật tư định mức',
+          isTransitive: currentDepth > 0,
+        });
+      }
+    }
+  }
+
   private getResourceForDocType(docType: TraceabilityNodeType): ErpResource {
     switch (docType) {
       case 'INVOICE':
@@ -1113,8 +1359,15 @@ export class DocumentTraceabilityService {
       case 'SALES_ORDER':
         return ErpResource.SALES_ORDERS;
       case 'GOODS_RECEIPT':
+        return ErpResource.GOODS_RECEIPTS;
       case 'GOODS_ISSUE':
+        return ErpResource.GOODS_ISSUES;
+      case 'INVENTORY_ITEM':
         return ErpResource.INVENTORY_ITEMS;
+      case 'PRODUCTION_ORDER':
+        return ErpResource.PRODUCTION;
+      case 'BOM':
+        return ErpResource.BOM;
       case 'JOURNAL_ENTRY':
         return ErpResource.JOURNAL_ENTRIES;
       case 'GARAGE_CASE':

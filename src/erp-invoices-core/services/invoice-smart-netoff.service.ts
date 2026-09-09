@@ -48,6 +48,76 @@ export function removeVietnameseAccents(str: string): string {
     .replace(/Đ/g, 'D');
 }
 
+export const STOP_WORDS = new Set([
+  'cong',
+  'ty',
+  'tnhh',
+  'co',
+  'phan',
+  'cp',
+  'mtv',
+  'chi',
+  'nhanh',
+  'doanh',
+  'nghiep',
+  'tu',
+  'nhan',
+  'ho',
+  'kinh',
+  'thuong',
+  'mai',
+  'dich',
+  'vu',
+  'san',
+  'xuat',
+  'dau',
+  'tu',
+  'quoc',
+  'te',
+  'phat',
+  'trien',
+  'viet',
+  'nam',
+  'vietnam',
+  'ha',
+  'noi',
+  'ho',
+  'chi',
+  'minh',
+  'sai',
+  'gon',
+  'da',
+  'nang',
+  'binh',
+  'duong',
+  'dong',
+  'nai',
+  'tmdv',
+  'xnk',
+  'thanh',
+  'toan',
+  'chuyen',
+  'khoan',
+  'tien',
+  'hang',
+  'mua',
+  'ban',
+  'phu',
+  'tung',
+  'xe',
+  'oto',
+  'mot',
+  'hai',
+  'vien',
+  'tap',
+  'doan',
+]);
+
+export function cleanLicensePlate(str?: string | null): string {
+  if (!str) return '';
+  return str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
 export function extractPartnerKeywords(
   name: string | undefined | null,
 ): string[] {
@@ -55,17 +125,21 @@ export function extractPartnerKeywords(
   const normalized = name
     .toLowerCase()
     .replace(
-      /công ty|tnhh|cổ phần|\bmtv\b|\bcp\b|chi nhánh|doanh nghiệp|tư nhân/gi,
+      /công ty|tnhh|cổ phần|\bmtv\b|\bcp\b|chi nhánh|doanh nghiệp|tư nhân|hộ kinh doanh|tập đoàn|thương mại|dịch vụ|sản xuất|đầu tư|quốc tế|phát triển|việt nam|viet nam|vietnam|\btmdv\b|\bxnk\b|một thành viên|hai thành viên|hợp danh/gi,
       ' ',
     )
     .trim();
 
-  const words = normalized.split(/\s+/).filter((w) => w.length > 2);
+  const words = normalized.split(/[\s,.-]+/).filter((w) => w.length >= 3);
   const unaccentedWords = removeVietnameseAccents(normalized)
-    .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .split(/[\s,.-]+/)
+    .filter((w) => w.length >= 3);
 
-  return Array.from(new Set([...words, ...unaccentedWords]));
+  const combined = Array.from(new Set([...words, ...unaccentedWords]));
+  return combined.filter((w) => {
+    const unaccented = removeVietnameseAccents(w.toLowerCase());
+    return unaccented.length >= 3 && !STOP_WORDS.has(unaccented);
+  });
 }
 
 @Injectable()
@@ -121,21 +195,78 @@ export class InvoiceSmartNetoffService {
     const partnerName =
       direction === 'IN' ? invoice.sellerName : invoice.buyerName;
     const partnerKeywords = extractPartnerKeywords(partnerName);
+    const taxCode = (
+      direction === 'IN' ? invoice.sellerTaxCode : invoice.buyerTaxCode
+    )?.trim();
+
     const invoiceNo = (invoice.invoiceNo || '').trim();
+    const invoiceNoNormalized = (
+      invoice.invoiceNoNormalized || invoiceNo.replace(/^0+/, '')
+    ).trim();
+    const serialNo = (invoice.serialNo || '').trim();
+    const rawPlate = (invoice.licensePlate || '').trim();
+    const compactPlate = cleanLicensePlate(rawPlate);
+    const settlementOrder = (invoice.settlementOrder || '').trim();
 
     // Query candidates directly from DB
-    const queryParams: any[] = [invoiceRemaining];
-    let paramIdx = 2;
+    const queryParams: any[] = [invoiceRemaining, invoiceTotal];
+    let paramIdx = 3;
 
-    let textConditionSql = '';
     const textConditions: string[] = [];
 
+    // Exact invoice number (e.g. 0001234)
     if (invoiceNo.length > 0) {
       textConditions.push(`txn.description ILIKE $${paramIdx}`);
       queryParams.push(`%${invoiceNo}%`);
       paramIdx++;
     }
 
+    // Normalized invoice number (e.g. 1234 without leading zeros, only if >= 3 chars and different)
+    if (invoiceNoNormalized.length >= 3 && invoiceNoNormalized !== invoiceNo) {
+      textConditions.push(`txn.description ILIKE $${paramIdx}`);
+      queryParams.push(`%${invoiceNoNormalized}%`);
+      paramIdx++;
+    }
+
+    // Serial number (e.g. 1C26TGA)
+    if (serialNo.length >= 3) {
+      textConditions.push(`txn.description ILIKE $${paramIdx}`);
+      queryParams.push(`%${serialNo}%`);
+      paramIdx++;
+    }
+
+    // Tax Code
+    if (taxCode && taxCode.length >= 5) {
+      textConditions.push(
+        `(txn.correspondent_name ILIKE $${paramIdx} OR txn.description ILIKE $${paramIdx})`,
+      );
+      queryParams.push(`%${taxCode}%`);
+      paramIdx++;
+    }
+
+    // License Plate
+    if (rawPlate.length >= 4) {
+      textConditions.push(`txn.description ILIKE $${paramIdx}`);
+      queryParams.push(`%${rawPlate}%`);
+      paramIdx++;
+
+      if (compactPlate.length >= 4 && compactPlate !== rawPlate.toLowerCase()) {
+        textConditions.push(
+          `REPLACE(REPLACE(REPLACE(LOWER(txn.description), '.', ''), '-', ''), ' ', '') ILIKE $${paramIdx}`,
+        );
+        queryParams.push(`%${compactPlate}%`);
+        paramIdx++;
+      }
+    }
+
+    // Settlement Order
+    if (settlementOrder.length >= 4) {
+      textConditions.push(`txn.description ILIKE $${paramIdx}`);
+      queryParams.push(`%${settlementOrder}%`);
+      paramIdx++;
+    }
+
+    // Distinctive partner keywords
     for (const kw of partnerKeywords) {
       textConditions.push(
         `(txn.correspondent_name ILIKE $${paramIdx} OR txn.description ILIKE $${paramIdx})`,
@@ -144,6 +275,7 @@ export class InvoiceSmartNetoffService {
       paramIdx++;
     }
 
+    let textConditionSql = '';
     if (textConditions.length > 0) {
       textConditionSql = `OR ${textConditions.join(' OR ')}`;
     }
@@ -175,11 +307,13 @@ export class InvoiceSmartNetoffService {
         AND (${direction === 'IN' ? 'txn.debit_amount > 0' : 'txn.credit_amount > 0'})
         AND (GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0)) > 0
         AND (
-          ABS(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - $1) < 1
+          ABS((GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE(no_sum.used_amount, 0)) - $1) < 1
+          OR ABS(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - $1) < 1
+          OR ABS(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - $2) < 1
           ${textConditionSql}
         )
       ORDER BY txn.trans_date DESC
-      LIMIT 50
+      LIMIT 100
     `;
 
     const candidates: any[] = await this.invoiceRepo.manager.query(
@@ -194,24 +328,74 @@ export class InvoiceSmartNetoffService {
       : null;
 
     for (const raw of candidates) {
-      const txnAmt =
+      const grossAmt =
         direction === 'IN'
           ? parseFloat(raw.debitAmount) || 0
           : parseFloat(raw.creditAmount) || 0;
+      const remainingAmt = parseFloat(raw.remainingAmount) || 0;
 
-      const amtDiff = Math.abs(txnAmt - invoiceRemaining);
-      const amountMatch = amtDiff < 1; // Khớp tiền chính xác (sai lệch < 1đ)
+      // Check amount match against remaining or total
+      const matchGrossRemaining = Math.abs(grossAmt - invoiceRemaining) < 1;
+      const matchRemainRemaining =
+        Math.abs(remainingAmt - invoiceRemaining) < 1;
+      const matchGrossTotal = Math.abs(grossAmt - invoiceTotal) < 1;
+      const matchRemainTotal = Math.abs(remainingAmt - invoiceTotal) < 1;
+
+      const amountMatch =
+        matchGrossRemaining ||
+        matchRemainRemaining ||
+        matchGrossTotal ||
+        matchRemainTotal;
 
       const desc = (raw.description || '').toLowerCase();
+      const descCleaned = cleanLicensePlate(desc);
       const corr = (raw.correspondentName || '').toLowerCase();
 
-      const invoiceNoMatch =
+      // InvoiceNo / SerialNo match
+      const rawNoMatch =
         invoiceNo.length > 0 && desc.includes(invoiceNo.toLowerCase());
+      const normNoMatch =
+        invoiceNoNormalized.length >= 3 &&
+        desc.includes(invoiceNoNormalized.toLowerCase());
+      const serialMatch =
+        serialNo.length >= 3 && desc.includes(serialNo.toLowerCase());
+
+      const invoiceNoMatch = rawNoMatch || normNoMatch || serialMatch;
+
+      // License plate match
+      const plateMatch =
+        (rawPlate.length >= 4 && desc.includes(rawPlate.toLowerCase())) ||
+        (compactPlate.length >= 4 && descCleaned.includes(compactPlate));
+
+      // Settlement order match
+      const settlementMatch =
+        settlementOrder.length >= 4 &&
+        desc.includes(settlementOrder.toLowerCase());
+
+      const codeMatch = invoiceNoMatch || plateMatch || settlementMatch;
 
       const matchedKw: string[] = [];
-      if (invoiceNoMatch) matchedKw.push(invoiceNo);
+      if (rawNoMatch) matchedKw.push(invoiceNo);
+      else if (normNoMatch) matchedKw.push(invoiceNoNormalized);
+      if (serialMatch && !matchedKw.includes(serialNo))
+        matchedKw.push(serialNo);
+      if (plateMatch && !matchedKw.includes(rawPlate)) matchedKw.push(rawPlate);
+      if (settlementMatch && !matchedKw.includes(settlementOrder)) {
+        matchedKw.push(settlementOrder);
+      }
 
+      // Tax Code & Partner Match
       let correspondentMatch = false;
+      if (taxCode && taxCode.length >= 5) {
+        if (
+          corr.includes(taxCode.toLowerCase()) ||
+          desc.includes(taxCode.toLowerCase())
+        ) {
+          correspondentMatch = true;
+          if (!matchedKw.includes(taxCode)) matchedKw.push(taxCode);
+        }
+      }
+
       for (const kw of partnerKeywords) {
         if (corr.includes(kw) || desc.includes(kw)) {
           correspondentMatch = true;
@@ -230,29 +414,31 @@ export class InvoiceSmartNetoffService {
 
       if (amountMatch) {
         score += 10;
-        if (invoiceNoMatch && correspondentMatch) {
+        if (codeMatch && correspondentMatch) {
           badge = 'PERFECT';
           score += 8 + 5;
-        } else if (invoiceNoMatch) {
+        } else if (codeMatch) {
           badge = 'HIGH';
           score += 8;
         } else if (correspondentMatch) {
           badge = 'LIKELY';
           score += 5;
         } else {
-          // Chỉ khớp tiền chính xác 100%, không có số HĐ và đối tác
           badge = 'POSSIBLE';
         }
       } else {
         // Tiền KHÔNG khớp chính xác
-        if (invoiceNoMatch && correspondentMatch) {
+        if (codeMatch && correspondentMatch) {
           badge = 'NOTICE_STRONG';
           score += 8 + 5;
-        } else if (invoiceNoMatch) {
+        } else if (codeMatch) {
           badge = 'NOTICE';
           score += 8;
+        } else if (correspondentMatch && matchedKw.length > 0) {
+          badge = 'NOTICE';
+          score += 5;
         } else {
-          // Tiền không khớp VÀ không có số HĐ -> SKIP HOÀN TOÀN!
+          // Tiền không khớp VÀ không có tín hiệu mã/đối tác -> SKIP
           continue;
         }
       }
