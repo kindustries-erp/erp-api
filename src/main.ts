@@ -18,8 +18,30 @@ async function bootstrap() {
   // Cấu hình Global Exception Filter để bắt chi tiết lỗi 500 (VD: TypeORM crashes)
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Kích hoạt CORS (điều chỉnh origin cho production)
-  app.enableCors();
+  // Kích hoạt CORS chuyên sâu hỗ trợ reverse proxy, NPM và dynamic origins
+  app.enableCors({
+    origin: true, // Tự động echo Origin của request (hỗ trợ mọi domain, NPM proxy, localhost)
+    credentials: true, // Cho phép cookies, authorization headers
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Range',
+      'X-Custom-Header',
+      'Cache-Control',
+      'Pragma',
+    ],
+    exposedHeaders: [
+      'Content-Range',
+      'X-Total-Count',
+      'Content-Disposition',
+      'Content-Length',
+    ],
+    maxAge: 86400, // Preflight cache 24h
+  });
 
   // Tự động validate & transform DTO dựa theo class-validator
   app.useGlobalPipes(
