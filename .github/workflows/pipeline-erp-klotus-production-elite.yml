@@ -1,9 +1,11 @@
 name: Pipeline API — erp-klotus-master via Komodo Elite
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [erp-klotus-master]
   pull_request:
     branches: [erp-klotus-master]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
