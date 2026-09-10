@@ -4,15 +4,20 @@ export class MigrateLegacyGaragePermissions20260830230000 implements MigrationIn
   name = 'MigrateLegacyGaragePermissions20260830230000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // 1. Delete duplicate legacy permissions if the role already has equivalent 'garage' permission for the same action
+    // Delete rows that would collide with an existing canonical permission, or
+    // with an earlier legacy row when both old resources map to garage.
     await queryRunner.query(`
       DELETE FROM "core_permissions" p_legacy
+      USING "core_permissions" p_existing
       WHERE p_legacy."resource" IN ('greenway_integration', 'kgara_integration')
-        AND EXISTS (
-          SELECT 1 FROM "core_permissions" p_garage
-          WHERE p_garage."role_id" = p_legacy."role_id"
-            AND p_garage."resource" = 'garage'
-            AND p_garage."action" = p_legacy."action"
+        AND p_existing."role_id" = p_legacy."role_id"
+        AND p_existing."action" = p_legacy."action"
+        AND (
+          p_existing."resource" = 'garage'
+          OR (
+            p_existing."resource" IN ('greenway_integration', 'kgara_integration')
+            AND p_existing.ctid < p_legacy.ctid
+          )
         )
     `);
 
