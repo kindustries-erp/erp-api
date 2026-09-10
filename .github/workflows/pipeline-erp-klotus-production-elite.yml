@@ -1,8 +1,7 @@
 name: Pipeline API — erp-klotus-master via Komodo Elite
 
 on:
-  push:
-    branches: [erp-klotus-master]
+  workflow_dispatch:
   pull_request:
     branches: [erp-klotus-master]
 
