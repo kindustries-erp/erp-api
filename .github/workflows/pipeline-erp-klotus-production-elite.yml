@@ -118,9 +118,9 @@ jobs:
           R2_BUCKET_NAME=$R2_BUCKET_NAME"
           api_image="${IMAGE_NAME}:${IMAGE_SHA}"
           migrate_image="${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
-          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "KLOTUS_API_IMAGE=$api_image\n" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "KLOTUS_API_IMAGE=$api_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "$runtime_env" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
-          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" --arg contents "KLOTUS_MIGRATE_IMAGE=$migrate_image\n" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" --arg contents "KLOTUS_MIGRATE_IMAGE=$migrate_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
       - name: Run DB migration gate through Komodo
         env:
           KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
