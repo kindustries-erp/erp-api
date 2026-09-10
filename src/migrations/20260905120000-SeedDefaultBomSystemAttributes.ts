@@ -4,6 +4,14 @@ export class SeedDefaultBomSystemAttributes20260905120000 implements MigrationIn
   name = 'SeedDefaultBomSystemAttributes20260905120000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Production clones can still contain the legacy BOM table shape. Add the
+    // bilingual column before the idempotent seed below; later migrations keep
+    // the column when the table is renamed into module-config.
+    await queryRunner.query(`
+      ALTER TABLE "erp_bom_attribute_defs"
+      ADD COLUMN IF NOT EXISTS "name_en" character varying(255)
+    `);
+
     // 1. Định nghĩa danh sách tùy chọn song ngữ chuẩn cho thuộc tính Màu sắc
     const defaultColorOptions = JSON.stringify([
       {
