@@ -98,7 +98,7 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 | `correspondent_name` | `varchar(255)` | `NULL` | Tên đối tác / Người thụ hưởng đối ứng |
 | `correspondent_bank` | `varchar(255)` | `NULL` | Ngân hàng của đối tác |
 | `correspondent_accounting_account_id` | `uuid` | `FK -> erp_chart_of_accounts(id)`, `NULL` | Tài khoản kế toán đối ứng (vd: 331, 131) |
-| `category_id` | `uuid` | `FK -> erp_bom_categories(id)`, `NULL` | Danh mục phân loại giao dịch (`module_key = 'BANK_TXN'`) |
+| `category_id` | `uuid` | `FK -> erp_module_categories(id)`, `NULL` | Danh mục phân loại giao dịch (`module_key = 'BANK_TXN'`) |
 | `import_batch_id` | `varchar(50)` | `NULL` | Mã UUID của đợt upload file sao kê |
 | `is_deleted` | `boolean` | `default: false` | Cờ xóa mềm (hoặc khi rollback batch) |
 

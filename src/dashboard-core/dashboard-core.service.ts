@@ -4,7 +4,6 @@ import { ReportsCoreService } from '../reports-core/reports-core.service';
 import { InventoryItemsService } from '../inventory-core/inventory-core.service';
 import { BankTransactionsCoreService } from '../bank-transactions-core/bank-transactions-core.service';
 import { InvoiceDashboardService } from '../erp-invoices-core/invoice-dashboard.service';
-import { OperationalDocumentsService } from '../operational-documents/operational-documents.service';
 import { PurchaseOrdersCoreService } from '../purchase-orders-core/purchase-orders-core.service';
 import { OperatingExpensesCoreService } from '../operating-expenses-core/operating-expenses-core.service';
 
@@ -15,7 +14,6 @@ export class DashboardCoreService {
     private readonly inventoryItemsService: InventoryItemsService,
     private readonly bankTransactionsService: BankTransactionsCoreService,
     private readonly invoiceDashboardService: InvoiceDashboardService,
-    private readonly operationalDocumentsService: OperationalDocumentsService,
     private readonly purchaseOrdersCoreService: PurchaseOrdersCoreService,
     private readonly operatingExpensesCoreService: OperatingExpensesCoreService,
     private readonly dataSource: DataSource,

@@ -24,6 +24,15 @@ export class CreateModuleCategoryDto {
   @MaxLength(255)
   name: string;
 
+  @ApiPropertyOptional({
+    description: 'Category name (English)',
+    example: 'Car',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  nameEn?: string;
+
   @ApiPropertyOptional({ description: 'Description' })
   @IsString()
   @IsOptional()

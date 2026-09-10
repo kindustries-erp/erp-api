@@ -11,7 +11,6 @@ import {
 import { ErpUom } from './erp_uom.entity';
 import { ErpItemType } from './erp_item_type.entity';
 import { ErpTrackingPolicy } from './erp_tracking_policy.entity';
-import { ErpTrackingCategory } from './erp_tracking_category.entity';
 
 @Entity({ name: 'erp_inventory_items' })
 export class ErpInventoryItem {
@@ -53,14 +52,6 @@ export class ErpInventoryItem {
   @JoinColumn({ name: 'tracking_policy_id' })
   trackingPolicy: ErpTrackingPolicy | null;
 
-  /** FK → erp_tracking_categories.id */
-  @Column({ type: 'uuid', name: 'tracking_category_id', nullable: true })
-  trackingCategoryId: string | null;
-
-  @ManyToOne(() => ErpTrackingCategory, { nullable: true, eager: false })
-  @JoinColumn({ name: 'tracking_category_id' })
-  trackingCategory: ErpTrackingCategory | null;
-
   @Column({ type: 'text', array: true, default: [] })
   attributes: string[];
 
@@ -72,4 +63,8 @@ export class ErpInventoryItem {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  categoryId?: string | null;
+  attributeValues?: any[];
+  customAttributes?: Record<string, any>;
 }

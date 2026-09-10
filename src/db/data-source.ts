@@ -13,9 +13,8 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
@@ -38,7 +37,6 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
 import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inventory_tracking_custom.entity';
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
-import { ErpTrackingCategory } from '../inventory-core/entities/erp_tracking_category.entity';
 import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -93,9 +91,8 @@ const entities = [
   ErpInventoryBalance,
   ErpBom,
   ErpBomLine,
-  ErpBomCategory,
-  ErpBomAttributeDef,
-  ErpBomAttributeValue,
+  ErpModuleCategory,
+  ErpModuleAttributeDef,
   ErpEntityAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,
@@ -118,7 +115,6 @@ const entities = [
   ErpInventoryTrackingLot,
   ErpInventoryTrackingCustom,
   ErpTrackingPolicy,
-  ErpTrackingCategory,
   ErpBranch,
   ErpAuditLog,
   ErpItemType,

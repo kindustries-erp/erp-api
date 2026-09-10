@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
@@ -433,6 +437,15 @@ export class GarageOpexService {
   }
 
   async create(dto: CreateGarageOpexDto, userId?: string) {
+    if (
+      dto.categoryKey === 'HOA_HONG_SALE' ||
+      dto.categoryKey === 'HOA_HONG_DV'
+    ) {
+      throw new BadRequestException(
+        'Hoa hồng Sale và Hoa hồng Dịch vụ được hệ thống tự động tính toán từ P&L, không thể tạo thủ công. Vui lòng sử dụng mục "Hoa hồng khác" để điều chỉnh tăng/giảm.',
+      );
+    }
+
     const item = this.opexRepo.create({
       periodYear: Number(dto.periodYear),
       periodMonth: Number(dto.periodMonth),
@@ -485,9 +498,26 @@ export class GarageOpexService {
   }
 
   async update(id: string, dto: UpdateGarageOpexDto) {
+    if (id.startsWith('auto-')) {
+      throw new BadRequestException(
+        'Hoa hồng tự động không thể chỉnh sửa trực tiếp. Vui lòng sử dụng mục "Hoa hồng khác" để điều chỉnh số tiền.',
+      );
+    }
+
     const item = await this.opexRepo.findOne({ where: { id } });
     if (!item) {
       throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
+    }
+
+    if (
+      item.categoryKey === 'HOA_HONG_SALE' ||
+      item.categoryKey === 'HOA_HONG_DV' ||
+      dto.categoryKey === 'HOA_HONG_SALE' ||
+      dto.categoryKey === 'HOA_HONG_DV'
+    ) {
+      throw new BadRequestException(
+        'Hoa hồng Sale và Hoa hồng Dịch vụ được hệ thống tự động tính toán từ P&L, không thể chỉnh sửa trực tiếp. Vui lòng sử dụng mục "Hoa hồng khác" để điều chỉnh.',
+      );
     }
 
     if (dto.periodYear !== undefined) item.periodYear = Number(dto.periodYear);
@@ -528,9 +558,26 @@ export class GarageOpexService {
     dto: import('../dto/garage-opex.dto').ApplyRecurringOpexDto,
     userId?: string,
   ) {
+    if (id.startsWith('auto-')) {
+      throw new BadRequestException(
+        'Hoa hồng tự động không hỗ trợ thiết lập chi phí định kỳ.',
+      );
+    }
+
     const item = await this.opexRepo.findOne({ where: { id } });
     if (!item) {
       throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
+    }
+
+    if (
+      item.categoryKey === 'HOA_HONG_SALE' ||
+      item.categoryKey === 'HOA_HONG_DV' ||
+      dto.categoryKey === 'HOA_HONG_SALE' ||
+      dto.categoryKey === 'HOA_HONG_DV'
+    ) {
+      throw new BadRequestException(
+        'Hoa hồng tự động không hỗ trợ thiết lập chi phí định kỳ.',
+      );
     }
 
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
@@ -652,6 +699,9 @@ export class GarageOpexService {
   }
 
   async delete(id: string) {
+    if (id.startsWith('auto-')) {
+      throw new BadRequestException('Hoa hồng tự động không thể xóa.');
+    }
     const item = await this.opexRepo.findOne({ where: { id } });
     if (!item) {
       throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
@@ -662,6 +712,7 @@ export class GarageOpexService {
 
   /**
    * Tổng hợp chi phí vận hành cho kỳ Year/Month (phục vụ P&L report)
+   * Lưu ý: Tự động bỏ qua HOA_HONG_SALE và HOA_HONG_DV trong DB vì 2 khoản này tính động 100% từ P&L.
    */
   async getSummaryByPeriod(year: number, month: number) {
     const items = await this.opexRepo.find({
@@ -719,6 +770,14 @@ export class GarageOpexService {
         ojAmount: ojAmt,
         note: item.note,
       };
+
+      // Bỏ qua HOA_HONG_SALE và HOA_HONG_DV cũ trong DB (nếu có từ trước)
+      if (
+        item.categoryKey === 'HOA_HONG_SALE' ||
+        item.categoryKey === 'HOA_HONG_DV'
+      ) {
+        continue;
+      }
 
       if (
         item.categoryKey === 'HOA_HONG_TRUC_TIEP' ||

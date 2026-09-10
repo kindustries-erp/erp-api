@@ -39,7 +39,7 @@ export class FilesService {
     });
   }
 
-  async upload(file: Express.Multer.File, userToken: string) {
+  async upload(file: Express.Multer.File) {
     try {
       const fileId = randomUUID();
       const filenameDisk = `${fileId}-${file.originalname}`;
@@ -77,7 +77,7 @@ export class FilesService {
     return file;
   }
 
-  async getFileStream(id: string, userToken?: string) {
+  async getFileStream(id: string) {
     const file = await this.getFileMeta(id);
 
     try {

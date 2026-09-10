@@ -8,9 +8,12 @@ description: Module tri thức Định mức vật tư (BOM - Bill of Materials)
 ## 1. Tổng quan Nghiệp vụ
 
 Module BOM quản lý cấu trúc định mức nguyên vật liệu (Bill of Materials) cần thiết để sản xuất một đơn vị thành phẩm (Finished Good). BOM hỗ trợ:
-- **Cấu hình Danh mục & Thuộc tính động (BOM Config)**:
-  - Phân loại BOM theo Danh mục (Category) như Xe điện, Phụ kiện, Bán thành phẩm...
-  - Mỗi danh mục có thể định nghĩa tập thuộc tính động riêng biệt (Màu sắc, Phiên bản, Kích thước, Đời xe...).
+- **Cấu hình Danh mục & Thuộc tính động (BOM Config & EAV)**:
+  - Phân loại BOM theo Danh mục (Category) hoặc dùng Thuộc tính mặc định toàn hệ thống (`color`, `version`).
+  - Hệ thống tích hợp với bảng EAV dùng chung `erp_entity_attribute_values` (`entity_type = 'BOM'`), hỗ trợ `globalAttributes`.
+  - 2 Thuộc tính mặc định hệ thống:
+    - `color` (`SELECT` - 9 màu xe chuẩn hỗ trợ song ngữ)
+    - `version` (`NUMBER` - mặc định 1.0, đồng bộ 2 chiều với trường `erp_boms.version`).
   - Hỗ trợ đa dạng kiểu dữ liệu: `TEXT` (Văn bản), `NUMBER` (Số), `SELECT` (Combobox với cặp key/value label), `DATE` (Ngày tháng), `CHECKBOX` (Đúng/Sai).
   - Vòng đời **Deactivate an toàn**: Không cho phép xóa hay chỉnh sửa mã nếu đã có BOM sử dụng (`usageCount > 0`), chỉ cho phép vô hiệu hóa (`is_active = false`).
 - **Bảo vệ toàn vẹn khi Đã Phát Sinh Sản Xuất (`hasProduction`)**:
@@ -31,15 +34,15 @@ Module BOM quản lý cấu trúc định mức nguyên vật liệu (Bill of Ma
 
 ```mermaid
 erDiagram
-    erp_bom_categories ||--o{ erp_bom_attribute_defs : "has many"
-    erp_bom_categories ||--o{ erp_boms : "categorizes"
+    erp_module_categories ||--o{ erp_module_attribute_defs : "has many"
+    erp_module_categories ||--o{ erp_boms : "categorizes"
     erp_boms ||--o{ erp_bom_lines : "contains"
-    erp_boms ||--o{ erp_bom_attribute_values : "has dynamic values"
-    erp_bom_attribute_defs ||--o{ erp_bom_attribute_values : "defines"
+    erp_boms ||--o{ erp_entity_attribute_values : "has dynamic values"
+    erp_module_attribute_defs ||--o{ erp_entity_attribute_values : "defines"
     erp_boms ||--o{ erp_production_orders : "executes in"
 ```
 
-### 2.1. Bảng `erp_bom_categories` (Danh mục BOM & Đa Module)
+### 2.1. Bảng `erp_module_categories` (Danh mục BOM & Đa Module)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
@@ -53,13 +56,13 @@ erDiagram
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời gian cập nhật |
 
-### 2.2. Bảng `erp_bom_attribute_defs` (Định nghĩa thuộc tính động)
+### 2.2. Bảng `erp_module_attribute_defs` (Định nghĩa thuộc tính động)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Primary Key |
-| `category_id` | `uuid` | NO | | FK tham chiếu `erp_bom_categories.id` |
-| `code` | `varchar(100)` | NO | | Mã thuộc tính (Unique theo Category `UQ_erp_bom_attr_defs_cat_code`) |
+| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_module_categories.id` |
+| `code` | `varchar(100)` | NO | | Mã thuộc tính |
 | `name` | `varchar(255)` | NO | | Tên hiển thị của thuộc tính |
 | `field_type` | `varchar(50)` | NO | | `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX` |
 | `options` | `jsonb` | YES | `NULL` | Danh sách options cho SELECT: `[{"value":"blue","label":"Xanh"}]` |
@@ -70,18 +73,20 @@ erDiagram
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời gian cập nhật |
 
-### 2.3. Bảng `erp_bom_attribute_values` (Giá trị thuộc tính BOM)
+### 2.3. Bảng `erp_entity_attribute_values` (Giá trị thuộc tính EAV Đa Module)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Primary Key |
-| `bom_id` | `uuid` | NO | | FK tham chiếu `erp_boms.id` (ON DELETE CASCADE) |
-| `attr_def_id` | `uuid` | NO | | FK tham chiếu `erp_bom_attribute_defs.id` |
-| `value_text` | `text` | NO | | Giá trị lưu trữ dưới dạng text chuẩn |
+| `entity_type` | `varchar(50)` | NO | | Phân hệ (`'BOM'`) |
+| `entity_id` | `uuid` | NO | | ID thực thể (FK `erp_boms.id`) |
+| `category_id` | `uuid` | YES | `NULL` | FK `erp_module_categories.id` |
+| `attr_def_id` | `uuid` | NO | | FK `erp_module_attribute_defs.id` |
+| `value_text` | `text` | YES | `NULL` | Giá trị text thực tế |
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời gian cập nhật |
 
-*Ràng buộc duy nhất*: `UQ_erp_bom_attribute_values_bom_attr` (`bom_id`, `attr_def_id`).
+*Ràng buộc duy nhất*: `UNIQUE (entity_type, entity_id, attr_def_id)`.
 
 ### 2.4. Bảng `erp_boms` (Header)
 
@@ -90,7 +95,7 @@ erDiagram
 | `id` | `uuid` | NO | `gen_random_uuid()` | Primary Key |
 | `bom_code` | `varchar(255)` | NO | | Mã BOM duy nhất (Unique Index `IDX_4b5651bad5828ff8baf279728c`) |
 | `bom_name` | `varchar(255)` | NO | | Tên định mức |
-| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_bom_categories.id` (ON DELETE SET NULL) |
+| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_module_categories.id` (ON DELETE SET NULL) |
 | `finished_good_item_id` | `uuid` | YES | `NULL` | FK tới `erp_inventory_items.id` (Thành phẩm) |
 | `version` | `varchar(255)` | NO | `'1.0'` | Phiên bản định mức (vd: "1.0", "01") |
 | `status` | `varchar(255)` | NO | `'ACTIVE'` | Trạng thái (`ACTIVE`, `INACTIVE`, `DRAFT`) |
@@ -134,21 +139,17 @@ src/
 │   │   ├── list-bom.dto.ts             # DTO phân trang & bộ lọc
 │   │   └── update-bom.dto.ts           # DTO cập nhật BOM
 │   ├── bom-core.controller.ts          # Controller BOM Core API
-│   ├── bom-core.service.ts             # Service xử lý transaction, hasProduction lock, import/export
+│   ├── bom-core.service.ts             # Service xử lý transaction, hasProduction lock, import/export, EAV values
 │   └── bom-core.module.ts              # Module đăng ký TypeORM và Service
-├── bom-config/
+├── module-config/                      # Phân hệ Cấu hình Danh mục & Thuộc tính động chung toàn hệ thống
 │   ├── entities/
-│   │   ├── erp_bom_category.entity.ts  # Entity danh mục BOM
-│   │   ├── erp_bom_attribute_def.entity.ts # Entity định nghĩa thuộc tính động
-│   │   └── erp_bom_attribute_value.entity.ts # Entity lưu giá trị thuộc tính
+│   │   ├── erp_module_category.entity.ts      # Entity danh mục (erp_module_categories)
+│   │   ├── erp_module_attribute_def.entity.ts # Entity định nghĩa thuộc tính động (erp_module_attribute_defs)
+│   │   └── erp_entity_attribute_value.entity.ts # Entity lưu giá trị EAV (erp_entity_attribute_values)
 │   ├── dto/
-│   │   ├── create-bom-category.dto.ts
-│   │   ├── update-bom-category.dto.ts
-│   │   ├── create-bom-attribute-def.dto.ts
-│   │   └── update-bom-attribute-def.dto.ts
-│   ├── bom-config.controller.ts        # Controller CRUD danh mục & thuộc tính
-│   ├── bom-config.service.ts           # Service validate unique, option keys, usage check & deactivate
-│   └── bom-config.module.ts
+│   ├── module-config.controller.ts     # Controller CRUD danh mục & thuộc tính (alias /api/v1/bom-config)
+│   ├── module-config.service.ts        # Service validate unique, option keys, usage check & deactivate
+│   └── module-config.module.ts
 ```
 
 ### 3.2. Frontend (`erp-web`)
@@ -210,7 +211,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`.
 
 ### 5.2. Quản lý Thuộc tính Động (Dynamic Attributes)
 - Trong `CreateBomDto` & `UpdateBomDto`: `attributes?: Record<string, string>`.
-- Lưu trữ trong bảng `erp_bom_attribute_values`. Khi update, xóa các bản ghi cũ của BOM và chèn lại các giá trị mới.
+- Lưu trữ trong bảng EAV dùng chung `erp_entity_attribute_values` (`entity_type = 'BOM'`). Khi update, xóa các bản ghi cũ của BOM và chèn lại các giá trị mới.
 - Khai báo kiểu `SELECT`: Bắt buộc cấu hình cặp Key / Value + Label, validate không được trùng key.
 - **Ràng buộc Thuộc tính Bắt buộc (Required Attributes Validation)**:
   - Frontend (`BomFormDrawer.tsx`): Kiểm tra `activeAttributeDefs` có `isRequired: true`, thông báo lỗi toast nếu người dùng chưa chọn hoặc để trống khi tạo mới/cập nhật.

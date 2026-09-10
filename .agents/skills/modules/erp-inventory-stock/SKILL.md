@@ -25,10 +25,13 @@ Phân hệ `erp-inventory-stock` (gồm `inventory-stock-core` và `erp_inventor
   - Endpoint `column-options` hỗ trợ lấy danh sách giá trị lọc duy nhất theo từng cột (SKU, Tên hàng, Loại hàng, Kho, Tình trạng tồn).
 - **Xuất Báo cáo Tồn kho ra Excel (`exportExcel`)**:
   - Hỗ trợ xuất toàn bộ danh sách tồn kho theo bộ lọc hiện hành thành file `.xlsx` định dạng chuẩn kế toán.
-- **Chuẩn hóa UI/UX Bảng Sổ Tồn Kho (`OperationalInventoryPage.tsx` & `stockColumns.tsx`)**:
-  - Cột STT `#` cố định 40px ở đầu bảng, căn giữa tiêu chuẩn.
-  - Làm mờ hàng trạng thái ngừng hoạt động/hủy (`INACTIVE`, `CANCELLED`, `VOID`).
-  - Quick Actions chuẩn: "Xem chi tiết" (Icon `Eye`, view mode) và "Chỉnh sửa" (Icon `Pencil`, edit mode).
+- **Chuẩn hóa UI/UX Bảng Sổ Tồn Kho & Detail Drawer (`OperationalInventoryPage.tsx` & `InventoryItemFormDrawer.tsx`)**:
+  - Bảng DataTable: STT `#` cố định 40px ở đầu bảng, căn giữa; làm mờ hàng trạng thái ngừng hoạt động/hủy; Quick Actions chuẩn "Xem chi tiết" (Icon `Eye`) và "Chỉnh sửa" (Icon `Pencil`). Đã loại bỏ hoàn toàn action đồ thị liên kết legacy.
+  - Detail Drawer: Tuân thủ chuẩn Top Navigation Tabs (`/standardize-drawer`):
+    - **Tab 1 ("Sổ thẻ kho & Thông tin")**: `key: "stock_ledger"`, hiển thị Sổ thẻ kho (`InventoryStockLedgerSection`) ở Left Panel và form chi tiết Master Data / Custom Fields ở Right Panel (kích thước `full` / `calc(100vw - 208px)`, `collapsibleRightPanel: true`).
+    - **Tab 2 ("Chứng từ liên kết")**: `key: "traceability_graph"`, sử dụng component `<DrawerDocumentTraceability>` chuẩn (`rootType = "INVENTORY_ITEM"`, `hideRightPanel: true` bung 100% full-width), cung cấp 3 view modes (Canvas XYFlow Swimlanes, Quy trình Pipeline Stages, Bảng kê Document Table), liên kết đa tầng giữa Mặt hàng $\leftrightarrow$ Phiếu Nhập (NK) $\leftrightarrow$ Phiếu Xuất (XK) $\leftrightarrow$ Lệnh Sản Xuất (MO) $\leftrightarrow$ Đơn Mua (PO) $\leftrightarrow$ Đơn Bán (SO) $\leftrightarrow$ Định Mức BOM.
+  - Khi Tạo mới (`!itemId`): Tự động chuyển sang `layout="1-column"`, `size="md"` (`max-w-[620px]`), không render tabs.
+  - Tích hợp `ModuleCustomFieldConfigDrawer` (tab `INVENTORY_ITEM`) và nhúng `ModuleEntityCustomFieldsSection` kết nối 2 chiều với Module Config EAV.
 
 ---
 

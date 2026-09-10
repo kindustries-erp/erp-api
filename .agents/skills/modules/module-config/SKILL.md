@@ -1,65 +1,127 @@
 ---
 name: module-config
-description: Module tri thức Quản lý Cấu hình Danh mục, Thuộc tính động & Thuộc tính chung Đa Module (Dynamic Module Categories, Custom Fields & Global Attributes) trong erp-api (module-config & bom-config). Chứa toàn bộ database schema (erp_bom_categories, erp_bom_attribute_defs, erp_entity_attribute_values), DTOs, API endpoints, logic phân vùng module_key, Global Attributes auto-inject và tích hợp liên module với Invoices, Bank Transactions, BOM & frontend drawer controls.
+description: Module tri thức Quản lý Cấu hình Danh mục, Thuộc tính động & Thuộc tính chung Đa Module (Dynamic Module Categories, Custom Fields & Global Attributes) trong erp-api (module-config). Chứa toàn bộ database schema (erp_module_categories, erp_module_attribute_defs, erp_entity_attribute_values), DTOs, API endpoints, logic phân vùng module_key, Dual-Key Access, cơ chế response 3 trường (attributeValues, customAttributes, attributes), Global Attributes auto-inject và tích hợp liên module với Invoices, Bank Transactions, BOM, Production, Chứng từ kho & frontend drawer controls.
 ---
 
 # 📦 Module Tri Thức: Quản lý Cấu hình Danh mục & Trường tùy chỉnh Đa Module (`module-config`)
 
-## 1. Tổng quan Nghiệp vụ
+## 1. Tổng quan Nghiệp vụ & Kiến trúc Hệ thống
 
-Module `module-config` cung cấp cơ chế **Dynamic Custom Fields Engine (EAV)** linh hoạt cho toàn bộ hệ sinh thái Liouni ERP:
-1. **Thuộc tính theo Danh mục (Category-specific Attributes)**: Admin định nghĩa các Danh mục (Categories) theo `module_key` (như `'INVOICE'`, `'BANK_TXN'`, `'BOM'`). Người dùng chọn Danh mục trên drawer chứng từ để mở ra các trường thuộc tính tương ứng.
-2. **Thuộc tính chung (Global Attributes - Toàn phân hệ)**: Admin định nghĩa các thuộc tính cấp module (`is_global = true`, `module_key_global = '<MODULE_KEY>'`, `category_id = NULL`). Các thuộc tính này **tự động hiển thị ngay lập tức** trong Drawer chứng từ của phân hệ mà không cần người dùng chọn danh mục.
-3. **Quy tắc i18n, Ràng buộc bắt buộc & Giao diện Neutral**:
-   - **Tên Danh mục & Tên Thuộc tính**: Tên trong DB chỉ là *fallback name*. Hệ thống ưu tiên tra cứu khóa i18n trước (`moduleConfig.category.<MODULE_KEY>.<CODE>.name` và `moduleConfig.attr.<MODULE_KEY>.<CATEGORY_OR_GLOBAL>.<CODE>.name`).
-   - **Dấu `*` (Asterisk)**: Mọi thuộc tính có `isRequired = true` (cả global và category) đều hiển thị dấu `*` màu `text-destructive`.
-   - **Cơ chế Validation Bắt buộc**: Frontend dùng `validateModuleRequiredFields(...)` để chặn submit và hiển thị đồng thời cả Toast lẫn error banner màu đỏ nếu thiếu trường bắt buộc. Backend `saveEntityValues` thực hiện soft check để không làm gián đoạn API của module chính.
-   - **Giao diện & Thành phần chuẩn**: Sử dụng màu sắc Neutral (không dùng sky-blue), trường `DATE` dùng component `DatePicker` chuẩn có popup lịch tiếng Việt và format `DD/MM/YYYY`.
-   - **Tự động nhúng trong API Response**: `/api/v1/erp-invoices` (cả `findOne` và `findAll` batch load) tự động trả về `category`, `categoryId`, `attributes`, `globalAttributes`, `customAttributes`, và `attributeValues` trực tiếp trong JSON response.
+Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (EAV - Entity-Attribute-Value)** thống nhất, tinh gọn và có khả năng scale vô hạn cho toàn bộ hệ sinh thái Liouni ERP:
+1. **Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
+   - Khởi tạo sẵn các trường cốt lõi của từng phân hệ (VD: `type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`, `color`, `version`, `type_production_order`).
+   - Cố định trường `code` và `fieldType`, được bảo vệ an toàn chống xóa nhầm (`is_system = true`). Admin chỉ có thể đổi nhãn hiển thị (`name`, `name_en`), bật/tắt bắt buộc (`isRequired`), hoặc chỉnh sửa danh sách tùy chọn (`options`).
+2. **Thuộc tính Tùy chỉnh Linh hoạt (`is_system = false`)**:
+   - Cho phép Quản trị viên tự do tạo thêm các trường động mới theo nhu cầu doanh nghiệp (hỗ trợ kiểu `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX`).
+3. **Phân loại Phạm vi (Scope)**:
+   - **Thuộc tính Chung Toàn Phân hệ (Global Attributes)**: `is_global = true`, `module_key_global = '<MODULE_KEY>'`, `category_id = NULL`. Tự động xuất hiện ngay trên form/drawer của phân hệ đó.
+   - **Thuộc tính Theo Danh mục (Category-specific Attributes)**: `is_global = false`, gắn với `category_id`. Chỉ xuất hiện khi người dùng chọn Danh mục tương ứng.
+4. **Cơ chế Dual-Key Access Pattern**:
+   - Hỗ trợ truy cập giá trị bằng cả **UUID (`attrDefId`)** lẫn **Mã code (`attrCode`)** trong cùng một object `customAttributes`.
+5. **Đồng nhất API Response 3 trường**:
+   - Mọi entity có custom fields (Hóa đơn, Chứng từ kho, BOM, Sản xuất, Giao dịch ngân hàng...) đều trả về đồng nhất 3 trường: `attributeValues`, `customAttributes`, và `attributes`.
 
 ---
 
-## 2. Database Schema & Quan hệ Dữ liệu
+## 2. Giải thích Chi tiết Cấu trúc Response 3 Trường
 
-### A. Bảng Danh mục Module: `erp_bom_categories`
+Khi truy vấn chi tiết một bản ghi thực thể (VD: Phiếu nhập kho, Hóa đơn, BOM), API Backend tự động nhúng 3 trường:
+
+```json
+{
+  "id": "b74a6ab7-9704-4074-920d-736639db7419",
+  "receiptNo": "NK-202609005",
+  "attributeValues": [
+    {
+      "id": "dd2bc650-649b-4da8-b9d4-782c393ba297",
+      "attrDefId": "a8e8f377-fd59-48e8-8818-a75bc3171613",
+      "attrCode": "type_inventory_receipt",
+      "attrName": "Loại nhập kho",
+      "nameEn": "Goods Receipt Type",
+      "fieldType": "SELECT",
+      "isSystem": true,
+      "valueText": "PRODUCTION"
+    }
+  ],
+  "customAttributes": {
+    "a8e8f377-fd59-48e8-8818-a75bc3171613": "PRODUCTION",
+    "type_inventory_receipt": "PRODUCTION"
+  },
+  "attributes": {
+    "a8e8f377-fd59-48e8-8818-a75bc3171613": "PRODUCTION",
+    "type_inventory_receipt": "PRODUCTION"
+  }
+}
+```
+
+### So sánh & Mục đích sử dụng:
+
+| Trường | Kiểu dữ liệu | Mục đích cốt lõi | Khi nào sử dụng ở Frontend? |
+| :--- | :--- | :--- | :--- |
+| **`attributeValues`** | `Array<AttributeValueDetail>` *(Full Metadata)* | Chứa **toàn bộ định nghĩa + giá trị thực tế**: `attrDefId`, `attrCode`, `attrName`, `nameEn`, `fieldType`, `isSystem`, `valueText`. | Dùng khi cần **render UI động** trên Drawer/Modal (tự động render nhãn Việt/Anh, kiểu input Text/Select/Date/Checkbox mà không cần gọi thêm API config). |
+| **`customAttributes`** | `Record<string, any>` *(Key-Value Map)* | Chứa **cặp Key - Value phẳng** rút gọn đại diện cho dữ liệu form của thực thể. | Dùng để **Binding Form State** (React Hook Form / Antd Form) hoặc đọc giá trị nhanh trong code (VD: `if (rec.customAttributes.type_inventory_receipt === 'PRODUCTION')`) mà không cần duyệt mảng `attributeValues.find()`. |
+| **`attributes`** | `Record<string, any>` *(Alias)* | **Bí danh tương thích ngược** trỏ thẳng đến cùng đối tượng `customAttributes`. | Đảm bảo các component hoặc hook legacy trước đây đọc `record.attributes` tiếp tục hoạt động 100% không bị vỡ. |
+
+---
+
+## 3. Database Schema & Quan hệ Dữ liệu
+
+```mermaid
+erDiagram
+    erp_module_categories ||--o{ erp_module_attribute_defs : "has many"
+    erp_module_categories ||--o{ erp_entity_attribute_values : "scopes (optional)"
+    erp_module_attribute_defs ||--o{ erp_entity_attribute_values : "defines"
+    erp_module_categories ||--o{ erp_invoices : "categorizes"
+    erp_module_categories ||--o{ erp_bank_transactions : "categorizes"
+    erp_module_categories ||--o{ erp_boms : "categorizes"
+    erp_module_categories ||--o{ erp_goods_receipts : "categorizes"
+    erp_module_categories ||--o{ erp_goods_issues : "categorizes"
+    erp_module_categories ||--o{ erp_inventory_adjustments : "categorizes"
+    erp_module_categories ||--o{ erp_inventory_items : "categorizes"
+```
+
+### A. Bảng Danh mục Module: `erp_module_categories`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `PK`, `gen_random_uuid()` | Khóa chính |
-| `module_key` | `varchar(50)` | NO | Default `'BOM'` | Phân hệ nghiệp vụ (`'BOM'`, `'INVOICE'`, `'BANK_TXN'`) |
+| `module_key` | `varchar(50)` | NO | Default `'BOM'` | Phân hệ nghiệp vụ (`'INVENTORY_ITEM'`, `'BOM'`, `'INVOICE'`, `'BANK_TXN'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`) |
 | `code` | `varchar(50)` | NO | Composite Unique `(module_key, code)` | Mã danh mục viết hoa (vd: `EXPENSE`, `INTERNAL`, `MOTORCYCLE`) |
-| `name` | `varchar(255)` | NO | | Tên hiển thị danh mục (Fallback) |
+| `name` | `varchar(255)` | NO | | Tên hiển thị danh mục (Fallback Tiếng Việt) |
+| `name_en` | `varchar(255)` | YES | | Tên hiển thị tiếng Anh |
 | `description` | `text` | YES | | Mô tả chi tiết danh mục |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái kích hoạt |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | Default `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | Default `now()` | Thời điểm cập nhật |
 
-### B. Bảng Định nghĩa Thuộc tính Động: `erp_bom_attribute_defs`
+### B. Bảng Định nghĩa Thuộc tính: `erp_module_attribute_defs`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `PK`, `gen_random_uuid()` | Khóa chính |
-| `category_id` | `uuid` | YES | `FK -> erp_bom_categories(id) ON DELETE CASCADE` | Danh mục sở hữu (NULL nếu `is_global = true`) |
+| `category_id` | `uuid` | YES | `FK -> erp_module_categories(id) ON DELETE CASCADE` | Danh mục sở hữu (NULL nếu `is_global = true`) |
 | `is_global` | `boolean` | NO | Default `false` | Cờ xác định thuộc tính chung toàn module |
 | `module_key_global` | `varchar(50)` | YES | Index `(module_key_global, code)` | Phân hệ của thuộc tính chung khi `is_global = true` |
-| `code` | `varchar(100)` | NO | Unique theo category hoặc module | Mã thuộc tính viết thường/snake_case |
-| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback) |
+| `code` | `varchar(100)` | NO | | Mã thuộc tính viết thường / snake_case |
+| `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
+| `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string }` | Danh sách options khi `field_type = 'SELECT'` |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string> }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
+| `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái hoạt động |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | Default `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | Default `now()` | Thời điểm cập nhật |
 
-### C. Bảng Lưu trữ Giá trị Thực tế Đa Module: `erp_entity_attribute_values`
+### C. Bảng Lưu trữ Giá trị Thực tế: `erp_entity_attribute_values`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `PK`, `gen_random_uuid()` | Khóa chính |
-| `entity_type` | `varchar(50)` | NO | Index | Phân loại module (`'INVOICE'`, `'BANK_TXN'`, `'BOM'`) |
+| `entity_type` | `varchar(50)` | NO | Index | Phân loại module (`'INVENTORY_ITEM'`, `'INVOICE_IN'`, `'INVOICE_OUT'`, `'GOODS_RECEIPT'`, `'GOODS_ISSUE'`, `'INVENTORY_ADJUSTMENT'`, `'BOM'`, `'PRODUCTION'`, `'BANK_TXN'`) |
 | `entity_id` | `uuid` | NO | Index `(entity_type, entity_id)` | Khóa chính của bản ghi thực thể |
-| `category_id` | `uuid` | YES | `FK -> erp_bom_categories(id) ON DELETE SET NULL` | ID Danh mục (NULL đối với Global Attributes) |
-| `attr_def_id` | `uuid` | NO | `FK -> erp_bom_attribute_defs(id) ON DELETE CASCADE` | ID Định nghĩa thuộc tính |
+| `category_id` | `uuid` | YES | `FK -> erp_module_categories(id) ON DELETE SET NULL` | ID Danh mục (NULL đối với Global Attributes) |
+| `attr_def_id` | `uuid` | NO | `FK -> erp_module_attribute_defs(id) ON DELETE CASCADE` | ID Định nghĩa thuộc tính |
 | `value_text` | `text` | YES | | Giá trị thực tế đã nhập |
 | `created_at` | `timestamptz` | NO | Default `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | Default `now()` | Thời điểm cập nhật |
@@ -68,19 +130,25 @@ Module `module-config` cung cấp cơ chế **Dynamic Custom Fields Engine (EAV)
 
 ---
 
-## 3. Cấu trúc Source Code Backend
+## 4. Cấu trúc Source Code Backend (`erp-api`)
 
 ```
 src/module-config/
 ├── dto/
+│   ├── base-entity-custom-fields.dto.ts   # Base DTO chuẩn cho mọi module kế thừa
 │   ├── create-module-category.dto.ts
 │   ├── update-module-category.dto.ts
 │   ├── create-module-attr-def.dto.ts      # Hỗ trợ isGlobal, moduleKeyGlobal, optional categoryId
 │   ├── update-module-attr-def.dto.ts
-│   └── save-entity-values.dto.ts          # Hỗ trợ categoryId, attributes & globalAttributes
+│   └── save-entity-values.dto.ts
 ├── entities/
-│   └── erp_entity_attribute_value.entity.ts
-├── module-config.controller.ts
+│   ├── erp_module_category.entity.ts      # Entity ErpModuleCategory (erp_module_categories)
+│   ├── erp_module_attribute_def.entity.ts # Entity ErpModuleAttributeDef (erp_module_attribute_defs)
+│   └── erp_entity_attribute_value.entity.ts # Entity ErpEntityAttributeValue (erp_entity_attribute_values)
+├── helpers/
+│   ├── entity-custom-fields.helper.ts     # Shared Helper saveInTx & enrichOne/enrichMany
+│   └── entity-custom-fields.helper.spec.ts
+├── module-config.controller.ts            # Alias router ['module-config', 'bom-config']
 ├── module-config.service.ts
 ├── module-config.service.spec.ts
 └── module-config.module.ts
@@ -88,9 +156,9 @@ src/module-config/
 
 ---
 
-## 4. Danh sách API Endpoints & RBAC Contract
+## 5. Danh sách API Endpoints & RBAC Contract
 
-Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
+Base URL: `/api/v1/module-config` (Hỗ trợ alias `/api/v1/bom-config`, yêu cầu `JwtAuthGuard`)
 
 | Method | Endpoint | Payload / Params | Mô tả |
 | :--- | :--- | :--- | :--- |
@@ -101,54 +169,87 @@ Base URL: `/api/v1/module-config` (Yêu cầu `JwtAuthGuard`)
 | `GET` | `/global-attribute-defs` | `query: { moduleKey: string }` | Lấy danh sách thuộc tính chung (Global) của 1 module |
 | `GET` | `/attribute-defs` | `query: { categoryId?: string, isGlobal?: boolean, moduleKey?: string }` | Lấy danh sách thuộc tính |
 | `POST` | `/attribute-defs` | `CreateModuleAttrDefDto` | Tạo thuộc tính (`isGlobal`, `moduleKeyGlobal`, `categoryId`, `code`, `name`, `fieldType`, `options`, `isRequired`) |
-| `PATCH` | `/attribute-defs/:id` | `UpdateModuleAttrDefDto` | Cập nhật thuộc tính (chặn đổi `fieldType` nếu đã có dữ liệu nhập) |
-| `DELETE` | `/attribute-defs/:id` | `id: UUID` | Xóa mềm thuộc tính (chặn xóa nếu thuộc tính đang được sử dụng) |
+| `PATCH` | `/attribute-defs/:id` | `UpdateModuleAttrDefDto` | Cập nhật thuộc tính (chặn đổi `fieldType` nếu đã có dữ liệu, chặn xóa option đang dùng) |
+| `GET` | `/attribute-defs/:id/options-usage` | `id: UUID` | Lấy thống kê số lượng bản ghi đang dùng theo từng option value (`Record<string, number>`) |
+| `DELETE` | `/attribute-defs/:id` | `id: UUID` | Xóa mềm thuộc tính (chặn xóa nếu thuộc tính đang được sử dụng hoặc là `is_system`) |
 | `GET` | `/values/:entityType/:entityId` | `params: { entityType, entityId }` | Lấy danh mục, category attributes, global attributes và danh sách global defs của 1 thực thể |
-| `PUT` | `/values/:entityType/:entityId` | `SaveEntityValuesDto` (`categoryId`, `attributes`, `globalAttributes`) | Validate các trường `isRequired` (cả global và category), cập nhật `category_id` và upsert giá trị thuộc tính |
+| `PUT` | `/values/:entityType/:entityId` | `SaveEntityValuesDto` | Validate các trường `isRequired`, cập nhật `category_id` và upsert giá trị thuộc tính |
 
 ---
 
-## 5. Logic Nghiệp vụ Trọng tâm
+## 6. Shared Helper: `EntityCustomFieldsHelper`
 
-1. **Global Attributes vs Category Attributes**:
-   - Khi `isGlobal = true`: `categoryId = null`, `moduleKeyGlobal` bắt buộc, `code` duy nhất trong phân hệ `moduleKeyGlobal`.
-   - Khi `isGlobal = false`: `categoryId` bắt buộc, `code` duy nhất trong danh mục `categoryId`.
-2. **Kiểm tra an toàn kiểu dữ liệu (Data Integrity Guard)**:
-   - Khi `fieldType === 'SELECT'`, options trong JSONB phải có `value` và `label` hợp lệ, không được trùng lặp `value`.
-   - Không cho phép đổi `fieldType` hoặc `code` của thuộc tính nếu `usageCount > 0` (tính cả `erp_bom_attribute_values` và `erp_entity_attribute_values`).
-3. **Transaction lưu trữ thực thể (`saveEntityValues`)**:
-   - Validate toàn bộ thuộc tính chung có `isRequired = true` trong module xem đã được điền chưa (bất kể có chọn category hay không).
-   - Nếu có `categoryId`: Validate các thuộc tính có `isRequired = true` trong danh mục đó.
-   - Chạy transaction: Cập nhật `category_id` trên bảng thực thể (`erp_invoices`, `erp_bank_transactions`, `erp_boms`), xóa các giá trị cũ của `(entity_type, entity_id)` và chèn các giá trị mới cho cả `attributes` và `globalAttributes`.
+Mọi module backend chỉ cần sử dụng [EntityCustomFieldsHelper](file:///home/dev/repos/erp/erp-api/src/module-config/helpers/entity-custom-fields.helper.ts) để lưu và đọc dữ liệu:
+
+### 6.1. Lưu dữ liệu trong Transaction (`saveInTx`)
+```typescript
+await EntityCustomFieldsHelper.saveInTx(
+  manager,
+  'GOODS_RECEIPT',
+  receiptId,
+  dto.customAttributes, // Nhận Record<string, any> với key là attrDefId hoặc attrCode
+  categoryId,           // Optional category_id
+);
+```
+
+### 6.2. Nhúng dữ liệu cho 1 bản ghi (`enrichOne`)
+```typescript
+const receipt = await this.repo.findOne({ where: { id } });
+await EntityCustomFieldsHelper.enrichOne(this.dataSource, 'GOODS_RECEIPT', receipt);
+// receipt sẽ được nhúng: receipt.customAttributes, receipt.attributes, receipt.attributeValues
+```
+
+### 6.3. Batch Load hiệu năng cao cho danh sách (`enrichMany`)
+```typescript
+const items = await queryBuilder.getMany();
+await EntityCustomFieldsHelper.enrichMany(this.dataSource, 'GOODS_RECEIPT', items);
+// Chạy đúng 1 SQL query duy nhất cho toàn bộ danh sách items
+```
 
 ---
 
-## 6. Tích hợp Frontend (`erp-web`)
+## 7. Scalability Blueprint: Quy trình 3 Bước Tích hợp Module Mới
 
-- **`moduleConfigApi.ts`**:
-  - Expose API methods: `getCategories()`, `getGlobalAttributeDefs()`, `getAttributeDefs()`, `saveEntityValues()`.
-  - Helpers: `resolveCategoryName(cat, t)` và `resolveAttrName(attr, moduleKey, categoryCode, t)`.
-- **`ModuleEntityCustomFieldsSection`**:
-  - Chia thành **2 Drawer Sections riêng biệt**:
-    1. `Thuộc tính chung` (Global Attributes): Tự động fetch và hiển thị mọi active global attribute defs mà không cần chọn danh mục.
-    2. `Danh mục & Thuộc tính` (Category Attributes): Combobox chọn danh mục, sau đó hiển thị các thuộc tính con của danh mục.
-  - Hỗ trợ dấu `*` Asterisk cho toàn bộ field có `isRequired = true`.
-- **`ModuleCustomFieldConfigDrawer`**:
-  - Giao diện 2 cột chuẩn ERP:
-    - Cột trái: Quản lý cả `Thuộc tính chung (Toàn phân hệ)` (Card trên) và `Danh mục & Thuộc tính danh mục` (Danh sách Card dưới).
-    - Cột phải: Live Form Preview mô phỏng tức thì cả 2 section trên Drawer chứng từ thực tế.
+Khi tạo thêm bất kỳ module mới nào (`SALES_ORDER`, `PURCHASE_ORDER`, `GARAGE_CASE`...):
+
+### Bước 1: Kế thừa Base DTO (`erp-api`)
+```typescript
+import { BaseEntityCustomFieldsDto } from '../module-config/dto/base-entity-custom-fields.dto';
+
+export class CreateSalesOrderDto extends BaseEntityCustomFieldsDto {
+  // các trường nghiệp vụ khác...
+}
+```
+
+### Bước 2: Tích hợp trong Service (`erp-api`)
+```typescript
+// Trong hàm create / update:
+await EntityCustomFieldsHelper.saveInTx(manager, 'SALES_ORDER', order.id, dto.customAttributes, dto.categoryId);
+
+// Trong hàm findOne / findAll:
+await EntityCustomFieldsHelper.enrichOne(this.dataSource, 'SALES_ORDER', order);
+```
+
+### Bước 3: Đặt Component vào Drawer (`erp-web`)
+```tsx
+<ModuleEntityCustomFieldsSection
+  moduleKey="SALES_ORDER"
+  attributes={form.customAttributes}
+  onAttributesChange={(attrs) => setForm(prev => ({ ...prev, customAttributes: attrs }))}
+/>
+```
 
 ---
 
-## 7. Quy tắc Kiểm thử & Quality Control
+## 8. Quality Control & Testing Commands
 
 ```bash
-# Backend unit tests
-cd ./erp-api && bunx jest src/module-config/
+# 1. Backend tests
+cd /home/dev/repos/erp/erp-api && bun test src/module-config
 
-# Backend CI checks
-cd ./erp-api && bun run check:ci
+# 2. Backend CI checks (Type, Lint, Prettier)
+cd /home/dev/repos/erp/erp-api && bun run check:ci
 
-# Frontend Type check & Vitest
-cd ./erp-web && bun run type:check && bun run test
+# 3. Frontend Type check & Tests
+cd /home/dev/repos/erp/erp-web && bun run type:check && bun run test
 ```

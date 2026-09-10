@@ -7,9 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ModuleConfigService } from './module-config.service';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpModuleCategory } from './entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from './entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
 
 describe('ModuleConfigService', () => {
@@ -31,17 +30,6 @@ describe('ModuleConfigService', () => {
     update: jest.fn(),
   };
 
-  const mockAttrValueRepo = {
-    count: jest.fn().mockResolvedValue(0),
-    createQueryBuilder: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([]),
-    })),
-  };
-
   const mockEntityAttrValueRepo = {
     find: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
@@ -49,6 +37,7 @@ describe('ModuleConfigService', () => {
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
       getRawMany: jest.fn().mockResolvedValue([]),
     })),
@@ -76,16 +65,12 @@ describe('ModuleConfigService', () => {
       providers: [
         ModuleConfigService,
         {
-          provide: getRepositoryToken(ErpBomCategory),
+          provide: getRepositoryToken(ErpModuleCategory),
           useValue: mockCategoryRepo,
         },
         {
-          provide: getRepositoryToken(ErpBomAttributeDef),
+          provide: getRepositoryToken(ErpModuleAttributeDef),
           useValue: mockAttrDefRepo,
-        },
-        {
-          provide: getRepositoryToken(ErpBomAttributeValue),
-          useValue: mockAttrValueRepo,
         },
         {
           provide: getRepositoryToken(ErpEntityAttributeValue),
@@ -186,7 +171,7 @@ describe('ModuleConfigService', () => {
   describe('deleteAttributeDef', () => {
     it('should throw ConflictException if attribute is in use', async () => {
       mockAttrDefRepo.findOne.mockResolvedValue({ id: 'def-1', code: 'dept' });
-      mockAttrValueRepo.count.mockResolvedValue(3);
+      mockEntityAttrValueRepo.count.mockResolvedValue(3);
 
       await expect(service.deleteAttributeDef('def-1')).rejects.toThrow(
         ConflictException,
@@ -199,7 +184,7 @@ describe('ModuleConfigService', () => {
         code: 'dept',
         isDeleted: false,
       });
-      mockAttrValueRepo.count.mockResolvedValue(0);
+      mockEntityAttrValueRepo.count.mockResolvedValue(0);
 
       await service.deleteAttributeDef('def-1');
       expect(mockAttrDefRepo.save).toHaveBeenCalledWith(
@@ -276,7 +261,7 @@ describe('ModuleConfigService', () => {
           categoryId: 'cat-1',
           attributes: {},
         }),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     it('should validate and save global attributes without category', async () => {
@@ -315,7 +300,144 @@ describe('ModuleConfigService', () => {
         service.saveEntityValues('INVOICE', 'inv-123', {
           globalAttributes: {},
         }),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
+    });
+
+    it('should update erp_invoices table when entityType is INVOICE_IN or INVOICE_OUT', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([]);
+      mockManager.query = jest.fn().mockResolvedValue([]);
+
+      await service.saveEntityValues('INVOICE_IN', 'inv-in-1', {
+        categoryId: 'cat-in-1',
+        attributes: {},
+        globalAttributes: {},
+      });
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE erp_invoices SET category_id = $1'),
+        ['cat-in-1', 'inv-in-1'],
+      );
+
+      await service.saveEntityValues('INVOICE_OUT', 'inv-out-1', {
+        categoryId: 'cat-out-1',
+        attributes: {},
+        globalAttributes: {},
+      });
+
+      expect(mockManager.query).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE erp_invoices SET category_id = $1'),
+        ['cat-out-1', 'inv-out-1'],
+      );
+    });
+
+    it('should query erp_invoices table in getEntityValues when entityType is INVOICE_IN or INVOICE_OUT', async () => {
+      mockDataSource.query = jest
+        .fn()
+        .mockResolvedValue([{ category_id: 'cat-in-1' }]);
+      mockEntityAttrValueRepo.find = jest.fn().mockResolvedValue([]);
+      mockCategoryRepo.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'cat-in-1', attributeDefs: [] });
+      mockAttrDefRepo.find = jest.fn().mockResolvedValue([]);
+
+      const resIn = await service.getEntityValues('INVOICE_IN', 'inv-in-1');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'SELECT category_id FROM erp_invoices WHERE id = $1',
+        ),
+        ['inv-in-1'],
+      );
+      expect(resIn.categoryId).toBe('cat-in-1');
+
+      const resOut = await service.getEntityValues('INVOICE_OUT', 'inv-out-1');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'SELECT category_id FROM erp_invoices WHERE id = $1',
+        ),
+        ['inv-out-1'],
+      );
+      expect(resOut.categoryId).toBe('cat-in-1');
+    });
+
+    it('should deduplicate attribute values when both UUID and code are present in globalAttributes to prevent unique constraint violations', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: '181efcb3-aabb-4885-91c3-817d3e6b7a7b',
+          code: 'type_invoice_out',
+          name: 'Phân loại hóa đơn bán ra',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE_OUT',
+          isDeleted: false,
+        },
+      ]);
+      mockManager.save = jest
+        .fn()
+        .mockImplementation((entity, list) => Promise.resolve(list));
+
+      await service.saveEntityValues(
+        'INVOICE_OUT',
+        '920b8499-b37a-4b82-8445-cca01ea82953',
+        {
+          categoryId: null,
+          attributes: {},
+          globalAttributes: {
+            '181efcb3-aabb-4885-91c3-817d3e6b7a7b': 'SALE_SERVICE',
+            type_invoice_out: 'SALE_SERVICE',
+          },
+        },
+      );
+
+      expect(mockManager.save).toHaveBeenCalledTimes(1);
+      const savedEntities = (mockManager.save as jest.Mock).mock.calls[0][1];
+      expect(savedEntities).toHaveLength(1);
+      expect(savedEntities[0]).toMatchObject({
+        entityType: 'INVOICE_OUT',
+        entityId: '920b8499-b37a-4b82-8445-cca01ea82953',
+        attrDefId: '181efcb3-aabb-4885-91c3-817d3e6b7a7b',
+        valueText: 'SALE_SERVICE',
+      });
+    });
+
+    it('should safely handle JSON serialization for objects/arrays and ignore empty/invalid non-UUID keys', async () => {
+      mockManager.find = jest.fn().mockResolvedValue([
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          code: 'tags',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE_OUT',
+          isDeleted: false,
+        },
+      ]);
+      mockManager.save = jest
+        .fn()
+        .mockImplementation((entity, list) => Promise.resolve(list));
+
+      await service.saveEntityValues('INVOICE_OUT', 'inv-123', {
+        categoryId: null,
+        attributes: {},
+        globalAttributes: {
+          tags: ['A', 'B'],
+          invalid_non_existent_key: 'value',
+          '22222222-2222-2222-2222-222222222222': 'valid-uuid-direct',
+          empty_key: '',
+        },
+      });
+
+      expect(mockManager.save).toHaveBeenCalledTimes(1);
+      const savedEntities = (mockManager.save as jest.Mock).mock.calls[0][1];
+      expect(savedEntities).toHaveLength(2);
+      expect(savedEntities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            attrDefId: '11111111-1111-1111-1111-111111111111',
+            valueText: JSON.stringify(['A', 'B']),
+          }),
+          expect.objectContaining({
+            attrDefId: '22222222-2222-2222-2222-222222222222',
+            valueText: 'valid-uuid-direct',
+          }),
+        ]),
+      );
     });
   });
 
@@ -353,6 +475,193 @@ describe('ModuleConfigService', () => {
       const res = await service.getGlobalAttributeDefs('INVOICE');
       expect(res.length).toBe(1);
       expect(res[0].code).toBe('note');
+    });
+  });
+
+  describe('Options Usage & Guard', () => {
+    it('should return correct options usage map for an attribute', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'RETURN', label: 'Nhập trả' },
+          { value: 'OTHER', label: 'Nhập khác' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { value: 'PO', count: '8' },
+          { value: 'OTHER', count: '2' },
+        ]),
+      })) as any;
+
+      const usage = await service.getAttributeOptionsUsage('attr-select-1');
+      expect(usage).toEqual({
+        PO: 8,
+        RETURN: 0,
+        OTHER: 2,
+      });
+    });
+
+    it('should throw ConflictException when removing an option that is in use (for system attribute)', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'RETURN', label: 'Nhập trả' },
+        ],
+      });
+
+      // Mock getAttributeOptionsUsage logic via repos
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '10' }]),
+      })) as any;
+
+      // Update options removing PO (which has 10 usages)
+      await expect(
+        service.updateAttributeDef('attr-select-1', {
+          options: [{ value: 'RETURN', label: 'Nhập trả' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw ConflictException when removing an option that is in use (for custom attribute)', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-custom-1',
+        name: 'Màu sắc tùy chỉnh',
+        fieldType: 'SELECT',
+        isSystem: false,
+        options: [
+          { value: 'RED', label: 'Đỏ' },
+          { value: 'BLUE', label: 'Xanh' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'RED', count: '3' }]),
+      })) as any;
+
+      // Removing RED which is in use
+      await expect(
+        service.updateAttributeDef('attr-custom-1', {
+          options: [{ value: 'BLUE', label: 'Xanh' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should allow removing an option when it has 0 usages', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'UNUSED', label: 'Chưa dùng' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ value: 'PO', count: '5' }]),
+      })) as any;
+
+      // Removing UNUSED which has 0 usages
+      const updated = await service.updateAttributeDef('attr-select-1', {
+        options: [{ value: 'PO', label: 'Đơn mua hàng' }],
+      });
+      expect(updated).toBeDefined();
+      expect(mockAttrDefRepo.save).toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException when removing a core system option even with 0 usage', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-select-1',
+        name: 'Loại nhập kho',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'PRODUCTION', label: 'Nhập sản xuất' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Cố tình xóa option PO (Core option)
+      await expect(
+        service.updateAttributeDef('attr-select-1', {
+          options: [{ value: 'PRODUCTION', label: 'Nhập sản xuất' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should query entity tables for GOODS_RECEIPT and count PO / PRODUCTION usages', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-gr-type',
+        code: 'type_inventory_receipt',
+        name: 'Loại nhập kho',
+        moduleKeyGlobal: 'GOODS_RECEIPT',
+        isGlobal: true,
+        isSystem: true,
+        options: [
+          { value: 'PO', label: 'Đơn mua hàng' },
+          { value: 'PRODUCTION', label: 'Nhập sản xuất' },
+          { value: 'OTHER', label: 'Nhập khác' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      mockDataSource.query = jest
+        .fn()
+        .mockResolvedValueOnce([{ count: '12' }]) // PO count
+        .mockResolvedValueOnce([{ count: '3' }]) // PRODUCTION count
+        .mockResolvedValueOnce([{ count: '5' }]); // OTHER count
+
+      const usage = await service.getAttributeOptionsUsage('attr-gr-type');
+      expect(usage.PO).toBe(12);
+      expect(usage.PRODUCTION).toBe(3);
+      expect(usage.OTHER).toBe(5);
     });
   });
 });

@@ -44,7 +44,7 @@ export class ErpMfgCoreService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  private directusPaginated<T>(
+  private formatPaginated<T>(
     data: T[],
     total: number,
     page: number,
@@ -97,7 +97,7 @@ export class ErpMfgCoreService {
     const data = items.map((item) =>
       this.mapComponent(item, balanceMap.get(item.id)),
     );
-    return this.directusPaginated(data, total, page, pageSize);
+    return this.formatPaginated(data, total, page, pageSize);
   }
 
   async getComponent(id: string) {
@@ -251,7 +251,7 @@ export class ErpMfgCoreService {
       vin: null,
     }));
 
-    return this.directusPaginated(data, total, page, pageSize);
+    return this.formatPaginated(data, total, page, pageSize);
   }
 
   // ─── Purchase Orders ──────────────────────────────────────────────────────────
@@ -269,7 +269,7 @@ export class ErpMfgCoreService {
     });
 
     const data = rows.map((po) => this.mapPo(po));
-    return this.directusPaginated(data, total, page, pageSize);
+    return this.formatPaginated(data, total, page, pageSize);
   }
 
   async getPurchaseOrder(id: string) {
@@ -313,7 +313,7 @@ export class ErpMfgCoreService {
     });
 
     const data = rows.map((v) => this.mapVehicle(v));
-    return this.directusPaginated(data, total, page, pageSize);
+    return this.formatPaginated(data, total, page, pageSize);
   }
 
   async getVehicle(id: string) {

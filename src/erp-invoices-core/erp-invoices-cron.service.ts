@@ -10,7 +10,10 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
-import { isCronEnabled } from '../common/utils/cron.util';
+import {
+  isGdtInvoiceCronEnabled,
+  isWithinInvoiceSyncWindow,
+} from '../common/utils/cron.util';
 
 @Injectable()
 export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
@@ -27,9 +30,9 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    if (!isCronEnabled()) {
+    if (!isGdtInvoiceCronEnabled()) {
       this.logger.log(
-        'ErpInvoices auto-sync cron is disabled in this environment.',
+        'ErpInvoices GDT auto-sync cron is temporarily locked in code (chờ setup mật khẩu mới).',
       );
       return;
     }
@@ -59,6 +62,20 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   }
 
   async autoSyncCurrentMonth() {
+    if (!isGdtInvoiceCronEnabled()) {
+      this.logger.log(
+        'ErpInvoices auto-sync skipped: GDT cron is temporarily locked in code.',
+      );
+      return;
+    }
+
+    if (!isWithinInvoiceSyncWindow()) {
+      this.logger.log(
+        'ErpInvoices auto-sync skipped: outside allowed time window (00:00 - 03:59 Asia/Ho_Chi_Minh).',
+      );
+      return;
+    }
+
     this.logger.log('Auto-sync started for current month.');
 
     try {

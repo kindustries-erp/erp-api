@@ -136,7 +136,7 @@ export class GarageDashboardController {
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('opex')
   getOpexList(@Query() query: ListGarageOpexQueryDto) {
-    return this.opexService.getList(query);
+    return this.service.getCombinedOpexList(query);
   }
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
@@ -165,7 +165,7 @@ export class GarageDashboardController {
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('opex/:id')
   getOpexById(@Param('id') id: string) {
-    return this.opexService.getById(id);
+    return this.service.getVirtualOpexById(id);
   }
 
   @RequirePermissions({

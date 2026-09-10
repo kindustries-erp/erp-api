@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import { InventoryItemQueryDto } from './dto/inventory-item-query.dto';
 import { InventoryItemsService } from './inventory-core.service';
 import { CreateInventoryItemDto } from './dto/create-item.dto';
@@ -25,8 +27,6 @@ import { CreateUomDto } from './dto/create-uom.dto';
 import { UpdateUomDto } from './dto/update-uom.dto';
 import { CreateItemTypeDto } from './dto/create-item-type.dto';
 import { UpdateItemTypeDto } from './dto/update-item-type.dto';
-import { CreateTrackingCategoryDto } from './dto/create-tracking-category.dto';
-import { UpdateTrackingCategoryDto } from './dto/update-tracking-category.dto';
 import { InventorySerialQueryDto } from './dto/inventory-serial-query.dto';
 import { UpdateInventorySerialDto } from './dto/update-inventory-serial.dto';
 import {
@@ -49,6 +49,7 @@ export class InventoryItemsController {
     private readonly service: InventoryItemsService,
     private readonly lotService: InventoryLotService,
     private readonly customService: InventoryCustomService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
 
   @RequirePermissions({
@@ -76,6 +77,27 @@ export class InventoryItemsController {
   @Get('items')
   findAll(@Query() query: InventoryItemQueryDto) {
     return this.service.findAll(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ITEMS,
+    action: ErpAction.READ,
+  })
+  @Get('items/column-options')
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filters,
+    );
   }
 
   @RequirePermissions({
@@ -146,29 +168,11 @@ export class InventoryItemsController {
 
   @RequirePermissions({
     resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.READ,
-  })
-  @Get('tracking-categories')
-  listTrackingCategories(@Query() query: InventoryMasterQueryDto) {
-    return this.service.listTrackingCategories(query);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.CREATE,
   })
   @Post('item-types')
   createItemType(@Body() dto: CreateItemTypeDto) {
     return this.service.createItemType(dto);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.CREATE,
-  })
-  @Post('tracking-categories')
-  createTrackingCategory(@Body() dto: CreateTrackingCategoryDto) {
-    return this.service.createTrackingCategory(dto);
   }
 
   @RequirePermissions({
@@ -185,32 +189,11 @@ export class InventoryItemsController {
 
   @RequirePermissions({
     resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.UPDATE,
-  })
-  @Patch('tracking-categories/:id')
-  updateTrackingCategory(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateTrackingCategoryDto,
-  ) {
-    return this.service.updateTrackingCategory(id, dto);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.DELETE,
   })
   @Delete('item-types/:id')
   removeItemType(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.softDeleteItemType(id);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.INVENTORY_ITEMS,
-    action: ErpAction.DELETE,
-  })
-  @Delete('tracking-categories/:id')
-  removeTrackingCategory(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.softDeleteTrackingCategory(id);
   }
 
   @RequirePermissions({
@@ -226,9 +209,15 @@ export class InventoryItemsController {
     resource: ErpResource.INVENTORY_ITEMS,
     action: ErpAction.READ,
   })
-  @Get('items/:id/connections')
-  getConnections(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.getItemConnections(id);
+  @Get('items/:id/traceability-graph')
+  getTraceabilityGraph(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Request() req: any,
+  ) {
+    return this.traceabilityService.getInventoryItemTraceabilityGraph(
+      id,
+      req.user,
+    );
   }
 
   @RequirePermissions({

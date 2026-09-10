@@ -8,7 +8,6 @@ import { InventoryItemsService } from './inventory-core.service';
 import { ErpUom } from './entities/erp_uom.entity';
 import { ErpItemType } from './entities/erp_item_type.entity';
 import { ErpTrackingPolicy } from './entities/erp_tracking_policy.entity';
-import { ErpTrackingCategory } from './entities/erp_tracking_category.entity';
 import { ErpInventoryTrackingSerial } from './entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryTrackingCustom } from './entities/erp_inventory_tracking_custom.entity';
 import { ErpInventoryTrackingLot } from './entities/erp_inventory_tracking_lot.entity';
@@ -31,7 +30,6 @@ import { InventoryCustomService } from './services/inventory-custom.service';
       ErpUom,
       ErpItemType,
       ErpTrackingPolicy,
-      ErpTrackingCategory,
       ErpInventoryTrackingSerial,
       ErpInventoryTrackingCustom,
       ErpInventoryTrackingLot,

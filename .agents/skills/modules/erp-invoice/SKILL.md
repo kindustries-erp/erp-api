@@ -11,7 +11,7 @@ Phân hệ Quản lý Hóa đơn Điện tử (`erp-invoices-core`) là trung t�
 
 Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
-- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` tự động đồng bộ hóa đơn trong tháng hiện tại theo chu kỳ ngẫu nhiên (30-45 phút) và gửi thông báo qua `NotificationsService`.
+- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts` (mặc định tạm khóa/tắt để setup mật khẩu mới và bảo trì). Khi được kích hoạt, cron chỉ chạy trong khung giờ 00:00 - 03:59 (Asia/Ho_Chi_Minh). Hệ thống tích hợp cơ chế chống khóa tài khoản: nếu Cổng Thuế GDT hoặc Viettel SInvoice trả về lỗi HTTP 401/403 ở lần đăng nhập đầu tiên, tiến trình lập tức dừng retry.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
 - **Trích xuất Metadata Tự động & Subscribers**: Tự động nhận diện biển số xe (`license_plate`), số lệnh quyết toán / sửa chữa (`settlement_order`), mã phụ tùng VinFast (`BAT21001011`, `EEP73110011AP`,...) qua `ErpInvoiceItemSubscriber`.
 - **Hạch toán Kế toán Kép (Post / Unpost Journal Entries)**: Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
@@ -57,7 +57,7 @@ Các nghiệp vụ trọng tâm:
 | `description` | `text` | YES | `NULL` | Trích yếu / Diễn giải hóa đơn |
 | `invoice_type` | `varchar(255)` | YES | `NULL` | Phân loại nghiệp vụ (vd: `VINFAST_PARTS`, `INSURANCE`,...) |
 | `invoice_category` | `varchar(255)` | YES | `NULL` | Danh mục hóa đơn (legacy text field) |
-| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_bom_categories.id` (`module_key = 'INVOICE'`) |
+| `category_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_module_categories.id` (`module_key = 'INVOICE'`) |
 | `pre_vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền trước thuế (VNĐ) |
 | `vat_rate` | `numeric(9,4)` | YES | `NULL` | Thuế suất VAT chung (nếu đồng nhất) |
 | `vat_amount` | `numeric(18,2)`| NO | `0` | Tổng tiền thuế GTGT (VNĐ) |
@@ -301,7 +301,7 @@ src/erp-invoices-core/
 
 ### 5.5. Tích hợp Thuộc tính Động & Thuộc tính Chung (Dynamic Custom & Global Attributes)
 - **Tự động nhúng trong DTO response**: Toàn bộ endpoint lấy danh sách (`GET /api/v1/erp-invoices`) và chi tiết (`GET /api/v1/erp-invoices/:id`) đều tự động nạp và trả về:
-  - `category`: Thông tin chi tiết danh mục (`erp_bom_categories`).
+  - `category`: Thông tin chi tiết danh mục (`erp_module_categories`).
   - `categoryId`: ID danh mục liên kết.
   - `attributes`: Key-value map các thuộc tính theo danh mục.
   - `globalAttributes`: Key-value map các thuộc tính chung toàn phân hệ (`module_key = 'INVOICE'`).
@@ -495,3 +495,17 @@ src/modules/erp-invoices-core/components/
         ├── ComingSoonTabContent.tsx             # Placeholder Sắp ra mắt cho tab Sổ quỹ
         └── NetOffInput.tsx                      # Input số tiền cấn trừ có kiểm soát validation
 ```
+
+### 8.5. Cơ chế Gợi Ý Đối Soát Sao Kê Thông Minh (Smart Net-Off Engine)
+`InvoiceSmartNetOffService` (`POST /erp-invoices/smart-net-off-suggestions`) sử dụng thuật toán tính điểm đa tín hiệu (Multi-Signal Scoring):
+1. **Lọc từ dừng tiếng Việt (Stop Words Filter)**: Loại bỏ các từ quá phổ biến (`công ty`, `tnhh`, `cổ phần`, `việt nam`, `chi nhánh`,...) trước khi sinh từ khóa tìm kiếm SQL để tránh chiếm trọn hạn mức `LIMIT` quota của database.
+2. **Khớp đa chiều (Multi-Signal Matchers)**:
+   - Số hóa đơn chuẩn hóa (bỏ leading zeros, vd: `0001234` -> `1234`).
+   - Ký hiệu hóa đơn (`serialNo`), Mã số thuế bên bán/mua (`taxCode`).
+   - Biển số xe (`licensePlate`), Số quyết toán vụ việc (`settlementOrder`).
+   - So khớp số tiền: Đối soát đồng thời trên cả tổng tiền hóa đơn (`totalAmount`) và số tiền nợ còn lại sau cấn trừ (`remainingDebt`).
+3. **Phân cấp Badge độ tin cậy**:
+   - `PERFECT` (Khớp tuyệt đối): Khớp cả số tiền và số hóa đơn.
+   - `HIGH` (Khớp cao): Khớp số tiền và tên/MST đối tác hoặc biển số xe.
+   - `LIKELY` / `POSSIBLE`: Khớp một phần từ khóa diễn giải.
+

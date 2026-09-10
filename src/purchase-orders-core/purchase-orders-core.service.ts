@@ -23,7 +23,7 @@ import {
   Or,
   Equal,
 } from 'typeorm';
-import { OperationalQueryDto } from '../operational-documents/dto/operational-document.dto';
+import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { ErpPurchaseOrder } from './entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './entities/erp_purchase_order_line.entity';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -551,7 +551,7 @@ export class PurchaseOrdersCoreService {
     };
   }
 
-  async findAll(query: OperationalQueryDto) {
+  async findAll(query: QueryPurchaseOrdersDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 

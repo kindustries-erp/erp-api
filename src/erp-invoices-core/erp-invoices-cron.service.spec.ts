@@ -1,5 +1,6 @@
 import { ErpInvoicesCronService } from './erp-invoices-cron.service';
 import { Logger } from '@nestjs/common';
+import * as cronUtil from '../common/utils/cron.util';
 
 describe('ErpInvoicesCronService', () => {
   let cronService: ErpInvoicesCronService;
@@ -44,9 +45,54 @@ describe('ErpInvoicesCronService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  describe('onModuleInit', () => {
+    it('should not schedule next sync if GDT invoice cron is disabled / locked', () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
+      const scheduleSpy = jest.spyOn(cronService as any, 'scheduleNextSync');
+
+      cronService.onModuleInit();
+
+      expect(scheduleSpy).not.toHaveBeenCalled();
+    });
+
+    it('should schedule next sync if GDT invoice cron is enabled', () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      const scheduleSpy = jest
+        .spyOn(cronService as any, 'scheduleNextSync')
+        .mockImplementation(() => {});
+
+      cronService.onModuleInit();
+
+      expect(scheduleSpy).toHaveBeenCalled();
+    });
   });
 
   describe('autoSyncCurrentMonth', () => {
+    beforeEach(() => {
+      // Default enabled and within window for existing sync tests
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
+    });
+
+    it('should skip sync if GDT invoice cron is disabled / locked', async () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+    });
+
+    it('should skip sync if outside allowed sync time window (00:00 - 03:59 VN)', async () => {
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(false);
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+    });
+
     it('should attempt auto-relogin and skip sync if re-login fails for empty token', async () => {
       erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);

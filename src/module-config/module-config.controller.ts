@@ -23,7 +23,7 @@ import { SaveEntityValuesDto } from './dto/save-entity-values.dto';
 @ApiTags('erp_module_config')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('module-config')
+@Controller(['module-config', 'bom-config'])
 export class ModuleConfigController {
   constructor(private readonly service: ModuleConfigService) {}
 
@@ -83,6 +83,11 @@ export class ModuleConfigController {
     @Body() dto: UpdateModuleAttrDefDto,
   ): Promise<any> {
     return this.service.updateAttributeDef(id, dto);
+  }
+
+  @Get('attribute-defs/:id/options-usage')
+  getAttributeOptionsUsage(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getAttributeOptionsUsage(id);
   }
 
   @Delete('attribute-defs/:id')
