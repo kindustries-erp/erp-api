@@ -76,6 +76,10 @@ jobs:
       fail-fast: false
       matrix:
         target:
+          - host: elite
+            server_name: ELITE
+            ip: 100.75.67.115
+            port: 10020
           - host: prod1
             server_name: prod-1
             ip: 100.69.94.117
