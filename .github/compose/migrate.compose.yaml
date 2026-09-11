@@ -1,0 +1,10 @@
+services:
+  migrate:
+    image: ${ERP_MIGRATE_IMAGE:?ERP_MIGRATE_IMAGE is required}
+    restart: "no"
+    env_file: [application.env]
+    networks: [npm-network]
+networks:
+  npm-network:
+    external: true
+    name: npm-network

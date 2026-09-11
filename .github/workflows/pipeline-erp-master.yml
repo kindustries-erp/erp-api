@@ -86,6 +86,7 @@ jobs:
       KOMODO_URL: ${{ vars.KOMODO_URL }}
       BRANCH: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v4
       - uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -131,42 +132,8 @@ jobs:
           echo "Resolved Server $SERVER_NAME -> $server_id"
 
           # 2. Compose contents
-          api_compose="$(cat <<EOF
-services:
-  api:
-    image: \${ERP_API_IMAGE:?ERP_API_IMAGE is required}
-    restart: unless-stopped
-    stop_grace_period: 30s
-    env_file: [application.env]
-    expose: ["3000"]
-    ports: ["${TARGET_IP}:${TARGET_PORT}:3000"]
-    networks: [npm-network]
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/auth/profile').then(r => process.exit([200,401].includes(r.status) ? 0 : 1)).catch(() => process.exit(1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-    security_opt: [no-new-privileges:true]
-networks:
-  npm-network:
-    external: true
-    name: npm-network
-EOF
-)"
-
-          migrate_compose="$(cat <<EOF
-services:
-  migrate:
-    image: \${ERP_MIGRATE_IMAGE:?ERP_MIGRATE_IMAGE is required}
-    restart: "no"
-    env_file: [application.env]
-    networks: [npm-network]
-networks:
-  npm-network:
-    external: true
-    name: npm-network
-EOF
-)"
+          api_compose="$(sed -e "s/__TARGET_IP__/$TARGET_IP/g" -e "s/__TARGET_PORT__/$TARGET_PORT/g" .github/compose/api.compose.yaml)"
+          migrate_compose="$(cat .github/compose/migrate.compose.yaml)"
 
           ensure_stack() {
             local sname="$1"
