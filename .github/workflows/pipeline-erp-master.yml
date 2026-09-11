@@ -110,6 +110,7 @@ jobs:
           call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "ERP_API_IMAGE=$api_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_API_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" --arg contents "ERP_MIGRATE_IMAGE=$migrate_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$KOMODO_MIGRATE_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
       - name: Run DB migration gate through Komodo
         run: |
           set -euo pipefail
