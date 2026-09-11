@@ -64,6 +64,12 @@ import { AppConfigModule } from './app-config/app-config.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const databaseUrl = configService.get<string>('DATABASE_URL');
+        const isSslDisabled =
+          configService.get<string>('DB_SSL') === 'false' ||
+          (databaseUrl &&
+            (databaseUrl.includes('sslmode=disable') ||
+              databaseUrl.includes('ssl=false')));
+
         if (databaseUrl) {
           return {
             type: 'postgres' as const,
@@ -77,7 +83,8 @@ import { AppConfigModule } from './app-config/app-config.module';
               CoreUserRole,
             ],
             synchronize: false,
-            ssl: { rejectUnauthorized: false },
+            ssl: isSslDisabled ? false : { rejectUnauthorized: false },
+            extra: isSslDisabled ? {} : { ssl: { rejectUnauthorized: false } },
             autoLoadEntities: true,
             retryAttempts: 2,
           };
@@ -103,6 +110,10 @@ import { AppConfigModule } from './app-config/app-config.module';
             configService.get<string>('DB_SSL') === 'true'
               ? { rejectUnauthorized: false }
               : false,
+          extra:
+            configService.get<string>('DB_SSL') === 'true'
+              ? { ssl: { rejectUnauthorized: false } }
+              : {},
           autoLoadEntities: true,
           retryAttempts: 2,
         };
