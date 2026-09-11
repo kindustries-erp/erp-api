@@ -100,6 +100,10 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+      KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+      KOMODO_URL: ${{ vars.KOMODO_URL }}
 
     steps:
       - name: Connect Tailscale to Komodo MAIN
@@ -110,45 +114,36 @@ jobs:
           tags: tag:ci
 
       - name: Guard Komodo deployment settings
-        env:
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
           test -n "$KOMODO_API_KEY" || (echo "KOMODO_API_KEY missing" && exit 1)
           test -n "$KOMODO_API_SECRET" || (echo "KOMODO_API_SECRET missing" && exit 1)
           test -n "$KOMODO_URL" || (echo "KOMODO_URL missing" && exit 1)
 
-      - name: Update API immutable image reference
+      - name: Write release references and runtime settings
         env:
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ vars.KOMODO_URL }}
           IMAGE_SHA: ${{ needs.build-and-push.outputs.sha }}
+          API_ENV: ${{ secrets.ERP_MASTER_API_ENV }}
         run: |
           set -euo pipefail
           api_image="${{ env.IMAGE_NAME }}:${IMAGE_SHA}"
           migrate_image="${{ env.MIGRATE_IMAGE_NAME }}:${IMAGE_SHA}"
-          payload="$(jq -n --arg stack "erp-master-demo-api" --arg api "$api_image" --arg migrate "$migrate_image" '{stack:$stack,file_path:".env",contents:("ERP_API_IMAGE=" + $api + "\nERP_MIGRATE_IMAGE=" + $migrate + "\n")}')"
-          curl --fail-with-body --silent --show-error \
-            -X POST "${KOMODO_URL}/write/WriteStackFileContents" \
-            -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
-            -H "X-Api-Secret: $KOMODO_API_SECRET" \
-            -H "Content-Type: application/json" \
-            --data "$payload" > komodo-write.json
-          jq -e . komodo-write.json >/dev/null
+          call() {
+            curl --fail-with-body --silent --show-error -X POST "${KOMODO_URL}$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' --data "$2"
+          }
+          call /write/WriteStackFileContents "$(jq -n --arg stack "erp-master-demo-api" --arg api "$api_image" --arg migrate "$migrate_image" '{stack:$stack,file_path:".env",contents:("ERP_API_IMAGE=" + $api + "\nERP_MIGRATE_IMAGE=" + $migrate + "\n")}')" >/dev/null
+          if [ -n "$API_ENV" ]; then
+            call /write/WriteStackFileContents "$(jq -n --arg stack "erp-master-demo-api" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
+          fi
 
       - name: Run Komodo API release procedure
-        env:
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
-          KOMODO_URL: ${{ vars.KOMODO_URL }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error \
             -X POST "${KOMODO_URL}/execute/RunProcedure" \
-            -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+            -H "X-Api-Key: $KOMODO_API_KEY" \
             -H "X-Api-Secret: $KOMODO_API_SECRET" \
             -H "Content-Type: application/json" \
             --data '{"procedure":"erp-demo-api-release"}' > komodo-procedure.json
@@ -157,7 +152,7 @@ jobs:
           for i in $(seq 1 60); do
             curl --fail-with-body --silent --show-error \
               -X POST "${KOMODO_URL}/read/GetUpdate" \
-              -H "$(printf 'X-Api-%s: %s' Key "$KOMODO_API_KEY")" \
+              -H "X-Api-Key: $KOMODO_API_KEY" \
               -H "X-Api-Secret: $KOMODO_API_SECRET" \
               -H "Content-Type: application/json" \
               --data "$(jq -nc --arg id "$procedure_update_id" '{id:$id}')" > komodo-procedure-update.json
