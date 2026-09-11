@@ -333,26 +333,37 @@ describe('ModuleConfigService', () => {
     it('should query erp_invoices table in getEntityValues when entityType is INVOICE_IN or INVOICE_OUT', async () => {
       mockDataSource.query = jest
         .fn()
-        .mockResolvedValue([{ category_id: 'cat-in-1' }]);
+        .mockResolvedValue([{ category_id: 'cat-in-1', is_valid: true }]);
       mockEntityAttrValueRepo.find = jest.fn().mockResolvedValue([]);
       mockCategoryRepo.findOne = jest
         .fn()
         .mockResolvedValue({ id: 'cat-in-1', attributeDefs: [] });
-      mockAttrDefRepo.find = jest.fn().mockResolvedValue([]);
+      mockAttrDefRepo.find = jest.fn().mockResolvedValue([
+        {
+          id: 'def-is-valid-1',
+          code: 'is_valid',
+          name: 'Hóa đơn hợp lý, hợp lệ',
+          isGlobal: true,
+          moduleKeyGlobal: 'INVOICE_IN',
+          isDeleted: false,
+        },
+      ]);
 
       const resIn = await service.getEntityValues('INVOICE_IN', 'inv-in-1');
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining(
-          'SELECT category_id FROM erp_invoices WHERE id = $1',
+          'SELECT category_id, is_valid FROM erp_invoices WHERE id = $1',
         ),
         ['inv-in-1'],
       );
       expect(resIn.categoryId).toBe('cat-in-1');
+      expect(resIn.globalAttributes['is_valid']).toBe('true');
+      expect(resIn.globalAttributes['def-is-valid-1']).toBe('true');
 
       const resOut = await service.getEntityValues('INVOICE_OUT', 'inv-out-1');
       expect(mockDataSource.query).toHaveBeenCalledWith(
         expect.stringContaining(
-          'SELECT category_id FROM erp_invoices WHERE id = $1',
+          'SELECT category_id, is_valid FROM erp_invoices WHERE id = $1',
         ),
         ['inv-out-1'],
       );
