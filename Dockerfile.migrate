@@ -20,6 +20,6 @@ COPY src ./src
 COPY .agents/skills/db-migrate/scripts/typeorm-runner.sh ./.agents/skills/db-migrate/scripts/typeorm-runner.sh
 RUN chmod 0755 ./.agents/skills/db-migrate/scripts/typeorm-runner.sh
 
-CMD ["bash", ".agents/skills/db-migrate/scripts/typeorm-runner.sh", "run", "/app/runtime.env"]
+CMD ["bash", ".agents/skills/db-migrate/scripts/typeorm-runner.sh", "run"]
 
 ENTRYPOINT []
