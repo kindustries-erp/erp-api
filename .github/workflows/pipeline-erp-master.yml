@@ -84,6 +84,10 @@ jobs:
             server_name: prod-1
             ip: 100.69.94.117
             port: 10020
+          - host: head
+            server_name: HEAD
+            ip: 100.119.247.85
+            port: 10020
     env:
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
       KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
