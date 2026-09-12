@@ -80,10 +80,10 @@ jobs:
             server_name: ELITE
             ip: 100.75.67.115
             port: 10020
-          - host: prod1
-            server_name: prod-1
-            ip: 100.69.94.117
-            port: 10020
+          # - host: prod1
+          #   server_name: prod-1
+          #   ip: 100.69.94.117
+          #   port: 10020
           # - host: head
           #   server_name: HEAD
           #   ip: 100.119.247.85
