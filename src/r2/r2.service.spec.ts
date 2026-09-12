@@ -15,8 +15,10 @@ describe('resolveS3Endpoint', () => {
   it('falls back to the Cloudflare R2 endpoint when no explicit endpoint is configured', () => {
     expect(
       resolveS3Endpoint({
-        get: jest.fn(() => undefined),
-        getOrThrow: jest.fn(() => 'account-id'),
+        get: jest.fn((key) =>
+          key === 'R2_ACCOUNT_ID' ? 'account-id' : undefined,
+        ),
+        getOrThrow: jest.fn(),
       }),
     ).toBe('https://account-id.r2.cloudflarestorage.com');
   });

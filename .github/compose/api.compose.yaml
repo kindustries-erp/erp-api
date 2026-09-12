@@ -1,0 +1,19 @@
+services:
+  api:
+    image: ${ERP_API_IMAGE:?ERP_API_IMAGE is required}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file: [application.env]
+    expose: ["3000"]
+    ports: ["__TARGET_IP__:__TARGET_PORT__:3000"]
+    networks: [npm-network]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/v1/auth/profile').then(r => process.exit([200,401].includes(r.status) ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt: [no-new-privileges:true]
+networks:
+  npm-network:
+    external: true
+    name: npm-network

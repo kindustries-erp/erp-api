@@ -19,6 +19,8 @@ COPY --from=builder /app/dist ./dist
 
 RUN bun install --frozen-lockfile --production
 
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
 EXPOSE 3000
 
 CMD ["bun", "dist/main.js"]

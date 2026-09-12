@@ -176,6 +176,7 @@ export default new DataSource(
         ],
         synchronize: false,
         ssl: isSslDisabled ? false : { rejectUnauthorized: false },
+        extra: isSslDisabled ? {} : { ssl: { rejectUnauthorized: false } },
       }
     : {
         type: 'postgres',
@@ -193,5 +194,9 @@ export default new DataSource(
         synchronize: false,
         ssl:
           process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        extra:
+          process.env.DB_SSL === 'true'
+            ? { ssl: { rejectUnauthorized: false } }
+            : {},
       },
 );

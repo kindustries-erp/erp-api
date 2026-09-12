@@ -781,16 +781,24 @@ export class ModuleConfigService {
 
     // 1. Lấy categoryId từ entity table nếu có
     let categoryId: string | null = null;
+    let invoiceIsValid: boolean | null = null;
     if (
       upperType === 'INVOICE' ||
       upperType === 'INVOICE_IN' ||
       upperType === 'INVOICE_OUT'
     ) {
       const rows = await this.dataSource.query(
-        `SELECT category_id FROM erp_invoices WHERE id = $1`,
+        `SELECT category_id, is_valid FROM erp_invoices WHERE id = $1`,
         [entityId],
       );
       categoryId = rows[0]?.category_id || null;
+      if (
+        rows[0] &&
+        rows[0].is_valid !== undefined &&
+        rows[0].is_valid !== null
+      ) {
+        invoiceIsValid = Boolean(rows[0].is_valid);
+      }
     } else if (upperType === 'BANK_TXN') {
       const rows = await this.dataSource.query(
         `SELECT category_id FROM erp_bank_transactions WHERE id = $1`,
@@ -897,6 +905,23 @@ export class ModuleConfigService {
       }
     }
 
+    // Fallback: Nếu is_valid chưa có trong globalAttributes nhưng có giá trị từ bảng erp_invoices
+    if (
+      (upperType === 'INVOICE' ||
+        upperType === 'INVOICE_IN' ||
+        upperType === 'INVOICE_OUT') &&
+      invoiceIsValid !== null
+    ) {
+      const isValidDef = globalAttributeDefs.find((d) => d.code === 'is_valid');
+      if (isValidDef) {
+        if (globalAttributes['is_valid'] === undefined) {
+          const valStr = invoiceIsValid ? 'true' : 'false';
+          globalAttributes['is_valid'] = valStr;
+          globalAttributes[isValidDef.id] = valStr;
+        }
+      }
+    }
+
     return {
       entityType: upperType,
       entityId,
@@ -994,10 +1019,32 @@ export class ModuleConfigService {
         upperType === 'INVOICE_IN' ||
         upperType === 'INVOICE_OUT'
       ) {
-        await manager.query(
-          `UPDATE erp_invoices SET category_id = $1, updated_at = now() WHERE id = $2`,
-          [categoryId || null, entityId],
-        );
+        let isValidValue: boolean | undefined = undefined;
+        if (globalAttributes && typeof globalAttributes === 'object') {
+          const isValidDefId = globalDefMap.get('is_valid');
+          const rawVal =
+            globalAttributes['is_valid'] ??
+            (isValidDefId ? globalAttributes[isValidDefId] : undefined);
+          if (rawVal !== undefined && rawVal !== null) {
+            isValidValue =
+              rawVal === true ||
+              rawVal === 'true' ||
+              rawVal === 1 ||
+              rawVal === '1';
+          }
+        }
+
+        if (isValidValue !== undefined) {
+          await manager.query(
+            `UPDATE erp_invoices SET category_id = $1, is_valid = $2, updated_at = now() WHERE id = $3`,
+            [categoryId || null, isValidValue, entityId],
+          );
+        } else {
+          await manager.query(
+            `UPDATE erp_invoices SET category_id = $1, updated_at = now() WHERE id = $2`,
+            [categoryId || null, entityId],
+          );
+        }
       } else if (upperType === 'BANK_TXN') {
         await manager.query(
           `UPDATE erp_bank_transactions SET category_id = $1, updated_at = now() WHERE id = $2`,

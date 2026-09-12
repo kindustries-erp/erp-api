@@ -381,6 +381,50 @@ export class InvoiceLifecycleService {
     }
 
     await this.repository.save(invoice);
+
+    // Sync to erp_entity_attribute_values
+    try {
+      const entityType =
+        invoice.taxInvoiceType === 'OUT' ? 'INVOICE_OUT' : 'INVOICE_IN';
+      const defs: { id: string }[] = await this.repository.manager.query(
+        `SELECT id FROM "erp_module_attribute_defs"
+         WHERE "module_key_global" = $1 AND "code" = 'is_valid' AND "is_deleted" = false
+         LIMIT 1`,
+        [entityType],
+      );
+
+      if (defs && defs.length > 0) {
+        const attrDefId = defs[0].id;
+        const valStr = isValid ? 'true' : 'false';
+
+        const existing: { id: string }[] = await this.repository.manager.query(
+          `SELECT id FROM "erp_entity_attribute_values"
+           WHERE "entity_type" IN ($1, 'INVOICE') AND "entity_id" = $2 AND "attr_def_id" = $3
+           LIMIT 1`,
+          [entityType, id, attrDefId],
+        );
+
+        if (existing && existing.length > 0) {
+          await this.repository.manager.query(
+            `UPDATE "erp_entity_attribute_values"
+             SET "value_text" = $1, "updated_at" = now()
+             WHERE "id" = $2`,
+            [valStr, existing[0].id],
+          );
+        } else {
+          await this.repository.manager.query(
+            `INSERT INTO "erp_entity_attribute_values" (
+               "id", "entity_type", "entity_id", "attr_def_id", "value_text", "created_at", "updated_at"
+             ) VALUES (
+               gen_random_uuid(), $1, $2, $3, $4, now(), now()
+             )`,
+            [entityType, id, attrDefId, valStr],
+          );
+        }
+      }
+    } catch (e) {
+      // Safe sync error catch to avoid blocking core response
+    }
   }
 
   // ---------------------------------------------------------------------------
