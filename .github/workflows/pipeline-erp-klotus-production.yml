@@ -1,0 +1,232 @@
+name: Pipeline API — erp-klotus-production via Komodo
+
+on:
+  push:
+    branches: [erp-klotus-production]
+  pull_request:
+    branches: [erp-klotus-production]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-production
+  MIGRATE_IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-production-migrate
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  ci:
+    name: Lint, Type & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run check:ci
+      - run: bunx jest --forceExit
+      - run: bun run build
+
+  build-and-push:
+    name: Build & Push immutable images
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - id: meta
+        run: echo "sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.migrate
+          push: true
+          tags: |
+            ${{ env.MIGRATE_IMAGE_NAME }}:latest
+            ${{ env.MIGRATE_IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to ${{ matrix.target.host }} (${{ matrix.target.ip }})
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - host: elite
+            server_name: ELITE
+            ip: 100.75.67.115
+            port: 10016
+    env:
+      KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+      KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+      KOMODO_URL: ${{ vars.KOMODO_URL }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+      - name: Guard deployment configuration
+        env:
+          API_ENV: ${{ secrets.KLOTUS_PRODUCTION_API_ENV }}
+        run: |
+          set -euo pipefail
+          test -n "$KOMODO_API_KEY"
+          test -n "$KOMODO_API_SECRET"
+          test -n "$KOMODO_URL"
+          test -n "$API_ENV"
+
+      - name: Ensure Komodo Stacks (Auto-Provisioning)
+        id: provision
+        env:
+          TARGET_HOST: ${{ matrix.target.host }}
+          SERVER_NAME: ${{ matrix.target.server_name }}
+          TARGET_IP: ${{ matrix.target.ip }}
+          TARGET_PORT: ${{ matrix.target.port }}
+        run: |
+          set -euo pipefail
+          call() {
+            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' --data "$2"
+          }
+
+          api_stack="${BRANCH}-${TARGET_HOST}-api"
+          migrate_stack="${BRANCH}-${TARGET_HOST}-migrate"
+          echo "api_stack=$api_stack" >> "$GITHUB_OUTPUT"
+          echo "migrate_stack=$migrate_stack" >> "$GITHUB_OUTPUT"
+
+          # 1. Resolve Server ID from Komodo
+          servers="$(call /read/ListServers '{}')"
+          server_id="$(jq -r --arg sname "$SERVER_NAME" '.[] | select(.name | ascii_downcase == ($sname | ascii_downcase)) | .id' <<<"$servers")"
+          if [ -z "$server_id" ]; then
+            echo "Error: Server $SERVER_NAME not found in Komodo" >&2
+            exit 1
+          fi
+          echo "Resolved Server $SERVER_NAME -> $server_id"
+
+          # 2. Compose contents
+          api_compose="$(sed -e "s/__TARGET_IP__/$TARGET_IP/g" -e "s/__TARGET_PORT__/$TARGET_PORT/g" .github/compose/api.compose.yaml)"
+          migrate_compose="$(cat .github/compose/migrate.compose.yaml)"
+
+          ensure_stack() {
+            local sname="$1"
+            local sid="$2"
+            local compose_text="$3"
+
+            local stack_info
+            stack_info="$(call /read/GetStack "$(jq -nc --arg stack "$sname" '{stack:$stack}')" 2>/dev/null || true)"
+            local sid_found
+            sid_found="$(jq -r '._id."$oid" // .id // empty' <<<"$stack_info")"
+
+            if [ -z "$sid_found" ]; then
+              echo "Creating stack $sname..."
+              local create_resp
+              create_resp="$(call /write/CreateStack "$(jq -nc --arg name "$sname" '{name:$name}')")"
+              sid_found="$(jq -r '._id."$oid" // .id // empty' <<<"$create_resp")"
+            fi
+
+            echo "Configuring stack $sname (ID: $sid_found)..."
+            call /write/UpdateStack "$(jq -nc --arg id "$sid_found" --arg sid "$sid" --arg run_dir "/opt/stacks/$sname" \
+              '{id:$id, config:{server_id:$sid, files_on_host:true, run_directory:$run_dir, file_paths:["compose.yaml"], env_file_path:".env", auto_pull:true}}')" >/dev/null
+
+            call /write/WriteStackFileContents "$(jq -nc --arg stack "$sname" --arg contents "$compose_text" \
+              '{stack:$stack, file_path:"compose.yaml", contents:$contents}')" >/dev/null
+          }
+
+          ensure_stack "$api_stack" "$server_id" "$api_compose"
+          ensure_stack "$migrate_stack" "$server_id" "$migrate_compose"
+
+      - name: Write release references and runtime settings
+        env:
+          IMAGE_SHA: ${{ needs.build-and-push.outputs.sha }}
+          API_ENV: ${{ secrets.KLOTUS_PRODUCTION_API_ENV }}
+          API_STACK: ${{ steps.provision.outputs.api_stack }}
+          MIGRATE_STACK: ${{ steps.provision.outputs.migrate_stack }}
+        run: |
+          set -euo pipefail
+          call() {
+            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' --data "$2"
+          }
+          api_image="${IMAGE_NAME}:${IMAGE_SHA}"
+          migrate_image="${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "ERP_API_IMAGE=$api_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$MIGRATE_STACK" --arg contents "ERP_MIGRATE_IMAGE=$migrate_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
+          call /write/WriteStackFileContents "$(jq -n --arg stack "$MIGRATE_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
+
+      - name: Run DB migration gate through Komodo
+        env:
+          MIGRATE_STACK: ${{ steps.provision.outputs.migrate_stack }}
+        run: |
+          set -euo pipefail
+          call() {
+            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' --data "$2"
+          }
+          call /execute/PullStack "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack}')" >/dev/null
+          update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
+          update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
+          test -n "$update_id"
+          for i in $(seq 1 90); do
+            state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
+            status="$(jq -r '.status // empty' <<<"$state")"
+            success="$(jq -r '.success // false' <<<"$state")"
+            echo "migration $i/90: status=$status success=$success"
+            if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Pull and deploy API through Komodo
+        env:
+          API_STACK: ${{ steps.provision.outputs.api_stack }}
+        run: |
+          set -euo pipefail
+          call() {
+            curl --fail-with-body --silent --show-error -X POST "$KOMODO_URL$1" \
+              -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
+              -H 'Content-Type: application/json' --data "$2"
+          }
+          call /execute/PullStack "$(jq -n --arg stack "$API_STACK" '{stack:$stack}')" >/dev/null
+          call /execute/DeployStack "$(jq -n --arg stack "$API_STACK" '{stack:$stack}')" >/dev/null
+
+      - name: Verify API on Tailscale endpoint
+        run: |
+          set -euo pipefail
+          url="http://${{ matrix.target.ip }}:${{ matrix.target.port }}"
+          for i in $(seq 1 36); do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$url/api/v1/auth/profile" || true)"
+            if [ "$code" = 401 ] || [ "$code" = 200 ]; then echo "API healthy: HTTP $code"; exit 0; fi
+            echo "API attempt $i/36: HTTP $code"; sleep 5
+          done
+          exit 1
