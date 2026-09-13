@@ -189,6 +189,11 @@ export class PurchaseOrdersCoreService {
                 `TO_CHAR(po.orderDate, 'YYYY-MM-DD') IN (:...${paramName})`,
                 { [paramName]: values },
               );
+            else if (key === 'createdAt' || key === 'created_at')
+              qb.andWhere(
+                `TO_CHAR(po.createdAt, 'YYYY-MM-DD') IN (:...${paramName})`,
+                { [paramName]: values },
+              );
             else if (key === 'expectedDate') {
               const hasBlank = values.includes('__BLANK__');
               const realVals = values.filter((v) => v !== '__BLANK__');
@@ -631,20 +636,26 @@ export class PurchaseOrdersCoreService {
                     ? In(matchingIds)
                     : In(['00000000-0000-0000-0000-000000000000']);
               }
-            } else if (key === 'orderDate' || key === 'expectedDate') {
+            } else if (
+              key === 'orderDate' ||
+              key === 'expectedDate' ||
+              key === 'createdAt' ||
+              key === 'created_at'
+            ) {
+              const targetKey = key === 'created_at' ? 'createdAt' : key;
               if (strVal.includes('|')) {
                 const [from, to] = strVal.split('|');
                 if (from && to) {
-                  where[key] = Between(
+                  where[targetKey] = Between(
                     new Date(`${from}T00:00:00.000+07:00`),
                     new Date(`${to}T23:59:59.999+07:00`),
                   );
                 } else if (from) {
-                  where[key] = MoreThanOrEqual(
+                  where[targetKey] = MoreThanOrEqual(
                     new Date(`${from}T00:00:00.000+07:00`),
                   );
                 } else if (to) {
-                  where[key] = LessThanOrEqual(
+                  where[targetKey] = LessThanOrEqual(
                     new Date(`${to}T23:59:59.999+07:00`),
                   );
                 }
@@ -749,6 +760,22 @@ export class PurchaseOrdersCoreService {
                 );
               } else if (hasBlank) {
                 where.expectedDate = IsNull();
+              }
+            } else if (
+              key === 'orderDate' ||
+              key === 'createdAt' ||
+              key === 'created_at'
+            ) {
+              const targetKey = key === 'created_at' ? 'createdAt' : key;
+              if (hasBlank && realVals.length > 0) {
+                where[targetKey] = Or(
+                  IsNull(),
+                  In(realVals.map((d: string) => new Date(d))),
+                );
+              } else if (hasBlank) {
+                where[targetKey] = IsNull();
+              } else {
+                where[targetKey] = In(realVals.map((d: string) => new Date(d)));
               }
             } else if (key === 'inventoryStatus') {
               const statusMatches: any[] = [];
@@ -887,6 +914,7 @@ export class PurchaseOrdersCoreService {
       ],
       columnMap: {
         created_at: 'createdAt',
+        createdAt: 'createdAt',
         order_date: 'orderDate',
         orderDate: 'orderDate',
         expected_date: 'expectedDate',
@@ -902,7 +930,7 @@ export class PurchaseOrdersCoreService {
         status: 'status',
         remarks: 'remarks',
       },
-      defaultOrder: { orderDate: 'DESC', createdAt: 'DESC' },
+      defaultOrder: { createdAt: 'DESC' },
     });
 
     let finalWhere: any = where;

@@ -77,15 +77,15 @@ jobs:
       matrix:
         target:
           - host: elite
-            server_name: ELITE
+            server_name: elite
             ip: 100.75.67.115
-            port: 10020
-          - host: prod1
-            server_name: prod-1
-            ip: 100.69.94.117
-            port: 10020
+            port: 10012
+          # - host: prod1
+          #   server_name: prod-1
+          #   ip: 100.69.94.117
+          #   port: 10020
           # - host: head
-          #   server_name: HEAD
+          #   server_name: head
           #   ip: 100.119.247.85
           #   port: 10020
     env:

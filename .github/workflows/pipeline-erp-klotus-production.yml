@@ -2,10 +2,13 @@ name: Pipeline API — erp-klotus-production via Komodo
 
 on:
   push:
-    branches: [erp-klotus-production]
+    branches:
+      - erp-klotus-production
   pull_request:
-    branches: [erp-klotus-production]
+    branches:
+      - erp-klotus-production
   workflow_dispatch:
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-production
@@ -30,7 +33,7 @@ jobs:
     name: Build & Push immutable images
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -71,13 +74,13 @@ jobs:
     name: Deploy to ${{ matrix.target.host }} (${{ matrix.target.ip }})
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         target:
           - host: elite
-            server_name: ELITE
+            server_name: elite
             ip: 100.75.67.115
             port: 10016
     env:
@@ -131,7 +134,7 @@ jobs:
           fi
           echo "Resolved Server $SERVER_NAME -> $server_id"
 
-          # 2. Compose contents
+          # 2. Compose contents from templates
           api_compose="$(sed -e "s/__TARGET_IP__/$TARGET_IP/g" -e "s/__TARGET_PORT__/$TARGET_PORT/g" .github/compose/api.compose.yaml)"
           migrate_compose="$(cat .github/compose/migrate.compose.yaml)"
 

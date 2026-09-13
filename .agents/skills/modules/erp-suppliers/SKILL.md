@@ -88,8 +88,9 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 
 | Method | Endpoint | Tham số / Body | RBAC Permission | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/business-partners` | Body: `CreateBusinessPartnerDto` | `resource: 'business_partners'`, `action: 'create'` | Tạo mới thông tin đối tác kinh doanh |
+| `POST` | `/api/v1/business-partners` | Body: `CreateBusinessPartnerDto` | `resource: 'business_partners'`, `action: 'create'` | Tạo mới thông tin đối tác kinh doanh (tự động sinh mã nếu trống) |
 | `GET` | `/api/v1/business-partners` | Query: `partnerType`, `search`, `page`, `pageSize`, `sort`, `column_filters`, `column_search`, `date_from`, `date_to` | `resource: 'business_partners'`, `action: 'read'` | Danh sách đối tác kèm tìm kiếm đa chiều, lọc từng cột và phân trang |
+| `GET` | `/api/v1/business-partners/next-code` | Query: `partnerType` (`VENDOR`, `CUSTOMER`) | `resource: 'business_partners'`, `action: 'read'` | Lấy mã đối tác kế tiếp tự động tăng theo format `NCC-XXX` / `KH-XXX` |
 | `GET` | `/api/v1/business-partners/column-options` | Query: `column`, `search`, `page`, `pageSize`, `filters`, `partnerType` | `resource: 'business_partners'`, `action: 'read'` | Lấy danh sách options distinct kèm đếm số lượng bản ghi cho Filter Popover |
 | `GET` | `/api/v1/business-partners/:id` | Param: `id` (UUID) | `resource: 'business_partners'`, `action: 'read'` | Lấy chi tiết thông tin đối tác theo ID |
 | `PATCH`| `/api/v1/business-partners/:id` | Param: `id`, Body: `UpdateBusinessPartnerDto` | `resource: 'business_partners'`, `action: 'update'` | Cập nhật thông tin chi tiết đối tác |
