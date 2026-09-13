@@ -80,6 +80,14 @@ jobs:
             server_name: elite
             ip: 100.75.67.115
             port: 10014
+          - host: prod-1
+            server_name: prod-1
+            ip: 100.69.94.117
+            port: 10014
+          - host: dev
+            server_name: dev
+            ip: 100.90.103.19
+            port: 10014
     env:
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
       KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
