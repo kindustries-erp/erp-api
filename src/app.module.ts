@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
+import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
@@ -13,6 +14,7 @@ import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
+import { ModuleConfigModule } from './module-config/module-config.module';
 import { PurchaseRequestsCoreModule } from './purchase-requests-core/purchase-requests-core.module';
 import { PurchaseOrdersCoreModule } from './purchase-orders-core/purchase-orders-core.module';
 import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-core.module';
@@ -31,9 +33,11 @@ import { RbacCoreModule } from './rbac-core/rbac-core.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
+import { ErpAttachmentsCoreModule } from './erp-attachments-core/erp-attachments-core.module';
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { isCronEnabled } from './common/utils/cron.util';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
@@ -43,13 +47,15 @@ import { PublicWarrantyModule } from './public-warranty/public-warranty.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardCoreModule } from './dashboard-core/dashboard-core.module';
 import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inventory-adjustments-core.module';
+import { SinvoiceModule } from './sinvoice/sinvoice.module';
+import { EmailIngestModule } from './email-ingest/email-ingest.module';
+import { OperatingExpensesCoreModule } from './operating-expenses-core/operating-expenses-core.module';
+import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
+import { AppConfigModule } from './app-config/app-config.module';
 
 @Module({
   imports: [
-    ...(process.env.APP_ENV?.endsWith('-production') ||
-    process.env.NODE_ENV === 'production'
-      ? [ScheduleModule.forRoot()]
-      : []),
+    ...(isCronEnabled() ? [ScheduleModule.forRoot()] : []),
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),
@@ -58,14 +64,27 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const databaseUrl = configService.get<string>('DATABASE_URL');
+        const isSslDisabled =
+          configService.get<string>('DB_SSL') === 'false' ||
+          (databaseUrl &&
+            (databaseUrl.includes('sslmode=disable') ||
+              databaseUrl.includes('ssl=false')));
+
         if (databaseUrl) {
           return {
             type: 'postgres' as const,
             schema: 'public',
             url: databaseUrl,
-            entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
+            entities: [
+              CoreUser,
+              CoreUserPreference,
+              CoreRole,
+              CorePermission,
+              CoreUserRole,
+            ],
             synchronize: false,
-            ssl: { rejectUnauthorized: false },
+            ssl: isSslDisabled ? false : { rejectUnauthorized: false },
+            extra: isSslDisabled ? {} : { ssl: { rejectUnauthorized: false } },
             autoLoadEntities: true,
             retryAttempts: 2,
           };
@@ -79,12 +98,22 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
           username: configService.get<string>('DB_USER', 'postgres'),
           password: configService.get<string>('DB_PASSWORD', ''),
           database: configService.get<string>('DB_DATABASE', 'erp_core'),
-          entities: [CoreUser, CoreRole, CorePermission, CoreUserRole],
+          entities: [
+            CoreUser,
+            CoreUserPreference,
+            CoreRole,
+            CorePermission,
+            CoreUserRole,
+          ],
           synchronize: false,
           ssl:
             configService.get<string>('DB_SSL') === 'true'
               ? { rejectUnauthorized: false }
               : false,
+          extra:
+            configService.get<string>('DB_SSL') === 'true'
+              ? { ssl: { rejectUnauthorized: false } }
+              : {},
           autoLoadEntities: true,
           retryAttempts: 2,
         };
@@ -94,7 +123,11 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
     EmployeesCoreModule,
     BusinessPartnersCoreModule,
     InventoryCoreModule,
+    ErpInvoicesCoreModule,
+    ErpAttachmentsCoreModule,
+    ErpMfgCoreModule,
     BomCoreModule,
+    ModuleConfigModule,
     PurchaseRequestsCoreModule,
     PurchaseOrdersCoreModule,
     GoodsReceiptsCoreModule,
@@ -121,6 +154,11 @@ import { InventoryAdjustmentsCoreModule } from './inventory-adjustments-core/inv
     NotificationsModule,
     DashboardCoreModule,
     InventoryAdjustmentsCoreModule,
+    SinvoiceModule,
+    EmailIngestModule,
+    OperatingExpensesCoreModule,
+    VinfastPartsModule,
+    AppConfigModule,
   ],
   controllers: [AppController],
   providers: [

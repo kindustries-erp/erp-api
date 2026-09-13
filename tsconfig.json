@@ -4,6 +4,7 @@
     "moduleResolution": "node16",
     "ignoreDeprecations": "5.0",
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "declaration": true,
     "removeComments": true,
@@ -19,6 +20,10 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": false,
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   }
 }

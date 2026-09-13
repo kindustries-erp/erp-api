@@ -10,12 +10,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { Readable } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UserToken } from '../common/decorators/user-token.decorator';
 
 @ApiTags('Files')
 @ApiBearerAuth()
@@ -43,11 +41,11 @@ export class FilesController {
     },
   })
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: any, @UserToken() token: string) {
+  async uploadFile(@UploadedFile() file: any) {
     if (!file) {
       throw new BadRequestException('Không tìm thấy file để upload');
     }
-    return this.filesService.upload(file, token);
+    return this.filesService.upload(file);
   }
 
   @Get(':id/metadata')
@@ -57,13 +55,9 @@ export class FilesController {
   }
 
   @Get(':id')
-  async getFile(
-    @Param('id') id: string,
-    @Res() res: any,
-    @UserToken() token?: string,
-  ) {
+  async getFile(@Param('id') id: string, @Res() res: Response) {
     const { stream, contentType, contentLength } =
-      await this.filesService.getFileStream(id, token);
+      await this.filesService.getFileStream(id);
 
     if (contentType) res.setHeader('Content-Type', contentType);
     if (contentLength) res.setHeader('Content-Length', contentLength);

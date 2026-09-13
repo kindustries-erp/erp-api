@@ -4,6 +4,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InventoryStockCoreService } from './inventory-stock-core.service';
 import { InventoryStockQueryDto } from './dto/inventory-stock-query.dto';
 
@@ -14,13 +15,19 @@ import { InventoryStockQueryDto } from './dto/inventory-stock-query.dto';
 export class InventoryStockCoreController {
   constructor(private readonly service: InventoryStockCoreService) {}
 
-  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ITEMS,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: InventoryStockQueryDto) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ITEMS,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -28,6 +35,8 @@ export class InventoryStockCoreController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('filters') filters?: string,
+    @Query('stock_tab') stockTabSnake?: string,
+    @Query('stockTab') stockTab?: string,
   ) {
     return this.service.getColumnOptions(
       column,
@@ -35,10 +44,14 @@ export class InventoryStockCoreController {
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
       filters,
+      stockTabSnake || stockTab,
     );
   }
 
-  @RequirePermissions({ resource: 'inventory_items', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVENTORY_ITEMS,
+    action: ErpAction.READ,
+  })
   @Get('export/excel')
   async exportExcel(
     @Query() query: InventoryStockQueryDto,

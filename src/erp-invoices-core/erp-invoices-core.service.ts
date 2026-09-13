@@ -6,7 +6,13 @@ import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
+import {
+  InvoiceExportBackgroundService,
+  type InvoiceExportHistoryResult,
+  type InvoiceExportProgressEvent,
+} from './services/invoice-export-background.service';
 import type { PortalProgressEvent } from './services/invoice-portal.service';
+import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -18,6 +24,8 @@ export type {
   BulkImportErrorItem,
   BulkImportResult,
 } from './services/invoice-import.service';
+
+export type { ErpInvoiceItemQuery } from './services/invoice-query.service';
 
 export interface ErpInvoiceQuery {
   direction?: string;
@@ -37,6 +45,7 @@ export interface ErpInvoiceQuery {
   column_search?: string;
   column_filters?: string;
   is_valid?: string;
+  unlinked_po_id?: string;
 }
 
 /**
@@ -55,12 +64,18 @@ export class ErpInvoicesCoreService {
     return this.portalService.progress$;
   }
 
+  get exportProgress$(): Subject<InvoiceExportProgressEvent> {
+    return this.exportBackgroundService.progress$;
+  }
+
   constructor(
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly portalService: InvoicePortalService,
     private readonly importService: InvoiceImportService,
     private readonly filesService: InvoiceFilesService,
     private readonly queryService: InvoiceQueryService,
+    private readonly exportBackgroundService: InvoiceExportBackgroundService,
+    private readonly smartNetoffService: InvoiceSmartNetoffService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -69,6 +84,12 @@ export class ErpInvoicesCoreService {
 
   findAll(query: ErpInvoiceQuery) {
     return this.queryService.findAll(query);
+  }
+
+  findAllItems(
+    query: import('./services/invoice-query.service').ErpInvoiceItemQuery,
+  ) {
+    return this.queryService.findAllItems(query);
   }
 
   getColumnOptions(
@@ -89,8 +110,68 @@ export class ErpInvoicesCoreService {
     );
   }
 
+  getItemColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    direction?: 'IN' | 'OUT',
+  ) {
+    return this.queryService.getItemColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filtersStr,
+      direction,
+    );
+  }
+
   exportExcel(query: ErpInvoiceQuery) {
     return this.queryService.exportExcel(query);
+  }
+
+  exportItemsExcel(
+    query: import('./services/invoice-query.service').ErpInvoiceItemQuery,
+  ) {
+    return this.queryService.exportItemsExcel(query);
+  }
+
+  startExportExcelBackground(query: ErpInvoiceQuery, userId: string) {
+    return this.exportBackgroundService.startBackgroundExport(query, userId);
+  }
+
+  getExportExcelHistory(
+    userId: string,
+    page?: number,
+    pageSize?: number,
+  ): InvoiceExportHistoryResult {
+    return this.exportBackgroundService.listHistoryForUser(
+      userId,
+      page,
+      pageSize,
+    );
+  }
+
+  getExportExcelProgressSnapshot(userId: string) {
+    return this.exportBackgroundService.getJobSnapshotForUser(userId);
+  }
+
+  getExportExcelBackgroundFile(jobId: string, userId: string) {
+    return this.exportBackgroundService.getReadyExportFile(jobId, userId);
+  }
+
+  getBulkNetOffs(invoiceIds: string[]) {
+    return this.queryService.getBulkNetOffs(invoiceIds);
+  }
+
+  getSmartNetOffSuggestions(invoiceIds: string[]) {
+    return this.smartNetoffService.getSuggestionsForInvoices(invoiceIds);
+  }
+
+  getStats(direction?: 'IN' | 'OUT', dateFrom?: string, dateTo?: string) {
+    return this.queryService.getStats(direction, dateFrom, dateTo);
   }
 
   // ---------------------------------------------------------------------------
@@ -137,6 +218,10 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.unpostInvoice(id);
   }
 
+  autoPostStandard(id: string) {
+    return this.lifecycleService.autoPostStandard(id);
+  }
+
   linkVouchersToInvoice(
     invoiceId: string,
     payload: { bankTransactionId: string; netOffAmount?: number }[],
@@ -156,12 +241,39 @@ export class ErpInvoicesCoreService {
     return this.portalService.getPortalConfig();
   }
 
-  savePortalConfig(token: string, cookies?: string) {
-    return this.portalService.savePortalConfig(token, cookies);
+  savePortalConfig(
+    token: string,
+    cookies?: string,
+    username?: string,
+    password?: string,
+  ) {
+    return this.portalService.savePortalConfig(
+      token,
+      cookies,
+      username,
+      password,
+    );
+  }
+
+  getPortalCaptcha() {
+    return this.portalService.getCaptcha();
+  }
+
+  loginPortalWithCaptcha(dto: {
+    username: string;
+    password?: string;
+    cvalue: string;
+    ckey: string;
+  }) {
+    return this.portalService.loginWithCaptcha(dto);
   }
 
   checkTokenValid(token: string, cookies?: string) {
     return this.portalService.checkTokenValid(token, cookies);
+  }
+
+  autoReloginWithRetry(maxRetries?: number, retryDelayMs?: number) {
+    return this.portalService.autoReloginWithRetry(maxRetries, retryDelayMs);
   }
 
   syncFromPortal(
@@ -170,10 +282,6 @@ export class ErpInvoicesCoreService {
     waitForCompletion = false,
   ) {
     return this.portalService.syncFromPortal(dto, userId, waitForCompletion);
-  }
-
-  reparseXml(id: string, token?: string, cookies?: string) {
-    return this.portalService.reparseXml(id, token, cookies);
   }
 
   bulkDownloadXml(
@@ -226,8 +334,18 @@ export class ErpInvoicesCoreService {
   uploadPdfs(
     invoiceId: string,
     files: { filename: string; buffer: Buffer; mimetype: string }[],
+    documentType?: string,
+    userId?: string,
   ) {
-    return this.filesService.uploadPdfs(invoiceId, files);
+    return this.filesService.uploadPdfs(invoiceId, files, documentType, userId);
+  }
+
+  linkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.linkAttachment(invoiceId, attachmentId);
+  }
+
+  unlinkAttachment(invoiceId: string, attachmentId: string) {
+    return this.filesService.unlinkAttachment(invoiceId, attachmentId);
   }
 
   getPdfContent(invoiceId: string, fileKey: string) {

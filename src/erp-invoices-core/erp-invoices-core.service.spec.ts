@@ -13,6 +13,7 @@ describe('ErpInvoicesCoreService', () => {
   let importService: any;
   let filesService: any;
   let queryService: any;
+  let exportBackgroundService: any;
   // Keep repository mock for lifecycle sub-service tests that instantiate it directly
   let repository: any;
   let accountingCoreService: any;
@@ -50,8 +51,8 @@ describe('ErpInvoicesCoreService', () => {
       getPortalConfig: jest.fn(),
       savePortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
+      autoReloginWithRetry: jest.fn(),
       syncFromPortal: jest.fn(),
-      reparseXml: jest.fn(),
       bulkDownloadXml: jest.fn(),
       syncDetailFromPortal: jest.fn(),
     };
@@ -79,12 +80,27 @@ describe('ErpInvoicesCoreService', () => {
       exportExcel: jest.fn(),
     };
 
+    exportBackgroundService = {
+      progress$: { next: jest.fn() } as any,
+      startBackgroundExport: jest.fn(),
+      listHistoryForUser: jest.fn(),
+      getJobSnapshotForUser: jest.fn(),
+      getReadyExportFile: jest.fn(),
+    };
+
+    const smartNetoffService: any = {
+      getSuggestionsForInvoices: jest.fn(),
+      getSuggestionsForSingleInvoice: jest.fn(),
+    };
+
     service = new ErpInvoicesCoreService(
       lifecycleService,
       portalService,
       importService,
       filesService,
       queryService,
+      exportBackgroundService,
+      smartNetoffService,
     );
   });
 
@@ -204,6 +220,16 @@ describe('ErpInvoicesCoreService', () => {
     it('returns false for empty token (via portalService)', async () => {
       portalService.checkTokenValid.mockResolvedValue(false);
       expect(await service.checkTokenValid('')).toBe(false);
+    });
+  });
+
+  describe('autoReloginWithRetry', () => {
+    it('delegates to portalService.autoReloginWithRetry', async () => {
+      const mockResult = { token: 'new-token', cookies: 'cookies' };
+      portalService.autoReloginWithRetry.mockResolvedValue(mockResult);
+      const res = await service.autoReloginWithRetry(3, 5000);
+      expect(res).toEqual(mockResult);
+      expect(portalService.autoReloginWithRetry).toHaveBeenCalledWith(3, 5000);
     });
   });
 });

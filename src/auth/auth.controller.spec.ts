@@ -8,6 +8,7 @@ describe('AuthController', () => {
     login: jest.Mock;
     registerLocalUser: jest.Mock;
     profile: jest.Mock;
+    updateProfile: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -15,6 +16,7 @@ describe('AuthController', () => {
       login: jest.fn(),
       registerLocalUser: jest.fn(),
       profile: jest.fn(),
+      updateProfile: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -94,6 +96,34 @@ describe('AuthController', () => {
 
       expect(result).toEqual(profileResult);
       expect(authService.profile).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('should delegate request.user.sub and body to AuthService.updateProfile', async () => {
+      const req = { user: { sub: 'user-1' } } as any;
+      const payload = {
+        email: 'new@example.com',
+        full_name: 'New Name',
+        phone: '0909123456',
+        notes: 'updated',
+      };
+      const updateResult = {
+        message: 'Cập nhật hồ sơ thành công',
+        data: {
+          id: 'user-1',
+          email: 'new@example.com',
+          full_name: 'New Name',
+          phone: '0909123456',
+          notes: 'updated',
+        },
+      };
+      authService.updateProfile.mockResolvedValue(updateResult);
+
+      const result = await controller.updateProfile(payload, req);
+
+      expect(result).toEqual(updateResult);
+      expect(authService.updateProfile).toHaveBeenCalledWith('user-1', payload);
     });
   });
 });

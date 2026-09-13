@@ -18,20 +18,25 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
-import type { ErpInvoiceQuery } from './erp-invoices-core.service';
+import type {
+  ErpInvoiceQuery,
+  ErpInvoiceItemQuery,
+} from './erp-invoices-core.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -41,13 +46,83 @@ export class ErpInvoicesCoreController {
   constructor(
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
+    private readonly traceabilityService: DocumentTraceabilityService,
   ) {}
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get(':id/traceability-graph')
+  getTraceabilityGraph(@Param('id') id: string, @Request() req: any) {
+    return this.traceabilityService.getInvoiceTraceabilityGraph(id, req.user);
+  }
 
   // ---------------------------------------------------------------------------
   // CRUD cơ bản
   // ---------------------------------------------------------------------------
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('items')
+  @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'pageSize', required: false })
+  findAllItems(@Query() query: ErpInvoiceItemQuery) {
+    return this.service.findAllItems(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('items/column-options')
+  getItemColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+    @Query('column_filters') filtersStr?: string,
+    @Query('direction') direction?: 'IN' | 'OUT',
+  ) {
+    return this.service.getItemColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+      direction,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('items/export/excel')
+  async exportItemsExcel(
+    @Query() query: ErpInvoiceItemQuery,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.service.exportItemsExcel(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=invoice-lines-${query.direction || 'all'}.xlsx`,
+    );
+    res.send(buffer);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get()
   @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
   @ApiQuery({ name: 'search', required: false })
@@ -63,7 +138,10 @@ export class ErpInvoicesCoreController {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -83,7 +161,10 @@ export class ErpInvoicesCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export/excel')
   async exportExcel(@Query() query: ErpInvoiceQuery, @Res() res: Response) {
     const buffer = await this.service.exportExcel(query);
@@ -95,71 +176,258 @@ export class ErpInvoicesCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Post('export/excel/background')
+  startExportExcelBackground(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('export/excel/background/history')
+  getExportExcelBackgroundHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.getExportExcelHistory(
+      req.user?.sub,
+      page ? Number(page) : undefined,
+      pageSize ? Number(pageSize) : undefined,
+    );
+  }
+
+  // Compatibility alias for clients using legacy path variant.
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Post('export/background/excel')
+  startExportExcelBackgroundAlias(
+    @Body() query: ErpInvoiceQuery,
+    @Request() req: any,
+  ) {
+    return this.service.startExportExcelBackground(query, req.user?.sub);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('export/excel/background/:jobId/download')
+  async downloadBackgroundExport(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = this.service.getExportExcelBackgroundFile(
+      jobId,
+      req.user?.sub,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Sse('export/excel/progress/stream')
+  exportExcelProgressStream(@Request() req: any): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      subscriber.next({
+        data: JSON.stringify({
+          processId: 'ping',
+          current: 0,
+          total: 100,
+          isRunning: false,
+          completed: false,
+          ready: false,
+          failed: false,
+          message: 'Connected',
+        }),
+      } as MessageEvent);
+
+      const snapshot = this.service.getExportExcelProgressSnapshot(
+        req.user?.sub,
+      );
+      if (snapshot) {
+        subscriber.next({ data: JSON.stringify(snapshot) } as MessageEvent);
+      }
+
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            current: 0,
+            total: 100,
+            isRunning: false,
+            completed: false,
+            ready: false,
+            failed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000);
+
+      const subscription = this.service.exportProgress$.subscribe({
+        next: (data) => {
+          if (data.userId !== req.user?.sub) return;
+          subscriber.next({ data: JSON.stringify(data) } as MessageEvent);
+        },
+        error: (err) => subscriber.error(err),
+        complete: () => subscriber.complete(),
+      });
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.unsubscribe();
+      };
+    });
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get('stats')
+  @ApiQuery({ name: 'direction', required: false, enum: ['IN', 'OUT'] })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  getStats(
+    @Query('direction') direction?: 'IN' | 'OUT',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.service.getStats(direction, dateFrom, dateTo);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Post('bulk-net-offs')
+  getBulkNetOffs(@Body('ids') ids: string[]) {
+    return this.service.getBulkNetOffs(ids);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Post('smart-net-off-suggestions')
+  getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
+    return this.service.getSmartNetOffSuggestions(invoiceIds);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreateErpInvoiceDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/post')
   postInvoice(@Param('id') id: string, @Body() dto: PostInvoiceDto) {
     return this.service.postInvoice(id, dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/unpost')
   unpostInvoice(@Param('id') id: string) {
     return this.service.unpostInvoice(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':id/auto-post-standard')
+  autoPostStandard(@Param('id') id: string) {
+    return this.service.autoPostStandard(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch('bulk-set-branch')
   bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
     return this.service.bulkSetBranch(body.ids, body.branchId);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch('bulk-set-notes')
   bulkSetNotes(@Body() body: { ids: string[]; notes: string }) {
     return this.service.bulkSetNotes(body.ids, body.notes);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateErpInvoiceDto) {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
   }
 
-  @Post(':id/reparse-xml')
-  reparseXml(@Param('id') id: string, @Body('token') token?: string) {
-    return this.service.reparseXml(id, token);
-  }
-
   @Post(':id/sync-detail')
-  syncDetail(@Param('id') id: string, @Body('token') token: string) {
+  syncDetail(@Param('id') id: string, @Body('token') token?: string) {
     return this.service.syncDetailFromPortal(id, token);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/net-off-vouchers')
   linkVouchers(
     @Param('id') id: string,
@@ -168,7 +436,10 @@ export class ErpInvoicesCoreController {
     return this.service.linkVouchersToInvoice(id, payload);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Delete(':id/net-off-vouchers/:voucherId')
   removeVoucherLink(
     @Param('id') id: string,
@@ -181,6 +452,10 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/sync
    * Fetch từ GDT portal, lưu vào DB, download XML theo batch rate-limited.
    */
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/sync')
   async syncPortal(@Body() dto: PortalFetchDto, @Request() req: any) {
     try {
@@ -220,7 +495,10 @@ export class ErpInvoicesCoreController {
     }
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id/validate')
   async validateInvoice(
     @Param('id') id: string,
@@ -235,9 +513,13 @@ export class ErpInvoicesCoreController {
    * POST /api/v1/erp-invoices/portal/bulk-download-xml
    * Tải lại XML cho tất cả hóa đơn chưa có XML trong DB
    */
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/bulk-download-xml')
   bulkDownloadXml(
-    @Body() body: { token: string; cookies?: string; direction: 'IN' | 'OUT' },
+    @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
   ) {
     return this.service.bulkDownloadXml(
       body.token,
@@ -246,14 +528,53 @@ export class ErpInvoicesCoreController {
     );
   }
 
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Get('portal/captcha')
+  async getPortalCaptcha() {
+    return await this.service.getPortalCaptcha();
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post('portal/login')
+  async loginPortal(@Body() dto: PortalLoginDto) {
+    return await this.service.loginPortalWithCaptcha(dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Get('portal/token')
   async getPortalToken() {
     return await this.service.getPortalConfig();
   }
 
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post('portal/token')
-  async savePortalToken(@Body() body: { token: string; cookies?: string }) {
-    await this.service.savePortalConfig(body.token, body.cookies);
+  async savePortalToken(
+    @Body()
+    body: {
+      token: string;
+      cookies?: string;
+      username?: string;
+      password?: string;
+    },
+  ) {
+    await this.service.savePortalConfig(
+      body.token,
+      body.cookies,
+      body.username,
+      body.password,
+    );
     return { message: 'Config saved successfully' };
   }
 
@@ -432,6 +753,8 @@ export class ErpInvoicesCoreController {
   uploadPdfs(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    @Body('documentType') documentType?: string,
+    @Request() req?: any,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Chưa chọn file PDF nào');
@@ -443,7 +766,33 @@ export class ErpInvoicesCoreController {
         buffer: f.buffer,
         mimetype: f.mimetype,
       })),
+      documentType,
+      req?.user?.sub,
     );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':id/attachments/link')
+  linkAttachment(
+    @Param('id') id: string,
+    @Body() body: { attachmentId: string },
+  ) {
+    return this.service.linkAttachment(id, body.attachmentId);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Delete(':id/attachments/:attachmentId')
+  unlinkAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.service.unlinkAttachment(id, attachmentId);
   }
 
   @Get(':id/pdfs/zip')

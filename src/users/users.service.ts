@@ -108,6 +108,10 @@ export class UsersService {
     return this.employeesRepository.findOne({ where: { id: employeeId } });
   }
 
+  async saveEmployee(employee: ErpEmployee): Promise<ErpEmployee> {
+    return this.employeesRepository.save(employee);
+  }
+
   async updateLastLogin(userId: string): Promise<void> {
     await this.usersRepository.update(userId, {
       lastLoginAt: new Date(),

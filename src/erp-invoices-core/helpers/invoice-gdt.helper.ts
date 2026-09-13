@@ -2,12 +2,7 @@ import { Logger } from '@nestjs/common';
 
 const gdtLogger = new Logger('InvoiceGdtHelper');
 
-/**
- * Sleep helper — reusable across portal/import flows.
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from '../../common/utils/delay.util';
 
 /**
  * fetchWithRetry — wraps native fetch with timeout, GDT-compatible UA headers,

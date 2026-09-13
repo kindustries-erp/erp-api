@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SalesOrdersCoreService } from './sales-orders-core.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';
@@ -31,19 +32,28 @@ import { UnreserveSalesOrderDto } from './dto/unreserve-sales-order.dto';
 export class SalesOrdersCoreController {
   constructor(private readonly service: SalesOrdersCoreService) {}
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreateSalesOrderDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   async getColumnOptions(
     @Query('column') column: string,
@@ -61,19 +71,28 @@ export class SalesOrdersCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get('next-no')
   getNextNo(@Query('date') date?: string) {
     return this.service.getNextSoNo(date);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -82,7 +101,10 @@ export class SalesOrdersCoreController {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/reserve')
   reserve(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -91,7 +113,10 @@ export class SalesOrdersCoreController {
     return this.service.reserve(id, dto);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/unreserve')
   unreserve(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -100,25 +125,37 @@ export class SalesOrdersCoreController {
     return this.service.unreserve(id, dto);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/confirm-all-delivery')
   confirmAllDelivery(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.confirmAllDelivery(id);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancel(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancel(id);
   }
 
-  @RequirePermissions({ resource: 'sales_orders', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id/export/xlsx')
   async exportXlsx(
     @Param('id', new ParseUUIDPipe()) id: string,

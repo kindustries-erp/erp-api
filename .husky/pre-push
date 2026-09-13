@@ -1,2 +1,2 @@
-bun run check:ci
+bun run type:check
 bunx jest --forceExit

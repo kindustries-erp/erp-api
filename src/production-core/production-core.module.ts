@@ -9,6 +9,8 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
+import { ErpProductionOrderSerialAssignment } from './entities/erp_production_order_serial_assignment.entity';
+import { ErpProductionCheckpoint } from './entities/erp_production_checkpoint.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from '../goods-issues-core/entities/erp_goods_issue_line.entity';
 import { ErpGoodsReceipt } from '../goods-receipts-core/entities/erp_goods_receipt.entity';
@@ -31,6 +33,8 @@ import { CompanyProfileModule } from '../company-profile/company-profile.module'
       ErpInventoryTransaction,
       ErpProductionOrder,
       ErpProductionOrderMaterial,
+      ErpProductionOrderSerialAssignment,
+      ErpProductionCheckpoint,
       ErpGoodsIssue,
       ErpGoodsIssueLine,
       ErpGoodsReceipt,

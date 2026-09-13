@@ -1,20 +1,16 @@
-# ERP API Agent Entry
+# Liouni ERP API Agent Entry
 
-This file is the repo-root bridge for agents.
+This file is the root entry point for AI agents in `erp-api`.
 
-## Read order
+## Mandatory Implementation Authority
 
-1. `.agents/context/current-truth.md`
-2. `.agents/context/working-contract.md`
-3. `.agents/tasks/current-lane.md`
-4. `.agents/skills/liouni-erp-api-current-truth/SKILL.md`
-5. `.agents/rules/liouni-erp-api.md`
-6. `.agents/rules/ai-instructions/technical-instructions.md`
+The canonical source of truth and full rules for this repository are defined in:
+👉 [`.agents/AGENTS.md`](./.agents/AGENTS.md)
 
-## Mandatory alignment
+## Core Guardrails Summary
 
-- Reuse existing `.agents` skills, rules, and task artifacts before creating new ones.
-- Follow gate order: DB -> API -> UI -> QC.
-- Use Bun/Bunx only.
-- No code without a task file under `.agents/tasks/`.
-- Before push, run required checks defined by husky hooks.
+1. **Delivery Sequence**: Always follow `DB -> API -> UI -> QC`.
+2. **Tooling**: Use `bun` / `bunx` exclusively (do NOT use `npm` or `yarn`).
+3. **Task & Planning**: Use Antigravity Brain (`implementation_plan.md` & `walkthrough.md`) for all feature & bugfix planning across DB -> API -> UI -> QC.
+4. **Git Operations**: All git commands MUST be run inside `./erp-api`. Remote is `github-industries`, branch is `erp-master`.
+5. **Strict Pre-push Mandate**: Before commit/push, you MUST run `bun run build`, `bun run check:ci`, and `bun run test`.

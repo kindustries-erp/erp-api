@@ -10,6 +10,7 @@ import {
   Min,
   ValidateNested,
   IsBoolean,
+  IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -23,6 +24,11 @@ export class CreateErpInvoiceItemDto {
   @IsOptional()
   @IsString()
   invoiceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  invoiceSubcategory?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -60,7 +66,6 @@ export class CreateErpInvoiceItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   preVatAmount?: number;
 
   @ApiPropertyOptional()
@@ -74,22 +79,24 @@ export class CreateErpInvoiceItemDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   vatAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   discountAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   totalAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemCode?: string | null;
 }
 
 export class CreateErpInvoiceDto {
@@ -122,6 +129,16 @@ export class CreateErpInvoiceDto {
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  taxInvoiceStatus?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  taxProcessStatus?: number;
+
   // Bên bán
   @ApiPropertyOptional()
   @IsOptional()
@@ -135,10 +152,34 @@ export class CreateErpInvoiceDto {
   @MaxLength(64)
   sellerTaxCode?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  sellerAddress?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  sellerAddress?: string;
+  @MaxLength(255)
+  invoiceType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  invoiceCategory?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Dynamic attribute values map: attrDefId -> valueText',
+  })
+  @IsOptional()
+  @IsObject()
+  attributes?: Record<string, any>;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -186,7 +227,6 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   preVatAmount?: number;
 
   @ApiPropertyOptional()
@@ -200,21 +240,18 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   vatAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   discountAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   totalAmount?: number;
 
   // Liên kết
@@ -247,6 +284,16 @@ export class CreateErpInvoiceDto {
   @IsOptional()
   @IsUUID()
   createdBy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  settlementOrder?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  licensePlate?: string;
 
   @ApiPropertyOptional({ type: [CreateErpInvoiceItemDto] })
   @IsOptional()

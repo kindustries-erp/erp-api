@@ -35,6 +35,29 @@ export class AccountingCoreController {
     return this.accountingCoreService.getChartOfAccounts(query);
   }
 
+  @Get('chart-of-accounts/column-options')
+  async getChartOfAccountsColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('filters') filters?: string,
+  ) {
+    return this.accountingCoreService.getChartOfAccountsColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filters,
+    );
+  }
+
+  @Get('chart-of-accounts/:id')
+  async getChartOfAccountById(@Param('id') id: string) {
+    const data = await this.accountingCoreService.getChartOfAccountById(id);
+    return { data };
+  }
+
   @Post('chart-of-accounts')
   async createChartOfAccount(@Body() dto: any) {
     const data = await this.accountingCoreService.createChartOfAccount(dto);

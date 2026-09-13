@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -7,6 +15,7 @@ import { RegisterLocalUserDto } from './dto/register-local-user.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -81,5 +90,16 @@ export class AuthController {
   @ApiOperation({ summary: 'Profile của user local auth hiện tại' })
   profile(@Req() request: Request & { user: { sub: string } }) {
     return this.authService.profile(request.user.sub);
+  }
+
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cập nhật hồ sơ cá nhân của user hiện tại' })
+  updateProfile(
+    @Body() body: UpdateProfileDto,
+    @Req() request: Request & { user: { sub: string } },
+  ) {
+    return this.authService.updateProfile(request.user.sub, body);
   }
 }

@@ -13,6 +13,7 @@ import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 
 @Entity({ name: 'erp_bank_transactions' })
 export class ErpBankTransaction {
@@ -21,6 +22,13 @@ export class ErpBankTransaction {
 
   @Column({ type: 'varchar', length: 10, name: 'source_type' })
   sourceType: 'BANK' | 'CASH';
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpModuleCategory | null;
 
   @Column({ type: 'uuid', name: 'bank_account_id', nullable: true })
   bankAccountId: string | null;
@@ -54,7 +62,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'reference_number',
     nullable: true,
   })
@@ -87,7 +95,7 @@ export class ErpBankTransaction {
   })
   balance: number | null;
 
-  @Column({ type: 'varchar', length: 100, name: 'seq_no', nullable: true })
+  @Column({ type: 'varchar', length: 255, name: 'seq_no', nullable: true })
   seqNo: string | null;
 
   @Column({ type: 'text', name: 'description', nullable: true })
@@ -98,7 +106,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'correspondent_account',
     nullable: true,
   })
@@ -114,7 +122,7 @@ export class ErpBankTransaction {
 
   @Column({
     type: 'varchar',
-    length: 100,
+    length: 255,
     name: 'correspondent_bank',
     nullable: true,
   })

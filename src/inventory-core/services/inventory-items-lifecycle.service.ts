@@ -1,12 +1,38 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { GraphLayoutService } from '../../common/services/graph-layout.service';
+import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import { CreateInventoryItemDto } from '../dto/create-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-item.dto';
 import { ErpInventoryBalance } from '../entities/erp_inventory_balance.entity';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../entities/erp_inventory_transaction.entity';
+import { ErpUom } from '../entities/erp_uom.entity';
+import { ErpItemType } from '../entities/erp_item_type.entity';
+import { ErpTrackingPolicy } from '../entities/erp_tracking_policy.entity';
+
+function isUuid(str?: string | null): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    str,
+  );
+}
+
+function getItemTypeAliases(codeOrId?: string): string[] {
+  if (!codeOrId) return [];
+  const upper = codeOrId.toUpperCase().trim();
+  if (upper === 'RAW' || upper === 'RAW_MATERIAL')
+    return ['RAW', 'RAW_MATERIAL'];
+  if (upper === 'FG' || upper === 'FINISHED' || upper === 'FINISHED_GOODS')
+    return ['FG', 'FINISHED', 'FINISHED_GOODS'];
+  if (upper === 'SERVICE') return ['SERVICE'];
+  if (upper === 'SPARE_PART' || upper === 'PART') return ['SPARE_PART', 'PART'];
+  return [upper, codeOrId];
+}
 
 @Injectable()
 export class InventoryItemsLifecycleService {
@@ -18,54 +44,284 @@ export class InventoryItemsLifecycleService {
     @InjectRepository(ErpInventoryBalance)
     private readonly balanceRepository: Repository<ErpInventoryBalance>,
     private readonly dataSource: DataSource,
-    private readonly graphLayoutService: GraphLayoutService,
   ) {}
 
   async create(dto: CreateInventoryItemDto) {
-    const entity = this.repository.create({
-      ...dto,
-      uomId: dto.uomId,
-      itemTypeId: dto.itemTypeId,
-      status: dto.status || 'ACTIVE',
-      note: dto.note || undefined,
-      trackingPolicyId: dto.trackingPolicyId || null,
-      trackingCategoryId: dto.trackingCategoryId || null,
-      attributes: dto.attributes || [],
-    } as Partial<ErpInventoryItem>);
-    const data = await this.repository.save(entity);
+    const customAttrs = dto.customAttributes ? { ...dto.customAttributes } : {};
+    let effectiveAttributes = dto.attributes || [];
+    if (effectiveAttributes.length > 0 && !customAttrs.item_features) {
+      customAttrs.item_features = effectiveAttributes;
+    } else if (customAttrs.item_features && effectiveAttributes.length === 0) {
+      if (Array.isArray(customAttrs.item_features)) {
+        effectiveAttributes = customAttrs.item_features;
+      } else if (typeof customAttrs.item_features === 'string') {
+        try {
+          const parsed = JSON.parse(customAttrs.item_features);
+          if (Array.isArray(parsed)) effectiveAttributes = parsed;
+          else
+            effectiveAttributes = customAttrs.item_features
+              .split(',')
+              .map((s) => s.trim());
+        } catch {
+          effectiveAttributes = customAttrs.item_features
+            .split(',')
+            .map((s) => s.trim());
+        }
+      }
+    }
+
+    const data = await this.dataSource.transaction(async (manager) => {
+      // 1. Resolve uomId, itemTypeId, trackingPolicyId (hỗ trợ cả Code, Alias lẫn UUID)
+      let resolvedUomId = dto.uomId;
+      if (resolvedUomId) {
+        const whereConditions: any[] = [
+          { code: resolvedUomId.toUpperCase() },
+          { code: resolvedUomId },
+        ];
+        if (isUuid(resolvedUomId)) {
+          whereConditions.push({ id: resolvedUomId });
+        }
+        const uomMatch = await manager.getRepository(ErpUom).findOne({
+          where: whereConditions,
+        });
+        if (uomMatch) resolvedUomId = uomMatch.id;
+      }
+
+      let resolvedItemTypeId = dto.itemTypeId;
+      if (resolvedItemTypeId) {
+        const aliases = getItemTypeAliases(resolvedItemTypeId);
+        const whereConditions: any[] = aliases.map((c) => ({ code: c }));
+        if (isUuid(resolvedItemTypeId)) {
+          whereConditions.push({ id: resolvedItemTypeId });
+        }
+        const typeMatch = await manager.getRepository(ErpItemType).findOne({
+          where: whereConditions,
+        });
+        if (typeMatch) resolvedItemTypeId = typeMatch.id;
+      }
+
+      let resolvedTrackingPolicyId = dto.trackingPolicyId;
+      if (resolvedTrackingPolicyId) {
+        const whereConditions: any[] = [
+          { code: resolvedTrackingPolicyId.toUpperCase() },
+          { code: resolvedTrackingPolicyId },
+        ];
+        if (isUuid(resolvedTrackingPolicyId)) {
+          whereConditions.push({ id: resolvedTrackingPolicyId });
+        }
+        const tpMatch = await manager.getRepository(ErpTrackingPolicy).findOne({
+          where: whereConditions,
+        });
+        if (tpMatch) resolvedTrackingPolicyId = tpMatch.id;
+      }
+
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+      const entity = itemRepo.create({
+        ...dto,
+        uomId: resolvedUomId,
+        itemTypeId: resolvedItemTypeId,
+        status: dto.status || 'ACTIVE',
+        note: dto.note || undefined,
+        trackingPolicyId: resolvedTrackingPolicyId || null,
+        attributes: effectiveAttributes,
+      } as Partial<ErpInventoryItem>);
+      const saved = await itemRepo.save(entity);
+
+      // Khởi tạo balance ban đầu nếu chưa có
+      const balRepo = manager.getRepository(ErpInventoryBalance);
+      const existingBal = await balRepo.findOne({
+        where: { itemId: saved.id, warehouseCode: 'MAIN' } as never,
+      });
+      if (!existingBal) {
+        const newBal = balRepo.create({
+          itemId: saved.id,
+          warehouseCode: 'MAIN',
+          qtyOnHand: 0,
+          qtyReserved: 0,
+          avgUnitCost: 0,
+          inventoryValue: 0,
+        } as never);
+        await balRepo.save(newBal);
+      }
+
+      // Lưu customAttributes nguyên tử trong transaction
+      if (Object.keys(customAttrs).length > 0) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'INVENTORY_ITEM',
+          saved.id,
+          customAttrs,
+        );
+      }
+
+      const reloaded = await itemRepo.findOne({
+        where: { id: saved.id },
+        relations: ['uom', 'itemType', 'trackingPolicy'],
+      });
+
+      if (reloaded) {
+        await EntityCustomFieldsHelper.enrichOne(
+          manager,
+          'INVENTORY_ITEM',
+          reloaded,
+        );
+      }
+
+      return reloaded || saved;
+    });
+
     return { message: 'Tạo thành công', data };
   }
 
   async findOne(id: string) {
     const data = await this.repository.findOne({
       where: { id },
-      relations: ['uom', 'itemType'],
+      relations: ['uom', 'itemType', 'trackingPolicy'],
     });
     if (!data) throw new NotFoundException('Không tìm thấy item');
-    return { message: 'Lấy thông tin thành công', data };
+    const serialCountRes = await this.dataSource.query(
+      `SELECT COUNT(1) as cnt FROM erp_inventory_tracking_serials WHERE item_id = $1`,
+      [id],
+    );
+    const hasSerials = Number(serialCountRes[0]?.cnt || 0) > 0;
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'INVENTORY_ITEM',
+      data,
+    );
+    return {
+      message: 'Lấy thông tin thành công',
+      data: { ...data, hasSerials },
+    };
   }
 
   async update(id: string, dto: UpdateInventoryItemDto) {
-    const item = await this.repository.findOneBy({ id });
-    if (!item) throw new NotFoundException('Không tìm thấy item');
+    const data = await this.dataSource.transaction(async (manager) => {
+      const itemRepo = manager.getRepository(ErpInventoryItem);
+      const item = await itemRepo.findOneBy({ id });
+      if (!item) throw new NotFoundException('Không tìm thấy item');
 
-    if (dto.uomId !== undefined) item.uomId = dto.uomId;
-    if (dto.itemTypeId !== undefined) item.itemTypeId = dto.itemTypeId;
-    if (dto.itemName !== undefined) item.itemName = dto.itemName;
-    if (dto.sku !== undefined) item.sku = dto.sku;
-    if (dto.note !== undefined) item.note = dto.note;
-    if (dto.status !== undefined) item.status = dto.status;
-    if (dto.trackingPolicyId !== undefined)
-      item.trackingPolicyId = dto.trackingPolicyId;
-    if (dto.trackingCategoryId !== undefined)
-      item.trackingCategoryId = dto.trackingCategoryId;
-    if (dto.attributes !== undefined) item.attributes = dto.attributes;
+      if (dto.uomId !== undefined) {
+        let resolvedUomId = dto.uomId;
+        if (resolvedUomId) {
+          const whereConditions: any[] = [
+            { code: resolvedUomId.toUpperCase() },
+            { code: resolvedUomId },
+          ];
+          if (isUuid(resolvedUomId)) {
+            whereConditions.push({ id: resolvedUomId });
+          }
+          const uomMatch = await manager.getRepository(ErpUom).findOne({
+            where: whereConditions,
+          });
+          if (uomMatch) resolvedUomId = uomMatch.id;
+        }
+        item.uomId = resolvedUomId;
+      }
 
-    await this.repository.save(item);
-    const data = await this.repository.findOne({
-      where: { id },
-      relations: ['uom', 'itemType', 'trackingPolicy', 'trackingCategory'],
+      if (dto.itemTypeId !== undefined) {
+        let resolvedItemTypeId = dto.itemTypeId;
+        if (resolvedItemTypeId) {
+          const aliases = getItemTypeAliases(resolvedItemTypeId);
+          const whereConditions: any[] = aliases.map((c) => ({ code: c }));
+          if (isUuid(resolvedItemTypeId)) {
+            whereConditions.push({ id: resolvedItemTypeId });
+          }
+          const typeMatch = await manager.getRepository(ErpItemType).findOne({
+            where: whereConditions,
+          });
+          if (typeMatch) resolvedItemTypeId = typeMatch.id;
+        }
+        item.itemTypeId = resolvedItemTypeId;
+      }
+
+      if (dto.itemName !== undefined) item.itemName = dto.itemName;
+      if (dto.sku !== undefined) item.sku = dto.sku;
+      if (dto.note !== undefined) item.note = dto.note;
+      if (dto.status !== undefined) item.status = dto.status;
+      if (dto.trackingPolicyId !== undefined) {
+        let resolvedTpId = dto.trackingPolicyId;
+        if (resolvedTpId) {
+          const whereConditions: any[] = [
+            { code: resolvedTpId.toUpperCase() },
+            { code: resolvedTpId },
+          ];
+          if (isUuid(resolvedTpId)) {
+            whereConditions.push({ id: resolvedTpId });
+          }
+          const tpMatch = await manager
+            .getRepository(ErpTrackingPolicy)
+            .findOne({
+              where: whereConditions,
+            });
+          if (tpMatch) resolvedTpId = tpMatch.id;
+        }
+
+        if ((resolvedTpId || null) !== (item.trackingPolicyId || null)) {
+          const serialCountRes = await manager.query(
+            `SELECT COUNT(1) as cnt FROM erp_inventory_tracking_serials WHERE item_id = $1`,
+            [id],
+          );
+          const serialCount = Number(serialCountRes[0]?.cnt || 0);
+          if (serialCount > 0) {
+            throw new BadRequestException(
+              'Mặt hàng đã phát sinh mã Serial/Tracking trong hệ thống, không thể thay đổi Tracking Policy. Vui lòng tạo mặt hàng mới nếu muốn thay đổi phương thức theo dõi.',
+            );
+          }
+          item.trackingPolicyId = resolvedTpId || null;
+        }
+      }
+
+      const customAttrsToSave = dto.customAttributes
+        ? { ...dto.customAttributes }
+        : undefined;
+
+      if (dto.attributes !== undefined) {
+        item.attributes = dto.attributes;
+        if (customAttrsToSave && !customAttrsToSave.item_features) {
+          customAttrsToSave.item_features = dto.attributes;
+        }
+      } else if (customAttrsToSave?.item_features !== undefined) {
+        const feat = customAttrsToSave.item_features;
+        if (Array.isArray(feat)) item.attributes = feat;
+        else if (typeof feat === 'string') {
+          try {
+            const parsed = JSON.parse(feat);
+            if (Array.isArray(parsed)) item.attributes = parsed;
+            else item.attributes = feat.split(',').map((s) => s.trim());
+          } catch {
+            item.attributes = feat.split(',').map((s) => s.trim());
+          }
+        }
+      }
+
+      await itemRepo.save(item);
+
+      if (customAttrsToSave) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'INVENTORY_ITEM',
+          id,
+          customAttrsToSave,
+        );
+      }
+
+      const reloaded = await itemRepo.findOne({
+        where: { id },
+        relations: ['uom', 'itemType', 'trackingPolicy'],
+      });
+
+      if (reloaded) {
+        await EntityCustomFieldsHelper.enrichOne(
+          manager,
+          'INVENTORY_ITEM',
+          reloaded,
+        );
+      }
+
+      return reloaded || item;
     });
+
     return { message: 'Cập nhật thành công', data };
   }
 
@@ -89,10 +345,12 @@ export class InventoryItemsLifecycleService {
       where: { itemId: id } as never,
     });
     const currentOnHand = Number(balance?.qtyOnHand ?? 0);
-    const txns = await this.txnRepository.find({
-      where: { itemId: id } as never,
-      order: { transactionDate: 'ASC', createdAt: 'ASC' } as never,
-    });
+    const txns = await this.txnRepository
+      .createQueryBuilder('txn')
+      .where('txn.item_id = :itemId', { itemId: id })
+      .orderBy('DATE(txn.transaction_date)', 'ASC')
+      .addOrderBy('txn.created_at', 'ASC')
+      .getMany();
 
     const receiptIds = txns
       .filter((t) => t.documentType === 'GOODS_RECEIPT' && t.documentId)
@@ -102,6 +360,9 @@ export class InventoryItemsLifecycleService {
       .map((t) => t.documentId);
     const adjustmentIds = txns
       .filter((t) => t.documentType === 'INVENTORY_ADJUSTMENT' && t.documentId)
+      .map((t) => t.documentId);
+    const productionOrderIds = txns
+      .filter((t) => t.documentType === 'PRODUCTION_ORDER' && t.documentId)
       .map((t) => t.documentId);
 
     const docNoMap: Record<string, string> = {};
@@ -130,6 +391,14 @@ export class InventoryItemsLifecycleService {
       adjustments.forEach((a) => (docNoMap[a.id] = a.adjustment_no));
     }
 
+    if (productionOrderIds.length > 0) {
+      const pos = await this.dataSource.query(
+        `SELECT id, po_no FROM public.erp_production_orders WHERE id = ANY($1)`,
+        [productionOrderIds],
+      );
+      pos.forEach((p) => (docNoMap[p.id] = p.po_no));
+    }
+
     let running = 0;
     const movements = txns.map((txn) => {
       const qtyIn = Number(txn.qtyIn ?? 0);
@@ -151,6 +420,8 @@ export class InventoryItemsLifecycleService {
       };
     });
 
+    movements.reverse();
+
     return {
       message: 'Lịch sử xuất nhập kho',
       data: {
@@ -163,253 +434,6 @@ export class InventoryItemsLifecycleService {
         },
         currentOnHand,
         movements,
-      },
-    };
-  }
-
-  async getItemConnections(id: string) {
-    const item = await this.repository.findOneByOrFail({ id });
-
-    // Goods Receipts (limit 10)
-    const grs = await this.dataSource.query(
-      `
-      SELECT g.id, g.receipt_no as "receiptNo", g.receipt_date as "receiptDate", g.status, SUM(l.qty_received) as qty,
-             g.production_order_id as "productionOrderId", g.purchase_order_id as "purchaseOrderId"
-      FROM public.erp_goods_receipts g
-      JOIN public.erp_goods_receipt_lines l ON g.id = l.goods_receipt_id
-      WHERE l.item_id = $1 AND g.is_deleted = false
-      GROUP BY g.id, g.receipt_no, g.receipt_date, g.status, g.production_order_id, g.purchase_order_id
-      ORDER BY g.receipt_date DESC, g.id DESC
-      LIMIT 10
-    `,
-      [id],
-    );
-
-    // Goods Issues (limit 10)
-    const gis = await this.dataSource.query(
-      `
-      SELECT g.id, g.issue_no as "issueNo", g.issue_date as "issueDate", g.status, SUM(l.qty_issued) as qty,
-             g.production_order_id as "productionOrderId", g.sales_order_id as "salesOrderId"
-      FROM public.erp_goods_issues g
-      JOIN public.erp_goods_issue_lines l ON g.id = l.goods_issue_id
-      WHERE l.item_id = $1 AND g.is_deleted = false
-      GROUP BY g.id, g.issue_no, g.issue_date, g.status, g.production_order_id, g.sales_order_id
-      ORDER BY g.issue_date DESC, g.id DESC
-      LIMIT 10
-    `,
-      [id],
-    );
-
-    // Production Orders (limit 10)
-    const pos = await this.dataSource.query(
-      `
-      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'FG' as role, p.qty_to_produce as qty, p.output_metadata->>'bomId' as "bomId"
-      FROM public.erp_production_orders p
-      WHERE p.finished_good_item_id = $1 AND p.is_deleted = false
-      UNION
-      SELECT p.id, p.reference_no as "orderNo", p.planned_start_date as "orderDate", p.status, 'COMPONENT' as role, SUM(m.qty_required) as qty, p.output_metadata->>'bomId' as "bomId"
-      FROM public.erp_production_orders p
-      JOIN public.erp_production_order_materials m ON p.id = m.production_order_id
-      WHERE m.item_id = $1 AND p.is_deleted = false
-      GROUP BY p.id, p.reference_no, p.planned_start_date, p.status, p.output_metadata
-      LIMIT 10
-    `,
-      [id],
-    );
-
-    // BOMs (limit 10)
-    const boms = await this.dataSource.query(
-      `
-      SELECT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'FG' as role
-      FROM public.erp_boms b
-      WHERE b.finished_good_item_id = $1 AND b.is_deleted = false
-      UNION
-      SELECT DISTINCT b.id, b.bom_code as "bomCode", b.bom_name as "bomName", b.status, 'COMPONENT' as role
-      FROM public.erp_boms b
-      JOIN public.erp_bom_lines l ON b.id = l.bom_id
-      WHERE l.component_item_id = $1 AND b.is_deleted = false
-      LIMIT 10
-    `,
-      [id],
-    );
-
-    // Build Graph Nodes and Edges
-    const nodes: any[] = [];
-    const edges: any[] = [];
-
-    // 1. Map lookups
-    const grByPo = new Map<string, any[]>();
-    grs.forEach((gr: any) => {
-      if (gr.productionOrderId) {
-        if (!grByPo.has(gr.productionOrderId))
-          grByPo.set(gr.productionOrderId, []);
-        grByPo.get(gr.productionOrderId)!.push(gr);
-      }
-    });
-
-    const giByPo = new Map<string, any[]>();
-    gis.forEach((gi: any) => {
-      if (gi.productionOrderId) {
-        if (!giByPo.has(gi.productionOrderId))
-          giByPo.set(gi.productionOrderId, []);
-        giByPo.get(gi.productionOrderId)!.push(gi);
-      }
-    });
-
-    const poByBom = new Map<string, any[]>();
-    pos.forEach((po: any) => {
-      if (po.bomId) {
-        if (!poByBom.has(po.bomId)) poByBom.set(po.bomId, []);
-        poByBom.get(po.bomId)!.push(po);
-      }
-    });
-
-    // 2. The Root Item Node
-    nodes.push({
-      id: `item-${item.id}`,
-      // No module so it sits at root
-      data: {
-        nodeType: 'inventory_item',
-        label: item.itemName,
-        sublabel: item.sku,
-        docId: item.id,
-      },
-    });
-
-    // 3. Goods Receipts
-    grs.forEach((gr: any) => {
-      nodes.push({
-        id: `gr-${gr.id}`,
-        module: 'inventory',
-        date: gr.receiptDate
-          ? new Date(gr.receiptDate).toISOString()
-          : undefined,
-        data: {
-          nodeType: 'goods_receipt',
-          label: gr.receiptNo,
-          status: gr.status,
-          amount: Number(gr.qty || 0),
-          docId: gr.id,
-        },
-      });
-      // Removed edge to central item
-    });
-
-    // 4. Goods Issues
-    gis.forEach((gi: any) => {
-      nodes.push({
-        id: `gi-${gi.id}`,
-        module: 'inventory',
-        date: gi.issueDate ? new Date(gi.issueDate).toISOString() : undefined,
-        data: {
-          nodeType: 'goods_issue',
-          label: gi.issueNo,
-          status: gi.status,
-          amount: Number(gi.qty || 0),
-          docId: gi.id,
-        },
-      });
-      // Removed edge from central item
-    });
-
-    // 5. Production Orders
-    pos.forEach((po: any) => {
-      nodes.push({
-        id: `po-${po.id}`,
-        module: 'production',
-        date: po.orderDate ? new Date(po.orderDate).toISOString() : undefined,
-        data: {
-          nodeType: 'production_order',
-          label: po.orderNo,
-          status: po.status,
-          amount: Number(po.qty || 0),
-          docId: po.id,
-        },
-      });
-
-      if (po.role === 'FG') {
-        const relatedGrs = grByPo.get(po.id);
-        if (relatedGrs && relatedGrs.length > 0) {
-          relatedGrs.forEach((gr) => {
-            edges.push({
-              id: `e-po-${po.id}-gr-${gr.id}`,
-              source: `po-${po.id}`,
-              target: `gr-${gr.id}`,
-            });
-          });
-        }
-      } else {
-        const relatedGis = giByPo.get(po.id);
-        if (relatedGis && relatedGis.length > 0) {
-          relatedGis.forEach((gi) => {
-            edges.push({
-              id: `e-gi-${gi.id}-po-${po.id}`,
-              source: `gi-${gi.id}`,
-              target: `po-${po.id}`,
-            });
-          });
-        }
-      }
-    });
-
-    // 6. BOMs
-    boms.forEach((bom: any) => {
-      nodes.push({
-        id: `bom-${bom.id}`,
-        module: 'bom',
-        data: {
-          nodeType: 'bom',
-          label: bom.bomCode,
-          sublabel: bom.bomName,
-          status: bom.status,
-          docId: bom.id,
-        },
-      });
-
-      const relatedPos = poByBom.get(bom.id);
-      if (relatedPos && relatedPos.length > 0) {
-        relatedPos.forEach((po) => {
-          edges.push({
-            id: `e-bom-${bom.id}-po-${po.id}`,
-            source: `bom-${bom.id}`,
-            target: `po-${po.id}`,
-          });
-        });
-      }
-    });
-
-    // 7. Connect Root Item to Groups
-    const populatedModules = new Set(
-      nodes.filter((n) => n.module).map((n) => n.module),
-    );
-    populatedModules.forEach((mod) => {
-      edges.push({
-        id: `e-item-to-group-${mod}`,
-        source: `item-${item.id}`,
-        target: `group-${mod}`,
-      });
-    });
-
-    const graph = await this.graphLayoutService.calculateSwimlaneLayout(
-      nodes,
-      edges,
-    );
-
-    return {
-      message: 'Liên kết kho',
-      data: {
-        item: {
-          id: item.id,
-          sku: item.sku,
-          itemName: item.itemName,
-          uom: item.uom,
-          itemType: item.itemType,
-        },
-        goodsReceipts: grs,
-        goodsIssues: gis,
-        productionOrders: pos,
-        boms: boms,
-        graph,
       },
     };
   }

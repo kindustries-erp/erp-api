@@ -6,9 +6,13 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { ErpInvoiceItem } from './erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAttachment } from './erp_invoice_attachment.entity';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -17,6 +21,13 @@ export class ErpInvoice {
 
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpModuleCategory | null;
 
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
@@ -63,6 +74,22 @@ export class ErpInvoice {
     nullable: true,
   })
   taxInvoiceType: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 128,
+    name: 'related_invoice_no',
+    nullable: true,
+  })
+  relatedInvoiceNo: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'related_serial_no',
+    nullable: true,
+  })
+  relatedSerialNo: string | null;
 
   @Column({ type: 'boolean', name: 'is_valid', default: false })
   isValid: boolean;
@@ -138,6 +165,14 @@ export class ErpInvoice {
     nullable: true,
   })
   invoiceType: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'invoice_category',
+    nullable: true,
+  })
+  invoiceCategory: string | null;
 
   @Column({
     type: 'numeric',
@@ -278,4 +313,9 @@ export class ErpInvoice {
 
   @OneToMany('ErpInvoiceVoucherNetOff', (netOff: any) => netOff.invoice)
   voucherNetOffs: ErpInvoiceVoucherNetOff[];
+
+  @OneToMany(() => ErpInvoiceAttachment, (attachment) => attachment.invoice, {
+    cascade: true,
+  })
+  attachments: ErpInvoiceAttachment[];
 }

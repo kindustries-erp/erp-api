@@ -31,6 +31,7 @@ describe('ProductionCoreService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
   };
 
@@ -157,5 +158,581 @@ describe('ProductionCoreService', () => {
         warehouseCode: 'WH-1',
       }),
     ).rejects.toThrow('Không tìm thấy tồn kho cho NVL RM-A — Thép tấm A');
+  });
+
+  it('extracts BOM attributes in explodePreview and getBomDetailsWithAttributes', async () => {
+    const rootBom = {
+      id: 'bom-1',
+      bomCode: 'BOM-01',
+      bomName: 'BOM Khung Xe',
+      version: '1.0',
+      status: 'ACTIVE',
+      finishedGoodItemId: 'fg-1',
+    };
+    const bomRepo = {
+      findOne: jest.fn().mockResolvedValue(rootBom),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const bomLineRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          lineNo: 1,
+          componentItemId: 'rm-1',
+          qtyRequired: '1.000',
+          scrapRate: null,
+        },
+      ]),
+    };
+    const itemRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 'rm-1',
+          sku: 'RM-1',
+          itemName: 'Khung thép',
+          uom: 'Cái',
+          itemType: { code: 'RAW_MATERIAL' },
+        },
+      ]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
+    const manager = makeManager({
+      ErpBom: bomRepo,
+      ErpBomLine: bomLineRepo,
+      ErpInventoryItem: itemRepo,
+    });
+
+    const queryMock = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: 'bom-1',
+          bom_code: 'BOM-01',
+          bom_name: 'BOM Khung Xe',
+          version: '1.0',
+          status: 'ACTIVE',
+          category_id: 'cat-1',
+          category_code: 'FRAME',
+          category_name: 'Khung xe',
+        },
+      ]) // bomRows
+      .mockResolvedValueOnce([
+        {
+          id: 'def-1',
+          code: 'steel_grade',
+          name: 'Mác thép',
+          name_en: 'Steel Grade',
+          field_type: 'TEXT',
+          options: null,
+          is_required: true,
+          sort_order: 1,
+          is_global: false,
+          value_text: 'SS400',
+        },
+      ]) // attrRows
+      .mockResolvedValueOnce([
+        {
+          id: 'def-color',
+          code: 'color',
+          name: 'Màu sắc',
+          name_en: 'Color',
+          field_type: 'SELECT',
+          options: [{ value: 'DO', label: 'Đỏ' }],
+          is_required: false,
+          sort_order: 0,
+          is_global: true,
+          value_text: 'DO',
+        },
+      ]); // globalRows
+
+    const dataSource = {
+      transaction: jest.fn(async (cb) => cb(manager)),
+      getRepository: (entity: any) => manager.getRepository(entity),
+      query: queryMock,
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const preview = await service.explodePreview('bom-1', 1);
+    expect(preview.bom).toBeDefined();
+    expect(preview.bom.bomCode).toBe('BOM-01');
+    expect(preview.bom.categoryName).toBe('Khung xe');
+    expect(preview.bom.attributeDetails).toHaveLength(2);
+    expect(preview.bom.attributeDetails[0].code).toBe('color');
+    expect(preview.bom.attributeDetails[0].label).toBe('Đỏ');
+    expect(preview.bom.attributeDetails[1].code).toBe('steel_grade');
+    expect(preview.bom.attributeDetails[1].value).toBe('SS400');
+  });
+
+  it('deduplicates duplicate attribute codes between global and category definitions', async () => {
+    const queryMock = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: 'bom-1',
+          bom_code: 'BOM-01',
+          bom_name: 'BOM Xe',
+          version: '1.0',
+          status: 'ACTIVE',
+          category_id: 'cat-1',
+          category_code: 'BIKE',
+          category_name: 'Xe máy điện',
+        },
+      ]) // bomRows
+      .mockResolvedValueOnce([
+        {
+          id: 'cat-def-color',
+          code: 'color',
+          name: 'Màu sắc',
+          name_en: 'Color',
+          field_type: 'SELECT',
+          options: [{ value: 'DO', label: 'Đỏ' }],
+          is_required: false,
+          sort_order: 1,
+          is_global: false,
+          value_text: 'DO',
+        },
+        {
+          id: 'cat-def-version',
+          code: 'version',
+          name: 'Phiên bản',
+          name_en: 'Version',
+          field_type: 'TEXT',
+          options: null,
+          is_required: false,
+          sort_order: 2,
+          is_global: false,
+          value_text: '1.0',
+        },
+      ]) // attrRows (category has color & version)
+      .mockResolvedValueOnce([
+        {
+          id: 'global-def-color',
+          code: 'color',
+          name: 'Màu sắc',
+          name_en: 'Color',
+          field_type: 'SELECT',
+          options: [{ value: 'DO', label: 'Đỏ' }],
+          is_required: false,
+          sort_order: 0,
+          is_global: true,
+          value_text: null,
+        },
+        {
+          id: 'global-def-version',
+          code: 'version',
+          name: 'Phiên bản',
+          name_en: 'Version',
+          field_type: 'TEXT',
+          options: null,
+          is_required: false,
+          sort_order: 1,
+          is_global: true,
+          value_text: null,
+        },
+      ]); // globalRows (global has color & version)
+
+    const dataSource = {
+      query: queryMock,
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const details = await service.getBomDetailsWithAttributes('bom-1');
+    expect(details.attributeDetails).toHaveLength(2);
+    expect(details.attributeDetails.map((a) => a.code)).toEqual([
+      'color',
+      'version',
+    ]);
+    expect(details.attributeDetails[0].value).toBe('DO');
+    expect(details.attributeDetails[1].value).toBe('1.0');
+  });
+
+  it('completes VEHICLE production with only vinNo and engineNo and inherits BOM attributes', async () => {
+    const order = {
+      id: 'po-1',
+      referenceNo: 'MO-2026090001',
+      status: 'IN_PROGRESS',
+      qtyToProduce: '1.000',
+      qtyProduced: '0.000',
+      finishedGoodItemId: 'fg-1',
+      warehouseCode: 'WH-01',
+      outputMetadata: {
+        bomId: 'bom-1',
+        bomAttributes: { 'attr-1': 'Val1' },
+        bomGlobalAttributes: { color: 'DO', version: '1.0' },
+        bomAttributeDetails: [
+          { code: 'color', value: 'DO' },
+          { code: 'version', value: '1.0' },
+          { code: 'motor_power', value: '800W' },
+        ],
+      },
+    };
+
+    const savedVehicles: any[] = [];
+    const savedSerials: any[] = [];
+
+    const manager = {
+      getRepository: (entity: any) => {
+        const name = entity?.name || entity;
+        if (name === 'ErpProductionOrder') {
+          return {
+            findOne: jest.fn().mockResolvedValue(order),
+            save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+          };
+        }
+        if (name === 'ErpProductionOrderMaterial') {
+          return {
+            find: jest.fn().mockResolvedValue([]),
+          };
+        }
+        if (name === 'ErpInventoryBalance') {
+          return {
+            findOne: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation((d) => d),
+            save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+          };
+        }
+        if (name === 'ErpInventoryTransaction') {
+          return {
+            create: jest.fn().mockImplementation((d) => d),
+            save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+          };
+        }
+        if (name === 'ErpGoodsReceipt') {
+          return {
+            createQueryBuilder: () => ({
+              where: () => ({
+                orderBy: () => ({
+                  getOne: jest.fn().mockResolvedValue(null),
+                }),
+              }),
+            }),
+            create: jest.fn().mockImplementation((d) => ({ id: 'gr-1', ...d })),
+            save: jest
+              .fn()
+              .mockImplementation((d) => Promise.resolve({ id: 'gr-1', ...d })),
+          };
+        }
+        if (name === 'ErpGoodsReceiptLine') {
+          return {
+            create: jest
+              .fn()
+              .mockImplementation((d) => ({ id: 'grl-1', ...d })),
+            save: jest
+              .fn()
+              .mockImplementation((d) =>
+                Promise.resolve({ id: 'grl-1', ...d }),
+              ),
+          };
+        }
+        if (name === 'ErpInventoryItem') {
+          return {
+            findOne: jest.fn().mockResolvedValue({
+              id: 'fg-1',
+              trackingPolicy: { code: 'VEHICLE' },
+            }),
+          };
+        }
+        if (name === 'ErpVehicle') {
+          return {
+            createQueryBuilder: () => ({
+              select: () => ({
+                where: () => ({
+                  orWhere: () => ({
+                    getRawMany: jest.fn().mockResolvedValue([]),
+                  }),
+                }),
+              }),
+            }),
+            create: jest
+              .fn()
+              .mockImplementation((d) => ({ id: 'veh-1', ...d })),
+            save: jest.fn().mockImplementation((d) => {
+              const res = { id: 'veh-1', ...d };
+              savedVehicles.push(res);
+              return Promise.resolve(res);
+            }),
+          };
+        }
+        if (name === 'ErpInventoryTrackingSerial') {
+          return {
+            create: jest
+              .fn()
+              .mockImplementation((d) => ({ id: 'ser-1', ...d })),
+            save: jest.fn().mockImplementation((d) => {
+              const res = { id: 'ser-1', ...d };
+              savedSerials.push(res);
+              return Promise.resolve(res);
+            }),
+          };
+        }
+        if (name === 'ErpBomLine') {
+          return {
+            find: jest.fn().mockResolvedValue([]),
+          };
+        }
+        if (name === 'ErpProductionOrderSerialAssignment') {
+          return {
+            save: jest.fn().mockResolvedValue({}),
+          };
+        }
+        return {
+          find: jest.fn().mockResolvedValue([]),
+          findOne: jest.fn().mockResolvedValue(null),
+          save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+        };
+      },
+      query: jest.fn().mockResolvedValue([]),
+    } as any;
+
+    const dataSource = {
+      transaction: jest.fn(async (cb) => cb(manager)),
+      getRepository: (entity: any) => manager.getRepository(entity),
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    // Call completeProduction with all 4 required vehicle fields
+    await service.completeProduction('po-1', {
+      qtyFinished: 1,
+      identifiers: [
+        {
+          vinNo: 'VIN-TEST-001',
+          engineNo: 'ENG-TEST-001',
+          serialNo: 'SER-TEST-001',
+          internalSerialNo: 'SN-TEST-001',
+          notes: 'Xe thử nghiệm',
+        },
+      ],
+    });
+
+    expect(savedVehicles).toHaveLength(1);
+    expect(savedVehicles[0].vinNo).toBe('VIN-TEST-001');
+    expect(savedVehicles[0].engineNo).toBe('ENG-TEST-001');
+
+    expect(savedSerials).toHaveLength(1);
+    expect(savedSerials[0].serialNo).toBe('SER-TEST-001');
+    expect(savedSerials[0].attributes).toMatchObject({
+      color: 'DO',
+      version: '1.0',
+      motor_power: '800W',
+    });
+  });
+
+  it('rejects VEHICLE production if any of the 4 required fields is missing', async () => {
+    const dataSource = {
+      transaction: jest.fn(async (cb) => {
+        const manager = {
+          getRepository: jest.fn((entity) => {
+            if (entity.name === 'ErpProductionOrder') {
+              return {
+                findOne: jest.fn().mockResolvedValue({
+                  id: 'po-1',
+                  referenceNo: 'LSX-001',
+                  status: 'IN_PROGRESS',
+                  qtyToProduce: '5',
+                  qtyProduced: '0',
+                  finishedGoodItemId: 'fg-1',
+                  isDeleted: false,
+                }),
+              };
+            }
+            if (entity.name === 'ErpProductionOrderMaterial') {
+              return { find: jest.fn().mockResolvedValue([]) };
+            }
+            if (entity.name === 'ErpInventoryItem') {
+              return {
+                findOne: jest.fn().mockResolvedValue({
+                  id: 'fg-1',
+                  trackingPolicy: { code: 'VEHICLE' },
+                }),
+              };
+            }
+            return {
+              findOne: jest.fn().mockResolvedValue(null),
+              createQueryBuilder: jest.fn(() => ({
+                select: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                orWhere: jest.fn().mockReturnThis(),
+                getRawMany: jest.fn().mockResolvedValue([]),
+              })),
+            };
+          }),
+        };
+        return cb(manager);
+      }),
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    // Missing serialNo and internalSerialNo
+    await expect(
+      service.completeProduction('po-1', {
+        qtyFinished: 1,
+        identifiers: [
+          {
+            vinNo: 'VIN-TEST-001',
+            engineNo: 'ENG-TEST-001',
+          },
+        ],
+      }),
+    ).rejects.toThrow('còn thiếu: Số Serial xe, Số Serial nội bộ');
+  });
+
+  it('updates produced vehicle identifiers and notes correctly', async () => {
+    const existingVehicle = {
+      id: 'veh-1',
+      productionOrderId: 'po-1',
+      vinNo: 'OLD-VIN',
+      engineNo: 'OLD-ENG',
+      notes: 'Old note',
+    };
+
+    const existingSerial = {
+      id: 'ser-1',
+      vinId: 'veh-1',
+      serialNo: 'SN-OLD',
+      attributes: { vehicleSerialNo: 'SN-OLD-TEM' },
+      notes: 'Old note',
+    };
+
+    const vehicleRepo = {
+      findOne: jest.fn().mockResolvedValue(existingVehicle),
+      save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+    };
+    const serialRepo = {
+      findOne: jest.fn().mockResolvedValue(existingSerial),
+      save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+    };
+    const orderRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'po-1', isDeleted: false }),
+    };
+
+    const manager = {
+      getRepository: (entity: any) => {
+        const name = entity?.name || entity;
+        if (name === 'ErpVehicle') return vehicleRepo;
+        if (name === 'ErpInventoryTrackingSerial') return serialRepo;
+        if (name === 'ErpProductionOrder') return orderRepo;
+        return {
+          findOne: jest.fn().mockResolvedValue(null),
+          save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+        };
+      },
+    } as any;
+
+    const dataSource = {
+      transaction: jest.fn(async (cb) => cb(manager)),
+      getRepository: (entity: any) => manager.getRepository(entity),
+    } as any;
+
+    const service = new ProductionCoreService(
+      dataSource,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.updateProducedVehicles('po-1', {
+      vehicles: [
+        {
+          id: 'veh-1',
+          vinNo: 'NEW-VIN-001',
+          engineNo: 'NEW-ENG-001',
+          serialNo: 'NEW-TEM-001',
+          notes: 'Đã cập nhật ghi chú',
+        },
+      ],
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].vinNo).toBe('NEW-VIN-001');
+    expect(result.data[0].engineNo).toBe('NEW-ENG-001');
+    expect(result.data[0].notes).toBe('Đã cập nhật ghi chú');
+
+    expect(vehicleRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vinNo: 'NEW-VIN-001',
+        engineNo: 'NEW-ENG-001',
+        notes: 'Đã cập nhật ghi chú',
+      }),
+    );
+
+    expect(serialRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          vehicleSerialNo: 'NEW-TEM-001',
+          vinNo: 'NEW-VIN-001',
+          engineNo: 'NEW-ENG-001',
+        }),
+        notes: 'Đã cập nhật ghi chú',
+      }),
+    );
   });
 });

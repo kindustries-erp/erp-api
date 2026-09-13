@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,6 +11,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
+import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
 import { ListBomDto } from './dto/list-bom.dto';
@@ -25,14 +27,63 @@ export class BomCoreService {
     private readonly lineRepository: Repository<ErpBomLine>,
   ) {}
 
+  private async validateRequiredAttributes(
+    manager: any,
+    categoryId: string,
+    attributes?: Record<string, any>,
+  ) {
+    if (!categoryId) return;
+    const requiredDefs = await manager.query(
+      `SELECT id, name, field_type FROM erp_module_attribute_defs 
+       WHERE category_id = $1 AND is_required = true AND is_active = true AND is_deleted = false`,
+      [categoryId],
+    );
+    if (!requiredDefs || requiredDefs.length === 0) return;
+
+    for (const def of requiredDefs) {
+      const val = attributes?.[def.id];
+      if (
+        val === undefined ||
+        val === null ||
+        (typeof val === 'string' && val.trim() === '')
+      ) {
+        throw new BadRequestException(
+          `Thuộc tính bắt buộc "${def.name}" chưa được chọn hoặc điền thông tin.`,
+        );
+      }
+    }
+  }
+
   async create(dto: CreateBomDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], attributes, globalAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
+      if (header.categoryId) {
+        await this.validateRequiredAttributes(
+          manager,
+          header.categoryId,
+          attributes,
+        );
+      }
+
+      let initialVersion = header.version?.trim() || '1.0';
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const vCandidate =
+          globalAttributes.version ?? globalAttributes['version'];
+        if (
+          vCandidate !== undefined &&
+          vCandidate !== null &&
+          String(vCandidate).trim() !== ''
+        ) {
+          initialVersion = String(vCandidate).trim();
+        }
+      }
+
       const headerRepo = manager.getRepository(ErpBom);
       const lineRepo = manager.getRepository(ErpBomLine);
       const data = await headerRepo.save(
         headerRepo.create({
           status: header.status ?? 'ACTIVE',
+          version: initialVersion,
           ...header,
         } as DeepPartial<ErpBom>),
       );
@@ -62,9 +113,71 @@ export class BomCoreService {
           ),
         );
       }
+
+      if (attributes && typeof attributes === 'object') {
+        const attrValRepo = manager.getRepository(ErpEntityAttributeValue);
+        const attrMap = attributes as Record<string, string | number | boolean>;
+        for (const [attrDefId, rawVal] of Object.entries(attrMap)) {
+          if (rawVal !== undefined && rawVal !== null) {
+            const valStr =
+              typeof rawVal === 'string' ? rawVal.trim() : `${rawVal}`.trim();
+            if (valStr !== '') {
+              await attrValRepo.save(
+                attrValRepo.create({
+                  entityType: 'BOM',
+                  entityId: data.id,
+                  categoryId: data.categoryId,
+                  attrDefId,
+                  valueText: valStr,
+                }),
+              );
+            }
+          }
+        }
+      }
+
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const globalDefs = await manager.query(
+          `SELECT id, code FROM erp_module_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+        );
+        const globalDefMap = new Map<string, string>();
+        for (const gd of globalDefs) {
+          globalDefMap.set(gd.id, gd.id);
+          if (gd.code) {
+            globalDefMap.set(gd.code.toLowerCase(), gd.id);
+          }
+        }
+        const gAttrs = (globalAttributes || {}) as Record<string, unknown>;
+        for (const [key, rawVal] of Object.entries(gAttrs)) {
+          const valStr =
+            typeof rawVal === 'string'
+              ? rawVal.trim()
+              : typeof rawVal === 'number' || typeof rawVal === 'boolean'
+                ? String(rawVal).trim()
+                : '';
+          if (valStr !== '') {
+            const defId =
+              globalDefMap.get(key) ||
+              globalDefMap.get(key.toLowerCase()) ||
+              key;
+            await manager.query(
+              `INSERT INTO erp_entity_attribute_values (id, entity_type, entity_id, attr_def_id, value_text, created_at, updated_at)
+               VALUES (gen_random_uuid(), 'BOM', $1, $2, $3, NOW(), NOW())
+               ON CONFLICT (entity_type, entity_id, attr_def_id) DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = NOW()`,
+              [data.id, defId, valStr],
+            );
+          }
+        }
+      }
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: savedLines },
+        data: {
+          ...data,
+          lines: savedLines,
+          attributes: attributes || {},
+          globalAttributes: globalAttributes || {},
+        },
       };
     });
   }
@@ -121,6 +234,10 @@ export class BomCoreService {
   async findOne(id: string) {
     const data = await this.repository.findOneOrFail({
       where: { id, isDeleted: false },
+      relations: {
+        category: true,
+        attributeValues: true,
+      },
     });
     const lines = await this.lineRepository.find({
       where: { bomId: id },
@@ -131,6 +248,37 @@ export class BomCoreService {
     lines.forEach((line: any) => {
       line.uom = line.uom?.name || '';
     });
+
+    // Load all attributes (category & global) from erp_entity_attribute_values
+    const entityAttrRows = await this.dataSource.query(
+      `SELECT eav.attr_def_id, eav.value_text, def.code, def.is_global
+       FROM erp_entity_attribute_values eav
+       JOIN erp_module_attribute_defs def ON def.id = eav.attr_def_id
+       WHERE eav.entity_type = 'BOM' AND eav.entity_id = $1 AND def.is_deleted = false`,
+      [id],
+    );
+    const attrMap: Record<string, string> = {};
+    const globalAttrsMap: Record<string, any> = {};
+    for (const row of entityAttrRows) {
+      if (row.is_global) {
+        globalAttrsMap[row.attr_def_id] = row.value_text;
+      } else {
+        attrMap[row.attr_def_id] = row.value_text;
+      }
+    }
+    (data as any).attributes = attrMap;
+    (data as any).globalAttributes = globalAttrsMap;
+    (data as any).categoryCode = data.category?.code || null;
+    (data as any).categoryName = data.category?.name || null;
+
+    // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [id, data.finishedGoodItemId || '00000000-0000-0000-0000-000000000000'],
+    );
+    const count = parseInt(prodOrderCount[0]?.count, 10) || 0;
+    (data as any).hasProduction = count > 0;
+    (data as any).productionCount = count;
 
     if (data.finishedGoodItemId) {
       const fgItems = await this.dataSource.query(
@@ -148,7 +296,14 @@ export class BomCoreService {
       const itemIds = lines.map((l) => l.componentItemId).filter(Boolean);
       if (itemIds.length > 0) {
         const items = await this.dataSource.query(
-          `SELECT id, sku, item_name FROM public.erp_inventory_items WHERE id = ANY($1::uuid[])`,
+          `SELECT
+             i.id,
+             i.sku,
+             i.item_name,
+             p.code AS tracking_policy_code
+           FROM public.erp_inventory_items i
+           LEFT JOIN public.erp_tracking_policies p ON p.id = i.tracking_policy_id
+           WHERE i.id = ANY($1::uuid[])`,
           [itemIds],
         );
         const itemMap = new Map(items.map((i: any) => [i.id, i]));
@@ -157,6 +312,12 @@ export class BomCoreService {
             const item = itemMap.get(line.componentItemId) as any;
             (line as any).componentItemCode = item.sku;
             (line as any).componentItemName = `${item.sku} — ${item.item_name}`;
+            // Dòng BOM có cần track serial riêng lẻ không?
+            // true = cần ghi As-Built BOM khi sản xuất (policy SERIAL hoặc CUSTOM)
+            (line as any).requiresSerialTracking = [
+              'SERIAL',
+              'CUSTOM',
+            ].includes(item.tracking_policy_code ?? '');
           }
         }
       }
@@ -166,10 +327,65 @@ export class BomCoreService {
   }
 
   async update(id: string, dto: UpdateBomDto) {
-    const { lines, ...header } = dto as any;
-    await this.repository.update(id, header);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    const existing = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+
+    // Kiểm tra xem BOM này đã phát sinh Lệnh sản xuất chưa
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [
+        id,
+        existing.finishedGoodItemId || '00000000-0000-0000-0000-000000000000',
+      ],
+    );
+    const hasProduction = (parseInt(prodOrderCount[0]?.count, 10) || 0) > 0;
+
+    if (hasProduction) {
+      // Nếu BOM đã có sản xuất: Chỉ cho phép sửa ghi chú và hiệu lực đến
+      const allowedPatch: Partial<ErpBom> = {};
+      if (dto.notes !== undefined) allowedPatch.notes = dto.notes;
+      if (dto.effectiveTo !== undefined)
+        allowedPatch.effectiveTo = dto.effectiveTo;
+      if (Object.keys(allowedPatch).length > 0) {
+        await this.repository.update(id, allowedPatch);
+      }
+      return this.findOne(id);
+    }
+
+    const { lines, attributes, globalAttributes, ...header } = dto as any;
+    await this.dataSource.transaction(async (manager) => {
+      const targetCategoryId =
+        header.categoryId !== undefined
+          ? header.categoryId
+          : existing.categoryId;
+      if (targetCategoryId && attributes !== undefined) {
+        await this.validateRequiredAttributes(
+          manager,
+          targetCategoryId,
+          attributes,
+        );
+      }
+
+      if (globalAttributes && typeof globalAttributes === 'object') {
+        const vCandidate =
+          globalAttributes.version ?? globalAttributes['version'];
+        if (
+          vCandidate !== undefined &&
+          vCandidate !== null &&
+          String(vCandidate).trim() !== ''
+        ) {
+          header.version = String(vCandidate).trim();
+        }
+      }
+
+      const headerRepo = manager.getRepository(ErpBom);
+      if (Object.keys(header).length > 0) {
+        await headerRepo.update(id, header);
+      }
+
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpBomLine);
         await lineRepo.delete({ bomId: id });
         let lineNo = 1;
@@ -195,8 +411,77 @@ export class BomCoreService {
             } as DeepPartial<ErpBomLine>),
           );
         }
-      });
-    }
+      }
+
+      if (attributes !== undefined) {
+        const attrValRepo = manager.getRepository(ErpEntityAttributeValue);
+        await attrValRepo.delete({ entityType: 'BOM', entityId: id });
+        if (attributes && typeof attributes === 'object') {
+          const attrMap = attributes as Record<
+            string,
+            string | number | boolean
+          >;
+          for (const [attrDefId, rawVal] of Object.entries(attrMap)) {
+            if (rawVal !== undefined && rawVal !== null) {
+              const valStr =
+                typeof rawVal === 'string' ? rawVal.trim() : `${rawVal}`.trim();
+              if (valStr !== '') {
+                await attrValRepo.save(
+                  attrValRepo.create({
+                    entityType: 'BOM',
+                    entityId: id,
+                    categoryId: targetCategoryId || null,
+                    attrDefId,
+                    valueText: valStr,
+                  }),
+                );
+              }
+            }
+          }
+        }
+      }
+
+      if (
+        globalAttributes !== undefined &&
+        typeof globalAttributes === 'object'
+      ) {
+        const globalDefs = await manager.query(
+          `SELECT id, code FROM erp_module_attribute_defs WHERE module_key_global = 'BOM' AND is_global = true AND is_deleted = false`,
+        );
+        const globalDefMap = new Map<string, string>();
+        for (const gd of globalDefs) {
+          globalDefMap.set(gd.id, gd.id);
+          if (gd.code) {
+            globalDefMap.set(gd.code.toLowerCase(), gd.id);
+          }
+        }
+        await manager.query(
+          `DELETE FROM erp_entity_attribute_values WHERE entity_type = 'BOM' AND entity_id = $1`,
+          [id],
+        );
+        const gAttrs = (globalAttributes || {}) as Record<string, unknown>;
+        for (const [key, rawVal] of Object.entries(gAttrs)) {
+          const valStr =
+            typeof rawVal === 'string'
+              ? rawVal.trim()
+              : typeof rawVal === 'number' || typeof rawVal === 'boolean'
+                ? String(rawVal).trim()
+                : '';
+          if (valStr !== '') {
+            const defId =
+              globalDefMap.get(key) ||
+              globalDefMap.get(key.toLowerCase()) ||
+              key;
+            await manager.query(
+              `INSERT INTO erp_entity_attribute_values (id, entity_type, entity_id, attr_def_id, value_text, created_at, updated_at)
+               VALUES (gen_random_uuid(), 'BOM', $1, $2, $3, NOW(), NOW())
+               ON CONFLICT (entity_type, entity_id, attr_def_id) DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = NOW()`,
+              [id, defId, valStr],
+            );
+          }
+        }
+      }
+    });
     return this.findOne(id);
   }
 
@@ -205,6 +490,21 @@ export class BomCoreService {
       where: { id, isDeleted: false },
     });
     if (!existing) throw new NotFoundException('Không tìm thấy định mức (BOM)');
+
+    const prodOrderCount = await this.dataSource.query(
+      `SELECT COUNT(1) as count FROM erp_production_orders WHERE is_deleted = false AND (output_metadata->>'bomId' = $1 OR (output_metadata IS NULL AND finished_good_item_id = $2))`,
+      [
+        id,
+        existing.finishedGoodItemId || '00000000-0000-0000-0000-000000000000',
+      ],
+    );
+    const hasProduction = (parseInt(prodOrderCount[0]?.count, 10) || 0) > 0;
+    if (hasProduction) {
+      throw new ConflictException(
+        'Định mức (BOM) đã phát sinh lệnh sản xuất, không thể xóa.',
+      );
+    }
+
     await this.repository.update(id, { isDeleted: true } as any);
     return { message: 'Xóa thành công' };
   }
@@ -583,5 +883,76 @@ export class BomCoreService {
     });
 
     return { message: 'Parse thành công', data: validatedLines };
+  }
+
+  async getColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filtersStr?: string,
+  ) {
+    const qb = this.repository.createQueryBuilder('bom');
+    qb.where('bom.isDeleted = :isDeleted', { isDeleted: false });
+
+    let selectField = '';
+
+    if (column === 'bom_code') selectField = 'bom.bomCode';
+    else if (column === 'bom_name') selectField = 'bom.bomName';
+    else if (column === 'version') selectField = 'bom.version';
+    else if (column === 'status') selectField = 'bom.status';
+    else if (column === 'finished_good_item_name') {
+      qb.leftJoin(
+        'erp_inventory_items',
+        'item',
+        'item.id = bom.finishedGoodItemId',
+      );
+      selectField = 'item.itemName';
+    } else return { items: [], total: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          if (col === 'status')
+            qb.andWhere(`bom.status IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+          else if (col === 'bom_code')
+            qb.andWhere(`bom.bomCode IN (:...vals_${col})`, {
+              [`vals_${col}`]: vals,
+            });
+        }
+      } catch (e) {}
+    }
+
+    if (search) {
+      qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :search`, {
+        search: `%${search}%`,
+      });
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const raw = await qb.getRawMany();
+    const total = raw.length;
+    const items = raw
+      .slice((page - 1) * pageSize, page * pageSize)
+      .map((r) => String(r.value));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 }

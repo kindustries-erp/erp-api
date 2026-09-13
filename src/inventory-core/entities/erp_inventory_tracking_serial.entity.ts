@@ -12,7 +12,8 @@ import {
  * Được dùng chung cho các tracking policy: SERIAL, VEHICLE, CUSTOM.
  *
  * - SERIAL:  serialNo chứa số serial của sản phẩm; vinId = null; customId = null
- * - VEHICLE: serialNo chứa engineNo (dùng như key); vinId trỏ tới erp_vehicles; customId = null
+ * - VEHICLE: serialNo chứa Số Serial xe thành phẩm (COC số 3, độc lập với vinNo và engineNo);
+ *            vinId trỏ tới erp_vehicles; customId = null
  * - CUSTOM:  serialNo chứa mã định danh thủ công; vinId = null; customId trỏ tới erp_inventory_tracking_customs
  */
 @Entity({ name: 'erp_inventory_tracking_serials' })

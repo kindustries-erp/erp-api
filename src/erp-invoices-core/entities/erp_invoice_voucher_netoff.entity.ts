@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type { ErpInvoice } from './erp_invoice.entity';
-import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
+import type { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
 @Entity({ name: 'erp_invoice_voucher_netoff' })
 export class ErpInvoiceVoucherNetOff {
@@ -33,7 +33,7 @@ export class ErpInvoiceVoucherNetOff {
     { onDelete: 'CASCADE' },
   )
   @JoinColumn({ name: 'bank_transaction_id' })
-  bankTransaction: ErpBankTransaction;
+  bankTransaction: import('typeorm').Relation<ErpBankTransaction>;
 
   @Column({
     type: 'numeric',

@@ -17,4 +17,3 @@
 - No code without a task file in `.agents/tasks/`.
 - Respect pre-commit and pre-push hooks.
 - Before push, run this sequence explicitly: `bun run check:ci` -> `bun run test` (or scoped Jest) -> `bun run build` -> `git push`.
-

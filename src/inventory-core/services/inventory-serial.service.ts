@@ -25,6 +25,9 @@ export class InventorySerialService {
   async listSerials(query: InventorySerialQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date, s.created_at), 'YYYY-MM-DD')";
+    const serialBusinessSortExpr = 'COALESCE(gr.receipt_date, s.created_at)';
 
     const qb = this.serialRepository
       .createQueryBuilder('s')
@@ -41,15 +44,19 @@ export class InventorySerialService {
         's.attributes as s_attributes',
         's.status as s_status',
         's.sales_order_line_id as s_sales_order_line_id',
+        'gr.receipt_date as gr_receipt_date',
         'so.id as so_id',
         'so.so_no as so_no',
         'so.expected_delivery_date as so_delivery_date',
+        'sl.delivery_date as l_delivery_date',
+        'gi.id as gi_id',
+        'gi.issue_date as gi_issue_date',
+        'gi.issue_no as gi_issue_no',
         'i.id as i_id',
         'i.sku as i_sku',
         'i.item_name as i_item_name',
         'i.item_type_id as i_item_type',
         'i.tracking_policy_id as i_tracking_policy_id',
-        'i.tracking_category_id as i_tracking_category_id',
         'v.vin_no as v_vin_no',
         'v.engine_no as v_engine_no',
         'tp.name as tp_name',
@@ -62,7 +69,11 @@ export class InventorySerialService {
         'sol',
         's.sales_order_line_id = sol.id',
       )
-      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id');
+      .leftJoin('erp_sales_orders', 'so', 'sol.sales_order_id = so.id')
+      .leftJoin('erp_goods_receipt_lines', 'grl', 's.receipt_line_id = grl.id')
+      .leftJoin('erp_goods_receipts', 'gr', 'grl.goods_receipt_id = gr.id')
+      .leftJoin('erp_serial_lifecycles', 'sl', 'sl.serial_id = s.id')
+      .leftJoin('erp_goods_issues', 'gi', 'sl.goods_issue_id = gi.id');
 
     if (query.ids) {
       const idsArr = Array.isArray(query.ids)
@@ -135,31 +146,59 @@ export class InventorySerialService {
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
           let filterField = '';
-          if (col === 'itemCode') filterField = 'i.sku';
-          else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
-          else if (col === 'soNo') filterField = 'so.so_no';
+          if (col === 'itemCode' || col === 'sku') filterField = 'i.sku';
+          else if (col === 'itemName' || col === 'item_name')
+            filterField = 'i.item_name';
+          else if (col === 'lotNo' || col === 'lot_no')
+            filterField = 's.lot_no';
+          else if (col === 'serialNo' || col === 'serial_no')
+            filterField = 's.serial_no';
+          else if (col === 'vinNo' || col === 'vin_no')
+            filterField = 'v.vin_no';
+          else if (col === 'engineNo' || col === 'engine_no')
+            filterField = 'v.engine_no';
+          else if (col === 'soNo' || col === 'so_no') filterField = 'so.so_no';
           else if (col === 'status') filterField = 's.status';
           else if (col === 'delivery')
-            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            filterField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+            filterField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueDate')
+            filterField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo') filterField = 'gi.issue_no';
+          else if (col === 'createdAt') filterField = serialBusinessDateExpr;
           else if (col === 'color') filterField = "s.attributes->>'color'";
-          else if (col === 'dealer_code')
+          else if (col === 'dealer_code' || col === 'dealerCode')
             filterField = "s.attributes->>'dealer_code'";
-          else if (col === 'dealer_name')
+          else if (col === 'dealer_name' || col === 'dealerName')
             filterField = "s.attributes->>'dealer_name'";
           else if (col === 'trackingPolicyName') filterField = 'tp.name';
+          else if (col === 'notes') filterField = 's.notes';
 
           if (filterField) {
-            qb.andWhere(
-              `CAST(${filterField} AS TEXT) IN (:...filter_${paramIdx})`,
-              { [`filter_${paramIdx}`]: vals },
+            const hasBlank =
+              vals.includes('__BLANK__') ||
+              vals.includes('(blank)') ||
+              vals.includes('(Trống)');
+            const nonBlank = vals.filter(
+              (v) => v !== '__BLANK__' && v !== '(blank)' && v !== '(Trống)',
             );
-            paramIdx++;
+
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                `(${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '' OR CAST(${filterField} AS TEXT) IN (:...filter_${paramIdx}))`,
+                { [`filter_${paramIdx}`]: nonBlank },
+              );
+              paramIdx++;
+            } else if (hasBlank) {
+              qb.andWhere(
+                `(${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`,
+              );
+            } else if (nonBlank.length > 0) {
+              qb.andWhere(
+                `CAST(${filterField} AS TEXT) IN (:...filter_${paramIdx})`,
+                { [`filter_${paramIdx}`]: nonBlank },
+              );
+              paramIdx++;
+            }
           }
         }
       } catch (e) {}
@@ -175,42 +214,105 @@ export class InventorySerialService {
         for (const [col, val] of Object.entries(searchFilters)) {
           if (!val) continue;
           let searchField = '';
-          if (col === 'itemCode') searchField = 'i.sku';
-          else if (col === 'itemName') searchField = 'i.item_name';
-          else if (col === 'serialNo') searchField = 's.serial_no';
-          else if (col === 'vinNo') searchField = 'v.vin_no';
-          else if (col === 'engineNo') searchField = 'v.engine_no';
-          else if (col === 'soNo') searchField = 'so.so_no';
+          let isDateRange = false;
+          if (col === 'itemCode' || col === 'sku') searchField = 'i.sku';
+          else if (col === 'itemName' || col === 'item_name')
+            searchField = 'i.item_name';
+          else if (col === 'lotNo' || col === 'lot_no')
+            searchField = 's.lot_no';
+          else if (col === 'serialNo' || col === 'serial_no')
+            searchField = 's.serial_no';
+          else if (col === 'vinNo' || col === 'vin_no')
+            searchField = 'v.vin_no';
+          else if (col === 'engineNo' || col === 'engine_no')
+            searchField = 'v.engine_no';
+          else if (col === 'soNo' || col === 'so_no') searchField = 'so.so_no';
           else if (col === 'status') searchField = 's.status';
-          else if (col === 'delivery')
-            searchField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            searchField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
-          else if (col === 'color') searchField = "s.attributes->>'color'";
-          else if (col === 'dealer_code')
+          else if (col === 'delivery') {
+            searchField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+            isDateRange = true;
+          } else if (col === 'goodsIssueDate') {
+            searchField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+            isDateRange = true;
+          } else if (col === 'goodsIssueNo') searchField = 'gi.issue_no';
+          else if (col === 'createdAt') {
+            searchField = serialBusinessDateExpr;
+            isDateRange = true;
+          } else if (col === 'color') searchField = "s.attributes->>'color'";
+          else if (col === 'dealer_code' || col === 'dealerCode')
             searchField = "s.attributes->>'dealer_code'";
-          else if (col === 'dealer_name')
+          else if (col === 'dealer_name' || col === 'dealerName')
             searchField = "s.attributes->>'dealer_name'";
           else if (col === 'trackingPolicyName') searchField = 'tp.name';
+          else if (col === 'attributes')
+            searchField = 'CAST(s.attributes AS TEXT)';
+          else if (col === 'notes') searchField = 's.notes';
 
           if (searchField) {
-            const keywords = val
-              .split(';')
-              .map((k) => k.trim())
-              .filter((k) => k);
-            if (keywords.length > 0) {
-              const conditions: string[] = [];
-              const searchParams: Record<string, any> = {};
-              keywords.forEach((kw, i) => {
-                const paramName = `search_${paramIdx}_${i}`;
-                conditions.push(
-                  `CAST(${searchField} AS TEXT) ILIKE :${paramName}`,
+            if (isDateRange && val.includes('|')) {
+              const [dateFrom, dateTo] = val.split('|');
+              if (dateFrom && dateFrom.trim()) {
+                qb.andWhere(
+                  `CAST(${searchField} AS TEXT) >= :date_from_${paramIdx}`,
+                  {
+                    [`date_from_${paramIdx}`]: dateFrom.trim(),
+                  },
                 );
-                searchParams[paramName] = `%${kw}%`;
-              });
-              qb.andWhere(`(${conditions.join(' OR ')})`, searchParams);
+              }
+              if (dateTo && dateTo.trim()) {
+                qb.andWhere(
+                  `CAST(${searchField} AS TEXT) <= :date_to_${paramIdx}`,
+                  {
+                    [`date_to_${paramIdx}`]: dateTo.trim(),
+                  },
+                );
+              }
               paramIdx++;
+            } else {
+              const keywords = val
+                .split(';')
+                .map((k) => k.trim())
+                .filter((k) => k.length > 0);
+              if (keywords.length > 0) {
+                const conditions: string[] = [];
+                const searchParams: Record<string, any> = {};
+                keywords.forEach((kw, i) => {
+                  const lowerKw = kw.toLowerCase();
+                  if (
+                    lowerKw === '(blank)' ||
+                    lowerKw === '__blank__' ||
+                    lowerKw === '(trống)' ||
+                    lowerKw === 'null' ||
+                    lowerKw === '""'
+                  ) {
+                    conditions.push(
+                      `(${searchField} IS NULL OR CAST(${searchField} AS TEXT) = '')`,
+                    );
+                  } else {
+                    let isExact = false;
+                    let cleanKw = kw;
+                    if (
+                      kw.startsWith('"') &&
+                      kw.endsWith('"') &&
+                      kw.length >= 2
+                    ) {
+                      isExact = true;
+                      cleanKw = kw.slice(1, -1);
+                    }
+                    const paramName = `search_${paramIdx}_${i}`;
+                    conditions.push(
+                      `CAST(${searchField} AS TEXT) ILIKE :${paramName}`,
+                    );
+                    searchParams[paramName] = isExact
+                      ? cleanKw
+                      : `%${cleanKw}%`;
+                  }
+                });
+                if (conditions.length > 0) {
+                  qb.andWhere(`(${conditions.join(' OR ')})`, searchParams);
+                  paramIdx++;
+                }
+              }
             }
           }
         }
@@ -218,7 +320,7 @@ export class InventorySerialService {
     }
 
     // sort
-    let sortColumn = 's.created_at';
+    let sortColumn = serialBusinessSortExpr;
     let sortDirection: 'ASC' | 'DESC' = 'DESC';
     if (query.sort && query.sort.length > 0) {
       let sortField = query.sort[0];
@@ -228,17 +330,45 @@ export class InventorySerialService {
       } else {
         sortDirection = 'ASC';
       }
-      if (sortField === 'serial_no') sortColumn = 's.serial_no';
-      if (sortField === 'created_at') sortColumn = 's.created_at';
-      if (sortField === 'color') sortColumn = "s.attributes->>'color'";
-      if (sortField === 'dealer_code')
+      if (sortField === 'serial_no' || sortField === 'serialNo')
+        sortColumn = 's.serial_no';
+      else if (sortField === 'created_at' || sortField === 'createdAt')
+        sortColumn = serialBusinessSortExpr;
+      else if (sortField === 'lot_no' || sortField === 'lotNo')
+        sortColumn = 's.lot_no';
+      else if (
+        sortField === 'sku' ||
+        sortField === 'item_code' ||
+        sortField === 'itemCode'
+      )
+        sortColumn = 'i.sku';
+      else if (sortField === 'item_name' || sortField === 'itemName')
+        sortColumn = 'i.item_name';
+      else if (sortField === 'vin_no' || sortField === 'vinNo')
+        sortColumn = 'v.vin_no';
+      else if (sortField === 'engine_no' || sortField === 'engineNo')
+        sortColumn = 'v.engine_no';
+      else if (sortField === 'so_no' || sortField === 'soNo')
+        sortColumn = 'so.so_no';
+      else if (sortField === 'status') sortColumn = 's.status';
+      else if (sortField === 'color') sortColumn = "s.attributes->>'color'";
+      else if (sortField === 'dealer_code' || sortField === 'dealerCode')
         sortColumn = "s.attributes->>'dealer_code'";
-      if (sortField === 'dealer_name')
+      else if (sortField === 'dealer_name' || sortField === 'dealerName')
         sortColumn = "s.attributes->>'dealer_name'";
-      if (sortField === 'trackingPolicyName') sortColumn = 'tp.name';
+      else if (sortField === 'trackingPolicyName') sortColumn = 'tp.name';
+      else if (sortField === 'delivery') sortColumn = 'sl.delivery_date';
+      else if (
+        sortField === 'goodsIssueDate' ||
+        sortField === 'goods_issue_date'
+      )
+        sortColumn = 'gi.issue_date';
+      else if (sortField === 'goodsIssueNo' || sortField === 'goods_issue_no')
+        sortColumn = 'gi.issue_no';
+      else if (sortField === 'notes') sortColumn = 's.notes';
     }
 
-    qb.orderBy(sortColumn, sortDirection);
+    qb.orderBy(sortColumn, sortDirection).addOrderBy('s.created_at', 'DESC');
     qb.offset((page - 1) * pageSize).limit(pageSize);
 
     const [itemsRaw, total] = await Promise.all([
@@ -251,7 +381,7 @@ export class InventorySerialService {
         let s = dateOrString;
         if (!s.endsWith('Z') && !s.match(/[+-]\d{2}:\d{2}$/)) {
           if (s.includes(' ')) s = s.replace(' ', 'T');
-          return s + 'Z';
+          return s + '+07:00';
         }
         return s;
       }
@@ -263,7 +393,7 @@ export class InventorySerialService {
         const min = String(dateOrString.getMinutes()).padStart(2, '0');
         const sec = String(dateOrString.getSeconds()).padStart(2, '0');
         const ms = String(dateOrString.getMilliseconds()).padStart(3, '0');
-        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}Z`;
+        return `${y}-${m}-${d}T${h}:${min}:${sec}.${ms}+07:00`;
       }
       return null;
     };
@@ -284,6 +414,7 @@ export class InventorySerialService {
       salesOrderLineId: raw.s_sales_order_line_id,
       soId: raw.so_id,
       soNo: raw.so_no,
+      receiptDate: fixTimezone(raw.gr_receipt_date),
       createdAt: fixTimezone(raw.s_created_at),
       updatedAt: fixTimezone(raw.s_updated_at),
       item: {
@@ -292,13 +423,17 @@ export class InventorySerialService {
         itemName: raw.i_item_name,
         itemType: raw.i_item_type,
         trackingPolicyId: raw.i_tracking_policy_id,
-        trackingCategoryId: raw.i_tracking_category_id,
         trackingPolicyName: raw.tp_name,
       },
       lifecycle: {
-        deliveryDate: raw.so_delivery_date
-          ? fixTimezone(raw.so_delivery_date)
+        deliveryDate: raw.l_delivery_date
+          ? fixTimezone(raw.l_delivery_date)
           : null,
+        goodsIssueDate: raw.gi_issue_date
+          ? fixTimezone(raw.gi_issue_date)
+          : null,
+        goodsIssueNo: raw.gi_issue_no || null,
+        goodsIssueId: raw.gi_id || null,
       },
     }));
 
@@ -311,17 +446,56 @@ export class InventorySerialService {
     };
   }
 
-  async getSerial(id: string) {
-    const serial = await this.serialRepository.findOne({
-      where: { id },
-    });
-    if (!serial)
-      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
+  private async findSerialEntity(
+    idOrCode: string,
+  ): Promise<ErpInventoryTrackingSerial> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        idOrCode,
+      );
+
+    let serial: ErpInventoryTrackingSerial | null = null;
+    if (isUuid) {
+      serial = await this.serialRepository.findOne({
+        where: { id: idOrCode },
+      });
+    }
+
+    if (!serial) {
+      serial = await this.serialRepository.findOne({
+        where: [{ serialNo: idOrCode }, { lotNo: idOrCode }],
+      });
+    }
+
+    if (!serial) {
+      // Thử tìm qua VIN hoặc Engine No trong erp_vehicles
+      const vinVehicles = await this.serialRepository.manager.query(
+        `SELECT id FROM erp_vehicles WHERE vin_no = $1 OR engine_no = $1 LIMIT 1`,
+        [idOrCode],
+      );
+      if (vinVehicles.length > 0) {
+        serial = await this.serialRepository.findOne({
+          where: { vinId: vinVehicles[0].id },
+        });
+      }
+    }
+
+    if (!serial) {
+      throw new NotFoundException(
+        `Tracking serial '${idOrCode}' không tồn tại`,
+      );
+    }
+
+    return serial;
+  }
+
+  async getSerial(idOrCode: string) {
+    const serial = await this.findSerialEntity(idOrCode);
 
     // Fetch related item manually since it's not a direct TypeORM relation mapping yet
     const itemRaw = await this.serialRepository.manager.query(
       `
-      SELECT i.id, i.sku, i.item_name, i.item_type_id, i.tracking_policy_id, i.tracking_category_id, tp.name as tp_name
+      SELECT i.id, i.sku, i.item_name, i.item_type_id, i.tracking_policy_id, tp.name as tp_name
       FROM erp_inventory_items i
       LEFT JOIN erp_tracking_policies tp ON i.tracking_policy_id = tp.id
       WHERE i.id = $1
@@ -349,7 +523,6 @@ export class InventorySerialService {
           itemName: itemRaw[0].item_name,
           itemType: itemRaw[0].item_type_id,
           trackingPolicyId: itemRaw[0].tracking_policy_id,
-          trackingCategoryId: itemRaw[0].tracking_category_id,
           trackingPolicyName: itemRaw[0].tp_name,
         }
       : null;
@@ -373,7 +546,9 @@ export class InventorySerialService {
 
     const lifecycleRepo =
       this.serialRepository.manager.getRepository(ErpSerialLifecycle);
-    const lifecycle = await lifecycleRepo.findOne({ where: { serialId: id } });
+    const lifecycle = await lifecycleRepo.findOne({
+      where: { serialId: serial.id },
+    });
     if (lifecycle) {
       result.lifecycle = lifecycle;
     }
@@ -381,11 +556,8 @@ export class InventorySerialService {
     return result;
   }
 
-  async updateSerial(id: string, dto: UpdateInventorySerialDto) {
-    const serial = await this.serialRepository.findOne({ where: { id } });
-    if (!serial) {
-      throw new NotFoundException(`Tracking serial '${id}' không tồn tại`);
-    }
+  async updateSerial(idOrCode: string, dto: UpdateInventorySerialDto) {
+    const serial = await this.findSerialEntity(idOrCode);
     if (dto.notes !== undefined) serial.notes = dto.notes;
     if (dto.attributes !== undefined) serial.attributes = dto.attributes;
     await this.serialRepository.save(serial);
@@ -531,6 +703,8 @@ export class InventorySerialService {
   ) {
     let selectField = '';
     let isDateColumn = false;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date, s.created_at), 'YYYY-MM-DD')";
 
     if (column === 'expectedDeliveryDate') {
       selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
@@ -539,9 +713,13 @@ export class InventorySerialService {
       selectField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'itemName') selectField = 'i.item_name';
-    else if (column === 'serialNo') selectField = 's.serial_no';
-    else if (column === 'vinNo') selectField = 'v.vin_no';
-    else if (column === 'engineNo') selectField = 'v.engine_no';
+    else if (column === 'serialNo')
+      selectField =
+        "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
+    else if (column === 'vinNo')
+      selectField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+    else if (column === 'engineNo')
+      selectField = "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
     else if (column === 'soNo') selectField = 'so.so_no';
     else if (column === 'customerName') selectField = 'l.customer_name';
     else if (column === 'activationDate') {
@@ -550,7 +728,8 @@ export class InventorySerialService {
     } else if (column === 'dealerName') {
       selectField = "l.attributes->>'dealer_name'";
     } else if (column === 'color') {
-      selectField = "s.attributes->>'color'";
+      selectField =
+        "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
     } else {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };
     }
@@ -558,8 +737,8 @@ export class InventorySerialService {
     let sql = `
       SELECT DISTINCT ${selectField} as value
       FROM erp_serial_lifecycles l
-      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
-      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      LEFT JOIN erp_inventory_items i ON s.item_id = i.id
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
       WHERE 1=1
@@ -586,12 +765,19 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'serialNo')
+            filterField =
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            filterField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
-          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'color')
+            filterField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
@@ -652,13 +838,13 @@ export class InventorySerialService {
       SELECT 
         l.id as lifecycle_id, l.status, l.delivery_date, l.customer_name, l.customer_phone,
         l.warranty_activated_at, l.warranty_months, l.warranty_end_date, l.dealer_id, l.sales_order_id, l.attributes,
-        s.id as serial_id, s.serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
+        s.id as serial_id, COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin')) as serial_no, s.item_id, s.vin_id, s.attributes as tracking_attributes,
         i.sku, i.item_name,
-        v.vin_no, v.engine_no,
+        COALESCE(v.vin_no, l.attributes->>'ghost_vin') as vin_no, COALESCE(v.engine_no, l.attributes->>'ghost_engine') as engine_no,
         so.so_no, so.expected_delivery_date as expected_delivery_date
       FROM erp_serial_lifecycles l
-      JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
-      JOIN erp_inventory_items i ON s.item_id = i.id
+      LEFT JOIN erp_inventory_tracking_serials s ON l.serial_id = s.id
+      LEFT JOIN erp_inventory_items i ON s.item_id = i.id
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_orders so ON l.sales_order_id = so.id
       WHERE 1=1
@@ -683,8 +869,8 @@ export class InventorySerialService {
 
     if (query.search) {
       sql += ` AND (
-        s.serial_no ILIKE $${paramIdx} OR 
-        v.vin_no ILIKE $${paramIdx} OR 
+        COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin')) ILIKE $${paramIdx} OR 
+        COALESCE(v.vin_no, l.attributes->>'ghost_vin') ILIKE $${paramIdx} OR 
         l.customer_name ILIKE $${paramIdx} OR 
         l.customer_phone ILIKE $${paramIdx}
       )`;
@@ -719,12 +905,19 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             filterField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
+          else if (col === 'serialNo')
+            filterField =
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            filterField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            filterField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') filterField = 'so.so_no';
           else if (col === 'customerName') filterField = 'l.customer_name';
-          else if (col === 'color') filterField = "s.attributes->>'color'";
+          else if (col === 'color')
+            filterField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             filterField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
@@ -801,12 +994,19 @@ export class InventorySerialService {
           else if (col === 'deliveryDate')
             searchField = "TO_CHAR(l.delivery_date, 'YYYY-MM-DD')";
           else if (col === 'itemName') searchField = 'i.item_name';
-          else if (col === 'serialNo') searchField = 's.serial_no';
-          else if (col === 'vinNo') searchField = 'v.vin_no';
-          else if (col === 'engineNo') searchField = 'v.engine_no';
+          else if (col === 'serialNo')
+            searchField =
+              "COALESCE(s.serial_no, l.attributes->>'ghost_serial', 'UNVERIFIED_' || (l.attributes->>'ghost_vin'))";
+          else if (col === 'vinNo')
+            searchField = "COALESCE(v.vin_no, l.attributes->>'ghost_vin')";
+          else if (col === 'engineNo')
+            searchField =
+              "COALESCE(v.engine_no, l.attributes->>'ghost_engine')";
           else if (col === 'soNo') searchField = 'so.so_no';
           else if (col === 'customerName') searchField = 'l.customer_name';
-          else if (col === 'color') searchField = "s.attributes->>'color'";
+          else if (col === 'color')
+            searchField =
+              "COALESCE(s.attributes->>'color', l.attributes->>'ghost_color')";
           else if (col === 'activationDate')
             searchField = "TO_CHAR(l.warranty_activated_at, 'YYYY-MM-DD')";
           else if (col === 'dealerName')
@@ -911,32 +1111,47 @@ export class InventorySerialService {
     page: number = 1,
     pageSize: number = 20,
     filtersStr?: string,
+    trackingPolicy?: string,
   ) {
     let selectField = '';
     let isDateColumn = false;
+    const serialBusinessDateExpr =
+      "TO_CHAR(COALESCE(gr.receipt_date AT TIME ZONE 'Asia/Ho_Chi_Minh', s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'YYYY-MM-DD')";
 
-    if (column === 'itemCode') selectField = 'i.sku';
-    else if (column === 'itemName') selectField = 'i.item_name';
-    else if (column === 'serialNo') selectField = 's.serial_no';
-    else if (column === 'vinNo') selectField = 'v.vin_no';
-    else if (column === 'engineNo') selectField = 'v.engine_no';
-    else if (column === 'soNo') selectField = 'so.so_no';
+    if (column === 'itemCode' || column === 'sku') selectField = 'i.sku';
+    else if (column === 'itemName' || column === 'item_name')
+      selectField = 'i.item_name';
+    else if (column === 'lotNo' || column === 'lot_no')
+      selectField = 's.lot_no';
+    else if (column === 'serialNo' || column === 'serial_no')
+      selectField = 's.serial_no';
+    else if (column === 'vinNo' || column === 'vin_no')
+      selectField = 'v.vin_no';
+    else if (column === 'engineNo' || column === 'engine_no')
+      selectField = 'v.engine_no';
+    else if (column === 'soNo' || column === 'so_no') selectField = 'so.so_no';
     else if (column === 'status') selectField = 's.status';
     else if (column === 'delivery') {
-      selectField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
+      selectField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'createdAt') {
-      selectField =
-        "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+      selectField = serialBusinessDateExpr;
+      isDateColumn = true;
+    } else if (column === 'goodsIssueNo' || column === 'goods_issue_no') {
+      selectField = 'gi.issue_no';
+    } else if (column === 'goodsIssueDate' || column === 'goods_issue_date') {
+      selectField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'color') {
       selectField = "s.attributes->>'color'";
-    } else if (column === 'dealer_code') {
+    } else if (column === 'dealer_code' || column === 'dealerCode') {
       selectField = "s.attributes->>'dealer_code'";
-    } else if (column === 'dealer_name') {
+    } else if (column === 'dealer_name' || column === 'dealerName') {
       selectField = "s.attributes->>'dealer_name'";
     } else if (column === 'trackingPolicyName') {
       selectField = 'tp.name';
+    } else if (column === 'notes') {
+      selectField = 's.notes';
     } else {
       return { items: [], total: 0, page, pageSize, totalPages: 0 };
     }
@@ -949,10 +1164,19 @@ export class InventorySerialService {
       LEFT JOIN erp_vehicles v ON s.vin_id = v.id
       LEFT JOIN erp_sales_order_lines sol ON s.sales_order_line_id = sol.id
       LEFT JOIN erp_sales_orders so ON sol.sales_order_id = so.id
+      LEFT JOIN erp_serial_lifecycles sl ON sl.serial_id = s.id
+      LEFT JOIN erp_goods_issues gi ON sl.goods_issue_id = gi.id
+      LEFT JOIN erp_goods_receipt_lines grl ON s.receipt_line_id = grl.id
+      LEFT JOIN erp_goods_receipts gr ON grl.goods_receipt_id = gr.id
       WHERE 1=1
     `;
     const params: any[] = [];
     let paramIdx = 1;
+
+    if (trackingPolicy) {
+      sql += ` AND tp.code = $${paramIdx++}`;
+      params.push(trackingPolicy);
+    }
 
     if (isDateColumn) {
       sql += ` AND ${selectField} IS NOT NULL AND ${selectField} != ''`;
@@ -968,29 +1192,58 @@ export class InventorySerialService {
           if (col === column) continue;
 
           let filterField = '';
-          if (col === 'itemCode') filterField = 'i.sku';
-          else if (col === 'itemName') filterField = 'i.item_name';
-          else if (col === 'serialNo') filterField = 's.serial_no';
-          else if (col === 'vinNo') filterField = 'v.vin_no';
-          else if (col === 'engineNo') filterField = 'v.engine_no';
-          else if (col === 'soNo') filterField = 'so.so_no';
+          if (col === 'itemCode' || col === 'sku') filterField = 'i.sku';
+          else if (col === 'itemName' || col === 'item_name')
+            filterField = 'i.item_name';
+          else if (col === 'lotNo' || col === 'lot_no')
+            filterField = 's.lot_no';
+          else if (col === 'serialNo' || col === 'serial_no')
+            filterField = 's.serial_no';
+          else if (col === 'vinNo' || col === 'vin_no')
+            filterField = 'v.vin_no';
+          else if (col === 'engineNo' || col === 'engine_no')
+            filterField = 'v.engine_no';
+          else if (col === 'soNo' || col === 'so_no') filterField = 'so.so_no';
           else if (col === 'status') filterField = 's.status';
           else if (col === 'delivery')
-            filterField = "TO_CHAR(so.expected_delivery_date, 'YYYY-MM-DD')";
-          else if (col === 'createdAt')
-            filterField =
-              "TO_CHAR(s.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')";
+            filterField = "TO_CHAR(sl.delivery_date, 'YYYY-MM-DD')";
+          else if (col === 'goodsIssueNo' || col === 'goods_issue_no')
+            filterField = 'gi.issue_no';
+          else if (col === 'goodsIssueDate' || col === 'goods_issue_date')
+            filterField = "TO_CHAR(gi.issue_date, 'YYYY-MM-DD')";
+          else if (col === 'createdAt') filterField = serialBusinessDateExpr;
           else if (col === 'color') filterField = "s.attributes->>'color'";
-          else if (col === 'dealer_code')
+          else if (col === 'dealer_code' || col === 'dealerCode')
             filterField = "s.attributes->>'dealer_code'";
-          else if (col === 'dealer_name')
+          else if (col === 'dealer_name' || col === 'dealerName')
             filterField = "s.attributes->>'dealer_name'";
           else if (col === 'trackingPolicyName') filterField = 'tp.name';
+          else if (col === 'notes') filterField = 's.notes';
 
           if (filterField) {
-            const placeholders = vals.map(() => `$${paramIdx++}`).join(', ');
-            sql += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
-            params.push(...vals);
+            const hasBlank =
+              vals.includes('__BLANK__') ||
+              vals.includes('(blank)') ||
+              vals.includes('(Trống)');
+            const nonBlank = vals.filter(
+              (v) => v !== '__BLANK__' && v !== '(blank)' && v !== '(Trống)',
+            );
+
+            if (hasBlank && nonBlank.length > 0) {
+              const placeholders = nonBlank
+                .map(() => `$${paramIdx++}`)
+                .join(', ');
+              sql += ` AND (${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '' OR CAST(${filterField} AS TEXT) IN (${placeholders}))`;
+              params.push(...nonBlank);
+            } else if (hasBlank) {
+              sql += ` AND (${filterField} IS NULL OR CAST(${filterField} AS TEXT) = '')`;
+            } else if (nonBlank.length > 0) {
+              const placeholders = nonBlank
+                .map(() => `$${paramIdx++}`)
+                .join(', ');
+              sql += ` AND CAST(${filterField} AS TEXT) IN (${placeholders})`;
+              params.push(...nonBlank);
+            }
           }
         }
       } catch (e) {}
@@ -1000,14 +1253,37 @@ export class InventorySerialService {
       const keywords = String(search)
         .split(';')
         .map((k) => k.trim())
-        .filter((k) => k);
+        .filter((k) => k.length > 0);
       if (keywords.length > 0) {
         const conditions: string[] = [];
         for (const kw of keywords) {
-          conditions.push(`CAST(${selectField} AS TEXT) ILIKE $${paramIdx++}`);
-          params.push(`%${kw}%`);
+          const lowerKw = kw.toLowerCase();
+          if (
+            lowerKw === '(blank)' ||
+            lowerKw === '__blank__' ||
+            lowerKw === '(trống)' ||
+            lowerKw === 'null' ||
+            lowerKw === '""'
+          ) {
+            conditions.push(
+              `(${selectField} IS NULL OR CAST(${selectField} AS TEXT) = '')`,
+            );
+          } else {
+            let isExact = false;
+            let cleanKw = kw;
+            if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+              isExact = true;
+              cleanKw = kw.slice(1, -1);
+            }
+            conditions.push(
+              `CAST(${selectField} AS TEXT) ILIKE $${paramIdx++}`,
+            );
+            params.push(isExact ? cleanKw : `%${cleanKw}%`);
+          }
         }
-        sql += ` AND (${conditions.join(' OR ')})`;
+        if (conditions.length > 0) {
+          sql += ` AND (${conditions.join(' OR ')})`;
+        }
       }
     }
 

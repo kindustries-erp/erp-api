@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InvoiceDashboardService } from './invoice-dashboard.service';
 
 @ApiTags('erp_invoices_dashboard')
@@ -13,7 +14,10 @@ import { InvoiceDashboardService } from './invoice-dashboard.service';
 export class InvoiceDashboardController {
   constructor(private readonly service: InvoiceDashboardService) {}
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('stats')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -26,7 +30,10 @@ export class InvoiceDashboardController {
     return this.service.getDashboardStats(dateFrom, dateTo, branchId);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('partners')
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
@@ -36,6 +43,8 @@ export class InvoiceDashboardController {
   @ApiQuery({ name: 'branch_id', required: false })
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'sortOrder', required: false })
+  @ApiQuery({ name: 'column_search', required: false })
+  @ApiQuery({ name: 'column_filters', required: false })
   getDashboardPartners(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -45,6 +54,8 @@ export class InvoiceDashboardController {
     @Query('branch_id') branchId?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
   ) {
     return this.service.getDashboardPartners(
       page ? parseInt(page, 10) : 1,
@@ -55,10 +66,15 @@ export class InvoiceDashboardController {
       branchId,
       sortBy,
       sortOrder,
+      columnSearch,
+      columnFilters,
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('partners/:taxCode/stats')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -70,7 +86,10 @@ export class InvoiceDashboardController {
     return this.service.getPartnerStats(taxCode, dateFrom, dateTo);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export')
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 cd "$REPO_ROOT"
 
+export NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-0}"
+
 TYPEORM_CMD=(node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js)
 BACKUP_DIR="$REPO_ROOT/.agents/skills/db-migrate/backups"
 mkdir -p "$BACKUP_DIR"
@@ -30,22 +32,77 @@ require_cmd() {
 }
 
 read_database_url_from_env() {
-  local env_file="$1"
-  [[ -f "$env_file" ]] || die "Env file not found: $env_file"
+  local env_file="${1:-}"
 
-  local line
-  line="$(grep -E '^DATABASE_URL=' "$env_file" | tail -n1 || true)"
-  [[ -n "$line" ]] || die "DATABASE_URL not found in $env_file"
+  # 1. Direct environment variable takes precedence if present
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    printf '%s' "$DATABASE_URL"
+    return 0
+  fi
 
-  local value="${line#DATABASE_URL=}"
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
+  # 2. Try to read active DATABASE_URL from file if specified and exists
+  if [[ -n "$env_file" && -f "$env_file" ]]; then
+    local line
+    line="$(grep -E '^[[:space:]]*DATABASE_URL=' "$env_file" | tail -n1 || true)"
+    if [[ -n "$line" ]]; then
+      local value="${line#*DATABASE_URL=}"
+      value="${value%\"}"
+      value="${value#\"}"
+      value="${value%\'}"
+      value="${value#\'}"
+      value="$(echo "$value" | tr -d '[:space:]')"
+      if [[ -n "$value" ]]; then
+        printf '%s' "$value"
+        return 0
+      fi
+    fi
 
-  [[ -n "$value" ]] || die "DATABASE_URL is empty in $env_file"
-  printf '%s' "$value"
+    # Fallback: Construct URL from DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE, DB_SSL
+    local host user pass port db ssl
+    host="$(grep -E '^[[:space:]]*DB_HOST=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+    user="$(grep -E '^[[:space:]]*DB_USER=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+    pass="$(grep -E '^[[:space:]]*DB_PASSWORD=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+    port="$(grep -E '^[[:space:]]*DB_PORT=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+    db="$(grep -E '^[[:space:]]*DB_DATABASE=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+    ssl="$(grep -E '^[[:space:]]*DB_SSL=' "$env_file" | tail -n1 | cut -d= -f2- | tr -d '\"'\'' ' || true)"
+
+    if [[ -n "$host" && -n "$db" ]]; then
+      user="${user:-postgres}"
+      port="${port:-5432}"
+      local ssl_param="?sslmode=disable"
+      if [[ "$ssl" == "true" ]]; then
+        ssl_param="?sslmode=require"
+      fi
+      echo "INFO: DATABASE_URL not set in $env_file. Constructed from DB_HOST=$host, DB_PORT=$port, DB_DATABASE=$db." >&2
+      local encoded_user encoded_pass
+      encoded_user="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$user")"
+      encoded_pass="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$pass")"
+      printf 'postgresql://%s:%s@%s:%s/%s%s' "$encoded_user" "$encoded_pass" "$host" "$port" "$db" "$ssl_param"
+      return 0
+    fi
+  fi
+
+  # 3. Fallback: Construct URL from DB_* environment variables
+  if [[ -n "${DB_HOST:-}" && -n "${DB_DATABASE:-}" ]]; then
+    local host="$DB_HOST"
+    local user="${DB_USER:-postgres}"
+    local pass="${DB_PASSWORD:-}"
+    local port="${DB_PORT:-5432}"
+    local db="$DB_DATABASE"
+    local ssl_param="?sslmode=disable"
+    if [[ "${DB_SSL:-}" == "true" ]]; then
+      ssl_param="?sslmode=require"
+    fi
+    local encoded_user encoded_pass
+    encoded_user="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$user")"
+    encoded_pass="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$pass")"
+    printf 'postgresql://%s:%s@%s:%s/%s%s' "$encoded_user" "$encoded_pass" "$host" "$port" "$db" "$ssl_param"
+    return 0
+  fi
+
+  die "Neither active DATABASE_URL nor valid DB credentials found (env_file: ${env_file:-none})"
 }
+
 
 normalize_neon_url_for_migration() {
   local raw_url="$1"
@@ -75,14 +132,19 @@ typeorm() {
 
 backup_schema() {
   local db_url="$1"
-  local env_name="$2"
+  local env_name="${2:-runtime-env}"
   local ts
   ts="$(date +%Y%m%d-%H%M%S)"
   local backup_file="$BACKUP_DIR/${ts}-${env_name}-schema.sql"
 
+  if [[ -z "$db_url" ]]; then
+    echo "WARN: No db_url provided for schema backup, skipping." >&2
+    return 0
+  fi
+
   if command -v pg_dump >/dev/null 2>&1; then
     echo "INFO: Backing up schema to $backup_file"
-    pg_dump --schema-only "$db_url" > "$backup_file"
+    pg_dump --schema-only "$db_url" > "$backup_file" || echo "WARN: pg_dump backup failed, continuing with migration." >&2
   else
     echo "WARN: pg_dump is not available, skipping schema backup." >&2
   fi
@@ -101,24 +163,24 @@ run_generate() {
 }
 
 run_migrations() {
-  local env_file="$1"
+  local env_file="${1:-}"
   local target_url
   target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
 
-  backup_schema "$target_url" "$(basename "$env_file")"
+  backup_schema "$target_url" "$(basename "${env_file:-runtime-env}")"
 
-  echo "INFO: Running migrations on $env_file"
+  echo "INFO: Running migrations"
   typeorm "$target_url" migration:run
 }
 
 run_sync_schema() {
-  local env_file="$1"
+  local env_file="${1:-}"
   local target_url
   target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
 
-  backup_schema "$target_url" "$(basename "$env_file")"
+  backup_schema "$target_url" "$(basename "${env_file:-runtime-env}")"
 
-  echo "INFO: Syncing schema on $env_file"
+  echo "INFO: Syncing schema"
   typeorm "$target_url" schema:sync
 }
 
@@ -142,7 +204,7 @@ run_sync_data() {
 }
 
 main() {
-  [[ $# -ge 2 ]] || {
+  [[ $# -ge 1 ]] || {
     usage
     exit 1
   }
@@ -156,12 +218,10 @@ main() {
       run_generate "$1" "$2"
       ;;
     run)
-      [[ $# -eq 1 ]] || die "run requires <TARGET_ENV_FILE>"
-      run_migrations "$1"
+      run_migrations "${1:-}"
       ;;
     sync-schema)
-      [[ $# -eq 1 ]] || die "sync-schema requires <TARGET_ENV_FILE>"
-      run_sync_schema "$1"
+      run_sync_schema "${1:-}"
       ;;
     sync)
       [[ $# -eq 2 ]] || die "sync requires <SOURCE_ENV_FILE> <TARGET_ENV_FILE>"

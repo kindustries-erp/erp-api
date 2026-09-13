@@ -27,9 +27,16 @@ export function applyMultiKeywordFilter(
   return qb.andWhere(
     new Brackets((sqb) => {
       keywords.forEach((kw, index) => {
+        let isExact = false;
+        let cleanKw = kw;
+        if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+          isExact = true;
+          cleanKw = kw.slice(1, -1);
+        }
+
         const paramName = `${paramPrefix}_${index}`;
         const condition = `${sqlField} ILIKE :${paramName}`;
-        const params = { [paramName]: `%${kw}%` };
+        const params = { [paramName]: isExact ? cleanKw : `%${cleanKw}%` };
 
         if (index === 0) {
           sqb.where(condition, params);
@@ -64,8 +71,15 @@ export function applyMultiKeywordMultiFieldFilter(
   return qb.andWhere(
     new Brackets((sqb) => {
       keywords.forEach((kw, index) => {
+        let isExact = false;
+        let cleanKw = kw;
+        if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+          isExact = true;
+          cleanKw = kw.slice(1, -1);
+        }
+
         const paramName = `${paramPrefix}_${index}`;
-        const params = { [paramName]: `%${kw}%` };
+        const params = { [paramName]: isExact ? cleanKw : `%${cleanKw}%` };
 
         // For each keyword, it matches ANY of the sqlFields
         const condition = sqlFields

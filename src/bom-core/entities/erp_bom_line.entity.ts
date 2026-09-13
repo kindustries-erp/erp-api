@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { ErpUom } from '../../inventory-core/entities/erp_uom.entity';
+import { ErpInventoryItem } from '../../inventory-core/entities/erp_inventory_item.entity';
 
 @Entity({ name: 'erp_bom_lines' })
 export class ErpBomLine {
@@ -22,6 +23,10 @@ export class ErpBomLine {
 
   @Column({ type: 'uuid', name: 'component_item_id', nullable: true })
   componentItemId: string | null;
+
+  @ManyToOne(() => ErpInventoryItem, { createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'component_item_id' })
+  componentItem: ErpInventoryItem;
 
   @Column({ type: 'numeric', name: 'qty_required', precision: 18, scale: 3 })
   qtyRequired: string;

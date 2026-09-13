@@ -12,10 +12,17 @@ describe('ErpInvoicesCoreController', () => {
   const notificationsService = {
     createForUser: jest.fn(),
   } as any;
+  const traceabilityService = {
+    getInvoiceTraceabilityGraph: jest.fn(),
+  } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ErpInvoicesCoreController(service, notificationsService);
+    controller = new ErpInvoicesCoreController(
+      service,
+      notificationsService,
+      traceabilityService,
+    );
   });
 
   it('sends notification when taxpayer mismatch happens', async () => {

@@ -15,10 +15,13 @@ import { UpdateErpInvoiceDto } from '../dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from '../dto/post-invoice.dto';
 import { extractInvoiceMetadata } from '../helpers/invoice-metadata.helper';
 import { toInvoiceDto } from '../helpers/invoice-mapper.helper';
+import { resolvePurchaseDebitAccountCode } from '../helpers/invoice-tax-code-accounting.helper';
 import { R2Service } from '../../r2/r2.service';
 import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-transactions-core.service';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
+
+import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -27,6 +30,8 @@ export class InvoiceLifecycleService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
@@ -37,11 +42,122 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async findOne(id: string) {
-    const data = await this.repository.findOne({
-      where: { id, isDeleted: false },
-      relations: ['items', 'voucherNetOffs', 'voucherNetOffs.bankTransaction'],
-    });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+
+    const relations = [
+      'items',
+      'voucherNetOffs',
+      'voucherNetOffs.bankTransaction',
+      'attachments',
+      'attachments.attachment',
+      'category',
+    ];
+
+    let data: ErpInvoice | null = null;
+    if (isUuid) {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+    } else if (id.includes('_') || id.includes('-')) {
+      const sep = id.includes('_') ? '_' : '-';
+      const parts = id.split(sep);
+      const first = parts[0];
+      const rest = parts.slice(1).join(sep);
+
+      // Thử 1: Ký hiệu _ Số hóa đơn (serialNo = first, invoiceNo = rest)
+      data = await this.repository.findOne({
+        where: {
+          serialNo: first,
+          invoiceNo: rest,
+          isDeleted: false,
+        },
+        relations,
+      });
+
+      // Thử 2: Số hóa đơn _ Ký hiệu (invoiceNo = first, serialNo = rest)
+      if (!data) {
+        data = await this.repository.findOne({
+          where: {
+            invoiceNo: first,
+            serialNo: rest,
+            isDeleted: false,
+          },
+          relations,
+        });
+      }
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { invoiceNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { serialNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data && !isUuid) {
+      try {
+        data = await this.repository.findOne({
+          where: { id, isDeleted: false },
+          relations,
+        });
+      } catch {
+        // Ignore DB UUID syntax error if any
+      }
+    }
+
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+
+    // Load custom attributes & global attributes
+    const entityAttrValues = await this.entityAttrValueRepo.find({
+      where: {
+        entityType: In(['INVOICE', 'INVOICE_IN', 'INVOICE_OUT']),
+        entityId: data.id,
+      },
+      relations: ['attrDef'],
+    });
+
+    const attributes: Record<string, any> = {};
+    const globalAttributes: Record<string, any> = {};
+    for (const ev of entityAttrValues) {
+      if (ev.attrDef?.isGlobal) {
+        globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
+      } else {
+        attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
+      }
+    }
+
+    const attributeValues = entityAttrValues.map((ev) => ({
+      id: ev.id,
+      attrDefId: ev.attrDefId,
+      attrCode: ev.attrDef?.code,
+      attrName: ev.attrDef?.name,
+      fieldType: ev.attrDef?.fieldType,
+      valueText: ev.valueText,
+      isGlobal: ev.attrDef?.isGlobal || false,
+    }));
+
+    (data as any).attributes = attributes;
+    (data as any).globalAttributes = globalAttributes;
+    (data as any).customAttributes = attributes;
+    (data as any).attributeValues = attributeValues;
+
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
   }
 
@@ -50,8 +166,11 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateErpInvoiceDto) {
+    const createPayload: any = { ...dto };
+    delete createPayload.attributes;
+
     const invoice = this.repository.create({
-      ...dto,
+      ...createPayload,
       preVatAmount: String(dto.preVatAmount ?? 0),
       vatRate: dto.vatRate != null ? String(dto.vatRate) : null,
       vatAmount: String(dto.vatAmount ?? 0),
@@ -86,6 +205,7 @@ export class InvoiceLifecycleService {
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
     const updatePayload: any = { ...dto };
+    delete updatePayload.attributes;
     if (dto.preVatAmount != null)
       updatePayload.preVatAmount = String(dto.preVatAmount);
     if (dto.vatRate != null) updatePayload.vatRate = String(dto.vatRate);
@@ -134,21 +254,6 @@ export class InvoiceLifecycleService {
         .catch((e) =>
           this.logger.warn(`UC2 branch sync failed for ${id}: ${e.message}`),
         );
-    }
-
-    const netOffs = await this.repository.manager.find(
-      ErpInvoiceVoucherNetOff,
-      { where: { invoiceId: id } },
-    );
-    if (netOffs && netOffs.length > 0) {
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
     }
 
     return this.findOne(id);
@@ -276,6 +381,50 @@ export class InvoiceLifecycleService {
     }
 
     await this.repository.save(invoice);
+
+    // Sync to erp_entity_attribute_values
+    try {
+      const entityType =
+        invoice.taxInvoiceType === 'OUT' ? 'INVOICE_OUT' : 'INVOICE_IN';
+      const defs: { id: string }[] = await this.repository.manager.query(
+        `SELECT id FROM "erp_module_attribute_defs"
+         WHERE "module_key_global" = $1 AND "code" = 'is_valid' AND "is_deleted" = false
+         LIMIT 1`,
+        [entityType],
+      );
+
+      if (defs && defs.length > 0) {
+        const attrDefId = defs[0].id;
+        const valStr = isValid ? 'true' : 'false';
+
+        const existing: { id: string }[] = await this.repository.manager.query(
+          `SELECT id FROM "erp_entity_attribute_values"
+           WHERE "entity_type" IN ($1, 'INVOICE') AND "entity_id" = $2 AND "attr_def_id" = $3
+           LIMIT 1`,
+          [entityType, id, attrDefId],
+        );
+
+        if (existing && existing.length > 0) {
+          await this.repository.manager.query(
+            `UPDATE "erp_entity_attribute_values"
+             SET "value_text" = $1, "updated_at" = now()
+             WHERE "id" = $2`,
+            [valStr, existing[0].id],
+          );
+        } else {
+          await this.repository.manager.query(
+            `INSERT INTO "erp_entity_attribute_values" (
+               "id", "entity_type", "entity_id", "attr_def_id", "value_text", "created_at", "updated_at"
+             ) VALUES (
+               gen_random_uuid(), $1, $2, $3, $4, now(), now()
+             )`,
+            [entityType, id, attrDefId, valStr],
+          );
+        }
+      }
+    } catch (e) {
+      // Safe sync error catch to avoid blocking core response
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -370,14 +519,6 @@ export class InvoiceLifecycleService {
       await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
         invoiceId: id,
       });
-      const uniqueTxnIds = [
-        ...new Set(netOffs.map((n) => n.bankTransactionId)),
-      ];
-      for (const txnId of uniqueTxnIds) {
-        await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-          txnId,
-        );
-      }
     }
 
     invoice.postingStatus = 'UNPOSTED';
@@ -385,6 +526,177 @@ export class InvoiceLifecycleService {
     invoice.journalEntryId = null;
     await this.repository.save(invoice);
     return invoice;
+  }
+
+  async autoPostStandard(id: string) {
+    const invoice = await this.repository.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.isDeleted) throw new BadRequestException('Invoice is deleted');
+    if (invoice.postingStatus === 'POSTED') {
+      return invoice;
+    }
+
+    if (!invoice.branchId) {
+      // Try to recover branchId from linked voucher netoffs
+      const netOffs = await this.repository.manager.find(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId: id },
+          relations: ['bankTransaction'],
+        },
+      );
+      const validBranch = netOffs.find(
+        (n) =>
+          n.bankTransaction &&
+          !n.bankTransaction.isDeleted &&
+          n.bankTransaction.branchId,
+      )?.bankTransaction?.branchId;
+
+      if (validBranch) {
+        invoice.branchId = validBranch;
+        await this.repository.save(invoice);
+      } else {
+        const branches: { id: string }[] = await this.repository.manager.query(
+          `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 2`,
+        );
+        if (branches.length === 1) {
+          invoice.branchId = branches[0].id;
+          await this.repository.save(invoice);
+        } else {
+          throw new BadRequestException(
+            'Hóa đơn chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
+          );
+        }
+      }
+    }
+
+    const accounts: { id: string; account_code: string }[] =
+      await this.repository.manager.query(
+        `SELECT id, account_code FROM erp_chart_of_accounts WHERE is_deleted = false AND is_active = true ORDER BY length(account_code) ASC, account_code ASC`,
+      );
+
+    const findAccountId = (prefix: string): string | null => {
+      const exact = accounts.find((a) => a.account_code === prefix);
+      if (exact) return exact.id;
+      const starts = accounts.find((a) => a.account_code.startsWith(prefix));
+      return starts ? starts.id : null;
+    };
+
+    const preVat = Math.round((Number(invoice.preVatAmount) || 0) * 100) / 100;
+    const vat = Math.round((Number(invoice.vatAmount) || 0) * 100) / 100;
+    const total = Math.round((Number(invoice.totalAmount) || 0) * 100) / 100;
+
+    if (total <= 0 && preVat <= 0) {
+      throw new BadRequestException(
+        'Giá trị hóa đơn không hợp lệ để hạch toán (Tổng tiền <= 0).',
+      );
+    }
+
+    const defaultDesc = `Hạch toán hóa đơn ${invoice.invoiceNo}`;
+    const userDesc = invoice.description || defaultDesc;
+    const lines: {
+      accountId: string;
+      debit: number;
+      credit: number;
+      description?: string;
+    }[] = [];
+
+    if (invoice.direction === 'IN') {
+      const debitCode = resolvePurchaseDebitAccountCode(invoice.sellerTaxCode);
+      const debitAccountId =
+        findAccountId(debitCode) ||
+        findAccountId('642') ||
+        findAccountId('632');
+      const vatAccountId = findAccountId('133') || findAccountId('1331');
+      const apAccountId = findAccountId('331');
+
+      if (!debitAccountId || !apAccountId) {
+        throw new BadRequestException(
+          'Không tìm thấy tài khoản kế toán phù hợp (632/642 hoặc 331) trong hệ thống.',
+        );
+      }
+
+      if (preVat > 0) {
+        lines.push({
+          accountId: debitAccountId,
+          debit: preVat,
+          credit: 0,
+          description: userDesc,
+        });
+      }
+      if (vat > 0) {
+        if (!vatAccountId) {
+          throw new BadRequestException(
+            'Không tìm thấy tài khoản thuế GTGT (133) trong hệ thống.',
+          );
+        }
+        lines.push({
+          accountId: vatAccountId,
+          debit: vat,
+          credit: 0,
+          description: `Thuế GTGT ${invoice.invoiceNo}`,
+        });
+      }
+      if (total > 0) {
+        lines.push({
+          accountId: apAccountId,
+          debit: 0,
+          credit: total,
+          description: userDesc,
+        });
+      }
+    } else {
+      // OUT: Nợ 131 / Có 511 / Có 3331
+      const arAccountId = findAccountId('131');
+      const revenueAccountId = findAccountId('511') || findAccountId('711');
+      const vatOutAccountId = findAccountId('3331') || findAccountId('333');
+
+      if (!arAccountId || !revenueAccountId) {
+        throw new BadRequestException(
+          'Không tìm thấy tài khoản kế toán phù hợp (131 hoặc 511) trong hệ thống.',
+        );
+      }
+
+      if (total > 0) {
+        lines.push({
+          accountId: arAccountId,
+          debit: total,
+          credit: 0,
+          description: userDesc,
+        });
+      }
+      if (preVat > 0) {
+        lines.push({
+          accountId: revenueAccountId,
+          debit: 0,
+          credit: preVat,
+          description: userDesc,
+        });
+      }
+      if (vat > 0) {
+        if (!vatOutAccountId) {
+          throw new BadRequestException(
+            'Không tìm thấy tài khoản thuế GTGT đầu ra (3331) trong hệ thống.',
+          );
+        }
+        lines.push({
+          accountId: vatOutAccountId,
+          debit: 0,
+          credit: vat,
+          description: `Thuế GTGT ${invoice.invoiceNo}`,
+        });
+      }
+    }
+
+    const postingDate = invoice.invoiceDate
+      ? new Date(invoice.invoiceDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    return this.postInvoice(id, {
+      postingDate,
+      description: userDesc,
+      lines,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -430,21 +742,28 @@ export class InvoiceLifecycleService {
       }
     }
 
-    const netOffEntities = payload.map((p) =>
-      this.repository.manager.create(ErpInvoiceVoucherNetOff, {
-        invoiceId,
-        bankTransactionId: p.bankTransactionId,
-        netOffAmount: p.netOffAmount ?? 0,
-      }),
-    );
-
-    await this.repository.manager.save(ErpInvoiceVoucherNetOff, netOffEntities);
-
-    const uniqueTxnIds = [...new Set(payload.map((p) => p.bankTransactionId))];
-    for (const txnId of uniqueTxnIds) {
-      await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-        txnId,
+    for (const p of payload) {
+      const existing = await this.repository.manager.findOne(
+        ErpInvoiceVoucherNetOff,
+        {
+          where: { invoiceId, bankTransactionId: p.bankTransactionId },
+        },
       );
+
+      if (existing) {
+        existing.netOffAmount = p.netOffAmount ?? 0;
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, existing);
+      } else {
+        const newNetOff = this.repository.manager.create(
+          ErpInvoiceVoucherNetOff,
+          {
+            invoiceId,
+            bankTransactionId: p.bankTransactionId,
+            netOffAmount: p.netOffAmount ?? 0,
+          },
+        );
+        await this.repository.manager.save(ErpInvoiceVoucherNetOff, newNetOff);
+      }
     }
 
     return { message: 'Đã liên kết phiếu thành công' };
@@ -455,9 +774,6 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
-    await this.bankTransactionsCoreService.refreshJournalEntriesForBankTransaction(
-      voucherId,
-    );
     return { message: 'Đã xóa liên kết phiếu thành công' };
   }
 }

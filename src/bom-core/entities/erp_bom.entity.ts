@@ -3,9 +3,13 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import type { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 
 @Entity({ name: 'erp_boms' })
 export class ErpBom {
@@ -21,6 +25,13 @@ export class ErpBom {
 
   @Column({ type: 'uuid', name: 'finished_good_item_id', nullable: true })
   finishedGoodItemId: string | null;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne('ErpModuleCategory', { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'category_id' })
+  category?: ErpModuleCategory;
 
   @Column({ type: 'varchar', length: 255, name: 'version' })
   version: string;
@@ -48,4 +59,8 @@ export class ErpBom {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  attributeValues?: ErpEntityAttributeValue[];
+  customAttributes?: Record<string, any>;
+  attributes?: Record<string, any>;
 }

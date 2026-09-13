@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsDateString,
@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsObject,
 } from 'class-validator';
 
 export class CreateBankTransactionDto {
@@ -97,4 +98,16 @@ export class CreateBankTransactionDto {
   @IsString()
   @IsOptional()
   importBatchId?: string;
+
+  @ApiPropertyOptional()
+  @IsUUID()
+  @IsOptional()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Dynamic attribute values map: attrDefId -> valueText',
+  })
+  @IsOptional()
+  @IsObject()
+  attributes?: Record<string, any>;
 }

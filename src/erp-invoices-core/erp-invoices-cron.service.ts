@@ -10,6 +10,10 @@ import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import {
+  isGdtInvoiceCronEnabled,
+  isWithinInvoiceSyncWindow,
+} from '../common/utils/cron.util';
 
 @Injectable()
 export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +30,12 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!isGdtInvoiceCronEnabled()) {
+      this.logger.log(
+        'ErpInvoices GDT auto-sync cron is temporarily locked in code (chờ setup mật khẩu mới).',
+      );
+      return;
+    }
     this.scheduleNextSync();
   }
 
@@ -52,24 +62,50 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   }
 
   async autoSyncCurrentMonth() {
+    if (!isGdtInvoiceCronEnabled()) {
+      this.logger.log(
+        'ErpInvoices auto-sync skipped: GDT cron is temporarily locked in code.',
+      );
+      return;
+    }
+
+    if (!isWithinInvoiceSyncWindow()) {
+      this.logger.log(
+        'ErpInvoices auto-sync skipped: outside allowed time window (00:00 - 03:59 Asia/Ho_Chi_Minh).',
+      );
+      return;
+    }
+
     this.logger.log('Auto-sync started for current month.');
 
     try {
       const config = await this.erpInvoicesCoreService.getPortalConfig();
-      const token = config.token;
-      if (!token) {
-        this.logger.warn('No GDT portal token found. Skipping auto-sync.');
-        return;
-      }
+      let token = config.token;
+      let cookies: string | undefined = config.cookies;
 
-      const isValid = await this.erpInvoicesCoreService.checkTokenValid(
-        token,
-        config.cookies,
-      );
+      let isValid = token
+        ? await this.erpInvoicesCoreService.checkTokenValid(token, cookies)
+        : false;
+
       if (!isValid) {
-        this.logger.warn('GDT portal token is invalid/expired.');
-        await this.notifyTokenExpired();
-        return;
+        this.logger.log(
+          'Token GDT không tồn tại hoặc đã hết hạn. Đang tự động đăng nhập lại Cổng Thuế...',
+        );
+        const reAuth = await this.erpInvoicesCoreService.autoReloginWithRetry();
+        if (reAuth) {
+          token = reAuth.token;
+          cookies = reAuth.cookies;
+          isValid = true;
+          this.logger.log(
+            'Tự động đăng nhập lại Cổng Thuế thành công trong tiến trình Cron.',
+          );
+        } else {
+          this.logger.warn(
+            'Tự động đăng nhập lại Cổng Thuế thất bại. Gửi thông báo hết hạn token.',
+          );
+          await this.notifyTokenExpired();
+          return;
+        }
       }
 
       const now = new Date();
@@ -85,7 +121,8 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
             type: 'purchase',
             dateFrom,
             dateTo,
-            cookies: config.cookies,
+            token,
+            cookies,
           },
           undefined, // no specific user
           true, // waitForCompletion
@@ -100,7 +137,8 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           type: 'sold',
           dateFrom,
           dateTo,
-          cookies: config.cookies,
+          token,
+          cookies,
         },
         undefined,
         true, // waitForCompletion
@@ -172,7 +210,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
         await this.notificationsService.createForUser(userId, {
           type: 'INFO',
           title: 'Đồng bộ hóa đơn thành công',
-          message: `Hệ thống vừa đồng bộ và kiểm tra ${totalFetched} hóa đơn. Có ${totalImported} hóa đơn được thêm mới vào phần mềm.`,
+          message: `Hệ thống vừa đồng bộ và kiểm tra ${totalFetched} hóa đơn. Có ${totalImported} hóa đơn được thêm mới vào phần mềm. Sổ cái phụ tùng FIFO cũng đang được tự động tính toán lại.`,
         });
       }
     } catch (e) {

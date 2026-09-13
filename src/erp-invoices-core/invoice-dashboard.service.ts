@@ -38,7 +38,9 @@ export class InvoiceDashboardService {
         'vatOut',
       )
       .where('inv.is_deleted = false')
-      .andWhere("inv.status != 'CANCELLED'");
+      .andWhere(
+        '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+      );
 
     if (dateFrom) {
       qb.andWhere('inv.invoice_date >= :dateFrom', { dateFrom });
@@ -82,6 +84,8 @@ export class InvoiceDashboardService {
     branchId?: string,
     sortBy?: string,
     sortOrder?: 'ASC' | 'DESC',
+    columnSearch?: string,
+    columnFilters?: string,
   ) {
     // Build the query to get aggregated data grouped by taxCode and partnerName
     // Because a partner might be both buyer and seller (though rare), we group by the relevant side
@@ -109,7 +113,7 @@ export class InvoiceDashboardService {
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
-      WHERE inv.is_deleted = false AND inv.status != 'CANCELLED'
+      WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         ${dateFrom ? `AND inv.invoice_date >= '${dateFrom}'` : ''}
         ${dateTo ? `AND inv.invoice_date <= '${dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo}'` : ''}
         ${branchId ? (branchId === 'null' ? `AND inv.branch_id IS NULL` : `AND inv.branch_id = '${branchId}'`) : ''}
@@ -139,6 +143,38 @@ export class InvoiceDashboardService {
       whereConditions.push(
         `(p."taxCode" ILIKE '%${s}%' OR p."partnerName" ILIKE '%${s}%')`,
       );
+    }
+
+    if (columnSearch) {
+      try {
+        const cSearch = JSON.parse(columnSearch) as Record<string, string>;
+        for (const [col, val] of Object.entries(cSearch)) {
+          if (!val) continue;
+          const s = val.replace(/'/g, "''");
+          if (col === 'taxCode') {
+            whereConditions.push(`p."taxCode" ILIKE '%${s}%'`);
+          } else if (col === 'partnerName') {
+            whereConditions.push(`p."partnerName" ILIKE '%${s}%'`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (columnFilters) {
+      try {
+        const cFilters = JSON.parse(columnFilters) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+          const quotedVals = vals
+            .map((v) => `'${v.replace(/'/g, "''")}'`)
+            .join(', ');
+          if (col === 'taxCode') {
+            whereConditions.push(`p."taxCode" IN (${quotedVals})`);
+          } else if (col === 'partnerName') {
+            whereConditions.push(`p."partnerName" IN (${quotedVals})`);
+          }
+        }
+      } catch (e) {}
     }
 
     if (sortBy === 'payableAmount') {
@@ -206,7 +242,9 @@ export class InvoiceDashboardService {
         'cashIn', // Output invoices mean we receive money (cashIn)
       )
       .where('inv.is_deleted = false')
-      .andWhere("inv.status != 'CANCELLED'")
+      .andWhere(
+        '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
+      )
       .andWhere(
         '(inv.seller_tax_code = :taxCode OR inv.buyer_tax_code = :taxCode)',
         { taxCode },
@@ -261,7 +299,7 @@ export class InvoiceDashboardService {
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
-      WHERE inv.is_deleted = false AND inv.status != 'CANCELLED'
+      WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
     `;
 
     const whereConditions: string[] = [];

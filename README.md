@@ -4,37 +4,37 @@ Backend cho lane ERP active hiện tại (`erp-master`) — thuần **Postgres/N
 
 ## Runtime hiện tại (2026-06-14)
 
-| Item | Giá trị |
-|---|---|
-| Branch | `erp-master` |
-| Stack | _xem runtime/deploy contract hiện hành trong docs canonical; README này không còn là source of truth cho stack path_ |
-| Port | _xem runtime/deploy contract hiện hành_ |
-| DB | Neon PostgreSQL (`DATABASE_URL` trong stack `.env`) |
-| Auth | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`) |
-| Image | `ghcr.io/kindustries-erp/erp-api:<sha>` |
-| CI/CD | GitHub Actions (trigger branch active: `erp-master`) |
-| Public domain | _xem docs canonical / runtime hiện hành_ |
+| Item          | Giá trị                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Branch        | `erp-master`                                                                                                         |
+| Stack         | _xem runtime/deploy contract hiện hành trong docs canonical; README này không còn là source of truth cho stack path_ |
+| Port          | _xem runtime/deploy contract hiện hành_                                                                              |
+| DB            | Neon PostgreSQL (`DATABASE_URL` trong stack `.env`)                                                                  |
+| Auth          | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`)                                                                           |
+| Image         | `ghcr.io/kindustries-erp/erp-api:<sha>`                                                                              |
+| CI/CD         | GitHub Actions (trigger branch active: `erp-master`)                                                                 |
+| Public domain | _xem docs canonical / runtime hiện hành_                                                                             |
 
 ## 🚀 API Endpoints (core)
 
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `POST` | `/api/v1/auth/login` | Đăng nhập → JWT |
-| `POST` | `/api/v1/auth/refresh` | Refresh token |
-| `GET` | `/api/v1/auth/profile` | Profile (yêu cầu Bearer) |
-| `GET` | `/api/v1/basic-masters` | Lookup masters (JWT only, no RBAC) |
-| `GET/POST` | `/api/v1/purchase-orders` | Đơn mua hàng |
-| `GET/POST` | `/api/v1/goods-receipts` | Nhập kho |
-| `GET/POST` | `/api/v1/sales-orders` | Đơn bán hàng |
-| `GET/POST` | `/api/v1/goods-issues` | Xuất kho |
-| `GET/POST` | `/api/v1/bom` | Định mức vật tư (BOM) |
-| `POST` | `/api/v1/production/execute` | Thực hiện sản xuất |
-| `GET/POST` | `/api/v1/inventory/items` | Danh mục hàng hóa |
-| `GET` | `/api/v1/inventory/stock` | Tồn kho tổng hợp |
-| `GET` | `/api/v1/inventory/movements` | Lịch sử nhập xuất |
-| `GET/POST` | `/api/v1/business-partners` | Đối tác (khách hàng/nhà cung cấp) |
-| `GET/POST` | `/api/v1/admin/users` | Quản lý người dùng (RBAC) |
-| `GET` | `/api/v1/audit-logs` | Audit logs |
+| Method     | Endpoint                      | Mô tả                              |
+| ---------- | ----------------------------- | ---------------------------------- |
+| `POST`     | `/api/v1/auth/login`          | Đăng nhập → JWT                    |
+| `POST`     | `/api/v1/auth/refresh`        | Refresh token                      |
+| `GET`      | `/api/v1/auth/profile`        | Profile (yêu cầu Bearer)           |
+| `GET`      | `/api/v1/basic-masters`       | Lookup masters (JWT only, no RBAC) |
+| `GET/POST` | `/api/v1/purchase-orders`     | Đơn mua hàng                       |
+| `GET/POST` | `/api/v1/goods-receipts`      | Nhập kho                           |
+| `GET/POST` | `/api/v1/sales-orders`        | Đơn bán hàng                       |
+| `GET/POST` | `/api/v1/goods-issues`        | Xuất kho                           |
+| `GET/POST` | `/api/v1/bom`                 | Định mức vật tư (BOM)              |
+| `POST`     | `/api/v1/production/execute`  | Thực hiện sản xuất                 |
+| `GET/POST` | `/api/v1/inventory/items`     | Danh mục hàng hóa                  |
+| `GET`      | `/api/v1/inventory/stock`     | Tồn kho tổng hợp                   |
+| `GET`      | `/api/v1/inventory/movements` | Lịch sử nhập xuất                  |
+| `GET/POST` | `/api/v1/business-partners`   | Đối tác (khách hàng/nhà cung cấp)  |
+| `GET/POST` | `/api/v1/admin/users`         | Quản lý người dùng (RBAC)          |
+| `GET`      | `/api/v1/audit-logs`          | Audit logs                         |
 
 ## 📁 Cấu trúc thư mục
 

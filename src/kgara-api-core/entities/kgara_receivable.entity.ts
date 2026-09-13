@@ -65,6 +65,10 @@ export class KgaraReceivable {
   @Column({ type: 'varchar', length: 50, name: 'bien_so_xe', nullable: true })
   bienSoXe: string | null;
 
+  /** SoKhung – VIN / chassis number */
+  @Column({ type: 'varchar', length: 100, name: 'so_khung', nullable: true })
+  soKhung: string | null;
+
   /** TienThanhToan – total receivable amount */
   @Column({
     type: 'decimal',

@@ -28,6 +28,7 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { format } from 'date-fns';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -130,7 +131,7 @@ export class GoodsIssuesCoreService {
   }
 
   async create(dto: CreateGoodsIssueDto) {
-    const { lines = [], ...header } = dto;
+    const { lines = [], customAttributes, ...header } = dto;
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsIssue);
       const lineRepo = manager.getRepository(ErpGoodsIssueLine);
@@ -161,9 +162,26 @@ export class GoodsIssuesCoreService {
         const saved = await lineRepo.save(linePayload);
         savedLines.push(saved);
       }
+
+      // Lưu customAttributes nguyên tử trong transaction
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_ISSUE',
+          data.id,
+          customAttributes,
+        );
+      }
+
+      const result = {
+        ...data,
+        lines: await this.enrichLines(savedLines, manager),
+      };
+      await EntityCustomFieldsHelper.enrichOne(manager, 'GOODS_ISSUE', result);
+
       return {
         message: 'Tạo thành công',
-        data: { ...data, lines: await this.enrichLines(savedLines, manager) },
+        data: result,
       };
     });
   }
@@ -202,6 +220,12 @@ export class GoodsIssuesCoreService {
         : null,
     }));
 
+    await EntityCustomFieldsHelper.enrichMany(
+      this.dataSource,
+      'GOODS_ISSUE',
+      enrichedItems,
+    );
+
     return {
       items: enrichedItems,
       total,
@@ -223,32 +247,59 @@ export class GoodsIssuesCoreService {
       where: { goodsIssueId: id },
       order: { lineNo: 'ASC' },
     });
+    const result = {
+      ...data,
+      customerName,
+      lines: await this.enrichLines(lines),
+    };
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'GOODS_ISSUE',
+      result,
+    );
+
     return {
       message: 'Lấy thông tin thành công',
-      data: { ...data, customerName, lines: await this.enrichLines(lines) },
+      data: result,
     };
   }
 
   async update(id: string, dto: UpdateGoodsIssueDto) {
     const existing = await this.getIssueOrThrow(this.repository, id);
+    const { lines, customAttributes, ...header } = dto as any;
+
     if (existing.status !== 'DRAFT') {
-      throw new BadRequestException(
-        'Chỉ được sửa phiếu xuất ở trạng thái nháp',
-      );
+      const { remarks } = dto as any;
+      if (remarks !== undefined) {
+        await this.repository.update(id, { remarks });
+        await this.dataSource
+          .getRepository(ErpInventoryTransaction)
+          .update({ documentId: id }, { notes: remarks });
+      }
+      if (customAttributes) {
+        await this.dataSource.transaction(async (manager) => {
+          await EntityCustomFieldsHelper.saveInTx(
+            manager,
+            'GOODS_ISSUE',
+            id,
+            customAttributes,
+          );
+        });
+      }
+      return this.findOne(id);
     }
     if (existing.productionOrderId) {
       throw new BadRequestException(
         'Phiếu xuất kho đã gắn với lệnh sản xuất, không được phép sửa',
       );
     }
-    const { lines, ...header } = dto as any;
     if (header.issueNo === '') {
       delete header.issueNo;
     }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
-    if (Array.isArray(lines)) {
-      await this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
+      if (Array.isArray(lines)) {
         const lineRepo = manager.getRepository(ErpGoodsIssueLine);
         await lineRepo.delete({ goodsIssueId: id });
         let lineNo = 1;
@@ -267,8 +318,16 @@ export class GoodsIssuesCoreService {
           };
           await lineRepo.save(linePayload);
         }
-      });
-    }
+      }
+      if (customAttributes) {
+        await EntityCustomFieldsHelper.saveInTx(
+          manager,
+          'GOODS_ISSUE',
+          id,
+          customAttributes,
+        );
+      }
+    });
     return this.findOne(id);
   }
 
@@ -364,7 +423,7 @@ export class GoodsIssuesCoreService {
         const item = line.itemId
           ? await itemRepo.findOne({
               where: { id: line.itemId },
-              relations: ['itemType'],
+              relations: ['itemType', 'trackingPolicy'],
             })
           : null;
         const isService = item?.itemType?.code === 'SERVICE';
@@ -379,6 +438,35 @@ export class GoodsIssuesCoreService {
         const currentValue = Number(balance?.inventoryValue || 0);
         const avgUnitCost = Number(balance?.avgUnitCost || 0);
         const availableQty = currentQty - currentReserved;
+
+        if (!isService && item?.trackingPolicy?.code === 'SERIAL') {
+          const inStockCount = await serialRepo.count({
+            where: { itemId: line.itemId!, status: 'IN_STOCK' },
+          });
+
+          if (inStockCount < qty) {
+            const pendingCount = await manager
+              .createQueryBuilder()
+              .select('COUNT(l.id)', 'cnt')
+              .from('erp_goods_receipt_lines', 'l')
+              .innerJoin(
+                'erp_goods_receipts',
+                'gr',
+                'gr.id = l.goods_receipt_id',
+              )
+              .where('l.item_id = :itemId', { itemId: line.itemId })
+              .andWhere('gr.status = :status', { status: 'POSTED' })
+              .andWhere('l.serials_generated = false')
+              .getRawOne();
+
+            if (Number(pendingCount?.cnt || 0) > 0) {
+              throw new BadRequestException(
+                `Hệ thống đang trong quá trình đăng ký mã Serial cho phụ tùng ${item.sku}. Vui lòng đợi vài phút để hoàn tất, sau đó thực hiện lại lệnh xuất kho.`,
+              );
+            }
+            // else let it fall through to normal balance validation or we can throw here
+          }
+        }
 
         if (!isService) {
           if (line.salesOrderLineId) {
@@ -475,12 +563,32 @@ export class GoodsIssuesCoreService {
         }
 
         if (serial) {
+          let dealerId = issue.customerId;
+          if (!dealerId && issue.salesOrderId) {
+            const soRepo = manager.getRepository(ErpSalesOrder);
+            const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+            if (so) {
+              dealerId = so.customerId;
+            }
+          }
+
           serial.goodsIssueLineId = line.id;
           if (line.salesOrderLineId) {
             serial.status = 'DELIVERING';
           }
           if (!serial.vinId && vehicle?.id) {
             serial.vinId = vehicle.id;
+          }
+          if (line.salesOrderLineId && dealerId) {
+            const bpRepo = manager.getRepository(ErpBusinessPartner);
+            const dealer = await bpRepo.findOneBy({ id: dealerId });
+            if (dealer) {
+              serial.attributes = {
+                ...(serial.attributes || {}),
+                dealer_code: dealer.code,
+                dealer_name: dealer.name,
+              };
+            }
           }
           await serialRepo.save(serial);
 
@@ -495,14 +603,14 @@ export class GoodsIssuesCoreService {
                   serialId: serial.id,
                   salesOrderId: issue.salesOrderId,
                   goodsIssueId: issue.id,
-                  dealerId: issue.customerId, // Using customerId as dealerId
+                  dealerId: dealerId,
                   status: 'ACTIVE',
                 }),
               );
             } else {
               existingLifecycle.salesOrderId = issue.salesOrderId;
               existingLifecycle.goodsIssueId = issue.id;
-              existingLifecycle.dealerId = issue.customerId;
+              existingLifecycle.dealerId = dealerId;
               existingLifecycle.status = 'ACTIVE';
               await lifecycleRepo.save(existingLifecycle);
             }

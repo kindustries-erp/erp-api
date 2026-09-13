@@ -1,11 +1,13 @@
 import * as ExcelJS from 'exceljs';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import { parseVNLocalDate } from './date-parser';
 
 export async function parseBidvXlsx(
   buffer: Buffer | any,
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): Promise<CreateBankTransactionDto[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -13,6 +15,23 @@ export async function parseBidvXlsx(
   const worksheet = workbook.worksheets[0];
   if (!worksheet) {
     throw new Error('File excel không có dữ liệu');
+  }
+
+  // Validate BIDV specific cells
+  const c1 = String((worksheet.getCell('C1').value as any) || '').toLowerCase();
+  if (!c1.includes('bidv') && !c1.includes('đầu tư và phát triển')) {
+    throw new Error(
+      'File không đúng định dạng sao kê BIDV (Thông tin ngân hàng ở ô C1 không khớp)',
+    );
+  }
+
+  if (expectedAccountNumber) {
+    const e12 = String((worksheet.getCell('E12').value as any) || '').trim();
+    if (e12 !== expectedAccountNumber) {
+      throw new Error(
+        `File sao kê không khớp với số tài khoản đích ${expectedAccountNumber} (Số tài khoản trong file: ${e12})`,
+      );
+    }
   }
 
   const transactions: CreateBankTransactionDto[] = [];
@@ -101,19 +120,7 @@ export async function parseBidvXlsx(
 
     const parseDate = (colKey: string): Date | null => {
       const val = getVal(colKey);
-      if (val instanceof Date) return val;
-      if (typeof val === 'string') {
-        // Try parsing DD/MM/YYYY
-        const parts = val.split(/[/\- ]/);
-        if (parts.length >= 3) {
-          // Assuming DD/MM/YYYY
-          const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          if (!isNaN(d.getTime())) return d;
-        }
-        const d2 = new Date(val);
-        if (!isNaN(d2.getTime())) return d2;
-      }
-      return null;
+      return parseVNLocalDate(val);
     };
 
     const stt = parseNumber('stt');
@@ -141,6 +148,10 @@ export async function parseBidvXlsx(
       correspondentBank: parseString('corrBank') || undefined,
     });
   });
+
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê BIDV');
+  }
 
   return transactions;
 }

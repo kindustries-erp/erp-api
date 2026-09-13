@@ -1,12 +1,14 @@
 import { parse } from 'csv-parse/sync';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import * as ExcelJS from 'exceljs';
+import { parseVNLocalDate } from './date-parser';
 
 export function parseTcbCsv(
   buffer: Buffer,
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): CreateBankTransactionDto[] {
   // Convert buffer to string, TCB CSV might have different encodings, assuming utf-8 for now
   const fileContent = buffer.toString('utf-8');
@@ -19,8 +21,10 @@ export function parseTcbCsv(
 
   const transactions: CreateBankTransactionDto[] = [];
   let startParsing = false;
+  let stopParsing = false;
 
   for (const record of records) {
+    if (stopParsing) break;
     if (!startParsing) {
       // Check for header row
       if (
@@ -52,6 +56,17 @@ export function parseTcbCsv(
     const efdDateRaw = record[0]?.trim();
     const transDateRaw = record[1]?.trim();
     const referenceNumber = record[2]?.trim() || undefined;
+
+    const refStr = (referenceNumber || '').toLowerCase();
+    if (
+      !referenceNumber ||
+      refStr.includes('ngày giờ in') ||
+      refStr.includes('phiếu này được in')
+    ) {
+      stopParsing = true;
+      break;
+    }
+
     const correspondentBank = record[3]?.trim() || undefined;
     const correspondentAccount = record[4]?.trim() || undefined;
     const correspondentName = record[5]?.trim() || undefined;
@@ -81,39 +96,20 @@ export function parseTcbCsv(
 
     if (!transDateRaw) continue;
 
-    // Convert DD/MM/YYYY or YYYY-MM-DD to proper ISO date string if necessary.
-    // In the sample, it is "YYYY-MM-DD HH:mm:ss" and "YYYY-MM-DD".
-    // new Date(transDateRaw) should work for "2026-05-30" or "2026-05-30 16:44:52"
-    let transDate = new Date(transDateRaw);
-    if (isNaN(transDate.getTime())) {
-      // Try to parse DD/MM/YYYY
-      const parts = transDateRaw.split('/');
-      if (parts.length === 3) {
-        transDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      }
-    }
-
-    let efdDate: Date | undefined;
-    if (efdDateRaw) {
-      efdDate = new Date(efdDateRaw);
-      if (isNaN(efdDate.getTime())) {
-        const parts = efdDateRaw.split('/');
-        if (parts.length === 3) {
-          efdDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        }
-      }
-    }
+    let transDate = parseVNLocalDate(transDateRaw);
+    let efdDate = parseVNLocalDate(efdDateRaw);
 
     transactions.push({
       sourceType: bankAccountId ? 'BANK' : 'CASH',
       branchId,
       bankAccountId,
       cashBookId,
-      transDate: transDate.toISOString(),
-      efdDate:
-        efdDate && !isNaN(efdDate.getTime())
-          ? efdDate.toISOString()
-          : undefined,
+      transDate: efdDate
+        ? efdDate.toISOString()
+        : transDate
+          ? transDate.toISOString()
+          : new Date().toISOString(),
+      efdDate: transDate ? transDate.toISOString() : undefined,
       referenceNumber,
       debitAmount,
       creditAmount,
@@ -125,6 +121,10 @@ export function parseTcbCsv(
     });
   }
 
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê TCB');
+  }
+
   return transactions;
 }
 
@@ -133,6 +133,7 @@ export async function parseTcbXlsx(
   branchId: string,
   bankAccountId?: string,
   cashBookId?: string,
+  expectedAccountNumber?: string,
 ): Promise<CreateBankTransactionDto[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
@@ -142,18 +143,41 @@ export async function parseTcbXlsx(
     throw new Error('File excel không có dữ liệu');
   }
 
+  // Validate TCB specific cells
+  const a1 = String((worksheet.getCell('A1').value as any) || '').toLowerCase();
+  if (
+    !a1.includes('kỹ thương') &&
+    !a1.includes('techcombank') &&
+    !a1.includes('tcb')
+  ) {
+    throw new Error(
+      'File không đúng định dạng sao kê TCB (Thông tin ngân hàng ở ô A1 không khớp)',
+    );
+  }
+
+  if (expectedAccountNumber) {
+    const b9 = String((worksheet.getCell('B9').value as any) || '').trim();
+    if (b9 !== expectedAccountNumber) {
+      throw new Error(
+        `File sao kê không khớp với số tài khoản đích ${expectedAccountNumber} (Số tài khoản trong file: ${b9})`,
+      );
+    }
+  }
+
   const transactions: CreateBankTransactionDto[] = [];
   let startParsing = false;
+  let stopParsing = false;
 
   worksheet.eachRow((row, rowNumber) => {
+    if (stopParsing) return;
     if (!startParsing) {
       const rowValues = row.values as any[];
-      const hasDate = rowValues.some(
+      const hasTcbHeader = rowValues.some(
         (v) =>
           String(v).toLowerCase().includes('ngày kh thực hiện') ||
-          String(v).toLowerCase().includes('ngày giao dịch'),
+          String(v).toLowerCase().includes('số bút toán'),
       );
-      if (hasDate) {
+      if (hasTcbHeader) {
         startParsing = true;
       }
       return;
@@ -164,6 +188,17 @@ export async function parseTcbXlsx(
     const efdDateRaw = rowValues[1];
     const transDateRaw = rowValues[2];
     const referenceNumber = rowValues[3]?.toString().trim() || undefined;
+
+    const refStr = (referenceNumber || '').toLowerCase();
+    if (
+      !referenceNumber ||
+      refStr.includes('ngày giờ in') ||
+      refStr.includes('phiếu này được in')
+    ) {
+      stopParsing = true;
+      return;
+    }
+
     const correspondentBank = rowValues[4]?.toString().trim() || undefined;
     const correspondentAccount = rowValues[5]?.toString().trim() || undefined;
     const correspondentName = rowValues[6]?.toString().trim() || undefined;
@@ -193,43 +228,20 @@ export async function parseTcbXlsx(
     if (!transDateRaw) return;
     if (String(transDateRaw).includes('TỔNG PHÁT SINH')) return;
 
-    let transDate = new Date(transDateRaw);
-    if (isNaN(transDate.getTime())) {
-      const parts = String(transDateRaw).trim().split('/');
-      if (parts.length === 3) {
-        transDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      } else {
-        const partsSpace = String(transDateRaw).trim().split(' ')[0].split('/');
-        if (partsSpace.length === 3) {
-          transDate = new Date(
-            `${partsSpace[2]}-${partsSpace[1]}-${partsSpace[0]}`,
-          );
-        }
-      }
-    }
-    if (isNaN(transDate.getTime())) return;
-
-    let efdDate: Date | undefined;
-    if (efdDateRaw) {
-      efdDate = new Date(efdDateRaw);
-      if (isNaN(efdDate.getTime())) {
-        const parts = String(efdDateRaw).trim().split('/');
-        if (parts.length === 3) {
-          efdDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-        }
-      }
-    }
+    let transDate = parseVNLocalDate(transDateRaw);
+    let efdDate = parseVNLocalDate(efdDateRaw);
 
     transactions.push({
       sourceType: bankAccountId ? 'BANK' : 'CASH',
       branchId,
       bankAccountId,
       cashBookId,
-      transDate: transDate.toISOString(),
-      efdDate:
-        efdDate && !isNaN(efdDate.getTime())
-          ? efdDate.toISOString()
-          : undefined,
+      transDate: efdDate
+        ? efdDate.toISOString()
+        : transDate
+          ? transDate.toISOString()
+          : new Date().toISOString(),
+      efdDate: transDate ? transDate.toISOString() : undefined,
       referenceNumber,
       debitAmount,
       creditAmount,
@@ -240,6 +252,10 @@ export async function parseTcbXlsx(
       correspondentBank,
     });
   });
+
+  if (!startParsing) {
+    throw new Error('File không đúng định dạng sao kê TCB');
+  }
 
   return transactions;
 }

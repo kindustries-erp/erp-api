@@ -26,6 +26,20 @@ export class ErpGoodsReceiptLine {
   @Column({ type: 'jsonb', name: 'returned_serial_ids', nullable: true })
   returnedSerialIds: string[] | null;
 
+  @Column({ type: 'boolean', name: 'serials_generated', default: false })
+  serialsGenerated: boolean;
+
+  @Column({ type: 'jsonb', name: 'declared_serials', nullable: true })
+  declaredSerials: Array<{
+    serialNo: string;
+    vinNo?: string | null;
+    engineNo?: string | null;
+    internalSerialNo?: string | null;
+    notes?: string | null;
+    lotNo?: string | null;
+    attributes?: Record<string, string> | null;
+  }> | null;
+
   @Column({
     type: 'numeric',
     name: 'qty_received',

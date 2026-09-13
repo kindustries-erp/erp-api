@@ -21,11 +21,21 @@ import { ErpInventoryTrackingSerial } from '../entities/erp_inventory_tracking_s
 import { ErpVehicle } from '../../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpSerialLifecycle } from '../entities/erp_serial_lifecycle.entity';
-
+import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
 describe('Inventory voucher posting chain integration', () => {
   function makeManager(repoMap: Map<any, any>) {
     return {
-      getRepository: (entity: any) => repoMap.get(entity),
+      getRepository: (entity: any) => {
+        const repo = repoMap.get(entity);
+        if (repo) {
+          if (!repo.findBy)
+            repo.findBy = jest.fn().mockReturnValue(Promise.resolve([]));
+          if (!repo.find)
+            repo.find = jest.fn().mockReturnValue(Promise.resolve([]));
+          if (!repo.insert) repo.insert = jest.fn(async (x) => x);
+        }
+        return repo;
+      },
     };
   }
 
@@ -113,6 +123,8 @@ describe('Inventory voucher posting chain integration', () => {
     const transactions: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {
@@ -124,18 +136,23 @@ describe('Inventory voucher posting chain integration', () => {
           }) ?? null
         );
       }),
+
       save: jest.fn(async (x: any) => {
-        if (!x.itemId) return x;
-        const idx = balances.findIndex(
-          (b) =>
-            b.itemId === x.itemId &&
-            String(b.warehouseCode || '') === String(x.warehouseCode || ''),
-        );
-        if (idx >= 0) {
-          balances[idx] = { ...balances[idx], ...x };
-          return balances[idx];
+        const items = Array.isArray(x) ? x : [x];
+        for (const item of items) {
+          if (!item.itemId) continue;
+          const idx = balances.findIndex(
+            (b) =>
+              b.itemId === item.itemId &&
+              String(b.warehouseCode || '') ===
+                String(item.warehouseCode || ''),
+          );
+          if (idx >= 0) {
+            balances[idx] = { ...balances[idx], ...item };
+          } else {
+            balances.push(item);
+          }
         }
-        balances.push(x);
         return x;
       }),
     };
@@ -143,7 +160,13 @@ describe('Inventory voucher posting chain integration', () => {
     const txnRepo = {
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => {
-        transactions.push(x);
+        const items = Array.isArray(x) ? x : [x];
+        transactions.push(...items);
+        return x;
+      }),
+      insert: jest.fn(async (x: any) => {
+        const items = Array.isArray(x) ? x : [x];
+        transactions.push(...items);
         return x;
       }),
     };
@@ -224,6 +247,7 @@ describe('Inventory voucher posting chain integration', () => {
       [ErpInventoryTrackingSerial, { findOneBy: jest.fn(), save: jest.fn() }],
       [ErpVehicle, { findOneBy: jest.fn(), save: jest.fn() }],
       [ErpInventoryItem, itemRepo],
+      [ErpBusinessPartner, { findOneBy: jest.fn() }],
     ]);
 
     const manager = makeManager(repoMap);
@@ -331,6 +355,8 @@ describe('Inventory voucher posting chain integration', () => {
     const lifecycles: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {
@@ -451,6 +477,7 @@ describe('Inventory voucher posting chain integration', () => {
       [ErpVehicle, vehicleRepo],
       [ErpInventoryItem, itemRepo],
       [ErpSerialLifecycle, lifecycleRepo],
+      [ErpBusinessPartner, { findOneBy: jest.fn(), save: jest.fn() }],
     ]);
 
     const manager = makeManager(repoMap);
@@ -531,6 +558,8 @@ describe('Inventory voucher posting chain integration', () => {
     const transactions: any[] = [];
 
     const balanceRepo = {
+      findBy: jest.fn(async () => balances),
+      find: jest.fn(async () => balances),
       findOne: jest.fn(async ({ where }: any) => {
         return (
           balances.find((b) => {

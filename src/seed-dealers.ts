@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import * as fs from 'fs';
+import * as path from 'path';
 import dataSource from './db/data-source';
 import { ErpBusinessPartner } from './business-partners-core/entities/erp_business_partner.entity';
 
@@ -31,8 +32,10 @@ async function seedDealers() {
     }
   }
 
-  const jsonPath =
-    '/home/dev/repos/erp/data/web-db/danh_sach_dai_ly_klotus.json';
+  const jsonPath = path.resolve(
+    __dirname,
+    '../../data/web-db/danh_sach_dai_ly_klotus.json',
+  );
   const fileContent = fs.readFileSync(jsonPath, 'utf8');
   const dealers = JSON.parse(fileContent);
 
