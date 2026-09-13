@@ -48,6 +48,11 @@ export class GoodsIssuesCoreController {
     return this.service.findAll(query);
   }
 
+  @Get('next-no')
+  getNextNo(@Query('date') date?: string) {
+    return this.service.getNextIssueNo(date);
+  }
+
   @RequirePermissions({
     resource: ErpResource.GOODS_ISSUES,
     action: ErpAction.READ,
