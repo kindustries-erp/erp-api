@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     env_file: [application.env]
+    environment:
+      - PORT=3000
     expose: ["3000"]
     ports: ["__TARGET_IP__:__TARGET_PORT__:3000"]
     networks: [npm-network]
