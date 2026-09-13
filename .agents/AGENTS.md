@@ -77,27 +77,33 @@ Source of truth for this repo (`./erp-api`).
 
 ## Liouni ERP API Rules
 
-Apply to all work in this repo.
-
 ### Git Workflow Mandates
 
-When asked to **commit code**, you MUST execute the following in order:
-1. `bun run build`
-2. `bun run check:ci`
-3. `bun run test`
-4. `git commit`
+1. **Master-First Mandate**: ALL code modifications, features, bug fixes, and refactoring **MUST** be performed and tested on `erp-master` FIRST. Direct commits to downstream branches (`erp-greenway-*`, `erp-klotus-*`) are strictly prohibited.
 
-When asked to **pull code**, you MUST execute the following in order:
-1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
-2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+2. When asked to **commit code**, you MUST execute the following in order:
+   - Ensure current branch is `erp-master`
+   - `bun run build`
+   - `bun run check:ci`
+   - `bun run test` (or `bunx jest --forceExit`)
+   - `git commit`
 
-When asked to **push code**, you MUST execute the following in order:
-1. If there are uncommitted changes, you MUST execute the full **commit code** sequence first (build -> check:ci -> test -> commit).
-2. `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
-3. `bun run build`
-4. `bun run check:ci`
-5. `bun run test`
-6. `git push github-industries erp-master`
+3. When asked to **pull code**, you MUST execute the following in order:
+   - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
+   - `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+
+4. When asked to **push code**, you MUST execute the following in order:
+   - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
+   - `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
+   - `bun run build`
+   - `bun run check:ci`
+   - `bun run test` (or `bunx jest --forceExit`)
+   - `git push github-industries erp-master`
+
+5. When asked to **sync/deploy to downstream branches** (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-*`):
+   - First ensure `erp-master` is committed, tested, and pushed to `github-industries erp-master`.
+   - Run `/home/dev/repos/erp/.agents/scripts/sync-branch.sh <target-branch> --push` or follow `erp-git-workflow.md` Scenario 4.
+   - Always return back to `erp-master` after syncing.
 
 **Git Execution Context**: You MUST perform all Git operations (add, commit, pull, push) exclusively inside the `erp-api` directory. NEVER run git commands from the workspace root. When pulling or pushing, ALWAYS specify the remote `github-industries` (e.g., `git push github-industries erp-master`).
 
@@ -112,10 +118,10 @@ When asked to **push code**, you MUST execute the following in order:
 - inspect current state before edits
 - use evidence-first wording
 - before push/commit, `cd` vào root của repo hiện tại (`./erp-api` từ workspace root)
-- **Strict Git Workflow**: You MUST follow the `Git Workflow Mandates` defined above for all commits and pushes.
+- **Strict Git Workflow**: You MUST follow the `Git Workflow Mandates` defined above for all commits and pushes (Master-First).
 - if backend source changed, also run `bunx jest --forceExit` or a narrower affected test scope and report which scope was used
 - push with `github-industries`
-- always check branch 1st when push. all commit must be push on erp-master 1st, then I will create PR to another branch
+- always check branch 1st when push. All modifications must be developed and pushed on `erp-master` 1st, then merged/synced downstream to other branches.
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
 - manage all task execution, planning, and verification in Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`)
