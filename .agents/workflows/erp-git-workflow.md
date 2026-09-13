@@ -12,7 +12,7 @@ Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho 
 
 1. **🌟 Master-First Modification Mandate (BẮT BUỘC MỌI THAY ĐỔI LÀM TRÊN `erp-master` TRƯỚC)**:
    - Mọi chỉnh sửa mã nguồn (tính năng mới, sửa lỗi / bugfix, refactoring, cấu hình) **BẮT BUỘC** phải được checkout, phát triển, kiểm thử và commit/push trên nhánh **`erp-master`** TRƯỚC TIÊN.
-   - Tuyệt đối **NGHIÊM CẤM** sửa code trực tiếp hoặc commit trực tiếp trên các nhánh môi trường/khách hàng (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-master`, `erp-klotus-production`, `erp-klotus-staging`) mà không xuất phát từ `erp-master`.
+   - Tuyệt đối **NGHIÊM CẤM** sửa code trực tiếp hoặc commit trực tiếp trên các nhánh môi trường/khách hàng (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-production`, `erp-klotus-staging`) mà không xuất phát từ `erp-master`.
 2. **Sử dụng đường dẫn tương đối — Tuyệt đối KHÔNG chạy Git ở root workspace**:
    - Luôn `cd` vào repo con: `./erp-api` (Backend) hoặc `./erp-web` (Frontend).
 3. **🛡️ Test-First Guard**:
@@ -154,7 +154,7 @@ git push $REMOTE_NAME erp-master
 
 ## 🧭 Kịch Bản 4: Quy Trình Merge/Sync từ `erp-master` sang các nhánh khác
 
-Sau khi các thay đổi trên `erp-master` đã được commit, kiểm thử và push thành công lên remote, quy trình đồng bộ sang các nhánh đích (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-master`, `erp-klotus-production`, `erp-klotus-staging`) được thực hiện như sau:
+Sau khi các thay đổi trên `erp-master` đã được commit, kiểm thử và push thành công lên remote, quy trình đồng bộ sang các nhánh đích (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-production`, `erp-klotus-staging`) được thực hiện như sau:
 
 ```mermaid
 graph TD

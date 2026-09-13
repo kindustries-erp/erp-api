@@ -1,18 +1,16 @@
-name: Pipeline API — erp-klotus-production via Komodo
+name: Pipeline API — erp-klotus-staging via Komodo
 
 on:
   push:
-    branches:
-      - erp-klotus-production
+    branches: [erp-klotus-staging]
   pull_request:
-    branches:
-      - erp-klotus-production
+    branches: [erp-klotus-staging]
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-production
-  MIGRATE_IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-production-migrate
+  IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-staging
+  MIGRATE_IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-staging-migrate
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
@@ -82,7 +80,7 @@ jobs:
           - host: elite
             server_name: elite
             ip: 100.75.67.115
-            port: 10016
+            port: 10015
     env:
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
       KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
@@ -97,7 +95,7 @@ jobs:
           tags: tag:ci
       - name: Guard deployment configuration
         env:
-          API_ENV: ${{ secrets.KLOTUS_PRODUCTION_API_ENV }}
+          API_ENV: ${{ secrets.KLOTUS_STAGING_API_ENV }}
         run: |
           set -euo pipefail
           test -n "$KOMODO_API_KEY"
@@ -169,7 +167,7 @@ jobs:
       - name: Write release references and runtime settings
         env:
           IMAGE_SHA: ${{ needs.build-and-push.outputs.sha }}
-          API_ENV: ${{ secrets.KLOTUS_PRODUCTION_API_ENV }}
+          API_ENV: ${{ secrets.KLOTUS_STAGING_API_ENV }}
           API_STACK: ${{ steps.provision.outputs.api_stack }}
           MIGRATE_STACK: ${{ steps.provision.outputs.migrate_stack }}
         run: |
