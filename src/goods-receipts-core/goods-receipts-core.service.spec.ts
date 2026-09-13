@@ -612,4 +612,46 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     expect(serialRepo.delete).not.toHaveBeenCalled();
     expect(receipt.status).toBe('POSTED');
   });
+
+  // ─── generateDailyReceiptNo tests ───────────────────────────────────────
+
+  it('generateDailyReceiptNo: first receipt of the day — should return NK-YYYYMMDD-001', async () => {
+    const qb = {
+      where: j.fn().mockReturnThis(),
+      orderBy: j.fn().mockReturnThis(),
+      addOrderBy: j.fn().mockReturnThis(),
+      getOne: j.fn().mockResolvedValue(null),
+    };
+    const grRepo = {
+      createQueryBuilder: j.fn().mockReturnValue(qb),
+      save: j.fn(async (x: any) => x),
+      findOneBy: j.fn().mockResolvedValue(null),
+    };
+
+    const manager = { getRepository: () => grRepo };
+    const { service } = makeServiceWithManager(manager);
+    const { nextNo } = await service.getNextReceiptNo('2026-07-20');
+
+    expect(nextNo).toBe('NK-20260720-001');
+  });
+
+  it('generateDailyReceiptNo: existing receipt NK-20260720-003 — should return NK-20260720-004', async () => {
+    const qb = {
+      where: j.fn().mockReturnThis(),
+      orderBy: j.fn().mockReturnThis(),
+      addOrderBy: j.fn().mockReturnThis(),
+      getOne: j.fn().mockResolvedValue({ receiptNo: 'NK-20260720-003' }),
+    };
+    const grRepo = {
+      createQueryBuilder: j.fn().mockReturnValue(qb),
+      save: j.fn(async (x: any) => x),
+      findOneBy: j.fn().mockResolvedValue(null),
+    };
+
+    const manager = { getRepository: () => grRepo };
+    const { service } = makeServiceWithManager(manager);
+    const { nextNo } = await service.getNextReceiptNo('2026-07-20');
+
+    expect(nextNo).toBe('NK-20260720-004');
+  });
 });

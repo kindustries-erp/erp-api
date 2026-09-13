@@ -1,6 +1,6 @@
 ---
 name: erp-inventory-adjustments
-description: Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_adjustments, erp_inventory_adjustment_lines), DTOs, API endpoints, logic sinh mã tự động KK-YYYYMMxxxx, tính chênh lệch thừa/thiếu và hạch toán số dư tồn kho.
+description: Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_adjustments, erp_inventory_adjustment_lines), DTOs, API endpoints, logic sinh mã tự động DC-YYYYMMDD-XXX, tính chênh lệch thừa/thiếu và hạch toán số dư tồn kho.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Kiểm Kê & Điều Chỉnh Kho (`erp-inventory-adjustments`)
@@ -11,7 +11,7 @@ Phân hệ `erp-inventory-adjustments` (thuộc `inventory-adjustments-core`) qu
 
 ### 1.1. Các tính năng cốt lõi:
 - **Tự động Sinh Mã Phiếu Kiểm kê**:
-  - Mã phiếu sinh tự động theo quy tắc chuẩn: `KK-YYYYMMxxxx` (Kiểm kê) hoặc `DC-YYYYMMxxxx` (Điều chỉnh) (vd: `KK-2026080001`).
+  - Mã phiếu sinh tự động theo quy tắc chuẩn: `DC-YYYYMMDD-XXX` (Điều chỉnh / Kiểm kê, sequence 3 chữ số theo ngày, vd: `DC-20260913-001`).
 - **Phân loại Xử lý Chênh lệch (`type_adjust`)**:
   - `increase` (Điều chỉnh tăng / Thừa kho): Số lượng thực tế lớn hơn sổ sách $\to$ Tăng tồn kho và cập nhật giá vốn.
   - `decrease` (Điều chỉnh giảm / Thiếu kho): Số lượng thực tế nhỏ hơn sổ sách $\to$ Giảm tồn kho và ghi nhận chi phí hao hụt/mất mát.
@@ -97,7 +97,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/inventory-adjustments` | `{ resource: 'inventory_adjustments', action: 'read' }` | Danh sách phiếu kiểm kê (phân trang, search, lọc theo status) |
-| `GET` | `/api/v1/inventory-adjustments/next-no` | Không yêu cầu RBAC | Lấy mã phiếu tiếp theo tự động (`KK-YYYYMMxxxx`) |
+| `GET` | `/api/v1/inventory-adjustments/next-no` | Không yêu cầu RBAC | Lấy mã phiếu tiếp theo tự động (`DC-YYYYMMDD-XXX`) |
 | `GET` | `/api/v1/inventory-adjustments/:id` | `{ resource: 'inventory_adjustments', action: 'read' }` | Xem chi tiết phiếu kèm danh sách các dòng mặt hàng |
 | `POST` | `/api/v1/inventory-adjustments` | `{ resource: 'inventory_adjustments', action: 'create' }` | Tạo mới phiếu kiểm kê nháp (`DRAFT`) |
 | `PATCH` | `/api/v1/inventory-adjustments/:id` | `{ resource: 'inventory_adjustments', action: 'update' }` | Cập nhật thông tin và danh sách dòng của phiếu nháp |

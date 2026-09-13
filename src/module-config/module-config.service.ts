@@ -638,10 +638,7 @@ export class ModuleConfigService {
     const modKey = (def.moduleKeyGlobal || '').toUpperCase();
     const attrCode = (def.code || '').toLowerCase();
 
-    if (
-      modKey === 'GOODS_RECEIPT' ||
-      ['type_inventory_receipt', 'receipt_type', 'type'].includes(attrCode)
-    ) {
+    if (modKey === 'GOODS_RECEIPT' && attrCode === 'category') {
       try {
         const [poCountRow, prodCountRow, otherCountRow] = await Promise.all([
           this.dataSource.query(
@@ -668,10 +665,7 @@ export class ModuleConfigService {
       } catch (e) {
         // Safe catch if table doesn't exist during certain tests
       }
-    } else if (
-      modKey === 'GOODS_ISSUE' ||
-      ['type_inventory_issue', 'issue_type', 'type'].includes(attrCode)
-    ) {
+    } else if (modKey === 'GOODS_ISSUE' && attrCode === 'category') {
       try {
         const issueRows = await this.dataSource.query(
           `SELECT issue_type as value, COUNT(*)::int as count FROM erp_goods_issues WHERE is_deleted = false GROUP BY issue_type`,
