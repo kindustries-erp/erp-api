@@ -1,0 +1,85 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { {{pascalCase moduleName}}Service } from './{{kebabCase moduleName}}.service';
+import { Create{{pascalCase entityName}}Dto } from './dto/create-{{kebabCase entityName}}.dto';
+import { Update{{pascalCase entityName}}Dto } from './dto/update-{{kebabCase entityName}}.dto';
+
+@ApiTags('{{snakeCase moduleName}}')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@Controller('{{kebabCase routePath}}')
+export class {{pascalCase moduleName}}Controller {
+  constructor(private readonly service: {{pascalCase moduleName}}Service) {}
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'create' })
+  @ApiOperation({ summary: 'Tạo mới {{pascalCase entityName}}' })
+  @Post()
+  create(@Body() dto: Create{{pascalCase entityName}}Dto) {
+    return this.service.create(dto);
+  }
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'read' })
+  @ApiOperation({ summary: 'Lấy danh sách {{pascalCase entityName}} có phân trang & bộ lọc' })
+  @Get()
+  findAll(@Query() query: PaginationDto) {
+    return this.service.findAll(query);
+  }
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'read' })
+  @ApiOperation({ summary: 'Lấy danh sách options cho cột TableColumnHeaderFilter' })
+  @Get('column-options')
+  getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('filtersStr') filtersStr?: string,
+  ) {
+    return this.service.getColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filtersStr,
+    );
+  }
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'read' })
+  @ApiOperation({ summary: 'Lấy chi tiết {{pascalCase entityName}} theo ID' })
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'update' })
+  @ApiOperation({ summary: 'Cập nhật {{pascalCase entityName}} theo ID' })
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: Update{{pascalCase entityName}}Dto,
+  ) {
+    return this.service.update(id, dto);
+  }
+
+  @RequirePermissions({ resource: '{{snakeCase permissionResource}}', action: 'delete' })
+  @ApiOperation({ summary: 'Xóa mềm {{pascalCase entityName}} theo ID' })
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.remove(id);
+  }
+}

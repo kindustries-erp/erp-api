@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpChartOfAccount } from '../entities/erp_chart_of_account.entity';
@@ -275,21 +280,189 @@ export class AccountingCoreService {
   }
 
   async getChartOfAccounts(query: any) {
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 50;
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.max(1, Math.min(500, Number(query.pageSize) || 50));
 
     const qb = this.chartOfAccountRepo
       .createQueryBuilder('coa')
+      .leftJoinAndSelect('coa.parent', 'parent')
       .where('coa.isDeleted = :isDeleted', { isDeleted: false });
 
-    if (query.search) {
+    if (query.search && String(query.search).trim()) {
+      const search = `%${String(query.search).trim()}%`;
       qb.andWhere(
         '(coa.accountCode ILIKE :search OR coa.accountName ILIKE :search)',
-        { search: `%${query.search}%` },
+        { search },
       );
     }
 
-    qb.orderBy('coa.accountCode', 'ASC');
+    // Column specific searches
+    if (query.accountCodeSearch && String(query.accountCodeSearch).trim()) {
+      const codeSearch = `%${String(query.accountCodeSearch).trim()}%`;
+      qb.andWhere('coa.accountCode ILIKE :codeSearch', { codeSearch });
+    }
+
+    if (query.accountNameSearch && String(query.accountNameSearch).trim()) {
+      const nameSearch = `%${String(query.accountNameSearch).trim()}%`;
+      qb.andWhere('coa.accountName ILIKE :nameSearch', { nameSearch });
+    }
+
+    if (query.parentAccountSearch && String(query.parentAccountSearch).trim()) {
+      const parentSearch = `%${String(query.parentAccountSearch).trim()}%`;
+      qb.andWhere(
+        '(parent.accountCode ILIKE :parentSearch OR parent.accountName ILIKE :parentSearch)',
+        { parentSearch },
+      );
+    }
+
+    // Column options checkbox filters
+    const accountCode = query.accountCode || query.account_code;
+    if (accountCode) {
+      const codes = Array.isArray(accountCode)
+        ? accountCode
+        : typeof accountCode === 'string'
+          ? accountCode
+              .split(',')
+              .map((c) => c.trim())
+              .filter(Boolean)
+          : [];
+      if (codes.length > 0) {
+        qb.andWhere('coa.accountCode IN (:...accountCodes)', {
+          accountCodes: codes,
+        });
+      }
+    }
+
+    const accountName = query.accountName || query.account_name;
+    if (accountName) {
+      const names = Array.isArray(accountName)
+        ? accountName
+        : typeof accountName === 'string'
+          ? accountName
+              .split(',')
+              .map((n) => n.trim())
+              .filter(Boolean)
+          : [];
+      if (names.length > 0) {
+        qb.andWhere('coa.accountName IN (:...accountNames)', {
+          accountNames: names,
+        });
+      }
+    }
+
+    const parentAccount =
+      query.parentAccount || query.parentId || query.parent_id;
+    if (parentAccount) {
+      const parents = Array.isArray(parentAccount)
+        ? parentAccount
+        : typeof parentAccount === 'string'
+          ? parentAccount
+              .split(',')
+              .map((p) => p.trim())
+              .filter(Boolean)
+          : [];
+      if (parents.length > 0) {
+        const hasBlank = parents.includes('__BLANK__');
+        const nonBlank = parents.filter((p) => p !== '__BLANK__');
+        if (hasBlank && nonBlank.length > 0) {
+          qb.andWhere(
+            '(coa.parentId IS NULL OR coa.parentId IN (:...fParents) OR parent.accountCode IN (:...fParents))',
+            { fParents: nonBlank },
+          );
+        } else if (hasBlank) {
+          qb.andWhere('coa.parentId IS NULL');
+        } else if (nonBlank.length > 0) {
+          qb.andWhere(
+            '(coa.parentId IN (:...fParents) OR parent.accountCode IN (:...fParents))',
+            { fParents: nonBlank },
+          );
+        }
+      }
+    }
+
+    const accountType = query.accountType || query.account_type;
+    if (accountType) {
+      if (Array.isArray(accountType)) {
+        qb.andWhere('coa.accountType IN (:...accountTypes)', {
+          accountTypes: accountType,
+        });
+      } else if (typeof accountType === 'string' && accountType.trim()) {
+        const types = accountType
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (types.length > 1) {
+          qb.andWhere('coa.accountType IN (:...accountTypes)', {
+            accountTypes: types,
+          });
+        } else {
+          qb.andWhere('coa.accountType = :accountType', {
+            accountType: types[0] || accountType,
+          });
+        }
+      }
+    }
+
+    const isActive = query.isActive ?? query.is_active;
+    if (isActive !== undefined && isActive !== null && isActive !== '') {
+      const activeVal =
+        isActive === true ||
+        isActive === 'true' ||
+        isActive === 1 ||
+        isActive === '1';
+      qb.andWhere('coa.isActive = :isActive', { isActive: activeVal });
+    }
+
+    // Dynamic sorting
+    const sortParam = query.sort || query.sorts;
+    if (sortParam) {
+      const sortList = Array.isArray(sortParam)
+        ? sortParam
+        : typeof sortParam === 'string'
+          ? sortParam
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+
+      let hasOrder = false;
+      for (const sortField of sortList) {
+        const isDesc = sortField.startsWith('-');
+        const rawField = isDesc ? sortField.substring(1) : sortField;
+        const validFields: Record<string, string> = {
+          accountCode: 'coa.accountCode',
+          account_code: 'coa.accountCode',
+          accountName: 'coa.accountName',
+          account_name: 'coa.accountName',
+          accountType: 'coa.accountType',
+          account_type: 'coa.accountType',
+          parentAccount: 'parent.accountCode',
+          parent_account: 'parent.accountCode',
+          parentId: 'parent.accountCode',
+          createdAt: 'coa.createdAt',
+          created_at: 'coa.createdAt',
+          updatedAt: 'coa.updatedAt',
+          updated_at: 'coa.updatedAt',
+          isActive: 'coa.isActive',
+          is_active: 'coa.isActive',
+        };
+
+        if (validFields[rawField]) {
+          if (!hasOrder) {
+            qb.orderBy(validFields[rawField], isDesc ? 'DESC' : 'ASC');
+            hasOrder = true;
+          } else {
+            qb.addOrderBy(validFields[rawField], isDesc ? 'DESC' : 'ASC');
+          }
+        }
+      }
+      if (!hasOrder) {
+        qb.orderBy('coa.accountCode', 'ASC');
+      }
+    } else {
+      qb.orderBy('coa.accountCode', 'ASC');
+    }
+
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
@@ -299,36 +472,245 @@ export class AccountingCoreService {
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil(total / pageSize) || 1,
     };
   }
 
+  async getChartOfAccountsColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    const qb = this.chartOfAccountRepo
+      .createQueryBuilder('coa')
+      .leftJoin('coa.parent', 'parent')
+      .where('coa.isDeleted = :isDeleted', { isDeleted: false });
+
+    // Cascading filters
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          if (col === 'accountType' || col === 'account_type') {
+            qb.andWhere('coa.accountType IN (:...fAccountTypes)', {
+              fAccountTypes: vals,
+            });
+          } else if (col === 'isActive' || col === 'is_active') {
+            const hasTrue = vals.includes('true');
+            const hasFalse = vals.includes('false');
+            if (hasTrue && !hasFalse)
+              qb.andWhere('coa.isActive = :fActive', { fActive: true });
+            else if (hasFalse && !hasTrue)
+              qb.andWhere('coa.isActive = :fActive', { fActive: false });
+          } else if (col === 'accountCode' || col === 'account_code') {
+            qb.andWhere('coa.accountCode IN (:...fAccountCodes)', {
+              fAccountCodes: vals,
+            });
+          } else if (col === 'accountName' || col === 'account_name') {
+            qb.andWhere('coa.accountName IN (:...fAccountNames)', {
+              fAccountNames: vals,
+            });
+          } else if (col === 'parentAccount' || col === 'parentId') {
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                '(coa.parentId IS NULL OR coa.parentId IN (:...fParents) OR parent.accountCode IN (:...fParents))',
+                { fParents: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere('coa.parentId IS NULL');
+            } else if (nonBlank.length > 0) {
+              qb.andWhere(
+                '(coa.parentId IN (:...fParents) OR parent.accountCode IN (:...fParents))',
+                { fParents: nonBlank },
+              );
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (column === 'accountCode' || column === 'account_code') {
+      qb.select('DISTINCT coa.accountCode', 'value');
+      qb.andWhere("coa.accountCode IS NOT NULL AND coa.accountCode != ''");
+      if (search && search.trim()) {
+        qb.andWhere('coa.accountCode ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === 'accountName' || column === 'account_name') {
+      qb.select('DISTINCT coa.accountName', 'value');
+      qb.andWhere("coa.accountName IS NOT NULL AND coa.accountName != ''");
+      if (search && search.trim()) {
+        qb.andWhere('coa.accountName ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (
+      column === 'parentAccount' ||
+      column === 'parentId' ||
+      column === 'parent_id'
+    ) {
+      qb.select('DISTINCT parent.accountCode', 'value');
+      qb.addSelect('parent.accountName', 'label');
+      qb.andWhere('parent.id IS NOT NULL');
+      if (search && search.trim()) {
+        qb.andWhere(
+          '(parent.accountCode ILIKE :colSearch OR parent.accountName ILIKE :colSearch)',
+          { colSearch: `%${search.trim()}%` },
+        );
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === 'accountType' || column === 'account_type') {
+      qb.select('DISTINCT coa.accountType', 'value');
+      qb.andWhere('coa.accountType IS NOT NULL');
+      if (search && search.trim()) {
+        qb.andWhere('coa.accountType ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else {
+      return { items: [], total: 0, page: 1, pageSize, totalPages: 1 };
+    }
+
+    const raw = await qb.getRawMany();
+    const total = raw.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    const paged = raw.slice((page - 1) * pageSize, page * pageSize);
+
+    let items: { label: string; value: string }[] = [];
+    if (column === 'parentAccount' || column === 'parentId') {
+      items = paged.map((r) => ({
+        value: String(r.value),
+        label: r.label ? `${r.value} — ${r.label}` : String(r.value),
+      }));
+    } else {
+      items = paged.map((r) => ({
+        value: String(r.value),
+        label: String(r.value),
+      }));
+    }
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  }
+
+  async getChartOfAccountById(id: string) {
+    const account = await this.chartOfAccountRepo
+      .createQueryBuilder('coa')
+      .leftJoinAndSelect('coa.parent', 'parent')
+      .where('coa.id = :id', { id })
+      .andWhere('coa.isDeleted = false')
+      .getOne();
+
+    if (!account) {
+      throw new NotFoundException(
+        `Tài khoản kế toán không tồn tại (ID: ${id})`,
+      );
+    }
+
+    return account;
+  }
+
   async createChartOfAccount(dto: any) {
+    const code = (dto.account_code || dto.accountCode)?.trim();
+    if (!code) {
+      throw new BadRequestException('Mã tài khoản là bắt buộc');
+    }
+    const name = (dto.account_name || dto.accountName)?.trim();
+    if (!name) {
+      throw new BadRequestException('Tên tài khoản là bắt buộc');
+    }
+
+    const existing = await this.chartOfAccountRepo.findOne({
+      where: { accountCode: code, isDeleted: false },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `Mã tài khoản "${code}" đã tồn tại trên hệ thống`,
+      );
+    }
+
     const account = this.chartOfAccountRepo.create({
-      accountCode: dto.account_code,
-      accountName: dto.account_name,
-      accountType: dto.account_type,
-      parentId: dto.parent_account_id || null,
-      isActive: dto.is_active ?? true,
+      accountCode: code,
+      accountName: name,
+      accountType: (
+        dto.account_type ||
+        dto.accountType ||
+        'ASSET'
+      ).toUpperCase(),
+      parentId: dto.parent_account_id ?? dto.parentId ?? null,
+      isActive: dto.is_active ?? dto.isActive ?? true,
     });
     return this.chartOfAccountRepo.save(account);
   }
 
   async updateChartOfAccount(id: string, dto: any) {
-    const account = await this.chartOfAccountRepo.findOne({ where: { id } });
+    const account = await this.chartOfAccountRepo.findOne({
+      where: { id, isDeleted: false },
+    });
     if (!account) {
-      throw new Error('Account not found');
+      throw new NotFoundException('Tài khoản kế toán không tồn tại');
     }
-    if (dto.account_code) account.accountCode = dto.account_code;
-    if (dto.account_name) account.accountName = dto.account_name;
-    if (dto.account_type) account.accountType = dto.account_type;
-    if (dto.parent_account_id !== undefined)
-      account.parentId = dto.parent_account_id;
-    if (dto.is_active !== undefined) account.isActive = dto.is_active;
+
+    if (dto.account_code || dto.accountCode) {
+      const newCode = (dto.account_code || dto.accountCode).trim();
+      if (newCode !== account.accountCode) {
+        const existing = await this.chartOfAccountRepo.findOne({
+          where: { accountCode: newCode, isDeleted: false },
+        });
+        if (existing && existing.id !== id) {
+          throw new BadRequestException(`Mã tài khoản "${newCode}" đã tồn tại`);
+        }
+        account.accountCode = newCode;
+      }
+    }
+    if (dto.account_name || dto.accountName) {
+      account.accountName = (dto.account_name || dto.accountName).trim();
+    }
+    if (dto.account_type || dto.accountType) {
+      account.accountType = (dto.account_type || dto.accountType).toUpperCase();
+    }
+    if (dto.parent_account_id !== undefined || dto.parentId !== undefined) {
+      const newParentId =
+        dto.parent_account_id !== undefined
+          ? dto.parent_account_id
+          : dto.parentId;
+      if (newParentId === id) {
+        throw new BadRequestException(
+          'Tài khoản không thể tự làm tài khoản mẹ của chính mình',
+        );
+      }
+      account.parentId = newParentId || null;
+    }
+    if (dto.is_active !== undefined || dto.isActive !== undefined) {
+      account.isActive =
+        dto.is_active !== undefined ? dto.is_active : dto.isActive;
+    }
     return this.chartOfAccountRepo.save(account);
   }
 
   async deleteChartOfAccount(id: string) {
+    const account = await this.chartOfAccountRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!account) {
+      throw new NotFoundException('Tài khoản kế toán không tồn tại');
+    }
     return this.chartOfAccountRepo.update(id, { isDeleted: true });
   }
 }

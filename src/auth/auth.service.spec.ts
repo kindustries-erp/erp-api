@@ -8,6 +8,7 @@ import { UsersService } from '../users/users.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { RbacCoreService } from '../rbac-core/rbac-core.service';
+import { AppConfigService } from '../app-config/app-config.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -57,6 +58,28 @@ describe('AuthService', () => {
         {
           provide: RbacCoreService,
           useValue: { getUserPermissions: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: AppConfigService,
+          useValue: {
+            getPublicConfig: jest.fn().mockReturnValue({
+              appEnv: 'development',
+              appName: 'Liouni ERP',
+              version: '1.0.0',
+            }),
+            getUserPreferences: jest.fn().mockResolvedValue({
+              theme: 'classic',
+              language: 'vi',
+              tableConfigs: {},
+              uiConfigs: {},
+            }),
+            updateUserPreferences: jest.fn().mockResolvedValue({
+              theme: 'classic',
+              language: 'vi',
+              tableConfigs: {},
+              uiConfigs: {},
+            }),
+          },
         },
         {
           provide: ConfigService,

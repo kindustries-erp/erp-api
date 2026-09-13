@@ -28,7 +28,7 @@ export class PaginationDto {
   @IsString()
   sort?: string;
 
-  @ApiPropertyOptional({ description: 'Từ khóa tìm kiếm trên Directus' })
+  @ApiPropertyOptional({ description: 'Từ khóa tìm kiếm' })
   @IsOptional()
   @IsString()
   search?: string;

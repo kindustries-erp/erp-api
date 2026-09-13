@@ -19,6 +19,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { BomCoreService } from './bom-core.service';
 import { CreateBomDto } from './dto/create-bom.dto';
@@ -32,19 +33,19 @@ import { ListBomDto } from './dto/list-bom.dto';
 export class BomCoreController {
   constructor(private readonly service: BomCoreService) {}
 
-  @RequirePermissions({ resource: 'bom', action: 'create' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.CREATE })
   @Post()
   create(@Body() dto: CreateBomDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get()
   findAll(@Query() query: ListBomDto) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get('column-options')
   getColumnOptions(
     @Query('column') column: string,
@@ -62,7 +63,7 @@ export class BomCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get('import/template')
   async downloadImportTemplate(@Res() res: Response) {
     const { buffer, contentType, filename } =
@@ -72,14 +73,14 @@ export class BomCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'create' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.CREATE })
   @Post('import/parse')
   @UseInterceptors(FileInterceptor('file'))
   async parseBomLines(@UploadedFile() file: any) {
     return this.service.parseBomLines(file);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get(':id/export')
   async exportBom(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -94,19 +95,19 @@ export class BomCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.READ })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'update' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.UPDATE })
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBomDto) {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'bom', action: 'delete' })
+  @RequirePermissions({ resource: ErpResource.BOM, action: ErpAction.DELETE })
   @Delete(':id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);

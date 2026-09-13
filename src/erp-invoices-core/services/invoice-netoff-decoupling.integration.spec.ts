@@ -130,6 +130,7 @@ function setupFixture() {
 
   const service = new InvoiceLifecycleService(
     repository,
+    { find: jest.fn(async () => []) } as any,
     { deleteObject: jest.fn() } as any,
     bankTransactionsCoreService as any,
     accountingCoreService as any,

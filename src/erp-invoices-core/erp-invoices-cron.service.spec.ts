@@ -1,5 +1,6 @@
 import { ErpInvoicesCronService } from './erp-invoices-cron.service';
 import { Logger } from '@nestjs/common';
+import * as cronUtil from '../common/utils/cron.util';
 
 describe('ErpInvoicesCronService', () => {
   let cronService: ErpInvoicesCronService;
@@ -12,6 +13,7 @@ describe('ErpInvoicesCronService', () => {
     erpInvoicesCoreService = {
       getPortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
+      autoReloginWithRetry: jest.fn(),
       syncFromPortal: jest.fn().mockResolvedValue({}),
     };
     notificationsService = {
@@ -43,24 +45,61 @@ describe('ErpInvoicesCronService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  describe('onModuleInit', () => {
+    it('should not schedule next sync if GDT invoice cron is disabled / locked', () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
+      const scheduleSpy = jest.spyOn(cronService as any, 'scheduleNextSync');
+
+      cronService.onModuleInit();
+
+      expect(scheduleSpy).not.toHaveBeenCalled();
+    });
+
+    it('should schedule next sync if GDT invoice cron is enabled', () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      const scheduleSpy = jest
+        .spyOn(cronService as any, 'scheduleNextSync')
+        .mockImplementation(() => {});
+
+      cronService.onModuleInit();
+
+      expect(scheduleSpy).toHaveBeenCalled();
+    });
   });
 
   describe('autoSyncCurrentMonth', () => {
-    it('should skip sync if token is empty', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
-      await cronService.autoSyncCurrentMonth();
-      expect(erpInvoicesCoreService.checkTokenValid).not.toHaveBeenCalled();
-      expect(erpInvoicesCoreService.syncFromPortal).not.toHaveBeenCalled();
+    beforeEach(() => {
+      // Default enabled and within window for existing sync tests
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
     });
 
-    it('should notify and skip sync if token is invalid', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
-        token: 'invalid-token',
-      });
-      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
+    it('should skip sync if GDT invoice cron is disabled / locked', async () => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
 
       await cronService.autoSyncCurrentMonth();
 
+      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+    });
+
+    it('should skip sync if outside allowed sync time window (00:00 - 03:59 VN)', async () => {
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(false);
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+    });
+
+    it('should attempt auto-relogin and skip sync if re-login fails for empty token', async () => {
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
       expect(erpInvoicesCoreService.syncFromPortal).not.toHaveBeenCalled();
       expect(notificationsService.createForUser).toHaveBeenCalledWith(
         'user-1',
@@ -68,7 +107,87 @@ describe('ErpInvoicesCronService', () => {
       );
     });
 
-    it('should sync purchase and sold invoices sequentially with valid token', async () => {
+    it('should attempt auto-relogin and proceed with sync if re-login succeeds for empty token', async () => {
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue({
+        token: 'new-token',
+        cookies: 'new-cookies',
+      });
+
+      const setTimeoutSpy = jest
+        .spyOn(global, 'setTimeout')
+        .mockImplementation((cb: any) => {
+          cb();
+          return {} as any;
+        });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'purchase',
+          token: 'new-token',
+          cookies: 'new-cookies',
+        }),
+        undefined,
+        true,
+      );
+
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('should notify and skip sync if token is invalid and auto-relogin fails', async () => {
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'invalid-token',
+      });
+      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
+      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
+      expect(erpInvoicesCoreService.syncFromPortal).not.toHaveBeenCalled();
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'ERROR' }),
+      );
+    });
+
+    it('should auto-relogin and continue sync if token is invalid but auto-relogin succeeds', async () => {
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'invalid-token',
+      });
+      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
+      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue({
+        token: 'refreshed-token',
+        cookies: 'refreshed-cookies',
+      });
+
+      const setTimeoutSpy = jest
+        .spyOn(global, 'setTimeout')
+        .mockImplementation((cb: any) => {
+          cb();
+          return {} as any;
+        });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'purchase',
+          token: 'refreshed-token',
+          cookies: 'refreshed-cookies',
+        }),
+        undefined,
+        true,
+      );
+
+      setTimeoutSpy.mockRestore();
+    });
+
+    it('should sync purchase and sold invoices sequentially with valid token without re-login', async () => {
       erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
         token: 'valid-token',
         cookies: 'valid-cookies',
@@ -84,14 +203,25 @@ describe('ErpInvoicesCronService', () => {
 
       await cronService.autoSyncCurrentMonth();
 
+      expect(
+        erpInvoicesCoreService.autoReloginWithRetry,
+      ).not.toHaveBeenCalled();
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'purchase', cookies: 'valid-cookies' }),
+        expect.objectContaining({
+          type: 'purchase',
+          token: 'valid-token',
+          cookies: 'valid-cookies',
+        }),
         undefined,
         true,
       );
 
       expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'sold', cookies: 'valid-cookies' }),
+        expect.objectContaining({
+          type: 'sold',
+          token: 'valid-token',
+          cookies: 'valid-cookies',
+        }),
         undefined,
         true,
       );

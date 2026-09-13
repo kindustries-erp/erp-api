@@ -19,6 +19,11 @@ Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra 
   - Endpoint `column-options` tự động trích xuất danh sách giá trị distinct của từng cột trên toàn bộ các bảng chứng từ tham gia (Mã chứng từ, Loại phiếu, Đối tác/Khách hàng/NCC, Trạng thái, Ngày ghi sổ, Số lượng tổng).
 - **Xem Chi Tiết Chứng Từ Tức Thời (Voucher Detail Drawer)**:
   - Mở xem chi tiết toàn bộ các dòng mặt hàng (line items), số lượng, đơn giá, mã định danh Serial/VIN đính kèm mà không cần chuyển trang.
+- **Chuẩn hóa UI/UX Bảng Chứng Từ Kho (`ErpWarehouseTab.tsx`)**:
+  - Cột STT `#` cố định 40px ở đầu bảng, căn giữa.
+  - Hàng tổng cộng (`summaryRow`): tự động cộng dồn SL Nhập (`qtyReceipt`), SL Xuất (`qtyIssue`), và SL Điều chỉnh (`qtyAdjustment`).
+  - Làm mờ hàng trạng thái phiếu hủy (`CANCELLED`, `VOID`).
+  - Action Menu: "Xem chi tiết" (Icon `Eye`), "Xem đơn mua hàng" / "Xem đơn bán hàng" (Icon `FileText`), và "Chỉnh sửa" (Icon `Pencil`, mở thẳng form edit theo loại phiếu). Cột chứng từ dùng `TableText` gọn gàng.
 
 ---
 
@@ -90,6 +95,17 @@ Service `inventory-warehouse-voucher.service.ts` xây dựng câu truy vấn SQL
    - Nếu bao gồm Điều chỉnh (`includeAdjustments`): Query từ `erp_inventory_adjustments ga` và subquery `SUM(qty_adjusted)`.
 2. Hợp nhất bằng `UNION ALL`.
 3. Áp dụng phân trang (`LIMIT`, `OFFSET`) và sắp xếp theo ngày chứng từ giảm dần (`voucherDate DESC`).
+
+### 5.2. Multi-Keyword Search & Header Filter Engine
+1. **Multi-Keyword Search (`buildRawMultiKeywordSql`)**:
+   - Tách từ khóa qua dấu chấm phẩy `;` (điều kiện `OR`).
+   - Khớp chính xác tuyệt đối khi từ khóa nằm trong cặp ngoặc kép `""` (`isExact`).
+   - Hỗ trợ toàn diện cho tất cả các cột: `voucherNo`, `poNo`, `partnerName`, `remarks`, `date`, `status`, `type`, `qtyReceipt`, `qtyIssue`, `qtyAdjustment`.
+2. **Xử lý Bộ lọc Cột Đặc biệt**:
+   - `__ALL_MATCHING__`: Khi người dùng chọn tất cả kết quả tìm kiếm trong popover, backend tự động áp dụng điều kiện multi-keyword search tương ứng.
+   - `__BLANK__`: Hỗ trợ lọc các dòng có giá trị NULL hoặc chuỗi rỗng.
+3. **Đồng bộ Dropdown Options (`getColumnOptions`)**:
+   - Tìm kiếm options hỗ trợ multi-keyword search động với SQL parameter binding an toàn.
 
 ---
 

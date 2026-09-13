@@ -19,6 +19,7 @@ import { Observable } from 'rxjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
@@ -36,13 +37,19 @@ export class GoodsReceiptsCoreController {
     private readonly cronService: GoodsReceiptsCronService,
   ) {}
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreateGoodsReceiptDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
@@ -112,13 +119,19 @@ export class GoodsReceiptsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.READ,
+  })
   @Get(':id/export-xlsx')
   async exportXlsx(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -138,7 +151,10 @@ export class GoodsReceiptsCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -160,7 +176,10 @@ export class GoodsReceiptsCoreController {
     return this.service.cancelReceipt(id);
   }
 
-  @RequirePermissions({ resource: 'goods_receipts', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);

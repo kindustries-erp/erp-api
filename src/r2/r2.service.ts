@@ -11,24 +11,57 @@ import {
   PutObjectCommand as PutObjectCmd,
 } from '@aws-sdk/client-s3';
 
+interface S3EndpointConfig {
+  get(propertyPath: string): string | undefined;
+  getOrThrow(propertyPath: string): string;
+}
+
+export function resolveS3Endpoint(
+  config: S3EndpointConfig,
+): string | undefined {
+  const endpoint = config.get('R2_ENDPOINT');
+  if (endpoint) return endpoint;
+
+  const accountId = config.get('R2_ACCOUNT_ID');
+  if (!accountId) return undefined;
+  return `https://${accountId}.r2.cloudflarestorage.com`;
+}
+
 @Injectable()
 export class R2Service {
   private readonly logger = new Logger(R2Service.name);
-  private readonly client: S3Client;
-  private readonly bucket: string;
+  private readonly client?: S3Client;
+  private readonly bucket?: string;
 
   constructor(private readonly config: ConfigService) {
-    const accountId = this.config.getOrThrow<string>('R2_ACCOUNT_ID');
-    this.bucket = this.config.getOrThrow<string>('R2_BUCKET_NAME');
+    const bucket = this.config.get<string>('R2_BUCKET_NAME');
+    const endpoint = resolveS3Endpoint(this.config);
+    const accessKeyId = this.config.get<string>('R2_ACCESS_KEY_ID');
+    const secretAccessKey = this.config.get<string>('R2_SECRET_ACCESS_KEY');
 
+    if (!bucket || !endpoint || !accessKeyId || !secretAccessKey) {
+      this.logger.warn(
+        'R2 configuration is incomplete. R2 integration will be disabled.',
+      );
+      return;
+    }
+
+    this.bucket = bucket;
     this.client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint,
+      forcePathStyle: Boolean(this.config.get('R2_ENDPOINT')),
       credentials: {
-        accessKeyId: this.config.getOrThrow<string>('R2_ACCESS_KEY_ID'),
-        secretAccessKey: this.config.getOrThrow<string>('R2_SECRET_ACCESS_KEY'),
+        accessKeyId,
+        secretAccessKey,
       },
     });
+  }
+
+  private ensureConfigured() {
+    if (!this.client || !this.bucket) {
+      throw new Error('R2 is not configured on this environment.');
+    }
   }
 
   /**
@@ -39,9 +72,10 @@ export class R2Service {
     buffer: Buffer,
     contentType: string,
   ): Promise<void> {
-    await this.client.send(
+    this.ensureConfigured();
+    await this.client!.send(
       new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucket!,
         Key: key,
         Body: buffer,
         ContentType: contentType,
@@ -54,9 +88,10 @@ export class R2Service {
    * Download buffer từ R2
    */
   async downloadBuffer(key: string): Promise<Buffer> {
-    const s3Obj = await this.client.send(
+    this.ensureConfigured();
+    const s3Obj = await this.client!.send(
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucket!,
         Key: key,
       }),
     );
@@ -69,9 +104,10 @@ export class R2Service {
    * Download stream từ R2
    */
   async downloadStream(key: string): Promise<NodeJS.ReadableStream> {
-    const s3Obj = await this.client.send(
+    this.ensureConfigured();
+    const s3Obj = await this.client!.send(
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucket!,
         Key: key,
       }),
     );
@@ -88,14 +124,15 @@ export class R2Service {
     filename?: string,
     inline = false,
   ): Promise<string> {
-    const input: any = { Bucket: this.bucket, Key: key };
+    this.ensureConfigured();
+    const input: any = { Bucket: this.bucket!, Key: key };
     if (filename) {
       input.ResponseContentDisposition = `${inline ? 'inline' : 'attachment'}; filename="${filename}"`;
     } else if (inline) {
       input.ResponseContentDisposition = 'inline';
     }
     const cmd = new GetObjectCommand(input);
-    return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
+    return getSignedUrl(this.client!, cmd, { expiresIn: expiresInSeconds });
   }
 
   /**
@@ -106,20 +143,22 @@ export class R2Service {
     contentType: string,
     expiresInSeconds = 900,
   ): Promise<string> {
+    this.ensureConfigured();
     const cmd = new PutObjectCmd({
-      Bucket: this.bucket,
+      Bucket: this.bucket!,
       Key: key,
       ContentType: contentType,
     });
-    return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
+    return getSignedUrl(this.client!, cmd, { expiresIn: expiresInSeconds });
   }
 
   /**
    * Xóa object trên R2
    */
   async deleteObject(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    this.ensureConfigured();
+    await this.client!.send(
+      new DeleteObjectCommand({ Bucket: this.bucket!, Key: key }),
     );
     this.logger.log(`R2 deleted: ${key}`);
   }

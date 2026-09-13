@@ -30,6 +30,9 @@ export class CreateGoodsReceiptLineDto {
   @IsOptional()
   declaredSerials?: Array<{
     serialNo: string;
+    vinNo?: string | null;
+    engineNo?: string | null;
+    internalSerialNo?: string | null;
     notes?: string | null;
     lotNo?: string | null;
     attributes?: Record<string, string> | null;

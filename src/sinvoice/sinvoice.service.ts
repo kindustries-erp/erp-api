@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
@@ -505,6 +506,11 @@ export class SinvoiceService {
       );
 
       if (!loginRes.ok) {
+        if (loginRes.status === 401 || loginRes.status === 403) {
+          throw new UnauthorizedException(
+            `Đăng nhập Viettel SInvoice thất bại (HTTP ${loginRes.status}). Sai thông tin đăng nhập hoặc tài khoản bị khóa. Dừng tiến trình để tránh khóa tài khoản.`,
+          );
+        }
         throw new BadRequestException(
           'Đăng nhập Viettel thất bại (Web Portal). Có thể bị chặn bởi Captcha hoặc sai mật khẩu.',
         );

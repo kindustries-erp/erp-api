@@ -98,6 +98,7 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 | `correspondent_name` | `varchar(255)` | `NULL` | Tên đối tác / Người thụ hưởng đối ứng |
 | `correspondent_bank` | `varchar(255)` | `NULL` | Ngân hàng của đối tác |
 | `correspondent_accounting_account_id` | `uuid` | `FK -> erp_chart_of_accounts(id)`, `NULL` | Tài khoản kế toán đối ứng (vd: 331, 131) |
+| `category_id` | `uuid` | `FK -> erp_module_categories(id)`, `NULL` | Danh mục phân loại giao dịch (`module_key = 'BANK_TXN'`) |
 | `import_batch_id` | `varchar(50)` | `NULL` | Mã UUID của đợt upload file sao kê |
 | `is_deleted` | `boolean` | `default: false` | Cờ xóa mềm (hoặc khi rollback batch) |
 
@@ -155,35 +156,34 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 
 | Phân nhóm | Method | Endpoint | Quyền yêu cầu | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
-| **Bank Accounts** | `GET` | `/bank-accounts` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách tài khoản ngân hàng (kèm lọc chi nhánh) |
-| | `POST` | `/bank-accounts` | `{ resource: 'bank_accounts', action: 'create' }` | Tạo mới tài khoản ngân hàng |
-| | `PATCH`| `/bank-accounts/:id` | `{ resource: 'bank_accounts', action: 'update' }` | Cập nhật thông tin tài khoản |
-| | `DELETE`| `/bank-accounts/:id` | `{ resource: 'bank_accounts', action: 'delete' }` | Xóa mềm tài khoản ngân hàng |
-| **Cash Books** | `GET` | `/cash-books` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách sổ quỹ tiền mặt |
-| | `POST` | `/cash-books` | `{ resource: 'bank_accounts', action: 'create' }` | Tạo mới sổ quỹ tiền mặt |
-| | `PATCH`| `/cash-books/:id` | `{ resource: 'bank_accounts', action: 'update' }` | Cập nhật sổ quỹ |
-| | `DELETE`| `/cash-books/:id` | `{ resource: 'bank_accounts', action: 'delete' }` | Xóa mềm sổ quỹ |
-| **Transactions** | `GET` | `/transactions` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
-| | `GET` | `/transactions/:id` | `{ resource: 'bank_statements', action: 'read' }` | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
-| | `GET` | `/transactions/:id/traceability-graph` | `{ resource: 'bank_statements', action: 'read' }` | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
-| | `GET` | `/transactions/:id/posting` | `{ resource: 'bank_statements', action: 'read' }` | Lấy thông tin bút toán kế toán hiện thời |
-| | `POST` | `/transactions/:id/net-off-invoices` | `{ resource: 'bank_statements', action: 'update' }` | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
-| | `DELETE`| `/transactions/:id/net-off-invoices/:netOffId` | `{ resource: 'bank_statements', action: 'update' }` | Gỡ bỏ liên kết cấn trừ hóa đơn |
-| | `GET` | `/transactions/column-options` | `{ resource: 'bank_statements', action: 'read' }` | Lấy danh sách options duy nhất cho bộ lọc dropdown |
-
-| | `POST` | `/transactions/manual` | `{ resource: 'bank_statements', action: 'create' }` | Tạo giao dịch thu/chi thủ công |
-| | `PATCH`| `/transactions/:id` | `{ resource: 'bank_statements', action: 'update' }` | Cập nhật ghi chú/thông tin đối tác giao dịch |
-| | `POST` | `/transactions/:id/post` | `{ resource: 'bank_statements', action: 'update' }` | Hạch toán ghi nhận bút toán kế toán |
-| | `POST` | `/transactions/:id/unpost` | `{ resource: 'bank_statements', action: 'update' }` | Hủy hạch toán bút toán kế toán |
-| | `POST` | `/transactions/import` | `{ resource: 'bank_statements', action: 'create' }` | Upload file sao kê (Multipart: tối đa 5 file .csv/.xlsx) |
-| | `DELETE`| `/transactions/batch/:batchId` | `{ resource: 'bank_statements', action: 'delete' }` | Rollback (xóa) toàn bộ giao dịch theo lô import |
-| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng |
-| | `POST` | `/bank-account-balances` | `{ resource: 'bank_accounts', action: 'create' }` | Thiết lập số dư đầu kỳ tài khoản ngân hàng |
-| | `GET` | `/cash-book-balances` | `{ resource: 'bank_accounts', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ |
-| | `POST` | `/cash-book-balances` | `{ resource: 'bank_accounts', action: 'create' }` | Thiết lập số dư đầu kỳ sổ quỹ |
-| **Statement Files** | `GET` | `/statement-files` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách file sao kê đã tải lên |
-| | `POST` | `/statement-files` | `{ resource: 'bank_statements', action: 'create' }` | Ghi nhận metadata file sao kê |
-| | `DELETE`| `/statement-files/:id` | `{ resource: 'bank_statements', action: 'delete' }` | Xóa file sao kê |
+| **Bank Accounts** | `GET` | `/bank-accounts` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách tài khoản ngân hàng (kèm lọc chi nhánh) |
+| | `POST` | `/bank-accounts` | `{ resource: 'bank_statements', action: 'create' }` | Tạo mới tài khoản ngân hàng |
+| | `PATCH`| `/bank-accounts/:id` | `{ resource: 'bank_statements', action: 'update' }` | Cập nhật thông tin tài khoản |
+| | `DELETE`| `/bank-accounts/:id` | `{ resource: 'bank_statements', action: 'delete' }` | Xóa mềm tài khoản ngân hàng |
+| **Cash Books** | `GET` | `/cash-books` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách sổ quỹ tiền mặt |
+| | `POST` | `/cash-books` | `{ resource: 'cash_statements', action: 'create' }` | Tạo mới sổ quỹ tiền mặt |
+| | `PATCH`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'update' }` | Cập nhật sổ quỹ |
+| | `DELETE`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'delete' }` | Xóa mềm sổ quỹ |
+| **Transactions** | `GET` | `/transactions` | `bank_statements` OR `cash_statements` (`read`) | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
+| | `GET` | `/transactions/:id` | `bank_statements` OR `cash_statements` (`read`) | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
+| | `GET` | `/transactions/:id/traceability-graph` | `bank_statements` OR `cash_statements` (`read`) | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
+| | `GET` | `/transactions/:id/posting` | `bank_statements` OR `cash_statements` (`read`) | Lấy thông tin bút toán kế toán hiện thời |
+| | `POST` | `/transactions/:id/net-off-invoices` | `bank_statements` OR `cash_statements` (`update`) | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
+| | `DELETE`| `/transactions/:id/net-off-invoices/:netOffId` | `bank_statements` OR `cash_statements` (`update`) | Gỡ bỏ liên kết cấn trừ hóa đơn |
+| | `GET` | `/transactions/column-options` | `bank_statements` OR `cash_statements` (`read`) | Lấy danh sách options duy nhất cho bộ lọc dropdown |
+| | `POST` | `/transactions/manual` | `bank_statements` OR `cash_statements` (`create`) | Tạo giao dịch thu/chi thủ công |
+| | `PATCH`| `/transactions/:id` | `bank_statements` OR `cash_statements` (`update`) | Cập nhật ghi chú/thông tin đối tác giao dịch |
+| | `POST` | `/transactions/:id/post` | `bank_statements` OR `cash_statements` (`update`) | Hạch toán ghi nhận bút toán kế toán |
+| | `POST` | `/transactions/:id/unpost` | `bank_statements` OR `cash_statements` (`update`) | Hủy hạch toán bút toán kế toán |
+| | `POST` | `/transactions/import` | `bank_statements` OR `cash_statements` (`create`) | Upload file sao kê (Multipart: tối đa 5 file .csv/.xlsx) |
+| | `DELETE`| `/transactions/batch/:batchId` | `bank_statements` OR `cash_statements` (`delete`) | Rollback (xóa) toàn bộ giao dịch theo lô import |
+| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng |
+| | `POST` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'create' }` | Thiết lập số dư đầu kỳ tài khoản ngân hàng |
+| | `GET` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ |
+| | `POST` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'create' }` | Thiết lập số dư đầu kỳ sổ quỹ |
+| **Statement Files** | `GET` | `/statement-files` | `bank_statements` OR `cash_statements` (`read`) | Danh sách file sao kê đã tải lên |
+| | `POST` | `/statement-files` | `bank_statements` OR `cash_statements` (`create`) | Ghi nhận metadata file sao kê |
+| | `DELETE`| `/statement-files/:id` | `bank_statements` OR `cash_statements` (`delete`) | Xóa file sao kê |
 
 ---
 
@@ -211,6 +211,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   4. Tạo hoặc cập nhật chứng từ `erp_journal_entries` với mã tham chiếu nguồn `sourceId = txn.id`, `sourceType = 'BANK'` hoặc `'CASH'`.
 
 ### 5.3. Thuật toán Bộ Lọc Nâng Cao & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+- **Lọc Khoảng Ngày Múi Giờ Việt Nam (Timezone-Aware Date Range Filter)**:
+  - Do `trans_date` trong database PostgreSQL lưu theo mốc UTC, khi lọc theo khoảng ngày (`startDate` - `endDate`), hệ thống áp dụng chuyển đổi múi giờ chuẩn trong SQL:
+    ```sql
+    (txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date
+    AND
+    (txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date
+    ```
+  - Đảm bảo các giao dịch diễn ra rạng sáng đầu tháng tiếp theo theo giờ Việt Nam không bị lọt nhầm vào tháng trước do sai lệch múi giờ UTC/GMT+7.
 - **Tìm kiếm đa từ khóa & khớp chính xác (`applyMultiKeywordFilter`)**:
   - Dấu chấm phẩy `;`: Tách thành nhiều từ khóa và áp dụng điều kiện `OR` (ví dụ: `BIDV;TCB`).
   - Dấu ngoặc kép `"..."`: Tìm kiếm chính xác từng ký tự (Exact match với `op = '='` hoặc `ILIKE 'text'`), không gắn wildcard `%`.
@@ -218,6 +226,21 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 - **Lọc theo giá trị trống `(blank)` (`__BLANK__`)**:
   - Khi `vals` chứa `'__BLANK__'`: Sinh điều kiện `(field IN (:...realVals) OR field IS NULL OR CAST(field AS TEXT) = '')`.
   - Riêng trường Đối tượng HĐ (`invoiceSubject`): Áp dụng `NOT EXISTS (SELECT 1 FROM erp_invoice_voucher_netoff ...)` để tra cứu các giao dịch chưa từng cấn trừ hóa đơn.
+
+### 5.4. Xuất Báo Cáo Excel Ngầm & SSE Realtime Stream (`BankStatementExportBackgroundService`)
+- **Kiến trúc Chạy Nền (Non-blocking Background Jobs)**:
+  - Xử lý xuất báo cáo Excel sao kê ngân hàng và sổ quỹ tiền mặt dưới nền mà không làm nghẽn Event Loop.
+  - Tự động kiểm tra trùng lặp bộ lọc (Deduplication / Reused): Nếu cùng một người dùng yêu cầu xuất cùng bộ lọc trong vòng 24 giờ và file vẫn còn hạn trong bộ nhớ đệm, hệ thống trả về ngay file có sẵn (`reused: true`).
+- **Đặt Tên File Thông Minh Theo Số Tài Khoản / Tên Sổ Quỹ**:
+  - Khi xuất tài khoản ngân hàng cụ thể: `Sao_ke_[SoTaiKhoan]_[YYYYMMDD_HHmm].xlsx` (vd: `Sao_ke_0391000123456_20260826_1815.xlsx`).
+  - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
+  - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
+  - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **API Endpoints Xuất Excel**:
+  - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
+  - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
+  - `GET /api/v1/bank-transactions-core/export/excel/background/:jobId/download`: Tải file `.xlsx` trực tiếp theo jobId.
+  - `GET /api/v1/bank-transactions-core/export/excel/progress/stream`: Server-Sent Events (SSE) phát tiến độ `0% -> 100%`, trạng thái `ready` và tên file cho client tự động tải xuống.
 
 ---
 
@@ -227,6 +250,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 - **`erp-invoices-core`**: Đối soát và ghi nhận thanh toán cấn trừ công nợ hóa đơn (`erp_invoice_voucher_netoff`).
 - **`cashflow-dashboard` & `dashboard-core`**: Cung cấp dữ liệu nền tảng cho báo cáo dòng tiền, phân bổ đối tác, dự báo dòng tiền và gợi ý ngân sách tự động.
 - **`tags-core`**: Gán tag phân loại doanh thu/chi phí đa chiều (`sys_tags`, `sys_entity_tags`).
+- **`module-config`**: Quản lý danh mục phân loại (`category_id`) và các trường thuộc tính tùy chỉnh động (`erp_entity_attribute_values` với `entity_type = 'BANK_TXN'`). Cấu hình qua Action Dropdown trang Sao kê / menu Thiết lập chung và hiển thị/chọn tại cột phải trong Drawer Chi tiết giao dịch.
 
 ---
 
@@ -238,3 +262,38 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
    - `bunx jest src/bank-transactions-core/services/transaction-accounting.service.spec.ts`
    - `bunx jest src/bank-transactions-core/services/transaction-query.service.spec.ts`
 3. **Database Integrity**: Đảm bảo trường `debit_amount` và `credit_amount` luôn được lưu với kiểu `numeric(18,4)` để tránh sai số làm tròn tiền tệ.
+
+---
+
+## 8. Frontend UI (`erp-web`) — Chuẩn Thiết Kế Mới
+
+> Phân hệ này đã được refactor theo chuẩn **Atomic Module** và tích hợp hai tính năng mới:
+
+### 8.1. Switch nhanh Thu / Chi (`PillTabs` trong `customActionsNode`)
+- Component: `BankStatementsTab.tsx` → `customActionsNode` truyền vào `SpreadsheetPageTemplate`.
+- Ba trạng thái: **Tất cả** (`activeTransactionType = "ALL"`) / **Thu** (`"IN"`) / **Chi** (`"OUT"`).
+- Khi chọn, hook `useBankStatementsTabLogic.tsx` gọi `bankStatementApi.getTransactions({ transactionType: "IN" | "OUT" })` tương ứng với field **`transactionType?: 'IN' | 'OUT'`** trong `BankTransactionFilterDto` (backend).
+- Đồng bộ URL param `?txnType=IN|OUT` qua `usePageUrlState`.
+
+### 8.2. Chế độ xem Cột linh hoạt (ViewMode Presets)
+- Hai preset chuẩn (không xóa được, có thể Khôi phục mặc định):
+  - **`overview` — "Tổng quan"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `description`, `thu`, `chi`, `balance`, `branch`.
+  - **`audit` — "Kiểm toán / Đối soát"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `correspondentName`, `invoiceSubject`, `thu`, `chi`, `netOffAmount`, `remainingAmount`, `branch`.
+- Người dùng có thể **tạo Custom View** mới (đặt tên, chọn bật/tắt từng cột theo 4 nhóm), lưu vào `core_user_preferences`.
+
+### 8.3. Cấu trúc Module Atomic (`src/modules/bank-statements/`)
+```text
+src/modules/bank-statements/components/BankStatementsTab/
+├── utils.ts                                     # Preset configs, column groups, default visibility
+├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync)
+├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
+├── index.tsx                                    # Re-export entry
+├── components/
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions với header filters
+│   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
+│   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
+│   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+└── __tests__/
+    └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
+```
+

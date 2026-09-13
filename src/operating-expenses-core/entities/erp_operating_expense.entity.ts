@@ -111,8 +111,40 @@ export class ErpOperatingExpense {
   @Column({ type: 'boolean', name: 'auto_generate_next', default: false })
   autoGenerateNext: boolean;
 
+  @Column({ type: 'smallint', name: 'period_year', nullable: true })
+  periodYear: number | null;
+
+  @Column({ type: 'smallint', name: 'period_month', nullable: true })
+  periodMonth: number | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'category_key',
+    nullable: true,
+  })
+  categoryKey: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'cost_group',
+    default: 'OPEX',
+    nullable: true,
+  })
+  costGroup: string | null;
+
+  @Column({ type: 'smallint', name: 'recurrence_until_year', nullable: true })
+  recurrenceUntilYear: number | null;
+
+  @Column({ type: 'smallint', name: 'recurrence_until_month', nullable: true })
+  recurrenceUntilMonth: number | null;
+
   @Column({ type: 'uuid', name: 'parent_recurring_id', nullable: true })
   parentRecurringId: string | null;
+
+  @Column({ type: 'uuid', name: 'recurrence_anchor_id', nullable: true })
+  recurrenceAnchorId: string | null;
 
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;

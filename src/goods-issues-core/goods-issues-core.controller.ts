@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
@@ -29,25 +30,37 @@ import { PostGoodsIssueDto } from './dto/post-goods-issue.dto';
 export class GoodsIssuesCoreController {
   constructor(private readonly service: GoodsIssuesCoreService) {}
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.CREATE,
+  })
   @Post()
   create(@Body() dto: CreateGoodsIssueDto) {
     return this.service.create(dto);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.READ,
+  })
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.READ,
+  })
   @Get(':id/export-xlsx')
   async exportXlsx(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -67,7 +80,10 @@ export class GoodsIssuesCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.UPDATE,
+  })
   @Patch(':id')
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -76,7 +92,10 @@ export class GoodsIssuesCoreController {
     return this.service.update(id, dto);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/post')
   postIssue(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -85,13 +104,19 @@ export class GoodsIssuesCoreController {
     return this.service.postIssue(id, dto);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.DELETE,
+  })
   @Delete(':id')
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);
   }
 
-  @RequirePermissions({ resource: 'goods_issues', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.GOODS_ISSUES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/cancel')
   cancelIssue(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.cancelIssue(id);

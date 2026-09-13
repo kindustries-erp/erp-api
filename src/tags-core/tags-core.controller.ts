@@ -16,6 +16,7 @@ import { UpdateEntityTagsDto } from './dto/update-entity-tags.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @ApiTags('sys_tags')
 @ApiBearerAuth()
@@ -26,35 +27,50 @@ export class TagsCoreController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new tag' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'create' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.CREATE,
+  })
   create(@Body() createTagDto: CreateTagDto) {
     return this.tagsCoreService.create(createTagDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all tags' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.READ,
+  })
   findAll() {
     return this.tagsCoreService.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single tag by ID' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.READ,
+  })
   findOne(@Param('id') id: string) {
     return this.tagsCoreService.findOne(id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a tag' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.UPDATE,
+  })
   update(@Param('id') id: string, @Body() updateTagDto: UpdateTagDto) {
     return this.tagsCoreService.update(id, updateTagDto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a tag (soft delete)' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'delete' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.DELETE,
+  })
   remove(@Param('id') id: string) {
     return this.tagsCoreService.remove(id);
   }
@@ -65,14 +81,20 @@ export class TagsCoreController {
   @ApiOperation({
     summary: 'Update (overwrite) all tags for a specific entity',
   })
-  @RequirePermissions({ resource: 'sys_tags', action: 'update' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.UPDATE,
+  })
   updateEntityTags(@Body() updateEntityTagsDto: UpdateEntityTagsDto) {
     return this.tagsCoreService.updateEntityTags(updateEntityTagsDto);
   }
 
   @Get('entity-tags/list')
   @ApiOperation({ summary: 'Get all tags for a specific entity' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.READ,
+  })
   getEntityTags(
     @Query('entityType') entityType: string,
     @Query('entityId') entityId: string,
@@ -84,7 +106,10 @@ export class TagsCoreController {
   @ApiOperation({
     summary: 'Get tags for multiple entities in a single request',
   })
-  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.READ,
+  })
   batchGetEntityTags(
     @Body() body: { queries: { entityType: string; entityId: string }[] },
   ) {
@@ -93,7 +118,10 @@ export class TagsCoreController {
 
   @Get(':id/connections')
   @ApiOperation({ summary: 'Get all entity connections for a specific tag' })
-  @RequirePermissions({ resource: 'sys_tags', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SYS_TAGS,
+    action: ErpAction.READ,
+  })
   getTagConnections(@Param('id') id: string) {
     return this.tagsCoreService.getTagConnections(id);
   }

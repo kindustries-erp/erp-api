@@ -9,8 +9,9 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateInventoryAdjustmentLineDto } from './create-inventory-adjustment-line.dto';
+import { BaseEntityCustomFieldsDto } from '../../module-config/dto/base-entity-custom-fields.dto';
 
-export class CreateInventoryAdjustmentDto {
+export class CreateInventoryAdjustmentDto extends BaseEntityCustomFieldsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

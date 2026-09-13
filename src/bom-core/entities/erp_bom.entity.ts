@@ -5,12 +5,11 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
-  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBomCategory } from '../../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeValue } from '../../bom-config/entities/erp_bom_attribute_value.entity';
+import type { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import type { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 
 @Entity({ name: 'erp_boms' })
 export class ErpBom {
@@ -30,9 +29,9 @@ export class ErpBom {
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
-  @ManyToOne(() => ErpBomCategory, { onDelete: 'SET NULL' })
+  @ManyToOne('ErpModuleCategory', { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'category_id' })
-  category?: ErpBomCategory;
+  category?: ErpModuleCategory;
 
   @Column({ type: 'varchar', length: 255, name: 'version' })
   version: string;
@@ -61,6 +60,7 @@ export class ErpBom {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => ErpBomAttributeValue, (val) => val.bom)
-  attributeValues?: ErpBomAttributeValue[];
+  attributeValues?: ErpEntityAttributeValue[];
+  customAttributes?: Record<string, any>;
+  attributes?: Record<string, any>;
 }

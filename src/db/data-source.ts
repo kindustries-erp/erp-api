@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -12,9 +13,9 @@ import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
 import { ErpBom } from '../bom-core/entities/erp_bom.entity';
 import { ErpBomLine } from '../bom-core/entities/erp_bom_line.entity';
-import { ErpBomCategory } from '../bom-config/entities/erp_bom_category.entity';
-import { ErpBomAttributeDef } from '../bom-config/entities/erp_bom_attribute_def.entity';
-import { ErpBomAttributeValue } from '../bom-config/entities/erp_bom_attribute_value.entity';
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
+import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 import { ErpPurchaseRequest } from '../purchase-requests-core/entities/erp_purchase_request.entity';
 import { ErpPurchaseRequestLine } from '../purchase-requests-core/entities/erp_purchase_request_line.entity';
 import { ErpPurchaseOrder } from '../purchase-orders-core/entities/erp_purchase_order.entity';
@@ -36,7 +37,6 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
 import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inventory_tracking_custom.entity';
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
-import { ErpTrackingCategory } from '../inventory-core/entities/erp_tracking_category.entity';
 import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -59,6 +59,7 @@ import { KgaraCaseLinkedInvoice } from '../kgara-api-core/entities/kgara_case_li
 import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../kgara-api-core/entities/kgara_case_settlement.entity';
+import { KgaraOperatingExpense } from '../kgara-api-core/entities/kgara_operating_expense.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -74,22 +75,25 @@ import { ErpEmailMessage } from '../email-ingest/entities/erp_email_message.enti
 import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachment.entity';
 import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
+import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
 const entities = [
   CoreUser,
+  CoreUserPreference,
   CoreRefreshToken,
   CoreRole,
   CorePermission,
   CoreUserRole,
   ErpEmployee,
   ErpBusinessPartner,
+  ErpOperatingExpense,
   ErpInventoryItem,
   ErpInventoryTransaction,
   ErpInventoryBalance,
   ErpBom,
   ErpBomLine,
-  ErpBomCategory,
-  ErpBomAttributeDef,
-  ErpBomAttributeValue,
+  ErpModuleCategory,
+  ErpModuleAttributeDef,
+  ErpEntityAttributeValue,
   ErpPurchaseRequest,
   ErpPurchaseRequestLine,
   ErpPurchaseOrder,
@@ -111,7 +115,6 @@ const entities = [
   ErpInventoryTrackingLot,
   ErpInventoryTrackingCustom,
   ErpTrackingPolicy,
-  ErpTrackingCategory,
   ErpBranch,
   ErpAuditLog,
   ErpItemType,
@@ -133,6 +136,7 @@ const entities = [
   KgaraCaseLinkedInvoice,
   KgaraGrossProfit,
   KgaraCaseSettlement,
+  KgaraOperatingExpense,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,
@@ -153,6 +157,12 @@ const entities = [
 
 const databaseUrl = process.env.DATABASE_URL;
 
+const isSslDisabled =
+  process.env.DB_SSL === 'false' ||
+  (databaseUrl &&
+    (databaseUrl.includes('sslmode=disable') ||
+      databaseUrl.includes('ssl=false')));
+
 export default new DataSource(
   databaseUrl
     ? {
@@ -165,7 +175,8 @@ export default new DataSource(
           __dirname + '/../migrations/**/*{.ts,.js}',
         ],
         synchronize: false,
-        ssl: { rejectUnauthorized: false },
+        ssl: isSslDisabled ? false : { rejectUnauthorized: false },
+        extra: isSslDisabled ? {} : { ssl: { rejectUnauthorized: false } },
       }
     : {
         type: 'postgres',
@@ -183,5 +194,9 @@ export default new DataSource(
         synchronize: false,
         ssl:
           process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        extra:
+          process.env.DB_SSL === 'true'
+            ? { ssl: { rejectUnauthorized: false } }
+            : {},
       },
 );

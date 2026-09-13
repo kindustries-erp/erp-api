@@ -16,6 +16,7 @@ import { ReportsCoreService } from './reports-core.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import type { VinfastPartsExportQuery } from './services/vinfast-parts-export-background.service';
@@ -27,7 +28,10 @@ import type { VinfastPartsExportQuery } from './services/vinfast-parts-export-ba
 export class ReportsCoreController {
   constructor(private readonly reportsCoreService: ReportsCoreService) {}
 
-  @RequirePermissions({ resource: 'sales_reports', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.SALES_REPORTS,
+    action: ErpAction.READ,
+  })
   @Get('sales-dashboard')
   async getSalesDashboard(
     @Query('dateFrom') dateFrom?: string,
@@ -36,7 +40,10 @@ export class ReportsCoreController {
     return this.reportsCoreService.getSalesDashboard({ dateFrom, dateTo });
   }
 
-  @RequirePermissions({ resource: 'purchasing_reports', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.PURCHASING_REPORTS,
+    action: ErpAction.READ,
+  })
   @Get('purchasing-dashboard')
   async getPurchasingDashboard(
     @Query('dateFrom') dateFrom?: string,
@@ -45,7 +52,7 @@ export class ReportsCoreController {
     return this.reportsCoreService.getPurchasingDashboard({ dateFrom, dateTo });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts-dashboard')
   async getVinfastPartsDashboard(
     @Query('dateFrom') dateFrom?: string,
@@ -63,7 +70,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts-dashboard-table')
   async getVinfastPartsDashboardTable(
     @Query('dateFrom') dateFrom?: string,
@@ -87,7 +94,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts-dashboard-table/column-options')
   async getVinfastPartsDashboardTableColumnOptions(
     @Query('columnKey') columnKey: string,
@@ -111,7 +118,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts')
   async getVinfastPartsTracking(
     @Query('dateFrom') dateFrom?: string,
@@ -140,7 +147,7 @@ export class ReportsCoreController {
     return result;
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts/details')
   async getVinfastPartsTrackingDetails(
     @Query('dateFrom') dateFrom?: string,
@@ -156,7 +163,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts/column-options')
   async getVinfastPartsColumnOptions(
     @Query('columnKey') columnKey: string,
@@ -174,7 +181,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Post('vinfast-parts/export/excel/background')
   startVinfastPartsExportBackground(
     @Body() query: VinfastPartsExportQuery,
@@ -186,7 +193,7 @@ export class ReportsCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts/export/excel/background/history')
   getVinfastPartsExportBackgroundHistory(
     @Request() req: any,
@@ -200,7 +207,7 @@ export class ReportsCoreController {
     );
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('vinfast-parts/export/excel/background/:jobId/download')
   async downloadVinfastPartsBackgroundExport(
     @Param('jobId') jobId: string,
@@ -283,7 +290,7 @@ export class ReportsCoreController {
   // VINFAST SETTLEMENT ORDERS
   // ---------------------------------------------------------------------------
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('settlement-orders')
   async getSettlementOrders(
     @Query('dateFrom') dateFrom?: string,
@@ -309,7 +316,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('settlement-orders/export/excel')
   async exportSettlementOrdersExcel(
     @Query('dateFrom') dateFrom: string,
@@ -337,7 +344,7 @@ export class ReportsCoreController {
     res.send(buffer);
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('settlement-orders/details')
   async getSettlementOrderDetails(
     @Query('settlementOrder') settlementOrder: string,
@@ -349,7 +356,7 @@ export class ReportsCoreController {
     });
   }
 
-  @RequirePermissions({ resource: 'vinfast', action: 'read' })
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
   @Get('settlement-orders/column-options')
   async getSettlementOrderColumnOptions(
     @Query('columnKey') columnKey: string,

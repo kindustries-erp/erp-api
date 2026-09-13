@@ -71,6 +71,7 @@ export class VinfastPartsController {
   @Get('stock')
   @ApiOperation({ summary: 'Get VinFast parts stock balance' })
   @ApiQuery({ name: 'vehicleType', required: false })
+  @ApiQuery({ name: 'stockTab', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false })
@@ -81,6 +82,8 @@ export class VinfastPartsController {
   @ApiQuery({ name: 'column_filters', required: false })
   async getStock(
     @Query('vehicleType') vehicleType?: string,
+    @Query('stockTab') stockTab?: string,
+    @Query('stock_tab') stockTabSnake?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
@@ -92,6 +95,7 @@ export class VinfastPartsController {
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 50;
+    const effectiveStockTab = stockTab || stockTabSnake;
     return this.vinfastPartsService.getPartsStock(
       vehicleType,
       pageNum,
@@ -102,6 +106,7 @@ export class VinfastPartsController {
       sorts,
       columnSearch,
       columnFilters,
+      effectiveStockTab,
     );
   }
 
@@ -109,6 +114,8 @@ export class VinfastPartsController {
   @ApiOperation({
     summary: 'Get VinFast parts stock column options for filter',
   })
+  @ApiQuery({ name: 'stockTab', required: false })
+  @ApiQuery({ name: 'stock_tab', required: false })
   async getStockColumnOptions(
     @Query('columnKey') columnKey: string,
     @Query('search') search?: string,
@@ -116,9 +123,12 @@ export class VinfastPartsController {
     @Query('limit') limit?: string,
     @Query('filters') filters?: string,
     @Query('vehicleType') vehicleType?: string,
+    @Query('stockTab') stockTab?: string,
+    @Query('stock_tab') stockTabSnake?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
+    const effectiveStockTab = stockTab || stockTabSnake;
     return this.vinfastPartsService.getStockColumnOptions(
       columnKey,
       search,
@@ -126,6 +136,7 @@ export class VinfastPartsController {
       limitNum,
       filters,
       vehicleType,
+      effectiveStockTab,
     );
   }
 

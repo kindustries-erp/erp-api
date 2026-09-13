@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -286,6 +287,22 @@ export class InvoicePortalService implements OnModuleInit {
         this.logger.warn(
           `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
         );
+
+        // Chặn retry nếu gặp lỗi 401/403 Unauthorized để tránh bị Cổng Thuế khóa tài khoản
+        const isAuthError =
+          err?.status === 401 ||
+          err?.status === 403 ||
+          err instanceof UnauthorizedException ||
+          err?.message?.includes('401') ||
+          err?.message?.includes('403');
+
+        if (isAuthError) {
+          this.logger.error(
+            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
+          );
+          break;
+        }
+
         if (attempt < maxRetries) {
           this.logger.log(
             `Chờ ${Math.round(retryDelayMs / 1000)}s trước khi thử lại đăng nhập...`,
@@ -395,6 +412,11 @@ export class InvoicePortalService implements OnModuleInit {
         } catch {
           errMessage = `Đăng nhập thất bại (HTTP ${res.status})`;
         }
+        if (res.status === 401 || res.status === 403) {
+          throw new UnauthorizedException(
+            `Đăng nhập Cổng Thuế thất bại (HTTP ${res.status}): ${errMessage}. Sai tài khoản/mật khẩu hoặc tài khoản bị khóa.`,
+          );
+        }
         throw new BadRequestException(errMessage);
       }
 
@@ -444,14 +466,14 @@ export class InvoicePortalService implements OnModuleInit {
   async checkTokenValid(token: string, cookies?: string): Promise<boolean> {
     if (!token) return false;
     try {
-      const url = `${InvoicePortalService.GDT_API_BASE_URL}/query/invoices/purchase?sort=tdlap%3Adesc&size=1`;
+      const url = InvoicePortalService.GDT_PROFILE_URL;
       const res = await fetchWithRetry(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           ...(cookies ? { Cookie: cookies } : {}),
         },
       });
-      return res.status !== 401 && res.status !== 403;
+      return res.ok && res.status !== 401 && res.status !== 403;
     } catch {
       return false;
     }
@@ -1474,21 +1496,35 @@ export class InvoicePortalService implements OnModuleInit {
 
       const json = await res.json();
 
-      const items = (json.hdhhdvu || []).map((i: any) => ({
-        description: i.ten,
-        unit: i.dvtinh,
-        quantity: i.sluong != null ? Number(i.sluong) : undefined,
-        unitPrice: i.dgia != null ? Number(i.dgia) : undefined,
-        preVatAmount: i.thtien != null ? Number(i.thtien) : 0,
-        vatRate:
-          i.tsuat != null
-            ? typeof i.tsuat === 'string'
-              ? parseFloat(i.tsuat)
-              : Number(i.tsuat)
-            : undefined,
-        vatAmount: i.tthue != null ? Number(i.tthue) : 0,
-        discountAmount: i.stckhau != null ? Number(i.stckhau) : 0,
-      }));
+      const items = (json.hdhhdvu || []).map((i: any) => {
+        const preVat = i.thtien != null ? Number(i.thtien) : 0;
+        let vRate: number | undefined = undefined;
+        if (i.tsuat != null) {
+          const n =
+            typeof i.tsuat === 'string' ? parseFloat(i.tsuat) : Number(i.tsuat);
+          if (!isNaN(n)) vRate = n;
+        }
+        const decimalRate =
+          vRate != null ? (Math.abs(vRate) > 1 ? vRate / 100 : vRate) : 0;
+        let vatAmt = i.tthue != null ? Number(i.tthue) : 0;
+        if (!vatAmt && decimalRate && preVat) {
+          vatAmt = Math.round(preVat * decimalRate);
+        }
+        const disc = i.stckhau != null ? Number(i.stckhau) : 0;
+        const total = preVat + vatAmt - disc;
+
+        return {
+          description: i.ten,
+          unit: i.dvtinh,
+          quantity: i.sluong != null ? Number(i.sluong) : undefined,
+          unitPrice: i.dgia != null ? Number(i.dgia) : undefined,
+          preVatAmount: preVat,
+          vatRate: vRate,
+          vatAmount: vatAmt,
+          discountAmount: disc,
+          totalAmount: total,
+        };
+      });
 
       const invoiceLineCount = items.length;
 

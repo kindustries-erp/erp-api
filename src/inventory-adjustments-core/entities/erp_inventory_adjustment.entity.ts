@@ -3,9 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 
 @Entity({ name: 'erp_inventory_adjustments' })
 export class ErpInventoryAdjustment {
@@ -15,6 +18,13 @@ export class ErpInventoryAdjustment {
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, name: 'adjustment_no' })
   adjustmentNo: string;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category: ErpModuleCategory | null;
 
   @Column({ type: 'timestamptz', name: 'adjustment_date' })
   adjustmentDate: Date;

@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InvoiceDashboardService } from './invoice-dashboard.service';
 
 @ApiTags('erp_invoices_dashboard')
@@ -13,7 +14,10 @@ import { InvoiceDashboardService } from './invoice-dashboard.service';
 export class InvoiceDashboardController {
   constructor(private readonly service: InvoiceDashboardService) {}
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('stats')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -26,7 +30,10 @@ export class InvoiceDashboardController {
     return this.service.getDashboardStats(dateFrom, dateTo, branchId);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('partners')
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
@@ -64,7 +71,10 @@ export class InvoiceDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('partners/:taxCode/stats')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -76,7 +86,10 @@ export class InvoiceDashboardController {
     return this.service.getPartnerStats(taxCode, dateFrom, dateTo);
   }
 
-  @RequirePermissions({ resource: 'invoices', action: 'read' })
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Get('export')
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -1,0 +1,29 @@
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class {{pascalCase migrationName}}{{timestamp}} implements MigrationInterface {
+  name = '{{pascalCase migrationName}}{{timestamp}}';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "{{snakeCase tableName}}" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "code" varchar(100) NOT NULL UNIQUE,
+        "name" varchar(255) NOT NULL,
+        "status" varchar(50) DEFAULT 'ACTIVE',
+        "notes" text,
+        "created_at" timestamptz DEFAULT now(),
+        "updated_at" timestamptz DEFAULT now(),
+        "deleted_at" timestamptz
+      );
+
+      CREATE INDEX IF NOT EXISTS "idx_{{snakeCase tableName}}_code" ON "{{snakeCase tableName}}" ("code");
+      CREATE INDEX IF NOT EXISTS "idx_{{snakeCase tableName}}_status" ON "{{snakeCase tableName}}" ("status");
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      DROP TABLE IF EXISTS "{{snakeCase tableName}}";
+    `);
+  }
+}

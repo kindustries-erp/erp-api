@@ -21,6 +21,8 @@ import { BankTransactionsCoreService } from '../../bank-transactions-core/bank-t
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
+import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
+
 @Injectable()
 export class InvoiceLifecycleService {
   private readonly logger = new Logger(InvoiceLifecycleService.name);
@@ -28,6 +30,8 @@ export class InvoiceLifecycleService {
   constructor(
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
+    @InjectRepository(ErpEntityAttributeValue)
+    private readonly entityAttrValueRepo: Repository<ErpEntityAttributeValue>,
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
@@ -38,17 +42,122 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async findOne(id: string) {
-    const data = await this.repository.findOne({
-      where: { id, isDeleted: false },
-      relations: [
-        'items',
-        'voucherNetOffs',
-        'voucherNetOffs.bankTransaction',
-        'attachments',
-        'attachments.attachment',
-      ],
-    });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      );
+
+    const relations = [
+      'items',
+      'voucherNetOffs',
+      'voucherNetOffs.bankTransaction',
+      'attachments',
+      'attachments.attachment',
+      'category',
+    ];
+
+    let data: ErpInvoice | null = null;
+    if (isUuid) {
+      data = await this.repository.findOne({
+        where: { id, isDeleted: false },
+        relations,
+      });
+    } else if (id.includes('_') || id.includes('-')) {
+      const sep = id.includes('_') ? '_' : '-';
+      const parts = id.split(sep);
+      const first = parts[0];
+      const rest = parts.slice(1).join(sep);
+
+      // Thử 1: Ký hiệu _ Số hóa đơn (serialNo = first, invoiceNo = rest)
+      data = await this.repository.findOne({
+        where: {
+          serialNo: first,
+          invoiceNo: rest,
+          isDeleted: false,
+        },
+        relations,
+      });
+
+      // Thử 2: Số hóa đơn _ Ký hiệu (invoiceNo = first, serialNo = rest)
+      if (!data) {
+        data = await this.repository.findOne({
+          where: {
+            invoiceNo: first,
+            serialNo: rest,
+            isDeleted: false,
+          },
+          relations,
+        });
+      }
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { invoiceNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data) {
+      data = await this.repository.findOne({
+        where: { serialNo: id, isDeleted: false },
+        relations,
+      });
+    }
+
+    if (!data && !isUuid) {
+      try {
+        data = await this.repository.findOne({
+          where: { id, isDeleted: false },
+          relations,
+        });
+      } catch {
+        // Ignore DB UUID syntax error if any
+      }
+    }
+
     if (!data) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
+
+    // Load custom attributes & global attributes
+    const entityAttrValues = await this.entityAttrValueRepo.find({
+      where: {
+        entityType: In(['INVOICE', 'INVOICE_IN', 'INVOICE_OUT']),
+        entityId: data.id,
+      },
+      relations: ['attrDef'],
+    });
+
+    const attributes: Record<string, any> = {};
+    const globalAttributes: Record<string, any> = {};
+    for (const ev of entityAttrValues) {
+      if (ev.attrDef?.isGlobal) {
+        globalAttributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          globalAttributes[ev.attrDef.code] = ev.valueText;
+        }
+      } else {
+        attributes[ev.attrDefId] = ev.valueText;
+        if (ev.attrDef?.code) {
+          attributes[ev.attrDef.code] = ev.valueText;
+        }
+      }
+    }
+
+    const attributeValues = entityAttrValues.map((ev) => ({
+      id: ev.id,
+      attrDefId: ev.attrDefId,
+      attrCode: ev.attrDef?.code,
+      attrName: ev.attrDef?.name,
+      fieldType: ev.attrDef?.fieldType,
+      valueText: ev.valueText,
+      isGlobal: ev.attrDef?.isGlobal || false,
+    }));
+
+    (data as any).attributes = attributes;
+    (data as any).globalAttributes = globalAttributes;
+    (data as any).customAttributes = attributes;
+    (data as any).attributeValues = attributeValues;
+
     return { message: 'Lấy thông tin thành công', data: toInvoiceDto(data) };
   }
 
@@ -57,8 +166,11 @@ export class InvoiceLifecycleService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateErpInvoiceDto) {
+    const createPayload: any = { ...dto };
+    delete createPayload.attributes;
+
     const invoice = this.repository.create({
-      ...dto,
+      ...createPayload,
       preVatAmount: String(dto.preVatAmount ?? 0),
       vatRate: dto.vatRate != null ? String(dto.vatRate) : null,
       vatAmount: String(dto.vatAmount ?? 0),
@@ -93,6 +205,7 @@ export class InvoiceLifecycleService {
     if (!existing) throw new NotFoundException(`Invoice ${id} không tìm thấy`);
 
     const updatePayload: any = { ...dto };
+    delete updatePayload.attributes;
     if (dto.preVatAmount != null)
       updatePayload.preVatAmount = String(dto.preVatAmount);
     if (dto.vatRate != null) updatePayload.vatRate = String(dto.vatRate);
@@ -268,6 +381,50 @@ export class InvoiceLifecycleService {
     }
 
     await this.repository.save(invoice);
+
+    // Sync to erp_entity_attribute_values
+    try {
+      const entityType =
+        invoice.taxInvoiceType === 'OUT' ? 'INVOICE_OUT' : 'INVOICE_IN';
+      const defs: { id: string }[] = await this.repository.manager.query(
+        `SELECT id FROM "erp_module_attribute_defs"
+         WHERE "module_key_global" = $1 AND "code" = 'is_valid' AND "is_deleted" = false
+         LIMIT 1`,
+        [entityType],
+      );
+
+      if (defs && defs.length > 0) {
+        const attrDefId = defs[0].id;
+        const valStr = isValid ? 'true' : 'false';
+
+        const existing: { id: string }[] = await this.repository.manager.query(
+          `SELECT id FROM "erp_entity_attribute_values"
+           WHERE "entity_type" IN ($1, 'INVOICE') AND "entity_id" = $2 AND "attr_def_id" = $3
+           LIMIT 1`,
+          [entityType, id, attrDefId],
+        );
+
+        if (existing && existing.length > 0) {
+          await this.repository.manager.query(
+            `UPDATE "erp_entity_attribute_values"
+             SET "value_text" = $1, "updated_at" = now()
+             WHERE "id" = $2`,
+            [valStr, existing[0].id],
+          );
+        } else {
+          await this.repository.manager.query(
+            `INSERT INTO "erp_entity_attribute_values" (
+               "id", "entity_type", "entity_id", "attr_def_id", "value_text", "created_at", "updated_at"
+             ) VALUES (
+               gen_random_uuid(), $1, $2, $3, $4, now(), now()
+             )`,
+            [entityType, id, attrDefId, valStr],
+          );
+        }
+      }
+    } catch (e) {
+      // Safe sync error catch to avoid blocking core response
+    }
   }
 
   // ---------------------------------------------------------------------------

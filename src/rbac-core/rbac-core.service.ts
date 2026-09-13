@@ -1,16 +1,22 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Brackets, Repository, In } from 'typeorm';
 import { CoreRole } from './entities/core-role.entity';
 import { CorePermission } from './entities/core-permission.entity';
 import { CoreUserRole } from './entities/core-user-role.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
 import {
   CreateCoreRoleDto,
+  ListCoreRolesDto,
   UpdateCoreRoleDto,
   UpdateCoreRolePermissionsDto,
   UpdateCoreRoleUsersDto,
 } from './dto/rbac-core.dto';
+import {
+  applyMultiKeywordFilter,
+  applyMultiKeywordMultiFieldFilter,
+} from '../common/utils/query-builder.util';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @Injectable()
 export class RbacCoreService {
@@ -27,18 +33,56 @@ export class RbacCoreService {
 
   async hasPermission(
     userId: string,
-    resource: string,
-    action: string,
+    resource: ErpResource | string,
+    action: ErpAction | string,
   ): Promise<boolean> {
     const permissions = await this.getUserPermissions(userId);
-    const matchResources = [resource, '*'];
-    if (resource === 'garage') {
-      matchResources.push('greenway_integration', 'kgara_integration');
-    }
-    return permissions.some(
+    return this.checkPermissionMatch(permissions, resource, action);
+  }
+
+  async hasAnyPermission(
+    userId: string,
+    requiredPermissions: Array<{
+      resource: ErpResource | string;
+      action: ErpAction | string;
+    }>,
+  ): Promise<boolean> {
+    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    const permissions = await this.getUserPermissions(userId);
+    return requiredPermissions.some((req) =>
+      this.checkPermissionMatch(permissions, req.resource, req.action),
+    );
+  }
+
+  async hasAllPermissions(
+    userId: string,
+    requiredPermissions: Array<{
+      resource: ErpResource | string;
+      action: ErpAction | string;
+    }>,
+  ): Promise<boolean> {
+    if (!requiredPermissions || requiredPermissions.length === 0) return true;
+    const permissions = await this.getUserPermissions(userId);
+    return requiredPermissions.every((req) =>
+      this.checkPermissionMatch(permissions, req.resource, req.action),
+    );
+  }
+
+  private checkPermissionMatch(
+    userPermissions: CorePermission[],
+    resource: ErpResource | string,
+    action: ErpAction | string,
+  ): boolean {
+    const matchResources: string[] = [
+      String(resource),
+      String(ErpResource.SUPER_ADMIN),
+      '*',
+    ];
+    const matchActions: string[] = [String(action), String(ErpAction.ALL), '*'];
+    return userPermissions.some(
       (p) =>
-        matchResources.includes(p.resource) &&
-        (p.action === action || p.action === '*'),
+        matchResources.includes(String(p.resource)) &&
+        matchActions.includes(String(p.action)),
     );
   }
 
@@ -70,26 +114,274 @@ export class RbacCoreService {
     return Array.from(uniquePermissionsMap.values());
   }
 
-  async getRolesPaginated(query: {
-    page?: string;
-    pageSize?: string;
-    search?: string;
-  }) {
-    const page = parseInt(query.page || '1', 10);
-    const pageSize = parseInt(query.pageSize || '20', 10);
+  private mapColumnToSqlField(column: string): string | null {
+    switch (column) {
+      case 'name':
+        return 'role.name';
+      case 'description':
+        return 'role.description';
+      case 'isActive':
+      case 'is_active':
+      case 'status':
+        return 'role.isActive';
+      case 'createdAt':
+        return 'role.createdAt';
+      default:
+        return null;
+    }
+  }
+
+  async getColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    const rawSqlField = this.mapColumnToSqlField(column);
+    if (!rawSqlField) {
+      return { items: [], total: 0, next: null };
+    }
+
+    const qb = this.roleRepository.createQueryBuilder('role');
+
+    // Cross-column filters
+    if (filtersStr) {
+      try {
+        const filters: Record<string, string[]> =
+          typeof filtersStr === 'string' ? JSON.parse(filtersStr) : filtersStr;
+        Object.entries(filters).forEach(([key, values], idx) => {
+          if (key !== column && Array.isArray(values) && values.length > 0) {
+            // 1. Support __ALL_MATCHING__
+            if (values[0] === '__ALL_MATCHING__') {
+              const searchStr = (values[1] || '').trim();
+              if (searchStr) {
+                const sqlField = this.mapColumnToSqlField(key);
+                if (sqlField) {
+                  applyMultiKeywordFilter(
+                    qb,
+                    sqlField,
+                    searchStr,
+                    `c_opt_flt_all_${idx}`,
+                  );
+                }
+              }
+              return;
+            }
+
+            const sqlField = this.mapColumnToSqlField(key);
+            if (sqlField) {
+              const hasBlank = values.includes('__BLANK__');
+              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
+              const pName = `c_opt_flt_${idx}`;
+
+              if (hasBlank && nonBlankValues.length > 0) {
+                qb.andWhere(
+                  new Brackets((sqb) => {
+                    sqb
+                      .where(`${sqlField} IN (:...${pName})`, {
+                        [pName]: nonBlankValues,
+                      })
+                      .orWhere(
+                        `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                      );
+                  }),
+                );
+              } else if (hasBlank) {
+                qb.andWhere(
+                  `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                );
+              } else if (nonBlankValues.length > 0) {
+                qb.andWhere(`${sqlField} IN (:...${pName})`, {
+                  [pName]: nonBlankValues,
+                });
+              }
+            }
+          }
+        });
+      } catch (e) {
+        // Ignore JSON error
+      }
+    }
+
+    qb.select(`${rawSqlField}`, 'value');
+    qb.addSelect('COUNT(*)', 'count');
+    qb.andWhere(
+      `${rawSqlField} IS NOT NULL AND CAST(${rawSqlField} AS text) != ''`,
+    );
+
+    if (search && search.trim()) {
+      applyMultiKeywordFilter(qb, rawSqlField, search.trim(), 'col_opt_search');
+    }
+
+    qb.groupBy(`${rawSqlField}`);
+    qb.orderBy(`${rawSqlField}`, 'ASC');
+
+    const countQb = qb.clone();
+    const totalRaw = await countQb.getRawMany();
+    const total = totalRaw.length;
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const rows = await qb.getRawMany();
+
+    const items = rows.map((r) => {
+      let label = String(r.value);
+      if (
+        column === 'isActive' ||
+        column === 'is_active' ||
+        column === 'status'
+      ) {
+        label = r.value === true || r.value === 'true' ? 'Hoạt động' : 'Ngưng';
+      }
+      return {
+        label,
+        value: String(r.value),
+      };
+    });
+
+    const next = page * pageSize < total ? page + 1 : null;
+    return { items, total, next };
+  }
+
+  async getRolesPaginated(query: ListCoreRolesDto) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.max(1, Number(query.pageSize) || 20);
     const qb = this.roleRepository
       .createQueryBuilder('role')
       .leftJoinAndSelect('role.userRoles', 'ur')
-      .leftJoinAndSelect('ur.user', 'user')
-      .orderBy('role.createdAt', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
+      .leftJoinAndSelect('ur.user', 'user');
 
-    if (query.search) {
-      qb.andWhere('role.name ILIKE :search OR role.description ILIKE :search', {
-        search: `%${query.search}%`,
-      });
+    if (query.search && query.search.trim()) {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        ['role.name', 'role.description'],
+        query.search.trim(),
+        'global_search',
+      );
     }
+
+    // Column Search
+    if (query.column_search) {
+      try {
+        const searches: Record<string, string> =
+          typeof query.column_search === 'string'
+            ? JSON.parse(query.column_search)
+            : query.column_search;
+        Object.entries(searches).forEach(([key, val], idx) => {
+          if (val && typeof val === 'string' && val.trim()) {
+            const sqlField = this.mapColumnToSqlField(key);
+            if (sqlField) {
+              applyMultiKeywordFilter(
+                qb,
+                sqlField,
+                val.trim(),
+                `col_search_${idx}`,
+              );
+            }
+          }
+        });
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    // Column Filters
+    if (query.column_filters) {
+      try {
+        const filters: Record<string, string[]> =
+          typeof query.column_filters === 'string'
+            ? JSON.parse(query.column_filters)
+            : query.column_filters;
+        Object.entries(filters).forEach(([key, values], idx) => {
+          if (Array.isArray(values) && values.length > 0) {
+            // 1. Support __ALL_MATCHING__
+            if (values[0] === '__ALL_MATCHING__') {
+              const searchStr = (values[1] || '').trim();
+              if (searchStr) {
+                const sqlField = this.mapColumnToSqlField(key);
+                if (sqlField) {
+                  applyMultiKeywordFilter(
+                    qb,
+                    sqlField,
+                    searchStr,
+                    `col_filter_all_${idx}`,
+                  );
+                }
+              }
+              return;
+            }
+
+            const sqlField = this.mapColumnToSqlField(key);
+            if (sqlField) {
+              const hasBlank = values.includes('__BLANK__');
+              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
+              const pName = `col_filter_${idx}`;
+
+              if (hasBlank && nonBlankValues.length > 0) {
+                qb.andWhere(
+                  new Brackets((sqb) => {
+                    sqb
+                      .where(`${sqlField} IN (:...${pName})`, {
+                        [pName]: nonBlankValues,
+                      })
+                      .orWhere(
+                        `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                      );
+                  }),
+                );
+              } else if (hasBlank) {
+                qb.andWhere(
+                  `(${sqlField} IS NULL OR CAST(${sqlField} AS text) = '')`,
+                );
+              } else if (nonBlankValues.length > 0) {
+                qb.andWhere(`${sqlField} IN (:...${pName})`, {
+                  [pName]: nonBlankValues,
+                });
+              }
+            }
+          }
+        });
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    // Date range filter
+    if (query.date_from) {
+      qb.andWhere('role.createdAt >= :dateFrom', { dateFrom: query.date_from });
+    }
+    if (query.date_to) {
+      const dTo =
+        query.date_to.length === 10
+          ? `${query.date_to} 23:59:59.999`
+          : query.date_to;
+      qb.andWhere('role.createdAt <= :dateTo', { dateTo: dTo });
+    }
+
+    // Sorts
+    if (query.sorts) {
+      const sortList = Array.isArray(query.sorts) ? query.sorts : [query.sorts];
+      let hasOrder = false;
+      sortList.forEach((s) => {
+        if (typeof s === 'string' && s.trim()) {
+          const isDesc = s.startsWith('-');
+          const fieldKey = isDesc ? s.substring(1) : s;
+          const sqlField = this.mapColumnToSqlField(fieldKey);
+          if (sqlField) {
+            qb.addOrderBy(sqlField, isDesc ? 'DESC' : 'ASC');
+            hasOrder = true;
+          }
+        }
+      });
+      if (!hasOrder) {
+        qb.orderBy('role.createdAt', 'DESC');
+      }
+    } else {
+      qb.orderBy('role.createdAt', 'DESC');
+    }
+
+    qb.skip((page - 1) * pageSize);
+    qb.take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
 
@@ -99,9 +391,10 @@ export class RbacCoreService {
       name: role.name,
       description: role.description,
       is_active: role.isActive,
-      users: role.userRoles.map((ur) => ({
-        id: ur.user.id,
-        email: ur.user.email,
+      createdAt: role.createdAt,
+      users: (role.userRoles || []).map((ur) => ({
+        id: ur.user?.id,
+        email: ur.user?.email,
       })),
     }));
 
@@ -183,7 +476,6 @@ export class RbacCoreService {
       { resource: '*', label: 'All Resources (Super Admin)' },
       { resource: 'admin_users', label: 'Admin Users' },
       { resource: 'employees', label: 'Employees' },
-      { resource: 'cash_funds', label: 'Cash Funds' },
       { resource: 'business_partners', label: 'Business Partners' },
       { resource: 'purchase_orders', label: 'Purchase Orders' },
       { resource: 'sales_orders', label: 'Sales Orders' },
@@ -198,7 +490,6 @@ export class RbacCoreService {
       { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
       { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
-      { resource: 'greenway_integration', label: 'Garage / Kgara (Legacy)' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
@@ -207,17 +498,19 @@ export class RbacCoreService {
       { resource: 'sales_reports', label: 'Sales Reports' },
       { resource: 'purchasing_reports', label: 'Purchasing Reports' },
       { resource: 'sys_tags', label: 'Tags' },
-      { resource: 'bank_accounts', label: 'Bank Accounts & Cash Books' },
-      { resource: 'bank_statements', label: 'Bank Statements (Import)' },
+      {
+        resource: 'bank_statements',
+        label: 'Bank Statements & Accounts (Ngân hàng)',
+      },
+      {
+        resource: 'cash_statements',
+        label: 'Cash Statements & Books (Sổ quỹ tiền mặt)',
+      },
       {
         resource: 'purchase_requests',
         label: 'Purchase Requests / Yêu cầu mua hàng',
       },
       { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
-      {
-        resource: 'kgara_integration',
-        label: 'Kgara Integration (Garage)',
-      },
       {
         resource: 'vinfast',
         label: 'Vinfast (Phụ tùng & Xưởng)',

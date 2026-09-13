@@ -166,6 +166,15 @@ export class KgaraCase {
 
   // ── ERP Local columns ─────────────────────────────────────────────────────
 
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'classification',
+    nullable: true,
+  })
+  classification: string | null;
+
   @Column({ type: 'varchar', name: 'erp_notes', nullable: true })
   erpNotes: string | null;
 

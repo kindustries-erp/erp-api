@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { EmployeesCoreService } from './employees-core.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -20,7 +21,10 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 @ApiTags('erp_employees')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@RequirePermissions({ resource: 'employees', action: 'manage' })
+@RequirePermissions({
+  resource: ErpResource.EMPLOYEES,
+  action: ErpAction.MANAGE,
+})
 @Controller('employees')
 export class EmployeesCoreController {
   constructor(private readonly service: EmployeesCoreService) {}

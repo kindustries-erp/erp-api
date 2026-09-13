@@ -23,16 +23,30 @@ export class TransactionAnalyticsService {
       );
 
     if (filter.startDate) {
-      qb.andWhere('txn.transDate >= :startDate', {
-        startDate: filter.startDate,
-      });
+      if (filter.startDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
+          { startDate: filter.startDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') >= :startDate::timestamp",
+          { startDate: filter.startDate },
+        );
+      }
     }
     if (filter.endDate) {
-      const eDate =
-        filter.endDate.length === 10
-          ? `${filter.endDate} 23:59:59.999`
-          : filter.endDate;
-      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+      if (filter.endDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
+          { endDate: filter.endDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') <= :endDate::timestamp",
+          { endDate: filter.endDate },
+        );
+      }
     }
     if (filter.sourceType) {
       qb.andWhere('txn.sourceType = :sourceType', {
@@ -266,16 +280,30 @@ export class TransactionAnalyticsService {
       .where('txn.isDeleted = :isDeleted', { isDeleted: false });
 
     if (filter.startDate) {
-      qb.andWhere('txn.transDate >= :startDate', {
-        startDate: filter.startDate,
-      });
+      if (filter.startDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
+          { startDate: filter.startDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') >= :startDate::timestamp",
+          { startDate: filter.startDate },
+        );
+      }
     }
     if (filter.endDate) {
-      const eDate =
-        filter.endDate.length === 10
-          ? `${filter.endDate} 23:59:59.999`
-          : filter.endDate;
-      qb.andWhere('txn.transDate <= :endDate', { endDate: eDate });
+      if (filter.endDate.length === 10) {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
+          { endDate: filter.endDate },
+        );
+      } else {
+        qb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') <= :endDate::timestamp",
+          { endDate: filter.endDate },
+        );
+      }
     }
     if (filter.sourceType) {
       qb.andWhere('txn.sourceType = :sourceType', {
@@ -410,18 +438,30 @@ export class TransactionAnalyticsService {
       .where('txn.is_deleted = :isDeleted', { isDeleted: false });
 
     if (filter.startDate) {
-      categoryBreakdownQb.andWhere('txn.trans_date >= :startDate', {
-        startDate: filter.startDate,
-      });
+      if (filter.startDate.length === 10) {
+        categoryBreakdownQb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
+          { startDate: filter.startDate },
+        );
+      } else {
+        categoryBreakdownQb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') >= :startDate::timestamp",
+          { startDate: filter.startDate },
+        );
+      }
     }
     if (filter.endDate) {
-      const eDate =
-        filter.endDate.length === 10
-          ? `${filter.endDate} 23:59:59.999`
-          : filter.endDate;
-      categoryBreakdownQb.andWhere('txn.trans_date <= :endDate', {
-        endDate: eDate,
-      });
+      if (filter.endDate.length === 10) {
+        categoryBreakdownQb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
+          { endDate: filter.endDate },
+        );
+      } else {
+        categoryBreakdownQb.andWhere(
+          "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') <= :endDate::timestamp",
+          { endDate: filter.endDate },
+        );
+      }
     }
     if (filter.sourceType) {
       categoryBreakdownQb.andWhere('txn.source_type = :sourceType', {

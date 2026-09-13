@@ -73,6 +73,7 @@ describe('BankTransactionsCoreService facade delegation', () => {
       transactionQueryService,
       transactionAnalyticsService,
       transactionAccountingService,
+      {} as any,
     );
   });
 

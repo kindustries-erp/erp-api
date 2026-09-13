@@ -42,5 +42,12 @@ export function toInvoiceDto(invoice: ErpInvoice & { netOffAmount?: string }) {
       : undefined,
     voucherNetOffs: invoice.voucherNetOffs,
     attachments: invoice.attachments,
+    category: invoice.category || null,
+    categoryId: invoice.categoryId || null,
+    attributes: (invoice as any).attributes || {},
+    globalAttributes: (invoice as any).globalAttributes || {},
+    customAttributes:
+      (invoice as any).customAttributes || (invoice as any).attributes || {},
+    attributeValues: (invoice as any).attributeValues || [],
   };
 }
