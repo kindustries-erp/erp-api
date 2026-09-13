@@ -49,6 +49,15 @@ export class BusinessPartnersCoreController {
     resource: ErpResource.BUSINESS_PARTNERS,
     action: ErpAction.READ,
   })
+  @Get('next-code')
+  getNextCode(@Query('partnerType') partnerType?: string) {
+    return this.service.getNextCode(partnerType);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.BUSINESS_PARTNERS,
+    action: ErpAction.READ,
+  })
   @Get('column-options')
   async getColumnOptions(
     @Query('column') column: string,

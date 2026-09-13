@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -40,8 +44,68 @@ export class BusinessPartnersCoreService {
     return map[column] ?? null;
   }
 
+  async generateNextCode(partnerType?: string): Promise<string> {
+    const isVendor = !partnerType || partnerType.toUpperCase() === 'VENDOR';
+    const isCustomer = partnerType?.toUpperCase() === 'CUSTOMER';
+    const prefix = isVendor ? 'NCC-' : isCustomer ? 'KH-' : 'DT-';
+
+    const partners = await this.repository
+      .createQueryBuilder('bp')
+      .select('bp.code', 'code')
+      .where('bp.code LIKE :prefix', { prefix: `${prefix}%` })
+      .orWhere('bp.partnerType = :partnerType', {
+        partnerType: isVendor
+          ? 'VENDOR'
+          : isCustomer
+            ? 'CUSTOMER'
+            : partnerType,
+      })
+      .getRawMany();
+
+    let maxSeq = 0;
+    for (const p of partners) {
+      if (!p.code) continue;
+      const match = String(p.code).match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    return `${prefix}${String(nextSeq).padStart(3, '0')}`;
+  }
+
+  async getNextCode(partnerType?: string): Promise<{ nextCode: string }> {
+    const nextCode = await this.generateNextCode(partnerType);
+    return { nextCode };
+  }
+
   async create(dto: CreateBusinessPartnerDto) {
-    const entity = this.repository.create(dto as any);
+    let code = dto.code ? dto.code.trim().toUpperCase() : '';
+    if (!code) {
+      code = await this.generateNextCode(dto.partnerType);
+    }
+
+    // Check duplicate code
+    const existing = await this.repository
+      .createQueryBuilder('bp')
+      .where('LOWER(bp.code) = LOWER(:code)', { code })
+      .andWhere('bp.isDeleted = false')
+      .getOne();
+
+    if (existing) {
+      throw new BadRequestException(
+        `Mã đối tác "${code}" đã tồn tại trên hệ thống`,
+      );
+    }
+
+    const entity = this.repository.create({
+      ...dto,
+      code,
+    } as any);
     const data = await this.repository.save(entity);
     return { message: 'Tạo thành công', data };
   }
@@ -314,7 +378,31 @@ export class BusinessPartnersCoreService {
   }
 
   async update(id: string, dto: UpdateBusinessPartnerDto) {
-    await this.repository.update(id, dto as any);
+    const existing = await this.repository.findOneBy({ id, isDeleted: false });
+    if (!existing) {
+      throw new NotFoundException(`Business partner ${id} not found`);
+    }
+
+    const updatePayload = { ...dto } as any;
+
+    if (dto.code && dto.code.trim()) {
+      const code = dto.code.trim().toUpperCase();
+      const dup = await this.repository
+        .createQueryBuilder('bp')
+        .where('LOWER(bp.code) = LOWER(:code)', { code })
+        .andWhere('bp.id != :id', { id })
+        .andWhere('bp.isDeleted = false')
+        .getOne();
+
+      if (dup) {
+        throw new BadRequestException(
+          `Mã đối tác "${code}" đã tồn tại trên hệ thống`,
+        );
+      }
+      updatePayload.code = code;
+    }
+
+    await this.repository.update(id, updatePayload);
     const data = await this.repository.findOneByOrFail({
       id,
       isDeleted: false,

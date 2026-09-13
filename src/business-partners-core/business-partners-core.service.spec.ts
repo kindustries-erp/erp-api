@@ -12,6 +12,7 @@ describe('BusinessPartnersCoreService', () => {
     qb = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
@@ -38,6 +39,7 @@ describe('BusinessPartnersCoreService', () => {
         { value: 'ACTIVE', count: '10' },
         { value: 'INACTIVE', count: '2' },
       ]),
+      getOne: jest.fn().mockResolvedValue(null),
     };
     qb.clone.mockReturnValue(qb);
 
@@ -77,6 +79,36 @@ describe('BusinessPartnersCoreService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('generateNextCode and getNextCode', () => {
+    it('should generate next vendor code formatted as NCC-XXX', async () => {
+      qb.getRawMany.mockResolvedValueOnce([
+        { code: 'NCC-001' },
+        { code: 'NCC-005' },
+        { code: 'NCC-013' },
+      ]);
+
+      const result = await service.getNextCode('VENDOR');
+      expect(result).toEqual({ nextCode: 'NCC-014' });
+    });
+
+    it('should generate NCC-001 if no existing partners found', async () => {
+      qb.getRawMany.mockResolvedValueOnce([]);
+
+      const result = await service.getNextCode('VENDOR');
+      expect(result).toEqual({ nextCode: 'NCC-001' });
+    });
+
+    it('should generate next customer code formatted as KH-XXX', async () => {
+      qb.getRawMany.mockResolvedValueOnce([
+        { code: 'KH-001' },
+        { code: 'KH-006' },
+      ]);
+
+      const result = await service.getNextCode('CUSTOMER');
+      expect(result).toEqual({ nextCode: 'KH-007' });
+    });
   });
 
   describe('findAll', () => {
@@ -151,26 +183,68 @@ describe('BusinessPartnersCoreService', () => {
   });
 
   describe('create and update', () => {
-    it('should create a business partner', async () => {
+    it('should create a business partner with provided code', async () => {
+      qb.getOne.mockResolvedValueOnce(null); // no duplicate
+
       const result = await service.create({
-        code: 'KH-002',
+        code: 'NCC-002',
         name: 'Công ty XYZ',
-        partnerType: 'CUSTOMER',
+        partnerType: 'VENDOR',
       } as any);
 
-      expect(repository.create).toHaveBeenCalled();
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'NCC-002',
+          name: 'Công ty XYZ',
+        }),
+      );
       expect(repository.save).toHaveBeenCalled();
       expect(result.message).toBe('Tạo thành công');
     });
 
+    it('should auto-generate code if code is omitted or empty', async () => {
+      qb.getRawMany.mockResolvedValueOnce([{ code: 'NCC-013' }]);
+      qb.getOne.mockResolvedValueOnce(null); // no duplicate
+
+      const result = await service.create({
+        code: '',
+        name: 'Nhà cung cấp mới',
+        partnerType: 'VENDOR',
+      } as any);
+
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'NCC-014',
+          name: 'Nhà cung cấp mới',
+        }),
+      );
+      expect(result.message).toBe('Tạo thành công');
+    });
+
+    it('should throw BadRequestException if duplicate code on create', async () => {
+      qb.getOne.mockResolvedValueOnce({ id: 'uuid-existing', code: 'NCC-001' });
+
+      await expect(
+        service.create({
+          code: 'NCC-001',
+          name: 'Nhà cung cấp trùng',
+          partnerType: 'VENDOR',
+        } as any),
+      ).rejects.toThrow('Mã đối tác "NCC-001" đã tồn tại trên hệ thống');
+    });
+
     it('should update a business partner', async () => {
+      qb.getOne.mockResolvedValueOnce(null); // no duplicate
       const result = await service.update('uuid-1', {
         name: 'Công ty ABC Cập nhật',
       } as any);
 
-      expect(repository.update).toHaveBeenCalledWith('uuid-1', {
-        name: 'Công ty ABC Cập nhật',
-      });
+      expect(repository.update).toHaveBeenCalledWith(
+        'uuid-1',
+        expect.objectContaining({
+          name: 'Công ty ABC Cập nhật',
+        }),
+      );
       expect(result.message).toBe('Cập nhật thành công');
     });
   });
