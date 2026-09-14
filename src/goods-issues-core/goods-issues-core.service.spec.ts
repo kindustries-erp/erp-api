@@ -25,11 +25,30 @@ describe('GoodsIssuesCoreService stock and reserve invariants', () => {
       transaction: jest.fn(async (cb: any) => cb(manager)),
     } as unknown as DataSource;
 
+    const mockSystemOps = {
+      startOperation: jest.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: jest.fn().mockResolvedValue({}),
+      failOperation: jest.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: jest.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: jest.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: jest.fn().mockResolvedValue(0),
+    } as any;
+
+    const mockRepo = {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'gi1', issueNo: 'GI-001', status: 'DRAFT' }),
+    } as any;
+
     const service = new GoodsIssuesCoreService(
       dataSource,
+      mockRepo,
       {} as any,
       {} as any,
-      {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
 
     jest.spyOn(service, 'findOne').mockResolvedValue({ ok: true } as any);

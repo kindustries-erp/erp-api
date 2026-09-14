@@ -47,6 +47,8 @@ Phân hệ `erp-inventory-tracking` (thuộc `inventory-core`) đóng vai trò l
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính |
 | `item_id` | `uuid` | YES | `NULL` | FK $\to$ `erp_inventory_items.id` |
 | `serial_no` | `varchar(255)` | NO | | Số Serial hoặc Số Serial xe (COC 3) |
+| `system_serial_no` | `varchar(255)` | YES | `NULL` | Mã System Serial sinh tự động ngầm (`SYS-<SKU>-<YYMMDD>-<000001>`) |
+| `tracking_type` | `varchar(50)` | NO | `'USER_DECLARED'` | Phân loại: `USER_DECLARED` (khai báo thủ công/xe) hoặc `SYSTEM_AUTO` (sinh tự động ngầm) |
 | `status` | `varchar(50)` | NO | `'IN_STOCK'` | Trạng thái: `IN_STOCK`, `RESERVED`, `ISSUED`, `ASSEMBLED`, `SOLD`, `RETURNED`, `SCRAPPED` |
 | `vin_id` | `uuid` | YES | `NULL` | FK $\to$ `erp_vehicles.id` (Chỉ dùng cho policy `VEHICLE`) |
 | `custom_id` | `uuid` | YES | `NULL` | FK $\to$ `erp_inventory_tracking_customs.id` |
@@ -87,7 +89,7 @@ Phân hệ `erp-inventory-tracking` (thuộc `inventory-core`) đóng vai trò l
 ```text
 src/inventory-core/
 ├── entities/
-│   ├── erp_inventory_tracking_serial.entity.ts # Entity Serial/VIN trung tâm
+│   ├── erp_inventory_tracking_serial.entity.ts # Entity Serial/VIN trung tâm (thêm system_serial_no & tracking_type)
 │   ├── erp_inventory_tracking_lot.entity.ts    # Entity Quản lý Lô (Lot)
 │   ├── erp_inventory_tracking_custom.entity.ts # Entity Quản lý Custom Barcode
 │   └── erp_serial_lifecycle.entity.ts          # Entity Vòng đời & Bảo hành điện tử
@@ -98,6 +100,7 @@ src/inventory-core/
 │   └── update-serial-lifecycle.dto.ts          # DTO cập nhật vòng đời bảo hành
 ├── services/
 │   ├── inventory-serial.service.ts             # Service nghiệp vụ serial, lifecycles, bàn giao xe
+│   ├── inventory-system-serial.service.ts      # Service sinh ngầm System Serials tự động khi Ghi sổ (POSTED)
 │   ├── inventory-lot.service.ts                # Service quản lý lô và hạn sử dụng
 │   └── inventory-custom.service.ts             # Service quản lý barcode tùy chỉnh
 └── inventory-core.controller.ts                # Controller các endpoints /api/v1/inventory/serials/*

@@ -13,6 +13,7 @@ import { GoodsReceiptsCoreService } from './goods-receipts-core.service';
 import { GoodsReceiptsCronService } from './goods-receipts-cron.service';
 import { DocumentDependenciesCoreModule } from '../document-dependencies-core/document-dependencies-core.module';
 import { CompanyProfileModule } from '../company-profile/company-profile.module';
+import { InventoryCoreModule } from '../inventory-core/inventory-core.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CompanyProfileModule } from '../company-profile/company-profile.module'
     ]),
     DocumentDependenciesCoreModule,
     CompanyProfileModule,
+    InventoryCoreModule,
   ],
   controllers: [GoodsReceiptsCoreController],
   providers: [GoodsReceiptsCoreService, GoodsReceiptsCronService],
