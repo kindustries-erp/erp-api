@@ -24,23 +24,43 @@ export class SyncGrossProfitService {
       `Syncing gross profit ONLY for branch ${branchExternalId}...`,
     );
     try {
-      const dateRangesToSync: { from: string; to: string }[] = [];
+      const monthsToSync = new Set<string>();
       const parsedFrom = parseSafeDate(from);
       const parsedTo = parseSafeDate(to);
 
       if (parsedFrom && parsedTo) {
-        dateRangesToSync.push({
-          from: parsedFrom.toISOString().split('T')[0],
-          to: parsedTo.toISOString().split('T')[0],
-        });
+        let curr = new Date(parsedFrom.getFullYear(), parsedFrom.getMonth(), 1);
+        const endMonth = new Date(
+          parsedTo.getFullYear(),
+          parsedTo.getMonth(),
+          1,
+        );
+        while (curr <= endMonth) {
+          monthsToSync.add(
+            `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}`,
+          );
+          curr = new Date(curr.getFullYear(), curr.getMonth() + 1, 1);
+        }
       } else {
         const now = new Date();
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        dateRangesToSync.push({
-          from: firstDay.toLocaleDateString('en-CA'),
-          to: lastDay.toLocaleDateString('en-CA'),
-        });
+        for (let i = 2; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          monthsToSync.add(
+            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+          );
+        }
+      }
+
+      const dateRangesToSync: { from: string; to: string }[] = [];
+      for (const yyyyMm of Array.from(monthsToSync).sort()) {
+        const [y, m] = yyyyMm.split('-');
+        const fd = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
+          'en-CA',
+        );
+        const ld = new Date(Number(y), Number(m), 0).toLocaleDateString(
+          'en-CA',
+        );
+        dateRangesToSync.push({ from: fd, to: ld });
       }
 
       for (const range of dateRangesToSync) {

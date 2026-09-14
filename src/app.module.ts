@@ -52,10 +52,12 @@ import { EmailIngestModule } from './email-ingest/email-ingest.module';
 import { OperatingExpensesCoreModule } from './operating-expenses-core/operating-expenses-core.module';
 import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
+import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 
 @Module({
   imports: [
     ...(isCronEnabled() ? [ScheduleModule.forRoot()] : []),
+    SystemOperationsCoreModule,
     ReportsCoreModule,
     CommonModule,
     ConfigModule.forRoot({ isGlobal: true }),

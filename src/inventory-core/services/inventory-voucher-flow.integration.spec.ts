@@ -22,6 +22,9 @@ import { ErpVehicle } from '../../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpSerialLifecycle } from '../entities/erp_serial_lifecycle.entity';
 import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+
+const j: any = jest;
+
 describe('Inventory voucher posting chain integration', () => {
   function makeManager(repoMap: Map<any, any>) {
     return {
@@ -253,18 +256,33 @@ describe('Inventory voucher posting chain integration', () => {
     const manager = makeManager(repoMap);
     const dataSource = makeDataSource(manager);
 
+    const mockSystemOps = {
+      startOperation: j.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: j.fn().mockResolvedValue({}),
+      failOperation: j.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: j.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: j.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: j.fn().mockResolvedValue(0),
+    } as any;
+
     const grService = new GoodsReceiptsCoreService(
       dataSource,
-      {} as any,
+      { findOneBy: j.fn().mockResolvedValue(receipt) } as any,
       {} as any,
       dependencyService as any,
       {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
     const giService = new GoodsIssuesCoreService(
       dataSource,
+      { findOneBy: j.fn().mockResolvedValue(issue) } as any,
       {} as any,
       {} as any,
-      {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
     jest.spyOn(giService, 'findOne').mockResolvedValue({ ok: true } as any);
     const iaService = new InventoryAdjustmentsCoreService(
@@ -483,11 +501,24 @@ describe('Inventory voucher posting chain integration', () => {
     const manager = makeManager(repoMap);
     const dataSource = makeDataSource(manager);
 
+    const mockSystemOps = {
+      startOperation: j.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: j.fn().mockResolvedValue({}),
+      failOperation: j.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: j.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: j.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: j.fn().mockResolvedValue(0),
+    } as any;
+
     const giService = new GoodsIssuesCoreService(
       dataSource,
+      { findOneBy: j.fn().mockResolvedValue(issue) } as any,
       {} as any,
       {} as any,
-      {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
     jest.spyOn(giService, 'findOne').mockResolvedValue({ ok: true } as any);
 
@@ -655,11 +686,24 @@ describe('Inventory voucher posting chain integration', () => {
     const manager = makeManager(repoMap);
     const dataSource = makeDataSource(manager);
 
+    const mockSystemOps = {
+      startOperation: j.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: j.fn().mockResolvedValue({}),
+      failOperation: j.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: j.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: j.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: j.fn().mockResolvedValue(0),
+    } as any;
+
     const giService = new GoodsIssuesCoreService(
       dataSource,
+      { findOneBy: j.fn().mockResolvedValue(issue) } as any,
       {} as any,
       {} as any,
-      {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
     jest.spyOn(giService, 'findOne').mockResolvedValue({ ok: true } as any);
 

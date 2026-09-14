@@ -20,6 +20,7 @@ import { InventorySerialService } from './services/inventory-serial.service';
 import { InventoryDashboardService } from './services/inventory-dashboard.service';
 import { InventoryLotService } from './services/inventory-lot.service';
 import { InventoryCustomService } from './services/inventory-custom.service';
+import { InventorySystemSerialService } from './services/inventory-system-serial.service';
 
 @Module({
   imports: [
@@ -46,8 +47,9 @@ import { InventoryCustomService } from './services/inventory-custom.service';
     InventoryDashboardService,
     InventoryLotService,
     InventoryCustomService,
+    InventorySystemSerialService,
     InventoryItemsService,
   ],
-  exports: [InventoryItemsService],
+  exports: [InventoryItemsService, InventorySystemSerialService],
 })
 export class InventoryCoreModule {}
