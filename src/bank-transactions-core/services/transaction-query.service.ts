@@ -212,7 +212,7 @@ export class TransactionQueryService {
             continue;
           }
 
-          if (col === 'account') {
+          if (col === 'account' || col === 'source') {
             if (filter.sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (filter.sourceType === 'CASH')
               filterField = 'txn.cashBookId';
@@ -221,11 +221,18 @@ export class TransactionQueryService {
             filterField =
               "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
           else if (col === 'description') filterField = 'txn.description';
-          else if (col === 'thu') filterField = 'txn.creditAmount';
-          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'thu' || col === 'creditAmount')
+            filterField = 'txn.creditAmount';
+          else if (col === 'chi' || col === 'debitAmount')
+            filterField = 'txn.debitAmount';
           else if (col === 'balance') filterField = 'txn.balance';
-          else if (col === 'correspondentName')
-            filterField = 'txn.correspondentName';
+          else if (
+            col === 'correspondentName' ||
+            col === 'partner' ||
+            col === 'partnerName'
+          )
+            filterField =
+              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
           else if (col === 'correspondentAccount')
             filterField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
@@ -339,7 +346,7 @@ export class TransactionQueryService {
           }
 
           let searchField = '';
-          if (col === 'account') {
+          if (col === 'account' || col === 'source') {
             if (filter.sourceType === 'BANK')
               searchField = 'bankAccount.bankName';
             else if (filter.sourceType === 'CASH')
@@ -348,14 +355,21 @@ export class TransactionQueryService {
           } else if (col === 'transDate')
             searchField = "TO_CHAR(txn.transDate, 'DD/MM/YYYY')";
           else if (col === 'description') searchField = 'txn.description';
-          else if (col === 'thu') searchField = 'txn.creditAmount';
-          else if (col === 'chi') searchField = 'txn.debitAmount';
+          else if (col === 'thu' || col === 'creditAmount')
+            searchField = 'txn.creditAmount';
+          else if (col === 'chi' || col === 'debitAmount')
+            searchField = 'txn.debitAmount';
           else if (col === 'balance') searchField = 'txn.balance';
           else if (col === 'netOffAmount') searchField = netOffSubquery;
           else if (col === 'remainingAmount')
             searchField = remainingAmountSubquery;
-          else if (col === 'correspondentName')
-            searchField = 'txn.correspondentName';
+          else if (
+            col === 'correspondentName' ||
+            col === 'partner' ||
+            col === 'partnerName'
+          )
+            searchField =
+              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
           else if (col === 'correspondentAccount')
             searchField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
@@ -375,7 +389,9 @@ export class TransactionQueryService {
             } else if (
               [
                 'thu',
+                'creditAmount',
                 'chi',
+                'debitAmount',
                 'balance',
                 'netOffAmount',
                 'remainingAmount',
@@ -456,7 +472,7 @@ export class TransactionQueryService {
     let selectField = '';
     let labelField = '';
 
-    if (column === 'account') {
+    if (column === 'account' || column === 'source') {
       if (sourceType === 'BANK') {
         qb.leftJoin('txn.bankAccount', 'bankAccount');
         selectField = 'txn.bankAccountId';
@@ -475,15 +491,22 @@ export class TransactionQueryService {
       selectField =
         "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
     else if (column === 'description') selectField = 'txn.description';
-    else if (column === 'thu') selectField = 'txn.creditAmount';
-    else if (column === 'chi') selectField = 'txn.debitAmount';
+    else if (column === 'thu' || column === 'creditAmount')
+      selectField = 'txn.creditAmount';
+    else if (column === 'chi' || column === 'debitAmount')
+      selectField = 'txn.debitAmount';
     else if (column === 'netOffAmount')
       selectField = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
     else if (column === 'remainingAmount')
       selectField = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0))`;
     else if (column === 'balance') selectField = 'txn.balance';
-    else if (column === 'correspondentName')
-      selectField = 'txn.correspondentName';
+    else if (
+      column === 'correspondentName' ||
+      column === 'partner' ||
+      column === 'partnerName'
+    )
+      selectField =
+        "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
     else if (column === 'correspondentAccount')
       selectField = 'txn.correspondentAccount';
     else if (column === 'correspondentBank')
@@ -499,10 +522,7 @@ export class TransactionQueryService {
       qb.innerJoin('netoff.invoice', 'inv');
       selectField = `CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END`;
       labelField = selectField;
-    } else if (column === 'partner')
-      selectField =
-        "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
-    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    } else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     if (!labelField) labelField = selectField;
 
@@ -527,7 +547,7 @@ export class TransactionQueryService {
           const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
           const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
 
-          if (col === 'account') {
+          if (col === 'account' || col === 'source') {
             if (sourceType === 'BANK') filterField = 'txn.bankAccountId';
             else if (sourceType === 'CASH') filterField = 'txn.cashBookId';
             else filterField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
@@ -535,14 +555,21 @@ export class TransactionQueryService {
             filterField =
               "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
           else if (col === 'description') filterField = 'txn.description';
-          else if (col === 'thu') filterField = 'txn.creditAmount';
-          else if (col === 'chi') filterField = 'txn.debitAmount';
+          else if (col === 'thu' || col === 'creditAmount')
+            filterField = 'txn.creditAmount';
+          else if (col === 'chi' || col === 'debitAmount')
+            filterField = 'txn.debitAmount';
           else if (col === 'netOffAmount') filterField = netOffSubquery;
           else if (col === 'remainingAmount')
             filterField = remainingAmountSubquery;
           else if (col === 'balance') filterField = 'txn.balance';
-          else if (col === 'correspondentName')
-            filterField = 'txn.correspondentName';
+          else if (
+            col === 'correspondentName' ||
+            col === 'partner' ||
+            col === 'partnerName'
+          )
+            filterField =
+              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
           else if (col === 'correspondentAccount')
             filterField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
@@ -550,9 +577,6 @@ export class TransactionQueryService {
           else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
-          else if (col === 'partner')
-            filterField =
-              "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
 
           if (filterField) {
             const hasBlank = vals.includes('__BLANK__');

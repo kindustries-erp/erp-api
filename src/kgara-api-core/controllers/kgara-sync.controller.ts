@@ -38,19 +38,22 @@ export class KgaraSyncController {
     // 1. Sync branches
     await this.syncService.syncBranches();
 
-    // 2. Incremental sync cases
-    const caseWatermark = await this.syncService.getIncrementalWatermark(
-      branchId,
-      '/api/v1/gr/cases/list',
-    );
+    // 2. Sync cases (with automatic 2-month lookback window)
     await this.syncService.syncCasesForBranch(
       branchId,
       undefined,
       undefined,
-      caseWatermark,
+      undefined,
     );
 
-    // 3. Incremental sync receivables
+    // 3. Sync gross profit across lookback months
+    await this.syncService.syncGrossProfitForBranch(
+      branchId,
+      undefined,
+      undefined,
+    );
+
+    // 4. Incremental sync receivables
     const recWatermark = await this.syncService.getIncrementalWatermark(
       branchId,
       '/api/v1/gr/exports/receivables',
@@ -62,7 +65,7 @@ export class KgaraSyncController {
       recWatermark,
     );
 
-    // 4. Incremental sync payables
+    // 5. Incremental sync payables
     const payWatermark = await this.syncService.getIncrementalWatermark(
       branchId,
       '/api/v1/gr/exports/payables',
@@ -76,7 +79,7 @@ export class KgaraSyncController {
 
     return {
       success: true,
-      message: 'Full incremental sync completed successfully.',
+      message: 'Full sync with multi-month lookback completed successfully.',
     };
   }
 

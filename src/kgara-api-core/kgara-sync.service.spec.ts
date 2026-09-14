@@ -193,8 +193,8 @@ describe('KgaraSyncService', () => {
 
       expect(clientService.getCases).toHaveBeenCalledWith(
         'br-1',
-        undefined,
-        undefined,
+        expect.any(String),
+        expect.any(String),
         undefined,
         1,
         200,
