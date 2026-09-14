@@ -29,6 +29,8 @@ import * as ExcelJS from 'exceljs';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import { format } from 'date-fns';
 import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
+import { SystemOperationsCoreService } from '../system-operations-core/system-operations-core.service';
+import { InventorySystemSerialService } from '../inventory-core/services/inventory-system-serial.service';
 
 @Injectable()
 export class GoodsIssuesCoreService {
@@ -63,13 +65,22 @@ export class GoodsIssuesCoreService {
     @InjectRepository(ErpGoodsIssueLine)
     private readonly lineRepository: Repository<ErpGoodsIssueLine>,
     private readonly companyProfileService: CompanyProfileService,
+    private readonly systemOperationsService: SystemOperationsCoreService,
+    private readonly systemSerialService: InventorySystemSerialService,
   ) {}
 
   private async getIssueOrThrow(
     repository: Repository<ErpGoodsIssue>,
-    id: string,
+    idOrCode: string,
   ) {
-    const issue = await repository.findOneBy({ id, isDeleted: false });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        idOrCode,
+      );
+    const issue = isUuid
+      ? await repository.findOneBy({ id: idOrCode, isDeleted: false })
+      : (await repository.findOneBy({ issueNo: idOrCode, isDeleted: false })) ||
+        (await repository.findOneBy({ id: idOrCode, isDeleted: false }));
     if (!issue) {
       throw new NotFoundException('Không tìm thấy phiếu xuất');
     }
@@ -263,7 +274,7 @@ export class GoodsIssuesCoreService {
       customerName = customer?.name || null;
     }
     const lines = await this.lineRepository.find({
-      where: { goodsIssueId: id },
+      where: { goodsIssueId: data.id },
       order: { lineNo: 'ASC' },
     });
     const result = {
@@ -351,607 +362,686 @@ export class GoodsIssuesCoreService {
   }
 
   async postIssue(id: string, dto: PostGoodsIssueDto) {
-    return this.dataSource.transaction(async (manager) => {
-      const issueRepo = manager.getRepository(ErpGoodsIssue);
-      const lineRepo = manager.getRepository(ErpGoodsIssueLine);
-      const txnRepo = manager.getRepository(ErpInventoryTransaction);
-      const balanceRepo = manager.getRepository(ErpInventoryBalance);
-      const soRepo = manager.getRepository(ErpSalesOrder);
-      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
-      const moRepo = manager.getRepository(ErpProductionOrder);
-      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
-      const vehicleRepo = manager.getRepository(ErpVehicle);
-
-      const issue = await this.getIssueOrThrow(issueRepo, id);
-      if (issue.status === 'POSTED') {
-        throw new BadRequestException('Phiếu xuất đã được ghi nhận trước đó');
-      }
-
-      const lines = await lineRepo.find({
-        where: { goodsIssueId: id },
-        order: { lineNo: 'ASC' },
-      });
-      if (lines.length === 0) {
-        throw new BadRequestException('Phiếu xuất chưa có dòng hàng');
-      }
-
-      const itemRepo = manager.getRepository(ErpInventoryItem);
-
-      for (const line of lines) {
-        const qty = Number(line.qtyIssued || 0);
-        if (qty <= 0) {
-          throw new BadRequestException(
-            `Dòng ${line.lineNo} có số lượng xuất không hợp lệ`,
-          );
-        }
-
-        let serial: ErpInventoryTrackingSerial | null = null;
-        let vehicle: ErpVehicle | null = null;
-        if (line.serialId) {
-          serial = await serialRepo.findOneBy({ id: line.serialId });
-          if (!serial) {
-            throw new BadRequestException(
-              `Không tìm thấy serial cho dòng ${line.lineNo}`,
-            );
-          }
-          if (serial.itemId && line.itemId && serial.itemId !== line.itemId) {
-            throw new BadRequestException(
-              `Serial không khớp mặt hàng ở dòng ${line.lineNo}`,
-            );
-          }
-        }
-        if (line.vehicleId) {
-          vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
-          if (!vehicle) {
-            throw new BadRequestException(
-              `Không tìm thấy xe/VIN cho dòng ${line.lineNo}`,
-            );
-          }
-          if (
-            vehicle.finishedGoodItemId &&
-            line.itemId &&
-            vehicle.finishedGoodItemId !== line.itemId
-          ) {
-            throw new BadRequestException(
-              `Xe/VIN không khớp thành phẩm ở dòng ${line.lineNo}`,
-            );
-          }
-        }
-        if (serial?.vinId && vehicle?.id && serial.vinId !== vehicle.id) {
-          throw new BadRequestException(
-            `Serial và xe/VIN không cùng một chiếc ở dòng ${line.lineNo}`,
-          );
-        }
-        if (!vehicle && serial?.vinId) {
-          vehicle = await vehicleRepo.findOneBy({ id: serial.vinId });
-          line.vehicleId = vehicle?.id ?? line.vehicleId;
-        }
-        if (!serial && vehicle?.id) {
-          serial = await serialRepo.findOneBy({ vinId: vehicle.id });
-          line.serialId = serial?.id ?? line.serialId;
-        }
-        if (serial || vehicle) {
-          if (qty !== 1) {
-            throw new BadRequestException(
-              `Dòng ${line.lineNo} theo serial/xe phải có số lượng = 1`,
-            );
-          }
-        }
-
-        const item = line.itemId
-          ? await itemRepo.findOne({
-              where: { id: line.itemId },
-              relations: ['itemType', 'trackingPolicy'],
-            })
-          : null;
-        const isService = item?.itemType?.code === 'SERVICE';
-
-        const balanceWhere: any = {
-          itemId: line.itemId ?? undefined,
-          warehouseCode: dto.warehouseCode ?? undefined,
-        };
-        const balance = await balanceRepo.findOne({ where: balanceWhere });
-        const currentQty = Number(balance?.qtyOnHand || 0);
-        const currentReserved = Number(balance?.qtyReserved || 0);
-        const currentValue = Number(balance?.inventoryValue || 0);
-        const avgUnitCost = Number(balance?.avgUnitCost || 0);
-        const availableQty = currentQty - currentReserved;
-
-        if (!isService && item?.trackingPolicy?.code === 'SERIAL') {
-          const inStockCount = await serialRepo.count({
-            where: { itemId: line.itemId!, status: 'IN_STOCK' },
-          });
-
-          if (inStockCount < qty) {
-            const pendingCount = await manager
-              .createQueryBuilder()
-              .select('COUNT(l.id)', 'cnt')
-              .from('erp_goods_receipt_lines', 'l')
-              .innerJoin(
-                'erp_goods_receipts',
-                'gr',
-                'gr.id = l.goods_receipt_id',
-              )
-              .where('l.item_id = :itemId', { itemId: line.itemId })
-              .andWhere('gr.status = :status', { status: 'POSTED' })
-              .andWhere('l.serials_generated = false')
-              .getRawOne();
-
-            if (Number(pendingCount?.cnt || 0) > 0) {
-              throw new BadRequestException(
-                `Hệ thống đang trong quá trình đăng ký mã Serial cho phụ tùng ${item.sku}. Vui lòng đợi vài phút để hoàn tất, sau đó thực hiện lại lệnh xuất kho.`,
-              );
-            }
-            // else let it fall through to normal balance validation or we can throw here
-          }
-        }
-
-        if (!isService) {
-          if (line.salesOrderLineId) {
-            if (currentQty < qty) {
-              throw new BadRequestException(
-                `Tồn kho không đủ cho dòng ${line.lineNo}`,
-              );
-            }
-          } else if (line.productionOrderMaterialId) {
-            if (currentQty < qty) {
-              throw new BadRequestException(
-                `Tồn kho không đủ cho dòng sản xuất ${line.lineNo}`,
-              );
-            }
-          } else if (availableQty < qty) {
-            throw new BadRequestException(
-              `Tồn khả dụng không đủ cho dòng ${line.lineNo}`,
-            );
-          }
-        }
-
-        const issueUnitCost = Number(line.unitCost || avgUnitCost || 0);
-        const issueValue = qty * issueUnitCost;
-        const nextQty = currentQty - qty;
-        const nextValue = Math.max(0, currentValue - issueValue);
-        const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
-
-        if (!isService) {
-          await txnRepo.save(
-            txnRepo.create({
-              transactionType: 'ISSUE',
-              documentType: 'GOODS_ISSUE',
-              documentId: issue.id,
-              itemId: line.itemId ?? null,
-              warehouseCode: dto.warehouseCode ?? null,
-              qtyIn: '0.000',
-              qtyOut: qty.toFixed(3),
-              unitCost: issueUnitCost.toFixed(3),
-              transactionDate: issue.issueDate,
-              notes: issue.remarks ?? null,
-              createdBy: dto.createdBy ?? issue.createdBy ?? null,
-            } as any),
-          );
-        }
-
-        if (line.salesOrderLineId) {
-          const soLine = await soLineRepo.findOneBy({
-            id: line.salesOrderLineId,
-          });
-          if (!soLine) {
-            throw new BadRequestException(
-              `Không tìm thấy dòng SO tham chiếu cho dòng xuất ${line.lineNo}`,
-            );
-          }
-          const soReserved = Number(soLine.qtyReserved || 0);
-          const reservedConsume = Math.min(soReserved, qty);
-          soLine.qtyReserved = (soReserved - reservedConsume).toFixed(3);
-          const currentDelivered = Number(soLine.qtyDelivered || 0);
-          soLine.qtyDelivered = (currentDelivered + qty).toFixed(3);
-          await soLineRepo.save(soLine);
-
-          if (!isService && balance) {
-            balance.qtyReserved = Math.max(
-              0,
-              currentReserved - reservedConsume,
-            ).toFixed(3);
-          }
-
-          if (serial) {
-            serial.salesOrderLineId = soLine.id;
-          }
-        }
-
-        if (line.productionOrderMaterialId) {
-          const moMat = await moMatRepo.findOneBy({
-            id: line.productionOrderMaterialId,
-          });
-          if (!moMat) {
-            throw new BadRequestException(
-              `Không tìm thấy dòng MO tham chiếu cho dòng xuất ${line.lineNo}`,
-            );
-          }
-          const reservedConsume = Math.min(currentReserved, qty);
-          const currentIssued = Number(moMat.qtyIssued || 0);
-          moMat.qtyIssued = (currentIssued + qty).toFixed(3);
-          await moMatRepo.save(moMat);
-
-          if (!isService && balance) {
-            balance.qtyReserved = Math.max(
-              0,
-              currentReserved - reservedConsume,
-            ).toFixed(3);
-          }
-        }
-
-        if (serial) {
-          let dealerId = issue.customerId;
-          if (!dealerId && issue.salesOrderId) {
-            const soRepo = manager.getRepository(ErpSalesOrder);
-            const so = await soRepo.findOneBy({ id: issue.salesOrderId });
-            if (so) {
-              dealerId = so.customerId;
-            }
-          }
-
-          serial.goodsIssueLineId = line.id;
-          if (line.salesOrderLineId) {
-            serial.status = 'DELIVERING';
-          }
-          if (!serial.vinId && vehicle?.id) {
-            serial.vinId = vehicle.id;
-          }
-          if (line.salesOrderLineId && dealerId) {
-            const bpRepo = manager.getRepository(ErpBusinessPartner);
-            const dealer = await bpRepo.findOneBy({ id: dealerId });
-            if (dealer) {
-              serial.attributes = {
-                ...(serial.attributes || {}),
-                dealer_code: dealer.code,
-                dealer_name: dealer.name,
-              };
-            }
-          }
-          await serialRepo.save(serial);
-
-          if (line.salesOrderLineId) {
-            const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
-            const existingLifecycle = await lifecycleRepo.findOneBy({
-              serialId: serial.id,
-            });
-            if (!existingLifecycle) {
-              await lifecycleRepo.save(
-                lifecycleRepo.create({
-                  serialId: serial.id,
-                  salesOrderId: issue.salesOrderId,
-                  goodsIssueId: issue.id,
-                  dealerId: dealerId,
-                  status: 'ACTIVE',
-                }),
-              );
-            } else {
-              existingLifecycle.salesOrderId = issue.salesOrderId;
-              existingLifecycle.goodsIssueId = issue.id;
-              existingLifecycle.dealerId = dealerId;
-              existingLifecycle.status = 'ACTIVE';
-              await lifecycleRepo.save(existingLifecycle);
-            }
-          }
-        }
-
-        if (vehicle && line.salesOrderLineId) {
-          vehicle.status = 'DELIVERING';
-          await vehicleRepo.save(vehicle);
-        }
-
-        if (!isService && balance) {
-          balance.qtyOnHand = nextQty.toFixed(3);
-          balance.inventoryValue = nextValue.toFixed(3);
-          balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
-          await balanceRepo.save(balance);
-        }
-      }
-
-      const affectedSalesOrderIds = new Set<string>();
-      if (issue.salesOrderId) {
-        affectedSalesOrderIds.add(issue.salesOrderId);
-      }
-      for (const line of lines) {
-        if (!line.salesOrderLineId) {
-          continue;
-        }
-        const soLine = await soLineRepo.findOneBy({
-          id: line.salesOrderLineId,
-        });
-        if (soLine?.salesOrderId) {
-          affectedSalesOrderIds.add(soLine.salesOrderId);
-        }
-      }
-
-      for (const salesOrderId of affectedSalesOrderIds) {
-        const so = await soRepo.findOneBy({ id: salesOrderId });
-        if (!so) {
-          continue;
-        }
-        const refreshedLines = await soLineRepo.find({
-          where: { salesOrderId: so.id },
-        });
-        const allDelivered =
-          refreshedLines.length > 0 &&
-          refreshedLines.every(
-            (line) =>
-              Number(line.qtyDelivered || 0) >= Number(line.qtyOrdered || 0),
-          );
-        const anyDelivered = refreshedLines.some(
-          (line) => Number(line.qtyDelivered || 0) > 0,
-        );
-        const anyReserved = refreshedLines.some(
-          (line) => Number(line.qtyReserved || 0) > 0,
-        );
-
-        if (allDelivered) {
-          so.status = 'DELIVERING';
-        } else if (anyReserved) {
-          so.status = 'PARTIAL_RESERVED';
-        } else if (anyDelivered) {
-          so.status = 'PARTIAL_DELIVERING';
-        } else {
-          so.status = 'CONFIRMED';
-        }
-        await soRepo.save(so);
-      }
-
-      const affectedMoIds = new Set<string>();
-      if (issue.productionOrderId) {
-        affectedMoIds.add(issue.productionOrderId);
-      }
-      for (const line of lines) {
-        if (!line.productionOrderMaterialId) continue;
-        const moMat = await moMatRepo.findOneBy({
-          id: line.productionOrderMaterialId,
-        });
-        if (moMat?.productionOrderId) {
-          affectedMoIds.add(moMat.productionOrderId);
-        }
-      }
-
-      for (const moId of affectedMoIds) {
-        const mo = await moRepo.findOneBy({ id: moId });
-        if (!mo) continue;
-        const refreshedMats = await moMatRepo.find({
-          where: { productionOrderId: mo.id },
-        });
-        const anyIssued = refreshedMats.some(
-          (m) => Number(m.qtyIssued || 0) > 0,
-        );
-        if (mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
-          if (anyIssued) mo.status = 'IN_PROGRESS';
-          await moRepo.save(mo);
-        }
-      }
-
-      issue.status = 'POSTED';
-      await issueRepo.save(issue);
-
-      // --- Journal entry generation removed (accounting module decoupled) ---
-      this.logger.log(
-        `Goods issue ${issue.issueNo} posted; journal entry generation skipped.`,
-      );
-      // -----------------------------------------------------------------------
-
-      return this.findOne(id);
+    const existing = await this.getIssueOrThrow(this.repository, id);
+    const op = await this.systemOperationsService.startOperation({
+      module: 'INVENTORY',
+      operationType: 'GOODS_ISSUE_POSTING',
+      scopeType: 'MODULE',
+      targetId: id,
+      targetNo: existing.issueNo || id,
+      userId: dto.createdBy || existing.createdBy || undefined,
+      isBlockingUi: true,
+      blockedActions: [
+        'CREATE_RECEIPT',
+        'CREATE_ISSUE',
+        'POST_RECEIPT',
+        'POST_ISSUE',
+      ],
+      timeoutSeconds: 60,
     });
-  }
 
-  async cancelIssue(id: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const issueRepo = manager.getRepository(ErpGoodsIssue);
-      const lineRepo = manager.getRepository(ErpGoodsIssueLine);
-      const txnRepo = manager.getRepository(ErpInventoryTransaction);
-      const balanceRepo = manager.getRepository(ErpInventoryBalance);
-      const soRepo = manager.getRepository(ErpSalesOrder);
-      const soLineRepo = manager.getRepository(ErpSalesOrderLine);
-      const moRepo = manager.getRepository(ErpProductionOrder);
-      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
-      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
-      const vehicleRepo = manager.getRepository(ErpVehicle);
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const issueRepo = manager.getRepository(ErpGoodsIssue);
+        const lineRepo = manager.getRepository(ErpGoodsIssueLine);
+        const txnRepo = manager.getRepository(ErpInventoryTransaction);
+        const balanceRepo = manager.getRepository(ErpInventoryBalance);
+        const soRepo = manager.getRepository(ErpSalesOrder);
+        const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+        const moRepo = manager.getRepository(ErpProductionOrder);
+        const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+        const vehicleRepo = manager.getRepository(ErpVehicle);
 
-      const issue = await this.getIssueOrThrow(issueRepo, id);
-      if (issue.status === 'CANCELLED') {
-        throw new BadRequestException('Phiếu xuất đã bị hủy trước đó');
-      }
-      if (issue.status !== 'POSTED') {
-        throw new BadRequestException(
-          'Chỉ có thể hủy phiếu xuất đã ghi sổ (POSTED)',
-        );
-      }
-
-      const lines = await lineRepo.find({
-        where: { goodsIssueId: id },
-        order: { lineNo: 'ASC' },
-      });
-
-      const itemRepo = manager.getRepository(ErpInventoryItem);
-
-      for (const line of lines) {
-        const qty = Number(line.qtyIssued || 0);
-        if (qty <= 0) continue;
-
-        const unitCost = Number(line.unitCost || 0);
-        const item = line.itemId
-          ? await itemRepo.findOne({
-              where: { id: line.itemId },
-              relations: ['itemType'],
-            })
-          : null;
-        const isService = item?.itemType?.code === 'SERVICE';
-
-        if (!isService) {
-          await txnRepo.save(
-            txnRepo.create({
-              transactionType: 'ISSUE_CANCEL',
-              documentType: 'GOODS_ISSUE',
-              documentId: issue.id,
-              itemId: line.itemId ?? null,
-              warehouseCode: null,
-              qtyIn: qty.toFixed(3),
-              qtyOut: '0.000',
-              unitCost: unitCost.toFixed(3),
-              transactionDate: issue.issueDate,
-              notes: `Hủy phiếu xuất ${issue.issueNo}`,
-              createdBy: null,
-            } as any),
-          );
+        const issue = await this.getIssueOrThrow(issueRepo, id);
+        if (issue.status === 'POSTED') {
+          throw new BadRequestException('Phiếu xuất đã được ghi nhận trước đó');
         }
 
-        const balance = await balanceRepo.findOne({
-          where: { itemId: line.itemId ?? undefined },
+        const lines = await lineRepo.find({
+          where: { goodsIssueId: id },
+          order: { lineNo: 'ASC' },
         });
-        if (balance && !isService) {
-          const newQty = Number(balance.qtyOnHand) + qty;
-          const newValue = Number(balance.inventoryValue) + qty * unitCost;
-          balance.qtyOnHand = newQty.toFixed(3);
-          balance.inventoryValue = newValue.toFixed(3);
-          balance.avgUnitCost =
-            newQty > 0 ? (newValue / newQty).toFixed(3) : '0.000';
-          await balanceRepo.save(balance);
+        if (lines.length === 0) {
+          throw new BadRequestException('Phiếu xuất chưa có dòng hàng');
         }
 
-        if (line.salesOrderLineId) {
-          const soLine = await soLineRepo.findOneBy({
-            id: line.salesOrderLineId,
-          });
-          if (soLine) {
-            soLine.qtyDelivered = Math.max(
-              0,
-              Number(soLine.qtyDelivered) - qty,
-            ).toFixed(3);
+        const itemRepo = manager.getRepository(ErpInventoryItem);
+
+        for (const line of lines) {
+          const qty = Number(line.qtyIssued || 0);
+          if (qty <= 0) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo} có số lượng xuất không hợp lệ`,
+            );
+          }
+
+          let serial: ErpInventoryTrackingSerial | null = null;
+          let vehicle: ErpVehicle | null = null;
+          if (line.serialId) {
+            serial = await serialRepo.findOneBy({ id: line.serialId });
+            if (!serial) {
+              throw new BadRequestException(
+                `Không tìm thấy serial cho dòng ${line.lineNo}`,
+              );
+            }
+            if (serial.itemId && line.itemId && serial.itemId !== line.itemId) {
+              throw new BadRequestException(
+                `Serial không khớp mặt hàng ở dòng ${line.lineNo}`,
+              );
+            }
+          }
+          if (line.vehicleId) {
+            vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
+            if (!vehicle) {
+              throw new BadRequestException(
+                `Không tìm thấy xe/VIN cho dòng ${line.lineNo}`,
+              );
+            }
+            if (
+              vehicle.finishedGoodItemId &&
+              line.itemId &&
+              vehicle.finishedGoodItemId !== line.itemId
+            ) {
+              throw new BadRequestException(
+                `Xe/VIN không khớp thành phẩm ở dòng ${line.lineNo}`,
+              );
+            }
+          }
+          if (serial?.vinId && vehicle?.id && serial.vinId !== vehicle.id) {
+            throw new BadRequestException(
+              `Serial và xe/VIN không cùng một chiếc ở dòng ${line.lineNo}`,
+            );
+          }
+          if (!vehicle && serial?.vinId) {
+            vehicle = await vehicleRepo.findOneBy({ id: serial.vinId });
+            line.vehicleId = vehicle?.id ?? line.vehicleId;
+          }
+          if (!serial && vehicle?.id) {
+            serial = await serialRepo.findOneBy({ vinId: vehicle.id });
+            line.serialId = serial?.id ?? line.serialId;
+          }
+          if (serial || vehicle) {
+            if (qty !== 1) {
+              throw new BadRequestException(
+                `Dòng ${line.lineNo} theo serial/xe phải có số lượng = 1`,
+              );
+            }
+          }
+
+          const item = line.itemId
+            ? await itemRepo.findOne({
+                where: { id: line.itemId },
+                relations: ['itemType', 'trackingPolicy'],
+              })
+            : null;
+          const isService = item?.itemType?.code === 'SERVICE';
+
+          const balanceWhere: any = {
+            itemId: line.itemId ?? undefined,
+            warehouseCode: dto.warehouseCode ?? undefined,
+          };
+          const balance = await balanceRepo.findOne({ where: balanceWhere });
+          const currentQty = Number(balance?.qtyOnHand || 0);
+          const currentReserved = Number(balance?.qtyReserved || 0);
+          const currentValue = Number(balance?.inventoryValue || 0);
+          const avgUnitCost = Number(balance?.avgUnitCost || 0);
+          const availableQty = currentQty - currentReserved;
+
+          if (!isService && item?.trackingPolicy?.code === 'SERIAL') {
+            const inStockCount = await serialRepo.count({
+              where: { itemId: line.itemId!, status: 'IN_STOCK' },
+            });
+
+            if (inStockCount < qty) {
+              const pendingCount = await manager
+                .createQueryBuilder()
+                .select('COUNT(l.id)', 'cnt')
+                .from('erp_goods_receipt_lines', 'l')
+                .innerJoin(
+                  'erp_goods_receipts',
+                  'gr',
+                  'gr.id = l.goods_receipt_id',
+                )
+                .where('l.item_id = :itemId', { itemId: line.itemId })
+                .andWhere('gr.status = :status', { status: 'POSTED' })
+                .andWhere('l.serials_generated = false')
+                .getRawOne();
+
+              if (Number(pendingCount?.cnt || 0) > 0) {
+                throw new BadRequestException(
+                  `Hệ thống đang trong quá trình đăng ký mã Serial cho phụ tùng ${item.sku}. Vui lòng đợi vài phút để hoàn tất, sau đó thực hiện lại lệnh xuất kho.`,
+                );
+              }
+            }
+          }
+
+          if (!isService) {
+            if (line.salesOrderLineId) {
+              if (currentQty < qty) {
+                throw new BadRequestException(
+                  `Tồn kho không đủ cho dòng ${line.lineNo}`,
+                );
+              }
+            } else if (line.productionOrderMaterialId) {
+              if (currentQty < qty) {
+                throw new BadRequestException(
+                  `Tồn kho không đủ cho dòng sản xuất ${line.lineNo}`,
+                );
+              }
+            } else if (availableQty < qty) {
+              throw new BadRequestException(
+                `Tồn khả dụng không đủ cho dòng ${line.lineNo}`,
+              );
+            }
+          }
+
+          const issueUnitCost = Number(line.unitCost || avgUnitCost || 0);
+          const issueValue = qty * issueUnitCost;
+          const nextQty = currentQty - qty;
+          const nextValue = Math.max(0, currentValue - issueValue);
+          const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
+
+          if (!isService) {
+            await txnRepo.save(
+              txnRepo.create({
+                transactionType: 'ISSUE',
+                documentType: 'GOODS_ISSUE',
+                documentId: issue.id,
+                itemId: line.itemId ?? null,
+                warehouseCode: dto.warehouseCode ?? null,
+                qtyIn: '0.000',
+                qtyOut: qty.toFixed(3),
+                unitCost: issueUnitCost.toFixed(3),
+                transactionDate: issue.issueDate,
+                notes: issue.remarks ?? null,
+                createdBy: dto.createdBy ?? issue.createdBy ?? null,
+              } as any),
+            );
+          }
+
+          if (line.salesOrderLineId) {
+            const soLine = await soLineRepo.findOneBy({
+              id: line.salesOrderLineId,
+            });
+            if (!soLine) {
+              throw new BadRequestException(
+                `Không tìm thấy dòng SO tham chiếu cho dòng xuất ${line.lineNo}`,
+              );
+            }
+            const soReserved = Number(soLine.qtyReserved || 0);
+            const reservedConsume = Math.min(soReserved, qty);
+            soLine.qtyReserved = (soReserved - reservedConsume).toFixed(3);
+            const currentDelivered = Number(soLine.qtyDelivered || 0);
+            soLine.qtyDelivered = (currentDelivered + qty).toFixed(3);
             await soLineRepo.save(soLine);
-          }
-          if (balance && !isService) {
-            balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
-              3,
-            );
-            await balanceRepo.save(balance);
-          }
-        }
 
-        if (line.productionOrderMaterialId) {
-          const moMat = await moMatRepo.findOneBy({
-            id: line.productionOrderMaterialId,
-          });
-          if (moMat) {
-            moMat.qtyIssued = Math.max(
-              0,
-              Number(moMat.qtyIssued) - qty,
-            ).toFixed(3);
+            if (!isService && balance) {
+              balance.qtyReserved = Math.max(
+                0,
+                currentReserved - reservedConsume,
+              ).toFixed(3);
+            }
+
+            if (serial) {
+              serial.salesOrderLineId = soLine.id;
+            }
+          }
+
+          if (line.productionOrderMaterialId) {
+            const moMat = await moMatRepo.findOneBy({
+              id: line.productionOrderMaterialId,
+            });
+            if (!moMat) {
+              throw new BadRequestException(
+                `Không tìm thấy dòng MO tham chiếu cho dòng xuất ${line.lineNo}`,
+              );
+            }
+            const reservedConsume = Math.min(currentReserved, qty);
+            const currentIssued = Number(moMat.qtyIssued || 0);
+            moMat.qtyIssued = (currentIssued + qty).toFixed(3);
             await moMatRepo.save(moMat);
-          }
-          if (balance && !isService) {
-            balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
-              3,
-            );
-            await balanceRepo.save(balance);
-          }
-        }
 
-        if (line.serialId) {
-          const serial = await serialRepo.findOneBy({ id: line.serialId });
+            if (!isService && balance) {
+              balance.qtyReserved = Math.max(
+                0,
+                currentReserved - reservedConsume,
+              ).toFixed(3);
+            }
+          }
+
           if (serial) {
-            serial.status = 'AVAILABLE';
-            serial.goodsIssueLineId = null;
-            await serialRepo.save(serial);
-          }
-        }
+            let dealerId = issue.customerId;
+            if (!dealerId && issue.salesOrderId) {
+              const soRepo = manager.getRepository(ErpSalesOrder);
+              const so = await soRepo.findOneBy({ id: issue.salesOrderId });
+              if (so) {
+                dealerId = so.customerId;
+              }
+            }
 
-        if (line.vehicleId) {
-          const vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
-          if (vehicle) {
-            vehicle.status = 'AVAILABLE';
+            serial.goodsIssueLineId = line.id;
+            if (line.salesOrderLineId) {
+              serial.status = 'DELIVERING';
+            }
+            if (!serial.vinId && vehicle?.id) {
+              serial.vinId = vehicle.id;
+            }
+            if (line.salesOrderLineId && dealerId) {
+              const bpRepo = manager.getRepository(ErpBusinessPartner);
+              const dealer = await bpRepo.findOneBy({ id: dealerId });
+              if (dealer) {
+                serial.attributes = {
+                  ...(serial.attributes || {}),
+                  dealer_code: dealer.code,
+                  dealer_name: dealer.name,
+                };
+              }
+            }
+            await serialRepo.save(serial);
+
+            if (line.salesOrderLineId) {
+              const lifecycleRepo = manager.getRepository(ErpSerialLifecycle);
+              const existingLifecycle = await lifecycleRepo.findOneBy({
+                serialId: serial.id,
+              });
+              if (!existingLifecycle) {
+                await lifecycleRepo.save(
+                  lifecycleRepo.create({
+                    serialId: serial.id,
+                    salesOrderId: issue.salesOrderId,
+                    goodsIssueId: issue.id,
+                    dealerId: dealerId,
+                    status: 'ACTIVE',
+                  }),
+                );
+              } else {
+                existingLifecycle.salesOrderId = issue.salesOrderId;
+                existingLifecycle.goodsIssueId = issue.id;
+                existingLifecycle.dealerId = dealerId;
+                existingLifecycle.status = 'ACTIVE';
+                await lifecycleRepo.save(existingLifecycle);
+              }
+            }
+          } else if (!vehicle && !isService && line.itemId) {
+            // Tự động khấu trừ System Serial theo FIFO cho các mặt hàng NONE hoặc không chỉ định serial thủ công
+            await this.systemSerialService.deductFifoSystemSerials(manager, {
+              itemId: line.itemId,
+              qty,
+              goodsIssueLineId: line.id,
+              salesOrderLineId: line.salesOrderLineId,
+              productionOrderId: line.productionOrderMaterialId
+                ? issue.productionOrderId
+                : null,
+            });
+          }
+
+          if (vehicle && line.salesOrderLineId) {
+            vehicle.status = 'DELIVERING';
             await vehicleRepo.save(vehicle);
           }
+
+          if (!isService && balance) {
+            balance.qtyOnHand = nextQty.toFixed(3);
+            balance.inventoryValue = nextValue.toFixed(3);
+            balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
+            await balanceRepo.save(balance);
+          }
         }
-      }
 
-      // Recalc SO status
-      const affectedSoIds = new Set<string>();
-      if (issue.salesOrderId) affectedSoIds.add(issue.salesOrderId);
-      for (const line of lines) {
-        if (!line.salesOrderLineId) continue;
-        const soLine = await soLineRepo.findOneBy({
-          id: line.salesOrderLineId,
-        });
-        if (soLine?.salesOrderId) affectedSoIds.add(soLine.salesOrderId);
-      }
+        const affectedSalesOrderIds = new Set<string>();
+        if (issue.salesOrderId) {
+          affectedSalesOrderIds.add(issue.salesOrderId);
+        }
+        for (const line of lines) {
+          if (!line.salesOrderLineId) {
+            continue;
+          }
+          const soLine = await soLineRepo.findOneBy({
+            id: line.salesOrderLineId,
+          });
+          if (soLine?.salesOrderId) {
+            affectedSalesOrderIds.add(soLine.salesOrderId);
+          }
+        }
 
-      for (const salesOrderId of affectedSoIds) {
-        const so = await soRepo.findOneBy({ id: salesOrderId });
-        if (so) {
+        for (const salesOrderId of affectedSalesOrderIds) {
+          const so = await soRepo.findOneBy({ id: salesOrderId });
+          if (!so) {
+            continue;
+          }
           const refreshedLines = await soLineRepo.find({
             where: { salesOrderId: so.id },
           });
-          const totalOrdered = refreshedLines.reduce(
-            (sum, l) => sum + Number(l.qtyOrdered || 0),
-            0,
+          const allDelivered =
+            refreshedLines.length > 0 &&
+            refreshedLines.every(
+              (line) =>
+                Number(line.qtyDelivered || 0) >= Number(line.qtyOrdered || 0),
+            );
+          const anyDelivered = refreshedLines.some(
+            (line) => Number(line.qtyDelivered || 0) > 0,
           );
-          const totalDelivered = refreshedLines.reduce(
-            (sum, l) => sum + Number(l.qtyDelivered || 0),
-            0,
+          const anyReserved = refreshedLines.some(
+            (line) => Number(line.qtyReserved || 0) > 0,
           );
 
-          if (totalDelivered <= 0) {
-            so.status = so.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
-          } else if (totalDelivered < totalOrdered) {
+          if (allDelivered) {
+            so.status = 'DELIVERING';
+          } else if (anyReserved) {
+            so.status = 'PARTIAL_RESERVED';
+          } else if (anyDelivered) {
             so.status = 'PARTIAL_DELIVERING';
           } else {
-            so.status = 'DELIVERING';
+            so.status = 'CONFIRMED';
           }
           await soRepo.save(so);
         }
-      }
 
-      // Recalc MO status
-      const affectedMoIds = new Set<string>();
-      if (issue.productionOrderId) affectedMoIds.add(issue.productionOrderId);
-      for (const line of lines) {
-        if (!line.productionOrderMaterialId) continue;
-        const moMat = await moMatRepo.findOneBy({
-          id: line.productionOrderMaterialId,
-        });
-        if (moMat?.productionOrderId)
-          affectedMoIds.add(moMat.productionOrderId);
-      }
+        const affectedMoIds = new Set<string>();
+        if (issue.productionOrderId) {
+          affectedMoIds.add(issue.productionOrderId);
+        }
+        for (const line of lines) {
+          if (!line.productionOrderMaterialId) continue;
+          const moMat = await moMatRepo.findOneBy({
+            id: line.productionOrderMaterialId,
+          });
+          if (moMat?.productionOrderId) {
+            affectedMoIds.add(moMat.productionOrderId);
+          }
+        }
 
-      for (const moId of affectedMoIds) {
-        const mo = await moRepo.findOneBy({ id: moId });
-        if (mo && mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
+        for (const moId of affectedMoIds) {
+          const mo = await moRepo.findOneBy({ id: moId });
+          if (!mo) continue;
           const refreshedMats = await moMatRepo.find({
             where: { productionOrderId: mo.id },
           });
           const anyIssued = refreshedMats.some(
             (m) => Number(m.qtyIssued || 0) > 0,
           );
-          mo.status = anyIssued ? 'IN_PROGRESS' : 'CONFIRMED';
-          await moRepo.save(mo);
+          if (mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
+            if (anyIssued) mo.status = 'IN_PROGRESS';
+            await moRepo.save(mo);
+          }
         }
-      }
 
-      issue.status = 'CANCELLED';
-      const savedIssue = await issueRepo.save(issue);
-      const savedLines = await lineRepo.find({
-        where: { goodsIssueId: id },
-        order: { lineNo: 'ASC' },
+        issue.status = 'POSTED';
+        await issueRepo.save(issue);
+
+        // --- Journal entry generation removed (accounting module decoupled) ---
+        this.logger.log(
+          `Goods issue ${issue.issueNo} posted; journal entry generation skipped.`,
+        );
+        // -----------------------------------------------------------------------
+
+        return this.findOne(id);
       });
 
-      return {
-        message: 'Hủy phiếu xuất thành công',
-        data: { ...savedIssue, lines: savedLines },
-      };
+      await this.systemOperationsService.completeOperation(op.id, {
+        status: 'SUCCESS',
+        issueNo: existing.issueNo,
+      });
+
+      return result;
+    } catch (error: any) {
+      await this.systemOperationsService.failOperation(
+        op.id,
+        error?.message || 'Ghi sổ xuất kho thất bại',
+      );
+      throw error;
+    }
+  }
+
+  async cancelIssue(id: string) {
+    const existing = await this.getIssueOrThrow(this.repository, id);
+    const op = await this.systemOperationsService.startOperation({
+      module: 'INVENTORY',
+      operationType: 'GOODS_ISSUE_CANCEL',
+      scopeType: 'MODULE',
+      targetId: id,
+      targetNo: existing.issueNo || id,
+      isBlockingUi: true,
+      blockedActions: [
+        'CREATE_RECEIPT',
+        'CREATE_ISSUE',
+        'POST_RECEIPT',
+        'POST_ISSUE',
+      ],
+      timeoutSeconds: 60,
     });
+
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const issueRepo = manager.getRepository(ErpGoodsIssue);
+        const lineRepo = manager.getRepository(ErpGoodsIssueLine);
+        const txnRepo = manager.getRepository(ErpInventoryTransaction);
+        const balanceRepo = manager.getRepository(ErpInventoryBalance);
+        const soRepo = manager.getRepository(ErpSalesOrder);
+        const soLineRepo = manager.getRepository(ErpSalesOrderLine);
+        const moRepo = manager.getRepository(ErpProductionOrder);
+        const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+        const vehicleRepo = manager.getRepository(ErpVehicle);
+
+        const issue = await this.getIssueOrThrow(issueRepo, id);
+        if (issue.status === 'CANCELLED') {
+          throw new BadRequestException('Phiếu xuất đã bị hủy trước đó');
+        }
+        if (issue.status !== 'POSTED') {
+          throw new BadRequestException(
+            'Chỉ có thể hủy phiếu xuất đã ghi sổ (POSTED)',
+          );
+        }
+
+        const lines = await lineRepo.find({
+          where: { goodsIssueId: id },
+          order: { lineNo: 'ASC' },
+        });
+
+        const itemRepo = manager.getRepository(ErpInventoryItem);
+
+        for (const line of lines) {
+          const qty = Number(line.qtyIssued || 0);
+          if (qty <= 0) continue;
+
+          const unitCost = Number(line.unitCost || 0);
+          const item = line.itemId
+            ? await itemRepo.findOne({
+                where: { id: line.itemId },
+                relations: ['itemType'],
+              })
+            : null;
+          const isService = item?.itemType?.code === 'SERVICE';
+
+          if (!isService) {
+            await txnRepo.save(
+              txnRepo.create({
+                transactionType: 'ISSUE_CANCEL',
+                documentType: 'GOODS_ISSUE',
+                documentId: issue.id,
+                itemId: line.itemId ?? null,
+                warehouseCode: null,
+                qtyIn: qty.toFixed(3),
+                qtyOut: '0.000',
+                unitCost: unitCost.toFixed(3),
+                transactionDate: issue.issueDate,
+                notes: `Hủy phiếu xuất ${issue.issueNo}`,
+                createdBy: null,
+              } as any),
+            );
+          }
+
+          const balance = await balanceRepo.findOne({
+            where: { itemId: line.itemId ?? undefined },
+          });
+          if (balance && !isService) {
+            const newQty = Number(balance.qtyOnHand) + qty;
+            const newValue = Number(balance.inventoryValue) + qty * unitCost;
+            balance.qtyOnHand = newQty.toFixed(3);
+            balance.inventoryValue = newValue.toFixed(3);
+            balance.avgUnitCost =
+              newQty > 0 ? (newValue / newQty).toFixed(3) : '0.000';
+            await balanceRepo.save(balance);
+          }
+
+          if (line.salesOrderLineId) {
+            const soLine = await soLineRepo.findOneBy({
+              id: line.salesOrderLineId,
+            });
+            if (soLine) {
+              soLine.qtyDelivered = Math.max(
+                0,
+                Number(soLine.qtyDelivered) - qty,
+              ).toFixed(3);
+              await soLineRepo.save(soLine);
+            }
+            if (balance && !isService) {
+              balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
+                3,
+              );
+              await balanceRepo.save(balance);
+            }
+          }
+
+          if (line.productionOrderMaterialId) {
+            const moMat = await moMatRepo.findOneBy({
+              id: line.productionOrderMaterialId,
+            });
+            if (moMat) {
+              moMat.qtyIssued = Math.max(
+                0,
+                Number(moMat.qtyIssued) - qty,
+              ).toFixed(3);
+              await moMatRepo.save(moMat);
+            }
+            if (balance && !isService) {
+              balance.qtyReserved = (Number(balance.qtyReserved) + qty).toFixed(
+                3,
+              );
+              await balanceRepo.save(balance);
+            }
+          }
+
+          if (line.serialId) {
+            const serial = await serialRepo.findOneBy({ id: line.serialId });
+            if (serial) {
+              serial.status = 'AVAILABLE';
+              serial.goodsIssueLineId = null;
+              await serialRepo.save(serial);
+            }
+          } else if (!line.vehicleId && !isService) {
+            await this.systemSerialService.revertDeductedSystemSerials(
+              manager,
+              {
+                goodsIssueLineId: line.id,
+              },
+            );
+          }
+
+          if (line.vehicleId) {
+            const vehicle = await vehicleRepo.findOneBy({ id: line.vehicleId });
+            if (vehicle) {
+              vehicle.status = 'AVAILABLE';
+              await vehicleRepo.save(vehicle);
+            }
+          }
+        }
+
+        // Recalc SO status
+        const affectedSoIds = new Set<string>();
+        if (issue.salesOrderId) affectedSoIds.add(issue.salesOrderId);
+        for (const line of lines) {
+          if (!line.salesOrderLineId) continue;
+          const soLine = await soLineRepo.findOneBy({
+            id: line.salesOrderLineId,
+          });
+          if (soLine?.salesOrderId) affectedSoIds.add(soLine.salesOrderId);
+        }
+
+        for (const salesOrderId of affectedSoIds) {
+          const so = await soRepo.findOneBy({ id: salesOrderId });
+          if (so) {
+            const refreshedLines = await soLineRepo.find({
+              where: { salesOrderId: so.id },
+            });
+            const totalOrdered = refreshedLines.reduce(
+              (sum, l) => sum + Number(l.qtyOrdered || 0),
+              0,
+            );
+            const totalDelivered = refreshedLines.reduce(
+              (sum, l) => sum + Number(l.qtyDelivered || 0),
+              0,
+            );
+
+            if (totalDelivered <= 0) {
+              so.status = so.status === 'CONFIRMED' ? 'CONFIRMED' : 'DRAFT';
+            } else if (totalDelivered < totalOrdered) {
+              so.status = 'PARTIAL_DELIVERING';
+            } else {
+              so.status = 'DELIVERING';
+            }
+            await soRepo.save(so);
+          }
+        }
+
+        // Recalc MO status
+        const affectedMoIds = new Set<string>();
+        if (issue.productionOrderId) affectedMoIds.add(issue.productionOrderId);
+        for (const line of lines) {
+          if (!line.productionOrderMaterialId) continue;
+          const moMat = await moMatRepo.findOneBy({
+            id: line.productionOrderMaterialId,
+          });
+          if (moMat?.productionOrderId)
+            affectedMoIds.add(moMat.productionOrderId);
+        }
+
+        for (const moId of affectedMoIds) {
+          const mo = await moRepo.findOneBy({ id: moId });
+          if (mo && mo.status !== 'COMPLETED' && mo.status !== 'CANCELLED') {
+            const refreshedMats = await moMatRepo.find({
+              where: { productionOrderId: mo.id },
+            });
+            const anyIssued = refreshedMats.some(
+              (m) => Number(m.qtyIssued || 0) > 0,
+            );
+            mo.status = anyIssued ? 'IN_PROGRESS' : 'CONFIRMED';
+            await moRepo.save(mo);
+          }
+        }
+
+        issue.status = 'CANCELLED';
+        const savedIssue = await issueRepo.save(issue);
+        const savedLines = await lineRepo.find({
+          where: { goodsIssueId: id },
+          order: { lineNo: 'ASC' },
+        });
+
+        return {
+          message: 'Hủy phiếu xuất thành công',
+          data: { ...savedIssue, lines: savedLines },
+        };
+      });
+
+      await this.systemOperationsService.completeOperation(op.id, {
+        status: 'SUCCESS',
+        issueNo: existing.issueNo,
+      });
+
+      return result;
+    } catch (error: any) {
+      await this.systemOperationsService.failOperation(
+        op.id,
+        error?.message || 'Hủy phiếu xuất thất bại',
+      );
+      throw error;
+    }
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOneBy({ id });
-    if (!existing || existing.isDeleted) {
-      throw new NotFoundException('Không tìm thấy phiếu xuất');
-    }
+    const existing = await this.getIssueOrThrow(this.repository, id);
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException(
         'Chỉ được xóa phiếu xuất ở trạng thái nháp',

@@ -25,12 +25,33 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
       transaction: j.fn(async (cb: any) => cb(manager)),
     } as unknown as DataSource;
 
+    const mockSystemOps = {
+      startOperation: j.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: j.fn().mockResolvedValue({}),
+      failOperation: j.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: j.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: j.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: j.fn().mockResolvedValue(0),
+    } as any;
+
+    const mockRepo = {
+      findOneBy: j.fn().mockResolvedValue({
+        id: 'gr1',
+        receiptNo: 'NK-202607001',
+        status: 'DRAFT',
+      }),
+    } as any;
+
     const service = new GoodsReceiptsCoreService(
       dataSource,
-      {} as any,
+      mockRepo,
       {} as any,
       dependencyService ?? { checkDependencies: j.fn() },
       {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
 
     return { service };
@@ -653,5 +674,154 @@ describe('GoodsReceiptsCoreService stock and posting invariants', () => {
     const { nextNo } = await service.getNextReceiptNo('2026-07-20');
 
     expect(nextNo).toBe('NK-20260720-004');
+  });
+
+  it('getLineSerials: should return serials list for a given receipt line', async () => {
+    const lineId = 'line-123';
+    const mockLine = { id: lineId, goodsReceiptId: 'gr1' };
+    const mockSerials = [
+      {
+        id: 's1',
+        receiptLineId: lineId,
+        systemSerialNo: 'SYS-ITEM1-260914-000001',
+        serialNo: 'SYS-ITEM1-260914-000001',
+        trackingType: 'SYSTEM_AUTO',
+        status: 'IN_STOCK',
+        unitCost: '150000',
+      },
+      {
+        id: 's2',
+        receiptLineId: lineId,
+        systemSerialNo: 'SYS-ITEM1-260914-000002',
+        serialNo: 'SYS-ITEM1-260914-000002',
+        trackingType: 'SYSTEM_AUTO',
+        status: 'IN_STOCK',
+        unitCost: '150000',
+      },
+    ];
+
+    const lineRepo = {
+      findOneBy: j.fn().mockResolvedValue(mockLine),
+    };
+    const serialRepo = {
+      find: j.fn().mockResolvedValue(mockSerials),
+    };
+
+    const ds = {
+      getRepository: (entity: any) => {
+        if (entity === ErpInventoryTrackingSerial) return serialRepo;
+        return null;
+      },
+    };
+
+    const service = new GoodsReceiptsCoreService(
+      ds as any,
+      {} as any,
+      lineRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const result = await service.getLineSerials(lineId);
+    expect(result.total).toBe(2);
+    expect(result.data).toEqual(mockSerials);
+    expect(lineRepo.findOneBy).toHaveBeenCalledWith({ id: lineId });
+    expect(serialRepo.find).toHaveBeenCalledWith({
+      where: { receiptLineId: lineId },
+      order: { createdAt: 'ASC', systemSerialNo: 'ASC' },
+    });
+  });
+
+  it('findOne: should resolve receipt when given receiptNo (e.g. NK-20260914-001)', async () => {
+    const receiptNo = 'NK-20260914-001';
+    const mockReceipt = {
+      id: 'a0000000-0000-0000-0000-000000000001',
+      receiptNo,
+      status: 'POSTED',
+      isDeleted: false,
+    };
+    const mockLines = [
+      { id: 'b0000000-0000-0000-0000-000000000001', lineNo: 1 },
+    ];
+
+    const repo = {
+      findOneBy: j.fn().mockImplementation((criteria: any) => {
+        if (criteria.receiptNo === receiptNo)
+          return Promise.resolve(mockReceipt);
+        return Promise.resolve(null);
+      }),
+    };
+    const lineRepo = {
+      find: j.fn().mockResolvedValue(mockLines),
+    };
+    const ds = {
+      getRepository: j.fn().mockReturnValue({ findOneBy: j.fn() }),
+      query: j.fn().mockResolvedValue([]),
+    };
+
+    const service = new GoodsReceiptsCoreService(
+      ds as any,
+      repo as any,
+      lineRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const res = await service.findOne(receiptNo);
+    expect(res.data.id).toBe(mockReceipt.id);
+    expect(res.data.receiptNo).toBe(receiptNo);
+    expect(repo.findOneBy).toHaveBeenCalledWith({
+      receiptNo,
+      isDeleted: false,
+    });
+    expect(lineRepo.find).toHaveBeenCalledWith({
+      where: { goodsReceiptId: mockReceipt.id },
+      order: { lineNo: 'ASC' },
+    });
+  });
+
+  it('findOne: should resolve receipt when given UUID', async () => {
+    const uuid = 'a0000000-0000-0000-0000-000000000001';
+    const mockReceipt = {
+      id: uuid,
+      receiptNo: 'NK-20260914-001',
+      status: 'POSTED',
+      isDeleted: false,
+    };
+
+    const repo = {
+      findOneBy: j.fn().mockImplementation((criteria: any) => {
+        if (criteria.id === uuid) return Promise.resolve(mockReceipt);
+        return Promise.resolve(null);
+      }),
+    };
+    const lineRepo = {
+      find: j.fn().mockResolvedValue([]),
+    };
+    const ds = {
+      getRepository: j.fn().mockReturnValue({ findOneBy: j.fn() }),
+      query: j.fn().mockResolvedValue([]),
+    };
+
+    const service = new GoodsReceiptsCoreService(
+      ds as any,
+      repo as any,
+      lineRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const res = await service.findOne(uuid);
+    expect(res.data.id).toBe(uuid);
+    expect(repo.findOneBy).toHaveBeenCalledWith({
+      id: uuid,
+      isDeleted: false,
+    });
   });
 });

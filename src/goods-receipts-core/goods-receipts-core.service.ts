@@ -29,6 +29,8 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { format } from 'date-fns';
 import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
+import { SystemOperationsCoreService } from '../system-operations-core/system-operations-core.service';
+import { InventorySystemSerialService } from '../inventory-core/services/inventory-system-serial.service';
 
 @Injectable()
 export class GoodsReceiptsCoreService {
@@ -42,6 +44,8 @@ export class GoodsReceiptsCoreService {
     private readonly lineRepository: Repository<ErpGoodsReceiptLine>,
     private readonly dependencyService: DocumentDependenciesCoreService,
     private readonly companyProfileService: CompanyProfileService,
+    private readonly systemOperationsService: SystemOperationsCoreService,
+    private readonly systemSerialService: InventorySystemSerialService,
   ) {}
 
   /**
@@ -129,9 +133,18 @@ export class GoodsReceiptsCoreService {
 
   private async getReceiptOrThrow(
     repository: Repository<ErpGoodsReceipt>,
-    id: string,
+    idOrCode: string,
   ) {
-    const receipt = await repository.findOneBy({ id, isDeleted: false });
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        idOrCode,
+      );
+    const receipt = isUuid
+      ? await repository.findOneBy({ id: idOrCode, isDeleted: false })
+      : (await repository.findOneBy({
+          receiptNo: idOrCode,
+          isDeleted: false,
+        })) || (await repository.findOneBy({ id: idOrCode, isDeleted: false }));
     if (!receipt) {
       throw new NotFoundException('Không tìm thấy phiếu nhập');
     }
@@ -339,7 +352,7 @@ export class GoodsReceiptsCoreService {
       supplierName = supplier?.name || null;
     }
     const lines = await this.lineRepository.find({
-      where: { goodsReceiptId: id },
+      where: { goodsReceiptId: data.id },
       order: { lineNo: 'ASC' },
     });
     const result = { ...data, supplierName, lines };
@@ -352,6 +365,27 @@ export class GoodsReceiptsCoreService {
     return {
       message: 'Lấy thông tin thành công',
       data: result,
+    };
+  }
+
+  async getLineSerials(lineId: string) {
+    const line = await this.lineRepository.findOneBy({ id: lineId });
+    if (!line) {
+      throw new NotFoundException('Không tìm thấy dòng phiếu nhập kho');
+    }
+
+    const serialRepo = this.dataSource.getRepository(
+      ErpInventoryTrackingSerial,
+    );
+    const serials = await serialRepo.find({
+      where: { receiptLineId: lineId },
+      order: { createdAt: 'ASC', systemSerialNo: 'ASC' },
+    });
+
+    return {
+      message: 'Lấy danh sách serials thành công',
+      total: serials.length,
+      data: serials,
     };
   }
 
@@ -420,615 +454,624 @@ export class GoodsReceiptsCoreService {
   }
 
   async postReceipt(id: string, dto: PostGoodsReceiptDto) {
-    return this.dataSource.transaction(async (manager) => {
-      const receiptRepo = manager.getRepository(ErpGoodsReceipt);
-      const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
-      const txnRepo = manager.getRepository(ErpInventoryTransaction);
-      const balanceRepo = manager.getRepository(ErpInventoryBalance);
-      const poRepo = manager.getRepository(ErpPurchaseOrder);
-      const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
-      const moRepo = manager.getRepository(ErpProductionOrder);
-      const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
+    const existing = await this.getReceiptOrThrow(this.repository, id);
+    const lock = await this.systemOperationsService.startOperation({
+      module: 'INVENTORY',
+      operationType: 'GOODS_RECEIPT_POSTING',
+      scopeType: 'MODULE',
+      targetId: id,
+      targetNo: existing.receiptNo || id,
+      userId: dto.createdBy || existing.createdBy || undefined,
+      isBlockingUi: true,
+      blockedActions: [
+        'CREATE_RECEIPT',
+        'CREATE_ISSUE',
+        'POST_RECEIPT',
+        'POST_ISSUE',
+      ],
+      timeoutSeconds: 60,
+    });
 
-      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
-      if (receipt.status === 'POSTED') {
-        throw new BadRequestException('Phiếu nhập đã được ghi nhận trước đó');
-      }
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const receiptRepo = manager.getRepository(ErpGoodsReceipt);
+        const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+        const txnRepo = manager.getRepository(ErpInventoryTransaction);
+        const balanceRepo = manager.getRepository(ErpInventoryBalance);
+        const poRepo = manager.getRepository(ErpPurchaseOrder);
+        const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+        const moRepo = manager.getRepository(ErpProductionOrder);
+        const moMatRepo = manager.getRepository(ErpProductionOrderMaterial);
 
-      const lines = await lineRepo.find({
-        where: { goodsReceiptId: id },
-        order: { lineNo: 'ASC' },
-      });
-      if (lines.length === 0) {
-        throw new BadRequestException('Chưa nhập hàng nhập kho');
-      }
+        const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+        if (receipt.status === 'POSTED') {
+          throw new BadRequestException('Phiếu nhập đã được ghi nhận trước đó');
+        }
 
-      // Merge declared serials from dto.lines if provided in post request
-      if (Array.isArray(dto.lines) && dto.lines.length > 0) {
-        for (const dtoLine of dto.lines) {
-          const lineId = (dtoLine as any).id;
-          const match = lines.find(
-            (l) =>
-              (lineId && l.id === lineId) ||
-              (dtoLine.purchaseOrderLineId &&
-                l.purchaseOrderLineId === dtoLine.purchaseOrderLineId) ||
-              (dtoLine.itemId && l.itemId === dtoLine.itemId),
-          );
-          if (match && dtoLine.declaredSerials !== undefined) {
-            match.declaredSerials = dtoLine.declaredSerials;
+        const lines = await lineRepo.find({
+          where: { goodsReceiptId: id },
+          order: { lineNo: 'ASC' },
+        });
+        if (lines.length === 0) {
+          throw new BadRequestException('Chưa nhập hàng nhập kho');
+        }
+
+        // Merge declared serials from dto.lines if provided in post request
+        if (Array.isArray(dto.lines) && dto.lines.length > 0) {
+          for (const dtoLine of dto.lines) {
+            const lineId = (dtoLine as any).id;
+            const match = lines.find(
+              (l) =>
+                (lineId && l.id === lineId) ||
+                (dtoLine.purchaseOrderLineId &&
+                  l.purchaseOrderLineId === dtoLine.purchaseOrderLineId) ||
+                (dtoLine.itemId && l.itemId === dtoLine.itemId),
+            );
+            if (match && dtoLine.declaredSerials !== undefined) {
+              match.declaredSerials = dtoLine.declaredSerials;
+            }
           }
         }
-      }
 
-      if (receipt.productionOrderId) {
-        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
-        if (!mo || mo.isDeleted) {
-          throw new BadRequestException(
-            'Không tìm thấy lệnh sản xuất liên kết',
-          );
-        }
-        const moMaterials = await moMatRepo.find({
-          where: { productionOrderId: receipt.productionOrderId },
-        });
-        const incompleteMaterial = moMaterials.find((material) => {
-          const qtyRequired = Number(material.qtyRequired || 0);
-          const qtyIssued = Number(material.qtyIssued || 0);
-          return qtyRequired > 0 && qtyIssued + 0.0005 < qtyRequired;
-        });
-        if (incompleteMaterial) {
-          throw new BadRequestException(
-            'Chưa xuất đủ nguyên vật liệu cho lệnh sản xuất, không thể nhập thành phẩm',
-          );
-        }
-      }
-
-      // ── PRE-FETCH tất cả balances và PO lines để tránh N+1 queries ──────────
-      const itemIds = [
-        ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
-      ] as string[];
-      const poLineIds = [
-        ...new Set(lines.map((l) => l.purchaseOrderLineId).filter(Boolean)),
-      ] as string[];
-
-      const [existingBalances, existingPoLines] = await Promise.all([
-        itemIds.length > 0
-          ? balanceRepo.find({
-              where: itemIds.map((id) => ({
-                itemId: id,
-                warehouseCode: dto.warehouseCode ?? undefined,
-              })) as any,
-            })
-          : Promise.resolve([]),
-        poLineIds.length > 0
-          ? poLineRepo.findBy({ id: In(poLineIds) as any })
-          : Promise.resolve([]),
-      ]);
-
-      // Build lookup Maps in memory — O(1) access in the loop
-      const balanceMap = new Map<string, ErpInventoryBalance>();
-      for (const b of existingBalances) {
-        if (b.itemId) balanceMap.set(b.itemId, b);
-      }
-      const poLineMap = new Map<string, ErpPurchaseOrderLine>();
-      for (const p of existingPoLines) {
-        poLineMap.set(p.id, p);
-      }
-
-      // ── Collect all mutations — compute in memory ─────────────────────────
-      const txnsToInsert: any[] = [];
-      const balancesToSave: ErpInventoryBalance[] = [];
-      const newBalancesToSave: DeepPartial<ErpInventoryBalance>[] = [];
-      const poLinesToSave: ErpPurchaseOrderLine[] = [];
-
-      for (const line of lines) {
-        const qty = Number(line.qtyReceived || 0);
-        if (qty <= 0) {
-          throw new BadRequestException(
-            `Dòng ${line.lineNo} có số lượng nhận không hợp lệ`,
-          );
+        if (receipt.productionOrderId) {
+          const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+          if (!mo || mo.isDeleted) {
+            throw new BadRequestException(
+              'Không tìm thấy lệnh sản xuất liên kết',
+            );
+          }
+          const moMaterials = await moMatRepo.find({
+            where: { productionOrderId: receipt.productionOrderId },
+          });
+          const incompleteMaterial = moMaterials.find((material) => {
+            const qtyRequired = Number(material.qtyRequired || 0);
+            const qtyIssued = Number(material.qtyIssued || 0);
+            return qtyRequired > 0 && qtyIssued + 0.0005 < qtyRequired;
+          });
+          if (incompleteMaterial) {
+            throw new BadRequestException(
+              'Chưa xuất đủ nguyên vật liệu cho lệnh sản xuất, không thể nhập thành phẩm',
+            );
+          }
         }
 
-        const incomingUnitCost = Number(line.unitCost || 0);
-        const balance = line.itemId
-          ? (balanceMap.get(line.itemId) ?? null)
-          : null;
-        const currentQty = Number(balance?.qtyOnHand || 0);
-        const currentValue = Number(balance?.inventoryValue || 0);
-        const receiptValue = qty * incomingUnitCost;
-        const nextQty = currentQty + qty;
-        const nextValue = currentValue + receiptValue;
-        const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
+        // ── PRE-FETCH tất cả balances và PO lines để tránh N+1 queries ──────────
+        const itemIds = [
+          ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
+        ] as string[];
+        const poLineIds = [
+          ...new Set(lines.map((l) => l.purchaseOrderLineId).filter(Boolean)),
+        ] as string[];
 
-        txnsToInsert.push({
-          transactionType: 'RECEIPT',
-          documentType: 'GOODS_RECEIPT',
-          documentId: receipt.id,
-          itemId: line.itemId ?? null,
-          warehouseCode: dto.warehouseCode ?? null,
-          qtyIn: qty.toFixed(3),
-          qtyOut: '0.000',
-          unitCost: incomingUnitCost.toFixed(3),
-          transactionDate: receipt.receiptDate,
-          notes: receipt.remarks ?? null,
-          createdBy: dto.createdBy ?? receipt.createdBy ?? null,
-        });
+        const [existingBalances, existingPoLines] = await Promise.all([
+          itemIds.length > 0
+            ? balanceRepo.find({
+                where: itemIds.map((id) => ({
+                  itemId: id,
+                  warehouseCode: dto.warehouseCode ?? undefined,
+                })) as any,
+              })
+            : Promise.resolve([]),
+          poLineIds.length > 0
+            ? poLineRepo.findBy({ id: In(poLineIds) as any })
+            : Promise.resolve([]),
+        ]);
 
-        if (!balance) {
-          newBalancesToSave.push({
+        // Build lookup Maps in memory — O(1) access in the loop
+        const balanceMap = new Map<string, ErpInventoryBalance>();
+        for (const b of existingBalances) {
+          if (b.itemId) balanceMap.set(b.itemId, b);
+        }
+        const poLineMap = new Map<string, ErpPurchaseOrderLine>();
+        for (const p of existingPoLines) {
+          poLineMap.set(p.id, p);
+        }
+
+        // ── Collect all mutations — compute in memory ─────────────────────────
+        const txnsToInsert: any[] = [];
+        const balancesToSave: ErpInventoryBalance[] = [];
+        const newBalancesToSave: DeepPartial<ErpInventoryBalance>[] = [];
+        const poLinesToSave: ErpPurchaseOrderLine[] = [];
+
+        for (const line of lines) {
+          const qty = Number(line.qtyReceived || 0);
+          if (qty <= 0) {
+            throw new BadRequestException(
+              `Dòng ${line.lineNo} có số lượng nhận không hợp lệ`,
+            );
+          }
+
+          const incomingUnitCost = Number(line.unitCost || 0);
+          const balance = line.itemId
+            ? (balanceMap.get(line.itemId) ?? null)
+            : null;
+          const currentQty = Number(balance?.qtyOnHand || 0);
+          const currentValue = Number(balance?.inventoryValue || 0);
+          const receiptValue = qty * incomingUnitCost;
+          const nextQty = currentQty + qty;
+          const nextValue = currentValue + receiptValue;
+          const nextAvgUnitCost = nextQty > 0 ? nextValue / nextQty : 0;
+
+          txnsToInsert.push({
+            transactionType: 'RECEIPT',
+            documentType: 'GOODS_RECEIPT',
+            documentId: receipt.id,
             itemId: line.itemId ?? null,
             warehouseCode: dto.warehouseCode ?? null,
-            qtyOnHand: nextQty.toFixed(3),
-            avgUnitCost: nextAvgUnitCost.toFixed(3),
-            inventoryValue: nextValue.toFixed(3),
+            qtyIn: qty.toFixed(3),
+            qtyOut: '0.000',
+            unitCost: incomingUnitCost.toFixed(3),
+            transactionDate: receipt.receiptDate,
+            notes: receipt.remarks ?? null,
+            createdBy: dto.createdBy ?? receipt.createdBy ?? null,
           });
-        } else {
-          balance.qtyOnHand = nextQty.toFixed(3);
-          balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
-          balance.inventoryValue = nextValue.toFixed(3);
-          balancesToSave.push(balance);
-          // Update the map in case same item appears in multiple lines
-          balanceMap.set(balance.itemId!, balance);
-        }
 
-        if (line.purchaseOrderLineId) {
-          const poLine = poLineMap.get(line.purchaseOrderLineId) ?? null;
-          if (!poLine) {
-            throw new BadRequestException(
-              `Không tìm thấy dòng PO tham chiếu cho dòng nhập ${line.lineNo}`,
-            );
-          }
-          const currentReceived = Number(poLine.qtyReceived || 0);
-          const maxAllowed = Number(poLine.qtyOrdered || 0) - currentReceived;
-          if (qty > maxAllowed + 0.0005) {
-            throw new BadRequestException(
-              `Dòng ${line.lineNo}: số lượng nhập (${qty}) vượt quá số lượng còn được nhận (${maxAllowed.toFixed(3)}) của PO`,
-            );
-          }
-          poLine.qtyReceived = (Number(poLine.qtyReceived || 0) + qty).toFixed(
-            3,
-          );
-          poLinesToSave.push(poLine);
-          poLineMap.set(poLine.id, poLine); // Keep map in sync for next line with same PO line
-        }
-      }
-
-      // ── Bulk write: 4 round-trips total instead of 4×N ───────────────────
-      await Promise.all([
-        txnsToInsert.length > 0
-          ? txnRepo.insert(txnsToInsert)
-          : Promise.resolve(),
-        balancesToSave.length > 0
-          ? balanceRepo.save(balancesToSave)
-          : Promise.resolve(),
-        newBalancesToSave.length > 0
-          ? balanceRepo.save(newBalancesToSave)
-          : Promise.resolve(),
-        poLinesToSave.length > 0
-          ? poLineRepo.save(poLinesToSave)
-          : Promise.resolve(),
-      ]);
-
-      // ── Update PO header status ───────────────────────────────────────────
-      if (receipt.purchaseOrderId) {
-        const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
-        if (po) {
-          const refreshedLines = [...poLineMap.values()];
-          const allReceived =
-            refreshedLines.length > 0 &&
-            refreshedLines.every(
-              (line) =>
-                Number(line.qtyReceived || 0) >= Number(line.qtyOrdered || 0),
-            );
-          po.status = allReceived ? 'RECEIVED' : 'PARTIAL_RECEIVED';
-          await poRepo.save(po);
-        }
-      }
-
-      if (receipt.productionOrderId) {
-        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
-        if (mo) {
-          // Calculate total received qty across all receipt lines for this MO
-          const totalReceived = lines.reduce(
-            (sum, l) => sum + Number(l.qtyReceived || 0),
-            0,
-          );
-          mo.qtyProduced = (
-            Number(mo.qtyProduced || 0) + totalReceived
-          ).toFixed(3);
-          if (Number(mo.qtyProduced) >= Number(mo.qtyToProduce || 0)) {
-            mo.status = 'COMPLETED';
-          } else if (Number(mo.qtyProduced) > 0) {
-            mo.status = 'IN_PROGRESS';
-          }
-          await moRepo.save(mo);
-        }
-      }
-
-      // ── Process Tracking Serials for lines with SERIAL / VEHICLE / CUSTOM policy ──
-      const itemRepo = manager?.getRepository
-        ? manager.getRepository(ErpInventoryItem)
-        : null;
-      const trackingSerialRepo = manager?.getRepository
-        ? manager.getRepository(ErpInventoryTrackingSerial)
-        : null;
-      const itemsWithPolicy =
-        itemIds.length > 0 && itemRepo?.find
-          ? await itemRepo.find({
-              where: { id: In(itemIds) },
-              relations: ['trackingPolicy'],
-            })
-          : [];
-      const itemPolicyMap = new Map(itemsWithPolicy.map((i) => [i.id, i]));
-
-      const serialsToInsert: DeepPartial<ErpInventoryTrackingSerial>[] = [];
-
-      for (const line of lines) {
-        const item = line.itemId ? itemPolicyMap.get(line.itemId) : null;
-        const trackingCode = item?.trackingPolicy?.code;
-        const qty = Math.round(Number(line.qtyReceived || 0));
-
-        if (
-          trackingCode === 'SERIAL' ||
-          trackingCode === 'VEHICLE' ||
-          trackingCode === 'CUSTOM'
-        ) {
-          const declared = line.declaredSerials || [];
-          if (declared.length < qty) {
-            throw new BadRequestException(
-              `Dòng ${line.lineNo} (${item?.sku || 'Item'}): Chưa khai báo đủ số lượng Serial/Tracking (cần ${qty}, đã khai báo ${declared.length}).`,
-            );
-          }
-
-          // Check internal duplicates in line
-          const rawSerialNos = declared
-            .map((d) => d.serialNo?.trim())
-            .filter(Boolean);
-          const uniqueSerialNos = new Set(rawSerialNos);
-          if (uniqueSerialNos.size !== rawSerialNos.length) {
-            throw new BadRequestException(
-              `Dòng ${line.lineNo} (${item?.sku}): Có mã Serial/Tracking bị trùng lặp trong danh sách khai báo.`,
-            );
-          }
-
-          // Check duplicates against DB (IN_STOCK)
-          if (rawSerialNos.length > 0 && trackingSerialRepo?.find) {
-            const existingSerials = await trackingSerialRepo.find({
-              where: {
-                serialNo: In(rawSerialNos),
-                status: 'IN_STOCK',
-              },
+          if (!balance) {
+            newBalancesToSave.push({
+              itemId: line.itemId ?? null,
+              warehouseCode: dto.warehouseCode ?? null,
+              qtyOnHand: nextQty.toFixed(3),
+              avgUnitCost: nextAvgUnitCost.toFixed(3),
+              inventoryValue: nextValue.toFixed(3),
             });
-            if (existingSerials.length > 0) {
-              const dupes = existingSerials.map((s) => s.serialNo).join(', ');
+          } else {
+            balance.qtyOnHand = nextQty.toFixed(3);
+            balance.avgUnitCost = nextAvgUnitCost.toFixed(3);
+            balance.inventoryValue = nextValue.toFixed(3);
+            balancesToSave.push(balance);
+            balanceMap.set(balance.itemId!, balance);
+          }
+
+          if (line.purchaseOrderLineId) {
+            const poLine = poLineMap.get(line.purchaseOrderLineId) ?? null;
+            if (!poLine) {
               throw new BadRequestException(
-                `Dòng ${line.lineNo} (${item?.sku}): Các mã Serial sau đã tồn tại trong kho (IN_STOCK): ${dupes}`,
+                `Không tìm thấy dòng PO tham chiếu cho dòng nhập ${line.lineNo}`,
               );
             }
+            const currentReceived = Number(poLine.qtyReceived || 0);
+            const maxAllowed = Number(poLine.qtyOrdered || 0) - currentReceived;
+            if (qty > maxAllowed + 0.0005) {
+              throw new BadRequestException(
+                `Dòng ${line.lineNo}: số lượng nhập (${qty}) vượt quá số lượng còn được nhận (${maxAllowed.toFixed(3)}) của PO`,
+              );
+            }
+            poLine.qtyReceived = (
+              Number(poLine.qtyReceived || 0) + qty
+            ).toFixed(3);
+            poLinesToSave.push(poLine);
+            poLineMap.set(poLine.id, poLine);
           }
+        }
 
-          const vehicleRepo = manager?.getRepository
-            ? manager.getRepository(ErpVehicle)
-            : null;
+        // ── Bulk write: 4 round-trips total instead of 4×N ───────────────────
+        await Promise.all([
+          txnsToInsert.length > 0
+            ? txnRepo.insert(txnsToInsert)
+            : Promise.resolve(),
+          balancesToSave.length > 0
+            ? balanceRepo.save(balancesToSave)
+            : Promise.resolve(),
+          newBalancesToSave.length > 0
+            ? balanceRepo.save(newBalancesToSave)
+            : Promise.resolve(),
+          poLinesToSave.length > 0
+            ? poLineRepo.save(poLinesToSave)
+            : Promise.resolve(),
+        ]);
 
-          for (const d of declared.slice(0, qty)) {
-            let vinId: string | null = null;
-            const vinNo = d.vinNo?.trim() || d.attributes?.vinNo?.trim();
-            const engineNo =
-              d.engineNo?.trim() || d.attributes?.engineNo?.trim();
-            const internalSerialNo =
-              d.internalSerialNo?.trim() ||
-              d.attributes?.internalSerialNo?.trim();
+        // ── Update PO header status ───────────────────────────────────────────
+        if (receipt.purchaseOrderId) {
+          const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
+          if (po) {
+            const refreshedLines = [...poLineMap.values()];
+            const allReceived =
+              refreshedLines.length > 0 &&
+              refreshedLines.every(
+                (line) =>
+                  Number(line.qtyReceived || 0) >= Number(line.qtyOrdered || 0),
+              );
+            po.status = allReceived ? 'RECEIVED' : 'PARTIAL_RECEIVED';
+            await poRepo.save(po);
+          }
+        }
+
+        if (receipt.productionOrderId) {
+          const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+          if (mo) {
+            const totalReceived = lines.reduce(
+              (sum, l) => sum + Number(l.qtyReceived || 0),
+              0,
+            );
+            mo.qtyProduced = (
+              Number(mo.qtyProduced || 0) + totalReceived
+            ).toFixed(3);
+            if (Number(mo.qtyProduced) >= Number(mo.qtyToProduce || 0)) {
+              mo.status = 'COMPLETED';
+            } else if (Number(mo.qtyProduced) > 0) {
+              mo.status = 'IN_PROGRESS';
+            }
+            await moRepo.save(mo);
+          }
+        }
+
+        // ── Process Tracking Serials & Universal System Serials ────────────────
+        const itemRepo = manager?.getRepository
+          ? manager.getRepository(ErpInventoryItem)
+          : null;
+        const trackingSerialRepo = manager?.getRepository
+          ? manager.getRepository(ErpInventoryTrackingSerial)
+          : null;
+        const itemsWithPolicy =
+          itemIds.length > 0 && itemRepo?.find
+            ? await itemRepo.find({
+                where: { id: In(itemIds) },
+                relations: ['trackingPolicy'],
+              })
+            : [];
+        const itemPolicyMap = new Map(itemsWithPolicy.map((i) => [i.id, i]));
+
+        for (const line of lines) {
+          const item = line.itemId ? itemPolicyMap.get(line.itemId) : null;
+          const trackingCode = item?.trackingPolicy?.code;
+          const qty = Math.round(Number(line.qtyReceived || 0));
+
+          if (item && qty > 0) {
+            const declared = line.declaredSerials || [];
 
             if (
-              trackingCode === 'VEHICLE' &&
-              vinNo &&
-              engineNo &&
-              vehicleRepo
+              trackingCode === 'SERIAL' ||
+              trackingCode === 'VEHICLE' ||
+              trackingCode === 'CUSTOM'
             ) {
-              let vehicle = await vehicleRepo.findOne({
-                where: { vinNo },
-              });
-              if (!vehicle) {
-                const newVehicle = vehicleRepo.create({
-                  vinNo,
-                  engineNo,
-                  finishedGoodItemId: line.itemId ?? null,
-                  assemblyDate: receipt.receiptDate || null,
-                  status: 'ASSEMBLED',
-                  notes: d.notes || null,
-                } as any);
-                vehicle = (await vehicleRepo.save(
-                  newVehicle,
-                )) as unknown as ErpVehicle;
+              if (declared.length < qty) {
+                throw new BadRequestException(
+                  `Dòng ${line.lineNo} (${item?.sku || 'Item'}): Chưa khai báo đủ số lượng Serial/Tracking (cần ${qty}, đã khai báo ${declared.length}).`,
+                );
               }
-              if (vehicle) {
-                vinId = vehicle.id;
+
+              // Check internal duplicates in line
+              const rawSerialNos = declared
+                .map((d) => d.serialNo?.trim())
+                .filter(Boolean);
+              const uniqueSerialNos = new Set(rawSerialNos);
+              if (uniqueSerialNos.size !== rawSerialNos.length) {
+                throw new BadRequestException(
+                  `Dòng ${line.lineNo} (${item?.sku}): Có mã Serial/Tracking bị trùng lặp trong danh sách khai báo.`,
+                );
+              }
+
+              // Check duplicates against DB (IN_STOCK)
+              if (rawSerialNos.length > 0 && trackingSerialRepo?.find) {
+                const existingSerials = await trackingSerialRepo.find({
+                  where: {
+                    serialNo: In(rawSerialNos),
+                    status: 'IN_STOCK',
+                  },
+                });
+                if (existingSerials.length > 0) {
+                  const dupes = existingSerials
+                    .map((s) => s.serialNo)
+                    .join(', ');
+                  throw new BadRequestException(
+                    `Dòng ${line.lineNo} (${item?.sku}): Các mã Serial sau đã tồn tại trong kho (IN_STOCK): ${dupes}`,
+                  );
+                }
+              }
+
+              const vehicleRepo = manager?.getRepository
+                ? manager.getRepository(ErpVehicle)
+                : null;
+
+              if (trackingCode === 'VEHICLE' && vehicleRepo) {
+                for (const d of declared.slice(0, qty)) {
+                  const vinNo = d.vinNo?.trim() || d.attributes?.vinNo?.trim();
+                  const engineNo =
+                    d.engineNo?.trim() || d.attributes?.engineNo?.trim();
+
+                  if (vinNo && engineNo) {
+                    let vehicle = await vehicleRepo.findOne({
+                      where: { vinNo },
+                    });
+                    if (!vehicle) {
+                      const newVehicle = vehicleRepo.create({
+                        vinNo,
+                        engineNo,
+                        finishedGoodItemId: line.itemId ?? null,
+                        assemblyDate: receipt.receiptDate || null,
+                        status: 'ASSEMBLED',
+                        notes: d.notes || null,
+                      } as any);
+                      await vehicleRepo.save(newVehicle);
+                    }
+                  }
+                }
               }
             }
 
-            const finalAttributes = {
-              ...(d.attributes || {}),
-              ...(vinNo ? { vinNo } : {}),
-              ...(engineNo ? { engineNo } : {}),
-              ...(d.serialNo ? { vehicleSerialNo: d.serialNo.trim() } : {}),
-              ...(internalSerialNo ? { internalSerialNo } : {}),
-            };
-
-            serialsToInsert.push({
-              itemId: line.itemId ?? null,
-              serialNo: d.serialNo.trim(),
-              status: 'IN_STOCK',
-              vinId,
-              customId: null,
+            // Tự động sinh System Serial cho TẤT CẢ các item (kể cả NONE lẫn SERIAL/VEHICLE)
+            await this.systemSerialService.generateSystemSerials(manager, {
+              item,
+              qty,
               receiptLineId: line.id,
-              lotNo: d.lotNo || null,
-              notes: d.notes || null,
-              attributes:
-                Object.keys(finalAttributes).length > 0
-                  ? finalAttributes
-                  : null,
+              receiptId: receipt.id,
+              unitCost: line.unitCost,
+              receiptDate: receipt.receiptDate,
+              userDeclaredSerials: declared.length > 0 ? declared : null,
             });
+
+            line.serialsGenerated = true;
+          } else {
+            line.serialsGenerated = true;
           }
-          line.serialsGenerated = true;
-        } else {
-          line.serialsGenerated = true;
         }
-      }
 
-      if (serialsToInsert.length > 0 && trackingSerialRepo?.insert) {
-        const chunkSize = 1000;
-        for (let j = 0; j < serialsToInsert.length; j += chunkSize) {
-          await trackingSerialRepo.insert(
-            serialsToInsert.slice(j, j + chunkSize),
-          );
+        if (lineRepo?.save) {
+          await lineRepo.save(lines);
         }
-      }
-      if (lineRepo?.save) {
-        await lineRepo.save(lines);
-      }
 
-      receipt.status = 'POSTED';
-      const savedReceipt = await receiptRepo.save(receipt);
-      const savedLines = await lineRepo.find({
-        where: { goodsReceiptId: id },
-        order: { lineNo: 'ASC' },
+        receipt.status = 'POSTED';
+        const savedReceipt = await receiptRepo.save(receipt);
+        const savedLines = await lineRepo.find({
+          where: { goodsReceiptId: id },
+          order: { lineNo: 'ASC' },
+        });
+
+        this.logger.log(
+          `Goods receipt ${savedReceipt.receiptNo} posted successfully.`,
+        );
+
+        return {
+          message: 'Lấy thông tin thành công',
+          data: { ...savedReceipt, lines: savedLines },
+        };
       });
 
-      // --- Journal entry generation removed (accounting module decoupled) ---
-      this.logger.log(
-        `Goods receipt ${savedReceipt.receiptNo} posted; journal entry generation skipped.`,
-      );
-      // -----------------------------------------------------------------------
-
-      return {
-        message: 'Lấy thông tin thành công',
-        data: { ...savedReceipt, lines: savedLines },
-      };
-    });
+      await this.systemOperationsService.completeOperation(lock.id);
+      return result;
+    } catch (err: any) {
+      await this.systemOperationsService.failOperation(lock.id, err?.message);
+      throw err;
+    }
   }
 
   async cancelReceipt(id: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const receiptRepo = manager.getRepository(ErpGoodsReceipt);
-      const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
-      const txnRepo = manager.getRepository(ErpInventoryTransaction);
-      const balanceRepo = manager.getRepository(ErpInventoryBalance);
-      const poRepo = manager.getRepository(ErpPurchaseOrder);
-      const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
-      const moRepo = manager.getRepository(ErpProductionOrder);
-      const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
+    const existing = await this.getReceiptOrThrow(this.repository, id);
+    const lock = await this.systemOperationsService.startOperation({
+      module: 'INVENTORY',
+      operationType: 'GOODS_RECEIPT_CANCEL',
+      scopeType: 'MODULE',
+      targetId: id,
+      targetNo: existing.receiptNo || id,
+      userId: existing.createdBy || undefined,
+      isBlockingUi: true,
+      blockedActions: [
+        'CREATE_RECEIPT',
+        'CREATE_ISSUE',
+        'POST_RECEIPT',
+        'POST_ISSUE',
+      ],
+      timeoutSeconds: 60,
+    });
 
-      const receipt = await this.getReceiptOrThrow(receiptRepo, id);
-      if (receipt.status === 'CANCELLED') {
-        throw new BadRequestException('Phiếu nhập đã bị hủy trước đó');
-      }
-      if (receipt.status !== 'POSTED') {
-        throw new BadRequestException(
-          'Chỉ có thể hủy phiếu nhập đã ghi sổ (POSTED)',
-        );
-      }
+    try {
+      const result = await this.dataSource.transaction(async (manager) => {
+        const receiptRepo = manager.getRepository(ErpGoodsReceipt);
+        const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
+        const txnRepo = manager.getRepository(ErpInventoryTransaction);
+        const balanceRepo = manager.getRepository(ErpInventoryBalance);
+        const poRepo = manager.getRepository(ErpPurchaseOrder);
+        const poLineRepo = manager.getRepository(ErpPurchaseOrderLine);
+        const moRepo = manager.getRepository(ErpProductionOrder);
+        const serialRepo = manager.getRepository(ErpInventoryTrackingSerial);
 
-      await this.dependencyService.checkDependencies('goods_receipts', id);
+        const receipt = await this.getReceiptOrThrow(receiptRepo, id);
+        if (receipt.status === 'CANCELLED') {
+          throw new BadRequestException('Phiếu nhập đã bị hủy trước đó');
+        }
+        if (receipt.status !== 'POSTED') {
+          throw new BadRequestException(
+            'Chỉ có thể hủy phiếu nhập đã ghi sổ (POSTED)',
+          );
+        }
 
-      const lines = await lineRepo.find({
-        where: { goodsReceiptId: id },
-        order: { lineNo: 'ASC' },
-      });
+        await this.dependencyService.checkDependencies('goods_receipts', id);
 
-      const receiptLineIds = lines.map((line) => line.id);
-      const receiptSerials =
-        receiptLineIds.length > 0
-          ? await serialRepo.find({
-              where: { receiptLineId: In(receiptLineIds) },
-            })
-          : [];
-
-      const inUseSerials = receiptSerials.filter(
-        (serial) =>
-          serial.status !== 'IN_STOCK' ||
-          !!serial.salesOrderLineId ||
-          !!serial.goodsIssueLineId ||
-          !!serial.vinId ||
-          !!serial.productionOrderId,
-      );
-
-      if (inUseSerials.length > 0) {
-        throw new BadRequestException(
-          'Không thể hủy phiếu nhập vì có serial đã được sử dụng ở nghiệp vụ khác',
-        );
-      }
-
-      // ── PRE-FETCH tất cả balances và PO lines ────────────────────────────
-      const cancelItemIds = [
-        ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
-      ] as string[];
-      const cancelPoLineIds = [
-        ...new Set(lines.map((l) => l.purchaseOrderLineId).filter(Boolean)),
-      ] as string[];
-
-      const [cancelBalances, cancelPoLines] = await Promise.all([
-        cancelItemIds.length > 0
-          ? balanceRepo.findBy({ itemId: In(cancelItemIds) as any })
-          : Promise.resolve([]),
-        cancelPoLineIds.length > 0
-          ? poLineRepo.findBy({ id: In(cancelPoLineIds) as any })
-          : Promise.resolve([]),
-      ]);
-
-      const cancelBalanceMap = new Map<string, ErpInventoryBalance>();
-      for (const b of cancelBalances) {
-        if (b.itemId) cancelBalanceMap.set(b.itemId, b);
-      }
-      const cancelPoLineMap = new Map<string, ErpPurchaseOrderLine>();
-      for (const p of cancelPoLines) {
-        cancelPoLineMap.set(p.id, p);
-      }
-
-      // ── Compute reversals in memory ───────────────────────────────────────
-      const cancelTxns: any[] = [];
-      const cancelBalancesToSave: ErpInventoryBalance[] = [];
-      const cancelPoLinesToSave: ErpPurchaseOrderLine[] = [];
-
-      for (const line of lines) {
-        const qty = Number(line.qtyReceived || 0);
-        if (qty <= 0) continue;
-
-        const unitCost = Number(line.unitCost || 0);
-        cancelTxns.push({
-          transactionType: 'RECEIPT_CANCEL',
-          documentType: 'GOODS_RECEIPT',
-          documentId: receipt.id,
-          itemId: line.itemId ?? null,
-          warehouseCode: null,
-          qtyIn: '0.000',
-          qtyOut: qty.toFixed(3),
-          unitCost: unitCost.toFixed(3),
-          transactionDate: receipt.receiptDate,
-          notes: `Hủy phiếu nhập ${receipt.receiptNo}`,
-          createdBy: null,
+        const lines = await lineRepo.find({
+          where: { goodsReceiptId: id },
+          order: { lineNo: 'ASC' },
         });
 
-        if (line.itemId) {
-          const balance = cancelBalanceMap.get(line.itemId);
-          if (balance) {
-            const revertedQty = Math.max(0, Number(balance.qtyOnHand) - qty);
-            const revertedValue = Math.max(
+        const receiptLineIds = lines.map((line) => line.id);
+        const receiptSerials =
+          receiptLineIds.length > 0
+            ? await serialRepo.find({
+                where: { receiptLineId: In(receiptLineIds) },
+              })
+            : [];
+
+        const inUseSerials = receiptSerials.filter(
+          (serial) =>
+            serial.status !== 'IN_STOCK' ||
+            !!serial.salesOrderLineId ||
+            !!serial.goodsIssueLineId ||
+            !!serial.vinId ||
+            !!serial.productionOrderId,
+        );
+
+        if (inUseSerials.length > 0) {
+          throw new BadRequestException(
+            'Không thể hủy phiếu nhập vì có serial đã được sử dụng ở nghiệp vụ khác',
+          );
+        }
+
+        // ── PRE-FETCH tất cả balances và PO lines ────────────────────────────
+        const cancelItemIds = [
+          ...new Set(lines.map((l) => l.itemId).filter(Boolean)),
+        ] as string[];
+        const cancelPoLineIds = [
+          ...new Set(lines.map((l) => l.purchaseOrderLineId).filter(Boolean)),
+        ] as string[];
+
+        const [cancelBalances, cancelPoLines] = await Promise.all([
+          cancelItemIds.length > 0
+            ? balanceRepo.findBy({ itemId: In(cancelItemIds) as any })
+            : Promise.resolve([]),
+          cancelPoLineIds.length > 0
+            ? poLineRepo.findBy({ id: In(cancelPoLineIds) as any })
+            : Promise.resolve([]),
+        ]);
+
+        const cancelBalanceMap = new Map<string, ErpInventoryBalance>();
+        for (const b of cancelBalances) {
+          if (b.itemId) cancelBalanceMap.set(b.itemId, b);
+        }
+        const cancelPoLineMap = new Map<string, ErpPurchaseOrderLine>();
+        for (const p of cancelPoLines) {
+          cancelPoLineMap.set(p.id, p);
+        }
+
+        // ── Compute reversals in memory ───────────────────────────────────────
+        const cancelTxns: any[] = [];
+        const cancelBalancesToSave: ErpInventoryBalance[] = [];
+        const cancelPoLinesToSave: ErpPurchaseOrderLine[] = [];
+
+        for (const line of lines) {
+          const qty = Number(line.qtyReceived || 0);
+          if (qty <= 0) continue;
+
+          const unitCost = Number(line.unitCost || 0);
+          cancelTxns.push({
+            transactionType: 'RECEIPT_CANCEL',
+            documentType: 'GOODS_RECEIPT',
+            documentId: receipt.id,
+            itemId: line.itemId ?? null,
+            warehouseCode: null,
+            qtyIn: '0.000',
+            qtyOut: qty.toFixed(3),
+            unitCost: unitCost.toFixed(3),
+            transactionDate: receipt.receiptDate,
+            notes: `Hủy phiếu nhập ${receipt.receiptNo}`,
+            createdBy: null,
+          });
+
+          if (line.itemId) {
+            const balance = cancelBalanceMap.get(line.itemId);
+            if (balance) {
+              const revertedQty = Math.max(0, Number(balance.qtyOnHand) - qty);
+              const revertedValue = Math.max(
+                0,
+                Number(balance.inventoryValue) - qty * unitCost,
+              );
+              balance.qtyOnHand = revertedQty.toFixed(3);
+              balance.inventoryValue = revertedValue.toFixed(3);
+              balance.avgUnitCost =
+                revertedQty > 0
+                  ? (revertedValue / revertedQty).toFixed(3)
+                  : '0.000';
+              cancelBalancesToSave.push(balance);
+              cancelBalanceMap.set(line.itemId, balance);
+            }
+          }
+
+          if (line.purchaseOrderLineId) {
+            const poLine = cancelPoLineMap.get(line.purchaseOrderLineId);
+            if (poLine) {
+              poLine.qtyReceived = Math.max(
+                0,
+                Number(poLine.qtyReceived) - qty,
+              ).toFixed(3);
+              cancelPoLinesToSave.push(poLine);
+              cancelPoLineMap.set(poLine.id, poLine);
+            }
+          }
+        }
+
+        // ── Bulk write ────────────────────────────────────────────────────────
+        await Promise.all([
+          cancelTxns.length > 0
+            ? txnRepo.insert(cancelTxns)
+            : Promise.resolve(),
+          cancelBalancesToSave.length > 0
+            ? balanceRepo.save(cancelBalancesToSave)
+            : Promise.resolve(),
+          cancelPoLinesToSave.length > 0
+            ? poLineRepo.save(cancelPoLinesToSave)
+            : Promise.resolve(),
+          receiptSerials.length > 0
+            ? serialRepo.delete({
+                id: In(receiptSerials.map((serial) => serial.id)),
+              })
+            : Promise.resolve(),
+        ]);
+
+        // Recalc PO receipt status
+        if (receipt.purchaseOrderId) {
+          const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
+          if (po) {
+            const refreshedLines = [...cancelPoLineMap.values()];
+            const totalOrdered = refreshedLines.reduce(
+              (sum, l) => sum + Number(l.qtyOrdered || 0),
               0,
-              Number(balance.inventoryValue) - qty * unitCost,
             );
-            balance.qtyOnHand = revertedQty.toFixed(3);
-            balance.inventoryValue = revertedValue.toFixed(3);
-            balance.avgUnitCost =
-              revertedQty > 0
-                ? (revertedValue / revertedQty).toFixed(3)
-                : '0.000';
-            cancelBalancesToSave.push(balance);
-            cancelBalanceMap.set(line.itemId, balance);
-          }
-        }
-
-        if (line.purchaseOrderLineId) {
-          const poLine = cancelPoLineMap.get(line.purchaseOrderLineId);
-          if (poLine) {
-            poLine.qtyReceived = Math.max(
+            const totalReceived = refreshedLines.reduce(
+              (sum, l) => sum + Number(l.qtyReceived || 0),
               0,
-              Number(poLine.qtyReceived) - qty,
+            );
+            if (totalReceived <= 0) {
+              po.status = po.status === 'CONFIRMED' ? 'CONFIRMED' : 'APPROVED';
+            } else if (totalReceived < totalOrdered) {
+              po.status = 'PARTIAL_RECEIVED';
+            } else {
+              po.status = 'RECEIVED';
+            }
+            await poRepo.save(po);
+          }
+        }
+
+        if (receipt.productionOrderId) {
+          const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
+          if (mo) {
+            const totalCancelled = lines.reduce(
+              (sum, l) => sum + Number(l.qtyReceived || 0),
+              0,
+            );
+            mo.qtyProduced = Math.max(
+              0,
+              Number(mo.qtyProduced || 0) - totalCancelled,
             ).toFixed(3);
-            cancelPoLinesToSave.push(poLine);
-            cancelPoLineMap.set(poLine.id, poLine);
+
+            if (Number(mo.qtyProduced) <= 0) {
+              mo.status =
+                mo.status === 'IN_PROGRESS' || mo.status === 'COMPLETED'
+                  ? 'CONFIRMED'
+                  : mo.status;
+            } else if (Number(mo.qtyProduced) < Number(mo.qtyToProduce || 0)) {
+              mo.status = 'IN_PROGRESS';
+            }
+            await moRepo.save(mo);
           }
         }
-      }
 
-      // ── Bulk write ────────────────────────────────────────────────────────
-      await Promise.all([
-        cancelTxns.length > 0 ? txnRepo.insert(cancelTxns) : Promise.resolve(),
-        cancelBalancesToSave.length > 0
-          ? balanceRepo.save(cancelBalancesToSave)
-          : Promise.resolve(),
-        cancelPoLinesToSave.length > 0
-          ? poLineRepo.save(cancelPoLinesToSave)
-          : Promise.resolve(),
-        receiptSerials.length > 0
-          ? serialRepo.delete({
-              id: In(receiptSerials.map((serial) => serial.id)),
-            })
-          : Promise.resolve(),
-      ]);
+        receipt.status = 'CANCELLED';
+        const savedReceipt = await receiptRepo.save(receipt);
 
-      // Recalc PO receipt status
-      if (receipt.purchaseOrderId) {
-        const po = await poRepo.findOneBy({ id: receipt.purchaseOrderId });
-        if (po) {
-          const refreshedLines = [...cancelPoLineMap.values()];
-          const totalOrdered = refreshedLines.reduce(
-            (sum, l) => sum + Number(l.qtyOrdered || 0),
-            0,
-          );
-          const totalReceived = refreshedLines.reduce(
-            (sum, l) => sum + Number(l.qtyReceived || 0),
-            0,
-          );
-          if (totalReceived <= 0) {
-            po.status = po.status === 'CONFIRMED' ? 'CONFIRMED' : 'APPROVED';
-          } else if (totalReceived < totalOrdered) {
-            po.status = 'PARTIAL_RECEIVED';
-          } else {
-            po.status = 'RECEIVED';
-          }
-          await poRepo.save(po);
-        }
-      }
-
-      if (receipt.productionOrderId) {
-        const mo = await moRepo.findOneBy({ id: receipt.productionOrderId });
-        if (mo) {
-          const totalCancelled = lines.reduce(
-            (sum, l) => sum + Number(l.qtyReceived || 0),
-            0,
-          );
-          mo.qtyProduced = Math.max(
-            0,
-            Number(mo.qtyProduced || 0) - totalCancelled,
-          ).toFixed(3);
-
-          if (Number(mo.qtyProduced) <= 0) {
-            mo.status =
-              mo.status === 'IN_PROGRESS' || mo.status === 'COMPLETED'
-                ? 'CONFIRMED'
-                : mo.status;
-          } else if (Number(mo.qtyProduced) < Number(mo.qtyToProduce || 0)) {
-            mo.status = 'IN_PROGRESS';
-          }
-          await moRepo.save(mo);
-        }
-      }
-
-      receipt.status = 'CANCELLED';
-      const savedReceipt = await receiptRepo.save(receipt);
-      const savedLines = await lineRepo.find({
-        where: { goodsReceiptId: id },
-        order: { lineNo: 'ASC' },
+        return {
+          message: 'Hủy phiếu nhập thành công',
+          data: savedReceipt,
+        };
       });
 
-      // --- Reverse journal entry generation removed (accounting module decoupled) ---
-      this.logger.log(
-        `Goods receipt ${savedReceipt.receiptNo} cancelled; reverse journal entry generation skipped.`,
-      );
-      // ------------------------------------------------------------------------------
-
-      return {
-        message: 'Hủy phiếu nhập thành công',
-        data: { ...savedReceipt, lines: savedLines },
-      };
-    });
+      await this.systemOperationsService.completeOperation(lock.id);
+      return result;
+    } catch (err: any) {
+      await this.systemOperationsService.failOperation(lock.id, err?.message);
+      throw err;
+    }
   }
 
   async remove(id: string) {
-    const existing = await this.repository.findOneBy({ id });
-    if (!existing || existing.isDeleted) {
-      throw new NotFoundException('Không tìm thấy phiếu nhập');
-    }
+    const existing = await this.getReceiptOrThrow(this.repository, id);
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException(
         'Chỉ được xóa phiếu nhập ở trạng thái nháp',

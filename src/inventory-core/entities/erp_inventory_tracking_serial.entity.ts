@@ -67,6 +67,48 @@ export class ErpInventoryTrackingSerial {
   @Column({ type: 'jsonb', name: 'attributes', nullable: true })
   attributes: Record<string, string> | null;
 
+  /** Mã định danh hệ thống ngầm tự động sinh (SYS-SKU-YYMMDD-XXXXXX) */
+  @Index('idx_inv_tracking_system_serial_no')
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'system_serial_no',
+    nullable: true,
+  })
+  systemSerialNo: string | null;
+
+  /** Phân loại: USER_DECLARED (người dùng khai báo) hoặc SYSTEM_AUTO (hệ thống tự sinh ngầm) */
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'tracking_type',
+    default: 'USER_DECLARED',
+  })
+  trackingType: string;
+
+  /** Giá vốn đơn vị tại thời điểm nhập kho */
+  @Column({
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
+    name: 'unit_cost',
+    nullable: true,
+  })
+  unitCost: string | null;
+
+  /** Loại chứng từ gốc sinh ra serial (GOODS_RECEIPT, INVENTORY_ADJUSTMENT, INITIAL_STOCK) */
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'source_document_type',
+    default: 'GOODS_RECEIPT',
+  })
+  sourceDocumentType: string;
+
+  /** ID của chứng từ gốc */
+  @Column({ type: 'uuid', name: 'source_document_id', nullable: true })
+  sourceDocumentId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
