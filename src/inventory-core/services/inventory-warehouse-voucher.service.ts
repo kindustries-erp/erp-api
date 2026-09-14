@@ -48,6 +48,36 @@ function buildRawMultiKeywordSql(
   return `(${kwClauses.join(' OR ')})`;
 }
 
+const GR_CAT_CODE_EXPR = `COALESCE(eav_gr.value_text, CASE WHEN g.purchase_order_id IS NOT NULL THEN 'PO' WHEN g.production_order_id IS NOT NULL THEN 'PRODUCTION' ELSE 'OTHER' END)`;
+const GR_CAT_NAME_EXPR = `CASE ${GR_CAT_CODE_EXPR}
+  WHEN 'PO' THEN 'Đơn mua hàng (PO)'
+  WHEN 'PRODUCTION' THEN 'Nhập sản xuất (MO)'
+  WHEN 'RETURN' THEN 'Nhập trả hàng'
+  WHEN 'WARRANTY' THEN 'Nhập bảo hành'
+  WHEN 'OTHER' THEN 'Nhập khác'
+  ELSE COALESCE(eav_gr.value_text, '—')
+END`;
+
+const GI_CAT_CODE_EXPR = `COALESCE(eav_gi.value_text, CASE WHEN g.production_order_id IS NOT NULL OR g.issue_type = 'PRODUCTION' THEN 'PRODUCTION' WHEN g.sales_order_id IS NOT NULL OR g.issue_type = 'SALE' OR g.issue_type = 'SALES' THEN 'SALE' WHEN g.issue_type = 'WARRANTY' THEN 'WARRANTY' WHEN g.issue_type = 'SCRAP' THEN 'SCRAP' ELSE 'OTHER' END)`;
+const GI_CAT_NAME_EXPR = `CASE ${GI_CAT_CODE_EXPR}
+  WHEN 'SALE' THEN 'Xuất bán hàng (SO)'
+  WHEN 'PRODUCTION' THEN 'Xuất sản xuất (NVL)'
+  WHEN 'WARRANTY' THEN 'Xuất bảo hành'
+  WHEN 'SCRAP' THEN 'Xuất hủy / Hao hụt'
+  WHEN 'OTHER' THEN 'Xuất khác'
+  ELSE COALESCE(eav_gi.value_text, '—')
+END`;
+
+const IA_CAT_CODE_EXPR = `COALESCE(eav_ia.value_text, 'PERIODIC')`;
+const IA_CAT_NAME_EXPR = `CASE ${IA_CAT_CODE_EXPR}
+  WHEN 'PERIODIC' THEN 'Kiểm kê định kỳ'
+  WHEN 'DAMAGED' THEN 'Hàng hỏng hóc / Hao hụt'
+  WHEN 'COUNT_ERROR' THEN 'Sai lệch kiểm đếm'
+  WHEN 'RECLASSIFY' THEN 'Phân loại quy cách'
+  WHEN 'OTHER' THEN 'Lý do khác'
+  ELSE COALESCE(eav_ia.value_text, '—')
+END`;
+
 @Injectable()
 export class InventoryWarehouseVoucherService {
   constructor(private readonly dataSource: DataSource) {}
@@ -198,19 +228,19 @@ export class InventoryWarehouseVoucherService {
         if (ic) issueWhere += ` AND ${ic}`;
       } else if (key === 'category' || key === 'categoryName') {
         const rc = buildRawMultiKeywordSql(
-          ['cat.name', 'cat.code'],
+          [GR_CAT_NAME_EXPR, GR_CAT_CODE_EXPR],
           value,
           params,
           () => pIndex++,
         );
         const ic = buildRawMultiKeywordSql(
-          ['cat.name', 'cat.code'],
+          [GI_CAT_NAME_EXPR, GI_CAT_CODE_EXPR],
           value,
           params,
           () => pIndex++,
         );
         const ac = buildRawMultiKeywordSql(
-          ['cat.name', 'cat.code'],
+          [IA_CAT_NAME_EXPR, IA_CAT_CODE_EXPR],
           value,
           params,
           () => pIndex++,
@@ -313,19 +343,33 @@ export class InventoryWarehouseVoucherService {
     if (query.search) {
       const s = query.search;
       const receiptSearch = buildRawMultiKeywordSql(
-        ['g.receipt_no', 'g.remarks', 'bp.name', 'bp.display_name'],
+        [
+          'g.receipt_no',
+          'g.remarks',
+          'bp.name',
+          'bp.display_name',
+          GR_CAT_NAME_EXPR,
+          GR_CAT_CODE_EXPR,
+        ],
         s,
         params,
         () => pIndex++,
       );
       const issueSearch = buildRawMultiKeywordSql(
-        ['g.issue_no', 'g.remarks', 'bp.name', 'bp.display_name'],
+        [
+          'g.issue_no',
+          'g.remarks',
+          'bp.name',
+          'bp.display_name',
+          GI_CAT_NAME_EXPR,
+          GI_CAT_CODE_EXPR,
+        ],
         s,
         params,
         () => pIndex++,
       );
       const adjustmentSearch = buildRawMultiKeywordSql(
-        ['g.adjustment_no', 'g.remarks'],
+        ['g.adjustment_no', 'g.remarks', IA_CAT_NAME_EXPR, IA_CAT_CODE_EXPR],
         s,
         params,
         () => pIndex++,
@@ -402,9 +446,9 @@ export class InventoryWarehouseVoucherService {
             issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
             adjustmentWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
           } else if (key === 'category' || key === 'categoryName') {
-            receiptWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
-            issueWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
-            adjustmentWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            receiptWhere += ` AND (${applyAnyOrBlank(GR_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(GR_CAT_CODE_EXPR)})`;
+            issueWhere += ` AND (${applyAnyOrBlank(GI_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(GI_CAT_CODE_EXPR)})`;
+            adjustmentWhere += ` AND (${applyAnyOrBlank(IA_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(IA_CAT_CODE_EXPR)})`;
           } else if (key === 'status') {
             receiptWhere += ` AND ${applyAnyOrBlank('g.status')}`;
             issueWhere += ` AND ${applyAnyOrBlank('g.status')}`;
@@ -450,14 +494,17 @@ export class InventoryWarehouseVoucherService {
                po.po_no as "poNo",
                g.purchase_order_id as "purchaseOrderId",
                NULL as "salesOrderId",
-               g.category_id as "categoryId",
-               cat.name as "categoryName",
-               cat.code as "categoryCode",
+               ${GR_CAT_NAME_EXPR} as "categoryName",
+               ${GR_CAT_CODE_EXPR} as "categoryCode",
+               ${GR_CAT_CODE_EXPR} as "category",
                (SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id) as "totalQty"
         FROM public.erp_goods_receipts g
         LEFT JOIN public.erp_business_partners bp ON g.supplier_id = bp.id
         LEFT JOIN public.erp_purchase_orders po ON g.purchase_order_id = po.id
-        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_attribute_defs def_gr 
+          ON def_gr.module_key_global = 'GOODS_RECEIPT' AND def_gr.code = 'category' AND def_gr.is_deleted = false
+        LEFT JOIN public.erp_entity_attribute_values eav_gr 
+          ON eav_gr.entity_type = 'GOODS_RECEIPT' AND eav_gr.entity_id = g.id AND eav_gr.attr_def_id = def_gr.id
         WHERE ${receiptWhere}
       `);
     }
@@ -470,14 +517,17 @@ export class InventoryWarehouseVoucherService {
                so.so_no as "poNo",
                NULL as "purchaseOrderId",
                g.sales_order_id as "salesOrderId",
-               g.category_id as "categoryId",
-               cat.name as "categoryName",
-               cat.code as "categoryCode",
+               ${GI_CAT_NAME_EXPR} as "categoryName",
+               ${GI_CAT_CODE_EXPR} as "categoryCode",
+               ${GI_CAT_CODE_EXPR} as "category",
                (SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id) as "totalQty"
         FROM public.erp_goods_issues g
         LEFT JOIN public.erp_business_partners bp ON g.customer_id = bp.id
         LEFT JOIN public.erp_sales_orders so ON g.sales_order_id = so.id
-        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_attribute_defs def_gi 
+          ON def_gi.module_key_global = 'GOODS_ISSUE' AND def_gi.code = 'category' AND def_gi.is_deleted = false
+        LEFT JOIN public.erp_entity_attribute_values eav_gi 
+          ON eav_gi.entity_type = 'GOODS_ISSUE' AND eav_gi.entity_id = g.id AND eav_gi.attr_def_id = def_gi.id
         WHERE ${issueWhere}
       `);
     }
@@ -490,12 +540,15 @@ export class InventoryWarehouseVoucherService {
                NULL as "poNo",
                NULL as "purchaseOrderId",
                NULL as "salesOrderId",
-               g.category_id as "categoryId",
-               cat.name as "categoryName",
-               cat.code as "categoryCode",
+               ${IA_CAT_NAME_EXPR} as "categoryName",
+               ${IA_CAT_CODE_EXPR} as "categoryCode",
+               ${IA_CAT_CODE_EXPR} as "category",
                (SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id) as "totalQty"
         FROM public.erp_inventory_adjustments g
-        LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id
+        LEFT JOIN public.erp_module_attribute_defs def_ia 
+          ON def_ia.module_key_global = 'INVENTORY_ADJUSTMENT' AND def_ia.code = 'category' AND def_ia.is_deleted = false
+        LEFT JOIN public.erp_entity_attribute_values eav_ia 
+          ON eav_ia.entity_type = 'INVENTORY_ADJUSTMENT' AND eav_ia.entity_id = g.id AND eav_ia.attr_def_id = def_ia.id
         WHERE ${adjustmentWhere}
       `);
     }
@@ -641,19 +694,19 @@ export class InventoryWarehouseVoucherService {
                 if (ac) adjustmentWhere += ` AND ${ac}`;
               } else if (key === 'category' || key === 'categoryName') {
                 const rc = buildRawMultiKeywordSql(
-                  ['cat.name', 'cat.code'],
+                  [GR_CAT_NAME_EXPR, GR_CAT_CODE_EXPR],
                   searchStr,
                   params,
                   () => pIndex++,
                 );
                 const ic = buildRawMultiKeywordSql(
-                  ['cat.name', 'cat.code'],
+                  [GI_CAT_NAME_EXPR, GI_CAT_CODE_EXPR],
                   searchStr,
                   params,
                   () => pIndex++,
                 );
                 const ac = buildRawMultiKeywordSql(
-                  ['cat.name', 'cat.code'],
+                  [IA_CAT_NAME_EXPR, IA_CAT_CODE_EXPR],
                   searchStr,
                   params,
                   () => pIndex++,
@@ -759,6 +812,42 @@ export class InventoryWarehouseVoucherService {
                 if (rc) receiptWhere += ` AND ${rc}`;
                 if (ic) issueWhere += ` AND ${ic}`;
                 if (ac) adjustmentWhere += ` AND ${ac}`;
+              } else if (key === 'qtyReceipt') {
+                const rc = buildRawMultiKeywordSql(
+                  [
+                    '(SELECT COALESCE(SUM(qty_received), 0) FROM public.erp_goods_receipt_lines rl WHERE rl.goods_receipt_id = g.id)::text',
+                  ],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (rc) receiptWhere += ` AND ${rc}`;
+                issueWhere += ` AND 1 = 0`;
+                adjustmentWhere += ` AND 1 = 0`;
+              } else if (key === 'qtyIssue') {
+                receiptWhere += ` AND 1 = 0`;
+                const ic = buildRawMultiKeywordSql(
+                  [
+                    '(SELECT COALESCE(SUM(qty_issued), 0) FROM public.erp_goods_issue_lines il WHERE il.goods_issue_id = g.id)::text',
+                  ],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (ic) issueWhere += ` AND ${ic}`;
+                adjustmentWhere += ` AND 1 = 0`;
+              } else if (key === 'qtyAdjustment') {
+                receiptWhere += ` AND 1 = 0`;
+                issueWhere += ` AND 1 = 0`;
+                const ac = buildRawMultiKeywordSql(
+                  [
+                    '(SELECT COALESCE(SUM(qty_adjusted), 0) FROM public.erp_inventory_adjustment_lines al WHERE al.adjustment_id = g.id)::text',
+                  ],
+                  searchStr,
+                  params,
+                  () => pIndex++,
+                );
+                if (ac) adjustmentWhere += ` AND ${ac}`;
               }
             }
             continue;
@@ -799,9 +888,9 @@ export class InventoryWarehouseVoucherService {
             issueWhere += ` AND ${applyAnyOrBlank('COALESCE(bp.display_name, bp.name)')}`;
             adjustmentWhere += ` AND 1 = 0`;
           } else if (key === 'category' || key === 'categoryName') {
-            receiptWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
-            issueWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
-            adjustmentWhere += ` AND ${applyAnyOrBlank('cat.name')}`;
+            receiptWhere += ` AND (${applyAnyOrBlank(GR_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(GR_CAT_CODE_EXPR)})`;
+            issueWhere += ` AND (${applyAnyOrBlank(GI_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(GI_CAT_CODE_EXPR)})`;
+            adjustmentWhere += ` AND (${applyAnyOrBlank(IA_CAT_NAME_EXPR)} OR ${applyAnyOrBlank(IA_CAT_CODE_EXPR)})`;
           } else if (key === 'remarks') {
             receiptWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
             issueWhere += ` AND ${applyAnyOrBlank('g.remarks')}`;
@@ -870,11 +959,11 @@ export class InventoryWarehouseVoucherService {
       `;
     } else if (column === 'category' || column === 'categoryName') {
       selectExpr = `
-        ${includeReceipts ? `SELECT cat.name as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${receiptWhere}` : ''}
+        ${includeReceipts ? `SELECT ${GR_CAT_NAME_EXPR} as val FROM public.erp_goods_receipts g LEFT JOIN public.erp_module_attribute_defs def_gr ON def_gr.module_key_global = 'GOODS_RECEIPT' AND def_gr.code = 'category' AND def_gr.is_deleted = false LEFT JOIN public.erp_entity_attribute_values eav_gr ON eav_gr.entity_type = 'GOODS_RECEIPT' AND eav_gr.entity_id = g.id AND eav_gr.attr_def_id = def_gr.id WHERE ${receiptWhere}` : ''}
         ${includeReceipts && includeIssues ? 'UNION ALL' : ''}
-        ${includeIssues ? `SELECT cat.name as val FROM public.erp_goods_issues g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${issueWhere}` : ''}
+        ${includeIssues ? `SELECT ${GI_CAT_NAME_EXPR} as val FROM public.erp_goods_issues g LEFT JOIN public.erp_module_attribute_defs def_gi ON def_gi.module_key_global = 'GOODS_ISSUE' AND def_gi.code = 'category' AND def_gi.is_deleted = false LEFT JOIN public.erp_entity_attribute_values eav_gi ON eav_gi.entity_type = 'GOODS_ISSUE' AND eav_gi.entity_id = g.id AND eav_gi.attr_def_id = def_gi.id WHERE ${issueWhere}` : ''}
         ${(includeReceipts || includeIssues) && includeAdjustments ? 'UNION ALL' : ''}
-        ${includeAdjustments ? `SELECT cat.name as val FROM public.erp_inventory_adjustments g LEFT JOIN public.erp_module_categories cat ON g.category_id = cat.id WHERE ${adjustmentWhere}` : ''}
+        ${includeAdjustments ? `SELECT ${IA_CAT_NAME_EXPR} as val FROM public.erp_inventory_adjustments g LEFT JOIN public.erp_module_attribute_defs def_ia ON def_ia.module_key_global = 'INVENTORY_ADJUSTMENT' AND def_ia.code = 'category' AND def_ia.is_deleted = false LEFT JOIN public.erp_entity_attribute_values eav_ia ON eav_ia.entity_type = 'INVENTORY_ADJUSTMENT' AND eav_ia.entity_id = g.id AND eav_ia.attr_def_id = def_ia.id WHERE ${adjustmentWhere}` : ''}
       `;
     } else if (column === 'remarks') {
       selectExpr = `

@@ -11,7 +11,7 @@ import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsIssue } from './entities/erp_goods_issue.entity';
 import { ErpGoodsIssueLine } from './entities/erp_goods_issue_line.entity';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';
-import { getGMT7YearMonthString } from '../common/utils/date.util';
+import { getGMT7YearMonthDayString } from '../common/utils/date.util';
 import { UpdateGoodsIssueDto } from './dto/update-goods-issue.dto';
 import { PostGoodsIssueDto } from './dto/post-goods-issue.dto';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
@@ -34,9 +34,9 @@ import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom
 export class GoodsIssuesCoreService {
   private readonly logger = new Logger(GoodsIssuesCoreService.name);
 
-  private async generateMonthlyIssueNo(manager: any, issueDate?: string) {
-    const ym = getGMT7YearMonthString(issueDate);
-    const prefix = `XK-${ym}`;
+  private async generateDailyIssueNo(manager: any, issueDate?: string | Date) {
+    const ymd = getGMT7YearMonthDayString(issueDate);
+    const prefix = `XK-${ymd}-`;
     const latest = await manager
       .getRepository(ErpGoodsIssue)
       .createQueryBuilder('gi')
@@ -47,6 +47,13 @@ export class GoodsIssuesCoreService {
     const latestSeq = latest?.issueNo?.slice(prefix.length) ?? '000';
     const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
     return `${prefix}${nextSeq}`;
+  }
+
+  async getNextIssueNo(date?: string): Promise<{ nextNo: string }> {
+    const nextNo = await this.dataSource.transaction((manager) =>
+      this.generateDailyIssueNo(manager, date),
+    );
+    return { nextNo };
   }
 
   constructor(
@@ -132,12 +139,26 @@ export class GoodsIssuesCoreService {
 
   async create(dto: CreateGoodsIssueDto) {
     const { lines = [], customAttributes, ...header } = dto;
+    const finalCustomAttributes: Record<string, any> = {
+      ...(customAttributes || {}),
+    };
+    if (!finalCustomAttributes.category) {
+      if (header.issueType) {
+        finalCustomAttributes.category = header.issueType;
+      } else if (header.salesOrderId) {
+        finalCustomAttributes.category = 'SALE';
+      } else if (header.productionOrderId) {
+        finalCustomAttributes.category = 'PRODUCTION';
+      } else {
+        finalCustomAttributes.category = 'OTHER';
+      }
+    }
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsIssue);
       const lineRepo = manager.getRepository(ErpGoodsIssueLine);
       const issueNo =
         header.issueNo?.trim() ||
-        (await this.generateMonthlyIssueNo(manager, header.issueDate));
+        (await this.generateDailyIssueNo(manager, header.issueDate));
       const headerPayload: DeepPartial<ErpGoodsIssue> = {
         ...header,
         issueNo,
@@ -164,14 +185,12 @@ export class GoodsIssuesCoreService {
       }
 
       // Lưu customAttributes nguyên tử trong transaction
-      if (customAttributes) {
-        await EntityCustomFieldsHelper.saveInTx(
-          manager,
-          'GOODS_ISSUE',
-          data.id,
-          customAttributes,
-        );
-      }
+      await EntityCustomFieldsHelper.saveInTx(
+        manager,
+        'GOODS_ISSUE',
+        data.id,
+        finalCustomAttributes,
+      );
 
       const result = {
         ...data,

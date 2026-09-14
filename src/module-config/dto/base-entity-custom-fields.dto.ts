@@ -6,7 +6,7 @@ export class BaseEntityCustomFieldsDto {
     description:
       'Dữ liệu thuộc tính tùy chỉnh & mặc định hệ thống (Key: attr_def_id hoặc code)',
     example: {
-      type_inventory_receipt: 'PO',
+      category: 'PO',
       custom_project_code: 'DA-2026',
     },
   })

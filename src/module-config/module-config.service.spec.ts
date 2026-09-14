@@ -642,8 +642,8 @@ describe('ModuleConfigService', () => {
     it('should query entity tables for GOODS_RECEIPT and count PO / PRODUCTION usages', async () => {
       mockAttrDefRepo.findOne.mockResolvedValue({
         id: 'attr-gr-type',
-        code: 'type_inventory_receipt',
-        name: 'Loại nhập kho',
+        code: 'category',
+        name: 'Phân loại nhập kho',
         moduleKeyGlobal: 'GOODS_RECEIPT',
         isGlobal: true,
         isSystem: true,

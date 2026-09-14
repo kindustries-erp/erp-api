@@ -9,7 +9,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpGoodsReceipt } from './entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './entities/erp_goods_receipt_line.entity';
-import { getGMT7YearMonthString } from '../common/utils/date.util';
+import { getGMT7YearMonthDayString } from '../common/utils/date.util';
 import { CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
 import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
 import { PostGoodsReceiptDto } from './dto/post-goods-receipt.dto';
@@ -109,9 +109,12 @@ export class GoodsReceiptsCoreService {
     return created;
   }
 
-  private async generateMonthlyReceiptNo(manager: any, receiptDate?: string) {
-    const ym = getGMT7YearMonthString(receiptDate);
-    const prefix = `NK-${ym}`;
+  private async generateDailyReceiptNo(
+    manager: any,
+    receiptDate?: string | Date,
+  ) {
+    const ymd = getGMT7YearMonthDayString(receiptDate);
+    const prefix = `NK-${ymd}-`;
     const latest = await manager
       .getRepository(ErpGoodsReceipt)
       .createQueryBuilder('gr')
@@ -137,7 +140,7 @@ export class GoodsReceiptsCoreService {
 
   async getNextReceiptNo(date?: string): Promise<{ nextNo: string }> {
     const nextNo = await this.dataSource.transaction((manager) =>
-      this.generateMonthlyReceiptNo(manager, date),
+      this.generateDailyReceiptNo(manager, date),
     );
     return { nextNo };
   }
@@ -215,12 +218,24 @@ export class GoodsReceiptsCoreService {
 
   async create(dto: CreateGoodsReceiptDto) {
     const { lines = [], customAttributes, ...header } = dto;
+    const finalCustomAttributes: Record<string, any> = {
+      ...(customAttributes || {}),
+    };
+    if (!finalCustomAttributes.category) {
+      if (header.purchaseOrderId) {
+        finalCustomAttributes.category = 'PO';
+      } else if (header.productionOrderId) {
+        finalCustomAttributes.category = 'PRODUCTION';
+      } else {
+        finalCustomAttributes.category = 'OTHER';
+      }
+    }
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpGoodsReceipt);
       const lineRepo = manager.getRepository(ErpGoodsReceiptLine);
       const receiptNo =
         header.receiptNo?.trim() ||
-        (await this.generateMonthlyReceiptNo(manager, header.receiptDate));
+        (await this.generateDailyReceiptNo(manager, header.receiptDate));
       const headerPayload: DeepPartial<ErpGoodsReceipt> = {
         ...header,
         receiptNo,
@@ -245,14 +260,12 @@ export class GoodsReceiptsCoreService {
       }
 
       // Lưu customAttributes nguyên tử trong transaction
-      if (customAttributes) {
-        await EntityCustomFieldsHelper.saveInTx(
-          manager,
-          'GOODS_RECEIPT',
-          data.id,
-          customAttributes,
-        );
-      }
+      await EntityCustomFieldsHelper.saveInTx(
+        manager,
+        'GOODS_RECEIPT',
+        data.id,
+        finalCustomAttributes,
+      );
 
       const result = { ...data, lines: savedLines };
       await EntityCustomFieldsHelper.enrichOne(
