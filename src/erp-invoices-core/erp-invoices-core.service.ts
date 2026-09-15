@@ -30,6 +30,11 @@ export type { ErpInvoiceItemQuery } from './services/invoice-query.service';
 export interface ErpInvoiceQuery {
   direction?: string;
   search?: string;
+  invoice_no?: string;
+  serial_no?: string;
+  related_invoice_no?: string;
+  related_serial_no?: string;
+  tax_invoice_status?: string | number;
   seller_name?: string;
   buyer_name?: string;
   partner_tax_code?: string;

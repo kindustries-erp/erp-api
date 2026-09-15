@@ -295,6 +295,16 @@ export class CreateErpInvoiceDto {
   @IsString()
   licensePlate?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  relatedInvoiceNo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  relatedSerialNo?: string;
+
   @ApiPropertyOptional({ type: [CreateErpInvoiceItemDto] })
   @IsOptional()
   @ValidateNested({ each: true })

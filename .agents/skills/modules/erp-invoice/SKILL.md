@@ -256,6 +256,7 @@ src/erp-invoices-core/
   3. `VINFAST`: Hóa đơn VinFast với ký tự mã hóa Latin/Tiếng Việt đặc thù.
   4. `GENERIC`: Fallback tự động quét mọi cấu trúc thẻ XML tìm kiếm trường tương đương.
 - Tự động trích xuất thông tin người bán, người mua (MST, tên, địa chỉ, CCCD đối với cá nhân), diễn giải, số tiền trước thuế, thuế suất, tiền thuế, tiền chiết khấu và mảng chi tiết từng dòng mặt hàng.
+- **Trích xuất Hóa đơn Gốc Liên quan (`related_invoice_no`, `related_serial_no`)**: Tự động bóc tách thẻ `<TTHDLQuan>` (`SHDCLQuan`, `KHHDCLQuan`), `<TTHDGoc>` (`SHDGoc`, `KHHDGoc`) hoặc phân tích regex từ trường ghi chú/diễn giải khi hóa đơn là loại Điều chỉnh (`tax_invoice_status = 3`) hoặc Thay thế (`tax_invoice_status = 2`). Tích hợp liên kết hai chiều vào Traceability Graph (`ADJUSTS`, `ADJUSTED_BY`, `REPLACES`, `REPLACED_BY`).
 - Trích xuất mã tra cứu (`lookupCode`) và đường dẫn tra cứu (`providerLink`) từ khối `<TTKhac>` / `<TTin>`.
 
 ### 5.2. Đồng bộ Cổng Thuế GDT & Tự động Đăng nhập lại (Auto Re-login & Captcha Solving)
