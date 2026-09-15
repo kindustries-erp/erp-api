@@ -537,6 +537,8 @@ export class ModuleConfigService {
                 'RECLASSIFY',
                 'RETURN',
                 'WARRANTY',
+                'INTERNAL',
+                'SHOWROOM',
                 'SCRAP',
                 'OTHER',
                 'PURCHASE_GOODS',
@@ -684,7 +686,22 @@ export class ModuleConfigService {
             if (usageMap[key] !== undefined) {
               usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
             }
-            if (key === 'LOSS' && usageMap['SCRAP'] !== undefined) {
+            if (
+              (key === 'LOSS' ||
+                key === 'SCRAP' ||
+                key === 'SHOWROOM' ||
+                key === 'INTERNAL_USE') &&
+              usageMap['INTERNAL'] !== undefined
+            ) {
+              usageMap['INTERNAL'] =
+                (usageMap['INTERNAL'] || 0) + Number(row.count || 0);
+            } else if (
+              (key === 'LOSS' || key === 'SCRAP') &&
+              usageMap['SHOWROOM'] !== undefined
+            ) {
+              usageMap['SHOWROOM'] =
+                (usageMap['SHOWROOM'] || 0) + Number(row.count || 0);
+            } else if (key === 'LOSS' && usageMap['SCRAP'] !== undefined) {
               usageMap['SCRAP'] =
                 (usageMap['SCRAP'] || 0) + Number(row.count || 0);
             }
