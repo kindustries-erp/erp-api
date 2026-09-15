@@ -249,8 +249,22 @@ export class GoodsReceiptsCoreService {
       const receiptNo =
         header.receiptNo?.trim() ||
         (await this.generateDailyReceiptNo(manager, header.receiptDate));
+
+      let supplierId = header.supplierId || null;
+      if (!supplierId && header.purchaseOrderId) {
+        const poRepo = manager.getRepository(ErpPurchaseOrder);
+        const po = await poRepo.findOne({
+          where: { id: header.purchaseOrderId },
+          select: ['id', 'supplierId'],
+        });
+        if (po?.supplierId) {
+          supplierId = po.supplierId;
+        }
+      }
+
       const headerPayload: DeepPartial<ErpGoodsReceipt> = {
         ...header,
+        supplierId,
         receiptNo,
         status: 'DRAFT',
       };
@@ -419,6 +433,16 @@ export class GoodsReceiptsCoreService {
 
     if (header.receiptNo === '') {
       delete header.receiptNo;
+    }
+    if (header.purchaseOrderId && !header.supplierId && !existing.supplierId) {
+      const poRepo = this.dataSource.getRepository(ErpPurchaseOrder);
+      const po = await poRepo.findOne({
+        where: { id: header.purchaseOrderId },
+        select: ['id', 'supplierId'],
+      });
+      if (po?.supplierId) {
+        header.supplierId = po.supplierId;
+      }
     }
     const updatePayload = { ...header, status: 'DRAFT' };
     await this.repository.update(id, updatePayload);
