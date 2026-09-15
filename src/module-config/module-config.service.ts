@@ -539,6 +539,14 @@ export class ModuleConfigService {
                 'WARRANTY',
                 'SCRAP',
                 'OTHER',
+                'PURCHASE_GOODS',
+                'EXPENSE_OPEX',
+                'SERVICE_FEE',
+                'FIXED_ASSET',
+                'SALE_GOODS',
+                'SALE_SERVICE',
+                'SALE_FINANCIAL',
+                'OTHER_INCOME',
               ];
               if (coreCodes.includes(rem.value)) {
                 throw new ConflictException(
@@ -890,6 +898,18 @@ export class ModuleConfigService {
         globalAttributes[ev.attrDefId] = ev.valueText;
         if (ev.attrDef?.code) {
           globalAttributes[ev.attrDef.code] = ev.valueText;
+          if (ev.attrDef.code === 'category') {
+            if (upperType === 'INVOICE_IN')
+              globalAttributes['type_invoice_in'] = ev.valueText;
+            if (upperType === 'INVOICE_OUT')
+              globalAttributes['type_invoice_out'] = ev.valueText;
+            if (upperType === 'GOODS_RECEIPT')
+              globalAttributes['type_inventory_receipt'] = ev.valueText;
+            if (upperType === 'GOODS_ISSUE')
+              globalAttributes['type_inventory_issue'] = ev.valueText;
+            if (upperType === 'INVENTORY_ADJUSTMENT')
+              globalAttributes['type_inventory_adjustment'] = ev.valueText;
+          }
         }
       } else {
         attributes[ev.attrDefId] = ev.valueText;
@@ -981,7 +1001,28 @@ export class ModuleConfigService {
       for (const d of globalDefs) {
         globalDefMap.set(d.id, d.id);
         if (d.code) {
-          globalDefMap.set(d.code.trim().toLowerCase(), d.id);
+          const codeLower = d.code.trim().toLowerCase();
+          globalDefMap.set(codeLower, d.id);
+          if (codeLower === 'category') {
+            if (upperType === 'INVOICE_IN') {
+              globalDefMap.set('type_invoice_in', d.id);
+              globalDefMap.set('invoice_type', d.id);
+              globalDefMap.set('type', d.id);
+            } else if (upperType === 'INVOICE_OUT') {
+              globalDefMap.set('type_invoice_out', d.id);
+              globalDefMap.set('invoice_type', d.id);
+              globalDefMap.set('type', d.id);
+            } else if (upperType === 'GOODS_RECEIPT') {
+              globalDefMap.set('type_inventory_receipt', d.id);
+              globalDefMap.set('receipt_type', d.id);
+            } else if (upperType === 'GOODS_ISSUE') {
+              globalDefMap.set('type_inventory_issue', d.id);
+              globalDefMap.set('issue_type', d.id);
+            } else if (upperType === 'INVENTORY_ADJUSTMENT') {
+              globalDefMap.set('type_inventory_adjustment', d.id);
+              globalDefMap.set('adjustment_type', d.id);
+            }
+          }
         }
       }
 

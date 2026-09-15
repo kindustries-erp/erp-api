@@ -9,8 +9,9 @@ description: Module tri thức Quản lý Cấu hình Danh mục, Thuộc tính 
 
 Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (EAV - Entity-Attribute-Value)** thống nhất, tinh gọn và có khả năng scale vô hạn cho toàn bộ hệ sinh thái Liouni ERP:
 1. **Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
-   - Khởi tạo sẵn các trường cốt lõi của từng phân hệ (VD: `type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`, `color`, `version`, `type_production_order`).
-   - Cố định trường `code` và `fieldType`, được bảo vệ an toàn chống xóa nhầm (`is_system = true`). Admin chỉ có thể đổi nhãn hiển thị (`name`, `name_en`), bật/tắt bắt buộc (`isRequired`), hoặc chỉnh sửa danh sách tùy chọn (`options`).
+   - Khởi tạo sẵn các trường cốt lõi của từng phân hệ chuẩn hóa theo mã `category` (VD: `category` cho `INVOICE_IN`, `INVOICE_OUT`, `GOODS_RECEIPT`, `GOODS_ISSUE`, `INVENTORY_ADJUSTMENT`; cùng các thuộc tính chuyên biệt như `is_valid`, `color`, `version`, `type_production_order`).
+   - Tự động map 2 chiều (Dual-Key / Alias Mapping) giữa mã chuẩn `category` và các mã alias cũ (`type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`).
+   - Cố định trường `code` và `fieldType`, được bảo vệ an toàn chống xóa nhầm (`is_system = true`). Admin chỉ có thể đổi nhãn hiển thị (`name`, `name_en`), bật/tắt bắt buộc (`isRequired`), hoặc chỉnh sửa danh sách tùy chọn (`options`). Không được xóa các mã cốt lõi nghiệp vụ.
 2. **Thuộc tính Tùy chỉnh Linh hoạt (`is_system = false`)**:
    - Cho phép Quản trị viên tự do tạo thêm các trường động mới theo nhu cầu doanh nghiệp (hỗ trợ kiểu `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX`).
 3. **Phân loại Phạm vi (Scope)**:

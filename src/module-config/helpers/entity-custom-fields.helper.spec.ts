@@ -113,6 +113,7 @@ describe('EntityCustomFieldsHelper', () => {
       expect((enriched[0] as any).customAttributes).toEqual({
         'def-1': 'PO',
         category: 'PO',
+        type_inventory_receipt: 'PO',
       });
       expect((enriched[0] as any).attributeValues).toHaveLength(1);
       expect((enriched[0] as any).attributeValues[0].attrCode).toBe('category');

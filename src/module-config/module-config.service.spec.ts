@@ -370,11 +370,11 @@ describe('ModuleConfigService', () => {
       expect(resOut.categoryId).toBe('cat-in-1');
     });
 
-    it('should deduplicate attribute values when both UUID and code are present in globalAttributes to prevent unique constraint violations', async () => {
+    it('should deduplicate attribute values when both UUID, category, and legacy code alias are present in globalAttributes', async () => {
       mockManager.find = jest.fn().mockResolvedValue([
         {
           id: '181efcb3-aabb-4885-91c3-817d3e6b7a7b',
-          code: 'type_invoice_out',
+          code: 'category',
           name: 'Phân loại hóa đơn bán ra',
           isGlobal: true,
           moduleKeyGlobal: 'INVOICE_OUT',
@@ -393,6 +393,7 @@ describe('ModuleConfigService', () => {
           attributes: {},
           globalAttributes: {
             '181efcb3-aabb-4885-91c3-817d3e6b7a7b': 'SALE_SERVICE',
+            category: 'SALE_SERVICE',
             type_invoice_out: 'SALE_SERVICE',
           },
         },
@@ -635,6 +636,36 @@ describe('ModuleConfigService', () => {
       await expect(
         service.updateAttributeDef('attr-select-1', {
           options: [{ value: 'PRODUCTION', label: 'Nhập sản xuất' }],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw ConflictException when removing a core invoice system option like PURCHASE_GOODS', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'attr-inv-in-cat',
+        name: 'Phân loại hóa đơn mua vào',
+        code: 'category',
+        fieldType: 'SELECT',
+        isSystem: true,
+        options: [
+          { value: 'PURCHASE_GOODS', label: 'Mua hàng hóa / NVL' },
+          { value: 'EXPENSE_OPEX', label: 'Chi phí OPEX' },
+        ],
+      });
+
+      mockEntityAttrValueRepo.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      })) as any;
+
+      // Cố tình xóa option PURCHASE_GOODS
+      await expect(
+        service.updateAttributeDef('attr-inv-in-cat', {
+          options: [{ value: 'EXPENSE_OPEX', label: 'Chi phí OPEX' }],
         }),
       ).rejects.toThrow(ConflictException);
     });
