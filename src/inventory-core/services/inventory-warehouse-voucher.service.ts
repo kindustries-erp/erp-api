@@ -58,12 +58,13 @@ const GR_CAT_NAME_EXPR = `CASE ${GR_CAT_CODE_EXPR}
   ELSE COALESCE(eav_gr.value_text, '—')
 END`;
 
-const GI_CAT_CODE_EXPR = `COALESCE(eav_gi.value_text, CASE WHEN g.production_order_id IS NOT NULL OR g.issue_type = 'PRODUCTION' THEN 'PRODUCTION' WHEN g.sales_order_id IS NOT NULL OR g.issue_type = 'SALE' OR g.issue_type = 'SALES' THEN 'SALE' WHEN g.issue_type = 'WARRANTY' THEN 'WARRANTY' WHEN g.issue_type = 'SCRAP' THEN 'SCRAP' ELSE 'OTHER' END)`;
+const GI_CAT_CODE_EXPR = `COALESCE(eav_gi.value_text, CASE WHEN g.production_order_id IS NOT NULL OR g.issue_type = 'PRODUCTION' THEN 'PRODUCTION' WHEN g.sales_order_id IS NOT NULL OR g.issue_type = 'SALE' OR g.issue_type = 'SALES' THEN 'SALE' WHEN g.issue_type = 'WARRANTY' THEN 'WARRANTY' WHEN g.issue_type = 'INTERNAL' OR g.issue_type = 'INTERNAL_USE' OR g.issue_type = 'SHOWROOM' OR g.issue_type = 'DISPLAY' OR g.issue_type = 'SCRAP' THEN 'INTERNAL' ELSE 'OTHER' END)`;
 const GI_CAT_NAME_EXPR = `CASE ${GI_CAT_CODE_EXPR}
   WHEN 'SALE' THEN 'Xuất bán hàng (SO)'
   WHEN 'PRODUCTION' THEN 'Xuất sản xuất (NVL)'
   WHEN 'WARRANTY' THEN 'Xuất bảo hành'
-  WHEN 'SCRAP' THEN 'Xuất hủy / Hao hụt'
+  WHEN 'INTERNAL' THEN 'Xuất nội bộ / Trưng bày'
+  WHEN 'SHOWROOM' THEN 'Xuất nội bộ / Trưng bày'
   WHEN 'OTHER' THEN 'Xuất khác'
   ELSE COALESCE(eav_gi.value_text, '—')
 END`;
