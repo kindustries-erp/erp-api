@@ -18,7 +18,10 @@ export type TraceabilityRelationType =
   | 'RECEIPT_OF'
   | 'ISSUE_OF'
   | 'JOURNAL_POSTED'
+  | 'REPLACES'
   | 'REPLACED_BY'
+  | 'ADJUSTS'
+  | 'ADJUSTED_BY'
   | 'CASE_ATTACHED'
   | 'MATERIAL_FOR'
   | 'OUTPUT_OF';

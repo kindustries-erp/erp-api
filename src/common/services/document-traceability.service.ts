@@ -298,7 +298,7 @@ export class DocumentTraceabilityService {
 
   private async fetchInvoice(id: string): Promise<RawNodeItem | null> {
     const rows = await this.dataSource.query(
-      `SELECT id, invoice_no, serial_no, direction, invoice_date, total_amount, status, seller_name, buyer_name, purchase_order_id, sales_order_id, journal_entry_id
+      `SELECT id, invoice_no, serial_no, direction, invoice_date, total_amount, status, seller_name, buyer_name, purchase_order_id, sales_order_id, journal_entry_id, tax_invoice_status, related_invoice_no, related_serial_no
        FROM erp_invoices WHERE id = $1 AND is_deleted = false LIMIT 1`,
       [id],
     );
@@ -329,6 +329,9 @@ export class DocumentTraceabilityService {
         purchaseOrderId: r.purchase_order_id,
         salesOrderId: r.sales_order_id,
         journalEntryId: r.journal_entry_id,
+        taxInvoiceStatus: r.tax_invoice_status,
+        relatedInvoiceNo: r.related_invoice_no,
+        relatedSerialNo: r.related_serial_no,
       },
     };
   }
@@ -722,6 +725,137 @@ export class DocumentTraceabilityService {
           label: isOut ? 'HĐ Doanh thu dịch vụ' : 'HĐ Chi phí vật tư',
           isTransitive: currentDepth > 0,
         });
+      }
+    }
+
+    // 6. Check Related Original Invoices (if this invoice is an Adjustment / Replacement)
+    if (meta.relatedInvoiceNo) {
+      const origRows = await this.dataSource.query(
+        `SELECT id, invoice_no, serial_no, direction, invoice_date, total_amount, status, seller_name, buyer_name, purchase_order_id, sales_order_id, journal_entry_id, tax_invoice_status, related_invoice_no, related_serial_no
+         FROM erp_invoices
+         WHERE invoice_no = $1 AND ($2::text IS NULL OR serial_no = $2) AND direction = $3 AND is_deleted = false LIMIT 1`,
+        [
+          meta.relatedInvoiceNo,
+          meta.relatedSerialNo || null,
+          meta.direction || 'OUT',
+        ],
+      );
+      if (origRows && origRows.length > 0) {
+        const orig = origRows[0];
+        const partner =
+          orig.direction === 'IN' ? orig.seller_name : orig.buyer_name;
+        if (!nodes.has(orig.id)) {
+          nodes.set(orig.id, {
+            id: orig.id,
+            docType: 'INVOICE',
+            docNo: orig.invoice_no,
+            title:
+              `HĐ gốc ${orig.direction === 'IN' ? 'đầu vào' : 'đầu ra'} ${orig.serial_no ? '(' + orig.serial_no + ')' : ''}`.trim(),
+            date: orig.invoice_date,
+            amount: orig.total_amount ? Number(orig.total_amount) : 0,
+            status: orig.status,
+            statusVariant:
+              orig.status === 'CONFIRMED' || orig.status === 'ACTIVE'
+                ? 'default'
+                : 'secondary',
+            partnerName: partner,
+            depth: currentDepth + 1,
+            metadata: {
+              direction: orig.direction,
+              serialNo: orig.serial_no,
+              purchaseOrderId: orig.purchase_order_id,
+              salesOrderId: orig.sales_order_id,
+              journalEntryId: orig.journal_entry_id,
+              taxInvoiceStatus: orig.tax_invoice_status,
+              relatedInvoiceNo: orig.related_invoice_no,
+              relatedSerialNo: orig.related_serial_no,
+            },
+          });
+          if (!visited.has(orig.id)) {
+            visited.add(orig.id);
+            queue.push({
+              id: orig.id,
+              type: 'INVOICE',
+              depth: currentDepth + 1,
+            });
+          }
+        }
+        const isAdjustment = meta.taxInvoiceStatus === 3;
+        const edgeId = `e-inv-${invoiceId}-rel-${orig.id}`;
+        if (!edges.has(edgeId)) {
+          edges.set(edgeId, {
+            id: edgeId,
+            source: invoiceId,
+            target: orig.id,
+            relationType: isAdjustment ? 'ADJUSTS' : 'REPLACES',
+            label: isAdjustment
+              ? 'Điều chỉnh cho HĐ gốc'
+              : 'Thay thế cho HĐ gốc',
+            isTransitive: currentDepth > 0,
+          });
+        }
+      }
+    }
+
+    // 7. Check Invoices that Adjust/Replace this Invoice (Downstream Adjustments)
+    if (invNode?.docNo) {
+      const adjRows = await this.dataSource.query(
+        `SELECT id, invoice_no, serial_no, direction, invoice_date, total_amount, status, seller_name, buyer_name, purchase_order_id, sales_order_id, journal_entry_id, tax_invoice_status, related_invoice_no, related_serial_no
+         FROM erp_invoices
+         WHERE related_invoice_no = $1 AND ($2::text IS NULL OR related_serial_no = $2) AND direction = $3 AND is_deleted = false`,
+        [invNode.docNo, meta.serialNo || null, meta.direction || 'OUT'],
+      );
+      for (const adj of adjRows) {
+        const partner =
+          adj.direction === 'IN' ? adj.seller_name : adj.buyer_name;
+        if (!nodes.has(adj.id)) {
+          const isAdjustment = adj.tax_invoice_status === 3;
+          nodes.set(adj.id, {
+            id: adj.id,
+            docType: 'INVOICE',
+            docNo: adj.invoice_no,
+            title:
+              `HĐ ${isAdjustment ? 'điều chỉnh' : 'thay thế'} ${adj.serial_no ? '(' + adj.serial_no + ')' : ''}`.trim(),
+            date: adj.invoice_date,
+            amount: adj.total_amount ? Number(adj.total_amount) : 0,
+            status: adj.status,
+            statusVariant: 'default',
+            partnerName: partner,
+            depth: currentDepth + 1,
+            metadata: {
+              direction: adj.direction,
+              serialNo: adj.serial_no,
+              purchaseOrderId: adj.purchase_order_id,
+              salesOrderId: adj.sales_order_id,
+              journalEntryId: adj.journal_entry_id,
+              taxInvoiceStatus: adj.tax_invoice_status,
+              relatedInvoiceNo: adj.related_invoice_no,
+              relatedSerialNo: adj.related_serial_no,
+            },
+          });
+          if (!visited.has(adj.id)) {
+            visited.add(adj.id);
+            queue.push({
+              id: adj.id,
+              type: 'INVOICE',
+              depth: currentDepth + 1,
+            });
+          }
+        }
+        const isAdjustment = adj.tax_invoice_status === 3;
+        const edgeId = `e-inv-${adj.id}-rel-${invoiceId}`;
+        if (!edges.has(edgeId)) {
+          edges.set(edgeId, {
+            id: edgeId,
+            source: adj.id,
+            target: invoiceId,
+            relationType: isAdjustment ? 'ADJUSTS' : 'REPLACES',
+            label: isAdjustment
+              ? 'Điều chỉnh cho HĐ này'
+              : 'Thay thế cho HĐ này',
+            isTransitive: currentDepth > 0,
+          });
+        }
       }
     }
   }
