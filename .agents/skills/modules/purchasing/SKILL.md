@@ -95,6 +95,27 @@ src/
     └── purchase-requests-core.module.ts
 ```
 
+### 3.2. Cấu trúc Source Code Frontend (`erp-web`)
+```text
+src/
+├── modules/purchase-orders-core/
+│   ├── api/
+│   │   └── purchaseOrdersCoreApi.ts           # Axios client cho toàn bộ API PO & PR
+│   ├── components/
+│   │   ├── PurchaseOrderListPage.tsx          # Màn hình DataTable chính của PO
+│   │   ├── PurchaseOrderDrawer.tsx            # Drawer 2 cột chuẩn hóa xem/sửa chi tiết PO
+│   │   ├── PurchaseOrderPartnerTab.tsx        # Tab chi tiết mua hàng theo Nhà cung cấp
+│   │   ├── PurchaseOrderFinancialsTab.tsx     # Tab chi tiết tài chính & thanh toán
+│   │   ├── PurchaseOrderAttachmentsTab.tsx    # Tab tài liệu đính kèm
+│   │   └── PurchaseOrderExportDrawer.tsx      # Drawer xuất Excel bảng kê theo kỳ
+│   └── hooks/
+│       ├── usePurchaseOrderPage.ts            # Hook quản lý state trang danh sách PO
+│       └── usePurchaseOrderDrawer.ts          # Hook quản lý form state, validation & lưu PO
+└── modules/operational/components/form/
+    ├── FormLineDetailPanel.tsx                # Bảng chi tiết dòng hàng đặt mua (bên trái)
+    └── FormGeneralInfoPanel.tsx               # Panel Thông tin chung & Ghi chú & Thẻ nhãn (bên phải)
+```
+
 ---
 
 ## 4. Danh sách API Endpoints & RBAC Contract
@@ -161,6 +182,13 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 - Lọc các đơn hàng mà tồn tại ít nhất một dòng có:
   $$\text{CAST}(\text{qtyOrdered AS NUMERIC}) > \text{CAST}(\text{qtyReceived AS NUMERIC})$$
 - Phục vụ trực tiếp cho màn hình Lập Phiếu Nhập Kho (Goods Receipt) từ Đơn Mua Hàng.
+
+### 5.5. Chuẩn Hóa UI/UX Drawer Đơn Mua Hàng (`PurchaseOrderDrawer` & `FormGeneralInfoPanel`)
+- **Layout 2 cột chuẩn (`StandardFormDrawer`, size: `xl`)**:
+  - **Bên trái (Left Panel / Tabs)**: Bảng chi tiết dòng hàng (`FormLineDetailPanel`), Tab Đối tác (`PurchaseOrderPartnerTab`), Tab Tài chính (`PurchaseOrderFinancialsTab`), Tab Chứng từ liên kết (`PurchaseLinkedDocuments`), Tab Đính kèm và Audit Logs.
+  - **Bên phải (Right Panel - `FormGeneralInfoPanel`)**:
+    - Section **THÔNG TIN CHUNG**: Hợp nhất toàn bộ thông tin định danh (Số PO, NCC, Ngày lập, Ngày nhận dự kiến), trường **Ghi chú (`notes`)** và phần **Thẻ nhãn (Tags - `EntityTagSelector`)** vào chung một section theo thứ tự chuẩn hóa: `Thông tin nghiệp vụ -> Ghi chú -> Thẻ nhãn` (khớp 1-1 với tiêu chuẩn trong `erp-inventory-vouchers`).
+    - Nút đóng và modal xác nhận: Dùng `ConfirmModal` với variant `danger` màu đỏ chuẩn khi đóng mà chưa lưu thay đổi.
 
 ---
 
