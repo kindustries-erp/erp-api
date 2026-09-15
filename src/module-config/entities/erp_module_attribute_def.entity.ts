@@ -30,6 +30,7 @@ export interface BomAttributeOption {
     en?: string;
     [key: string]: string | undefined;
   };
+  parentValue?: string;
 }
 
 export type ModuleAttributeOption = BomAttributeOption;
@@ -72,6 +73,14 @@ export class ErpModuleAttributeDef {
 
   @Column({ type: 'varchar', length: 50, name: 'field_type', default: 'TEXT' })
   fieldType: ModuleAttributeFieldType;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'parent_attr_code',
+    nullable: true,
+  })
+  parentAttrCode: string | null;
 
   @Column({ type: 'jsonb', name: 'options', nullable: true })
   options: ModuleAttributeOption[] | null;

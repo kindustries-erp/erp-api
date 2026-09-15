@@ -103,10 +103,11 @@ erDiagram
 | `is_global` | `boolean` | NO | Default `false` | Cờ xác định thuộc tính chung toàn module |
 | `module_key_global` | `varchar(50)` | YES | Index `(module_key_global, code)` | Phân hệ của thuộc tính chung khi `is_global = true` |
 | `code` | `varchar(100)` | NO | | Mã thuộc tính viết thường / snake_case |
+| `parent_attr_code` | `varchar(100)` | YES | Default `NULL` | Mã thuộc tính cha (dùng cho thuộc tính con phụ thuộc cha, vd: `subcategory` phụ thuộc `category`) |
 | `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string> }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ) |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string>, parentValue?: string }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ và cascading theo option cha) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
 | `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |

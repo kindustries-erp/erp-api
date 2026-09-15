@@ -26,6 +26,7 @@ export interface BomAttributeOption {
     en?: string;
     [key: string]: string | undefined;
   };
+  parentValue?: string;
 }
 
 export class CreateModuleAttrDefDto {
@@ -73,6 +74,16 @@ export class CreateModuleAttrDefDto {
   @IsOptional()
   @MaxLength(255)
   nameEn?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Parent attribute code in the same module if this field depends on a parent SELECT field',
+    example: 'category',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  parentAttrCode?: string;
 
   @ApiProperty({
     description: 'Field type',
