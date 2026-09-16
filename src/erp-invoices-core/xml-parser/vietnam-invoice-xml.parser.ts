@@ -41,6 +41,10 @@ export interface ParsedVietnamInvoice {
   providerLink: string | null;
   rawSource: string; // 'TT78' | 'SINVOICE_V2' | 'VINFAST' | 'GENERIC'
   items: ParsedVietnamInvoiceItem[];
+  relatedInvoiceNo?: string | null;
+  relatedSerialNo?: string | null;
+  relatedInvoiceDate?: string | null;
+  relatedNote?: string | null;
 }
 
 export class XmlParseError extends Error {
@@ -162,6 +166,142 @@ function extractLookupInfo(
   }
 
   return { lookupCode, providerLink };
+}
+
+function extractRelatedInvoiceInfo(
+  doc: Document,
+  description?: string | null,
+): {
+  relatedInvoiceNo: string | null;
+  relatedSerialNo: string | null;
+  relatedInvoiceDate: string | null;
+  relatedNote: string | null;
+} {
+  const containers = [
+    doc.getElementsByTagName('TTHDLQuan')[0],
+    doc.getElementsByTagName('tthdlquan')[0],
+    doc.getElementsByTagName('TTHDGoc')[0],
+    doc.getElementsByTagName('tthdgoc')[0],
+    doc.getElementsByTagName('TTinHDGoc')[0],
+    doc.getElementsByTagName('RelatedInvoice')[0],
+    doc.getElementsByTagName('OriginalInvoice')[0],
+  ];
+
+  let relatedInvoiceNo: string | null = null;
+  let relatedSerialNo: string | null = null;
+  let relatedInvoiceDate: string | null = null;
+  let relatedNote: string | null = null;
+
+  for (const c of containers) {
+    if (!c) continue;
+    relatedInvoiceNo =
+      getTextIn(
+        c,
+        'SHDCLQuan',
+        'shdclquan',
+        'SHDGoc',
+        'shdgoc',
+        'SoHoaDonGoc',
+        'OriginalInvoiceNo',
+        'InvoiceNo',
+      ) ?? null;
+    relatedSerialNo =
+      getTextIn(
+        c,
+        'KHHDCLQuan',
+        'khhdclquan',
+        'KHHDGoc',
+        'khhdgoc',
+        'KHHDonGoc',
+        'KyHieuGoc',
+        'OriginalInvoiceSerial',
+        'SerialNo',
+      ) ?? null;
+    const dateRaw = getTextIn(
+      c,
+      'NLHDCLQuan',
+      'nlhdclquan',
+      'NLapGoc',
+      'NgayHoaDonGoc',
+      'InvoiceDate',
+    );
+    if (dateRaw) relatedInvoiceDate = normalizeDate(dateRaw);
+    relatedNote =
+      getTextIn(
+        c,
+        'GChu',
+        'gchu',
+        'GChuHDGoc',
+        'LDoDChinh',
+        'LyDoDieuChinh',
+        'Reason',
+      ) ?? null;
+
+    if (relatedInvoiceNo) break;
+  }
+
+  if (!relatedInvoiceNo) {
+    relatedInvoiceNo =
+      getText(
+        doc,
+        'SHDCLQuan',
+        'shdclquan',
+        'SHDGoc',
+        'shdgoc',
+        'SoHoaDonGoc',
+        'OriginalInvoiceNo',
+      ) ?? null;
+    relatedSerialNo =
+      getText(
+        doc,
+        'KHHDCLQuan',
+        'khhdclquan',
+        'KHHDGoc',
+        'khhdgoc',
+        'KHHDonGoc',
+        'KyHieuGoc',
+        'OriginalInvoiceSerial',
+      ) ?? null;
+    const dateRaw = getText(
+      doc,
+      'NLHDCLQuan',
+      'nlhdclquan',
+      'NLapGoc',
+      'NgayHoaDonGoc',
+    );
+    if (dateRaw) relatedInvoiceDate = normalizeDate(dateRaw);
+    if (!relatedNote) {
+      relatedNote =
+        getText(doc, 'GChuHDGoc', 'LDoDChinh', 'LyDoDieuChinh') ?? null;
+    }
+  }
+
+  // Fallback regex scan
+  const textToScan = [relatedNote, description].filter(Boolean).join(' ');
+  if (!relatedInvoiceNo && textToScan) {
+    const m1 = textToScan.match(
+      /(?:điều chỉnh|thay thế).*?ký hiệu\s*([A-Z0-9]+).*?số\s*([0-9]+)/i,
+    );
+    if (m1) {
+      relatedSerialNo = relatedSerialNo || m1[1].trim();
+      relatedInvoiceNo = m1[2].trim();
+    } else {
+      const m2 = textToScan.match(
+        /(?:điều chỉnh|thay thế).*?số\s*([0-9]+).*?ký hiệu\s*([A-Z0-9]+)/i,
+      );
+      if (m2) {
+        relatedInvoiceNo = m2[1].trim();
+        relatedSerialNo = relatedSerialNo || m2[2].trim();
+      }
+    }
+  }
+
+  return {
+    relatedInvoiceNo: relatedInvoiceNo ? String(relatedInvoiceNo).trim() : null,
+    relatedSerialNo: relatedSerialNo ? String(relatedSerialNo).trim() : null,
+    relatedInvoiceDate,
+    relatedNote,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +432,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   }
 
   const { lookupCode, providerLink } = extractLookupInfo(doc, sellerTaxCode);
+  const relatedInfo = extractRelatedInvoiceInfo(doc, description);
 
   return {
     invoiceNo,
@@ -316,6 +457,10 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     providerLink,
     rawSource: 'TT78',
     items,
+    relatedInvoiceNo: relatedInfo.relatedInvoiceNo,
+    relatedSerialNo: relatedInfo.relatedSerialNo,
+    relatedInvoiceDate: relatedInfo.relatedInvoiceDate,
+    relatedNote: relatedInfo.relatedNote,
   };
 }
 
@@ -481,6 +626,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
   }
 
   const { lookupCode, providerLink } = extractLookupInfo(doc, sellerTaxCode);
+  const relatedInfo = extractRelatedInvoiceInfo(doc, description);
 
   return {
     invoiceNo,
@@ -505,6 +651,10 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     providerLink,
     rawSource: 'VINFAST',
     items,
+    relatedInvoiceNo: relatedInfo.relatedInvoiceNo,
+    relatedSerialNo: relatedInfo.relatedSerialNo,
+    relatedInvoiceDate: relatedInfo.relatedInvoiceDate,
+    relatedNote: relatedInfo.relatedNote,
   };
 }
 
@@ -554,6 +704,9 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
   const invoiceNo = getText(doc, ...INVOICE_NO_TAGS);
   if (!invoiceNo) return null;
 
+  const desc = getText(doc, 'description', 'Description', 'DienGiai') ?? null;
+  const relatedInfo = extractRelatedInvoiceInfo(doc, desc);
+
   return {
     invoiceNo,
     serialNo: getText(doc, 'serial_no', 'SerialNo', 'KyHieu') ?? null,
@@ -569,7 +722,7 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     buyerTaxCode:
       getText(doc, 'buyer_tax_code', 'BuyerTaxCode', 'MaSoThueNMua') ?? null,
     buyerAddress: getText(doc, 'buyer_address', 'BuyerAddress') ?? null,
-    description: getText(doc, 'description', 'Description', 'DienGiai') ?? null,
+    description: desc,
     preVatAmount: toNum(
       getText(doc, 'pre_vat_amount', 'PreVatAmount', 'TruocVat'),
     ),
@@ -581,6 +734,10 @@ function parseGeneric(doc: Document): ParsedVietnamInvoice | null {
     providerLink: null,
     rawSource: 'GENERIC',
     items: [],
+    relatedInvoiceNo: relatedInfo.relatedInvoiceNo,
+    relatedSerialNo: relatedInfo.relatedSerialNo,
+    relatedInvoiceDate: relatedInfo.relatedInvoiceDate,
+    relatedNote: relatedInfo.relatedNote,
   };
 }
 
