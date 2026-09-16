@@ -8,7 +8,10 @@ import {
   UseGuards,
   NotFoundException,
   Logger,
+  Res,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiProduces, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
@@ -25,6 +28,8 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 
+@ApiTags('greenway_cases')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
 export class KgaraCasesController {
@@ -49,6 +54,58 @@ export class KgaraCasesController {
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getBranches() {
     return this.branchRepo.find({ order: { name: 'ASC' } });
+  }
+
+  @Get('cases/export/excel')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'date_type', required: false })
+  @ApiQuery({ name: 'classification', required: false })
+  @ApiQuery({ name: 'branch_id', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'q', required: false })
+  async exportCasesExcel(
+    @Res() res: Response,
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('date_type') dateType?: 'completion_date' | 'case_date',
+    @Query('classification') classification?: string,
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+  ) {
+    const effectiveBranchId = queryBranchId || headerBranchId;
+    const buffer = await this.caseQueryService.exportCompletedCasesExcel({
+      branchId: effectiveBranchId || undefined,
+      date_from: dateFrom,
+      date_to: dateTo,
+      date_type: dateType,
+      classification,
+      status,
+      q,
+    });
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    const fileName = `Bang_ke_phieu_dich_vu_ket_thuc_${y}${m}${d}_${hh}${mm}${ss}.xlsx`;
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @Get('cases')

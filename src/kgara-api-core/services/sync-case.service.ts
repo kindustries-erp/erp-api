@@ -93,10 +93,43 @@ export class SyncCaseService {
     let totalPages = 1;
     let totalRows = 0;
 
+    // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases)
+    let effectiveFrom: string | undefined = from;
+    let effectiveTo: string | undefined = to;
+
+    const parsedFrom = parseSafeDate(from);
+    const parsedTo = parseSafeDate(to);
+
+    if (parsedFrom) {
+      const lookbackFrom = new Date(
+        parsedFrom.getFullYear(),
+        parsedFrom.getMonth() - 2,
+        1,
+      );
+      effectiveFrom = lookbackFrom.toLocaleDateString('en-CA');
+      effectiveTo = parsedTo
+        ? parsedTo.toLocaleDateString('en-CA')
+        : new Date(
+            parsedFrom.getFullYear(),
+            parsedFrom.getMonth() + 1,
+            0,
+          ).toLocaleDateString('en-CA');
+    } else if (!updatedSince) {
+      const now = new Date();
+      const lookbackFrom = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      const endOfCurrentMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+      );
+      effectiveFrom = lookbackFrom.toLocaleDateString('en-CA');
+      effectiveTo = endOfCurrentMonth.toLocaleDateString('en-CA');
+    }
+
     const run = await this.syncRunLogger.createSyncRun(
       branchExternalId,
       '/api/v1/gr/cases/list',
-      { from, to, updatedSince },
+      { from: effectiveFrom, to: effectiveTo, updatedSince },
       200,
     );
 
@@ -106,8 +139,8 @@ export class SyncCaseService {
       do {
         const response = await this.client.getCases(
           branchExternalId,
-          from,
-          to,
+          effectiveFrom,
+          effectiveTo,
           updatedSince,
           page,
           200,
@@ -240,48 +273,52 @@ export class SyncCaseService {
         page++;
       } while (page <= totalPages);
 
-      // Sync gross profit details to map financial data to cases
+      // Sync gross profit details to map financial data to cases across all lookback months
       try {
-        const dateRangesToSync: { from: string; to: string }[] = [];
+        const monthsToSync = new Set<string>();
 
-        const parsedFrom = parseSafeDate(from);
-        const parsedTo = parseSafeDate(to);
-
-        if (parsedFrom && parsedTo) {
-          dateRangesToSync.push({
-            from: parsedFrom.toISOString().split('T')[0],
-            to: parsedTo.toISOString().split('T')[0],
-          });
-        } else {
-          const now = new Date();
-          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-          dateRangesToSync.push({
-            from: firstDay.toLocaleDateString('en-CA'),
-            to: lastDay.toLocaleDateString('en-CA'),
-          });
-
-          const monthsToSync = new Set<string>();
-          for (const isoStr of updatedCaseDates) {
-            const d = parseSafeDate(isoStr);
-            if (d && (d < firstDay || d > lastDay)) {
+        if (effectiveFrom && effectiveTo) {
+          const startD = parseSafeDate(effectiveFrom);
+          const endD = parseSafeDate(effectiveTo);
+          if (startD && endD) {
+            let curr = new Date(startD.getFullYear(), startD.getMonth(), 1);
+            const endMonth = new Date(endD.getFullYear(), endD.getMonth(), 1);
+            while (curr <= endMonth) {
               monthsToSync.add(
-                `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+                `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}`,
               );
+              curr = new Date(curr.getFullYear(), curr.getMonth() + 1, 1);
             }
           }
-
-          for (const yyyyMm of monthsToSync) {
-            const [y, m] = yyyyMm.split('-');
-            const fd = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
-              'en-CA',
+        } else {
+          const now = new Date();
+          for (let i = 2; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            monthsToSync.add(
+              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
             );
-            const ld = new Date(Number(y), Number(m), 0).toLocaleDateString(
-              'en-CA',
-            );
-            dateRangesToSync.push({ from: fd, to: ld });
           }
+        }
+
+        for (const isoStr of updatedCaseDates) {
+          const d = parseSafeDate(isoStr);
+          if (d) {
+            monthsToSync.add(
+              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+            );
+          }
+        }
+
+        const dateRangesToSync: { from: string; to: string }[] = [];
+        for (const yyyyMm of Array.from(monthsToSync).sort()) {
+          const [y, m] = yyyyMm.split('-');
+          const fd = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
+            'en-CA',
+          );
+          const ld = new Date(Number(y), Number(m), 0).toLocaleDateString(
+            'en-CA',
+          );
+          dateRangesToSync.push({ from: fd, to: ld });
         }
 
         for (const range of dateRangesToSync) {

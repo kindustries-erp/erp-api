@@ -19,7 +19,7 @@ describe('EntityCustomFieldsHelper', () => {
       const mockDefs = [
         {
           id: 'def-1',
-          code: 'type_inventory_receipt',
+          code: 'category',
           isGlobal: true,
           moduleKeyGlobal: 'GOODS_RECEIPT',
         },
@@ -52,7 +52,7 @@ describe('EntityCustomFieldsHelper', () => {
         'GOODS_RECEIPT',
         'rec-1',
         {
-          type_inventory_receipt: 'PO',
+          category: 'PO',
           'def-2': 'Ghi chú đặc biệt',
           ignored_field: 'Không có def',
         },
@@ -88,7 +88,7 @@ describe('EntityCustomFieldsHelper', () => {
           entityId: 'rec-1',
           attrDefId: 'def-1',
           valueText: 'PO',
-          attrCode: 'type_inventory_receipt',
+          attrCode: 'category',
           attrName: 'Loại nhập kho',
           nameEn: 'Receipt Type',
           fieldType: 'SELECT',
@@ -112,12 +112,11 @@ describe('EntityCustomFieldsHelper', () => {
       expect(enriched[0]).toHaveProperty('customAttributes');
       expect((enriched[0] as any).customAttributes).toEqual({
         'def-1': 'PO',
+        category: 'PO',
         type_inventory_receipt: 'PO',
       });
       expect((enriched[0] as any).attributeValues).toHaveLength(1);
-      expect((enriched[0] as any).attributeValues[0].attrCode).toBe(
-        'type_inventory_receipt',
-      );
+      expect((enriched[0] as any).attributeValues[0].attrCode).toBe('category');
 
       expect((enriched[1] as any).customAttributes).toEqual({});
       expect((enriched[1] as any).attributeValues).toEqual([]);

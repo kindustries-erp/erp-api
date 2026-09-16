@@ -55,7 +55,28 @@ export class EntityCustomFieldsHelper {
     for (const d of defs) {
       defMapById.set(d.id, d);
       if (d.code) {
-        defMapByCode.set(d.code.trim().toLowerCase(), d);
+        const codeLower = d.code.trim().toLowerCase();
+        defMapByCode.set(codeLower, d);
+        if (codeLower === 'category') {
+          if (upperType === 'INVOICE_IN') {
+            defMapByCode.set('type_invoice_in', d);
+            defMapByCode.set('invoice_type', d);
+            defMapByCode.set('type', d);
+          } else if (upperType === 'INVOICE_OUT') {
+            defMapByCode.set('type_invoice_out', d);
+            defMapByCode.set('invoice_type', d);
+            defMapByCode.set('type', d);
+          } else if (upperType === 'GOODS_RECEIPT') {
+            defMapByCode.set('type_inventory_receipt', d);
+            defMapByCode.set('receipt_type', d);
+          } else if (upperType === 'GOODS_ISSUE') {
+            defMapByCode.set('type_inventory_issue', d);
+            defMapByCode.set('issue_type', d);
+          } else if (upperType === 'INVENTORY_ADJUSTMENT') {
+            defMapByCode.set('type_inventory_adjustment', d);
+            defMapByCode.set('adjustment_type', d);
+          }
+        }
       }
     }
 
@@ -210,6 +231,18 @@ export class EntityCustomFieldsHelper {
         entry.customAttributes[row.attrDefId] = parsedVal;
         if (row.attrCode) {
           entry.customAttributes[row.attrCode] = parsedVal;
+          if (row.attrCode === 'category') {
+            if (upperType === 'INVOICE_IN')
+              entry.customAttributes['type_invoice_in'] = parsedVal;
+            if (upperType === 'INVOICE_OUT')
+              entry.customAttributes['type_invoice_out'] = parsedVal;
+            if (upperType === 'GOODS_RECEIPT')
+              entry.customAttributes['type_inventory_receipt'] = parsedVal;
+            if (upperType === 'GOODS_ISSUE')
+              entry.customAttributes['type_inventory_issue'] = parsedVal;
+            if (upperType === 'INVENTORY_ADJUSTMENT')
+              entry.customAttributes['type_inventory_adjustment'] = parsedVal;
+          }
         }
 
         entry.attributeValues.push({

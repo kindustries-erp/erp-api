@@ -43,8 +43,8 @@ export class InventoryAdjustmentsCoreService {
       .orderBy('LENGTH(ia.adjustmentNo)', 'DESC')
       .addOrderBy('ia.adjustmentNo', 'DESC')
       .getOne();
-    const latestSeq = latest?.adjustmentNo?.slice(prefix.length) ?? '00';
-    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(2, '0');
+    const latestSeq = latest?.adjustmentNo?.slice(prefix.length) ?? '000';
+    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
     return `${prefix}${nextSeq}`;
   }
 
@@ -68,6 +68,12 @@ export class InventoryAdjustmentsCoreService {
 
   async create(dto: CreateInventoryAdjustmentDto) {
     const { lines = [], customAttributes, ...header } = dto;
+    const finalCustomAttributes: Record<string, any> = {
+      ...(customAttributes || {}),
+    };
+    if (!finalCustomAttributes.category) {
+      finalCustomAttributes.category = 'PERIODIC';
+    }
     return this.dataSource.transaction(async (manager) => {
       const headerRepo = manager.getRepository(ErpInventoryAdjustment);
       const lineRepo = manager.getRepository(ErpInventoryAdjustmentLine);
@@ -95,14 +101,12 @@ export class InventoryAdjustmentsCoreService {
       const savedLines = await lineRepo.save(linesPayload);
 
       // Lưu customAttributes nguyên tử trong transaction
-      if (customAttributes) {
-        await EntityCustomFieldsHelper.saveInTx(
-          manager,
-          'INVENTORY_ADJUSTMENT',
-          data.id,
-          customAttributes,
-        );
-      }
+      await EntityCustomFieldsHelper.saveInTx(
+        manager,
+        'INVENTORY_ADJUSTMENT',
+        data.id,
+        finalCustomAttributes,
+      );
 
       const result = { ...data, lines: savedLines };
       await EntityCustomFieldsHelper.enrichOne(

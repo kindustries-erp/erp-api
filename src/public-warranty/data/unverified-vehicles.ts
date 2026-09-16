@@ -1,4 +1,4 @@
-import rawBatch3 from './unverified-vehicles-batch3.json';
+import { rawBatch3 } from './unverified-vehicles-batch3.data';
 
 export interface UnverifiedVehicle {
   index: number;
@@ -22,8 +22,7 @@ export function getUnverifiedVehicleKey(
   return `${normalizeVehicleCode(vinNo)}_${normalizeVehicleCode(engineNo)}`;
 }
 
-export const UNVERIFIED_VEHICLES_BATCH3: UnverifiedVehicle[] =
-  rawBatch3 as UnverifiedVehicle[];
+export const UNVERIFIED_VEHICLES_BATCH3: UnverifiedVehicle[] = rawBatch3;
 
 const UNVERIFIED_VEHICLES_MAP = new Map<string, UnverifiedVehicle>();
 

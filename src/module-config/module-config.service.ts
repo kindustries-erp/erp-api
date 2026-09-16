@@ -537,8 +537,18 @@ export class ModuleConfigService {
                 'RECLASSIFY',
                 'RETURN',
                 'WARRANTY',
+                'INTERNAL',
+                'SHOWROOM',
                 'SCRAP',
                 'OTHER',
+                'PURCHASE_GOODS',
+                'EXPENSE_OPEX',
+                'SERVICE_FEE',
+                'FIXED_ASSET',
+                'SALE_GOODS',
+                'SALE_SERVICE',
+                'SALE_FINANCIAL',
+                'OTHER_INCOME',
               ];
               if (coreCodes.includes(rem.value)) {
                 throw new ConflictException(
@@ -638,10 +648,7 @@ export class ModuleConfigService {
     const modKey = (def.moduleKeyGlobal || '').toUpperCase();
     const attrCode = (def.code || '').toLowerCase();
 
-    if (
-      modKey === 'GOODS_RECEIPT' ||
-      ['type_inventory_receipt', 'receipt_type', 'type'].includes(attrCode)
-    ) {
+    if (modKey === 'GOODS_RECEIPT' && attrCode === 'category') {
       try {
         const [poCountRow, prodCountRow, otherCountRow] = await Promise.all([
           this.dataSource.query(
@@ -668,10 +675,7 @@ export class ModuleConfigService {
       } catch (e) {
         // Safe catch if table doesn't exist during certain tests
       }
-    } else if (
-      modKey === 'GOODS_ISSUE' ||
-      ['type_inventory_issue', 'issue_type', 'type'].includes(attrCode)
-    ) {
+    } else if (modKey === 'GOODS_ISSUE' && attrCode === 'category') {
       try {
         const issueRows = await this.dataSource.query(
           `SELECT issue_type as value, COUNT(*)::int as count FROM erp_goods_issues WHERE is_deleted = false GROUP BY issue_type`,
@@ -682,7 +686,22 @@ export class ModuleConfigService {
             if (usageMap[key] !== undefined) {
               usageMap[key] = (usageMap[key] || 0) + Number(row.count || 0);
             }
-            if (key === 'LOSS' && usageMap['SCRAP'] !== undefined) {
+            if (
+              (key === 'LOSS' ||
+                key === 'SCRAP' ||
+                key === 'SHOWROOM' ||
+                key === 'INTERNAL_USE') &&
+              usageMap['INTERNAL'] !== undefined
+            ) {
+              usageMap['INTERNAL'] =
+                (usageMap['INTERNAL'] || 0) + Number(row.count || 0);
+            } else if (
+              (key === 'LOSS' || key === 'SCRAP') &&
+              usageMap['SHOWROOM'] !== undefined
+            ) {
+              usageMap['SHOWROOM'] =
+                (usageMap['SHOWROOM'] || 0) + Number(row.count || 0);
+            } else if (key === 'LOSS' && usageMap['SCRAP'] !== undefined) {
               usageMap['SCRAP'] =
                 (usageMap['SCRAP'] || 0) + Number(row.count || 0);
             }
@@ -896,6 +915,18 @@ export class ModuleConfigService {
         globalAttributes[ev.attrDefId] = ev.valueText;
         if (ev.attrDef?.code) {
           globalAttributes[ev.attrDef.code] = ev.valueText;
+          if (ev.attrDef.code === 'category') {
+            if (upperType === 'INVOICE_IN')
+              globalAttributes['type_invoice_in'] = ev.valueText;
+            if (upperType === 'INVOICE_OUT')
+              globalAttributes['type_invoice_out'] = ev.valueText;
+            if (upperType === 'GOODS_RECEIPT')
+              globalAttributes['type_inventory_receipt'] = ev.valueText;
+            if (upperType === 'GOODS_ISSUE')
+              globalAttributes['type_inventory_issue'] = ev.valueText;
+            if (upperType === 'INVENTORY_ADJUSTMENT')
+              globalAttributes['type_inventory_adjustment'] = ev.valueText;
+          }
         }
       } else {
         attributes[ev.attrDefId] = ev.valueText;
@@ -987,7 +1018,28 @@ export class ModuleConfigService {
       for (const d of globalDefs) {
         globalDefMap.set(d.id, d.id);
         if (d.code) {
-          globalDefMap.set(d.code.trim().toLowerCase(), d.id);
+          const codeLower = d.code.trim().toLowerCase();
+          globalDefMap.set(codeLower, d.id);
+          if (codeLower === 'category') {
+            if (upperType === 'INVOICE_IN') {
+              globalDefMap.set('type_invoice_in', d.id);
+              globalDefMap.set('invoice_type', d.id);
+              globalDefMap.set('type', d.id);
+            } else if (upperType === 'INVOICE_OUT') {
+              globalDefMap.set('type_invoice_out', d.id);
+              globalDefMap.set('invoice_type', d.id);
+              globalDefMap.set('type', d.id);
+            } else if (upperType === 'GOODS_RECEIPT') {
+              globalDefMap.set('type_inventory_receipt', d.id);
+              globalDefMap.set('receipt_type', d.id);
+            } else if (upperType === 'GOODS_ISSUE') {
+              globalDefMap.set('type_inventory_issue', d.id);
+              globalDefMap.set('issue_type', d.id);
+            } else if (upperType === 'INVENTORY_ADJUSTMENT') {
+              globalDefMap.set('type_inventory_adjustment', d.id);
+              globalDefMap.set('adjustment_type', d.id);
+            }
+          }
         }
       }
 
