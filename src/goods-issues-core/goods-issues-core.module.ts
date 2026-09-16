@@ -11,6 +11,7 @@ import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { GoodsIssuesCoreController } from './goods-issues-core.controller';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
 import { CompanyProfileModule } from '../company-profile/company-profile.module';
+import { InventoryCoreModule } from '../inventory-core/inventory-core.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CompanyProfileModule } from '../company-profile/company-profile.module'
       ErpVehicle,
     ]),
     CompanyProfileModule,
+    InventoryCoreModule,
   ],
   controllers: [GoodsIssuesCoreController],
   providers: [GoodsIssuesCoreService],

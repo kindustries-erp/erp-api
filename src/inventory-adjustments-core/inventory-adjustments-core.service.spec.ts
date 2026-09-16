@@ -322,7 +322,7 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
 
   // ─── generateDailyAdjustmentNo tests ─────────────────────────────────────
 
-  it('generateDailyAdjustmentNo: first voucher of the day — should return DC-YYYYMMDD-01', async () => {
+  it('generateDailyAdjustmentNo: first voucher of the day — should return DC-YYYYMMDD-001', async () => {
     const qb = {
       where: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
@@ -347,15 +347,15 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     );
     const { nextNo } = await service.getNextAdjustmentNo('2026-07-20');
 
-    expect(nextNo).toBe('DC-20260720-01');
+    expect(nextNo).toBe('DC-20260720-001');
   });
 
-  it('generateDailyAdjustmentNo: existing voucher DC-20260720-03 — should return DC-20260720-04', async () => {
+  it('generateDailyAdjustmentNo: existing voucher DC-20260720-003 — should return DC-20260720-004', async () => {
     const qb = {
       where: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue({ adjustmentNo: 'DC-20260720-03' }),
+      getOne: jest.fn().mockResolvedValue({ adjustmentNo: 'DC-20260720-003' }),
     };
     const adjRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
@@ -375,6 +375,6 @@ describe('InventoryAdjustmentsCoreService — stock invariants', () => {
     );
     const { nextNo } = await service.getNextAdjustmentNo('2026-07-20');
 
-    expect(nextNo).toBe('DC-20260720-04');
+    expect(nextNo).toBe('DC-20260720-004');
   });
 });

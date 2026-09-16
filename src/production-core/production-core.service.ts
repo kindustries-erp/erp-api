@@ -23,7 +23,7 @@ import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_ba
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ErpProductionOrder } from './entities/erp_production_order.entity';
-import { getGMT7YearMonthString } from '../common/utils/date.util';
+import { getGMT7YearMonthDayString } from '../common/utils/date.util';
 import { ErpProductionOrderMaterial } from './entities/erp_production_order_material.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
@@ -41,6 +41,7 @@ import { ListProductionDto } from './dto/list-production.dto';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
 import * as ExcelJS from 'exceljs';
 import { format } from 'date-fns';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 
 @Injectable()
 export class ProductionCoreService {
@@ -1596,8 +1597,8 @@ export class ProductionCoreService {
       if (hasLineToIssue) {
         // Generate GI number
         const today = new Date();
-        const ym = getGMT7YearMonthString(today);
-        const giPrefix = `XK-${ym}`;
+        const ymd = getGMT7YearMonthDayString(today);
+        const giPrefix = `XK-${ymd}-`;
         const latestGi = await giRepo
           .createQueryBuilder('gi')
           .where('gi.issueNo LIKE :prefix', { prefix: `${giPrefix}%` })
@@ -1618,6 +1619,10 @@ export class ProductionCoreService {
             remarks: `Xuất NVL sản xuất ${order.referenceNo} — ${qtyToManufacture} SP`,
           } as any),
         )) as unknown as ErpGoodsIssue;
+
+        await EntityCustomFieldsHelper.saveInTx(manager, 'GOODS_ISSUE', gi.id, {
+          category: 'PRODUCTION',
+        });
       }
 
       let lineNo = 1;
@@ -1909,12 +1914,13 @@ export class ProductionCoreService {
         });
       }
       const today = new Date();
-      const ym = getGMT7YearMonthString(today);
-      const grPrefix = `NK-${ym}`;
+      const ymd = getGMT7YearMonthDayString(today);
+      const grPrefix = `NK-${ymd}-`;
       const latestGr = await grRepo
         .createQueryBuilder('gr')
         .where('gr.receiptNo LIKE :prefix', { prefix: `${grPrefix}%` })
-        .orderBy('gr.receiptNo', 'DESC')
+        .orderBy('LENGTH(gr.receiptNo)', 'DESC')
+        .addOrderBy('gr.receiptNo', 'DESC')
         .getOne();
       const latestSeq = latestGr?.receiptNo?.slice(grPrefix.length) ?? '000';
       const grNo = `${grPrefix}${String(Number(latestSeq || '0') + 1).padStart(3, '0')}`;
@@ -1960,6 +1966,11 @@ export class ProductionCoreService {
           mergedBomAttributes[item.code] = item.value;
         }
       }
+
+      await EntityCustomFieldsHelper.saveInTx(manager, 'GOODS_RECEIPT', gr.id, {
+        ...mergedBomAttributes,
+        category: 'PRODUCTION',
+      });
 
       // Build declaredSerials array for the goods receipt line
       const declaredSerials: Array<{

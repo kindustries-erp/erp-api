@@ -25,17 +25,6 @@ async function bootstrap() {
     origin: true, // Tự động echo Origin của request (hỗ trợ mọi domain, NPM proxy, localhost)
     credentials: true, // Cho phép cookies, authorization headers
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
-    allowedHeaders: [
-      'Origin',
-      'X-Requested-With',
-      'Content-Type',
-      'Accept',
-      'Authorization',
-      'Range',
-      'X-Custom-Header',
-      'Cache-Control',
-      'Pragma',
-    ],
     exposedHeaders: [
       'Content-Range',
       'X-Total-Count',

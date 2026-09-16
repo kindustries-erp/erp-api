@@ -25,11 +25,30 @@ describe('GoodsIssuesCoreService stock and reserve invariants', () => {
       transaction: jest.fn(async (cb: any) => cb(manager)),
     } as unknown as DataSource;
 
+    const mockSystemOps = {
+      startOperation: jest.fn().mockResolvedValue({ id: 'op-mock' }),
+      completeOperation: jest.fn().mockResolvedValue({}),
+      failOperation: jest.fn().mockResolvedValue({}),
+    } as any;
+    const mockSystemSerial = {
+      generateSystemSerials: jest.fn().mockResolvedValue([]),
+      deductFifoSystemSerials: jest.fn().mockResolvedValue(0),
+      revertDeductedSystemSerials: jest.fn().mockResolvedValue(0),
+    } as any;
+
+    const mockRepo = {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: 'gi1', issueNo: 'GI-001', status: 'DRAFT' }),
+    } as any;
+
     const service = new GoodsIssuesCoreService(
       dataSource,
+      mockRepo,
       {} as any,
       {} as any,
-      {} as any,
+      mockSystemOps,
+      mockSystemSerial,
     );
 
     jest.spyOn(service, 'findOne').mockResolvedValue({ ok: true } as any);
@@ -640,5 +659,49 @@ describe('GoodsIssuesCoreService stock and reserve invariants', () => {
     ).rejects.toThrow('Serial không khớp mặt hàng ở dòng 1');
     expect(issue.status).toBe('DRAFT');
     expect(txnRepo.save).not.toHaveBeenCalled();
+  });
+
+  // ─── generateDailyIssueNo tests ──────────────────────────────────────────
+
+  it('generateDailyIssueNo: first issue of the day — should return XK-YYYYMMDD-001', async () => {
+    const qb = {
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(null),
+    };
+    const giRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      save: jest.fn(async (x: any) => x),
+      findOneBy: jest.fn().mockResolvedValue(null),
+    };
+
+    const repoMap = new Map<any, any>([[ErpGoodsIssue, giRepo]]);
+    const manager = makeManager(repoMap);
+    const { service } = makeServiceWithManager(manager);
+    const { nextNo } = await service.getNextIssueNo('2026-07-20');
+
+    expect(nextNo).toBe('XK-20260720-001');
+  });
+
+  it('generateDailyIssueNo: existing issue XK-20260720-003 — should return XK-20260720-004', async () => {
+    const qb = {
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue({ issueNo: 'XK-20260720-003' }),
+    };
+    const giRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      save: jest.fn(async (x: any) => x),
+      findOneBy: jest.fn().mockResolvedValue(null),
+    };
+
+    const repoMap = new Map<any, any>([[ErpGoodsIssue, giRepo]]);
+    const manager = makeManager(repoMap);
+    const { service } = makeServiceWithManager(manager);
+    const { nextNo } = await service.getNextIssueNo('2026-07-20');
+
+    expect(nextNo).toBe('XK-20260720-004');
   });
 });

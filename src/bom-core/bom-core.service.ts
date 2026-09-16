@@ -12,6 +12,7 @@ import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBom } from './entities/erp_bom.entity';
 import { ErpBomLine } from './entities/erp_bom_line.entity';
 import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
+import { EntityCustomFieldsHelper } from '../module-config/helpers/entity-custom-fields.helper';
 import { CreateBomDto } from './dto/create-bom.dto';
 import { UpdateBomDto } from './dto/update-bom.dto';
 import { ListBomDto } from './dto/list-bom.dto';
@@ -220,6 +221,7 @@ export class BomCoreService {
           }
         }
       }
+      await EntityCustomFieldsHelper.enrichMany(this.dataSource, 'BOM', items);
     }
 
     return {
@@ -236,7 +238,6 @@ export class BomCoreService {
       where: { id, isDeleted: false },
       relations: {
         category: true,
-        attributeValues: true,
       },
     });
     const lines = await this.lineRepository.find({
@@ -248,6 +249,8 @@ export class BomCoreService {
     lines.forEach((line: any) => {
       line.uom = line.uom?.name || '';
     });
+
+    await EntityCustomFieldsHelper.enrichOne(this.dataSource, 'BOM', data);
 
     // Load all attributes (category & global) from erp_entity_attribute_values
     const entityAttrRows = await this.dataSource.query(

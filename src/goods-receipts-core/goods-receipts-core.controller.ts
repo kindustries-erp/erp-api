@@ -123,8 +123,17 @@ export class GoodsReceiptsCoreController {
     resource: ErpResource.GOODS_RECEIPTS,
     action: ErpAction.READ,
   })
+  @Get('lines/:lineId/serials')
+  getLineSerials(@Param('lineId', new ParseUUIDPipe()) lineId: string) {
+    return this.service.getLineSerials(lineId);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GOODS_RECEIPTS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+  findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
@@ -133,10 +142,7 @@ export class GoodsReceiptsCoreController {
     action: ErpAction.READ,
   })
   @Get(':id/export-xlsx')
-  async exportXlsx(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Res() res: Response,
-  ) {
+  async exportXlsx(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.service.exportXlsx(id);
     const receiptRes = await this.service.findOne(id);
     const receiptNo = receiptRes.data.receiptNo || 'draft';
@@ -156,23 +162,17 @@ export class GoodsReceiptsCoreController {
     action: ErpAction.UPDATE,
   })
   @Patch(':id')
-  update(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateGoodsReceiptDto,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdateGoodsReceiptDto) {
     return this.service.update(id, dto);
   }
 
   @Post(':id/post')
-  postReceipt(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: PostGoodsReceiptDto,
-  ) {
+  postReceipt(@Param('id') id: string, @Body() dto: PostGoodsReceiptDto) {
     return this.service.postReceipt(id, dto);
   }
 
   @Post(':id/cancel')
-  cancelReceipt(@Param('id', new ParseUUIDPipe()) id: string) {
+  cancelReceipt(@Param('id') id: string) {
     return this.service.cancelReceipt(id);
   }
 
@@ -181,7 +181,7 @@ export class GoodsReceiptsCoreController {
     action: ErpAction.DELETE,
   })
   @Delete(':id')
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+  remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 }

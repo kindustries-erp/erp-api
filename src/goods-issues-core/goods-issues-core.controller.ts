@@ -48,12 +48,17 @@ export class GoodsIssuesCoreController {
     return this.service.findAll(query);
   }
 
+  @Get('next-no')
+  getNextNo(@Query('date') date?: string) {
+    return this.service.getNextIssueNo(date);
+  }
+
   @RequirePermissions({
     resource: ErpResource.GOODS_ISSUES,
     action: ErpAction.READ,
   })
   @Get(':id')
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+  findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
@@ -62,10 +67,7 @@ export class GoodsIssuesCoreController {
     action: ErpAction.READ,
   })
   @Get(':id/export-xlsx')
-  async exportXlsx(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Res() res: Response,
-  ) {
+  async exportXlsx(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.service.exportXlsx(id);
     const issueRes = await this.service.findOne(id);
     const issueNo = issueRes.data.issueNo || 'draft';
@@ -85,10 +87,7 @@ export class GoodsIssuesCoreController {
     action: ErpAction.UPDATE,
   })
   @Patch(':id')
-  update(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateGoodsIssueDto,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdateGoodsIssueDto) {
     return this.service.update(id, dto);
   }
 
@@ -97,10 +96,7 @@ export class GoodsIssuesCoreController {
     action: ErpAction.UPDATE,
   })
   @Post(':id/post')
-  postIssue(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: PostGoodsIssueDto,
-  ) {
+  postIssue(@Param('id') id: string, @Body() dto: PostGoodsIssueDto) {
     return this.service.postIssue(id, dto);
   }
 
@@ -109,7 +105,7 @@ export class GoodsIssuesCoreController {
     action: ErpAction.DELETE,
   })
   @Delete(':id')
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+  remove(@Param('id') id: string) {
     return this.service.remove(id);
   }
 
@@ -118,7 +114,7 @@ export class GoodsIssuesCoreController {
     action: ErpAction.UPDATE,
   })
   @Post(':id/cancel')
-  cancelIssue(@Param('id', new ParseUUIDPipe()) id: string) {
+  cancelIssue(@Param('id') id: string) {
     return this.service.cancelIssue(id);
   }
 }

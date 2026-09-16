@@ -432,6 +432,9 @@ describe('ProductionCoreService', () => {
             createQueryBuilder: () => ({
               where: () => ({
                 orderBy: () => ({
+                  addOrderBy: () => ({
+                    getOne: jest.fn().mockResolvedValue(null),
+                  }),
                   getOne: jest.fn().mockResolvedValue(null),
                 }),
               }),

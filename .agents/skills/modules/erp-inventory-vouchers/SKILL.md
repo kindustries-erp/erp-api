@@ -1,6 +1,6 @@
 ---
 name: erp-inventory-vouchers
-description: Module tri thức Trung tâm Tra cứu Chứng từ Kho Tổng hợp (Warehouse Vouchers Hub) trong Liouni ERP. Chứa toàn bộ logic truy vấn hợp nhất (Federated query) qua Phiếu Nhập (NK-), Phiếu Xuất (XK-), Phiếu Điều Chỉnh (KK-), bộ lọc đa chiều và xem chi tiết chứng từ.
+description: Module tri thức Trung tâm Tra cứu Chứng từ Kho Tổng hợp (Warehouse Vouchers Hub) trong Liouni ERP. Chứa toàn bộ logic truy vấn hợp nhất (Federated query) qua Phiếu Nhập (NK-), Phiếu Xuất (XK-), Phiếu Điều Chỉnh (DC-), bộ lọc đa chiều và xem chi tiết chứng từ.
 ---
 
 # 📦 Module Tri Thức: Trung Tâm Chứng Từ Kho Tổng Hợp (`erp-inventory-vouchers`)
@@ -12,9 +12,9 @@ Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra 
 ### 1.1. Các tính năng cốt lõi:
 - **Truy vấn Hợp nhất Đa nguồn (Federated Multi-Source Query)**:
   - Hợp nhất dữ liệu từ 3 nguồn chứng từ kho chính:
-    1. **Phiếu Nhập kho (`RECEIPT`)**: Mã tiền tố `NK-YYYYMMxxxx` (Nhập mua hàng PO, Nhập thành phẩm MO, Nhập trả hàng).
-    2. **Phiếu Xuất kho (`ISSUE`)**: Mã tiền tố `XK-YYYYMMxxxx` (Xuất bán hàng SO, Xuất NVL sản xuất MO, Xuất bảo hành).
-    3. **Phiếu Điều chỉnh Kiểm kê (`ADJUSTMENT`)**: Mã tiền tố `KK-YYYYMMxxxx` hoặc `DC-YYYYMMxxxx` (Kiểm kê thừa/thiếu).
+    1. **Phiếu Nhập kho (`RECEIPT`)**: Mã tiền tố `NK-YYYYMMDD-XXX` (Nhập mua hàng PO, Nhập thành phẩm MO, Nhập trả hàng).
+    2. **Phiếu Xuất kho (`ISSUE`)**: Mã tiền tố `XK-YYYYMMDD-XXX` (Xuất bán hàng SO, Xuất NVL sản xuất MO, Xuất bảo hành).
+    3. **Phiếu Điều chỉnh Kiểm kê (`ADJUSTMENT`)**: Mã tiền tố `DC-YYYYMMDD-XXX` (Kiểm kê thừa/thiếu).
 - **Bộ Lọc Động Đa Cột Phía Máy Chủ (Server-side Column Options & Filtering)**:
   - Endpoint `column-options` tự động trích xuất danh sách giá trị distinct của từng cột trên toàn bộ các bảng chứng từ tham gia (Mã chứng từ, Loại phiếu, Đối tác/Khách hàng/NCC, Trạng thái, Ngày ghi sổ, Số lượng tổng).
 - **Xem Chi Tiết Chứng Từ Tức Thời (Voucher Detail Drawer)**:
@@ -42,9 +42,9 @@ Union Query Hub:
 
 | Loại Chứng Từ | Bảng Header | Bảng Line | Mã Tiền Tố | Các trường hiển thị chung |
 | :--- | :--- | :--- | :--- | :--- |
-| `RECEIPT` | `erp_goods_receipts` | `erp_goods_receipt_lines` | `NK-...` | `voucherNo`, `voucherDate`, `partnerName`, `status`, `totalQty`, `totalAmount` |
-| `ISSUE` | `erp_goods_issues` | `erp_goods_issue_lines` | `XK-...` | `voucherNo`, `voucherDate`, `partnerName`, `status`, `totalQty`, `totalAmount` |
-| `ADJUSTMENT`| `erp_inventory_adjustments` | `erp_inventory_adjustment_lines`| `KK-...`/`DC-...` | `voucherNo`, `voucherDate`, `remarks`, `status`, `totalQty` |
+| `RECEIPT` | `erp_goods_receipts` | `erp_goods_receipt_lines` | `NK-...` | `voucherNo`, `voucherDate`, `partnerName`, `status`, `categoryCode`, `categoryName`, `totalQty`, `totalAmount` |
+| `ISSUE` | `erp_goods_issues` | `erp_goods_issue_lines` | `XK-...` | `voucherNo`, `voucherDate`, `partnerName`, `status`, `categoryCode`, `categoryName`, `totalQty`, `totalAmount` |
+| `ADJUSTMENT`| `erp_inventory_adjustments` | `erp_inventory_adjustment_lines`| `DC-...` | `voucherNo`, `voucherDate`, `remarks`, `status`, `categoryCode`, `categoryName`, `totalQty` |
 
 ---
 

@@ -76,6 +76,7 @@ import { ErpEmailAttachment } from '../email-ingest/entities/erp_email_attachmen
 import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
+import { ErpSystemOperation } from '../system-operations-core/entities/erp_system_operation.entity';
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -83,6 +84,7 @@ const entities = [
   CoreRole,
   CorePermission,
   CoreUserRole,
+  ErpSystemOperation,
   ErpEmployee,
   ErpBusinessPartner,
   ErpOperatingExpense,
