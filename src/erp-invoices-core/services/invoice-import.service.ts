@@ -211,6 +211,8 @@ export class InvoiceImportService {
           vatAmount: String(parsed.vatAmount),
           discountAmount: String(parsed.discountAmount),
           totalAmount: String(parsed.totalAmount),
+          relatedInvoiceNo: parsed.relatedInvoiceNo ?? null,
+          relatedSerialNo: parsed.relatedSerialNo ?? null,
           xmlFileKey: xmlUploaded ? xmlKey : null,
           xmlImportId: importId,
           pdfFiles: [],
@@ -413,6 +415,8 @@ export class InvoiceImportService {
           vatAmount: String(parsed.vatAmount),
           discountAmount: String(parsed.discountAmount),
           totalAmount: String(parsed.totalAmount),
+          relatedInvoiceNo: parsed.relatedInvoiceNo ?? null,
+          relatedSerialNo: parsed.relatedSerialNo ?? null,
           xmlFileKey: xmlKey,
           xmlImportId: importId,
         } as any);

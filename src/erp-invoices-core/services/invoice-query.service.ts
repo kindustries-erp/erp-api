@@ -419,6 +419,11 @@ export class InvoiceQueryService {
 
     const needsQb = !!(
       query.search ||
+      query.invoice_no ||
+      query.serial_no ||
+      query.related_invoice_no ||
+      query.related_serial_no ||
+      query.tax_invoice_status !== undefined ||
       query.seller_name ||
       query.buyer_name ||
       query.partner_tax_code ||
@@ -501,6 +506,26 @@ export class InvoiceQueryService {
           `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
           { tagId: query.tag_id },
         );
+      if (query.invoice_no)
+        qb.andWhere('inv.invoice_no = :invNo', { invNo: query.invoice_no });
+      if (query.serial_no)
+        qb.andWhere('inv.serial_no = :serNo', { serNo: query.serial_no });
+      if (query.related_invoice_no)
+        qb.andWhere('inv.related_invoice_no = :relInvNo', {
+          relInvNo: query.related_invoice_no,
+        });
+      if (query.related_serial_no)
+        qb.andWhere('inv.related_serial_no = :relSerNo', {
+          relSerNo: query.related_serial_no,
+        });
+      if (
+        query.tax_invoice_status !== undefined &&
+        query.tax_invoice_status !== null &&
+        query.tax_invoice_status !== ''
+      )
+        qb.andWhere('inv.tax_invoice_status = :taxInvStat', {
+          taxInvStat: Number(query.tax_invoice_status),
+        });
 
       const needsNetOffJoin =
         query.sort_by === 'netOffAmount' ||
@@ -1927,6 +1952,14 @@ export class InvoiceQueryService {
           taxProcessStatusVals: vals
             .map((v) => parseInt(v, 10))
             .filter((v) => !isNaN(v)),
+        });
+      } else if (key === 'relatedInvoiceNo' || key === 'related_invoice_no') {
+        qb.andWhere('inv.related_invoice_no IN (:...relInvNoVals)', {
+          relInvNoVals: vals,
+        });
+      } else if (key === 'relatedSerialNo' || key === 'related_serial_no') {
+        qb.andWhere('inv.related_serial_no IN (:...relSerialNoVals)', {
+          relSerialNoVals: vals,
         });
       } else if (key === 'netOffAmount' || key === 'remainingAmount') {
         const conditions: string[] = [];
