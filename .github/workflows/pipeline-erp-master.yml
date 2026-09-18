@@ -187,6 +187,8 @@ jobs:
           }
           api_image="${IMAGE_NAME}:${IMAGE_SHA}"
           migrate_image="${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
+          # Harmonize DB endpoint to db-dev.liouni.com:5433
+          API_ENV="$(sed -e 's|db.liouni.com:5432/erp_local?sslmode=require|db-dev.liouni.com:5433/erp_local?sslmode=disable|g' -e 's|db.liouni.com:5432/erp_local|db-dev.liouni.com:5433/erp_local?sslmode=disable|g' <<<"$API_ENV")"
           call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "ERP_API_IMAGE=$api_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$MIGRATE_STACK" --arg contents "ERP_MIGRATE_IMAGE=$migrate_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
