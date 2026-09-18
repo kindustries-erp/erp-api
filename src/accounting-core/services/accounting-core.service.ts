@@ -635,13 +635,148 @@ export class AccountingCoreService {
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
+    const totalPages = Math.ceil(total / pageSize) || 1;
+
+    let grandTotalDebit = 0;
+    let grandTotalCredit = 0;
+    let totalLines = 0;
+
+    let cumulativeDebit = 0;
+    let cumulativeCredit = 0;
+    let cumulativeLines = 0;
+
+    try {
+      const totalsQb = qb.clone();
+      if (totalsQb.expressionMap) {
+        totalsQb.expressionMap.orderBys = {};
+        totalsQb.expressionMap.selects = [];
+      }
+      totalsQb.offset?.(undefined);
+      totalsQb.limit?.(undefined);
+      totalsQb.skip?.(undefined);
+      totalsQb.take?.(undefined);
+      totalsQb
+        .select('COALESCE(SUM(lines.debit), 0)', 'totalDebit')
+        .addSelect('COALESCE(SUM(lines.credit), 0)', 'totalCredit')
+        .addSelect('COUNT(lines.id)', 'totalLines');
+
+      const totalsRaw = await totalsQb.getRawOne();
+      grandTotalDebit = parseFloat(totalsRaw?.totalDebit || '0') || 0;
+      grandTotalCredit = parseFloat(totalsRaw?.totalCredit || '0') || 0;
+      totalLines = parseInt(totalsRaw?.totalLines || '0', 10) || total;
+
+      const pageDebit = items.reduce(
+        (sum, je) =>
+          sum +
+          (je.lines || []).reduce(
+            (ls: number, l: any) => ls + (Number(l.debit) || 0),
+            0,
+          ),
+        0,
+      );
+      const pageCredit = items.reduce(
+        (sum, je) =>
+          sum +
+          (je.lines || []).reduce(
+            (ls: number, l: any) => ls + (Number(l.credit) || 0),
+            0,
+          ),
+        0,
+      );
+      const pageLines = items.reduce(
+        (sum, je) => sum + (je.lines?.length || 1),
+        0,
+      );
+
+      if (page === 1) {
+        cumulativeDebit = pageDebit;
+        cumulativeCredit = pageCredit;
+        cumulativeLines = pageLines;
+        if (totalPages <= 1) {
+          grandTotalDebit = pageDebit;
+          grandTotalCredit = pageCredit;
+          totalLines = pageLines;
+        }
+      } else if (page >= totalPages && totalPages > 0) {
+        cumulativeDebit = grandTotalDebit;
+        cumulativeCredit = grandTotalCredit;
+        cumulativeLines = totalLines;
+      } else {
+        const cumQb = qb.clone();
+        cumQb.skip?.(undefined);
+        cumQb.take?.(undefined);
+        cumQb.offset(0).limit(page * pageSize);
+
+        const cumItems = await cumQb.getMany();
+        cumulativeDebit = cumItems.reduce(
+          (sum, je) =>
+            sum +
+            (je.lines || []).reduce(
+              (ls: number, l: any) => ls + (Number(l.debit) || 0),
+              0,
+            ),
+          0,
+        );
+        cumulativeCredit = cumItems.reduce(
+          (sum, je) =>
+            sum +
+            (je.lines || []).reduce(
+              (ls: number, l: any) => ls + (Number(l.credit) || 0),
+              0,
+            ),
+          0,
+        );
+        cumulativeLines = cumItems.reduce(
+          (sum, je) => sum + (je.lines?.length || 1),
+          0,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to compute journal entries totals: ${err}`);
+      const pageDebit = items.reduce(
+        (sum, je) =>
+          sum +
+          (je.lines || []).reduce(
+            (ls: number, l: any) => ls + (Number(l.debit) || 0),
+            0,
+          ),
+        0,
+      );
+      const pageCredit = items.reduce(
+        (sum, je) =>
+          sum +
+          (je.lines || []).reduce(
+            (ls: number, l: any) => ls + (Number(l.credit) || 0),
+            0,
+          ),
+        0,
+      );
+      const pageLines = items.reduce(
+        (sum, je) => sum + (je.lines?.length || 1),
+        0,
+      );
+      grandTotalDebit = pageDebit;
+      grandTotalCredit = pageCredit;
+      totalLines = pageLines;
+      cumulativeDebit = pageDebit;
+      cumulativeCredit = pageCredit;
+      cumulativeLines = pageLines;
+    }
 
     return {
       items,
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize) || 1,
+      totalPages,
+      totals: {
+        grandTotalDebit,
+        grandTotalCredit,
+        cumulativeDebit,
+        cumulativeCredit,
+        totalLines,
+        cumulativeLines,
+      },
     };
   }
 

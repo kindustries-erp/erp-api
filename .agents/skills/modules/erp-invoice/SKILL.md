@@ -533,7 +533,13 @@ src/modules/erp-invoices-core/components/
    - Biển số xe (`licensePlate`), Số quyết toán vụ việc (`settlementOrder`).
    - So khớp số tiền: Đối soát đồng thời trên cả tổng tiền hóa đơn (`totalAmount`) và số tiền nợ còn lại sau cấn trừ (`remainingDebt`).
 3. **Phân cấp Badge độ tin cậy**:
-   - `PERFECT` (Khớp tuyệt đối): Khớp cả số tiền và số hóa đơn.
-   - `HIGH` (Khớp cao): Khớp số tiền và tên/MST đối tác hoặc biển số xe.
-   - `LIKELY` / `POSSIBLE`: Khớp một phần từ khóa diễn giải.
+### 8.6. Chuẩn Hóa Footer Tổng Quan Số Liệu & Popover Lũy Kế (`SubtotalSummaryCell`)
+Tab danh sách hóa đơn (`ErpInvoicesTab`) và hook `useInvoiceSummary` tích hợp component `SubtotalSummaryCell` cho toàn bộ các ô chân trang (Footer Summary Row):
+- **Cột Diễn giải / Tiêu đề**: `variantType="label"`, hiển thị `Tổng cộng:`, nhấp/hover hiển thị popover 3 cấp: Số dòng phát sinh trang hiện tại, Số dòng lũy kế ($T_1 \to T_X$), và Tổng số dòng toàn bộ dữ liệu kèm thanh tiến độ phân trang.
+- **Các Cột Số Tiền** (`preVatAmount`, `vatAmount`, `discountAmount`, `totalAmount`, `netOffAmount`, `remainingAmount`):
+  - `variantType="amount"`, truyền `subtotalAmount` (tổng trang), `cumulativeAmount` (tổng lũy kế từ API `totals.cumulative*`), `grandTotalAmount` (tổng toàn bộ từ API `totals.grandTotal*`).
+  - Popover hiển thị 3 tầng dữ liệu chuẩn: `Trang X:`, `↳ Lũy kế (T1 → TX):`, `Tổng toàn bộ (Y trang):`.
+  - Thanh tiến độ tỷ trọng và nhãn tỷ trọng trực quan theo tỷ lệ tích lũy: **`Tỷ trọng lũy kế: X%`** (`(cumulativeAmount / grandTotalAmount) * 100%`).
+- **Hợp đồng API Response (`InvoiceQueryService.findAll`)**:
+  - Trả về trường `totals`: `{ grandTotalPreVat, grandTotalVat, grandTotalDiscount, grandTotalAmount, grandTotalNetOff, grandTotalRemaining, cumulativePreVat, cumulativeVat, cumulativeDiscount, cumulativeTotal, cumulativeNetOff, cumulativeRemaining }` được tính toán trực tiếp từ cơ sở dữ liệu đồng bộ với toàn bộ bộ lọc active.
 
