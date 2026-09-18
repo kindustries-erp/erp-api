@@ -24,6 +24,25 @@ export class AccountingCoreController {
     return this.accountingCoreService.getJournalEntries(query);
   }
 
+  @Get('journal-entries/column-options')
+  async getJournalEntriesColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('filters') filters?: string,
+    @Query('branch_id') branchId?: string,
+  ) {
+    return this.accountingCoreService.getJournalEntriesColumnOptions(
+      column,
+      search,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+      filters,
+      branchId,
+    );
+  }
+
   @Get('journal-entries/:id')
   async getJournalEntryById(@Param('id') id: string) {
     const data = await this.accountingCoreService.getJournalEntryById(id);
