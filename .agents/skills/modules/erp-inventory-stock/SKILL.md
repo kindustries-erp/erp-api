@@ -123,11 +123,15 @@ Khi xuất kho số lượng $\text{qtyOut}$:
    - Sử dụng helper chuẩn `applyMultiKeywordFilter` phân tách từ khóa qua dấu chấm phẩy `;` (điều kiện `OR`).
    - Khớp chính xác tuyệt đối khi từ khóa nằm trong cặp ngoặc kép `""` (`isExact`).
    - Hỗ trợ toàn diện cho tất cả các cột trong `findAll` (`searches`): `item_code`, `item_name`, `item_type`, `status`, `unit`, `on_hand_qty`, `reserved_qty`, `received_qty`, `issued_qty`, `adjusted_qty`, `last`.
-2. **Xử lý Bộ lọc Cột Đặc biệt**:
+2. **Xử lý Bộ lọc Cột Đặc biệt & Tracking Policy**:
+   - Hỗ trợ cột `tracking_policy` (`tracking_policy_code`, `tracking_policy_name`) tham chiếu từ `erp_tracking_policies` (vd: `SERIAL` - Theo Serial Number, `VEHICLE` - Theo Xe, `LOT` - Theo Lô, `CUSTOM` - Tùy chỉnh).
    - `__ALL_MATCHING__`: Khi người dùng chọn tất cả kết quả tìm kiếm trong popover, backend tự động áp dụng điều kiện multi-keyword search tương ứng.
    - `__BLANK__`: Hỗ trợ lọc các dòng có giá trị NULL hoặc chuỗi rỗng.
 3. **Đồng bộ Dropdown Options (`getColumnOptions`)**:
    - Tìm kiếm options hỗ trợ multi-keyword search động với SQL parameter binding an toàn.
+4. **Tổng hợp Grand Total Summary (`summary`)**:
+   - Endpoint `GET /api/v1/inventory/stock` trả về object `summary` tính toán tổng hợp toàn bộ các dòng thỏa mãn bộ lọc (`total_received_qty`, `total_issued_qty`, `total_adjusted_qty`, `total_positive_adjusted_qty`, `total_negative_adjusted_qty`, `total_on_hand_qty`, `total_reserved_qty`, `total_stock_value`).
+   - Frontend hiển thị subtotal của trang hiện tại trực tiếp trên ô chân bảng và hiển thị Grand Total toàn bộ trong Popover tổng quan khi hover icon `(i)`.
 
 ---
 
