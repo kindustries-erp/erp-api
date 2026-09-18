@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
@@ -8,6 +8,8 @@ import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
 
 @Injectable()
 export class TransactionQueryService {
+  private readonly logger = new Logger(TransactionQueryService.name);
+
   constructor(
     @InjectRepository(ErpBankTransaction)
     private readonly transactionRepo: Repository<ErpBankTransaction>,
@@ -466,13 +468,87 @@ export class TransactionQueryService {
 
     const [items, total] = await qb.getManyAndCount();
     const mappedItems = await this.loadNetOffAmounts(items);
+    const totalPages = Math.ceil(total / pageSize);
+
+    // Calculate Grand Totals and Cumulative Totals
+    let grandTotalCredit = 0;
+    let grandTotalDebit = 0;
+    let cumulativeCredit = 0;
+    let cumulativeDebit = 0;
+
+    try {
+      const totalsQb = qb.clone();
+      if (totalsQb.expressionMap) {
+        totalsQb.expressionMap.orderBys = {};
+        totalsQb.expressionMap.selects = [];
+      }
+      totalsQb.offset?.(undefined);
+      totalsQb.limit?.(undefined);
+      totalsQb.skip?.(undefined);
+      totalsQb.take?.(undefined);
+      totalsQb
+        .select('COALESCE(SUM(txn.creditAmount), 0)', 'totalCredit')
+        .addSelect('COALESCE(SUM(txn.debitAmount), 0)', 'totalDebit');
+      const totalsRaw = await totalsQb.getRawOne();
+      grandTotalCredit = parseFloat(totalsRaw?.totalCredit || '0') || 0;
+      grandTotalDebit = parseFloat(totalsRaw?.totalDebit || '0') || 0;
+
+      if (page === 1) {
+        cumulativeCredit = mappedItems.reduce(
+          (acc, curr) => acc + (Number(curr.creditAmount) || 0),
+          0,
+        );
+        cumulativeDebit = mappedItems.reduce(
+          (acc, curr) => acc + (Number(curr.debitAmount) || 0),
+          0,
+        );
+      } else if (page >= totalPages && totalPages > 0) {
+        cumulativeCredit = grandTotalCredit;
+        cumulativeDebit = grandTotalDebit;
+      } else {
+        const cumQb = qb.clone();
+        if (cumQb.expressionMap) {
+          cumQb.expressionMap.selects = [];
+        }
+        cumQb
+          .select('txn.creditAmount', 'credit')
+          .addSelect('txn.debitAmount', 'debit')
+          .offset(0)
+          .limit(page * pageSize);
+        cumQb.skip?.(undefined);
+        cumQb.take?.(undefined);
+
+        const cumRows = await cumQb.getRawMany();
+        cumulativeCredit = cumRows.reduce(
+          (acc, curr) =>
+            acc +
+            (parseFloat(String(curr.credit ?? curr.txn_credit_amount ?? 0)) ||
+              0),
+          0,
+        );
+        cumulativeDebit = cumRows.reduce(
+          (acc, curr) =>
+            acc +
+            (parseFloat(String(curr.debit ?? curr.txn_debit_amount ?? 0)) || 0),
+          0,
+        );
+      }
+    } catch (e) {
+      this.logger.error(`Error calculating totals in getTransactions: ${e}`);
+    }
 
     return {
       items: mappedItems,
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages,
+      totals: {
+        grandTotalCredit,
+        grandTotalDebit,
+        cumulativeCredit,
+        cumulativeDebit,
+      },
     };
   }
 

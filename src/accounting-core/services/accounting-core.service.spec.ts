@@ -162,17 +162,38 @@ describe('AccountingCoreService', () => {
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest
-          .fn()
-          .mockResolvedValue([[{ id: 'je-1', entryNo: 'CT-01' }], 1]),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          totalDebit: '5000000',
+          totalCredit: '5000000',
+          totalLines: '4',
+        }),
+        getMany: jest.fn().mockResolvedValue([]),
+        getManyAndCount: jest.fn().mockResolvedValue([
+          [
+            {
+              id: 'je-1',
+              entryNo: 'CT-01',
+              lines: [
+                { debit: 2500000, credit: 0 },
+                { debit: 0, credit: 2500000 },
+              ],
+            },
+          ],
+          2,
+        ]),
       };
+      qbMock.clone = jest.fn().mockReturnValue(qbMock);
       journalEntryRepo.createQueryBuilder.mockReturnValue(qbMock);
 
       const result = await service.getJournalEntries({
-        page: 2,
-        pageSize: 50,
+        page: 1,
+        pageSize: 1,
         branchId: 'b-1',
         startDate: '2026-09-01',
         endDate: '2026-09-30',
@@ -186,12 +207,20 @@ describe('AccountingCoreService', () => {
         column_search: JSON.stringify({ description: 'điện', debit: '1000' }),
       });
 
-      expect(result.page).toBe(2);
-      expect(result.pageSize).toBe(50);
-      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.pageSize).toBe(1);
+      expect(result.total).toBe(2);
       expect(result.items).toHaveLength(1);
-      expect(qbMock.skip).toHaveBeenCalledWith(50);
-      expect(qbMock.take).toHaveBeenCalledWith(50);
+      expect(result.totals).toEqual({
+        grandTotalDebit: 5000000,
+        grandTotalCredit: 5000000,
+        cumulativeDebit: 2500000,
+        cumulativeCredit: 2500000,
+        totalLines: 4,
+        cumulativeLines: 2,
+      });
+      expect(qbMock.skip).toHaveBeenCalledWith(0);
+      expect(qbMock.take).toHaveBeenCalledWith(1);
       expect(qbMock.andWhere).toHaveBeenCalledWith('je.branchId = :branchId', {
         branchId: 'b-1',
       });
