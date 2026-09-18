@@ -137,6 +137,7 @@ src/erp-invoices-core/
 │   └── erp_invoice_attachment.entity.ts       # TypeORM Entity bảng erp_invoice_attachments
 ├── helpers/
 │   ├── gdt-captcha-solver.helper.ts           # Helper giải mã Captcha cổng thuế GDT
+│   ├── gdt-session.helper.ts                  # Helper quản lý Cookie Jar và khởi tạo phiên WAF GDT (F5 BIG-IP)
 │   ├── invoice-branch.helper.ts               # Helper tự động suy diễn Chi nhánh từ MST/cấu hình
 │   ├── invoice-gdt.helper.ts                  # Helper gọi HTTP API sang Cổng thuế GDT
 │   ├── invoice-mapper.helper.ts               # Helper format/map Entity sang API DTO
@@ -263,16 +264,21 @@ src/erp-invoices-core/
 - **Lưu trữ Cấu hình Bảo mật (`company_profile`)**:
   - Tên đăng nhập / MST (`gdt_portal_username`), Token JWT (`gdt_portal_token`), Cookie phiên (`gdt_portal_cookies`).
   - Mật khẩu Cổng Thuế (`gdt_portal_password`) được mã hóa an toàn qua thuật toán AES-256-CBC với tiền tố `enc:<iv_hex>:<cipher_hex>` sử dụng secret key từ `GDT_ENCRYPT_SECRET` hoặc `JWT_SECRET`.
+- **Khởi tạo Phiên & Cookie Jar Chống Chặn WAF F5 BIG-IP (`gdt-session.helper.ts`)**:
+  - Cổng thuế GDT sử dụng F5 BIG-IP ASM WAF yêu cầu khởi tạo cookie từ `GET /` (Trang chủ) và cập nhật cookie qua `GET /api/captcha` trước khi gửi request đăng nhập. Nếu thiếu cookie WAF (`TS0114b13e`, `df9a...`), request sẽ lập tức bị chặn với lỗi HTTP `403: Hệ thống phát hiện hành vi không hợp lệ`.
+  - Lớp `GdtCookieJar` quản lý việc bóc tách `set-cookie`, lưu trữ và sinh header `Cookie` hợp lệ qua từng bước.
+  - Header giả lập trình duyệt chuẩn mực: `Origin: https://hoadondientu.gdt.gov.vn`, `Referer: https://hoadondientu.gdt.gov.vn/`, `end-point: /`, `action: `, `priority: u=1, i`, `request-id: <uuid>` và `User-Agent` Chrome chuẩn.
 - **Giải mã Captcha SVG Tự động (`gdt-captcha-solver.helper.ts`)**:
-  - Tải mã Captcha SVG từ `https://hoadondientu.gdt.gov.vn/api/captcha`.
+  - Tải mã Captcha SVG từ `https://hoadondientu.gdt.gov.vn/api/captcha` thông qua `GdtCookieJar`.
   - Bộ giải `solveGdtSvgCaptcha` bóc tách các thẻ `<path>`, loại bỏ đường nhiễu (`stroke` không có `fill`), trích xuất chuỗi lệnh đường vẽ (`d` attribute command patterns) và đối chiếu với từ điển mô hình `GDT_CAPTCHA_MODEL` để giải chuỗi 6 ký tự chính xác.
 - **Kiểm tra Tính hợp lệ của Token (`checkTokenValid`)**:
   - Gọi trực tiếp endpoint `https://hoadondientu.gdt.gov.vn/api/security-taxpayer/profile`.
   - Trả về `true` khi `res.ok && res.status !== 401 && res.status !== 403`, tránh gọi các endpoint tra cứu hóa đơn rỗng tham số gây lỗi HTTP 500.
 - **Quy trình Tự động Đăng nhập lại (`autoReloginWithRetry`)**:
   - Tự động lấy cấu hình username/password giải mã từ DB.
-  - Lấy Captcha và tự giải mã qua `solveGdtSvgCaptcha`.
-  - Gửi POST `/security-taxpayer/authenticate` tối đa 3 lần (`maxRetries = 3`, khoảng cách `retryDelayMs = 60s`).
+  - Khởi tạo `GdtCookieJar`, nạp cookie khởi tạo và lấy Captcha qua `GdtCookieJar`.
+  - Tự giải mã Captcha qua `solveGdtSvgCaptcha`.
+  - Gửi POST `/security-taxpayer/authenticate` kèm `request-id` và cookie WAF tối đa 3 lần (`maxRetries = 3`, khoảng cách `retryDelayMs = 60s`).
   - Khi thành công, tự động lưu Token mới và Cookie vào `company_profile` và tiếp tục luồng xử lý.
 - **Cơ chế Tự phục hồi trong Tiến trình Cron (`ErpInvoicesCronService`)**:
   - Khi tiến trình cron chạy định kỳ: nếu token chưa có hoặc `checkTokenValid` trả về `false`, Cron Job chủ động gọi `autoReloginWithRetry()` để tự lấy token mới.
@@ -354,6 +360,26 @@ src/erp-invoices-core/
   - Lấy distinct options cho tất cả các cột số tiền, số lượng, diễn giải, đối tác, trạng thái GĐT (`taxInvoiceStatus`), chi nhánh (`branchId`) kèm lọc chéo phụ thuộc (`filtersStr`) để các popover tự động thu hẹp lựa chọn.
   - Hỗ trợ loại bỏ dấu phân cách phần nghìn (`.`, `,`) khi tìm kiếm số tiền và số lượng.
 
+### 5.9. Đồng Nhất Luồng Bulk Upload ZIP/XML & Smart Backfill Dữ Liệu Hóa Đơn (`invoice-import.service.ts`)
+- **Giải nén Đệ quy Đa tầng (Recursive Nested ZIP Extraction)**:
+  - Tự động nhận diện và giải nén các tệp ZIP lồng nhau (ZIP chứa các file ZIP con và XML/PDF) mà không giới hạn cấp độ lồng nhau.
+- **Lưu trữ Chi tiết Dòng Hàng (`erp_invoice_items`) & Trích xuất `itemCode`**:
+  - Tự động bóc tách từng dòng hàng hóa (`DSHHDVu/HHDVu`), trích xuất mã linh kiện/phụ tùng (`itemCode` hoặc qua subscriber) và lưu trực tiếp vào bảng `erp_invoice_items`.
+- **Tự động Suy diễn Chi nhánh (`branchId`)**:
+  - Hóa đơn mua vào (`direction = 'IN'`): Tự động gán chi nhánh qua `resolveBranchForInInvoice` (Đào Trí cho VinFast hoặc lịch sử MST).
+  - Hóa đơn bán ra (`direction = 'OUT'`): Tự động gán chi nhánh qua `resolveBranchForOutInvoice` (Đào Trí cho khách hàng Đào Trí/mã lệnh hoặc Phổ Quang).
+- **Kích hoạt Đồng bộ Phụ tùng VinFast Tự động**:
+  - Tự động kích hoạt `vinfastPartsService.syncCatalog({})` và `syncLedger({})` sau khi import nếu phát hiện hóa đơn VinFast, đảm bảo sổ cái tồn kho và danh mục phụ tùng luôn cập nhật tức thời tương đương luồng sync GDT.
+- **Cập nhật Trạng thái Hóa đơn Gốc Liên quan**:
+  - Khi import hóa đơn Thay thế (`tax_invoice_status = 2` / mã loại 2) hoặc Điều chỉnh (`tax_invoice_status = 3` / mã loại 3), tự động tìm hóa đơn gốc và cập nhật trạng thái tương ứng (`4`: Bị thay thế, `5`: Bị điều chỉnh).
+- **Cơ chế Bù đắp Thông minh & Bỏ qua An toàn (Smart Backfill & Safe Skip)**:
+  - Khi phát hiện hóa đơn đã tồn tại trong DB (`invoice_no` + `serial_no` + `direction` + `seller_tax_code`):
+    - **Backfill XML gốc**: Nếu DB chưa có `xml_file_key`, tải file XML lên R2 và cập nhật vào hóa đơn.
+    - **Backfill File PDF**: Nếu có file PDF mới, tự động upload R2 và chèn vào `pdf_files`.
+    - **Backfill Dòng Hàng (`items`)**: Nếu DB chưa có dòng hàng, tự động lưu mảng dòng hàng từ XML vào `erp_invoice_items`.
+    - **Backfill Chi nhánh (`branch_id`)**: Nếu DB chưa có chi nhánh, tự động suy diễn và cập nhật.
+    - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
+
 ---
 
 ## 6. Tích hợp Liên Module
@@ -396,6 +422,7 @@ bunx jest src/erp-invoices-core/services/invoice-import.service.spec.ts
 bunx jest src/erp-invoices-core/services/invoice-files.service.spec.ts
 bunx jest src/erp-invoices-core/services/invoice-query.service.spec.ts
 bunx jest src/erp-invoices-core/helpers/gdt-captcha-solver.helper.spec.ts
+bunx jest src/erp-invoices-core/helpers/gdt-session.helper.spec.ts
 bunx jest src/erp-invoices-core/helpers/invoice-branch.helper.spec.ts
 ```
 

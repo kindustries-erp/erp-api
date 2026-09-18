@@ -84,6 +84,9 @@ Controller Base Route: `/api/v1/accounting-core`
 | `POST` | `/api/v1/accounting-core/chart-of-accounts` | Body: `{ accountCode, accountName, accountType, parentId, isActive }` | Tạo mới tài khoản kế toán (kiểm tra bắt buộc và tính duy nhất của mã) |
 | `PATCH` | `/api/v1/accounting-core/chart-of-accounts/:id` | Param: `id`, Body: `{ accountCode?, accountName?, accountType?, parentId?, isActive? }` | Cập nhật thông tin tài khoản (chặn trùng mã và chặn `parentId === id`) |
 | `DELETE` | `/api/v1/accounting-core/chart-of-accounts/:id` | Param: `id` (UUID) | Xóa mềm tài khoản kế toán (`isDeleted = true`) |
+| `GET` | `/api/v1/accounting-core/journal-entries` | Query: `page`, `pageSize`, `search`, `sourceType`, `sourceModule`, `fromDate`, `toDate`, `entryNumber`, `documentNumber`, `description`, `debitAccount`, `creditAccount`, `sorts` | Lấy danh sách sổ nhật ký chung kèm dòng hạch toán Nợ/Có, hỗ trợ đa lọc, tìm kiếm đa từ khóa, tabs (ALL/CASHFLOW/INVOICE/OTHER) và dynamic sorting (default `date DESC, createdAt DESC`) |
+| `GET` | `/api/v1/accounting-core/journal-entries/column-options` | Query: `column`, `search`, `page`, `pageSize`, `filters` | Lấy danh sách distinct options phân trang infinite scroll theo từng cột (`entryNumber`, `sourceType`, `documentNumber`, `description`, `debitAccount`, `creditAccount`) |
+| `GET` | `/api/v1/accounting-core/journal-entries/:id` | Param: `id` (UUID) | Lấy chi tiết một bút toán nhật ký chung kèm các dòng định khoản Nợ/Có |
 
 ---
 

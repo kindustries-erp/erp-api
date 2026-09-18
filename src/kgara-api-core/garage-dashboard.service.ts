@@ -744,6 +744,123 @@ export class GarageDashboardService {
       }))
       .sort((a, b) => b.count - a.count);
 
+    // 1.5 Phân bổ Loại Nghiệp vụ (Classification Distribution) theo từng tháng trong 6 tháng gần nhất
+    const classificationQb = this.caseRepo
+      .createQueryBuilder('c')
+      .select("TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM')", 'month')
+      .addSelect(
+        `CASE 
+          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          ELSE 'KHAC'
+        END`,
+        'classificationKey',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :sixMonthsAgo', {
+        sixMonthsAgo,
+      })
+      .groupBy('1, 2')
+      .orderBy('month', 'DESC')
+      .addOrderBy('count', 'DESC');
+
+    const rawClassification = await classificationQb.getRawMany();
+
+    const classificationNames: Record<string, string> = {
+      SUA_CHUA_CHUNG: 'Sửa chữa chung',
+      KY_GUI_NOI_BO: 'Ký gửi / Nội bộ',
+      OJ_NGOAI: 'OJ Ngoài',
+      KHAC: 'Khác / Chưa phân loại',
+    };
+
+    const classificationDistributionByMonth: Record<string, any[]> = {};
+    const classificationTotalCountByMonth: Record<string, number> = {};
+    const classificationTotalRevenueByMonth: Record<string, number> = {};
+    const overallClassificationMap: Record<
+      string,
+      {
+        classificationKey: string;
+        classificationName: string;
+        count: number;
+        revenue: number;
+      }
+    > = {};
+    let totalClassificationCount = 0;
+    let totalClassificationRevenue = 0;
+
+    for (const item of rawClassification) {
+      const m = item.month;
+      const key = item.classificationKey || 'KHAC';
+      const name = classificationNames[key] || 'Khác';
+      const cnt = Number(item.count) || 0;
+      const rev = Number(item.revenue) || 0;
+
+      if (!classificationDistributionByMonth[m]) {
+        classificationDistributionByMonth[m] = [];
+        classificationTotalCountByMonth[m] = 0;
+        classificationTotalRevenueByMonth[m] = 0;
+      }
+
+      classificationDistributionByMonth[m].push({
+        classificationKey: key,
+        classificationName: name,
+        count: cnt,
+        revenue: rev,
+      });
+      classificationTotalCountByMonth[m] += cnt;
+      classificationTotalRevenueByMonth[m] += rev;
+
+      if (!overallClassificationMap[key]) {
+        overallClassificationMap[key] = {
+          classificationKey: key,
+          classificationName: name,
+          count: 0,
+          revenue: 0,
+        };
+      }
+      overallClassificationMap[key].count += cnt;
+      overallClassificationMap[key].revenue += rev;
+      totalClassificationCount += cnt;
+      totalClassificationRevenue += rev;
+    }
+
+    // Tính tỷ lệ % theo từng tháng
+    for (const [m, items] of Object.entries(
+      classificationDistributionByMonth,
+    )) {
+      const mCountTotal = classificationTotalCountByMonth[m] || 1;
+      const mRevTotal = classificationTotalRevenueByMonth[m] || 1;
+      for (const item of items) {
+        item.percentage =
+          Math.round(((item.count as number) / mCountTotal) * 1000) / 10;
+        item.revenuePercentage =
+          Math.round(((item.revenue as number) / mRevTotal) * 1000) / 10;
+      }
+    }
+
+    // Tính tỷ lệ % tổng thể toàn kỳ 6 tháng
+    const classificationDistribution = Object.values(overallClassificationMap)
+      .map((c) => ({
+        classificationKey: c.classificationKey,
+        classificationName: c.classificationName,
+        count: c.count,
+        revenue: c.revenue,
+        percentage:
+          totalClassificationCount > 0
+            ? Math.round((c.count / totalClassificationCount) * 1000) / 10
+            : 0,
+        revenuePercentage:
+          totalClassificationRevenue > 0
+            ? Math.round((c.revenue / totalClassificationRevenue) * 1000) / 10
+            : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
     const availableMonths = Object.keys(statusDistributionByMonth)
       .sort()
       .reverse();
@@ -754,6 +871,8 @@ export class GarageDashboardService {
       costPaymentSummary,
       statusDistribution,
       statusDistributionByMonth,
+      classificationDistribution,
+      classificationDistributionByMonth,
       availableMonths,
     };
   }

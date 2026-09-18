@@ -242,6 +242,29 @@ export class TransactionQueryService {
             filterField = 'txn.referenceNumber';
 
           if (filterField) {
+            const isAllMatching = vals[0] === '__ALL_MATCHING__';
+            if (isAllMatching) {
+              const searchKeyword = vals[1] || '';
+              if (searchKeyword.trim()) {
+                if (col === 'transDate') {
+                  applyMultiKeywordFilter(
+                    qb,
+                    filterField,
+                    searchKeyword,
+                    `all_match_${col}`,
+                  );
+                } else {
+                  applyMultiKeywordFilter(
+                    qb,
+                    `CAST(${filterField} AS TEXT)`,
+                    searchKeyword,
+                    `all_match_${col}`,
+                  );
+                }
+              }
+              continue;
+            }
+
             const hasBlank = vals.includes('__BLANK__');
             const realVals = vals.filter((v) => v !== '__BLANK__');
 
@@ -579,6 +602,29 @@ export class TransactionQueryService {
             filterField = 'txn.referenceNumber';
 
           if (filterField) {
+            const isAllMatching = vals[0] === '__ALL_MATCHING__';
+            if (isAllMatching) {
+              const searchKeyword = vals[1] || '';
+              if (searchKeyword.trim()) {
+                if (col === 'transDate') {
+                  applyMultiKeywordFilter(
+                    qb,
+                    filterField,
+                    searchKeyword,
+                    `all_match_opts_${col}`,
+                  );
+                } else {
+                  applyMultiKeywordFilter(
+                    qb,
+                    `CAST(${filterField} AS TEXT)`,
+                    searchKeyword,
+                    `all_match_opts_${col}`,
+                  );
+                }
+              }
+              continue;
+            }
+
             const hasBlank = vals.includes('__BLANK__');
             const realVals = vals.filter((v) => v !== '__BLANK__');
 

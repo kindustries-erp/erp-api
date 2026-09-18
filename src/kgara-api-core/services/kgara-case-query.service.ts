@@ -88,7 +88,9 @@ export class KgaraCaseQueryService {
       completionDate:
         'TO_CHAR("case"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
       hasInvoice:
-        'CASE WHEN (("case"."raw_data" ->> \'TienThueKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThueKH\')::numeric > 0) THEN \'YES\' ELSE \'NO\' END',
+        'CASE WHEN (COALESCE(("case"."raw_data" ->> \'DaTaoHoaDonThue\')::boolean, false) OR (("case"."raw_data" ->> \'TienThueKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThueKH\')::numeric > 0) OR (("case"."raw_data" ->> \'TienThue\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThue\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThue\')::numeric > 0)) THEN \'YES\' ELSE \'NO\' END',
+      vatInvoice:
+        'CASE WHEN (COALESCE(("case"."raw_data" ->> \'DaTaoHoaDonThue\')::boolean, false) OR (("case"."raw_data" ->> \'TienThueKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThueKH\')::numeric > 0) OR (("case"."raw_data" ->> \'TienThue\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThue\') ~ \'^[0-9.]+$\' AND ("case"."raw_data" ->> \'TienThue\')::numeric > 0)) THEN \'YES\' ELSE \'NO\' END',
       hasLinkedInvoice:
         'CASE WHEN EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id) THEN \'YES\' ELSE \'NO\' END',
       updatedAt: 'TO_CHAR("case"."updated_at", \'YYYY-MM-DD\')',
@@ -197,15 +199,13 @@ export class KgaraCaseQueryService {
     // 4. Cột đặc thù: hasInvoice / vatInvoice (Có hóa đơn VAT theo thuế KGara)
     if (column === 'hasInvoice' || column === 'vatInvoice') {
       const conditions: string[] = [];
+      const vatPositiveCondition =
+        '(COALESCE(("case"."raw_data"->>\'DaTaoHoaDonThue\')::boolean, false) OR ("case"."raw_data"->>\'TienThueKH\' IS NOT NULL AND ("case"."raw_data"->>\'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThueKH\')::numeric > 0) OR ("case"."raw_data"->>\'TienThue\' IS NOT NULL AND ("case"."raw_data"->>\'TienThue\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThue\')::numeric > 0))';
       if (values.includes('YES') || values.includes('WITH_INVOICE')) {
-        conditions.push(
-          '("case"."raw_data"->>\'TienThueKH\' IS NOT NULL AND ("case"."raw_data"->>\'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThueKH\')::numeric > 0)',
-        );
+        conditions.push(vatPositiveCondition);
       }
       if (values.includes('NO') || values.includes('NO_INVOICE')) {
-        conditions.push(
-          'NOT ("case"."raw_data"->>\'TienThueKH\' IS NOT NULL AND ("case"."raw_data"->>\'TienThueKH\') ~ \'^[0-9.]+$\' AND ("case"."raw_data"->>\'TienThueKH\')::numeric > 0)',
-        );
+        conditions.push(`NOT ${vatPositiveCondition}`);
       }
       if (conditions.length > 0) {
         qb.andWhere(`(${conditions.join(' OR ')})`);
