@@ -27,9 +27,10 @@ Phân hệ `erp-inventory-stock` (gồm `inventory-stock-core` và `erp_inventor
   - Hỗ trợ xuất toàn bộ danh sách tồn kho theo bộ lọc hiện hành thành file `.xlsx` định dạng chuẩn kế toán.
 - **Chuẩn hóa UI/UX Bảng Sổ Tồn Kho & Detail Drawer (`OperationalInventoryPage.tsx` & `InventoryItemFormDrawer.tsx`)**:
   - Bảng DataTable: STT `#` cố định 40px ở đầu bảng, căn giữa; làm mờ hàng trạng thái ngừng hoạt động/hủy; Quick Actions chuẩn "Xem chi tiết" (Icon `Eye`) và "Chỉnh sửa" (Icon `Pencil`). Đã loại bỏ hoàn toàn action đồ thị liên kết legacy.
-  - Detail Drawer: Tuân thủ chuẩn Top Navigation Tabs (`/standardize-drawer`):
-    - **Tab 1 ("Sổ thẻ kho & Thông tin")**: `key: "stock_ledger"`, hiển thị Sổ thẻ kho (`InventoryStockLedgerSection`) ở Left Panel và form chi tiết Master Data / Custom Fields ở Right Panel (kích thước `full` / `calc(100vw - 208px)`, `collapsibleRightPanel: true`).
-    - **Tab 2 ("Chứng từ liên kết")**: `key: "traceability_graph"`, sử dụng component `<DrawerDocumentTraceability>` chuẩn (`rootType = "INVENTORY_ITEM"`, `hideRightPanel: true` bung 100% full-width), cung cấp 3 view modes (Canvas XYFlow Swimlanes, Quy trình Pipeline Stages, Bảng kê Document Table), liên kết đa tầng giữa Mặt hàng $\leftrightarrow$ Phiếu Nhập (NK) $\leftrightarrow$ Phiếu Xuất (XK) $\leftrightarrow$ Lệnh Sản Xuất (MO) $\leftrightarrow$ Đơn Mua (PO) $\leftrightarrow$ Đơn Bán (SO) $\leftrightarrow$ Định Mức BOM.
+  - Detail Drawer: Tuân thủ chuẩn Top Navigation Tabs (`/standardize-drawer`) với 3 tabs chuyên biệt:
+    - **Tab 1 ("Tổng quan")**: `key: "overview"` (Default Tab), hiển thị `InventoryItemOverviewSection` ở Left Panel (4 thẻ KPI trong `DrawerSection hideHeader={true}`, biểu đồ xu hướng tồn kho full-size trực tiếp không double border, bảng 5 giao dịch gần nhất bằng `StandardTable variant="spreadsheet"`). Ở Right Panel hiển thị `THÔNG TIN CHUNG`, `CƠ CẤU CHỨNG TỪ` (thống kê phiếu NK/XK/MO/DC), `THUỘC TÍNH MẶC ĐỊNH` và `THUỘC TÍNH TÙY CHỈNH`.
+    - **Tab 2 ("Sổ thẻ kho")**: `key: "stock_ledger"`, hiển thị Sổ thẻ kho (`InventoryStockLedgerSection`) ở Left Panel với phân trang, tìm kiếm và form chi tiết Master Data ở Right Panel (kích thước `full` / `calc(100vw - 208px)`, `collapsibleRightPanel: true`).
+    - **Tab 3 ("Chứng từ liên kết")**: `key: "traceability_graph"`, sử dụng component `<DrawerDocumentTraceability>` chuẩn (`rootType = "INVENTORY_ITEM"`, `hideRightPanel: true` bung 100% full-width), cung cấp 3 view modes (Canvas XYFlow Swimlanes, Quy trình Pipeline Stages, Bảng kê Document Table), liên kết đa tầng giữa Mặt hàng $\leftrightarrow$ Phiếu Nhập (NK) $\leftrightarrow$ Phiếu Xuất (XK) $\leftrightarrow$ Lệnh Sản Xuất (MO) $\leftrightarrow$ Đơn Mua (PO) $\leftrightarrow$ Đơn Bán (SO) $\leftrightarrow$ Định Mức BOM.
   - Khi Tạo mới (`!itemId`): Tự động chuyển sang `layout="1-column"`, `size="md"` (`max-w-[620px]`), không render tabs.
   - Tích hợp `ModuleCustomFieldConfigDrawer` (tab `INVENTORY_ITEM`) và nhúng `ModuleEntityCustomFieldsSection` kết nối 2 chiều với Module Config EAV.
 
@@ -122,11 +123,15 @@ Khi xuất kho số lượng $\text{qtyOut}$:
    - Sử dụng helper chuẩn `applyMultiKeywordFilter` phân tách từ khóa qua dấu chấm phẩy `;` (điều kiện `OR`).
    - Khớp chính xác tuyệt đối khi từ khóa nằm trong cặp ngoặc kép `""` (`isExact`).
    - Hỗ trợ toàn diện cho tất cả các cột trong `findAll` (`searches`): `item_code`, `item_name`, `item_type`, `status`, `unit`, `on_hand_qty`, `reserved_qty`, `received_qty`, `issued_qty`, `adjusted_qty`, `last`.
-2. **Xử lý Bộ lọc Cột Đặc biệt**:
+2. **Xử lý Bộ lọc Cột Đặc biệt & Tracking Policy**:
+   - Hỗ trợ cột `tracking_policy` (`tracking_policy_code`, `tracking_policy_name`) tham chiếu từ `erp_tracking_policies` (vd: `SERIAL` - Theo Serial Number, `VEHICLE` - Theo Xe, `LOT` - Theo Lô, `CUSTOM` - Tùy chỉnh).
    - `__ALL_MATCHING__`: Khi người dùng chọn tất cả kết quả tìm kiếm trong popover, backend tự động áp dụng điều kiện multi-keyword search tương ứng.
    - `__BLANK__`: Hỗ trợ lọc các dòng có giá trị NULL hoặc chuỗi rỗng.
 3. **Đồng bộ Dropdown Options (`getColumnOptions`)**:
    - Tìm kiếm options hỗ trợ multi-keyword search động với SQL parameter binding an toàn.
+4. **Tổng hợp Grand Total Summary (`summary`)**:
+   - Endpoint `GET /api/v1/inventory/stock` trả về object `summary` tính toán tổng hợp toàn bộ các dòng thỏa mãn bộ lọc (`total_received_qty`, `total_issued_qty`, `total_adjusted_qty`, `total_positive_adjusted_qty`, `total_negative_adjusted_qty`, `total_on_hand_qty`, `total_reserved_qty`, `total_stock_value`).
+   - Frontend hiển thị subtotal của trang hiện tại trực tiếp trên ô chân bảng và hiển thị Grand Total toàn bộ trong Popover tổng quan khi hover icon `(i)`.
 
 ---
 

@@ -232,13 +232,48 @@ await EntityCustomFieldsHelper.saveInTx(manager, 'SALES_ORDER', order.id, dto.cu
 await EntityCustomFieldsHelper.enrichOne(this.dataSource, 'SALES_ORDER', order);
 ```
 
-### Bước 3: Đặt Component vào Drawer (`erp-web`)
+### Bước 3: Đặt Component vào Drawer (`erp-web`) theo Chuẩn 3 Tầng (3-Tier Structure)
+
+Trên giao diện Drawer 2 cột (`erp-web`), toàn bộ thông tin đối tượng và thuộc tính động được cấu trúc thành 3 Tầng đồng nhất:
+
 ```tsx
-<ModuleEntityCustomFieldsSection
-  moduleKey="SALES_ORDER"
-  attributes={form.customAttributes}
-  onAttributesChange={(attrs) => setForm(prev => ({ ...prev, customAttributes: attrs }))}
-/>
+<div className="space-y-4">
+  {/* Tầng 1: THÔNG TIN CHUNG (Dùng chung component GeneralInfoSection với icon-based view mode & edit mode) */}
+  <EntityGeneralInfoSection
+    entity={entity}
+    editMode={editMode}
+    branchId={form.branchId}
+    onBranchChange={(val) => fieldSet("branchId", val)}
+    notes={form.notes}
+    onNotesChange={(val) => fieldSet("notes", val)}
+  />
+
+  {/* Tầng 2: THUỘC TÍNH MẶC ĐỊNH (System / Global Fields: is_system = true) */}
+  <DrawerSection title={t("defaultAttributes", "THUỘC TÍNH MẶC ĐỊNH")} collapsible defaultCollapsed={false}>
+    <DrawerField label={<span>{t("classification", "Phân loại")} <AttributeTypeBadge type="system" /></span>}>
+      {editMode ? (
+        <Combobox options={categoryOptions} value={form.category} onChange={...} />
+      ) : (
+        <div className="font-medium text-sm px-3 py-2 bg-gray-50 rounded-lg">{displayLabel}</div>
+      )}
+    </DrawerField>
+  </DrawerSection>
+
+  {/* Tầng 3: THUỘC TÍNH TÙY CHỈNH (ModuleEntityCustomFieldsSection: Category & Dynamic Custom Attributes) */}
+  <ModuleEntityCustomFieldsSection
+    moduleKey="SALES_ORDER"
+    entityId={entity?.id}
+    editMode={editMode}
+    title={t("customAttributes", "THUỘC TÍNH TÙY CHỈNH")}
+    globalTitle={t("globalAttributes", "THUỘC TÍNH MẶC ĐỊNH")}
+    categoryId={form.categoryId}
+    onCategoryChange={(catId) => fieldSet("categoryId", catId)}
+    attributes={form.customAttributes}
+    onAttributesChange={(attrs) => fieldSet("customAttributes", attrs)}
+    globalAttributes={form.globalAttributes}
+    onGlobalAttributesChange={(gAttrs) => fieldSet("globalAttributes", gAttrs)}
+  />
+</div>
 ```
 
 ---
@@ -255,3 +290,4 @@ cd /home/dev/repos/erp/erp-api && bun run check:ci
 # 3. Frontend Type check & Tests
 cd /home/dev/repos/erp/erp-web && bun run type:check && bun run test
 ```
+

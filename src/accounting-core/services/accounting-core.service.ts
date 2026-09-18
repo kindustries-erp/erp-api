@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { ErpChartOfAccount } from '../entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../entities/erp_journal_entry_line.entity';
+import {
+  applyMultiKeywordFilter,
+  applyMultiKeywordMultiFieldFilter,
+} from '../../common/utils/query-builder.util';
 
 @Injectable()
 export class AccountingCoreService {
@@ -220,8 +224,8 @@ export class AccountingCoreService {
   }
 
   async getJournalEntries(query: any) {
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
 
     const qb = this.journalEntryRepo
       .createQueryBuilder('je')
@@ -230,32 +234,404 @@ export class AccountingCoreService {
       .leftJoinAndSelect('je.branch', 'branch')
       .where('je.isDeleted = :isDeleted', { isDeleted: false });
 
-    if (query.branchId) {
-      qb.andWhere('je.branchId = :branchId', { branchId: query.branchId });
+    const branchId = query.branchId || query.branch_id;
+    if (branchId) {
+      qb.andWhere('je.branchId = :branchId', { branchId });
     }
-    if (query.startDate) {
-      qb.andWhere('je.date >= :startDate', { startDate: query.startDate });
+
+    const startDate = query.startDate || query.date_from || query.dateFrom;
+    if (startDate) {
+      qb.andWhere('je.date >= :startDate', { startDate });
     }
-    if (query.endDate) {
+
+    const endDate = query.endDate || query.date_to || query.dateTo;
+    if (endDate) {
       const eDate =
-        query.endDate.length === 10
-          ? `${query.endDate} 23:59:59.999`
-          : query.endDate;
+        String(endDate).length === 10 ? `${endDate} 23:59:59.999` : endDate;
       qb.andWhere('je.date <= :endDate', { endDate: eDate });
     }
-    if (query.search) {
-      qb.andWhere(
-        '(je.entryNo ILIKE :search OR je.description ILIKE :search OR lines.description ILIKE :search)',
-        { search: `%${query.search}%` },
-      );
+
+    const docDateFrom =
+      query.doc_date_from || query.document_date_from || query.documentDateFrom;
+    if (docDateFrom) {
+      qb.andWhere('je.documentDate >= :docDateFrom', { docDateFrom });
     }
+
+    const docDateTo =
+      query.doc_date_to || query.document_date_to || query.documentDateTo;
+    if (docDateTo) {
+      qb.andWhere('je.documentDate <= :docDateTo', { docDateTo });
+    }
+
+    const sourceType = query.source_type || query.sourceType;
+    if (sourceType && sourceType !== 'ALL') {
+      if (sourceType === 'CASHFLOW') {
+        qb.andWhere('je.sourceType IN (:...cfTypes)', {
+          cfTypes: ['BANK', 'CASH'],
+        });
+      } else if (sourceType === 'OTHER') {
+        qb.andWhere(
+          '(je.sourceType IS NULL OR je.sourceType NOT IN (:...stdTypes))',
+          { stdTypes: ['BANK', 'CASH', 'INVOICE'] },
+        );
+      } else {
+        qb.andWhere('je.sourceType = :sourceType', { sourceType });
+      }
+    }
+
     if (query.accountId) {
       qb.andWhere('lines.accountId = :accountId', {
         accountId: query.accountId,
       });
     }
 
-    qb.orderBy('je.date', 'DESC').addOrderBy('je.createdAt', 'DESC');
+    // Global keyword search
+    if (query.search && String(query.search).trim()) {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        [
+          'je.entryNo',
+          'je.description',
+          'je.subjectName',
+          'je.reference',
+          'branch.name',
+          'account.accountCode',
+          'lines.description',
+        ],
+        String(query.search).trim(),
+        'je_search',
+      );
+    }
+
+    // Column-specific searches
+    let colSearch: Record<string, string> = {};
+    if (query.column_search) {
+      try {
+        colSearch =
+          typeof query.column_search === 'string'
+            ? JSON.parse(query.column_search)
+            : query.column_search;
+      } catch (e) {}
+    } else if (query.columnSearch) {
+      try {
+        colSearch =
+          typeof query.columnSearch === 'string'
+            ? JSON.parse(query.columnSearch)
+            : query.columnSearch;
+      } catch (e) {}
+    }
+
+    for (const [colKey, rawVal] of Object.entries(colSearch)) {
+      const val = typeof rawVal === 'string' ? rawVal.trim() : '';
+      if (!val) continue;
+
+      if (
+        colKey === '_entryNo' ||
+        colKey === 'entryNo' ||
+        colKey === 'entry_no'
+      ) {
+        applyMultiKeywordFilter(qb, 'je.entryNo', val, 'cs_entryNo');
+      } else if (colKey === '_branch' || colKey === 'branch') {
+        applyMultiKeywordFilter(qb, 'branch.name', val, 'cs_branch');
+      } else if (
+        colKey === '_subjectName' ||
+        colKey === 'subjectName' ||
+        colKey === 'subject_name'
+      ) {
+        applyMultiKeywordFilter(qb, 'je.subjectName', val, 'cs_subject');
+      } else if (colKey === 'description' || colKey === '_description') {
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['je.description', 'lines.description'],
+          val,
+          'cs_desc',
+        );
+      } else if (colKey === '_reference' || colKey === 'reference') {
+        applyMultiKeywordFilter(qb, 'je.reference', val, 'cs_ref');
+      } else if (
+        colKey === '_account' ||
+        colKey === 'account' ||
+        colKey === 'accountCode' ||
+        colKey === '_opposingAccount' ||
+        colKey === 'opposingAccount'
+      ) {
+        applyMultiKeywordFilter(qb, 'account.accountCode', val, 'cs_account');
+      } else if (colKey === 'debit') {
+        const num = Number(val.replace(/[^\d.-]/g, ''));
+        if (!isNaN(num)) {
+          qb.andWhere('lines.debit = :csDebit', { csDebit: num });
+        }
+      } else if (colKey === 'credit') {
+        const num = Number(val.replace(/[^\d.-]/g, ''));
+        if (!isNaN(num)) {
+          qb.andWhere('lines.credit = :csCredit', { csCredit: num });
+        }
+      }
+    }
+
+    // Column checkbox filters (multi-select)
+    let colFilters: Record<string, string[]> = {};
+    if (query.column_filters) {
+      try {
+        colFilters =
+          typeof query.column_filters === 'string'
+            ? JSON.parse(query.column_filters)
+            : query.column_filters;
+      } catch (e) {}
+    } else if (query.columnFilters) {
+      try {
+        colFilters =
+          typeof query.columnFilters === 'string'
+            ? JSON.parse(query.columnFilters)
+            : query.columnFilters;
+      } catch (e) {}
+    }
+
+    for (const [colKey, rawVals] of Object.entries(colFilters)) {
+      const vals = Array.isArray(rawVals)
+        ? rawVals.map((v) => String(v).trim()).filter(Boolean)
+        : typeof rawVals === 'string'
+          ? String(rawVals)
+              .split(',')
+              .map((v) => v.trim())
+              .filter(Boolean)
+          : [];
+      if (vals.length === 0) continue;
+
+      if (vals[0] === '__ALL_MATCHING__') {
+        const searchKeyword = vals[1] || '';
+        if (
+          colKey === '_entryNo' ||
+          colKey === 'entryNo' ||
+          colKey === 'entry_no'
+        ) {
+          applyMultiKeywordFilter(
+            qb,
+            'je.entryNo',
+            searchKeyword,
+            'f_all_entryNo',
+          );
+        } else if (
+          colKey === '_branch' ||
+          colKey === 'branch' ||
+          colKey === 'branchId'
+        ) {
+          applyMultiKeywordFilter(
+            qb,
+            'branch.name',
+            searchKeyword,
+            'f_all_branch',
+          );
+        } else if (
+          colKey === '_subjectName' ||
+          colKey === 'subjectName' ||
+          colKey === 'subject_name'
+        ) {
+          applyMultiKeywordFilter(
+            qb,
+            'je.subjectName',
+            searchKeyword,
+            'f_all_subject',
+          );
+        } else if (colKey === 'description' || colKey === '_description') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['je.description', 'lines.description'],
+            searchKeyword,
+            'f_all_desc',
+          );
+        } else if (colKey === '_reference' || colKey === 'reference') {
+          applyMultiKeywordFilter(
+            qb,
+            'je.reference',
+            searchKeyword,
+            'f_all_ref',
+          );
+        } else if (
+          colKey === '_account' ||
+          colKey === 'account' ||
+          colKey === 'accountCode' ||
+          colKey === '_opposingAccount' ||
+          colKey === 'opposingAccount'
+        ) {
+          applyMultiKeywordFilter(
+            qb,
+            'account.accountCode',
+            searchKeyword,
+            'f_all_account',
+          );
+        }
+        continue;
+      }
+
+      if (
+        colKey === '_entryNo' ||
+        colKey === 'entryNo' ||
+        colKey === 'entry_no'
+      ) {
+        qb.andWhere('je.entryNo IN (:...fEntryNos)', { fEntryNos: vals });
+      } else if (
+        colKey === '_branch' ||
+        colKey === 'branch' ||
+        colKey === 'branchId'
+      ) {
+        qb.andWhere(
+          '(je.branchId IN (:...fBranches) OR branch.name IN (:...fBranches))',
+          { fBranches: vals },
+        );
+      } else if (
+        colKey === '_subjectName' ||
+        colKey === 'subjectName' ||
+        colKey === 'subject_name'
+      ) {
+        const hasBlank = vals.includes('__BLANK__') || vals.includes('(Trống)');
+        const nonBlank = vals.filter(
+          (v) => v !== '__BLANK__' && v !== '(Trống)',
+        );
+        if (hasBlank && nonBlank.length > 0) {
+          qb.andWhere(
+            "(je.subjectName IS NULL OR je.subjectName = '' OR je.subjectName IN (:...fSubjects))",
+            { fSubjects: nonBlank },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(je.subjectName IS NULL OR je.subjectName = '')");
+        } else if (nonBlank.length > 0) {
+          qb.andWhere('je.subjectName IN (:...fSubjects)', {
+            fSubjects: nonBlank,
+          });
+        }
+      } else if (colKey === '_status' || colKey === 'status') {
+        qb.andWhere('je.status IN (:...fStatus)', { fStatus: vals });
+      } else if (
+        colKey === '_sourceType' ||
+        colKey === 'sourceType' ||
+        colKey === 'source_type'
+      ) {
+        qb.andWhere('je.sourceType IN (:...fSourceTypes)', {
+          fSourceTypes: vals,
+        });
+      } else if (colKey === '_reference' || colKey === 'reference') {
+        const hasBlank = vals.includes('__BLANK__') || vals.includes('(Trống)');
+        const nonBlank = vals.filter(
+          (v) => v !== '__BLANK__' && v !== '(Trống)',
+        );
+        if (hasBlank && nonBlank.length > 0) {
+          qb.andWhere(
+            "(je.reference IS NULL OR je.reference = '' OR je.reference IN (:...fRefs))",
+            { fRefs: nonBlank },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(je.reference IS NULL OR je.reference = '')");
+        } else if (nonBlank.length > 0) {
+          qb.andWhere('je.reference IN (:...fRefs)', { fRefs: nonBlank });
+        }
+      } else if (
+        colKey === '_account' ||
+        colKey === 'account' ||
+        colKey === 'accountCode' ||
+        colKey === '_opposingAccount' ||
+        colKey === 'opposingAccount'
+      ) {
+        const hasBlank = vals.includes('__BLANK__') || vals.includes('(Trống)');
+        const nonBlank = vals.filter(
+          (v) => v !== '__BLANK__' && v !== '(Trống)',
+        );
+        if (hasBlank && nonBlank.length > 0) {
+          qb.andWhere(
+            "(account.accountCode IS NULL OR account.accountCode = '' OR account.accountCode IN (:...fAccounts))",
+            { fAccounts: nonBlank },
+          );
+        } else if (hasBlank) {
+          qb.andWhere(
+            "(account.accountCode IS NULL OR account.accountCode = '')",
+          );
+        } else if (nonBlank.length > 0) {
+          qb.andWhere('account.accountCode IN (:...fAccounts)', {
+            fAccounts: nonBlank,
+          });
+        }
+      } else if (colKey === 'description' || colKey === '_description') {
+        qb.andWhere(
+          '(je.description IN (:...fDescs) OR lines.description IN (:...fDescs))',
+          { fDescs: vals },
+        );
+      } else if (colKey === 'debit') {
+        const numVals = vals.map(Number).filter((n) => !isNaN(n));
+        if (numVals.length > 0) {
+          qb.andWhere('lines.debit IN (:...fDebits)', { fDebits: numVals });
+        }
+      } else if (colKey === 'credit') {
+        const numVals = vals.map(Number).filter((n) => !isNaN(n));
+        if (numVals.length > 0) {
+          qb.andWhere('lines.credit IN (:...fCredits)', { fCredits: numVals });
+        }
+      }
+    }
+
+    // Dynamic Multi-column sorting
+    const sortParam = query.sort || query.sorts;
+    if (sortParam) {
+      const sortList = Array.isArray(sortParam)
+        ? sortParam
+        : typeof sortParam === 'string'
+          ? sortParam
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+
+      let hasOrder = false;
+      for (const sortField of sortList) {
+        const isDesc = sortField.startsWith('-');
+        const rawField = isDesc ? sortField.substring(1) : sortField;
+        const validFields: Record<string, string> = {
+          date: 'je.date',
+          _date: 'je.date',
+          documentDate: 'je.documentDate',
+          _documentDate: 'je.documentDate',
+          document_date: 'je.documentDate',
+          entryNo: 'je.entryNo',
+          _entryNo: 'je.entryNo',
+          entry_no: 'je.entryNo',
+          branch: 'branch.name',
+          _branch: 'branch.name',
+          subjectName: 'je.subjectName',
+          _subjectName: 'je.subjectName',
+          subject_name: 'je.subjectName',
+          description: 'je.description',
+          _description: 'je.description',
+          reference: 'je.reference',
+          _reference: 'je.reference',
+          status: 'je.status',
+          _status: 'je.status',
+          sourceType: 'je.sourceType',
+          _sourceType: 'je.sourceType',
+          source_type: 'je.sourceType',
+          debit: 'lines.debit',
+          credit: 'lines.credit',
+          account: 'account.accountCode',
+          _account: 'account.accountCode',
+          accountCode: 'account.accountCode',
+          createdAt: 'je.createdAt',
+          created_at: 'je.createdAt',
+        };
+
+        if (validFields[rawField]) {
+          if (!hasOrder) {
+            qb.orderBy(validFields[rawField], isDesc ? 'DESC' : 'ASC');
+            hasOrder = true;
+          } else {
+            qb.addOrderBy(validFields[rawField], isDesc ? 'DESC' : 'ASC');
+          }
+        }
+      }
+      if (!hasOrder) {
+        qb.orderBy('je.date', 'DESC').addOrderBy('je.createdAt', 'DESC');
+      }
+    } else {
+      qb.orderBy('je.date', 'DESC').addOrderBy('je.createdAt', 'DESC');
+    }
+
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
@@ -265,7 +641,263 @@ export class AccountingCoreService {
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil(total / pageSize) || 1,
+    };
+  }
+
+  async getJournalEntriesColumnOptions(
+    column: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    branchId?: string,
+  ) {
+    const qb = this.journalEntryRepo
+      .createQueryBuilder('je')
+      .leftJoin('je.lines', 'lines')
+      .leftJoin('lines.account', 'account')
+      .leftJoin('je.branch', 'branch')
+      .where('je.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (branchId) {
+      qb.andWhere('je.branchId = :branchId', { branchId });
+    }
+
+    // Cascading filters
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0) continue;
+          if (col === column) continue;
+
+          if (col === '_entryNo' || col === 'entryNo' || col === 'entry_no') {
+            qb.andWhere('je.entryNo IN (:...cfEntryNos)', {
+              cfEntryNos: vals,
+            });
+          } else if (
+            col === '_branch' ||
+            col === 'branch' ||
+            col === 'branchId'
+          ) {
+            qb.andWhere(
+              '(je.branchId IN (:...cfBranches) OR branch.name IN (:...cfBranches))',
+              { cfBranches: vals },
+            );
+          } else if (
+            col === '_subjectName' ||
+            col === 'subjectName' ||
+            col === 'subject_name'
+          ) {
+            const hasBlank =
+              vals.includes('__BLANK__') || vals.includes('(Trống)');
+            const nonBlank = vals.filter(
+              (v) => v !== '__BLANK__' && v !== '(Trống)',
+            );
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(je.subjectName IS NULL OR je.subjectName = '' OR je.subjectName IN (:...cfSubjects))",
+                { cfSubjects: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(je.subjectName IS NULL OR je.subjectName = '')");
+            } else if (nonBlank.length > 0) {
+              qb.andWhere('je.subjectName IN (:...cfSubjects)', {
+                cfSubjects: nonBlank,
+              });
+            }
+          } else if (col === '_status' || col === 'status') {
+            qb.andWhere('je.status IN (:...cfStatus)', { cfStatus: vals });
+          } else if (
+            col === '_sourceType' ||
+            col === 'sourceType' ||
+            col === 'source_type'
+          ) {
+            qb.andWhere('je.sourceType IN (:...cfSourceTypes)', {
+              cfSourceTypes: vals,
+            });
+          } else if (col === '_reference' || col === 'reference') {
+            const hasBlank =
+              vals.includes('__BLANK__') || vals.includes('(Trống)');
+            const nonBlank = vals.filter(
+              (v) => v !== '__BLANK__' && v !== '(Trống)',
+            );
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(je.reference IS NULL OR je.reference = '' OR je.reference IN (:...cfRefs))",
+                { cfRefs: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(je.reference IS NULL OR je.reference = '')");
+            } else if (nonBlank.length > 0) {
+              qb.andWhere('je.reference IN (:...cfRefs)', {
+                cfRefs: nonBlank,
+              });
+            }
+          } else if (
+            col === '_account' ||
+            col === 'account' ||
+            col === 'accountCode' ||
+            col === '_opposingAccount' ||
+            col === 'opposingAccount'
+          ) {
+            const hasBlank =
+              vals.includes('__BLANK__') || vals.includes('(Trống)');
+            const nonBlank = vals.filter(
+              (v) => v !== '__BLANK__' && v !== '(Trống)',
+            );
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(account.accountCode IS NULL OR account.accountCode = '' OR account.accountCode IN (:...cfAccounts))",
+                { cfAccounts: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(account.accountCode IS NULL OR account.accountCode = '')",
+              );
+            } else if (nonBlank.length > 0) {
+              qb.andWhere('account.accountCode IN (:...cfAccounts)', {
+                cfAccounts: nonBlank,
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (
+      column === '_entryNo' ||
+      column === 'entryNo' ||
+      column === 'entry_no'
+    ) {
+      qb.select('DISTINCT je.entryNo', 'value');
+      qb.andWhere("je.entryNo IS NOT NULL AND je.entryNo != ''");
+      if (search && search.trim()) {
+        qb.andWhere('je.entryNo ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === '_branch' || column === 'branch') {
+      qb.select('DISTINCT branch.name', 'value');
+      qb.andWhere("branch.name IS NOT NULL AND branch.name != ''");
+      if (search && search.trim()) {
+        qb.andWhere('branch.name ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (
+      column === '_subjectName' ||
+      column === 'subjectName' ||
+      column === 'subject_name'
+    ) {
+      qb.select('DISTINCT je.subjectName', 'value');
+      qb.andWhere("je.subjectName IS NOT NULL AND je.subjectName != ''");
+      if (search && search.trim()) {
+        qb.andWhere('je.subjectName ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (
+      column === '_account' ||
+      column === 'account' ||
+      column === 'accountCode' ||
+      column === '_opposingAccount' ||
+      column === 'opposingAccount'
+    ) {
+      qb.select('DISTINCT account.accountCode', 'value');
+      qb.andWhere(
+        "account.accountCode IS NOT NULL AND account.accountCode != ''",
+      );
+      if (search && search.trim()) {
+        qb.andWhere('account.accountCode ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === '_status' || column === 'status') {
+      qb.select('DISTINCT je.status', 'value');
+      qb.andWhere("je.status IS NOT NULL AND je.status != ''");
+      if (search && search.trim()) {
+        qb.andWhere('je.status ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (
+      column === '_sourceType' ||
+      column === 'sourceType' ||
+      column === 'source_type'
+    ) {
+      qb.select('DISTINCT je.sourceType', 'value');
+      qb.andWhere("je.sourceType IS NOT NULL AND je.sourceType != ''");
+      if (search && search.trim()) {
+        qb.andWhere('je.sourceType ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === '_reference' || column === 'reference') {
+      qb.select('DISTINCT je.reference', 'value');
+      qb.andWhere("je.reference IS NOT NULL AND je.reference != ''");
+      if (search && search.trim()) {
+        qb.andWhere('je.reference ILIKE :colSearch', {
+          colSearch: `%${search.trim()}%`,
+        });
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === 'description' || column === '_description') {
+      qb.select(
+        'DISTINCT COALESCE(lines.description, je.description)',
+        'value',
+      );
+      qb.andWhere(
+        "COALESCE(lines.description, je.description) IS NOT NULL AND COALESCE(lines.description, je.description) != ''",
+      );
+      if (search && search.trim()) {
+        qb.andWhere(
+          '(je.description ILIKE :colSearch OR lines.description ILIKE :colSearch)',
+          {
+            colSearch: `%${search.trim()}%`,
+          },
+        );
+      }
+      qb.orderBy('value', 'ASC');
+    } else if (column === 'debit') {
+      qb.select('DISTINCT lines.debit', 'value');
+      qb.andWhere('lines.debit > 0');
+      qb.orderBy('value', 'ASC');
+    } else if (column === 'credit') {
+      qb.select('DISTINCT lines.credit', 'value');
+      qb.andWhere('lines.credit > 0');
+      qb.orderBy('value', 'ASC');
+    } else {
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+
+    const rawRows = await qb.getRawMany();
+    const total = rawRows.length;
+    const startIdx = (page - 1) * pageSize;
+    const paginatedRows = rawRows.slice(startIdx, startIdx + pageSize);
+
+    return {
+      items: paginatedRows.map((r) => ({
+        label: String(r.value),
+        value: String(r.value),
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize) || 1,
     };
   }
 
