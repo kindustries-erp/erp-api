@@ -25,9 +25,10 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
 - **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx` & `GarageMonthDetailDrawer.tsx`)**:
   - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
   - Switch chuyển Tab pill bo tròn gọn gàng chuẩn Dashboard Tổng quan với 2 lựa chọn: **Phải Thu** & **Phải Trả**.
-  - Tiêu đề cột tinh gọn & đồng bộ, bố cục chuẩn hóa:
-    - Tab **Phải Thu**: `#` | `Tháng` | `Số vụ việc` (120px) | `Doanh Thu` | `Còn Phải Thu` (nền neutral) | `Tổng Phải Thu` (progress bar xanh ngọc `#059669`, compact format, tooltip đầy đủ) | `Có HĐ` | `Không HĐ`.
-    - Tab **Phải Trả**: `#` | `Tháng` | `Số vụ việc` (120px) | `Còn Phải Trả` (nền neutral) | `Tổng Phải Trả` (progress bar cam `#ea580c`, compact format, tooltip đầy đủ) | `Có HĐ` | `Không HĐ`.
+  - Tiêu đề cột tinh gọn & đồng bộ, độ rộng 200px cho toàn bộ các cột tiền tệ, bố cục chuẩn hóa:
+    - Tab **Phải Thu**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Doanh Thu` (200px) | `Tổng Phải Thu` (200px) | `Đã Thu` (200px) | `Còn Phải Thu` (200px, nền neutral) | `Còn Phải Thu Có HĐ` (200px) | `Còn Phải Thu Không HĐ` (200px).
+    - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (200px) | `Đã Trả` (200px) | `Còn Phải Trả` (200px, nền neutral) | `Còn Phải Trả Có HĐ` (200px) | `Còn Phải Trả Không HĐ` (200px).
+  - Hàng tổng cộng (`summaryRow`): Hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
   - Hỗ trợ Context Menu chuột phải trên từng dòng tháng mở **`GarageMonthDetailDrawer.tsx`** (2-column StandardFormDrawer layout):
     - **Cột Trái (Main Content)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) và Bảng phân loại theo Hóa đơn Thuế (Có HĐ vs Không HĐ) với các cột `#`, `Loại nghiệp vụ`, `Tổng phát sinh`, `Đã thu/chi`, `Còn lại`, `Tỷ trọng (%)` và dòng tổng cộng `Σ`. Cả 2 bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`), loại bỏ outer wrapper div chống double-border và đồng nhất nút `Xóa bộ lọc (N)` nằm bên trái cạnh tiêu đề section.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
