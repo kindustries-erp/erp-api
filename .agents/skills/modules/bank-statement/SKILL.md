@@ -325,6 +325,10 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
   - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
   - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
-- Popover chi tiết mở khi click hoặc hover, thể hiện rõ tỷ trọng trang và số tiền lũy kế kèm đầy đủ i18n keys.
+- **Quy chuẩn Popover Chi tiết**:
+  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, ...) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
+  - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
+  - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
+
 
 

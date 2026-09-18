@@ -613,4 +613,146 @@ describe('InvoiceQueryService', () => {
     // totalAmount dynamically computed: 100000 + 8000 - 0 = 108000
     expect(result.items[0].totalAmount).toBe(108000);
   });
+
+  it('findAll calculates grand totals and cumulative totals accurately for multi-page requests', async () => {
+    const mockInvoices = [
+      {
+        id: 'inv-1',
+        invoiceNo: '00001',
+        serialNo: '1C26TGA',
+        invoiceDate: new Date('2026-08-01'),
+        direction: 'IN',
+        preVatAmount: '1000000',
+        vatAmount: '100000',
+        discountAmount: '0',
+        totalAmount: '1100000',
+        taxInvoiceStatus: 1,
+        items: [],
+        attachments: [],
+        category: null,
+      },
+      {
+        id: 'inv-2',
+        invoiceNo: '00002',
+        serialNo: '1C26TGA',
+        invoiceDate: new Date('2026-08-02'),
+        direction: 'IN',
+        preVatAmount: '2000000',
+        vatAmount: '200000',
+        discountAmount: '50000',
+        totalAmount: '2150000',
+        taxInvoiceStatus: 1,
+        items: [],
+        attachments: [],
+        category: null,
+      },
+    ];
+
+    const qb: any = {
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([mockInvoices, 10]),
+      clone: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          totalPreVat: '10000000',
+          totalVat: '1000000',
+          totalDiscount: '200000',
+          totalAmount: '10800000',
+          totalNetOff: '3000000',
+        }),
+        getRawMany: jest.fn().mockResolvedValue([
+          {
+            preVat: '1000000',
+            vat: '100000',
+            discount: '0',
+            total: '1100000',
+            netoff: '500000',
+          },
+          {
+            preVat: '2000000',
+            vat: '200000',
+            discount: '50000',
+            total: '2150000',
+            netoff: '500000',
+          },
+          {
+            preVat: '1500000',
+            vat: '150000',
+            discount: '0',
+            total: '1650000',
+            netoff: '0',
+          },
+          {
+            preVat: '1500000',
+            vat: '150000',
+            discount: '0',
+            total: '1650000',
+            netoff: '0',
+          },
+        ]),
+      }),
+    };
+
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([
+            { invoiceId: 'inv-1', sum: '500000', refNos: 'FT123' },
+            { invoiceId: 'inv-2', sum: '500000', refNos: 'FT456' },
+          ]),
+        }),
+      },
+    };
+
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
+
+    // Page 1
+    const p1 = await service.findAll({
+      direction: 'IN',
+      page: 1,
+      pageSize: 2,
+    });
+
+    expect(p1.totals?.grandTotalAmount).toBe(10800000);
+    expect(p1.totals?.grandTotalNetOff).toBe(3000000);
+    expect(p1.totals?.grandTotalRemaining).toBe(7800000);
+    expect(p1.totals?.cumulativePreVat).toBe(3000000);
+    expect(p1.totals?.cumulativeVat).toBe(300000);
+    expect(p1.totals?.cumulativeDiscount).toBe(50000);
+    expect(p1.totals?.cumulativeTotal).toBe(3250000);
+    expect(p1.totals?.cumulativeNetOff).toBe(1000000);
+    expect(p1.totals?.cumulativeRemaining).toBe(2250000);
+
+    // Page 2 (multi-page middle)
+    const p2 = await service.findAll({
+      direction: 'IN',
+      page: 2,
+      pageSize: 2,
+    });
+
+    expect(p2.totals?.cumulativePreVat).toBe(6000000);
+    expect(p2.totals?.cumulativeTotal).toBe(6550000);
+    expect(p2.totals?.cumulativeNetOff).toBe(1000000);
+    expect(p2.totals?.cumulativeRemaining).toBe(5550000);
+  });
 });
