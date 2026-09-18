@@ -318,4 +318,13 @@ src/modules/bank-statements/components/BankStatementsTab/
   2. **Tầng 2 & 3 — `THUỘC TÍNH MẶC ĐỊNH` & `THUỘC TÍNH TÙY CHỈNH` (`ModuleEntityCustomFieldsSection`)**:
      - Tích hợp `moduleKey="BANK_TXN"` quản lý danh mục và dynamic custom fields.
 
+### 8.6. Chuẩn Hóa SubtotalSummaryCell tại Chân Bảng (`BankStatementsTab.tsx`)
+- Hàng tổng cộng (`summaryRow`) tích hợp **`SubtotalSummaryCell`** đa năng:
+  - `description`: Nhãn `Tổng cộng:` (variant `label`).
+  - `thu`: Hiển thị tổng Tiền vào / Thu (`variantType="amount"`, `text-emerald-600 font-bold`).
+  - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
+  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
+  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
+- Popover chi tiết mở khi click hoặc hover, thể hiện rõ tỷ trọng trang và số tiền lũy kế kèm đầy đủ i18n keys.
+
 
