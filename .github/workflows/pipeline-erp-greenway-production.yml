@@ -21,7 +21,23 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-cache-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-cache-
+
+      - name: Install dependencies with resilient retry
+        run: |
+          bun install --frozen-lockfile || (
+            echo "::warning::First bun install failed. Clearing corrupted tarball cache and retrying..."
+            bun pm cache rm || true
+            sleep 2
+            bun install --frozen-lockfile
+          )
       - run: bun run check:ci
       - run: bunx jest --forceExit
       - run: bun run build
