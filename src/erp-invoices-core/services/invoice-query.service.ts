@@ -94,32 +94,32 @@ export class InvoiceQueryService {
       selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'serialNo') {
-      selectField = 'inv.serial_no';
+      selectField = 'TRIM(inv.serial_no)';
     } else if (column === 'invoiceNo') {
-      selectField = 'inv.invoice_no';
-      customSecondaryField = 'inv.serial_no';
+      selectField = 'TRIM(inv.invoice_no)';
+      customSecondaryField = 'TRIM(inv.serial_no)';
       isCustomGroupColumn = true;
     } else if (column === 'partner') {
       isCustomGroupColumn = true;
       if (direction === 'IN') {
-        selectField = 'inv.seller_name';
-        customSecondaryField = 'inv.seller_tax_code';
+        selectField = "TRIM(COALESCE(inv.seller_name, ''))";
+        customSecondaryField = "TRIM(COALESCE(inv.seller_tax_code, ''))";
       } else if (direction === 'OUT') {
         selectField =
-          "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)";
-        customSecondaryField = 'inv.buyer_tax_code';
+          "TRIM(COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name, ''))";
+        customSecondaryField = "TRIM(COALESCE(inv.buyer_tax_code, ''))";
       } else {
         selectField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_name, '') ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name, '') END)";
         customSecondaryField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_tax_code, '') ELSE COALESCE(inv.buyer_tax_code, '') END)";
       }
     } else if (column === 'taxCode') {
-      if (direction === 'IN') selectField = 'inv.seller_tax_code';
-      else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
+      if (direction === 'IN') selectField = 'TRIM(inv.seller_tax_code)';
+      else if (direction === 'OUT') selectField = 'TRIM(inv.buyer_tax_code)';
       else
         selectField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
     } else if (column === 'description') selectField = 'inv.description';
     else if (column === 'preVatAmount') selectField = 'inv.pre_vat_amount';
     else if (column === 'vatRate') selectField = 'inv.vat_rate';
@@ -155,67 +155,23 @@ export class InvoiceQueryService {
     if (filtersStr) {
       try {
         const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        const activeFilters: Record<string, string[]> = {};
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
           if (col === column) continue;
-
-          if (col === 'invoiceNo') {
+          if (col === 'taxInvoiceStatus') {
             qb.andWhere(
-              '(inv.invoice_no IN (:...vals_invoiceNo) OR inv.serial_no IN (:...vals_invoiceNo))',
-              { vals_invoiceNo: vals },
+              'inv.tax_invoice_status IN (:...vals_taxInvoiceStatus)',
+              {
+                vals_taxInvoiceStatus: vals.map((v) => Number(v)),
+              },
             );
             continue;
           }
-
-          if (col === 'partner') {
-            const partnerNameField =
-              direction === 'IN'
-                ? 'inv.seller_name'
-                : direction === 'OUT'
-                  ? "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)"
-                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
-            const partnerTaxField =
-              direction === 'IN'
-                ? 'inv.seller_tax_code'
-                : direction === 'OUT'
-                  ? 'inv.buyer_tax_code'
-                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
-
-            qb.andWhere(
-              `(${partnerNameField} IN (:...vals_partner) OR ${partnerTaxField} IN (:...vals_partner))`,
-              { vals_partner: vals },
-            );
-            continue;
-          }
-
-          let filterField = '';
-          if (col === 'invoiceDate')
-            filterField = `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`;
-          else if (col === 'serialNo') filterField = 'inv.serial_no';
-          else if (col === 'taxCode') {
-            if (direction === 'IN') filterField = 'inv.seller_tax_code';
-            else if (direction === 'OUT') filterField = 'inv.buyer_tax_code';
-            else
-              filterField =
-                "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
-          } else if (col === 'description') filterField = 'inv.description';
-          else if (col === 'preVatAmount') filterField = 'inv.pre_vat_amount';
-          else if (col === 'vatRate') filterField = 'inv.vat_rate';
-          else if (col === 'vatAmount') filterField = 'inv.vat_amount';
-          else if (col === 'discountAmount')
-            filterField = 'inv.discount_amount';
-          else if (col === 'totalAmount') filterField = 'inv.total_amount';
-          else if (col === 'licensePlate') filterField = 'inv.license_plate';
-          else if (col === 'settlementOrder')
-            filterField = 'inv.settlement_order';
-          else if (col === 'branchId') filterField = 'inv.branch_id';
-          else if (col === 'notes') filterField = 'inv.notes';
-
-          if (filterField) {
-            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...vals_${col})`, {
-              [`vals_${col}`]: vals,
-            });
-          }
+          activeFilters[col] = vals;
+        }
+        if (Object.keys(activeFilters).length > 0) {
+          this._applyColumnFilters(qb, activeFilters, direction);
         }
       } catch {
         // ignore malformed filters
@@ -281,11 +237,20 @@ export class InvoiceQueryService {
 
     qb.orderBy('value', 'ASC');
 
+    const countQb = qb.clone();
+    if (countQb.expressionMap) {
+      countQb.expressionMap.groupBys = [];
+      countQb.expressionMap.selects = [];
+      countQb.expressionMap.orderBys = {};
+    }
+    countQb.offset?.(undefined);
+    countQb.limit?.(undefined);
+    countQb.skip?.(undefined);
+    countQb.take?.(undefined);
+
     let total = 0;
     if (isCustomGroupColumn) {
-      const totalRaw = await qb
-        .clone()
-        .orderBy()
+      const totalRaw = await countQb
         .select(
           `COUNT(DISTINCT CONCAT(COALESCE(${selectField}, ''), ':', COALESCE(${customSecondaryField}, '')))`,
           'cnt',
@@ -293,9 +258,7 @@ export class InvoiceQueryService {
         .getRawOne();
       total = parseInt(totalRaw?.cnt || '0', 10);
     } else {
-      const totalRaw = await qb
-        .clone()
-        .orderBy()
+      const totalRaw = await countQb
         .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
         .getRawOne();
       total = parseInt(totalRaw?.cnt || '0', 10);
@@ -306,24 +269,35 @@ export class InvoiceQueryService {
 
     let items: any[] = [];
     if (column === 'invoiceNo') {
+      const seen = new Set<string>();
       items = results
         .map((r) => {
           const val = r.value ? String(r.value).trim() : '';
           const sec = r.secondary_val ? String(r.secondary_val).trim() : '';
           const label = sec ? `${val} (${sec})` : val;
-          return { value: val, label: label || val };
+          const value = sec ? `${val}:::${sec}` : val;
+          return { value, label: label || val };
         })
-        .filter((x) => Boolean(x.value));
+        .filter((x) => {
+          if (!x.value || seen.has(x.value)) return false;
+          seen.add(x.value);
+          return true;
+        });
     } else if (column === 'partner') {
+      const seen = new Set<string>();
       items = results
         .map((r) => {
           const name = r.value ? String(r.value).trim() : '';
           const tax = r.secondary_val ? String(r.secondary_val).trim() : '';
           const label = name && tax ? `${name} (${tax})` : name || tax || '—';
-          const value = name || tax;
+          const value = tax && name ? `${tax}:::${name}` : tax || name;
           return { value, label };
         })
-        .filter((x) => Boolean(x.value));
+        .filter((x) => {
+          if (!x.value || seen.has(x.value)) return false;
+          seen.add(x.value);
+          return true;
+        });
     } else {
       items = results.map((r) => String(r.value)).filter(Boolean);
     }
@@ -1820,6 +1794,24 @@ export class InvoiceQueryService {
         applyMultiKeywordFilter(qb, 'inv.license_plate', val, 'plateSearch');
       } else if (key === 'notes') {
         applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
+      } else if (key === 'branchId' || key === 'branchName') {
+        applyMultiKeywordFilter(qb, 'inv.branch_id', val, 'branchIdSearch');
+      } else if (key === 'status') {
+        applyMultiKeywordFilter(qb, 'inv.status', val, 'statusSearch');
+      } else if (key === 'postingStatus') {
+        applyMultiKeywordFilter(
+          qb,
+          'inv.posting_status',
+          val,
+          'postingStatusSearch',
+        );
+      } else if (key === 'taxInvoiceStatus') {
+        applyMultiKeywordFilter(
+          qb,
+          'CAST(inv.tax_invoice_status AS TEXT)',
+          val,
+          'taxInvoiceStatusSearch',
+        );
       } else if (key === 'invoiceDate') {
         const rawKw = String(val);
         if (rawKw.includes('|')) {
@@ -1898,10 +1890,41 @@ export class InvoiceQueryService {
           serialNoVals: vals,
         });
       else if (key === 'invoiceNo') {
-        qb.andWhere(
-          '(inv.invoice_no IN (:...invoiceNoVals) OR inv.serial_no IN (:...invoiceNoVals))',
-          { invoiceNoVals: vals },
-        );
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const conds: string[] = [];
+        const params: Record<string, any> = {};
+        const simpleVals: string[] = [];
+
+        realVals.forEach((v, idx) => {
+          if (v.includes(':::')) {
+            const [invNo, serNo] = v.split(':::');
+            conds.push(
+              `(TRIM(inv.invoice_no) = :invNo_${idx} AND TRIM(inv.serial_no) = :serNo_${idx})`,
+            );
+            params[`invNo_${idx}`] = invNo.trim();
+            params[`serNo_${idx}`] = serNo.trim();
+          } else {
+            simpleVals.push(v.trim());
+          }
+        });
+
+        if (simpleVals.length > 0) {
+          conds.push(
+            '(TRIM(inv.invoice_no) IN (:...simpleInvoiceNos) OR TRIM(inv.serial_no) IN (:...simpleInvoiceNos))',
+          );
+          params['simpleInvoiceNos'] = simpleVals;
+        }
+
+        if (hasBlank) {
+          conds.push(
+            "(inv.invoice_no IS NULL OR CAST(inv.invoice_no AS TEXT) = '')",
+          );
+        }
+
+        if (conds.length > 0) {
+          qb.andWhere(`(${conds.join(' OR ')})`, params);
+        }
       } else if (key === 'partner') {
         const hasBlank = vals.includes('__BLANK__');
         const realVals = vals.filter((v) => v !== '__BLANK__');
@@ -1918,20 +1941,46 @@ export class InvoiceQueryService {
               ? 'inv.buyer_tax_code'
               : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
 
-        if (hasBlank && realVals.length > 0) {
-          qb.andWhere(
-            `(${nameField} IN (:...partnerVals) OR ${taxField} IN (:...partnerVals) OR ${nameField} IS NULL OR CAST(${nameField} AS TEXT) = '')`,
-            { partnerVals: realVals },
+        const conds: string[] = [];
+        const params: Record<string, any> = {};
+        const simpleVals: string[] = [];
+
+        realVals.forEach((v, idx) => {
+          if (v.includes(':::')) {
+            const [tax, name] = v.split(':::');
+            if (tax && name) {
+              conds.push(
+                `(TRIM(${taxField}) = :partnerTax_${idx} OR TRIM(${nameField}) ILIKE :partnerName_${idx})`,
+              );
+              params[`partnerTax_${idx}`] = tax.trim();
+              params[`partnerName_${idx}`] = `%${name.trim()}%`;
+            } else if (tax) {
+              conds.push(`TRIM(${taxField}) = :partnerTax_${idx}`);
+              params[`partnerTax_${idx}`] = tax.trim();
+            } else if (name) {
+              conds.push(`TRIM(${nameField}) ILIKE :partnerName_${idx}`);
+              params[`partnerName_${idx}`] = `%${name.trim()}%`;
+            }
+          } else {
+            simpleVals.push(v.trim());
+          }
+        });
+
+        if (simpleVals.length > 0) {
+          conds.push(
+            `(TRIM(${nameField}) IN (:...simplePartners) OR TRIM(${taxField}) IN (:...simplePartners))`,
           );
-        } else if (hasBlank) {
-          qb.andWhere(
+          params['simplePartners'] = simpleVals;
+        }
+
+        if (hasBlank) {
+          conds.push(
             `(${nameField} IS NULL OR CAST(${nameField} AS TEXT) = '')`,
           );
-        } else {
-          qb.andWhere(
-            `(${nameField} IN (:...partnerVals) OR ${taxField} IN (:...partnerVals))`,
-            { partnerVals: vals },
-          );
+        }
+
+        if (conds.length > 0) {
+          qb.andWhere(`(${conds.join(' OR ')})`, params);
         }
       } else if (key === 'taxCode') {
         const hasBlank = vals.includes('__BLANK__');
@@ -2200,267 +2249,8 @@ export class InvoiceQueryService {
       this.logger.error('Failed to parse column_search or column_filters', e);
     }
 
-    for (const [col, val] of Object.entries(columnSearch)) {
-      if (!val || !val.trim()) continue;
-      const term = `%${val.trim()}%`;
-      const termClean = `%${val.replace(/[,.]/g, '').trim()}%`;
-      if (col === 'invoiceNo') {
-        qb.andWhere(
-          '(inv.invoice_no ILIKE :term_invNo OR inv.serial_no ILIKE :term_invNo)',
-          { term_invNo: term },
-        );
-      } else if (col === 'serialNo') {
-        qb.andWhere('inv.serial_no ILIKE :term_serial', { term_serial: term });
-      } else if (col === 'partner') {
-        qb.andWhere(
-          '(inv.seller_name ILIKE :term_partner OR inv.buyer_name ILIKE :term_partner OR inv.buyer_personal_name ILIKE :term_partner)',
-          { term_partner: term },
-        );
-      } else if (col === 'taxCode') {
-        qb.andWhere(
-          '(inv.seller_tax_code ILIKE :term_taxCode OR inv.buyer_tax_code ILIKE :term_taxCode)',
-          { term_taxCode: term },
-        );
-      } else if (col === 'itemCode') {
-        qb.andWhere('ii.item_code ILIKE :term_itemCode', {
-          term_itemCode: term,
-        });
-      } else if (col === 'description') {
-        qb.andWhere('ii.description ILIKE :term_desc', { term_desc: term });
-      } else if (col === 'unit') {
-        qb.andWhere('ii.unit ILIKE :term_unit', { term_unit: term });
-      } else if (col === 'quantity') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.quantity AS TEXT), '.', ''), ',', '') ILIKE :term_qty",
-          { term_qty: termClean },
-        );
-      } else if (col === 'unitPrice') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.unit_price AS TEXT), '.', ''), ',', '') ILIKE :term_up",
-          { term_up: termClean },
-        );
-      } else if (col === 'preVatAmount') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :term_preVat",
-          { term_preVat: termClean },
-        );
-      } else if (col === 'vatAmount') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :term_vatAmt",
-          { term_vatAmt: termClean },
-        );
-      } else if (col === 'discountAmount') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :term_disc",
-          { term_disc: termClean },
-        );
-      } else if (col === 'totalAmount') {
-        qb.andWhere(
-          "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :term_tot",
-          { term_tot: termClean },
-        );
-      } else if (col === 'licensePlate') {
-        qb.andWhere('inv.license_plate ILIKE :term_lp', { term_lp: term });
-      } else if (col === 'settlementOrder') {
-        qb.andWhere('inv.settlement_order ILIKE :term_so', { term_so: term });
-      }
-    }
-
-    // Column Filters
-    for (const [col, vals] of Object.entries(columnFilters)) {
-      if (!vals || vals.length === 0) continue;
-
-      if (vals[0] === '__ALL_MATCHING__') {
-        const searchStr = vals[1] || '';
-        if (searchStr) {
-          const term = `%${searchStr.trim()}%`;
-          const termClean = `%${searchStr.replace(/[,.]/g, '').trim()}%`;
-          if (col === 'invoiceNo') {
-            qb.andWhere(
-              '(inv.invoice_no ILIKE :m_invNo OR inv.serial_no ILIKE :m_invNo)',
-              { m_invNo: term },
-            );
-          } else if (col === 'serialNo') {
-            qb.andWhere('inv.serial_no ILIKE :m_serial', { m_serial: term });
-          } else if (col === 'partner') {
-            qb.andWhere(
-              '(inv.seller_name ILIKE :m_partner OR inv.buyer_name ILIKE :m_partner OR inv.buyer_personal_name ILIKE :m_partner)',
-              { m_partner: term },
-            );
-          } else if (col === 'taxCode') {
-            qb.andWhere(
-              '(inv.seller_tax_code ILIKE :m_taxCode OR inv.buyer_tax_code ILIKE :m_taxCode)',
-              { m_taxCode: term },
-            );
-          } else if (col === 'itemCode') {
-            qb.andWhere('ii.item_code ILIKE :m_itemCode', {
-              m_itemCode: term,
-            });
-          } else if (col === 'description') {
-            qb.andWhere('ii.description ILIKE :m_desc', { m_desc: term });
-          } else if (col === 'unit') {
-            qb.andWhere('ii.unit ILIKE :m_unit', { m_unit: term });
-          } else if (col === 'quantity') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.quantity AS TEXT), '.', ''), ',', '') ILIKE :m_qty",
-              { m_qty: termClean },
-            );
-          } else if (col === 'unitPrice') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.unit_price AS TEXT), '.', ''), ',', '') ILIKE :m_up",
-              { m_up: termClean },
-            );
-          } else if (col === 'preVatAmount') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :m_preVat",
-              { m_preVat: termClean },
-            );
-          } else if (col === 'vatAmount') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :m_vatAmt",
-              { m_vatAmt: termClean },
-            );
-          } else if (col === 'discountAmount') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :m_disc",
-              { m_disc: termClean },
-            );
-          } else if (col === 'totalAmount') {
-            qb.andWhere(
-              "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :m_tot",
-              { m_tot: termClean },
-            );
-          } else if (col === 'licensePlate') {
-            qb.andWhere('inv.license_plate ILIKE :m_lp', { m_lp: term });
-          } else if (col === 'settlementOrder') {
-            qb.andWhere('inv.settlement_order ILIKE :m_so', { m_so: term });
-          }
-        }
-        continue;
-      }
-
-      if (col === 'invoiceNo') {
-        qb.andWhere(
-          '(inv.invoice_no IN (:...vals_invNo) OR inv.serial_no IN (:...vals_invNo))',
-          { vals_invNo: vals },
-        );
-      } else if (col === 'serialNo') {
-        qb.andWhere('inv.serial_no IN (:...vals_serial)', {
-          vals_serial: vals,
-        });
-      } else if (col === 'partner') {
-        qb.andWhere(
-          '(inv.seller_name IN (:...vals_partner) OR inv.buyer_name IN (:...vals_partner) OR inv.buyer_personal_name IN (:...vals_partner))',
-          { vals_partner: vals },
-        );
-      } else if (col === 'taxCode') {
-        qb.andWhere(
-          '(inv.seller_tax_code IN (:...vals_taxCode) OR inv.buyer_tax_code IN (:...vals_taxCode))',
-          { vals_taxCode: vals },
-        );
-      } else if (col === 'itemCode') {
-        qb.andWhere('ii.item_code IN (:...vals_itemCode)', {
-          vals_itemCode: vals,
-        });
-      } else if (col === 'description') {
-        const hasBlank = vals.includes('__BLANK__');
-        const realVals = vals.filter((v) => v !== '__BLANK__');
-        if (hasBlank && realVals.length > 0) {
-          qb.andWhere(
-            "(ii.description IN (:...vals_desc) OR ii.description IS NULL OR ii.description = '')",
-            { vals_desc: realVals },
-          );
-        } else if (hasBlank) {
-          qb.andWhere("(ii.description IS NULL OR ii.description = '')");
-        } else {
-          qb.andWhere('ii.description IN (:...vals_desc)', { vals_desc: vals });
-        }
-      } else if (col === 'unit') {
-        qb.andWhere('ii.unit IN (:...vals_unit)', { vals_unit: vals });
-      } else if (col === 'quantity') {
-        qb.andWhere('CAST(ii.quantity AS TEXT) IN (:...vals_qty)', {
-          vals_qty: vals,
-        });
-      } else if (col === 'unitPrice') {
-        qb.andWhere('CAST(ii.unit_price AS TEXT) IN (:...vals_up)', {
-          vals_up: vals,
-        });
-      } else if (col === 'preVatAmount') {
-        qb.andWhere('CAST(ii.pre_vat_amount AS TEXT) IN (:...vals_preVat)', {
-          vals_preVat: vals,
-        });
-      } else if (col === 'vatRate') {
-        const numericRates = vals
-          .map((v) => Number(v))
-          .filter((v) => !isNaN(v));
-        if (numericRates.length > 0) {
-          qb.andWhere('ii.vat_rate IN (:...vals_vatRate)', {
-            vals_vatRate: numericRates,
-          });
-        }
-      } else if (col === 'vatAmount') {
-        qb.andWhere('CAST(ii.vat_amount AS TEXT) IN (:...vals_vatAmt)', {
-          vals_vatAmt: vals,
-        });
-      } else if (col === 'discountAmount') {
-        qb.andWhere('CAST(ii.discount_amount AS TEXT) IN (:...vals_disc)', {
-          vals_disc: vals,
-        });
-      } else if (col === 'totalAmount') {
-        qb.andWhere('CAST(ii.total_amount AS TEXT) IN (:...vals_tot)', {
-          vals_tot: vals,
-        });
-      } else if (col === 'invoiceSubcategory') {
-        qb.andWhere('ii.invoice_subcategory IN (:...vals_subcat)', {
-          vals_subcat: vals,
-        });
-      } else if (col === 'status') {
-        qb.andWhere('inv.status IN (:...vals_status)', { vals_status: vals });
-      } else if (col === 'postingStatus') {
-        qb.andWhere('inv.posting_status IN (:...vals_postStatus)', {
-          vals_postStatus: vals,
-        });
-      } else if (col === 'taxInvoiceStatus') {
-        const numericVals = vals.map((v) => Number(v)).filter((v) => !isNaN(v));
-        const hasNull = vals.includes('__BLANK__') || vals.includes('null');
-        if (numericVals.length > 0 && hasNull) {
-          qb.andWhere(
-            '(inv.tax_invoice_status IN (:...vals_taxStatus) OR inv.tax_invoice_status IS NULL)',
-            { vals_taxStatus: numericVals },
-          );
-        } else if (numericVals.length > 0) {
-          qb.andWhere('inv.tax_invoice_status IN (:...vals_taxStatus)', {
-            vals_taxStatus: numericVals,
-          });
-        } else if (hasNull) {
-          qb.andWhere('inv.tax_invoice_status IS NULL');
-        }
-      } else if (col === 'branchId' || col === 'branchName') {
-        const hasBlank =
-          vals.includes('__BLANK__') ||
-          vals.includes('null') ||
-          vals.includes('');
-        const realVals = vals.filter(
-          (v) => v !== '__BLANK__' && v !== 'null' && v !== '',
-        );
-        if (hasBlank && realVals.length > 0) {
-          qb.andWhere(
-            '(inv.branch_id IN (:...vals_branch) OR inv.branch_id IS NULL)',
-            { vals_branch: realVals },
-          );
-        } else if (hasBlank) {
-          qb.andWhere('inv.branch_id IS NULL');
-        } else if (realVals.length > 0) {
-          qb.andWhere('inv.branch_id IN (:...vals_branch)', {
-            vals_branch: realVals,
-          });
-        }
-      } else if (col === 'licensePlate') {
-        qb.andWhere('inv.license_plate IN (:...vals_lp)', { vals_lp: vals });
-      } else if (col === 'settlementOrder') {
-        qb.andWhere('inv.settlement_order IN (:...vals_so)', { vals_so: vals });
-      }
-    }
+    this._applyItemColumnSearch(qb, columnSearch, query.direction);
+    this._applyItemColumnFilters(qb, columnFilters, query.direction);
 
     // Summary calculation and total count (calculated before applying orderBy to avoid Postgres aggregate error)
     const summaryQb = qb.clone();
@@ -2637,6 +2427,505 @@ export class InvoiceQueryService {
     };
   }
 
+  private _applyItemColumnSearch(
+    qb: any,
+    columnSearch: Record<string, string>,
+    direction?: string,
+  ) {
+    Object.keys(columnSearch).forEach((key) => {
+      const val = columnSearch[key];
+      if (!val) return;
+
+      if (key === 'invoiceNo') {
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['inv.invoice_no', 'inv.serial_no'],
+          val,
+          'itemInvoiceNoSearch',
+        );
+      } else if (key === 'serialNo') {
+        applyMultiKeywordFilter(qb, 'inv.serial_no', val, 'itemSerialNoSearch');
+      } else if (key === 'partner') {
+        if (direction === 'IN') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.seller_name', 'inv.seller_tax_code'],
+            val,
+            'itemPartnerSearch',
+          );
+        } else if (direction === 'OUT') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.buyer_name', 'inv.buyer_personal_name', 'inv.buyer_tax_code'],
+            val,
+            'itemPartnerSearch',
+          );
+        } else {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            [
+              'inv.seller_name',
+              'inv.seller_tax_code',
+              'inv.buyer_name',
+              'inv.buyer_personal_name',
+              'inv.buyer_tax_code',
+            ],
+            val,
+            'itemPartnerSearch',
+          );
+        }
+      } else if (key === 'taxCode') {
+        if (direction === 'IN') {
+          applyMultiKeywordFilter(
+            qb,
+            'inv.seller_tax_code',
+            val,
+            'itemTaxCodeSearch',
+          );
+        } else if (direction === 'OUT') {
+          applyMultiKeywordFilter(
+            qb,
+            'inv.buyer_tax_code',
+            val,
+            'itemTaxCodeSearch',
+          );
+        } else {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.seller_tax_code', 'inv.buyer_tax_code'],
+            val,
+            'itemTaxCodeSearch',
+          );
+        }
+      } else if (key === 'itemCode') {
+        applyMultiKeywordFilter(qb, 'ii.item_code', val, 'itemCodeSearch');
+      } else if (key === 'description') {
+        applyMultiKeywordFilter(qb, 'ii.description', val, 'itemDescSearch');
+      } else if (key === 'unit') {
+        applyMultiKeywordFilter(qb, 'ii.unit', val, 'itemUnitSearch');
+      } else if (key === 'quantity') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.quantity AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemQtySearch',
+        );
+      } else if (key === 'unitPrice') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.unit_price AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemUnitPriceSearch',
+        );
+      } else if (key === 'preVatAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.pre_vat_amount AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemPreVatSearch',
+        );
+      } else if (key === 'vatRate') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.vat_rate AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemVatRateSearch',
+        );
+      } else if (key === 'vatAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.vat_amount AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemVatAmountSearch',
+        );
+      } else if (key === 'discountAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.discount_amount AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemDiscountSearch',
+        );
+      } else if (key === 'totalAmount') {
+        applyMultiKeywordFilter(
+          qb,
+          "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '')",
+          val.replace(/[,.]/g, ''),
+          'itemTotalSearch',
+        );
+      } else if (key === 'invoiceSubcategory') {
+        applyMultiKeywordFilter(
+          qb,
+          'ii.invoice_subcategory',
+          val,
+          'itemSubcatSearch',
+        );
+      } else if (key === 'status') {
+        applyMultiKeywordFilter(qb, 'inv.status', val, 'itemStatusSearch');
+      } else if (key === 'postingStatus') {
+        applyMultiKeywordFilter(
+          qb,
+          'inv.posting_status',
+          val,
+          'itemPostingStatusSearch',
+        );
+      } else if (key === 'taxInvoiceStatus') {
+        applyMultiKeywordFilter(
+          qb,
+          'CAST(inv.tax_invoice_status AS TEXT)',
+          val,
+          'itemTaxInvoiceStatusSearch',
+        );
+      } else if (key === 'branchId' || key === 'branchName') {
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['inv.branch_id', 'b.name', 'b.code'],
+          val,
+          'itemBranchSearch',
+        );
+      } else if (key === 'licensePlate') {
+        applyMultiKeywordFilter(
+          qb,
+          'inv.license_plate',
+          val,
+          'itemPlateSearch',
+        );
+      } else if (key === 'settlementOrder') {
+        applyMultiKeywordFilter(
+          qb,
+          'inv.settlement_order',
+          val,
+          'itemSettlementSearch',
+        );
+      } else if (key === 'invoiceDate') {
+        const rawKw = String(val);
+        if (rawKw.includes('|')) {
+          const [from, to] = rawKw.split('|');
+          if (from && to) {
+            qb.andWhere(
+              `inv.invoice_date >= :item_from_invDate AND inv.invoice_date <= :item_to_invDate`,
+              {
+                item_from_invDate: from,
+                item_to_invDate: to + ' 23:59:59',
+              },
+            );
+          } else if (from) {
+            qb.andWhere(`inv.invoice_date >= :item_from_invDate`, {
+              item_from_invDate: from,
+            });
+          } else if (to) {
+            qb.andWhere(`inv.invoice_date <= :item_to_invDate`, {
+              item_to_invDate: to + ' 23:59:59',
+            });
+          }
+        } else {
+          applyMultiKeywordFilter(
+            qb,
+            "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')",
+            val,
+            'itemInvoiceDateSearch',
+          );
+        }
+      }
+    });
+  }
+
+  private _applyItemColumnFilters(
+    qb: any,
+    columnFilters: Record<string, string[]>,
+    direction?: string,
+  ) {
+    Object.keys(columnFilters).forEach((key) => {
+      const vals = columnFilters[key];
+      if (!vals || vals.length === 0) return;
+
+      if (vals[0] === '__ALL_MATCHING__') {
+        const searchStr = vals[1] || '';
+        if (searchStr) {
+          this._applyItemColumnSearch(qb, { [key]: searchStr }, direction);
+        }
+        return;
+      }
+
+      if (key === 'invoiceNo') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const conds: string[] = [];
+        const params: Record<string, any> = {};
+        const simpleVals: string[] = [];
+
+        realVals.forEach((v, idx) => {
+          if (v.includes(':::')) {
+            const [invNo, serNo] = v.split(':::');
+            conds.push(
+              `(TRIM(inv.invoice_no) = :item_invNo_${idx} AND TRIM(inv.serial_no) = :item_serNo_${idx})`,
+            );
+            params[`item_invNo_${idx}`] = invNo.trim();
+            params[`item_serNo_${idx}`] = serNo.trim();
+          } else {
+            simpleVals.push(v.trim());
+          }
+        });
+
+        if (simpleVals.length > 0) {
+          conds.push(
+            '(TRIM(inv.invoice_no) IN (:...itemSimpleInvoiceNos) OR TRIM(inv.serial_no) IN (:...itemSimpleInvoiceNos))',
+          );
+          params['itemSimpleInvoiceNos'] = simpleVals;
+        }
+
+        if (hasBlank) {
+          conds.push(
+            "(inv.invoice_no IS NULL OR CAST(inv.invoice_no AS TEXT) = '')",
+          );
+        }
+
+        if (conds.length > 0) {
+          qb.andWhere(`(${conds.join(' OR ')})`, params);
+        }
+      } else if (key === 'serialNo') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(inv.serial_no IN (:...item_serVals) OR inv.serial_no IS NULL OR inv.serial_no = '')",
+            { item_serVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(inv.serial_no IS NULL OR inv.serial_no = '')");
+        } else {
+          qb.andWhere('inv.serial_no IN (:...item_serVals)', {
+            item_serVals: vals,
+          });
+        }
+      } else if (key === 'partner') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const nameField =
+          direction === 'IN'
+            ? 'inv.seller_name'
+            : direction === 'OUT'
+              ? "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)"
+              : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+        const taxField =
+          direction === 'IN'
+            ? 'inv.seller_tax_code'
+            : direction === 'OUT'
+              ? 'inv.buyer_tax_code'
+              : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+
+        const conds: string[] = [];
+        const params: Record<string, any> = {};
+        const simpleVals: string[] = [];
+
+        realVals.forEach((v, idx) => {
+          if (v.includes(':::')) {
+            const [tax, name] = v.split(':::');
+            if (tax && name) {
+              conds.push(
+                `(TRIM(${taxField}) = :itemPartnerTax_${idx} OR TRIM(${nameField}) ILIKE :itemPartnerName_${idx})`,
+              );
+              params[`itemPartnerTax_${idx}`] = tax.trim();
+              params[`itemPartnerName_${idx}`] = `%${name.trim()}%`;
+            } else if (tax) {
+              conds.push(`TRIM(${taxField}) = :itemPartnerTax_${idx}`);
+              params[`itemPartnerTax_${idx}`] = tax.trim();
+            } else if (name) {
+              conds.push(`TRIM(${nameField}) ILIKE :itemPartnerName_${idx}`);
+              params[`itemPartnerName_${idx}`] = `%${name.trim()}%`;
+            }
+          } else {
+            simpleVals.push(v.trim());
+          }
+        });
+
+        if (simpleVals.length > 0) {
+          conds.push(
+            `(TRIM(${nameField}) IN (:...itemSimplePartners) OR TRIM(${taxField}) IN (:...itemSimplePartners))`,
+          );
+          params['itemSimplePartners'] = simpleVals;
+        }
+
+        if (hasBlank) {
+          conds.push(
+            `(${nameField} IS NULL OR CAST(${nameField} AS TEXT) = '')`,
+          );
+        }
+
+        if (conds.length > 0) {
+          qb.andWhere(`(${conds.join(' OR ')})`, params);
+        }
+      } else if (key === 'taxCode') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        const field =
+          direction === 'IN'
+            ? 'inv.seller_tax_code'
+            : direction === 'OUT'
+              ? 'inv.buyer_tax_code'
+              : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            `(${field} IN (:...itemTaxCodeVals) OR ${field} IS NULL OR CAST(${field} AS TEXT) = '')`,
+            { itemTaxCodeVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere(`(${field} IS NULL OR CAST(${field} AS TEXT) = '')`);
+        } else {
+          qb.andWhere(`${field} IN (:...itemTaxCodeVals)`, {
+            itemTaxCodeVals: vals,
+          });
+        }
+      } else if (key === 'itemCode') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(ii.item_code IN (:...itemCodeVals) OR ii.item_code IS NULL OR ii.item_code = '')",
+            { itemCodeVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(ii.item_code IS NULL OR ii.item_code = '')");
+        } else {
+          qb.andWhere('ii.item_code IN (:...itemCodeVals)', {
+            itemCodeVals: vals,
+          });
+        }
+      } else if (key === 'description') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(ii.description IN (:...itemDescVals) OR ii.description IS NULL OR ii.description = '')",
+            { itemDescVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(ii.description IS NULL OR ii.description = '')");
+        } else {
+          qb.andWhere('ii.description IN (:...itemDescVals)', {
+            itemDescVals: vals,
+          });
+        }
+      } else if (key === 'unit') {
+        const hasBlank = vals.includes('__BLANK__');
+        const realVals = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            "(ii.unit IN (:...itemUnitVals) OR ii.unit IS NULL OR ii.unit = '')",
+            { itemUnitVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere("(ii.unit IS NULL OR ii.unit = '')");
+        } else {
+          qb.andWhere('ii.unit IN (:...itemUnitVals)', {
+            itemUnitVals: vals,
+          });
+        }
+      } else if (key === 'quantity') {
+        qb.andWhere('CAST(ii.quantity AS TEXT) IN (:...itemQtyVals)', {
+          itemQtyVals: vals,
+        });
+      } else if (key === 'unitPrice') {
+        qb.andWhere('CAST(ii.unit_price AS TEXT) IN (:...itemUnitPriceVals)', {
+          itemUnitPriceVals: vals,
+        });
+      } else if (key === 'preVatAmount') {
+        qb.andWhere('CAST(ii.pre_vat_amount AS TEXT) IN (:...itemPreVatVals)', {
+          itemPreVatVals: vals,
+        });
+      } else if (key === 'vatRate') {
+        const numericRates = vals
+          .map((v) => Number(v))
+          .filter((v) => !isNaN(v));
+        const hasNull = vals.includes('__BLANK__') || vals.includes('null');
+        if (numericRates.length > 0 && hasNull) {
+          qb.andWhere(
+            '(ii.vat_rate IN (:...itemVatRates) OR ii.vat_rate IS NULL)',
+            { itemVatRates: numericRates },
+          );
+        } else if (numericRates.length > 0) {
+          qb.andWhere('ii.vat_rate IN (:...itemVatRates)', {
+            itemVatRates: numericRates,
+          });
+        } else if (hasNull) {
+          qb.andWhere('ii.vat_rate IS NULL');
+        }
+      } else if (key === 'vatAmount') {
+        qb.andWhere('CAST(ii.vat_amount AS TEXT) IN (:...itemVatAmountVals)', {
+          itemVatAmountVals: vals,
+        });
+      } else if (key === 'discountAmount') {
+        qb.andWhere('CAST(ii.discount_amount AS TEXT) IN (:...itemDiscVals)', {
+          itemDiscVals: vals,
+        });
+      } else if (key === 'totalAmount') {
+        qb.andWhere('CAST(ii.total_amount AS TEXT) IN (:...itemTotalVals)', {
+          itemTotalVals: vals,
+        });
+      } else if (key === 'invoiceSubcategory') {
+        qb.andWhere('ii.invoice_subcategory IN (:...itemSubcatVals)', {
+          itemSubcatVals: vals,
+        });
+      } else if (key === 'status') {
+        qb.andWhere('inv.status IN (:...itemStatusVals)', {
+          itemStatusVals: vals,
+        });
+      } else if (key === 'postingStatus') {
+        qb.andWhere('inv.posting_status IN (:...itemPostStatusVals)', {
+          itemPostStatusVals: vals,
+        });
+      } else if (key === 'taxInvoiceStatus') {
+        const numericVals = vals.map((v) => Number(v)).filter((v) => !isNaN(v));
+        const hasNull = vals.includes('__BLANK__') || vals.includes('null');
+        if (numericVals.length > 0 && hasNull) {
+          qb.andWhere(
+            '(inv.tax_invoice_status IN (:...itemTaxStatusVals) OR inv.tax_invoice_status IS NULL)',
+            { itemTaxStatusVals: numericVals },
+          );
+        } else if (numericVals.length > 0) {
+          qb.andWhere('inv.tax_invoice_status IN (:...itemTaxStatusVals)', {
+            itemTaxStatusVals: numericVals,
+          });
+        } else if (hasNull) {
+          qb.andWhere('inv.tax_invoice_status IS NULL');
+        }
+      } else if (key === 'branchId' || key === 'branchName') {
+        const hasBlank =
+          vals.includes('__BLANK__') ||
+          vals.includes('null') ||
+          vals.includes('');
+        const realVals = vals.filter(
+          (v) => v !== '__BLANK__' && v !== 'null' && v !== '',
+        );
+        if (hasBlank && realVals.length > 0) {
+          qb.andWhere(
+            '(inv.branch_id IN (:...itemBranchVals) OR inv.branch_id IS NULL)',
+            { itemBranchVals: realVals },
+          );
+        } else if (hasBlank) {
+          qb.andWhere('inv.branch_id IS NULL');
+        } else if (realVals.length > 0) {
+          qb.andWhere('inv.branch_id IN (:...itemBranchVals)', {
+            itemBranchVals: realVals,
+          });
+        }
+      } else if (key === 'licensePlate') {
+        qb.andWhere('inv.license_plate IN (:...itemLpVals)', {
+          itemLpVals: vals,
+        });
+      } else if (key === 'settlementOrder') {
+        qb.andWhere('inv.settlement_order IN (:...itemSoVals)', {
+          itemSoVals: vals,
+        });
+      } else if (key === 'invoiceDate') {
+        qb.andWhere(
+          `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') IN (:...itemInvDateVals)`,
+          { itemInvDateVals: vals },
+        );
+      }
+    });
+  }
+
   async getItemColumnOptions(
     column: string,
     search: string,
@@ -2667,32 +2956,32 @@ export class InvoiceQueryService {
       selectField = "TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')";
       isDateColumn = true;
     } else if (column === 'serialNo') {
-      selectField = 'inv.serial_no';
+      selectField = 'TRIM(inv.serial_no)';
     } else if (column === 'invoiceNo') {
-      selectField = 'inv.invoice_no';
-      customSecondaryField = 'inv.serial_no';
+      selectField = 'TRIM(inv.invoice_no)';
+      customSecondaryField = 'TRIM(inv.serial_no)';
       isCustomGroupColumn = true;
     } else if (column === 'partner') {
       isCustomGroupColumn = true;
       if (direction === 'IN') {
-        selectField = 'inv.seller_name';
-        customSecondaryField = 'inv.seller_tax_code';
+        selectField = "TRIM(COALESCE(inv.seller_name, ''))";
+        customSecondaryField = "TRIM(COALESCE(inv.seller_tax_code, ''))";
       } else if (direction === 'OUT') {
         selectField =
-          "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)";
-        customSecondaryField = 'inv.buyer_tax_code';
+          "TRIM(COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name, ''))";
+        customSecondaryField = "TRIM(COALESCE(inv.buyer_tax_code, ''))";
       } else {
         selectField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_name, '') ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name, '') END)";
         customSecondaryField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_tax_code, '') ELSE COALESCE(inv.buyer_tax_code, '') END)";
       }
     } else if (column === 'taxCode') {
-      if (direction === 'IN') selectField = 'inv.seller_tax_code';
-      else if (direction === 'OUT') selectField = 'inv.buyer_tax_code';
+      if (direction === 'IN') selectField = 'TRIM(inv.seller_tax_code)';
+      else if (direction === 'OUT') selectField = 'TRIM(inv.buyer_tax_code)';
       else
         selectField =
-          "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
+          "TRIM(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
     } else if (column === 'itemCode') selectField = 'ii.item_code';
     else if (column === 'description') selectField = 'ii.description';
     else if (column === 'unit') selectField = 'ii.unit';
@@ -2738,75 +3027,14 @@ export class InvoiceQueryService {
     if (filtersStr) {
       try {
         const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        const activeFilters: Record<string, string[]> = {};
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0) continue;
           if (col === column) continue;
-
-          if (col === 'invoiceNo') {
-            qb.andWhere(
-              '(inv.invoice_no IN (:...f_invNo) OR inv.serial_no IN (:...f_invNo))',
-              { f_invNo: vals },
-            );
-            continue;
-          }
-          if (col === 'partner') {
-            const partnerNameField =
-              direction === 'IN'
-                ? 'inv.seller_name'
-                : direction === 'OUT'
-                  ? "COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name)"
-                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_name ELSE COALESCE(NULLIF(inv.buyer_name, ''), inv.buyer_personal_name) END)";
-            const partnerTaxField =
-              direction === 'IN'
-                ? 'inv.seller_tax_code'
-                : direction === 'OUT'
-                  ? 'inv.buyer_tax_code'
-                  : "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code ELSE inv.buyer_tax_code END)";
-
-            qb.andWhere(
-              `(${partnerNameField} IN (:...f_partner) OR ${partnerTaxField} IN (:...f_partner))`,
-              { f_partner: vals },
-            );
-            continue;
-          }
-
-          let filterField = '';
-          if (col === 'invoiceDate')
-            filterField = `TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`;
-          else if (col === 'serialNo') filterField = 'inv.serial_no';
-          else if (col === 'taxCode') {
-            if (direction === 'IN') filterField = 'inv.seller_tax_code';
-            else if (direction === 'OUT') filterField = 'inv.buyer_tax_code';
-            else
-              filterField =
-                "(CASE WHEN inv.direction = 'IN' THEN inv.seller_tax_code WHEN inv.direction = 'OUT' THEN inv.buyer_tax_code END)";
-          } else if (col === 'itemCode') filterField = 'ii.item_code';
-          else if (col === 'description') filterField = 'ii.description';
-          else if (col === 'unit') filterField = 'ii.unit';
-          else if (col === 'quantity') filterField = 'ii.quantity';
-          else if (col === 'unitPrice') filterField = 'ii.unit_price';
-          else if (col === 'preVatAmount') filterField = 'ii.pre_vat_amount';
-          else if (col === 'vatRate') filterField = 'ii.vat_rate';
-          else if (col === 'vatAmount') filterField = 'ii.vat_amount';
-          else if (col === 'discountAmount') filterField = 'ii.discount_amount';
-          else if (col === 'totalAmount') filterField = 'ii.total_amount';
-          else if (col === 'invoiceSubcategory')
-            filterField = 'ii.invoice_subcategory';
-          else if (col === 'status') filterField = 'inv.status';
-          else if (col === 'postingStatus') filterField = 'inv.posting_status';
-          else if (col === 'taxInvoiceStatus')
-            filterField = 'inv.tax_invoice_status';
-          else if (col === 'branchId' || col === 'branchName')
-            filterField = 'inv.branch_id';
-          else if (col === 'licensePlate') filterField = 'inv.license_plate';
-          else if (col === 'settlementOrder')
-            filterField = 'inv.settlement_order';
-
-          if (filterField) {
-            qb.andWhere(`CAST(${filterField} AS TEXT) IN (:...f_${col})`, {
-              [`f_${col}`]: vals,
-            });
-          }
+          activeFilters[col] = vals;
+        }
+        if (Object.keys(activeFilters).length > 0) {
+          this._applyItemColumnFilters(qb, activeFilters, direction);
         }
       } catch {
         // ignore malformed filters
@@ -2814,29 +3042,66 @@ export class InvoiceQueryService {
     }
 
     if (search && search.trim()) {
-      const s = `%${search.trim()}%`;
-      const sClean = `%${search.replace(/[,.]/g, '').trim()}%`;
-      if (isCustomGroupColumn) {
-        qb.andWhere(
-          `(${selectField} ILIKE :s OR ${customSecondaryField} ILIKE :s)`,
-          { s },
+      if (column === 'invoiceNo') {
+        applyMultiKeywordMultiFieldFilter(
+          qb,
+          ['inv.invoice_no', 'inv.serial_no'],
+          search,
+          'itemOptInvNoSearch',
         );
-      } else if (
-        [
-          'quantity',
-          'unitPrice',
-          'preVatAmount',
-          'vatAmount',
-          'discountAmount',
-          'totalAmount',
-        ].includes(column)
-      ) {
-        qb.andWhere(
-          `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '') ILIKE :sClean`,
-          { sClean },
-        );
+      } else if (column === 'partner') {
+        if (direction === 'IN') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.seller_name', 'inv.seller_tax_code'],
+            search,
+            'itemOptPartnerSearch',
+          );
+        } else if (direction === 'OUT') {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            ['inv.buyer_name', 'inv.buyer_personal_name', 'inv.buyer_tax_code'],
+            search,
+            'itemOptPartnerSearch',
+          );
+        } else {
+          applyMultiKeywordMultiFieldFilter(
+            qb,
+            [
+              'inv.seller_name',
+              'inv.seller_tax_code',
+              'inv.buyer_name',
+              'inv.buyer_personal_name',
+              'inv.buyer_tax_code',
+            ],
+            search,
+            'itemOptPartnerSearch',
+          );
+        }
       } else {
-        qb.andWhere(`CAST(${selectField} AS TEXT) ILIKE :s`, { s });
+        let searchField = `CAST(${selectField} AS TEXT)`;
+        let searchKeyword = search;
+
+        if (
+          [
+            'quantity',
+            'unitPrice',
+            'preVatAmount',
+            'vatAmount',
+            'discountAmount',
+            'totalAmount',
+          ].includes(column)
+        ) {
+          searchField = `REPLACE(REPLACE(CAST(${selectField} AS TEXT), '.', ''), ',', '')`;
+          searchKeyword = search.replace(/[,.]/g, '');
+        }
+
+        applyMultiKeywordFilter(
+          qb,
+          searchField,
+          searchKeyword,
+          'itemOptSearch',
+        );
       }
     }
 
@@ -2847,13 +3112,31 @@ export class InvoiceQueryService {
     }
 
     const countQb = qb.clone();
+    if (countQb.expressionMap) {
+      countQb.expressionMap.groupBys = [];
+      countQb.expressionMap.selects = [];
+      countQb.expressionMap.orderBys = {};
+    }
+    countQb.offset?.(undefined);
+    countQb.limit?.(undefined);
+    countQb.skip?.(undefined);
+    countQb.take?.(undefined);
+
     let total = 0;
     try {
       if (isCustomGroupColumn) {
-        const countRes = await countQb.getRawMany();
-        total = countRes.length;
+        const totalRaw = await countQb
+          .select(
+            `COUNT(DISTINCT CONCAT(COALESCE(${selectField}, ''), ':', COALESCE(${customSecondaryField}, '')))`,
+            'cnt',
+          )
+          .getRawOne();
+        total = parseInt(totalRaw?.cnt || '0', 10);
       } else {
-        total = await countQb.getCount();
+        const totalRaw = await countQb
+          .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+          .getRawOne();
+        total = parseInt(totalRaw?.cnt || '0', 10);
       }
     } catch {
       total = 0;
@@ -2862,24 +3145,56 @@ export class InvoiceQueryService {
     qb.offset((page - 1) * pageSize).limit(pageSize);
     const rawItems = await qb.getRawMany();
 
-    const items = rawItems
-      .map((r) => {
-        let val =
-          r.value !== undefined && r.value !== null ? String(r.value) : '';
-        let sec =
-          r.secondary_val !== undefined && r.secondary_val !== null
-            ? String(r.secondary_val)
-            : undefined;
-        if (column === 'vatRate' && val) {
-          val = String(parseVatRateForDisplay(val));
-        }
-        return {
-          value: val,
-          label: sec ? `${val} (${sec})` : val,
-          secondaryLabel: sec,
-        };
-      })
-      .filter((i) => Boolean(i.value));
+    let items: any[] = [];
+    if (column === 'invoiceNo') {
+      const seen = new Set<string>();
+      items = rawItems
+        .map((r) => {
+          const val = r.value ? String(r.value).trim() : '';
+          const sec = r.secondary_val ? String(r.secondary_val).trim() : '';
+          const label = sec ? `${val} (${sec})` : val;
+          const value = sec ? `${val}:::${sec}` : val;
+          return { value, label: label || val, secondaryLabel: sec };
+        })
+        .filter((x) => {
+          if (!x.value || seen.has(x.value)) return false;
+          seen.add(x.value);
+          return true;
+        });
+    } else if (column === 'partner') {
+      const seen = new Set<string>();
+      items = rawItems
+        .map((r) => {
+          const name = r.value ? String(r.value).trim() : '';
+          const tax = r.secondary_val ? String(r.secondary_val).trim() : '';
+          const label = name && tax ? `${name} (${tax})` : name || tax || '—';
+          const value = tax && name ? `${tax}:::${name}` : tax || name;
+          return { value, label, secondaryLabel: tax };
+        })
+        .filter((x) => {
+          if (!x.value || seen.has(x.value)) return false;
+          seen.add(x.value);
+          return true;
+        });
+    } else {
+      const seen = new Set<string>();
+      items = rawItems
+        .map((r) => {
+          let val =
+            r.value !== undefined && r.value !== null
+              ? String(r.value).trim()
+              : '';
+          if (column === 'vatRate' && val) {
+            val = String(parseVatRateForDisplay(val));
+          }
+          return { value: val, label: val };
+        })
+        .filter((x) => {
+          if (!x.value || seen.has(x.value)) return false;
+          seen.add(x.value);
+          return true;
+        });
+    }
 
     return {
       items,
