@@ -33,6 +33,11 @@ import {
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
 import { parseVietnamInvoiceXml } from '../xml-parser/vietnam-invoice-xml.parser';
 import { solveGdtSvgCaptcha } from '../helpers/gdt-captcha-solver.helper';
+import {
+  GdtCookieJar,
+  fetchGdtCaptchaWithSession,
+  authenticateGdtWithSession,
+} from '../helpers/gdt-session.helper';
 import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
 
 export type PortalProgressEvent = {
@@ -67,9 +72,10 @@ export class InvoicePortalService implements OnModuleInit {
   ) {}
 
   // ---------------------------------------------------------------------------
-  // Config & Branch Pre-scan Cache
+  // Config, Session & Branch Pre-scan Cache
   // ---------------------------------------------------------------------------
 
+  private readonly _sessionCookieJar = new GdtCookieJar();
   private readonly _branchIdCache = new Map<string, string>();
   private _isBranchCacheLoaded = false;
 
@@ -320,38 +326,11 @@ export class InvoicePortalService implements OnModuleInit {
 
   async getCaptcha(): Promise<{ content: string; key: string; text: string }> {
     try {
-      const url = `${InvoicePortalService.GDT_API_BASE_URL}/captcha`;
-      const res = await fetch(url, {
-        headers: {
-          Accept: 'application/json, text/plain, */*',
-          Referer: 'https://hoadondientu.gdt.gov.vn/',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
-          'sec-ch-ua':
-            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"Windows"',
-        },
-      });
-
-      if (!res.ok) {
-        throw new BadRequestException(
-          `Không thể tải mã Captcha từ Cổng thuế (HTTP ${res.status})`,
-        );
-      }
-
-      const data = (await res.json()) as { content?: string; key?: string };
-      if (!data || !data.key) {
-        throw new BadRequestException('Phản hồi Captcha không hợp lệ');
-      }
-
-      const content = data.content || '';
-      const text = solveGdtSvgCaptcha(content);
-
+      const res = await fetchGdtCaptchaWithSession(this._sessionCookieJar);
       return {
-        content,
-        key: data.key,
-        text,
+        content: res.content,
+        key: res.key,
+        text: res.text,
       };
     } catch (err: any) {
       this.logger.error('Lỗi khi lấy captcha từ GDT', err);
@@ -376,87 +355,40 @@ export class InvoicePortalService implements OnModuleInit {
     }
 
     try {
-      const url = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/authenticate`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/plain, */*',
-          Referer: 'https://hoadondientu.gdt.gov.vn/',
-          'End-Point': '/',
-          Action: '',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
-          'sec-ch-ua':
-            '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"Windows"',
-        },
-        body: JSON.stringify({
-          username,
-          password: password || '',
-          cvalue,
-          ckey,
-        }),
+      const authResult = await authenticateGdtWithSession({
+        username,
+        password,
+        cvalue,
+        ckey,
+        jar: this._sessionCookieJar,
       });
 
-      if (!res.ok) {
-        let errMessage = 'Đăng nhập thất bại';
-        try {
-          const errData = await res.json();
-          errMessage =
-            errData?.message ||
-            errData?.error ||
-            errData?.description ||
-            `Đăng nhập thất bại (HTTP ${res.status})`;
-        } catch {
-          errMessage = `Đăng nhập thất bại (HTTP ${res.status})`;
-        }
-        if (res.status === 401 || res.status === 403) {
-          throw new UnauthorizedException(
-            `Đăng nhập Cổng Thuế thất bại (HTTP ${res.status}): ${errMessage}. Sai tài khoản/mật khẩu hoặc tài khoản bị khóa.`,
-          );
-        }
-        throw new BadRequestException(errMessage);
-      }
-
-      // Extract token from response
-      const data = (await res.json()) as any;
-      const token =
-        data?.token ||
-        data?.appToken ||
-        data?.accessToken ||
-        data?.jwt ||
-        data?.data?.token ||
-        (typeof data === 'string' ? data : '');
-
-      if (!token) {
-        throw new BadRequestException(
-          'Không tìm thấy token trong phản hồi từ Cổng thuế',
-        );
-      }
-
-      // Extract cookies from response headers if present
-      let cookies: string | undefined = undefined;
-      const rawCookies = res.headers.get('set-cookie');
-      if (rawCookies) {
-        cookies = rawCookies
-          .split(',')
-          .map((c) => c.split(';')[0].trim())
-          .join('; ');
-      }
-
       // Save token and credentials
-      await this.savePortalConfig(token, cookies, username, password);
+      await this.savePortalConfig(
+        authResult.token,
+        authResult.cookies,
+        username,
+        password,
+      );
 
       return {
         success: true,
-        token,
+        token: authResult.token,
         message: 'Đăng nhập Cổng Thuế thành công!',
       };
     } catch (err: any) {
       this.logger.error('Lỗi khi đăng nhập GDT portal', err);
-      if (err instanceof BadRequestException) throw err;
+      if (err?.status === 401 || err?.status === 403) {
+        throw new UnauthorizedException(
+          `Đăng nhập Cổng Thuế thất bại (HTTP ${err.status}): ${err.message}. Sai tài khoản/mật khẩu hoặc tài khoản bị khóa.`,
+        );
+      }
+      if (
+        err instanceof BadRequestException ||
+        err instanceof UnauthorizedException
+      ) {
+        throw err;
+      }
       throw new BadRequestException(
         err.message || 'Không thể kết nối đến máy chủ Cổng thuế',
       );
