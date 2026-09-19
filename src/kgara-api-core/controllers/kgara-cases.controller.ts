@@ -184,13 +184,33 @@ export class KgaraCasesController {
         else if (col === 'khachHangCode' || col === 'customerCode')
           targetCol = 'case.khachHangCode';
         else if (col === 'doanhThu') targetCol = 'case.doanhThu';
-        else if (col === 'chiPhi') targetCol = 'case.chiPhi';
+        else if (
+          col === 'chiPhi' ||
+          col === 'costProgress' ||
+          col === 'tongPhaiTra' ||
+          col === 'totalPayable' ||
+          col === 'tienConPhaiChi' ||
+          col === 'conPhaiTra' ||
+          col === 'remainingPayable'
+        )
+          targetCol = 'case.chiPhi';
         else if (col === 'loiNhuan') targetCol = 'case.loiNhuan';
-        else if (col === 'tienCoThue' || col === 'totalAmount')
+        else if (
+          col === 'tienCoThue' ||
+          col === 'totalAmount' ||
+          col === 'collectionProgress' ||
+          col === 'tongPhaiThu' ||
+          col === 'totalReceivable'
+        )
           targetCol = 'case.tienCoThue';
         else if (col === 'tienDaThanhToan' || col === 'paidAmount')
           targetCol = 'case.tienDaThanhToan';
-        else if (col === 'tienConPhaiThanhToan' || col === 'balanceAmount')
+        else if (
+          col === 'tienConPhaiThanhToan' ||
+          col === 'balanceAmount' ||
+          col === 'conPhaiThu' ||
+          col === 'remainingReceivable'
+        )
           targetCol = 'case.tienConPhaiThanhToan';
         else if (col === 'updatedAt') targetCol = 'case.updatedAt';
         else if (col === 'createdAt') targetCol = 'case.createdAt';
@@ -314,12 +334,185 @@ export class KgaraCasesController {
       };
     });
 
+    const currentPage = parseInt(page, 10) || 1;
+    const totalPages = Math.ceil(total / take) || 1;
+
+    // Calculate Grand Totals and Cumulative Totals
+    let grandTotalRevenue = 0;
+    let grandTotalCost = 0;
+    let grandTotalProfit = 0;
+    let grandTotalReceivable = 0;
+    let grandTotalPaid = 0;
+    let grandTotalBalance = 0;
+    let grandTotalPaidCost = 0;
+    let grandTotalRemainingPayable = 0;
+
+    let cumulativeRevenue = 0;
+    let cumulativeCost = 0;
+    let cumulativeProfit = 0;
+    let cumulativeReceivable = 0;
+    let cumulativePaid = 0;
+    let cumulativeBalance = 0;
+    let cumulativePaidCost = 0;
+    let cumulativeRemainingPayable = 0;
+
+    try {
+      const totalsQb = query.clone();
+      if (totalsQb.expressionMap) {
+        totalsQb.expressionMap.orderBys = {};
+        totalsQb.expressionMap.selects = [];
+      }
+      totalsQb.offset?.(undefined);
+      totalsQb.limit?.(undefined);
+      totalsQb.skip?.(undefined);
+      totalsQb.take?.(undefined);
+
+      totalsQb
+        .select(
+          'COALESCE(SUM(COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0)), 0)',
+          'totalRevenue',
+        )
+        .addSelect(
+          'COALESCE(SUM(COALESCE("case"."chi_phi", "gp"."chi_phi", 0)), 0)',
+          'totalCost',
+        )
+        .addSelect(
+          'COALESCE(SUM(COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))), 0)',
+          'totalProfit',
+        )
+        .addSelect(
+          'COALESCE(SUM(COALESCE("case"."tien_co_thue", 0)), 0)',
+          'totalReceivable',
+        )
+        .addSelect(
+          'COALESCE(SUM(COALESCE("case"."tien_da_thanh_toan", 0)), 0)',
+          'totalPaid',
+        )
+        .addSelect(
+          'COALESCE(SUM(COALESCE("case"."tien_con_phai_thanh_toan", 0)), 0)',
+          'totalBalance',
+        );
+
+      const totalsRaw = await totalsQb.getRawOne();
+      grandTotalRevenue = parseFloat(totalsRaw?.totalRevenue || '0') || 0;
+      grandTotalCost = parseFloat(totalsRaw?.totalCost || '0') || 0;
+      grandTotalProfit = parseFloat(totalsRaw?.totalProfit || '0') || 0;
+      grandTotalReceivable = parseFloat(totalsRaw?.totalReceivable || '0') || 0;
+      grandTotalPaid = parseFloat(totalsRaw?.totalPaid || '0') || 0;
+      grandTotalBalance = parseFloat(totalsRaw?.totalBalance || '0') || 0;
+      grandTotalRemainingPayable = Math.max(
+        0,
+        grandTotalCost - grandTotalPaidCost,
+      );
+
+      if (currentPage === 1) {
+        cumulativeRevenue = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.doanhThu) || 0),
+          0,
+        );
+        cumulativeCost = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.chiPhi) || 0),
+          0,
+        );
+        cumulativeProfit = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.loiNhuan) || 0),
+          0,
+        );
+        cumulativeReceivable = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.tienCoThue) || 0),
+          0,
+        );
+        cumulativePaid = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.tienDaThanhToan) || 0),
+          0,
+        );
+        cumulativeBalance = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.tienConPhaiThanhToan) || 0),
+          0,
+        );
+        cumulativePaidCost = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.tienDaChi) || 0),
+          0,
+        );
+        cumulativeRemainingPayable = Math.max(
+          0,
+          cumulativeCost - cumulativePaidCost,
+        );
+      } else if (currentPage >= totalPages && totalPages > 0) {
+        cumulativeRevenue = grandTotalRevenue;
+        cumulativeCost = grandTotalCost;
+        cumulativeProfit = grandTotalProfit;
+        cumulativeReceivable = grandTotalReceivable;
+        cumulativePaid = grandTotalPaid;
+        cumulativeBalance = grandTotalBalance;
+        cumulativePaidCost = grandTotalPaidCost;
+        cumulativeRemainingPayable = grandTotalRemainingPayable;
+      } else {
+        const cumQb = query.clone();
+        if (cumQb.expressionMap) {
+          cumQb.expressionMap.selects = [];
+        }
+        cumQb
+          .select(
+            'COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0)',
+            'rev',
+          )
+          .addSelect('COALESCE("case"."chi_phi", "gp"."chi_phi", 0)', 'cost')
+          .addSelect(
+            'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))',
+            'profit',
+          )
+          .addSelect('COALESCE("case"."tien_co_thue", 0)', 'receivable')
+          .addSelect('COALESCE("case"."tien_da_thanh_toan", 0)', 'paid')
+          .addSelect(
+            'COALESCE("case"."tien_con_phai_thanh_toan", 0)',
+            'balance',
+          )
+          .offset(0)
+          .limit(currentPage * take);
+        cumQb.skip?.(undefined);
+        cumQb.take?.(undefined);
+
+        const cumRows = await cumQb.getRawMany();
+        for (const r of cumRows) {
+          cumulativeRevenue += Number(r.rev || 0);
+          cumulativeCost += Number(r.cost || 0);
+          cumulativeProfit += Number(r.profit || 0);
+          cumulativeReceivable += Number(r.receivable || 0);
+          cumulativePaid += Number(r.paid || 0);
+          cumulativeBalance += Number(r.balance || 0);
+        }
+        cumulativeRemainingPayable = Math.max(
+          0,
+          cumulativeCost - cumulativePaidCost,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Failed to calculate case query totals', err);
+    }
+
     return {
       data: enrichedData,
       pagination: {
-        page: parseInt(page, 10) || 1,
+        page: currentPage,
         pageSize: take,
         total,
+      },
+      totals: {
+        grandTotalRevenue,
+        grandTotalCost,
+        grandTotalProfit,
+        grandTotalReceivable,
+        grandTotalPaid,
+        grandTotalBalance,
+        grandTotalRemainingPayable,
+        cumulativeRevenue,
+        cumulativeCost,
+        cumulativeProfit,
+        cumulativeReceivable,
+        cumulativePaid,
+        cumulativeBalance,
+        cumulativeRemainingPayable,
       },
     };
   }
