@@ -340,11 +340,11 @@ src/erp-invoices-core/
 
 ### 5.7. Bộ lọc & Tìm kiếm Đa trường Hóa đơn (Multi-field Column Search & Dynamic Options)
 - **`InvoiceQueryService.getColumnOptions`**:
-  - Đối với cột `invoiceNo`: Truy vấn distinct các cặp `(invoice_no, serial_no)`, hỗ trợ tìm kiếm kết hợp đa từ khóa trên cả 2 trường `['inv.invoice_no', 'inv.serial_no']` qua `applyMultiKeywordMultiFieldFilter`, format label trả về dạng `Số HĐ (Ký hiệu)` (vd: `0001234 (1C26TGA)`).
-  - Đối với cột `partner`: Truy vấn distinct các cặp Tên đối tác và MST theo chiều (`IN` $\to$ `seller_name`, `seller_tax_code`; `OUT` $\to$ `buyer_name`, `buyer_tax_code`), hỗ trợ tìm kiếm đa từ khóa trên cả tên và mã số thuế đồng thời, format label trả về dạng `Tên đối tác (MST)`.
+  - Đối với cột `invoiceNo`: Truy vấn distinct các cặp `(invoice_no, serial_no)`, hỗ trợ tìm kiếm kết hợp đa từ khóa trên cả 2 trường `['inv.invoice_no', 'inv.serial_no']` qua `applyMultiKeywordMultiFieldFilter`. Giá trị `value` trả về theo format định danh kép composite `"${invoice_no}:::${serial_no}"` và `label` trả về dạng `Số HĐ (Ký hiệu)` (vd: `0001234 (1C26TGA)`). Đếm total chuẩn xác cho Infinite Scroll bằng cách clone query và bỏ groupBy.
+  - Đối với cột `partner`: Truy vấn distinct các cặp Tên đối tác và MST theo chiều (`IN` $\to$ `seller_name`, `seller_tax_code`; `OUT` $\to$ `buyer_name`, `buyer_tax_code`), hỗ trợ tìm kiếm đa từ khóa trên cả tên và mã số thuế đồng thời. Giá trị `value` trả về theo format định danh kép composite `"${tax_code}:::${name}"` và `label` trả về dạng `Tên đối tác (MST)`.
 - **`InvoiceQueryService._applyColumnSearch` & `_applyColumnFilters`**:
-  - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`.
-  - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD).
+  - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`. Tự động bóc tách composite value dạng `invoiceNo:::serialNo` để so khớp chính xác từng hóa đơn, tránh xung đột giữa các hóa đơn có cùng số nhưng khác ký hiệu.
+  - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD). Tự động bóc tách composite value dạng `taxCode:::partnerName` để lọc chính xác theo từng đối tác.
 
 ### 5.8. Quản lý, Bộ lọc & Tự động Tính toán Dòng Hàng Hóa Đơn (`findAllItems`, `getItemColumnOptions`)
 - **Truy vấn Dòng hàng (`findAllItems`)**:
