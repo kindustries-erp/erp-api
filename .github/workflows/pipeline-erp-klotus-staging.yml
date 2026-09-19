@@ -77,10 +77,10 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - host: elite
-            server_name: elite
-            ip: 100.75.67.115
-            port: 10015
+          # - host: elite
+          #   server_name: elite
+          #   ip: 100.75.67.115
+          #   port: 10015
           - host: dev
             server_name: dev
             ip: 100.90.103.19
@@ -198,15 +198,33 @@ jobs:
               -H "X-Api-Key: $KOMODO_API_KEY" -H "X-Api-Secret: $KOMODO_API_SECRET" \
               -H 'Content-Type: application/json' --data "$2"
           }
-          call /execute/PullStack "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack}')" >/dev/null
+          # 1. Pull migrate image first and wait for completion
+          echo "Pulling migration image for $MIGRATE_STACK..."
+          pull_resp="$(call /execute/PullStack "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack}')" || true)"
+          pull_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$pull_resp")"
+          if [ -n "$pull_id" ]; then
+            for i in $(seq 1 120); do
+              pstate="$(call /read/GetUpdate "$(jq -nc --arg id "$pull_id" '{id:$id}')" || true)"
+              pstatus="$(jq -r '.status // empty' <<<"$pstate")"
+              psuccess="$(jq -r '.success // false' <<<"$pstate")"
+              if [ "$pstatus" = Complete ]; then
+                echo "Pull completed successfully (attempt $i/120, success=$psuccess)"
+                break
+              fi
+              sleep 5
+            done
+          fi
+
+          # 2. Execute migration container (image already pulled)
+          echo "Running migration service for $MIGRATE_STACK..."
           update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
           update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
           test -n "$update_id"
-          for i in $(seq 1 90); do
+          for i in $(seq 1 120); do
             state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
             status="$(jq -r '.status // empty' <<<"$state")"
             success="$(jq -r '.success // false' <<<"$state")"
-            echo "migration $i/90: status=$status success=$success"
+            echo "migration $i/120: status=$status success=$success"
             if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
             sleep 5
           done

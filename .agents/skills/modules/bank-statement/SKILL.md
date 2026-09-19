@@ -289,11 +289,46 @@ src/modules/bank-statements/components/BankStatementsTab/
 ├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
 ├── index.tsx                                    # Re-export entry
 ├── components/
-│   ├── BankStatementColumns.tsx                 # 15+ column definitions với header filters
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions với createColumnHeaderFilter
 │   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
 │   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
 │   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
 └── __tests__/
     └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
 ```
+
+### 8.4. Chuẩn Hóa Cột Bảng & Infinite Scroll (`BankStatementColumns.tsx`)
+- Toàn bộ cột bảng được xây dựng thông qua **`createColumnHeaderFilter`**:
+  - Cột Ngày: `headerFilter.date("transDate", ...)`
+  - Cột Số tiền / Số dư: `headerFilter.amount("thu" | "chi" | "balance", ...)`
+  - Cột Phân loại Cấn trừ: `headerFilter.client("netOffAmount" | "remainingAmount", ...)`
+  - Cột Tra cứu danh mục: `headerFilter("account" | "referenceNumber" | "description" | "branch" ..., { showBlankOption: true })`
+- **Hợp đồng Phân trang Vô tận (Infinite Scrolling Contract)**:
+  - `fetchOptions` mapping `next: res.page < res.totalPages ? res.page + 1 : null` để `useInfiniteQuery` cuộn tải liên tục mượt mà.
+  - Hỗ trợ cú pháp lọc `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm) và `__BLANK__` (Lọc giá trị trống).
+
+### 8.5. Detail Drawer & Kiến Trúc 3 Tầng (`BankTransactionDetailDrawer`)
+- **Quản lý Cập nhật Giao dịch**:
+  - Cho phép chỉnh sửa Chi nhánh (`branchId` qua `Combobox`) và Ghi chú / Diễn giải (`description` qua `BufferedTextarea` debounce 500ms).
+  - Tự động lưu qua `bankStatementApi.updateTransaction(transactionId, { branchId, description, accountingDescription })`.
+- **Cấu trúc Cột Phải (Right Panel) 3 Tầng Chuẩn Hóa**:
+  1. **Tầng 1 — `THÔNG TIN CHUNG` (`BankTransactionGeneralInfoSection`)**:
+     - View mode: Icon `<Building2>` (Đối tác), `<MapPin>` (Chi nhánh kèm tên tường minh), `<CreditCard>` (Tài khoản nguồn), `<Calendar>` (Ngày GD), `<FileText>` (Ghi chú / Diễn giải), `<EntityTagSelector>` (Thẻ nhãn) kèm nút Copy.
+     - Edit mode: Combobox chọn chi nhánh, BufferedTextarea nhập ghi chú, Thẻ nhãn.
+  2. **Tầng 2 & 3 — `THUỘC TÍNH MẶC ĐỊNH` & `THUỘC TÍNH TÙY CHỈNH` (`ModuleEntityCustomFieldsSection`)**:
+     - Tích hợp `moduleKey="BANK_TXN"` quản lý danh mục và dynamic custom fields.
+
+### 8.6. Chuẩn Hóa SubtotalSummaryCell tại Chân Bảng (`BankStatementsTab.tsx`)
+- Hàng tổng cộng (`summaryRow`) tích hợp **`SubtotalSummaryCell`** đa năng:
+  - `description`: Nhãn `Tổng cộng:` (variant `label`).
+  - `thu`: Hiển thị tổng Tiền vào / Thu (`variantType="amount"`, `text-emerald-600 font-bold`).
+  - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
+  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
+  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
+- **Quy chuẩn Popover Chi tiết**:
+  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, ...) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
+  - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
+  - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
+
+
 

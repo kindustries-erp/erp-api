@@ -7,7 +7,13 @@ cd "$REPO_ROOT"
 
 export NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-0}"
 
-TYPEORM_CMD=(node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js)
+if [[ -f "$REPO_ROOT/dist/db/data-source.cli.js" ]]; then
+  TYPEORM_CMD=(node ./node_modules/typeorm/cli.js)
+  DATA_SOURCE_PATH="dist/db/data-source.cli.js"
+else
+  TYPEORM_CMD=(node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js)
+  DATA_SOURCE_PATH="src/db/data-source.cli.ts"
+fi
 BACKUP_DIR="$REPO_ROOT/.agents/skills/db-migrate/backups"
 mkdir -p "$BACKUP_DIR"
 
@@ -127,7 +133,7 @@ normalize_neon_url_for_migration() {
 }
 
 typeorm() {
-  DATABASE_URL="$1" "${TYPEORM_CMD[@]}" "$2" -d src/db/data-source.cli.ts ${3+"$3"}
+  DATABASE_URL="$1" "${TYPEORM_CMD[@]}" "$2" -d "$DATA_SOURCE_PATH" ${3+"$3"}
 }
 
 backup_schema() {
