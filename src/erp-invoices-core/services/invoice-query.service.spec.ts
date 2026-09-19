@@ -755,4 +755,51 @@ describe('InvoiceQueryService', () => {
     expect(p2.totals?.cumulativeNetOff).toBe(1000000);
     expect(p2.totals?.cumulativeRemaining).toBe(5550000);
   });
+
+  it('getColumnOptions returns composite format for invoiceNo and partner to prevent shared checkboxes', async () => {
+    const rawRows = [
+      { value: '101', secondary_val: 'C25TTD' },
+      { value: '101', secondary_val: 'C26TGL' },
+    ];
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(rawRows),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '2' }),
+      }),
+    };
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
+
+    const res = await service.getColumnOptions(
+      'invoiceNo',
+      '',
+      1,
+      20,
+      undefined,
+      'IN',
+    );
+
+    expect(res.total).toBe(2);
+    expect(res.items).toEqual([
+      { value: '101:::C25TTD', label: '101 (C25TTD)' },
+      { value: '101:::C26TGL', label: '101 (C26TGL)' },
+    ]);
+  });
 });
