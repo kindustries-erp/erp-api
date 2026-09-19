@@ -79,10 +79,10 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - host: elite
-            server_name: elite
-            ip: 100.75.67.115
-            port: 10016
+          # - host: elite
+          #   server_name: elite
+          #   ip: 100.75.67.115
+          #   port: 10016
           - host: dev
             server_name: dev
             ip: 100.90.103.19
@@ -204,11 +204,11 @@ jobs:
           update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
           update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
           test -n "$update_id"
-          for i in $(seq 1 90); do
+          for i in $(seq 1 200); do
             state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
             status="$(jq -r '.status // empty' <<<"$state")"
             success="$(jq -r '.success // false' <<<"$state")"
-            echo "migration $i/90: status=$status success=$success"
+            echo "migration $i/200: status=$status success=$success"
             if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
             sleep 5
           done

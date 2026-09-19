@@ -5,6 +5,7 @@ on:
     branches: [erp-master]
   pull_request:
     branches: [erp-master]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -30,7 +31,7 @@ jobs:
     name: Build & Push immutable images
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -71,7 +72,7 @@ jobs:
     name: Deploy to ${{ matrix.target.host }} (${{ matrix.target.ip }})
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -186,6 +187,8 @@ jobs:
           }
           api_image="${IMAGE_NAME}:${IMAGE_SHA}"
           migrate_image="${MIGRATE_IMAGE_NAME}:${IMAGE_SHA}"
+          # Harmonize DB endpoint to db-dev.liouni.com:5433
+          API_ENV="$(sed -e 's|db.liouni.com:5432/erp_local?sslmode=require|db-dev.liouni.com:5433/erp_local?sslmode=disable|g' -e 's|db.liouni.com:5432/erp_local|db-dev.liouni.com:5433/erp_local?sslmode=disable|g' <<<"$API_ENV")"
           call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "ERP_API_IMAGE=$api_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$API_STACK" --arg contents "$API_ENV" '{stack:$stack,file_path:"application.env",contents:$contents}')" >/dev/null
           call /write/WriteStackFileContents "$(jq -n --arg stack "$MIGRATE_STACK" --arg contents "ERP_MIGRATE_IMAGE=$migrate_image" '{stack:$stack,file_path:".env",contents:$contents}')" >/dev/null
@@ -205,11 +208,11 @@ jobs:
           update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
           update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
           test -n "$update_id"
-          for i in $(seq 1 90); do
+          for i in $(seq 1 200); do
             state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
             status="$(jq -r '.status // empty' <<<"$state")"
             success="$(jq -r '.success // false' <<<"$state")"
-            echo "migration $i/90: status=$status success=$success"
+            echo "migration $i/200: status=$status success=$success"
             if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
             sleep 5
           done

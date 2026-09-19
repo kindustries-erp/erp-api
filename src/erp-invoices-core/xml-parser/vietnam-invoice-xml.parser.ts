@@ -7,6 +7,7 @@
  */
 
 export interface ParsedVietnamInvoiceItem {
+  itemCode?: string | null;
   description: string;
   unit: string | null;
   quantity: number | null;
@@ -383,6 +384,20 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
     const stt = toNum(getTextIn(el, 'STT', 'stt')) || i + 1;
+    const itemCode =
+      getTextIn(
+        el,
+        'MHHDVu',
+        'mhhdvu',
+        'MaHHDVu',
+        'mahhdvu',
+        'MHang',
+        'mhang',
+        'Ma',
+        'ma',
+        'MaHang',
+        'ma_vt',
+      ) ?? null;
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
     const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
     const quantity = getTextIn(el, 'SLuong', 'sluong')
@@ -406,6 +421,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     const total = preVat + vatAmt - discount;
     parsedItems.push({
       _stt: stt,
+      itemCode,
       description: desc,
       unit,
       quantity,
@@ -586,6 +602,17 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
   const lines = root.getElementsByTagName('InvoiceLine');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const itemCode =
+      getTextIn(
+        line,
+        'ItemCode',
+        'itemCode',
+        'SKU',
+        'sku',
+        'PartCode',
+        'PartNumber',
+        'ProductCode',
+      ) ?? null;
     const desc = getTextIn(line, 'ItemName', 'Description') ?? '';
     const unit = getTextIn(line, 'UnitName', 'Unit') ?? null;
     const quantity = getTextIn(line, 'Quantity')
@@ -607,6 +634,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     }
     const disc = toNum(getTextIn(line, 'DiscountAmount'));
     items.push({
+      itemCode,
       description: desc,
       unit,
       quantity,

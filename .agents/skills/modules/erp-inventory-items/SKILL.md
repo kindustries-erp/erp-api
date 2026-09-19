@@ -89,8 +89,9 @@ src/
 └── modules/inventory-core/
     ├── api/inventoryCoreApi.ts               # Client API calls cho Items (hỗ trợ customAttributes)
     └── components/
-        ├── InventoryItemFormDrawer.tsx       # StandardFormDrawer tích hợp Module Config, tự động normalize code & load masters
-        └── InventoryStockLedgerSection.tsx   # Lịch sử xuất nhập và tồn kho của mặt hàng
+        ├── InventoryItemFormDrawer.tsx       # StandardFormDrawer 3 Tabs (Tổng quan, Sổ thẻ kho, Chứng từ liên kết), Right panel THÔNG TIN CHUNG + THUỘC TÍNH MẶC ĐỊNH (Radix Checkbox) + THUỘC TÍNH TÙY CHỈNH
+        ├── InventoryItemOverviewSection.tsx  # Tab Tổng quan: 4 thẻ KPI (DrawerSection riêng biệt), Biểu đồ xu hướng full-width, Bảng 5 GD gần nhất (StandardTable spreadsheet)
+        └── InventoryStockLedgerSection.tsx   # Tab Sổ thẻ kho: Lịch sử xuất nhập và tồn kho của mặt hàng (Flat Ledger)
 ```
 
 ---

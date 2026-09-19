@@ -36,6 +36,9 @@ export class InventoryStockCoreService {
     qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
     qb.leftJoinAndSelect('item.uom', 'uom');
     qb.leftJoinAndSelect('item.itemType', 'itemType');
+    qb.leftJoinAndSelect('item.trackingPolicy', 'trackingPolicy');
+
+    qb.where('item.isDeleted = false');
 
     const effectiveStockTab = (
       query.stock_tab ||
@@ -51,7 +54,7 @@ export class InventoryStockCoreService {
     }
 
     if (query.item_type && query.search) {
-      qb.where(
+      qb.andWhere(
         new Brackets((qbInner) => {
           qbInner
             .where('itemType.code = :type AND item.sku ILIKE :search', {
@@ -65,9 +68,9 @@ export class InventoryStockCoreService {
         }),
       );
     } else if (query.item_type) {
-      qb.where('itemType.code = :type', { type: query.item_type });
+      qb.andWhere('itemType.code = :type', { type: query.item_type });
     } else if (query.search) {
-      qb.where(
+      qb.andWhere(
         new Brackets((qbInner) => {
           qbInner
             .where('item.sku ILIKE :search', { search: `%${query.search}%` })
@@ -94,6 +97,20 @@ export class InventoryStockCoreService {
         applyMultiKeywordFilter(qb, 'item.status', val, `${prefix}_status`);
       else if (col === 'unit')
         applyMultiKeywordFilter(qb, 'uom.name', val, `${prefix}_unit`);
+      else if (col === 'tracking_policy' || col === 'tracking_policy_code')
+        applyMultiKeywordFilter(
+          qb,
+          'trackingPolicy.code',
+          val,
+          `${prefix}_tracking_policy`,
+        );
+      else if (col === 'tracking_policy_name')
+        applyMultiKeywordFilter(
+          qb,
+          'trackingPolicy.name',
+          val,
+          `${prefix}_tracking_policy_name`,
+        );
       else if (col === 'on_hand_qty')
         applyMultiKeywordFilter(
           qb,
@@ -203,6 +220,10 @@ export class InventoryStockCoreService {
           else if (col === 'item_name')
             applyInCondition('item.itemName', `vals_${col}`);
           else if (col === 'unit') applyInCondition('uom.name', `vals_${col}`);
+          else if (col === 'tracking_policy' || col === 'tracking_policy_code')
+            applyInCondition('trackingPolicy.code', `vals_${col}`);
+          else if (col === 'tracking_policy_name')
+            applyInCondition('trackingPolicy.name', `vals_${col}`);
           else if (col === 'on_hand_qty')
             applyInCondition('b.qtyOnHand', `vals_${col}`, true);
           else if (col === 'reserved_qty')
@@ -241,6 +262,13 @@ export class InventoryStockCoreService {
         else if (field === 'item_type') sortField = 'itemType.code';
         else if (field === 'status') sortField = 'item.status';
         else if (field === 'unit') sortField = 'uom.name';
+        else if (
+          field === 'tracking_policy' ||
+          field === 'tracking_policy_code'
+        )
+          sortField = 'trackingPolicy.code';
+        else if (field === 'tracking_policy_name')
+          sortField = 'trackingPolicy.name';
         else if (field === 'item_name') sortField = 'item.itemName';
         else if (field === 'on_hand_qty') sortField = 'b.qtyOnHand';
         else if (field === 'reserved_qty') sortField = 'b.qtyReserved';
@@ -311,16 +339,71 @@ export class InventoryStockCoreService {
       qb.addSelect('b.updatedAt').orderBy('b.updatedAt', 'DESC', 'NULLS LAST');
     }
 
-    qb.offset((page - 1) * pageSize).limit(pageSize);
-
-    const items = await qb.getMany();
-
     const countQb = qb.clone();
     countQb.orderBy(); // clear order by for count query to avoid distinctAlias error
     const total = await countQb.getCount();
 
+    const summaryQb = qb.clone();
+    summaryQb.orderBy();
+    const summaryRaw = await summaryQb
+      .select('COALESCE(SUM(b.qtyOnHand), 0)', 'total_on_hand_qty')
+      .addSelect('COALESCE(SUM(b.qtyReserved), 0)', 'total_reserved_qty')
+      .addSelect('COALESCE(SUM(b.inventoryValue), 0)', 'total_stock_value')
+      .getRawOne();
+
+    const matchingItemIdsQb = qb.clone();
+    matchingItemIdsQb.orderBy();
+    matchingItemIdsQb.select('item.id', 'id');
+
+    const txnSummaryQb = this.transactionRepository
+      .createQueryBuilder('txn')
+      .select('COALESCE(SUM(txn.qtyIn), 0)', 'total_received_qty')
+      .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'total_issued_qty')
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn - txn.qtyOut ELSE 0 END), 0)",
+        'total_adjusted_qty',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') AND (txn.qtyIn - txn.qtyOut) > 0 THEN txn.qtyIn - txn.qtyOut ELSE 0 END), 0)",
+        'total_positive_adjusted_qty',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') AND (txn.qtyIn - txn.qtyOut) < 0 THEN txn.qtyOut - txn.qtyIn ELSE 0 END), 0)",
+        'total_negative_adjusted_qty',
+      );
+
+    txnSummaryQb.where(`txn.itemId IN (${matchingItemIdsQb.getQuery()})`);
+    txnSummaryQb.setParameters(matchingItemIdsQb.getParameters());
+    const txnSummaryRaw = await txnSummaryQb.getRawOne();
+
+    const grandSummary = {
+      total_received_qty: Number(txnSummaryRaw?.total_received_qty || 0),
+      total_issued_qty: Number(txnSummaryRaw?.total_issued_qty || 0),
+      total_adjusted_qty: Number(txnSummaryRaw?.total_adjusted_qty || 0),
+      total_positive_adjusted_qty: Number(
+        txnSummaryRaw?.total_positive_adjusted_qty || 0,
+      ),
+      total_negative_adjusted_qty: Number(
+        txnSummaryRaw?.total_negative_adjusted_qty || 0,
+      ),
+      total_on_hand_qty: Number(summaryRaw?.total_on_hand_qty || 0),
+      total_reserved_qty: Number(summaryRaw?.total_reserved_qty || 0),
+      total_stock_value: Number(summaryRaw?.total_stock_value || 0),
+    };
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+
+    const items = await qb.getMany();
+
     if (items.length === 0) {
-      return { items: [], total: 0, page, pageSize, totalPages: 0 };
+      return {
+        items: [],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        summary: grandSummary,
+      };
     }
 
     const itemIds = items.map((i) => i.id);
@@ -359,6 +442,8 @@ export class InventoryStockCoreService {
         item_name: item.itemName ?? '',
         item_type: item.itemType?.code ?? '',
         unit: item.uom?.name ?? '',
+        tracking_policy_code: item.trackingPolicy?.code ?? null,
+        tracking_policy_name: item.trackingPolicy?.name ?? null,
         received_qty: Number(txn?.receivedQty || 0),
         issued_qty: Number(txn?.issuedQty || 0),
         adjusted_qty: Number(txn?.adjustedQty || 0),
@@ -376,6 +461,7 @@ export class InventoryStockCoreService {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
+      summary: grandSummary,
     };
   }
 
@@ -390,6 +476,7 @@ export class InventoryStockCoreService {
     const qb = this.itemRepository.createQueryBuilder('item');
     qb.leftJoin('item.itemType', 'itemType');
     qb.leftJoin('item.uom', 'uom');
+    qb.leftJoin('item.trackingPolicy', 'trackingPolicy');
     qb.leftJoin(ErpInventoryBalance, 'b', 'b.itemId = item.id');
 
     const effectiveStockTab = (stockTab || '').toUpperCase();
@@ -407,6 +494,10 @@ export class InventoryStockCoreService {
     else if (column === 'item_type') selectField = 'itemType.code';
     else if (column === 'status') selectField = 'item.status';
     else if (column === 'unit') selectField = 'uom.name';
+    else if (column === 'tracking_policy' || column === 'tracking_policy_code')
+      selectField = 'trackingPolicy.code';
+    else if (column === 'tracking_policy_name')
+      selectField = 'trackingPolicy.name';
     else if (column === 'on_hand_qty') selectField = 'b.qtyOnHand';
     else if (column === 'reserved_qty') selectField = 'b.qtyReserved';
     else if (column === 'received_qty')
@@ -421,7 +512,8 @@ export class InventoryStockCoreService {
     else return { items: [], total: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
-    qb.where(`${selectField} IS NOT NULL`);
+    qb.where('item.isDeleted = false');
+    qb.andWhere(`${selectField} IS NOT NULL`);
     qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
 
     if (filtersStr) {
@@ -441,6 +533,13 @@ export class InventoryStockCoreService {
               else if (col === 'item_type') targetField = 'itemType.code';
               else if (col === 'status') targetField = 'item.status';
               else if (col === 'unit') targetField = 'uom.name';
+              else if (
+                col === 'tracking_policy' ||
+                col === 'tracking_policy_code'
+              )
+                targetField = 'trackingPolicy.code';
+              else if (col === 'tracking_policy_name')
+                targetField = 'trackingPolicy.name';
               else if (col === 'on_hand_qty')
                 targetField = 'CAST(b.qtyOnHand AS TEXT)';
               else if (col === 'reserved_qty')
@@ -500,6 +599,10 @@ export class InventoryStockCoreService {
           else if (col === 'item_name')
             applyInCondition('item.itemName', `vals_${col}`);
           else if (col === 'unit') applyInCondition('uom.name', `vals_${col}`);
+          else if (col === 'tracking_policy' || col === 'tracking_policy_code')
+            applyInCondition('trackingPolicy.code', `vals_${col}`);
+          else if (col === 'tracking_policy_name')
+            applyInCondition('trackingPolicy.name', `vals_${col}`);
           else if (col === 'on_hand_qty')
             applyInCondition('b.qtyOnHand', `vals_${col}`, true);
           else if (col === 'reserved_qty')

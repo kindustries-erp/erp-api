@@ -33,17 +33,38 @@ describe('TransactionQueryService', () => {
     const countQb: any = {
       orderBy: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ cnt: '0' }),
-      expressionMap: { groupBys: [] },
+      addSelect: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getRawOne: jest
+        .fn()
+        .mockResolvedValue({ cnt: '0', totalCredit: '0', totalDebit: '0' }),
+      getRawMany: jest.fn().mockResolvedValue([]),
+      expressionMap: {
+        groupBys: [],
+        orderBys: {},
+        selects: [],
+        joinAttributes: [],
+      },
     };
 
     qb.clone.mockReturnValue(countQb);
+
+    const netoffMock: any = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
 
     transactionRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
       findOne: jest.fn(),
       manager: {
-        createQueryBuilder: jest.fn(),
+        createQueryBuilder: jest.fn().mockReturnValue(netoffMock),
       },
     };
 
@@ -120,6 +141,12 @@ describe('TransactionQueryService', () => {
       page: 1,
       pageSize: 20,
       totalPages: 0,
+      totals: {
+        grandTotalCredit: 0,
+        grandTotalDebit: 0,
+        cumulativeCredit: 0,
+        cumulativeDebit: 0,
+      },
     });
   });
 
@@ -152,6 +179,58 @@ describe('TransactionQueryService', () => {
       page: 1,
       pageSize: 20,
       totalPages: 0,
+    });
+  });
+
+  it('calculates cumulative totals accurately for multi-page requests', async () => {
+    qb.getManyAndCount.mockResolvedValue([
+      [
+        { id: 'txn-51', creditAmount: '5000000', debitAmount: '0' },
+        { id: 'txn-52', creditAmount: '0', debitAmount: '2000000' },
+      ],
+      150,
+    ]);
+
+    const countQbMock: any = {
+      orderBy: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        cnt: '150',
+        totalCredit: '31000000000',
+        totalDebit: '20000000000',
+      }),
+      getRawMany: jest.fn().mockResolvedValue([
+        { credit: '663650173', debit: '100000000' },
+        { credit: '939237898', debit: '400000000' },
+      ]),
+      expressionMap: {
+        groupBys: [],
+        orderBys: {},
+        selects: [],
+        joinAttributes: [],
+      },
+    };
+
+    qb.clone.mockReturnValue(countQbMock);
+
+    const result = await service.getTransactions({
+      page: 2,
+      pageSize: 50,
+    } as any);
+
+    expect(result.page).toBe(2);
+    expect(result.pageSize).toBe(50);
+    expect(result.totalPages).toBe(3);
+    expect(result.totals).toEqual({
+      grandTotalCredit: 31000000000,
+      grandTotalDebit: 20000000000,
+      cumulativeCredit: 1602888071,
+      cumulativeDebit: 500000000,
     });
   });
 });
