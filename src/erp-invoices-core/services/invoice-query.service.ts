@@ -436,166 +436,269 @@ export class InvoiceQueryService {
       !!query.unlinked_po_id
     );
 
-    if (needsQb) {
-      const qb = this.repository
-        .createQueryBuilder('inv')
-        .where('inv.is_deleted = false')
-        .andWhere(query.direction ? 'inv.direction = :dir' : '1=1', {
-          dir: query.direction,
-        })
-        .andWhere(query.status ? 'inv.status = :status' : '1=1', {
-          status: query.status,
-        })
-        .andWhere(query.is_valid ? 'inv.is_valid = :isValid' : '1=1', {
-          isValid: query.is_valid === 'true' || query.is_valid === '1',
-        })
-        .andWhere(query.date_from ? 'inv.invoice_date >= :dateFrom' : '1=1', {
-          dateFrom: query.date_from,
-        })
-        .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
-          dateTo:
-            query.date_to?.length === 10
-              ? `${query.date_to} 23:59:59.999`
-              : query.date_to,
-        });
-
-      if (query.unlinked_po_id) {
-        qb.andWhere(
-          '(inv.purchase_order_id IS NULL OR inv.purchase_order_id = :unlinkedPoId)',
-          {
-            unlinkedPoId: query.unlinked_po_id,
-          },
-        );
-      }
-
-      if (query.search) {
-        const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
-        qb.andWhere(
-          `(
-            inv.invoice_no ILIKE :q 
-            OR inv.serial_no ILIKE :q 
-            OR inv.buyer_name ILIKE :q 
-            OR inv.seller_name ILIKE :q 
-            OR inv.buyer_tax_code ILIKE :q 
-            OR inv.seller_tax_code ILIKE :q
-            OR inv.description ILIKE :q
-            OR REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
-            OR REPLACE(REPLACE(CAST(inv.vat_rate AS TEXT), '.', ''), ',', '') ILIKE :qClean
-            OR REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
-            OR REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
-            OR REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
-          )`,
-          { q: `%${query.search}%`, qClean },
-        );
-      }
-      if (query.seller_name)
-        qb.andWhere('inv.seller_name ILIKE :sn', {
-          sn: `%${query.seller_name}%`,
-        });
-      if (query.buyer_name)
-        qb.andWhere('inv.buyer_name ILIKE :bn', {
-          bn: `%${query.buyer_name}%`,
-        });
-      if (query.partner_tax_code)
-        qb.andWhere(
-          '(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)',
-          { ptc: query.partner_tax_code },
-        );
-      if (query.tag_id)
-        qb.andWhere(
-          `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
-          { tagId: query.tag_id },
-        );
-      if (query.invoice_no)
-        qb.andWhere('inv.invoice_no = :invNo', { invNo: query.invoice_no });
-      if (query.serial_no)
-        qb.andWhere('inv.serial_no = :serNo', { serNo: query.serial_no });
-      if (query.related_invoice_no)
-        qb.andWhere('inv.related_invoice_no = :relInvNo', {
-          relInvNo: query.related_invoice_no,
-        });
-      if (query.related_serial_no)
-        qb.andWhere('inv.related_serial_no = :relSerNo', {
-          relSerNo: query.related_serial_no,
-        });
-      if (
-        query.tax_invoice_status !== undefined &&
-        query.tax_invoice_status !== null &&
-        query.tax_invoice_status !== ''
+    const qb = this.repository
+      .createQueryBuilder('inv')
+      .leftJoin(
+        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        'netoff_agg',
+        'netoff_agg.invoice_id = inv.id',
       )
-        qb.andWhere('inv.tax_invoice_status = :taxInvStat', {
-          taxInvStat: Number(query.tax_invoice_status),
-        });
+      .where('inv.is_deleted = false')
+      .andWhere(query.direction ? 'inv.direction = :dir' : '1=1', {
+        dir: query.direction,
+      })
+      .andWhere(query.status ? 'inv.status = :status' : '1=1', {
+        status: query.status,
+      })
+      .andWhere(query.is_valid ? 'inv.is_valid = :isValid' : '1=1', {
+        isValid: query.is_valid === 'true' || query.is_valid === '1',
+      })
+      .andWhere(query.date_from ? 'inv.invoice_date >= :dateFrom' : '1=1', {
+        dateFrom: query.date_from,
+      })
+      .andWhere(query.date_to ? 'inv.invoice_date <= :dateTo' : '1=1', {
+        dateTo:
+          query.date_to?.length === 10
+            ? `${query.date_to} 23:59:59.999`
+            : query.date_to,
+      });
 
-      const needsNetOffJoin =
-        query.sort_by === 'netOffAmount' ||
-        query.sort_by === 'remainingAmount' ||
-        columnSearch['netOffAmount'] !== undefined ||
-        columnSearch['remainingAmount'] !== undefined ||
-        (columnFilters['netOffAmount'] &&
-          columnFilters['netOffAmount'].length > 0) ||
-        (columnFilters['remainingAmount'] &&
-          columnFilters['remainingAmount'].length > 0);
-
-      if (needsNetOffJoin) {
-        qb.leftJoin(
-          '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
-          'netoff_agg',
-          'netoff_agg.invoice_id = inv.id',
-        );
-      }
-
-      this._applyColumnSearch(qb, columnSearch, query.direction);
-      this._applyColumnFilters(qb, columnFilters, query.direction);
-
-      let qbOrderColumn = orderColumn;
-      if (query.sort_by === 'invoiceNo') {
-        qbOrderColumn =
-          "NULLIF(regexp_replace(inv.invoice_no, '\\\\D', '', 'g'), '')::numeric";
-      }
-
-      let qbOrdered = qb.orderBy(qbOrderColumn, orderDirection);
-      if (query.sort_by === 'invoiceNo') {
-        qbOrdered = qbOrdered.addOrderBy('inv.invoiceNo', orderDirection);
-      }
-
-      const searchResults = await qbOrdered
-        .leftJoinAndSelect('inv.items', 'items')
-        .leftJoinAndSelect('inv.attachments', 'link')
-        .leftJoinAndSelect('link.attachment', 'attachment')
-        .leftJoinAndSelect('inv.category', 'category')
-        .addOrderBy('inv.createdAt', 'DESC')
-        .skip((page - 1) * pageSize)
-        .take(pageSize)
-        .getManyAndCount();
-
-      const mappedItems = await this._loadNetOffAmounts(searchResults[0]);
-      await this._loadCustomAttributes(mappedItems);
-      return {
-        items: mappedItems.map((i: any) => toInvoiceDto(i)),
-        total: searchResults[1],
-        page,
-        pageSize,
-        totalPages: Math.ceil(searchResults[1] / pageSize),
-      };
+    if (query.unlinked_po_id) {
+      qb.andWhere(
+        '(inv.purchase_order_id IS NULL OR inv.purchase_order_id = :unlinkedPoId)',
+        {
+          unlinkedPoId: query.unlinked_po_id,
+        },
+      );
     }
 
-    const [items, total] = await this.repository.findAndCount({
-      where,
-      relations: ['items', 'attachments', 'attachments.attachment', 'category'],
-      order: { [orderProperty]: orderDirection, createdAt: 'DESC' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+    if (query.search) {
+      const qClean = `%${query.search.replace(/[,.]/g, '')}%`;
+      qb.andWhere(
+        `(
+          inv.invoice_no ILIKE :q 
+          OR inv.serial_no ILIKE :q 
+          OR inv.buyer_name ILIKE :q 
+          OR inv.seller_name ILIKE :q 
+          OR inv.buyer_tax_code ILIKE :q 
+          OR inv.seller_tax_code ILIKE :q
+          OR inv.description ILIKE :q
+          OR REPLACE(REPLACE(CAST(inv.pre_vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(inv.vat_rate AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(inv.vat_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(inv.discount_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+          OR REPLACE(REPLACE(CAST(inv.total_amount AS TEXT), '.', ''), ',', '') ILIKE :qClean
+        )`,
+        { q: `%${query.search}%`, qClean },
+      );
+    }
+    if (query.seller_name)
+      qb.andWhere('inv.seller_name ILIKE :sn', {
+        sn: `%${query.seller_name}%`,
+      });
+    if (query.buyer_name)
+      qb.andWhere('inv.buyer_name ILIKE :bn', {
+        bn: `%${query.buyer_name}%`,
+      });
+    if (query.partner_tax_code)
+      qb.andWhere('(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)', {
+        ptc: query.partner_tax_code,
+      });
+    if (query.tag_id)
+      qb.andWhere(
+        `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
+        { tagId: query.tag_id },
+      );
+    if (query.invoice_no)
+      qb.andWhere('inv.invoice_no = :invNo', { invNo: query.invoice_no });
+    if (query.serial_no)
+      qb.andWhere('inv.serial_no = :serNo', { serNo: query.serial_no });
+    if (query.related_invoice_no)
+      qb.andWhere('inv.related_invoice_no = :relInvNo', {
+        relInvNo: query.related_invoice_no,
+      });
+    if (query.related_serial_no)
+      qb.andWhere('inv.related_serial_no = :relSerNo', {
+        relSerNo: query.related_serial_no,
+      });
+    if (
+      query.tax_invoice_status !== undefined &&
+      query.tax_invoice_status !== null &&
+      query.tax_invoice_status !== ''
+    )
+      qb.andWhere('inv.tax_invoice_status = :taxInvStat', {
+        taxInvStat: Number(query.tax_invoice_status),
+      });
 
-    const mappedItems = await this._loadNetOffAmounts(items);
+    this._applyColumnSearch(qb, columnSearch, query.direction);
+    this._applyColumnFilters(qb, columnFilters, query.direction);
+
+    let qbOrderColumn = orderColumn;
+    if (query.sort_by === 'invoiceNo') {
+      qbOrderColumn =
+        "NULLIF(regexp_replace(inv.invoice_no, '\\\\D', '', 'g'), '')::numeric";
+    }
+
+    let qbOrdered = qb.orderBy(qbOrderColumn, orderDirection);
+    if (query.sort_by === 'invoiceNo') {
+      qbOrdered = qbOrdered.addOrderBy('inv.invoiceNo', orderDirection);
+    }
+
+    const searchResults = await qbOrdered
+      .leftJoinAndSelect('inv.items', 'items')
+      .leftJoinAndSelect('inv.attachments', 'link')
+      .leftJoinAndSelect('link.attachment', 'attachment')
+      .leftJoinAndSelect('inv.category', 'category')
+      .addOrderBy('inv.createdAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
+    const mappedItems = await this._loadNetOffAmounts(searchResults[0]);
     await this._loadCustomAttributes(mappedItems);
+
+    const total = searchResults[1];
+    const totalPages = Math.ceil(total / pageSize);
+
+    // Calculate Grand Totals and Cumulative Totals
+    let grandTotalPreVat = 0;
+    let grandTotalVat = 0;
+    let grandTotalDiscount = 0;
+    let grandTotalAmount = 0;
+    let grandTotalNetOff = 0;
+    let grandTotalRemaining = 0;
+
+    let cumulativePreVat = 0;
+    let cumulativeVat = 0;
+    let cumulativeDiscount = 0;
+    let cumulativeTotal = 0;
+    let cumulativeNetOff = 0;
+    let cumulativeRemaining = 0;
+
+    try {
+      const totalsQb = qb.clone();
+      if (totalsQb.expressionMap) {
+        totalsQb.expressionMap.orderBys = {};
+        totalsQb.expressionMap.selects = [];
+      }
+      totalsQb.offset?.(undefined);
+      totalsQb.limit?.(undefined);
+      totalsQb.skip?.(undefined);
+      totalsQb.take?.(undefined);
+      totalsQb
+        .select('COALESCE(SUM(inv.pre_vat_amount), 0)', 'totalPreVat')
+        .addSelect('COALESCE(SUM(inv.vat_amount), 0)', 'totalVat')
+        .addSelect('COALESCE(SUM(inv.discount_amount), 0)', 'totalDiscount')
+        .addSelect('COALESCE(SUM(inv.total_amount), 0)', 'totalAmount')
+        .addSelect(
+          'COALESCE(SUM(COALESCE(netoff_agg.net_off_sum, 0)), 0)',
+          'totalNetOff',
+        );
+
+      const totalsRaw = await totalsQb.getRawOne();
+      grandTotalPreVat = parseFloat(totalsRaw?.totalPreVat || '0') || 0;
+      grandTotalVat = parseFloat(totalsRaw?.totalVat || '0') || 0;
+      grandTotalDiscount = parseFloat(totalsRaw?.totalDiscount || '0') || 0;
+      grandTotalAmount = parseFloat(totalsRaw?.totalAmount || '0') || 0;
+      grandTotalNetOff = parseFloat(totalsRaw?.totalNetOff || '0') || 0;
+      grandTotalRemaining = grandTotalAmount - grandTotalNetOff;
+
+      if (page === 1) {
+        cumulativePreVat = mappedItems.reduce(
+          (acc, curr) => acc + (parseFloat(curr.preVatAmount) || 0),
+          0,
+        );
+        cumulativeVat = mappedItems.reduce(
+          (acc, curr) => acc + (parseFloat(curr.vatAmount) || 0),
+          0,
+        );
+        cumulativeDiscount = mappedItems.reduce(
+          (acc, curr) => acc + (parseFloat(curr.discountAmount) || 0),
+          0,
+        );
+        cumulativeTotal = mappedItems.reduce(
+          (acc, curr) => acc + (parseFloat(curr.totalAmount) || 0),
+          0,
+        );
+        cumulativeNetOff = mappedItems.reduce(
+          (acc, curr) => acc + (parseFloat((curr as any).netOffAmount) || 0),
+          0,
+        );
+        cumulativeRemaining = cumulativeTotal - cumulativeNetOff;
+      } else if (page >= totalPages && totalPages > 0) {
+        cumulativePreVat = grandTotalPreVat;
+        cumulativeVat = grandTotalVat;
+        cumulativeDiscount = grandTotalDiscount;
+        cumulativeTotal = grandTotalAmount;
+        cumulativeNetOff = grandTotalNetOff;
+        cumulativeRemaining = grandTotalRemaining;
+      } else {
+        const cumQb = qb.clone();
+        if (cumQb.expressionMap) {
+          cumQb.expressionMap.selects = [];
+        }
+        cumQb
+          .select('inv.pre_vat_amount', 'preVat')
+          .addSelect('inv.vat_amount', 'vat')
+          .addSelect('inv.discount_amount', 'discount')
+          .addSelect('inv.total_amount', 'total')
+          .addSelect('COALESCE(netoff_agg.net_off_sum, 0)', 'netoff')
+          .offset(0)
+          .limit(page * pageSize);
+        cumQb.skip?.(undefined);
+        cumQb.take?.(undefined);
+
+        const cumRows = await cumQb.getRawMany();
+        cumulativePreVat = cumRows.reduce(
+          (acc, r) =>
+            acc + (parseFloat(r.preVat ?? r.inv_pre_vat_amount ?? 0) || 0),
+          0,
+        );
+        cumulativeVat = cumRows.reduce(
+          (acc, r) => acc + (parseFloat(r.vat ?? r.inv_vat_amount ?? 0) || 0),
+          0,
+        );
+        cumulativeDiscount = cumRows.reduce(
+          (acc, r) =>
+            acc + (parseFloat(r.discount ?? r.inv_discount_amount ?? 0) || 0),
+          0,
+        );
+        cumulativeTotal = cumRows.reduce(
+          (acc, r) =>
+            acc + (parseFloat(r.total ?? r.inv_total_amount ?? 0) || 0),
+          0,
+        );
+        cumulativeNetOff = cumRows.reduce(
+          (acc, r) =>
+            acc + (parseFloat(r.netoff ?? r.netoff_agg_net_off_sum ?? 0) || 0),
+          0,
+        );
+        cumulativeRemaining = cumulativeTotal - cumulativeNetOff;
+      }
+    } catch (e) {
+      this.logger.error(`Error calculating totals in findAll invoices: ${e}`);
+    }
+
     return {
       items: mappedItems.map((i: any) => toInvoiceDto(i)),
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages,
+      totals: {
+        grandTotalPreVat,
+        grandTotalVat,
+        grandTotalDiscount,
+        grandTotalAmount,
+        grandTotalNetOff,
+        grandTotalRemaining,
+        cumulativePreVat,
+        cumulativeVat,
+        cumulativeDiscount,
+        cumulativeTotal,
+        cumulativeNetOff,
+        cumulativeRemaining,
+      },
     };
   }
 

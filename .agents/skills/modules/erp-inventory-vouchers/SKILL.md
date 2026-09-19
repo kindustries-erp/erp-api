@@ -21,7 +21,11 @@ Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra 
   - Mở xem chi tiết toàn bộ các dòng mặt hàng (line items), số lượng, đơn giá, mã định danh Serial/VIN đính kèm mà không cần chuyển trang.
 - **Chuẩn hóa UI/UX Bảng Chứng Từ Kho (`ErpWarehouseTab.tsx`)**:
   - Cột STT `#` cố định 40px ở đầu bảng, căn giữa.
-  - Hàng tổng cộng (`summaryRow`): tự động cộng dồn SL Nhập (`qtyReceipt`), SL Xuất (`qtyIssue`), và SL Điều chỉnh (`qtyAdjustment`).
+  - Hàng tổng cộng (`summaryRow`): tích hợp component chuẩn **`SubtotalSummaryCell`** với Hero Ratio 2 dòng (`Trang X/Y` và `Tổng toàn bộ`), thanh Progress Bar trực quan và Popover chi tiết:
+    - `voucherNo`: Hiển thị nhãn `Tổng cộng:` (variant `label`).
+    - `qtyReceipt`: Hiển thị tổng SL Nhập kho (`text-emerald-600 font-bold`).
+    - `qtyIssue`: Hiển thị tổng SL Xuất kho (`text-orange-600 font-bold`).
+    - `qtyAdjustment`: Hiển thị tổng SL Điều chỉnh kèm chi tiết Tăng (+)/Giảm (-) (`positiveQty` và `negativeQty`).
   - Làm mờ hàng trạng thái phiếu hủy (`CANCELLED`, `VOID`).
   - Action Menu: "Xem chi tiết" (Icon `Eye`), "Xem đơn mua hàng" / "Xem đơn bán hàng" (Icon `FileText`), và "Chỉnh sửa" (Icon `Pencil`, mở thẳng form edit theo loại phiếu). Cột chứng từ dùng `TableText` gọn gàng.
 

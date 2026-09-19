@@ -1,8 +1,10 @@
+import { randomUUID } from 'crypto';
 import { Logger } from '@nestjs/common';
 
 const gdtLogger = new Logger('InvoiceGdtHelper');
 
 import { sleep } from '../../common/utils/delay.util';
+import { GDT_BROWSER_HEADERS, GDT_PORTAL_BASE_URL } from './gdt-session.helper';
 
 /**
  * fetchWithRetry — wraps native fetch with timeout, GDT-compatible UA headers,
@@ -21,15 +23,13 @@ export async function fetchWithRetry(
       const res = await fetch(url, {
         ...options,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+          ...GDT_BROWSER_HEADERS,
           Accept: 'application/json, text/plain, */*',
-          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-          Referer: 'https://hoadondientu.gdt.gov.vn/tra-cuu/tra-cuu-hoa-don',
-          'sec-ch-ua':
-            '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"Windows"',
+          Origin: GDT_PORTAL_BASE_URL,
+          Referer: `${GDT_PORTAL_BASE_URL}/tra-cuu/tra-cuu-hoa-don`,
+          'End-Point': '/tra-cuu/tra-cuu-hoa-don',
+          Action: '',
+          'request-id': randomUUID(),
           'sec-fetch-dest': 'empty',
           'sec-fetch-mode': 'cors',
           'sec-fetch-site': 'same-origin',
