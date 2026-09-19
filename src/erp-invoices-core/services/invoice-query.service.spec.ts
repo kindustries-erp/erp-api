@@ -368,7 +368,10 @@ describe('InvoiceQueryService', () => {
       select: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       clone: jest.fn().mockReturnValue({
-        getCount: jest.fn().mockResolvedValue(2),
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '2' }),
       }),
       offset: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
@@ -398,12 +401,62 @@ describe('InvoiceQueryService', () => {
 
     expect(res.total).toBe(2);
     expect(res.items).toEqual([
-      { value: 'Bánh xe', label: 'Bánh xe', secondaryLabel: undefined },
-      { value: 'Lốp xe', label: 'Lốp xe', secondaryLabel: undefined },
+      { value: 'Bánh xe', label: 'Bánh xe' },
+      { value: 'Lốp xe', label: 'Lốp xe' },
     ]);
   });
 
-  it('findAllItems filters by description and amount column_filters', async () => {
+  it('getItemColumnOptions returns composite format for invoiceNo and partner to prevent shared checkboxes', async () => {
+    const rawRows = [
+      { value: '1', secondary_val: 'C26TGA' },
+      { value: '1', secondary_val: 'C25TGA' },
+    ];
+    const itemQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(rawRows),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '2' }),
+      }),
+    };
+    const itemRepo: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(itemQb),
+    };
+
+    const service = new InvoiceQueryService(
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      itemRepo,
+    );
+
+    const res = await service.getItemColumnOptions(
+      'invoiceNo',
+      '',
+      1,
+      20,
+      undefined,
+      'OUT',
+    );
+
+    expect(res.total).toBe(2);
+    expect(res.items).toEqual([
+      { value: '1:::C26TGA', label: '1 (C26TGA)', secondaryLabel: 'C26TGA' },
+      { value: '1:::C25TGA', label: '1 (C25TGA)', secondaryLabel: 'C25TGA' },
+    ]);
+  });
+
+  it('findAllItems filters by description, amount, composite invoiceNo and __ALL_MATCHING__', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
@@ -468,22 +521,28 @@ describe('InvoiceQueryService', () => {
         description: ['Bảo dưỡng định kỳ'],
         preVatAmount: ['500000'],
         totalAmount: ['550000'],
+        invoiceNo: ['1:::C26TGA'],
+        partner: ['__ALL_MATCHING__', 'Garage A'],
       }),
       page: 1,
       pageSize: 20,
     });
 
     expect(itemQb.andWhere).toHaveBeenCalledWith(
-      'ii.description IN (:...vals_desc)',
-      { vals_desc: ['Bảo dưỡng định kỳ'] },
+      'ii.description IN (:...itemDescVals)',
+      { itemDescVals: ['Bảo dưỡng định kỳ'] },
     );
     expect(itemQb.andWhere).toHaveBeenCalledWith(
-      'CAST(ii.pre_vat_amount AS TEXT) IN (:...vals_preVat)',
-      { vals_preVat: ['500000'] },
+      'CAST(ii.pre_vat_amount AS TEXT) IN (:...itemPreVatVals)',
+      { itemPreVatVals: ['500000'] },
     );
     expect(itemQb.andWhere).toHaveBeenCalledWith(
-      'CAST(ii.total_amount AS TEXT) IN (:...vals_tot)',
-      { vals_tot: ['550000'] },
+      'CAST(ii.total_amount AS TEXT) IN (:...itemTotalVals)',
+      { itemTotalVals: ['550000'] },
+    );
+    expect(itemQb.andWhere).toHaveBeenCalledWith(
+      '((TRIM(inv.invoice_no) = :item_invNo_0 AND TRIM(inv.serial_no) = :item_serNo_0))',
+      { item_invNo_0: '1', item_serNo_0: 'C26TGA' },
     );
     expect(result.total).toBe(1);
     expect(result.items[0].description).toBe('Bảo dưỡng định kỳ');
@@ -497,7 +556,10 @@ describe('InvoiceQueryService', () => {
       select: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       clone: jest.fn().mockReturnValue({
-        getCount: jest.fn().mockResolvedValue(1),
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '1' }),
       }),
       offset: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
@@ -528,17 +590,11 @@ describe('InvoiceQueryService', () => {
       'value',
     );
     expect(itemQb.andWhere).toHaveBeenCalledWith(
-      "REPLACE(REPLACE(CAST(ii.total_amount AS TEXT), '.', ''), ',', '') ILIKE :sClean",
-      { sClean: '%1100000%' },
-    );
-    expect(itemQb.andWhere).toHaveBeenCalledWith(
-      'CAST(ii.description AS TEXT) IN (:...f_description)',
-      { f_description: ['Lốp xe VinFast'] },
+      'ii.description IN (:...itemDescVals)',
+      { itemDescVals: ['Lốp xe VinFast'] },
     );
     expect(res.total).toBe(1);
-    expect(res.items).toEqual([
-      { value: '1100000', label: '1100000', secondaryLabel: undefined },
-    ]);
+    expect(res.items).toEqual([{ value: '1100000', label: '1100000' }]);
   });
 
   it('findAllItems dynamically computes vatAmount and totalAmount when DB values are 0', async () => {
