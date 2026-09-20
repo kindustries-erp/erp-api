@@ -18,6 +18,7 @@ export enum ErpResource {
   GARAGE = 'garage',
   ACCOUNTING_CONFIGS = 'accounting_configs',
   INVOICES = 'invoices',
+  INVOICE_DEBTS = 'invoice_debts',
   SALES_REPORTS = 'sales_reports',
   PURCHASING_REPORTS = 'purchasing_reports',
   SYS_TAGS = 'sys_tags',

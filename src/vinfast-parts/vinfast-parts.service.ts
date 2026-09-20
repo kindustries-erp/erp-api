@@ -671,18 +671,85 @@ export class VinfastPartsService {
       WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
     `;
 
-    const [items, countResult] = await Promise.all([
+    const summaryQuery = `
+      ${baseQuery}
+      SELECT 
+        COALESCE(SUM("qtyIn"), 0) as "totalQtyIn",
+        COALESCE(SUM("qtyOut"), 0) as "totalQtyOut",
+        COALESCE(SUM("qtyBalance"), 0) as "totalQtyBalance"
+      FROM StockData
+      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
+    `;
+
+    const [items, countResult, summaryResult] = await Promise.all([
       this.catalogRepo.query(finalQuery, params),
       this.catalogRepo.query(countQuery, params),
+      this.catalogRepo.query(summaryQuery, params),
     ]);
 
     const total = parseInt(countResult[0]?.total || '0', 10);
+    const totalPages = Math.ceil(total / limit);
+
+    const totalQtyIn = parseFloat(summaryResult[0]?.totalQtyIn || '0');
+    const totalQtyOut = parseFloat(summaryResult[0]?.totalQtyOut || '0');
+    const totalQtyBalance = parseFloat(
+      summaryResult[0]?.totalQtyBalance || '0',
+    );
+
+    let cumulativeQtyIn = totalQtyIn;
+    let cumulativeQtyOut = totalQtyOut;
+    let cumulativeQtyBalance = totalQtyBalance;
+
+    if (page === 1) {
+      cumulativeQtyIn = items.reduce(
+        (acc: number, cur: any) => acc + parseFloat(cur.qtyIn || '0'),
+        0,
+      );
+      cumulativeQtyOut = items.reduce(
+        (acc: number, cur: any) => acc + parseFloat(cur.qtyOut || '0'),
+        0,
+      );
+      cumulativeQtyBalance = items.reduce(
+        (acc: number, cur: any) => acc + parseFloat(cur.qtyBalance || '0'),
+        0,
+      );
+    } else if (page > 1 && page < totalPages) {
+      const cumulativeQuery = `
+        ${baseQuery}
+        SELECT 
+          COALESCE(SUM("qtyIn"), 0) as "cumulativeQtyIn",
+          COALESCE(SUM("qtyOut"), 0) as "cumulativeQtyOut",
+          COALESCE(SUM("qtyBalance"), 0) as "cumulativeQtyBalance"
+        FROM (
+          SELECT "qtyIn", "qtyOut", "qtyBalance"
+          FROM StockData
+          WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
+          ${orderSql}
+          LIMIT ${page * limit}
+        ) sub
+      `;
+      const cumResult = await this.catalogRepo.query(cumulativeQuery, params);
+      cumulativeQtyIn = parseFloat(cumResult[0]?.cumulativeQtyIn || '0');
+      cumulativeQtyOut = parseFloat(cumResult[0]?.cumulativeQtyOut || '0');
+      cumulativeQtyBalance = parseFloat(
+        cumResult[0]?.cumulativeQtyBalance || '0',
+      );
+    }
+
     return {
       data: items,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages,
+      summary: {
+        totalQtyIn,
+        totalQtyOut,
+        totalQtyBalance,
+        cumulativeQtyIn,
+        cumulativeQtyOut,
+        cumulativeQtyBalance,
+      },
     };
   }
 

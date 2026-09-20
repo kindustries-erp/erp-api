@@ -13,12 +13,17 @@ import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import {
   isGdtInvoiceCronEnabled,
   isWithinInvoiceSyncWindow,
+  getNextInvoiceSyncSlot,
+  getSyncSlotKey,
+  runSafeCronJob,
 } from '../common/utils/cron.util';
+import { GdtCronStateHelper } from './helpers/gdt-cron-state.helper';
 
 @Injectable()
 export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ErpInvoicesCronService.name);
-  private timeoutId: NodeJS.Timeout;
+  private intervalId?: NodeJS.Timeout;
+  private isRunning = false;
 
   constructor(
     private readonly erpInvoicesCoreService: ErpInvoicesCoreService,
@@ -32,141 +37,198 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     if (!isGdtInvoiceCronEnabled()) {
       this.logger.log(
-        'ErpInvoices GDT auto-sync cron is temporarily locked in code (chờ setup mật khẩu mới).',
+        'ErpInvoices GDT auto-sync cron is disabled (ENABLE_INVOICE_CRON=false).',
       );
       return;
     }
-    this.scheduleNextSync();
+
+    const { nextSlotDate, slotLabel } = getNextInvoiceSyncSlot();
+    this.logger.log(
+      `ErpInvoices GDT auto-sync activated. Next sync slot scheduled at ${slotLabel} (${nextSlotDate.toISOString()}).`,
+    );
+
+    // Heartbeat check every 30 seconds
+    this.intervalId = setInterval(() => {
+      this.checkAndTriggerScheduledSync();
+    }, 30000);
   }
 
   onModuleDestroy() {
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
     }
   }
 
-  private scheduleNextSync() {
-    const minMinutes = 30;
-    const maxMinutes = 45;
-    const nextMinutes =
-      Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) + minMinutes;
-    const nextMs = nextMinutes * 60 * 1000;
+  /**
+   * Khôi phục tiến trình tự động đồng bộ khi người dùng cập nhật thông tin/mật khẩu mới
+   */
+  public resumeAfterPasswordUpdate() {
+    GdtCronStateHelper.resume();
+    this.logger.log(
+      'Tự động đồng bộ Cổng Thuế GDT đã được mở khóa lại sau khi cập nhật mật khẩu mới.',
+    );
+  }
 
-    this.logger.log(`Next auto-sync scheduled in ${nextMinutes} minutes.`);
+  public isAuthPaused(): boolean {
+    return GdtCronStateHelper.isPaused();
+  }
 
-    this.timeoutId = setTimeout(() => {
-      this.autoSyncCurrentMonth().finally(() => {
-        this.scheduleNextSync();
-      });
-    }, nextMs);
+  private async checkAndTriggerScheduledSync() {
+    if (this.isRunning) return;
+
+    if (!isGdtInvoiceCronEnabled() || GdtCronStateHelper.isPaused()) {
+      return;
+    }
+
+    const now = new Date();
+    if (!isWithinInvoiceSyncWindow(now)) {
+      return;
+    }
+
+    const { key, label } = getSyncSlotKey(now);
+    if (GdtCronStateHelper.getLastExecutedSlotKey() === key) {
+      return; // Đã chạy xong cho khung giờ này
+    }
+
+    GdtCronStateHelper.setLastExecutedSlotKey(key);
+    this.logger.log(
+      `Triggering scheduled invoice sync for slot ${label} (${key})...`,
+    );
+
+    await this.autoSyncCurrentMonth();
   }
 
   async autoSyncCurrentMonth() {
-    if (!isGdtInvoiceCronEnabled()) {
-      this.logger.log(
-        'ErpInvoices auto-sync skipped: GDT cron is temporarily locked in code.',
-      );
-      return;
-    }
-
-    if (!isWithinInvoiceSyncWindow()) {
-      this.logger.log(
-        'ErpInvoices auto-sync skipped: outside allowed time window (00:00 - 03:59 Asia/Ho_Chi_Minh).',
-      );
-      return;
-    }
-
-    this.logger.log('Auto-sync started for current month.');
+    if (this.isRunning) return;
+    this.isRunning = true;
 
     try {
-      const config = await this.erpInvoicesCoreService.getPortalConfig();
-      let token = config.token;
-      let cookies: string | undefined = config.cookies;
-
-      let isValid = token
-        ? await this.erpInvoicesCoreService.checkTokenValid(token, cookies)
-        : false;
-
-      if (!isValid) {
-        this.logger.log(
-          'Token GDT không tồn tại hoặc đã hết hạn. Đang tự động đăng nhập lại Cổng Thuế...',
-        );
-        const reAuth = await this.erpInvoicesCoreService.autoReloginWithRetry();
-        if (reAuth) {
-          token = reAuth.token;
-          cookies = reAuth.cookies;
-          isValid = true;
-          this.logger.log(
-            'Tự động đăng nhập lại Cổng Thuế thành công trong tiến trình Cron.',
-          );
-        } else {
-          this.logger.warn(
-            'Tự động đăng nhập lại Cổng Thuế thất bại. Gửi thông báo hết hạn token.',
-          );
-          await this.notifyTokenExpired();
-          return;
-        }
-      }
-
-      const now = new Date();
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      const dateFrom = this.formatDate(firstDay);
-      const dateTo = this.formatDate(now);
-
-      this.logger.log(`Syncing IN invoices from ${dateFrom} to ${dateTo}...`);
-      const purchaseResult: any =
-        await this.erpInvoicesCoreService.syncFromPortal(
-          {
-            type: 'purchase',
-            dateFrom,
-            dateTo,
-            token,
-            cookies,
-          },
-          undefined, // no specific user
-          true, // waitForCompletion
-        );
-
-      // Wait 5 seconds to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      this.logger.log(`Syncing OUT invoices from ${dateFrom} to ${dateTo}...`);
-      const soldResult: any = await this.erpInvoicesCoreService.syncFromPortal(
-        {
-          type: 'sold',
-          dateFrom,
-          dateTo,
-          token,
-          cookies,
+      await runSafeCronJob({
+        jobName: 'GdtInvoiceSync',
+        logger: this.logger,
+        checkEnabled: () => isGdtInvoiceCronEnabled(),
+        isPaused: () => GdtCronStateHelper.isPaused(),
+        onAuthError: async (err) => {
+          GdtCronStateHelper.pauseDueToAuthError();
+          await this.notifyPasswordError(err?.message);
         },
-        undefined,
-        true, // waitForCompletion
-      );
+        onError: async (err) => {
+          this.logger.error('Error during GDT auto-sync', err);
+        },
+        execute: async () => {
+          const config = await this.erpInvoicesCoreService.getPortalConfig();
+          let token = config.token;
+          let cookies: string | undefined = config.cookies;
 
-      this.logger.log('Auto-sync finished successfully.');
-      await this.notifySyncSuccess(purchaseResult, soldResult);
-    } catch (e: any) {
-      if (e.message === 'GDT_TOKEN_EXPIRED') {
-        this.logger.warn('Token expired during sync.');
-        await this.notifyTokenExpired();
-      } else {
-        this.logger.error('Error during auto-sync', e);
+          let isValid = token
+            ? await this.erpInvoicesCoreService.checkTokenValid(token, cookies)
+            : false;
+
+          if (!isValid) {
+            this.logger.log(
+              'Token GDT không tồn tại hoặc đã hết hạn. Đang tự động đăng nhập lại Cổng Thuế...',
+            );
+            const reAuth =
+              await this.erpInvoicesCoreService.autoReloginWithRetry();
+            if (reAuth) {
+              token = reAuth.token;
+              cookies = reAuth.cookies;
+              isValid = true;
+              this.logger.log(
+                'Tự động đăng nhập lại Cổng Thuế thành công trong tiến trình Cron.',
+              );
+            } else {
+              this.logger.warn(
+                'Tự động đăng nhập lại Cổng Thuế thất bại. Tạm dừng đồng bộ để bảo vệ tài khoản.',
+              );
+              await this.notifyTokenExpired();
+              return;
+            }
+          }
+
+          const now = new Date();
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+
+          const dateFrom = this.formatDate(firstDay);
+          const dateTo = this.formatDate(now);
+
+          this.logger.log(
+            `Syncing IN invoices from ${dateFrom} to ${dateTo}...`,
+          );
+          const purchaseResult: any =
+            await this.erpInvoicesCoreService.syncFromPortal(
+              {
+                type: 'purchase',
+                dateFrom,
+                dateTo,
+                token,
+                cookies,
+              },
+              undefined,
+              true,
+            );
+
+          // Wait 5 seconds to avoid rate limits
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+
+          this.logger.log(
+            `Syncing OUT invoices from ${dateFrom} to ${dateTo}...`,
+          );
+          const soldResult: any =
+            await this.erpInvoicesCoreService.syncFromPortal(
+              {
+                type: 'sold',
+                dateFrom,
+                dateTo,
+                token,
+                cookies,
+              },
+              undefined,
+              true,
+            );
+
+          this.logger.log('Auto-sync finished successfully.');
+          await this.notifySyncSuccess(purchaseResult, soldResult);
+        },
+      });
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  private async notifyPasswordError(details?: string) {
+    try {
+      const perms = await this.permissionRepo.find({
+        where: [{ resource: 'invoices' }, { resource: '*' }],
+      });
+      const roleIds = [...new Set(perms.map((p) => p.roleId))];
+      if (roleIds.length === 0) return;
+
+      const userRoles = await this.userRoleRepo.find({
+        where: { roleId: In(roleIds) },
+      });
+      const userIds = [...new Set(userRoles.map((ur) => ur.userId))];
+
+      for (const userId of userIds) {
+        await this.notificationsService.createForUser(userId, {
+          type: 'ERROR',
+          title: 'Tạm dừng đồng bộ Cổng Thuế GDT (Sai mật khẩu)',
+          message: `Hệ thống phát hiện thông tin đăng nhập Cổng Thuế GDT không chính xác (${details || 'Sai mật khẩu/tài khoản'}). Tiến trình tự động đồng bộ đã tạm dừng ngay lập tức để bảo vệ tài khoản tránh bị khóa. Vui lòng vào Cài đặt để cập nhật lại mật khẩu đúng.`,
+        });
       }
+    } catch (e) {
+      this.logger.error('Failed to send password error notification', e);
     }
   }
 
   private async notifyTokenExpired() {
     try {
-      // Find roles that have permission to 'invoices' or '*'
       const perms = await this.permissionRepo.find({
         where: [{ resource: 'invoices' }, { resource: '*' }],
       });
       const roleIds = [...new Set(perms.map((p) => p.roleId))];
-
       if (roleIds.length === 0) return;
 
-      // Find users with these roles
       const userRoles = await this.userRoleRepo.find({
         where: { roleId: In(roleIds) },
       });
@@ -177,7 +239,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           type: 'ERROR',
           title: 'Token GDT hóa đơn hết hạn',
           message:
-            'Vui lòng đăng nhập lại tại hoadondientu.gdt.gov.vn và cập nhật token trong hệ thống để tự động đồng bộ.',
+            'Vui lòng đăng nhập lại tại hoadondientu.gdt.gov.vn hoặc lưu lại mật khẩu trong hệ thống để tự động đồng bộ.',
         });
       }
     } catch (e) {
@@ -188,7 +250,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
   private async notifySyncSuccess(purchaseStats: any, soldStats: any) {
     const totalImported =
       (purchaseStats?.imported || 0) + (soldStats?.imported || 0);
-    if (totalImported <= 0) return; // Only notify if there are new invoices
+    if (totalImported <= 0) return;
 
     const totalFetched =
       (purchaseStats?.totalItemsFetched || 0) +
