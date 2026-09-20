@@ -25,3 +25,4 @@ yarn-error.log*
 /scripts/
 !/scripts/sync-db.sh
 backups/
+scratch/

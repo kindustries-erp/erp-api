@@ -123,12 +123,28 @@ export class GarageDashboardService {
         'receivableSuaChuaChung',
       )
       .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableWithInvoiceSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableNoInvoiceSuaChuaChung',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'revenueSuaChuaChung',
       )
       .addSelect(
         "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'costSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costWithInvoiceSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costNoInvoiceSuaChuaChung',
       )
       .addSelect(
         "COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN c.id END)",
@@ -148,12 +164,28 @@ export class GarageDashboardService {
         'receivableKyGuiNoiBo',
       )
       .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableWithInvoiceKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableNoInvoiceKyGuiNoiBo',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'revenueKyGuiNoiBo',
       )
       .addSelect(
         "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'costKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costWithInvoiceKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costNoInvoiceKyGuiNoiBo',
       )
       .addSelect(
         "COUNT(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
@@ -173,12 +205,28 @@ export class GarageDashboardService {
         'receivableOj',
       )
       .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableWithInvoiceOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableNoInvoiceOj',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'revenueOj',
       )
       .addSelect(
         "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'costOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costWithInvoiceOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costNoInvoiceOj',
       )
       .addSelect(
         "COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN c.id END)",
@@ -198,12 +246,28 @@ export class GarageDashboardService {
         'receivableOther',
       )
       .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableWithInvoiceOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        'receivableNoInvoiceOther',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'revenueOther',
       )
       .addSelect(
         "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'costOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costWithInvoiceOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        'costNoInvoiceOther',
       )
       .addSelect(
         "COUNT(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN c.id END)",
@@ -250,16 +314,48 @@ export class GarageDashboardService {
         'paidCostSuaChuaChung',
       )
       .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostWithInvoiceSuaChuaChung',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostNoInvoiceSuaChuaChung',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN s.amount ELSE 0 END)",
         'paidCostKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostWithInvoiceKyGuiNoiBo',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostNoInvoiceKyGuiNoiBo',
       )
       .addSelect(
         "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN s.amount ELSE 0 END)",
         'paidCostOj',
       )
       .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostWithInvoiceOj',
+      )
+      .addSelect(
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostNoInvoiceOj',
+      )
+      .addSelect(
         "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN s.amount ELSE 0 END)",
         'paidCostOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostWithInvoiceOther',
+      )
+      .addSelect(
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN s.amount ELSE 0 END)",
+        'paidCostNoInvoiceOther',
       )
       .where("s.settlement_type = 'PAYMENT'")
       .andWhere('c.kgara_deleted_at IS NULL')
@@ -290,9 +386,18 @@ export class GarageDashboardService {
           withInvoice: Number(r.paidCostWithInvoice) || 0,
           noInvoice: Number(r.paidCostNoInvoice) || 0,
           suaChuaChung: Number(r.paidCostSuaChuaChung) || 0,
+          suaChuaChungWithInvoice:
+            Number(r.paidCostWithInvoiceSuaChuaChung) || 0,
+          suaChuaChungNoInvoice: Number(r.paidCostNoInvoiceSuaChuaChung) || 0,
           kyGuiNoiBo: Number(r.paidCostKyGuiNoiBo) || 0,
+          kyGuiNoiBoWithInvoice: Number(r.paidCostWithInvoiceKyGuiNoiBo) || 0,
+          kyGuiNoiBoNoInvoice: Number(r.paidCostNoInvoiceKyGuiNoiBo) || 0,
           oj: Number(r.paidCostOj) || 0,
+          ojWithInvoice: Number(r.paidCostWithInvoiceOj) || 0,
+          ojNoInvoice: Number(r.paidCostNoInvoiceOj) || 0,
           other: Number(r.paidCostOther) || 0,
+          otherWithInvoice: Number(r.paidCostWithInvoiceOther) || 0,
+          otherNoInvoice: Number(r.paidCostNoInvoiceOther) || 0,
         },
       ]),
     );
@@ -320,9 +425,17 @@ export class GarageDashboardService {
         withInvoice: 0,
         noInvoice: 0,
         suaChuaChung: 0,
+        suaChuaChungWithInvoice: 0,
+        suaChuaChungNoInvoice: 0,
         kyGuiNoiBo: 0,
+        kyGuiNoiBoWithInvoice: 0,
+        kyGuiNoiBoNoInvoice: 0,
         oj: 0,
+        ojWithInvoice: 0,
+        ojNoInvoice: 0,
         other: 0,
+        otherWithInvoice: 0,
+        otherNoInvoice: 0,
       };
       const paidCost = paidCostInfo.total;
       const payableCost = Math.max(0, cost - paidCost);
@@ -402,6 +515,9 @@ export class GarageDashboardService {
       const tcSuaChuaChung = Number(r.tienCoThueSuaChuaChung) || 0;
       const pSuaChuaChung = Number(r.paidSuaChuaChung) || 0;
       const recSuaChuaChung = Number(r.receivableSuaChuaChung) || 0;
+      const recWithInvoiceScc =
+        Number(r.receivableWithInvoiceSuaChuaChung) || 0;
+      const recNoInvoiceScc = Number(r.receivableNoInvoiceSuaChuaChung) || 0;
       const revSuaChuaChung = Number(r.revenueSuaChuaChung) || 0;
       const billedSuaChuaChung =
         tcSuaChuaChung > 0
@@ -417,10 +533,22 @@ export class GarageDashboardService {
             )
           : 0;
       const costSuaChuaChung = Number(r.costSuaChuaChung) || 0;
+      const costWithInvoiceScc = Number(r.costWithInvoiceSuaChuaChung) || 0;
+      const costNoInvoiceScc = Number(r.costNoInvoiceSuaChuaChung) || 0;
       const paidCostSuaChuaChung = paidCostInfo.suaChuaChung;
+      const paidCostWithInvoiceScc = paidCostInfo.suaChuaChungWithInvoice || 0;
+      const paidCostNoInvoiceScc = paidCostInfo.suaChuaChungNoInvoice || 0;
       const payableCostSuaChuaChung = Math.max(
         0,
         costSuaChuaChung - paidCostSuaChuaChung,
+      );
+      const payableCostWithInvoiceScc = Math.max(
+        0,
+        costWithInvoiceScc - paidCostWithInvoiceScc,
+      );
+      const payableCostNoInvoiceScc = Math.max(
+        0,
+        costNoInvoiceScc - paidCostNoInvoiceScc,
       );
       const costRateSuaChuaChung =
         costSuaChuaChung > 0
@@ -434,6 +562,8 @@ export class GarageDashboardService {
       const tcKyGuiNoiBo = Number(r.tienCoThueKyGuiNoiBo) || 0;
       const pKyGuiNoiBo = Number(r.paidKyGuiNoiBo) || 0;
       const recKyGuiNoiBo = Number(r.receivableKyGuiNoiBo) || 0;
+      const recWithInvoiceKgNb = Number(r.receivableWithInvoiceKyGuiNoiBo) || 0;
+      const recNoInvoiceKgNb = Number(r.receivableNoInvoiceKyGuiNoiBo) || 0;
       const revKyGuiNoiBo = Number(r.revenueKyGuiNoiBo) || 0;
       const billedKyGuiNoiBo =
         tcKyGuiNoiBo > 0
@@ -449,10 +579,22 @@ export class GarageDashboardService {
             )
           : 0;
       const costKyGuiNoiBo = Number(r.costKyGuiNoiBo) || 0;
+      const costWithInvoiceKgNb = Number(r.costWithInvoiceKyGuiNoiBo) || 0;
+      const costNoInvoiceKgNb = Number(r.costNoInvoiceKyGuiNoiBo) || 0;
       const paidCostKyGuiNoiBo = paidCostInfo.kyGuiNoiBo;
+      const paidCostWithInvoiceKgNb = paidCostInfo.kyGuiNoiBoWithInvoice || 0;
+      const paidCostNoInvoiceKgNb = paidCostInfo.kyGuiNoiBoNoInvoice || 0;
       const payableCostKyGuiNoiBo = Math.max(
         0,
         costKyGuiNoiBo - paidCostKyGuiNoiBo,
+      );
+      const payableCostWithInvoiceKgNb = Math.max(
+        0,
+        costWithInvoiceKgNb - paidCostWithInvoiceKgNb,
+      );
+      const payableCostNoInvoiceKgNb = Math.max(
+        0,
+        costNoInvoiceKgNb - paidCostNoInvoiceKgNb,
       );
       const costRateKyGuiNoiBo =
         costKyGuiNoiBo > 0
@@ -466,6 +608,8 @@ export class GarageDashboardService {
       const tcOj = Number(r.tienCoThueOj) || 0;
       const pOj = Number(r.paidOj) || 0;
       const recOj = Number(r.receivableOj) || 0;
+      const recWithInvoiceOj = Number(r.receivableWithInvoiceOj) || 0;
+      const recNoInvoiceOj = Number(r.receivableNoInvoiceOj) || 0;
       const revOj = Number(r.revenueOj) || 0;
       const billedOj = tcOj > 0 ? tcOj : pOj + recOj > 0 ? pOj + recOj : revOj;
       const rateOj =
@@ -473,8 +617,20 @@ export class GarageDashboardService {
           ? Math.min(100, Math.round((pOj / billedOj) * 1000) / 10)
           : 0;
       const costOj = Number(r.costOj) || 0;
+      const costWithInvoiceOj = Number(r.costWithInvoiceOj) || 0;
+      const costNoInvoiceOj = Number(r.costNoInvoiceOj) || 0;
       const paidCostOj = paidCostInfo.oj;
+      const paidCostWithInvoiceOj = paidCostInfo.ojWithInvoice || 0;
+      const paidCostNoInvoiceOj = paidCostInfo.ojNoInvoice || 0;
       const payableCostOj = Math.max(0, costOj - paidCostOj);
+      const payableCostWithInvoiceOj = Math.max(
+        0,
+        costWithInvoiceOj - paidCostWithInvoiceOj,
+      );
+      const payableCostNoInvoiceOj = Math.max(
+        0,
+        costNoInvoiceOj - paidCostNoInvoiceOj,
+      );
       const costRateOj =
         costOj > 0
           ? Math.min(100, Math.round((paidCostOj / costOj) * 1000) / 10)
@@ -484,6 +640,8 @@ export class GarageDashboardService {
       const tcOther = Number(r.tienCoThueOther) || 0;
       const pOther = Number(r.paidOther) || 0;
       const recOther = Number(r.receivableOther) || 0;
+      const recWithInvoiceOther = Number(r.receivableWithInvoiceOther) || 0;
+      const recNoInvoiceOther = Number(r.receivableNoInvoiceOther) || 0;
       const revOther = Number(r.revenueOther) || 0;
       const billedOther =
         tcOther > 0
@@ -496,8 +654,20 @@ export class GarageDashboardService {
           ? Math.min(100, Math.round((pOther / billedOther) * 1000) / 10)
           : 0;
       const costOther = Number(r.costOther) || 0;
+      const costWithInvoiceOther = Number(r.costWithInvoiceOther) || 0;
+      const costNoInvoiceOther = Number(r.costNoInvoiceOther) || 0;
       const paidCostOther = paidCostInfo.other;
+      const paidCostWithInvoiceOther = paidCostInfo.otherWithInvoice || 0;
+      const paidCostNoInvoiceOther = paidCostInfo.otherNoInvoice || 0;
       const payableCostOther = Math.max(0, costOther - paidCostOther);
+      const payableCostWithInvoiceOther = Math.max(
+        0,
+        costWithInvoiceOther - paidCostWithInvoiceOther,
+      );
+      const payableCostNoInvoiceOther = Math.max(
+        0,
+        costNoInvoiceOther - paidCostNoInvoiceOther,
+      );
       const costRateOther =
         costOther > 0
           ? Math.min(100, Math.round((paidCostOther / costOther) * 1000) / 10)
@@ -545,10 +715,14 @@ export class GarageDashboardService {
         billedSuaChuaChung,
         paidSuaChuaChung: pSuaChuaChung,
         receivableSuaChuaChung: recSuaChuaChung,
+        receivableWithInvoiceSuaChuaChung: recWithInvoiceScc,
+        receivableNoInvoiceSuaChuaChung: recNoInvoiceScc,
         rateSuaChuaChung,
         costSuaChuaChung,
         paidCostSuaChuaChung,
         payableCostSuaChuaChung,
+        payableCostWithInvoiceSuaChuaChung: payableCostWithInvoiceScc,
+        payableCostNoInvoiceSuaChuaChung: payableCostNoInvoiceScc,
         costRateSuaChuaChung,
 
         // Classification breakdowns: Ký gửi / Nội bộ
@@ -556,10 +730,14 @@ export class GarageDashboardService {
         billedKyGuiNoiBo,
         paidKyGuiNoiBo: pKyGuiNoiBo,
         receivableKyGuiNoiBo: recKyGuiNoiBo,
+        receivableWithInvoiceKyGuiNoiBo: recWithInvoiceKgNb,
+        receivableNoInvoiceKyGuiNoiBo: recNoInvoiceKgNb,
         rateKyGuiNoiBo,
         costKyGuiNoiBo,
         paidCostKyGuiNoiBo,
         payableCostKyGuiNoiBo,
+        payableCostWithInvoiceKyGuiNoiBo: payableCostWithInvoiceKgNb,
+        payableCostNoInvoiceKyGuiNoiBo: payableCostNoInvoiceKgNb,
         costRateKyGuiNoiBo,
 
         // Classification breakdowns: OJ Ngoài
@@ -567,10 +745,14 @@ export class GarageDashboardService {
         billedOj,
         paidOj: pOj,
         receivableOj: recOj,
+        receivableWithInvoiceOj: recWithInvoiceOj,
+        receivableNoInvoiceOj: recNoInvoiceOj,
         rateOj,
         costOj,
         paidCostOj,
         payableCostOj,
+        payableCostWithInvoiceOj: payableCostWithInvoiceOj,
+        payableCostNoInvoiceOj: payableCostNoInvoiceOj,
         costRateOj,
 
         // Classification breakdowns: Khác / Chưa phân loại
@@ -578,10 +760,14 @@ export class GarageDashboardService {
         billedOther,
         paidOther: pOther,
         receivableOther: recOther,
+        receivableWithInvoiceOther: recWithInvoiceOther,
+        receivableNoInvoiceOther: recNoInvoiceOther,
         rateOther,
         costOther,
         paidCostOther,
         payableCostOther,
+        payableCostWithInvoiceOther: payableCostWithInvoiceOther,
+        payableCostNoInvoiceOther: payableCostNoInvoiceOther,
         costRateOther,
       };
     });

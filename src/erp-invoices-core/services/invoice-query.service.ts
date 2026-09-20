@@ -2633,6 +2633,13 @@ export class InvoiceQueryService {
       );
     }
 
+    // Filter by partner tax code (seller or buyer depending on direction)
+    if (query.partner_tax_code) {
+      qb.andWhere('(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)', {
+        ptc: query.partner_tax_code.trim(),
+      });
+    }
+
     // Global Search
     if (query.search) {
       const q = `%${query.search.trim()}%`;
