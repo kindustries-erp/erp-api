@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { SysFile } from '../../files/entities/sys-file.entity';
-import { ErpEmailMessage } from './erp_email_message.entity';
+import type { ErpEmailMessage } from './erp_email_message.entity';
 
 @Entity({ name: 'erp_email_attachments' })
 @Index('idx_erp_email_attachments_message_id', ['messageId'])
@@ -47,9 +47,13 @@ export class ErpEmailAttachment {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @ManyToOne(() => ErpEmailMessage, (message) => message.attachments, {
-    onDelete: 'CASCADE',
-  })
+  @ManyToOne(
+    'ErpEmailMessage',
+    (message: ErpEmailMessage) => message.attachments,
+    {
+      onDelete: 'CASCADE',
+    },
+  )
   @JoinColumn({ name: 'messageId' })
   message: ErpEmailMessage;
 

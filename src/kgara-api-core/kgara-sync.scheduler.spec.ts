@@ -5,6 +5,7 @@ import { KgaraBranch } from './entities/kgara_branch.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as cronUtil from '../common/utils/cron.util';
 
 describe('KgaraSyncScheduler', () => {
   let scheduler: KgaraSyncScheduler;
@@ -14,6 +15,8 @@ describe('KgaraSyncScheduler', () => {
   let notificationsService: any;
 
   beforeEach(async () => {
+    process.env.ENABLE_CRON = 'true';
+
     const mockQueryBuilder = {
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -73,12 +76,26 @@ describe('KgaraSyncScheduler', () => {
     scheduler = module.get<KgaraSyncScheduler>(KgaraSyncScheduler);
   });
 
+  afterEach(() => {
+    delete process.env.ENABLE_CRON;
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
   it('should be defined', () => {
     expect(scheduler).toBeDefined();
   });
 
-  it('should execute hourly sync check successfully when no cases are deleted', async () => {
-    await scheduler.runHourlySyncCheck();
+  it('should log next scheduled slot on onModuleInit', () => {
+    const loggerSpy = jest.spyOn((scheduler as any).logger, 'log');
+    scheduler.onModuleInit();
+    expect(loggerSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Next sync slot scheduled at'),
+    );
+  });
+
+  it('should execute scheduled sync check successfully when no cases are deleted', async () => {
+    await scheduler.runScheduledSyncCheck();
 
     expect(branchRepo.find).toHaveBeenCalled();
     expect(syncService.getIncrementalWatermark).toHaveBeenCalledWith(
@@ -89,13 +106,22 @@ describe('KgaraSyncScheduler', () => {
     expect(notificationsService.createForUser).not.toHaveBeenCalled();
   });
 
+  it('should skip execution when cron is disabled', async () => {
+    jest.spyOn(cronUtil, 'isCronEnabled').mockReturnValue(false);
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(branchRepo.find).not.toHaveBeenCalled();
+    expect(syncService.syncCasesForBranch).not.toHaveBeenCalled();
+  });
+
   it('should send INFO notification when cases are deleted without linked invoices', async () => {
     syncService.syncCasesForBranch.mockResolvedValueOnce({
       deletedCount: 2,
       withLinkedInvoices: [],
     });
 
-    await scheduler.runHourlySyncCheck();
+    await scheduler.runScheduledSyncCheck();
 
     expect(notificationsService.createForUser).toHaveBeenCalledWith(
       'admin-1',
@@ -112,7 +138,7 @@ describe('KgaraSyncScheduler', () => {
       withLinkedInvoices: ['case-id-1'],
     });
 
-    await scheduler.runHourlySyncCheck();
+    await scheduler.runScheduledSyncCheck();
 
     expect(notificationsService.createForUser).toHaveBeenCalledWith(
       'admin-1',
@@ -128,7 +154,7 @@ describe('KgaraSyncScheduler', () => {
       new Error('Connection timeout'),
     );
 
-    await scheduler.runHourlySyncCheck();
+    await scheduler.runScheduledSyncCheck();
 
     expect(notificationsService.createForUser).toHaveBeenCalledWith(
       'admin-1',

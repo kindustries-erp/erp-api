@@ -22,6 +22,7 @@ import { AccountingCoreService } from '../../accounting-core/services/accounting
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
 import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
+import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -177,6 +178,7 @@ export class InvoiceLifecycleService {
       discountAmount: String(dto.discountAmount ?? 0),
       totalAmount: String(dto.totalAmount ?? 0),
       items: dto.items?.map((i) => ({
+        itemCode: i.itemCode || extractVinfastItemCode(i.description) || null,
         description: i.description,
         unit: i.unit,
         quantity: i.quantity != null ? String(i.quantity) : null,
@@ -225,6 +227,7 @@ export class InvoiceLifecycleService {
       const newItems = dto.items.map((i) =>
         this.repository.manager.create(ErpInvoiceItem, {
           invoiceId: id,
+          itemCode: i.itemCode || extractVinfastItemCode(i.description) || null,
           description: i.description,
           unit: i.unit,
           quantity: i.quantity != null ? String(i.quantity) : null,
