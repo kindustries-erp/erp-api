@@ -380,6 +380,17 @@ src/erp-invoices-core/
     - **Backfill Chi nhánh (`branch_id`)**: Nếu DB chưa có chi nhánh, tự động suy diễn và cập nhật.
     - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
 
+### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel`)
+- **Cấu trúc Sheet & Trình bày Bảng**:
+  - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Hàng hóa`.
+  - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).
+  - **Cột Còn lại**: Nổi bật với màu vàng hổ phách nhạt (`#FEFCE8` / `#FFFDE68A`) thể hiện số dư còn lại của hóa đơn sau cấn trừ.
+  - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Hàng hóa` và sheet `Tổng quan hàng hóa`.
+  - **Sheet Công nợ Theo Đối tượng**: Bổ sung sheet tổng hợp công nợ đối tác tính đến ngày kết thúc kỳ báo cáo (`cutoffDate`) với các cột *Lũy kế công nợ*, *Lũy kế cấn trừ*, *Lũy kế còn nợ* và dòng *TỔNG CỘNG* footer.
+- **Định dạng Số liệu & Đơn vị tính**:
+  - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
+  - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
+
 ---
 
 ## 6. Tích hợp Liên Module
