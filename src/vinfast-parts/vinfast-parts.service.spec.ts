@@ -15,6 +15,20 @@ describe('VinfastPartsService Filter & Search Specs', () => {
         if (queryStr.includes('COUNT(DISTINCT')) {
           return Promise.resolve([{ total: '5' }]);
         }
+        if (queryStr.includes('totalQtyIn')) {
+          return Promise.resolve([
+            { totalQtyIn: '100', totalQtyOut: '30', totalQtyBalance: '70' },
+          ]);
+        }
+        if (queryStr.includes('cumulativeQtyIn')) {
+          return Promise.resolve([
+            {
+              cumulativeQtyIn: '50',
+              cumulativeQtyOut: '15',
+              cumulativeQtyBalance: '35',
+            },
+          ]);
+        }
         return Promise.resolve([
           {
             sku: 'EEP73110011AP',
@@ -200,6 +214,61 @@ describe('VinfastPartsService Filter & Search Specs', () => {
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
       expect(calledQuery).toContain('AND "qtyBalance" > 0');
+    });
+  });
+
+  describe('getPartsStock summary and cumulative totals', () => {
+    it('should return totalQtyIn, totalQtyOut, totalQtyBalance and local cumulative on page 1', async () => {
+      const res = await service.getPartsStock('oto', 1, 50);
+
+      expect(res.summary).toBeDefined();
+      expect(res.summary.totalQtyIn).toBe(100);
+      expect(res.summary.totalQtyOut).toBe(30);
+      expect(res.summary.totalQtyBalance).toBe(70);
+      expect(res.summary.cumulativeQtyIn).toBe(10);
+      expect(res.summary.cumulativeQtyOut).toBe(3);
+      expect(res.summary.cumulativeQtyBalance).toBe(7);
+    });
+
+    it('should calculate cumulative totals via query on page > 1 and page < totalPages', async () => {
+      // Mock totalPages > 2
+      catalogRepo.query.mockImplementation((queryStr: string) => {
+        if (queryStr.includes('COUNT(*) as total')) {
+          return Promise.resolve([{ total: '150' }]);
+        }
+        if (queryStr.includes('totalQtyIn')) {
+          return Promise.resolve([
+            { totalQtyIn: '100', totalQtyOut: '30', totalQtyBalance: '70' },
+          ]);
+        }
+        if (queryStr.includes('cumulativeQtyIn')) {
+          return Promise.resolve([
+            {
+              cumulativeQtyIn: '50',
+              cumulativeQtyOut: '15',
+              cumulativeQtyBalance: '35',
+            },
+          ]);
+        }
+        return Promise.resolve([
+          {
+            sku: 'EEP73110011AP',
+            name: 'Pack Pin VF5',
+            uom: 'Cái',
+            qtyIn: '10',
+            qtyOut: '3',
+            qtyBalance: '7',
+          },
+        ]);
+      });
+
+      const res = await service.getPartsStock('oto', 2, 50);
+
+      expect(res.summary).toBeDefined();
+      expect(res.summary.totalQtyIn).toBe(100);
+      expect(res.summary.cumulativeQtyIn).toBe(50);
+      expect(res.summary.cumulativeQtyOut).toBe(15);
+      expect(res.summary.cumulativeQtyBalance).toBe(35);
     });
   });
 });

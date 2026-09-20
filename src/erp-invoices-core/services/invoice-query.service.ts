@@ -2411,18 +2411,148 @@ export class InvoiceQueryService {
       };
     });
 
+    const totalPages = Math.ceil(total / pageSize);
+    const grandTotalQuantity = Number(summaryRaw?.total_quantity || 0);
+    const grandTotalPreVatAmount = Number(
+      summaryRaw?.total_pre_vat_amount || 0,
+    );
+    const grandTotalVatAmount = Number(summaryRaw?.total_vat_amount || 0);
+    const grandTotalDiscountAmount = Number(
+      summaryRaw?.total_discount_amount || 0,
+    );
+    const grandTotalAmount = Number(summaryRaw?.total_amount || 0);
+
+    let cumulativeQuantity = 0;
+    let cumulativePreVatAmount = 0;
+    let cumulativeVatAmount = 0;
+    let cumulativeDiscountAmount = 0;
+    let cumulativeTotalAmount = 0;
+
+    try {
+      if (page === 1) {
+        cumulativeQuantity = items.reduce(
+          (acc, curr) => acc + (Number(curr.quantity) || 0),
+          0,
+        );
+        cumulativePreVatAmount = items.reduce(
+          (acc, curr) => acc + (Number(curr.preVatAmount) || 0),
+          0,
+        );
+        cumulativeVatAmount = items.reduce(
+          (acc, curr) => acc + (Number(curr.vatAmount) || 0),
+          0,
+        );
+        cumulativeDiscountAmount = items.reduce(
+          (acc, curr) => acc + (Number(curr.discountAmount) || 0),
+          0,
+        );
+        cumulativeTotalAmount = items.reduce(
+          (acc, curr) => acc + (Number(curr.totalAmount) || 0),
+          0,
+        );
+      } else if (page >= totalPages && totalPages > 0) {
+        cumulativeQuantity = grandTotalQuantity;
+        cumulativePreVatAmount = grandTotalPreVatAmount;
+        cumulativeVatAmount = grandTotalVatAmount;
+        cumulativeDiscountAmount = grandTotalDiscountAmount;
+        cumulativeTotalAmount = grandTotalAmount;
+      } else {
+        const cumQb = qb.clone();
+        if (cumQb.expressionMap) {
+          cumQb.expressionMap.selects = [];
+        }
+        cumQb
+          .select([
+            'ii.quantity AS quantity',
+            'ii.pre_vat_amount AS pre_vat_amount',
+            'ii.vat_rate AS vat_rate',
+            'ii.vat_amount AS vat_amount',
+            'ii.discount_amount AS discount_amount',
+            'ii.total_amount AS total_amount',
+          ])
+          .offset(0)
+          .limit(page * pageSize);
+        cumQb.skip?.(undefined);
+        cumQb.take?.(undefined);
+
+        const cumRows = await cumQb.getRawMany();
+        cumulativeQuantity = cumRows.reduce(
+          (acc, r) => acc + (Number(r.quantity) || 0),
+          0,
+        );
+        cumulativePreVatAmount = cumRows.reduce(
+          (acc, r) => acc + (Number(r.pre_vat_amount) || 0),
+          0,
+        );
+        cumulativeDiscountAmount = cumRows.reduce(
+          (acc, r) => acc + (Number(r.discount_amount) || 0),
+          0,
+        );
+        cumulativeVatAmount = cumRows.reduce((acc, r) => {
+          const preVat = Number(r.pre_vat_amount || 0);
+          const vRateDisplay =
+            r.vat_rate !== null ? parseVatRateForDisplay(r.vat_rate) : null;
+          let vatAmt = Number(r.vat_amount || 0);
+          if (vatAmt === 0 && vRateDisplay !== null && preVat !== 0) {
+            const vRateNum =
+              typeof vRateDisplay === 'number'
+                ? vRateDisplay
+                : parseFloat(String(vRateDisplay));
+            if (!isNaN(vRateNum)) {
+              const decimalRate =
+                Math.abs(vRateNum) > 1 ? vRateNum / 100 : vRateNum;
+              vatAmt = Math.round(preVat * decimalRate);
+            }
+          }
+          return acc + vatAmt;
+        }, 0);
+        cumulativeTotalAmount = cumRows.reduce((acc, r) => {
+          const preVat = Number(r.pre_vat_amount || 0);
+          const disc = Number(r.discount_amount || 0);
+          const vRateDisplay =
+            r.vat_rate !== null ? parseVatRateForDisplay(r.vat_rate) : null;
+          let vatAmt = Number(r.vat_amount || 0);
+          if (vatAmt === 0 && vRateDisplay !== null && preVat !== 0) {
+            const vRateNum =
+              typeof vRateDisplay === 'number'
+                ? vRateDisplay
+                : parseFloat(String(vRateDisplay));
+            if (!isNaN(vRateNum)) {
+              const decimalRate =
+                Math.abs(vRateNum) > 1 ? vRateNum / 100 : vRateNum;
+              vatAmt = Math.round(preVat * decimalRate);
+            }
+          }
+          let totalAmt = Number(r.total_amount || 0);
+          if (totalAmt === 0 && (preVat !== 0 || vatAmt !== 0 || disc !== 0)) {
+            totalAmt = preVat + vatAmt - disc;
+          }
+          return acc + totalAmt;
+        }, 0);
+      }
+    } catch (e) {
+      this.logger.error(
+        `Error calculating cumulative totals in findAllItems: ${e}`,
+      );
+    }
+
     return {
       items,
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages,
       summary: {
-        totalQuantity: Number(summaryRaw?.total_quantity || 0),
-        totalPreVatAmount: Number(summaryRaw?.total_pre_vat_amount || 0),
-        totalVatAmount: Number(summaryRaw?.total_vat_amount || 0),
-        totalDiscountAmount: Number(summaryRaw?.total_discount_amount || 0),
-        totalAmount: Number(summaryRaw?.total_amount || 0),
+        totalQuantity: grandTotalQuantity,
+        totalPreVatAmount: grandTotalPreVatAmount,
+        totalVatAmount: grandTotalVatAmount,
+        totalDiscountAmount: grandTotalDiscountAmount,
+        totalAmount: grandTotalAmount,
+        cumulativeQuantity,
+        cumulativePreVatAmount,
+        cumulativeVatAmount,
+        cumulativeDiscountAmount,
+        cumulativeTotalAmount,
       },
     };
   }
