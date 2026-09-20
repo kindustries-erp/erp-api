@@ -128,14 +128,14 @@ export class InventoryStockCoreService {
       else if (col === 'received_qty')
         applyMultiKeywordFilter(
           qb,
-          'CAST((SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) AS TEXT)',
+          "CAST((SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id) AS TEXT)",
           val,
           `${prefix}_received`,
         );
       else if (col === 'issued_qty')
         applyMultiKeywordFilter(
           qb,
-          'CAST((SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id) AS TEXT)',
+          "CAST((SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id) AS TEXT)",
           val,
           `${prefix}_issued`,
         );
@@ -230,13 +230,13 @@ export class InventoryStockCoreService {
             applyInCondition('b.qtyReserved', `vals_${col}`, true);
           else if (col === 'received_qty')
             applyInCondition(
-              '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
               `vals_${col}`,
               true,
             );
           else if (col === 'issued_qty')
             applyInCondition(
-              '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
               `vals_${col}`,
               true,
             );
@@ -275,13 +275,13 @@ export class InventoryStockCoreService {
         else if (field === 'last') sortField = 'b.updatedAt';
         else if (field === 'received_qty') {
           qb.addSelect(
-            '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+            "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
             'receivedQty_sort',
           );
           sortField = '"receivedQty_sort"';
         } else if (field === 'issued_qty') {
           qb.addSelect(
-            '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+            "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
             'issuedQty_sort',
           );
           sortField = '"issuedQty_sort"';
@@ -357,8 +357,14 @@ export class InventoryStockCoreService {
 
     const txnSummaryQb = this.transactionRepository
       .createQueryBuilder('txn')
-      .select('COALESCE(SUM(txn.qtyIn), 0)', 'total_received_qty')
-      .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'total_issued_qty')
+      .select(
+        "COALESCE(SUM(CASE WHEN txn.transactionType NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn ELSE 0 END), 0)",
+        'total_received_qty',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyOut ELSE 0 END), 0)",
+        'total_issued_qty',
+      )
       .addSelect(
         "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn - txn.qtyOut ELSE 0 END), 0)",
         'total_adjusted_qty',
@@ -416,8 +422,14 @@ export class InventoryStockCoreService {
     const transactionSums = await this.transactionRepository
       .createQueryBuilder('txn')
       .select('txn.itemId', 'itemId')
-      .addSelect('COALESCE(SUM(txn.qtyIn), 0)', 'receivedQty')
-      .addSelect('COALESCE(SUM(txn.qtyOut), 0)', 'issuedQty')
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn ELSE 0 END), 0)",
+        'receivedQty',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN txn.transactionType NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyOut ELSE 0 END), 0)",
+        'issuedQty',
+      )
       .addSelect(
         "COALESCE(SUM(CASE WHEN txn.transactionType IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qtyIn - txn.qtyOut ELSE 0 END), 0)",
         'adjustedQty',
@@ -502,10 +514,10 @@ export class InventoryStockCoreService {
     else if (column === 'reserved_qty') selectField = 'b.qtyReserved';
     else if (column === 'received_qty')
       selectField =
-        '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
+        "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)";
     else if (column === 'issued_qty')
       selectField =
-        '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)';
+        "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)";
     else if (column === 'adjusted_qty')
       selectField = `(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in - txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)`;
     else if (column === 'last') selectField = 'b.updatedAt';
@@ -609,13 +621,13 @@ export class InventoryStockCoreService {
             applyInCondition('b.qtyReserved', `vals_${col}`, true);
           else if (col === 'received_qty')
             applyInCondition(
-              '(SELECT COALESCE(SUM("qty_in"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_in ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
               `vals_${col}`,
               true,
             );
           else if (col === 'issued_qty')
             applyInCondition(
-              '(SELECT COALESCE(SUM("qty_out"), 0) FROM erp_inventory_transactions txn WHERE txn."item_id" = item.id)',
+              "(SELECT COALESCE(SUM(CASE WHEN txn.transaction_type NOT IN ('ADJUSTMENT', 'ADJUSTMENT_CANCEL') THEN txn.qty_out ELSE 0 END), 0) FROM erp_inventory_transactions txn WHERE txn.\"item_id\" = item.id)",
               `vals_${col}`,
               true,
             );
