@@ -26,6 +26,11 @@ export interface InvoiceDebtSummary {
   grandTotalAmount: number;
   grandTotalPaid: number;
   grandTotalBalance: number;
+  cumulativeTotalAmount?: number;
+  cumulativePaidAmount?: number;
+  cumulativeBalanceAmount?: number;
+  cumulativeInvoiceCount?: number;
+  cumulativePartnersCount?: number;
 }
 
 export interface InvoiceDebtsResponse {
@@ -87,10 +92,10 @@ export class InvoiceDebtsService {
         ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
         : `COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
 
-    const partnerNameExpr =
+    const rawPartnerNameExpr =
       direction === 'IN'
-        ? `MAX(COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp'))`
-        : `MAX(COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ'))`;
+        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
+        : `COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
 
     const partnerAddressExpr =
       direction === 'IN' ? `MAX(inv.seller_address)` : `MAX(inv.buyer_address)`;
@@ -98,7 +103,7 @@ export class InvoiceDebtsService {
     let baseQuery = `
       SELECT 
         ${partnerTaxExpr} as "taxCode",
-        ${partnerNameExpr} as "partnerName",
+        ${rawPartnerNameExpr} as "partnerName",
         ${partnerAddressExpr} as "address",
         COUNT(DISTINCT inv.id) as "invoiceCount",
         SUM(CAST(inv.total_amount AS NUMERIC)) as "totalAmount",
@@ -140,7 +145,7 @@ export class InvoiceDebtsService {
       }
     }
 
-    baseQuery += ` GROUP BY ${partnerTaxExpr}`;
+    baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 
     // 2. Filter wrapper
     let finalQuery = `SELECT * FROM (${baseQuery}) p`;
@@ -320,12 +325,70 @@ export class InvoiceDebtsService {
       latestInvoiceDate: r.latestInvoiceDate || null,
     }));
 
+    const totalPages = Math.ceil(total / safePageSize);
+
+    // Calculate Cumulative Totals for Multi-page Navigation
+    let cumulativeTotalAmount = 0;
+    let cumulativePaidAmount = 0;
+    let cumulativeBalanceAmount = 0;
+    let cumulativeInvoiceCount = 0;
+    let cumulativePartnersCount = 0;
+
+    if (page === 1) {
+      for (const item of items) {
+        cumulativeTotalAmount += item.totalAmount;
+        cumulativePaidAmount += item.paidAmount;
+        cumulativeBalanceAmount += item.balanceAmount;
+        cumulativeInvoiceCount += item.invoiceCount;
+      }
+      cumulativePartnersCount = items.length;
+    } else if (page >= totalPages) {
+      cumulativeTotalAmount = summary.grandTotalAmount;
+      cumulativePaidAmount = summary.grandTotalPaid;
+      cumulativeBalanceAmount = summary.grandTotalBalance;
+      cumulativeInvoiceCount = summary.totalInvoiceCount;
+      cumulativePartnersCount = total;
+    } else {
+      const cumSql = `
+        SELECT 
+          COUNT(*) as "cumulativePartnersCount",
+          COALESCE(SUM(p."invoiceCount"), 0) as "cumulativeInvoiceCount",
+          COALESCE(SUM(p."totalAmount"), 0) as "cumulativeTotalAmount",
+          COALESCE(SUM(p."paidAmount"), 0) as "cumulativePaidAmount",
+          COALESCE(SUM(p."balanceAmount"), 0) as "cumulativeBalanceAmount"
+        FROM (
+          SELECT * FROM (${finalQuery}) p
+          ${orderClause}
+          LIMIT ${safePageSize * page}
+        ) as p
+      `;
+      const cumResult = await this.invoiceRepo.query(cumSql);
+      const cumRow = cumResult[0] || {};
+      cumulativeTotalAmount = Number(cumRow.cumulativeTotalAmount) || 0;
+      cumulativePaidAmount = Number(cumRow.cumulativePaidAmount) || 0;
+      cumulativeBalanceAmount = Number(cumRow.cumulativeBalanceAmount) || 0;
+      cumulativeInvoiceCount = parseInt(
+        cumRow.cumulativeInvoiceCount || '0',
+        10,
+      );
+      cumulativePartnersCount = parseInt(
+        cumRow.cumulativePartnersCount || '0',
+        10,
+      );
+    }
+
+    summary.cumulativeTotalAmount = cumulativeTotalAmount;
+    summary.cumulativePaidAmount = cumulativePaidAmount;
+    summary.cumulativeBalanceAmount = cumulativeBalanceAmount;
+    summary.cumulativeInvoiceCount = cumulativeInvoiceCount;
+    summary.cumulativePartnersCount = cumulativePartnersCount;
+
     return {
       items,
       total,
       page,
       pageSize: safePageSize,
-      totalPages: Math.ceil(total / safePageSize),
+      totalPages,
       summary,
     };
   }
@@ -401,18 +464,25 @@ export class InvoiceDebtsService {
         ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
         : `COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
 
-    const partnerNameExpr =
+    const rawPartnerNameExpr =
       direction === 'IN'
-        ? `MAX(COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp'))`
-        : `MAX(COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ'))`;
+        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
+        : `COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
 
     let baseQuery = `
       SELECT 
         ${partnerTaxExpr} as "taxCode",
-        ${partnerNameExpr} as "partnerName",
+        ${rawPartnerNameExpr} as "partnerName",
         COUNT(DISTINCT inv.id) as "invoiceCount",
-        SUM(CAST(inv.total_amount AS NUMERIC)) as "totalAmount"
+        SUM(CAST(inv.total_amount AS NUMERIC)) as "totalAmount",
+        SUM(COALESCE(netoff.net_off_amount, 0)) as "paidAmount",
+        SUM(GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))) as "balanceAmount"
       FROM erp_invoices inv
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) as net_off_amount
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) netoff ON netoff.invoice_id = inv.id
       WHERE inv.is_deleted = false 
         AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         AND inv.direction = '${direction}'
@@ -434,10 +504,15 @@ export class InvoiceDebtsService {
       }
     }
 
-    baseQuery += ` GROUP BY ${partnerTaxExpr}`;
+    baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 
     let colExpr = `p."${column_key}"`;
-    if (column_key === 'invoiceCount' || column_key === 'totalAmount') {
+    if (
+      column_key === 'invoiceCount' ||
+      column_key === 'totalAmount' ||
+      column_key === 'paidAmount' ||
+      column_key === 'balanceAmount'
+    ) {
       colExpr = `CAST(p."${column_key}" AS TEXT)`;
     }
 
@@ -486,6 +561,7 @@ export class InvoiceDebtsService {
     partnerType?: InvoicePartnerType,
     dateFrom?: string,
     dateTo?: string,
+    partnerName?: string,
   ) {
     const direction =
       partnerType === InvoicePartnerType.SUPPLIER ? 'IN' : 'OUT';
@@ -499,10 +575,12 @@ export class InvoiceDebtsService {
         inv.direction,
         inv.seller_name as "sellerName",
         inv.seller_tax_code as "sellerTaxCode",
+        inv.seller_address as "sellerAddress",
         inv.buyer_name as "buyerName",
         inv.buyer_tax_code as "buyerTaxCode",
         inv.buyer_personal_name as "buyerPersonalName",
         inv.buyer_cccd as "buyerCccd",
+        inv.buyer_address as "buyerAddress",
         CAST(inv.pre_vat_amount AS NUMERIC) as "preVatAmount",
         CAST(inv.vat_amount AS NUMERIC) as "vatAmount",
         CAST(inv.total_amount AS NUMERIC) as "totalAmount",
@@ -523,16 +601,24 @@ export class InvoiceDebtsService {
     `;
 
     if (direction === 'IN') {
-      if (taxCode === 'KHONG_MST') {
+      if (taxCode === 'KHONG_MST' || !taxCode) {
         query += ` AND inv.direction = 'IN' AND (inv.seller_tax_code IS NULL OR inv.seller_tax_code = '')`;
       } else {
         query += ` AND inv.direction = 'IN' AND inv.seller_tax_code = '${taxCode.replace(/'/g, "''")}'`;
       }
+      if (partnerName && partnerName.trim()) {
+        const cleanName = partnerName.trim().replace(/'/g, "''");
+        query += ` AND COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp') = '${cleanName}'`;
+      }
     } else {
-      if (taxCode === 'KHONG_MST') {
+      if (taxCode === 'KHONG_MST' || !taxCode) {
         query += ` AND inv.direction = 'OUT' AND (inv.buyer_tax_code IS NULL OR inv.buyer_tax_code = '') AND (inv.buyer_cccd IS NULL OR inv.buyer_cccd = '')`;
       } else {
         query += ` AND inv.direction = 'OUT' AND (inv.buyer_tax_code = '${taxCode.replace(/'/g, "''")}' OR inv.buyer_cccd = '${taxCode.replace(/'/g, "''")}')`;
+      }
+      if (partnerName && partnerName.trim()) {
+        const cleanName = partnerName.trim().replace(/'/g, "''");
+        query += ` AND COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ') = '${cleanName}'`;
       }
     }
 
@@ -556,8 +642,10 @@ export class InvoiceDebtsService {
       direction: r.direction,
       sellerName: r.sellerName,
       sellerTaxCode: r.sellerTaxCode,
+      sellerAddress: r.sellerAddress,
       buyerName: r.buyerName || r.buyerPersonalName,
       buyerTaxCode: r.buyerTaxCode || r.buyerCccd,
+      buyerAddress: r.buyerAddress,
       preVatAmount: Number(r.preVatAmount) || 0,
       vatAmount: Number(r.vatAmount) || 0,
       totalAmount: Number(r.totalAmount) || 0,

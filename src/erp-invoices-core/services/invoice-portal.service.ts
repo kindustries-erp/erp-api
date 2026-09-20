@@ -17,6 +17,7 @@ import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
+import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 import {
   fetchWithRetry,
   resolvePortalVatRate,
@@ -39,6 +40,7 @@ import {
   authenticateGdtWithSession,
 } from '../helpers/gdt-session.helper';
 import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
+import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -248,6 +250,7 @@ export class InvoicePortalService implements OnModuleInit {
       }
     }
     await this.companyProfileRepo.save(profile);
+    GdtCronStateHelper.resume();
   }
 
   async autoReloginWithRetry(
@@ -262,14 +265,22 @@ export class InvoicePortalService implements OnModuleInit {
       return null;
     }
 
+    this.logger.log(
+      `Bắt đầu quy trình tự động đăng nhập Cổng Thuế cho MST ${config.username}...`,
+    );
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      this.logger.log(
-        `Bắt đầu tự động đăng nhập lại Cổng Thuế GDT (lần ${attempt}/${maxRetries})...`,
-      );
       try {
+        this.logger.log(
+          `Lấy Captcha để đăng nhập Cổng Thuế (Lần thử ${attempt}/${maxRetries})...`,
+        );
         const captcha = await this.getCaptcha();
+
         if (!captcha?.text || !captcha?.key) {
-          throw new Error('Không thể lấy hoặc giải mã Captcha');
+          this.logger.warn(
+            `Không thể giải Captcha ở lần thử ${attempt}. Bỏ qua lượt này.`,
+          );
+          continue;
         }
 
         const loginRes = await this.loginWithCaptcha({
@@ -294,19 +305,26 @@ export class InvoicePortalService implements OnModuleInit {
           `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
         );
 
-        // Chặn retry nếu gặp lỗi 401/403 Unauthorized để tránh bị Cổng Thuế khóa tài khoản
+        // Chặn retry nếu gặp lỗi 401/403 Unauthorized hoặc thông báo sai mật khẩu/tài khoản
+        const errMsg = (err?.message || '').toLowerCase();
         const isAuthError =
           err?.status === 401 ||
           err?.status === 403 ||
           err instanceof UnauthorizedException ||
-          err?.message?.includes('401') ||
-          err?.message?.includes('403');
+          errMsg.includes('401') ||
+          errMsg.includes('403') ||
+          errMsg.includes('mật khẩu') ||
+          errMsg.includes('tài khoản') ||
+          errMsg.includes('password') ||
+          errMsg.includes('credentials') ||
+          errMsg.includes('gdt_auth_failed');
 
         if (isAuthError) {
+          GdtCronStateHelper.pauseDueToAuthError();
           this.logger.error(
-            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
+            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}: ${err?.message}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
           );
-          break;
+          return null;
         }
 
         if (attempt < maxRetries) {
@@ -1445,7 +1463,15 @@ export class InvoicePortalService implements OnModuleInit {
         const disc = i.stckhau != null ? Number(i.stckhau) : 0;
         const total = preVat + vatAmt - disc;
 
+        const itemCode =
+          i.mhhdvu ||
+          i.mhang ||
+          i.ma ||
+          extractVinfastItemCode(i.ten) ||
+          undefined;
+
         return {
+          itemCode,
           description: i.ten,
           unit: i.dvtinh,
           quantity: i.sluong != null ? Number(i.sluong) : undefined,

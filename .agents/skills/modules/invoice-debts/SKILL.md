@@ -15,8 +15,10 @@ Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế 
 1. **Tổng hợp thời gian thực (Zero-Lag Real-Time Aggregation)**: Không duy trì bảng số dư tĩnh gây lệch số liệu; dữ liệu được tổng hợp trực tiếp từ bảng hóa đơn gốc `erp_invoices` kết hợp `LEFT JOIN` với bảng cấn trừ thanh toán `erp_invoice_voucher_netoff`.
 2. **Loại trừ Hóa đơn Bị Thay Thế**: Tự động loại trừ các hóa đơn có `tax_invoice_status = 4` (hóa đơn bị thay thế từ Cổng thuế GDT) để số liệu công nợ không bị tính trùng lặp.
 3. **Phân tích Tuổi nợ Động (Aging Buckets)**: Tự động tính số ngày quá hạn `CURRENT_DATE - inv.invoice_date::date` cho các hóa đơn còn số dư (`balanceAmount > 0`). Phân loại thành các tầng: Trong hạn (< 30 ngày), Cảnh báo (30 - 90 ngày), Quá hạn nghiêm trọng (> 90 ngày).
-4. **Tiến độ Thanh toán Fintech**: Tính tỷ lệ `%` thanh toán `(paidAmount / totalAmount) * 100`, hiển thị thanh tiến độ với màu sắc trực quan (Xanh lá / Cam / Xám) tuân thủ quy tắc No-Blue Mandate.
-5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`).
+4. **Cấu trúc 2 Cột Tài chính Độc lập (Chuẩn /garage-cases)**:
+   - **Tổng phải thu / Tổng phải trả (`paymentProgress`)**: Hiển thị số tiền tổng `money(total)` + thanh Progress Bar tỉ lệ thanh toán bên dưới + Tooltip chi tiết (đã thu/trả, còn nợ, %) + Header Filter 3 trạng thái (Đã thu đủ / Thu một phần / Chưa thu hoặc Đã trả đủ / Trả một phần / Chưa trả).
+   - **Còn phải thu / Còn phải trả (`balanceAmount`)**: Hiển thị số dư nợ thực tế `money(balance)` với màu sắc trực quan (`emerald` khi hết nợ, `destructive` khi còn nợ) + Header Filter theo số tiền.
+5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
 
 ---
 
@@ -120,9 +122,9 @@ Tất cả các endpoint dưới đây được bảo vệ bởi `JwtAuthGuard`,
 
 | Phương thức | Endpoint | Params / Query | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/erp-invoices/debts` | `partner_type`, `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Lấy danh sách tổng hợp công nợ đối tác có phân trang, lọc đa chiều và tính Grand Totals |
+| `GET` | `/api/v1/erp-invoices/debts` | `partner_type`, `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Lấy danh sách tổng hợp công nợ đối tác nhóm theo Tên & MST (`GROUP BY partnerName, taxCode`), có phân trang, lọc đa chiều và tính Grand Totals |
 | `GET` | `/api/v1/erp-invoices/debts/column-options` | `column_key`, `partner_type`, `search`, `page`, `pageSize`, `filters`, `date_from`, `date_to`, `branch_id` | Lấy danh sách options lọc động cho từng cột trên Header Filter |
-| `GET` | `/api/v1/erp-invoices/debts/:taxCode/invoices` | `:taxCode`, `partner_type`, `date_from`, `date_to` | Lấy danh sách chi tiết các hóa đơn phát sinh của một đối tác cụ thể |
+| `GET` | `/api/v1/erp-invoices/debts/:taxCode/invoices` | `:taxCode`, `partner_type`, `date_from`, `date_to`, `partner_name` | Lấy danh sách chi tiết các hóa đơn phát sinh của một đối tác cụ thể theo MST và Tên |
 
 ---
 
@@ -139,10 +141,12 @@ Hàm `buildKeywordSqlClause` hỗ trợ cú pháp tìm kiếm chuẩn hóa:
 - **Lọc có dữ liệu (`__ALL_MATCHING__`)**: `(sqlField IS NOT NULL AND sqlField != '')`.
 
 ### 5.3. Drawer Chi Tiết Công Nợ (`InvoicePartnerDebtDetailDrawer`)
-- Sử dụng chuẩn `StandardFormDrawer` layout `1-column` với kích thước `size="xl"`.
-- Hiển thị 4 thẻ KPI tóm tắt tài chính (Tổng giá trị, Đã thanh toán, Còn lại, Tuổi nợ tối đa).
-- Tích hợp biểu đồ Bar Chart phân tích xu hướng công nợ 6 tháng gần nhất (Recharts).
-- Bảng DataTable danh sách các hóa đơn phát sinh chi tiết kèm số tiền cấn trừ và trạng thái.
+- Chuẩn `StandardFormDrawer` layout `2-columns` (`size="xl"`, `collapsibleRightPanel={true}`).
+- **Cột phải (Right Panel)**: 3 DrawerSection gồm:
+  1. *Thông tin đối tác*: Tên đối tác, MST/CCCD, Phân loại Khách hàng/Nhà cung cấp, Địa chỉ.
+  2. *Tổng quan tài chính & KPI công nợ*: 4 thẻ KPI tóm tắt + Phân bổ nợ theo thời hạn (0-30, 31-60, 61-90, >90 ngày).
+  3. *Biến động hóa đơn theo tháng*: BarChart chi phí/doanh thu.
+- **Cột trái (Left Panel / Main Content)**: `<DrawerSection>` bao bọc `<DataTable variant="spreadsheet">` có phân trang client-side (`page`, `pageSize`, options `[10, 20, 50]`), Header Filters đầy đủ, tìm kiếm chính xác/nhiều từ khóa, và dòng tổng phụ Subtotal Popover.
 
 ---
 

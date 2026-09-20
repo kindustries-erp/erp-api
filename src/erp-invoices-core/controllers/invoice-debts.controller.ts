@@ -55,12 +55,14 @@ export class InvoiceDebtsController {
     @Query('partner_type') partnerType?: InvoicePartnerType,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
+    @Query('partner_name') partnerName?: string,
   ) {
     return this.service.getPartnerInvoices(
       taxCode,
       partnerType,
       dateFrom,
       dateTo,
+      partnerName,
     );
   }
 }
