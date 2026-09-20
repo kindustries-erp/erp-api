@@ -917,13 +917,13 @@ export class InvoiceQueryService {
         header: 'Chiết khấu',
         key: 'headerDiscountAmount',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Trước thuế GTGT',
         key: 'preVat',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thuế suất',
@@ -935,41 +935,58 @@ export class InvoiceQueryService {
         header: 'Thuế GTGT',
         key: 'vat',
         width: 15,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thành tiền',
         key: 'total',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
-      {
-        header: 'Đã cấn trừ',
-        key: 'netOffAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
-      },
+      { header: 'Chi nhánh', key: 'branchName', width: 25 },
       {
         header: 'Tham chiếu cấn trừ',
         key: 'netOffReferences',
-        width: 30,
+        width: 25,
+      },
+      {
+        header: 'Ngày giao dịch',
+        key: 'netOffTransDate',
+        width: 18,
+      },
+      {
+        header: 'Nội dung giao dịch',
+        key: 'netOffTransDesc',
+        width: 45,
+      },
+      {
+        header: 'Số tiền của tham chiếu',
+        key: 'netOffRefAmount',
+        width: 25,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Số tiền cấn trừ',
+        key: 'netOffAmount',
+        width: 22,
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Còn lại',
         key: 'remainingAmount',
-        width: 20,
-        style: { numFmt: '#,##0' },
+        width: 22,
+        style: { numFmt: '#,##0.00' },
       },
-      { header: 'Chi nhánh', key: 'branchName', width: 25 },
     ];
 
     const detailedSheet = workbook.addWorksheet('Hàng hóa');
     detailedSheet.columns = [
       { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
+      { header: 'Mã hàng hóa', key: 'itemCode', width: 20 },
       { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
       { header: 'Đơn vị tính', key: 'uom', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
@@ -980,19 +997,19 @@ export class InvoiceQueryService {
         header: 'Số lượng',
         key: 'qty',
         width: 15,
-        style: { numFmt: '#,##0.###' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Đơn giá',
         key: 'unitPrice',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Trước thuế GTGT',
         key: 'preVatAmount',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thuế suất',
@@ -1004,67 +1021,154 @@ export class InvoiceQueryService {
         header: 'Thuế GTGT',
         key: 'vatAmount',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thành tiền',
         key: 'totalAmount',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
       { header: 'Diễn giải', key: 'description', width: 50 },
       { header: 'Trạng thái', key: 'statusName', width: 20 },
-      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
       { header: 'Chi nhánh', key: 'branchName', width: 25 },
+      { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
     ];
 
     const overviewSheet = workbook.addWorksheet('Tổng quan hàng hóa');
     overviewSheet.columns = [
+      { header: 'Mã hàng hóa', key: 'itemCode', width: 20 },
       { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 45 },
       { header: 'Đơn vị tính', key: 'uom', width: 15 },
       {
         header: 'Số lượng',
         key: 'totalQty',
         width: 18,
-        style: { numFmt: '#,##0.###' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Đơn giá bình quân',
         key: 'avgUnitPrice',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Trước thuế GTGT',
         key: 'totalPreVat',
         width: 20,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thuế GTGT',
         key: 'totalVat',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Thành tiền',
         key: 'totalAmount',
         width: 20,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Số dòng',
+        key: 'lineCount',
+        width: 12,
         style: { numFmt: '#,##0' },
       },
-      { header: 'Số dòng', key: 'lineCount', width: 12 },
     ];
 
-    const applyHeaderStyle = (sheet) => {
-      sheet.getRow(1).eachCell((cell) => {
+    const debtSheet = workbook.addWorksheet('Công nợ theo đối tượng');
+    debtSheet.columns = [
+      { header: 'STT', key: 'stt', width: 8 },
+      { header: 'Mã số thuế', key: 'taxCode', width: 18 },
+      { header: 'Tên đối tác', key: 'partnerName', width: 45 },
+      {
+        header: 'Số lượng HĐ',
+        key: 'invoiceCount',
+        width: 15,
+        style: { numFmt: '#,##0' },
+      },
+      {
+        header: 'Tổng tiền hóa đơn',
+        key: 'totalAmount',
+        width: 22,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Đã cấn trừ',
+        key: 'netOffAmount',
+        width: 22,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Còn lại',
+        key: 'remainingAmount',
+        width: 22,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Lũy kế công nợ',
+        key: 'cumulativeDebt',
+        width: 24,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Lũy kế cấn trừ',
+        key: 'cumulativeNetOff',
+        width: 24,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Lũy kế còn nợ',
+        key: 'cumulativeRemaining',
+        width: 24,
+        style: { numFmt: '#,##0.00' },
+      },
+      { header: 'Trạng thái', key: 'status', width: 16 },
+    ];
+
+    const applyHeaderStyle = (
+      sheet: ExcelJS.Worksheet,
+      sheetType: 'summary' | 'detailed' | 'overview' | 'debt' = 'detailed',
+    ) => {
+      sheet.getRow(1).eachCell((cell, colNumber) => {
         cell.font = { bold: true };
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' },
-        };
+        if (sheetType === 'summary') {
+          if (colNumber >= 17 && colNumber <= 21) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFDCEEFB' }, // pastel ice-blue for transaction reference columns
+            };
+          } else if (colNumber === 22) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFDE68A' }, // soft amber for Còn lại column
+            };
+          } else {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFE0E0E0' },
+            };
+          }
+        } else if (sheetType === 'debt' && colNumber >= 8 && colNumber <= 10) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFDCEEFB' }, // subtle highlight for cumulative columns
+          };
+        } else {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' },
+          };
+        }
       });
       sheet.views = [
         { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
@@ -1075,13 +1179,15 @@ export class InvoiceQueryService {
       };
     };
 
-    applyHeaderStyle(summarySheet);
-    applyHeaderStyle(detailedSheet);
-    applyHeaderStyle(overviewSheet);
+    applyHeaderStyle(summarySheet, 'summary');
+    applyHeaderStyle(detailedSheet, 'detailed');
+    applyHeaderStyle(overviewSheet, 'overview');
+    applyHeaderStyle(debtSheet, 'debt');
 
     const overviewMap = new Map<
       string,
       {
+        itemCode: string;
         itemName: string;
         uom: string;
         totalQty: number;
@@ -1094,6 +1200,7 @@ export class InvoiceQueryService {
     >();
 
     const accumulateOverview = (payload: {
+      itemCode?: string;
       itemName: string;
       uom: string;
       qty: number;
@@ -1102,12 +1209,16 @@ export class InvoiceQueryService {
       vatAmount: number;
       totalAmount: number;
     }) => {
+      const itemCode = String(payload.itemCode || '').trim();
       const itemName =
         String(payload.itemName || '').trim() || '(Không có tên)';
-      const uom = String(payload.uom || '').trim();
-      const key = `${itemName.toLowerCase()}__${uom.toLowerCase()}`;
+      const uom = String(payload.uom || '')
+        .trim()
+        .toUpperCase();
+      const key = `${itemCode.toLowerCase()}__${itemName.toLowerCase()}__${uom.toLowerCase()}`;
 
       const current = overviewMap.get(key) || {
+        itemCode,
         itemName,
         uom,
         totalQty: 0,
@@ -1179,12 +1290,32 @@ export class InvoiceQueryService {
         wo: inv.settlementOrder || '',
         description: fullDesc,
         statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-        netOffAmount: Number((inv as any).netOffAmount) || 0,
-        netOffReferences: (inv as any).netOffReferences || '',
-        remainingAmount:
-          Number(inv.totalAmount) - (Number((inv as any).netOffAmount) || 0),
         branchName: branchMap[inv.branchId || ''] || '',
+        netOffReferences: (inv as any).netOffReferences || '',
+        netOffTransDate: (inv as any).netOffTransDate || '',
+        netOffTransDesc: (inv as any).netOffTransDesc || '',
+        netOffRefAmount: Number((inv as any).netOffRefAmount) || 0,
+        netOffAmount: Number((inv as any).netOffAmount) || 0,
+        remainingAmount,
       });
+
+      const lastSummaryRow = summarySheet.lastRow;
+      if (lastSummaryRow) {
+        for (let c = 17; c <= 21; c++) {
+          const cell = lastSummaryRow.getCell(c);
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF0F9FF' }, // Soft ice-blue for transaction reference fields
+          };
+        }
+        const remainingCell = lastSummaryRow.getCell(22);
+        remainingCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEFCE8' }, // Distinct soft warm amber for Còn lại
+        };
+      }
 
       if (!inv.items || inv.items.length === 0) {
         const fallbackPreVat = Number(inv.preVatAmount) || 0;
@@ -1213,12 +1344,13 @@ export class InvoiceQueryService {
 
         detailedSheet.addRow({
           invoiceDate: inv.invoiceDate,
+          itemCode: '',
+          itemName: inv.description || '',
+          uom: '',
           serialNo: inv.serialNo,
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
-          itemName: inv.description || '',
-          uom: '',
           qty: normalizedFallback.quantity,
           unitPrice: normalizedFallback.unitPrice,
           preVatAmount: normalizedFallback.preVatAmount,
@@ -1229,16 +1361,17 @@ export class InvoiceQueryService {
           wo: inv.settlementOrder || '',
           description: fullDesc,
           statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+          branchName: branchMap[inv.branchId || ''] || '',
           invoiceSubcategory:
             normalizedFallback.invoiceSubcategory === 'DISCOUNT'
               ? 'Chiết khấu'
               : normalizedFallback.invoiceSubcategory === 'RESCUE'
                 ? 'Cứu hộ'
                 : 'Thông thường',
-          branchName: branchMap[inv.branchId || ''] || '',
         });
 
         accumulateOverview({
+          itemCode: '',
           itemName: inv.description || '',
           uom: '',
           qty: normalizedFallback.quantity,
@@ -1281,12 +1414,13 @@ export class InvoiceQueryService {
 
           detailedSheet.addRow({
             invoiceDate: inv.invoiceDate,
+            itemCode: item.itemCode || '',
+            itemName: item.description || '',
+            uom: (item.unit || '').trim().toUpperCase(),
             serialNo: inv.serialNo,
             invoiceNo: inv.invoiceNo,
             partnerName,
             taxCode,
-            itemName: item.description || '',
-            uom: item.unit || '',
             qty: normalizedItem.quantity,
             unitPrice: normalizedItem.unitPrice,
             preVatAmount: normalizedItem.preVatAmount,
@@ -1297,16 +1431,17 @@ export class InvoiceQueryService {
             wo: inv.settlementOrder || '',
             description: fullDesc,
             statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+            branchName: branchMap[inv.branchId || ''] || '',
             invoiceSubcategory:
               normalizedItem.invoiceSubcategory === 'DISCOUNT'
                 ? 'Chiết khấu'
                 : normalizedItem.invoiceSubcategory === 'RESCUE'
                   ? 'Cứu hộ'
                   : 'Thông thường',
-            branchName: branchMap[inv.branchId || ''] || '',
           });
 
           accumulateOverview({
+            itemCode: item.itemCode || '',
             itemName: item.description || '',
             uom: item.unit || '',
             qty: normalizedItem.quantity,
@@ -1327,8 +1462,10 @@ export class InvoiceQueryService {
       );
     }
 
-    const overviewRows = Array.from(overviewMap.values()).sort((a, b) =>
-      a.itemName.localeCompare(b.itemName, 'vi'),
+    const overviewRows = Array.from(overviewMap.values()).sort(
+      (a, b) =>
+        a.itemName.localeCompare(b.itemName, 'vi') ||
+        a.itemCode.localeCompare(b.itemCode, 'vi'),
     );
 
     for (const row of overviewRows) {
@@ -1340,6 +1477,7 @@ export class InvoiceQueryService {
             : 0;
 
       overviewSheet.addRow({
+        itemCode: row.itemCode,
         itemName: row.itemName,
         uom: row.uom,
         totalQty: row.totalQty,
@@ -1350,6 +1488,194 @@ export class InvoiceQueryService {
         lineCount: row.lineCount,
       });
     }
+
+    // Build Partner Debt Sheet (Công nợ theo đối tượng)
+    let cutoffDate = query.date_to ? query.date_to.substring(0, 10) : '';
+    if (!cutoffDate) {
+      const dates = items
+        .map((i) =>
+          i.invoiceDate ? String(i.invoiceDate).substring(0, 10) : '',
+        )
+        .filter(Boolean)
+        .sort();
+      cutoffDate =
+        dates.length > 0
+          ? dates[dates.length - 1]
+          : new Date().toISOString().substring(0, 10);
+    }
+    const effectiveCutoffDate =
+      cutoffDate.length === 10 ? `${cutoffDate} 23:59:59.999` : cutoffDate;
+
+    let cumRows: any[] = [];
+    try {
+      cumRows = await this.repository.manager.query(
+        `
+        SELECT 
+          CASE 
+            WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_tax_code, '')
+            WHEN inv.direction = 'OUT' THEN COALESCE(inv.buyer_tax_code, '')
+          END as "taxCode",
+          CASE 
+            WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_name, '')
+            WHEN inv.direction = 'OUT' THEN COALESCE(inv.buyer_name, '')
+          END as "partnerName",
+          SUM(CAST(inv.total_amount AS NUMERIC)) as "cumTotalAmount",
+          SUM(COALESCE(netoff.net_off_amount, 0)) as "cumNetOffAmount"
+        FROM erp_invoices inv
+        LEFT JOIN (
+          SELECT invoice_id, SUM(net_off_amount) as net_off_amount
+          FROM erp_invoice_voucher_netoff
+          GROUP BY invoice_id
+        ) netoff ON netoff.invoice_id = inv.id
+        WHERE inv.is_deleted = false 
+          AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
+          ${query.direction ? `AND inv.direction = '${query.direction}'` : ''}
+          AND inv.invoice_date <= '${effectiveCutoffDate}'
+        GROUP BY 
+          CASE 
+            WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_tax_code, '')
+            WHEN inv.direction = 'OUT' THEN COALESCE(inv.buyer_tax_code, '')
+          END,
+          CASE 
+            WHEN inv.direction = 'IN' THEN COALESCE(inv.seller_name, '')
+            WHEN inv.direction = 'OUT' THEN COALESCE(inv.buyer_name, '')
+          END
+        `,
+      );
+    } catch (e) {
+      cumRows = [];
+    }
+
+    const cumMap = new Map<string, { cumTotal: number; cumNetOff: number }>();
+    for (const r of cumRows || []) {
+      const tCode = String(r.taxCode || '').trim();
+      const pName = String(r.partnerName || '').trim();
+      const key = `${tCode}:::${pName}`;
+      cumMap.set(key, {
+        cumTotal: Number(r.cumTotalAmount) || 0,
+        cumNetOff: Number(r.cumNetOffAmount) || 0,
+      });
+    }
+
+    const partnerDebtMap = new Map<
+      string,
+      {
+        taxCode: string;
+        partnerName: string;
+        invoiceCount: number;
+        totalAmount: number;
+        netOffAmount: number;
+        remainingAmount: number;
+        cumulativeDebt: number;
+        cumulativeNetOff: number;
+        cumulativeRemaining: number;
+      }
+    >();
+
+    for (const inv of items) {
+      const partnerName =
+        query.direction === 'IN' ? inv.sellerName : inv.buyerName;
+      const taxCode =
+        query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
+      const pName = String(partnerName || '').trim() || '(Chưa có tên)';
+      const tCode = String(taxCode || '').trim();
+      const key = `${tCode}:::${pName}`;
+
+      const cumData = cumMap.get(key);
+      const current = partnerDebtMap.get(key) || {
+        taxCode: tCode,
+        partnerName: pName,
+        invoiceCount: 0,
+        totalAmount: 0,
+        netOffAmount: 0,
+        remainingAmount: 0,
+        cumulativeDebt: cumData ? cumData.cumTotal : 0,
+        cumulativeNetOff: cumData ? cumData.cumNetOff : 0,
+        cumulativeRemaining: cumData ? cumData.cumTotal - cumData.cumNetOff : 0,
+      };
+
+      const invTotal = Number(inv.totalAmount) || 0;
+      const invNetOff = Number((inv as any).netOffAmount) || 0;
+      const invRemaining = invTotal - invNetOff;
+
+      current.invoiceCount += 1;
+      current.totalAmount += invTotal;
+      current.netOffAmount += invNetOff;
+      current.remainingAmount += invRemaining;
+      if (!cumData) {
+        current.cumulativeDebt += invTotal;
+        current.cumulativeNetOff += invNetOff;
+        current.cumulativeRemaining += invRemaining;
+      }
+
+      partnerDebtMap.set(key, current);
+    }
+
+    const partnerDebtRows = Array.from(partnerDebtMap.values()).sort(
+      (a, b) =>
+        b.cumulativeRemaining - a.cumulativeRemaining ||
+        b.remainingAmount - a.remainingAmount ||
+        a.partnerName.localeCompare(b.partnerName, 'vi'),
+    );
+
+    let stt = 1;
+    let sumInvoices = 0;
+    let sumTotalAmount = 0;
+    let sumNetOffAmount = 0;
+    let sumRemainingAmount = 0;
+    let sumCumulativeDebt = 0;
+    let sumCumulativeNetOff = 0;
+    let sumCumulativeRemaining = 0;
+
+    for (const row of partnerDebtRows) {
+      sumInvoices += row.invoiceCount;
+      sumTotalAmount += row.totalAmount;
+      sumNetOffAmount += row.netOffAmount;
+      sumRemainingAmount += row.remainingAmount;
+      sumCumulativeDebt += row.cumulativeDebt;
+      sumCumulativeNetOff += row.cumulativeNetOff;
+      sumCumulativeRemaining += row.cumulativeRemaining;
+
+      debtSheet.addRow({
+        stt: stt++,
+        taxCode: row.taxCode,
+        partnerName: row.partnerName,
+        invoiceCount: row.invoiceCount,
+        totalAmount: row.totalAmount,
+        netOffAmount: row.netOffAmount,
+        remainingAmount: row.remainingAmount,
+        cumulativeDebt: row.cumulativeDebt,
+        cumulativeNetOff: row.cumulativeNetOff,
+        cumulativeRemaining: row.cumulativeRemaining,
+        status: row.cumulativeRemaining > 0 ? 'Còn nợ' : 'Đã tất toán',
+      });
+    }
+
+    const debtSummaryRow = debtSheet.addRow({
+      stt: '',
+      taxCode: '',
+      partnerName: 'TỔNG CỘNG',
+      invoiceCount: sumInvoices,
+      totalAmount: sumTotalAmount,
+      netOffAmount: sumNetOffAmount,
+      remainingAmount: sumRemainingAmount,
+      cumulativeDebt: sumCumulativeDebt,
+      cumulativeNetOff: sumCumulativeNetOff,
+      cumulativeRemaining: sumCumulativeRemaining,
+      status: '',
+    });
+    debtSummaryRow.font = { bold: true };
+    debtSummaryRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE8F0FE' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'double' },
+      };
+    });
 
     emitProgress(97, 'Dang dong goi file XLSX...');
     const buffer = await workbook.xlsx.writeBuffer();
@@ -1599,36 +1925,129 @@ export class InvoiceQueryService {
   private async _loadNetOffAmounts(invoices: ErpInvoice[]) {
     if (invoices.length === 0) return invoices;
     const ids = invoices.map((i) => i.id);
-    const netOffs = await this.repository.manager
+    const qb = this.repository.manager
       .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
       .select('netoff.invoice_id', 'invoiceId')
-      .addSelect('SUM(netoff.net_off_amount)', 'sum')
-      .addSelect("STRING_AGG(DISTINCT bt.reference_number, ', ')", 'refNos')
+      .addSelect('netoff.net_off_amount', 'netOffAmount')
+      .addSelect('bt.reference_number', 'refNo')
+      .addSelect('bt.trans_date', 'transDate')
+      .addSelect('bt.description', 'description')
+      .addSelect('bt.accounting_description', 'accountingDescription')
+      .addSelect('bt.debit_amount', 'debitAmount')
+      .addSelect('bt.credit_amount', 'creditAmount')
       .leftJoin(
         'erp_bank_transactions',
         'bt',
         'bt.id = netoff.bank_transaction_id',
       )
-      .where('netoff.invoice_id IN (:...ids)', { ids })
-      .groupBy('netoff.invoice_id')
-      .getRawMany();
+      .where('netoff.invoice_id IN (:...ids)', { ids });
 
-    const netOffMap = netOffs.reduce(
-      (acc, curr) => {
-        acc[curr.invoiceId] = {
-          sum: Number(curr.sum) || 0,
-          refNos: curr.refNos || '',
+    if (typeof (qb as any).orderBy === 'function') {
+      (qb as any).orderBy('bt.trans_date', 'ASC');
+    }
+    if (typeof (qb as any).addOrderBy === 'function') {
+      (qb as any).addOrderBy('netoff.created_at', 'ASC');
+    }
+
+    const rawRows = (await qb.getRawMany()) || [];
+
+    const netOffMap: Record<
+      string,
+      {
+        sum: number;
+        refNos: string[];
+        transDates: string[];
+        descriptions: string[];
+        refAmounts: number[];
+        details: Array<{
+          refNo: string;
+          transDate: string;
+          description: string;
+          refAmount: number;
+          netOffAmount: number;
+        }>;
+      }
+    > = {};
+
+    for (const row of rawRows) {
+      const invId = row.invoiceId;
+      if (!netOffMap[invId]) {
+        netOffMap[invId] = {
+          sum: 0,
+          refNos: [],
+          transDates: [],
+          descriptions: [],
+          refAmounts: [],
+          details: [],
         };
-        return acc;
-      },
-      {} as Record<string, { sum: number; refNos: string }>,
-    );
+      }
 
-    return invoices.map((i) => ({
-      ...i,
-      netOffAmount: String(netOffMap[i.id]?.sum || 0),
-      netOffReferences: netOffMap[i.id]?.refNos || '',
-    }));
+      const netOffAmt = Number(row.netOffAmount ?? row.sum) || 0;
+      const debitAmt = Number(row.debitAmount) || 0;
+      const creditAmt = Number(row.creditAmount) || 0;
+      const refAmt = debitAmt > 0 ? debitAmt : creditAmt;
+
+      const refNo = row.refNo
+        ? String(row.refNo).trim()
+        : row.refNos
+          ? String(row.refNos).trim()
+          : '';
+      let transDateStr = '';
+      if (row.transDate) {
+        if (typeof row.transDate === 'string') {
+          transDateStr = row.transDate.substring(0, 10);
+        } else if (row.transDate instanceof Date) {
+          const y = row.transDate.getFullYear();
+          const m = String(row.transDate.getMonth() + 1).padStart(2, '0');
+          const d = String(row.transDate.getDate()).padStart(2, '0');
+          transDateStr = `${y}-${m}-${d}`;
+        }
+      }
+
+      const desc = (row.accountingDescription || row.description || '')
+        .toString()
+        .trim();
+
+      netOffMap[invId].sum += netOffAmt;
+      if (refNo && !netOffMap[invId].refNos.includes(refNo)) {
+        netOffMap[invId].refNos.push(refNo);
+      }
+      if (transDateStr && !netOffMap[invId].transDates.includes(transDateStr)) {
+        netOffMap[invId].transDates.push(transDateStr);
+      }
+      if (desc && !netOffMap[invId].descriptions.includes(desc)) {
+        netOffMap[invId].descriptions.push(desc);
+      }
+      if (refAmt > 0 && !netOffMap[invId].refAmounts.includes(refAmt)) {
+        netOffMap[invId].refAmounts.push(refAmt);
+      }
+
+      netOffMap[invId].details.push({
+        refNo,
+        transDate: transDateStr,
+        description: desc,
+        refAmount: refAmt,
+        netOffAmount: netOffAmt,
+      });
+    }
+
+    return invoices.map((i) => {
+      const data = netOffMap[i.id];
+      return {
+        ...i,
+        netOffAmount: String(data?.sum || 0),
+        netOffReferences: (data?.refNos || []).join(', '),
+        netOffTransDate: (data?.transDates || []).join(', '),
+        netOffTransDesc: (data?.descriptions || []).join(' | '),
+        netOffRefAmount:
+          data?.refAmounts && data.refAmounts.length > 0
+            ? data.refAmounts.length === 1
+              ? data.refAmounts[0]
+              : data.refAmounts.reduce((a, b) => a + b, 0)
+            : 0,
+        netOffDetails: data?.details || [],
+      };
+    });
   }
 
   private _mapSortByToQbColumn(
