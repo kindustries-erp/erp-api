@@ -80,11 +80,12 @@ erp-api/src/
 │   ├── dto/
 │   │   └── get-invoice-debts.dto.ts   # GetInvoiceDebtsQueryDto, GetInvoiceDebtColumnOptionsQueryDto
 │   ├── controllers/
-│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts...)
+│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts, /export-excel...)
 │   ├── services/
-│   │   ├── invoice-debts.service.ts   # Aggregation engine, Aging buckets, Keyword search, Grand totals
+│   │   ├── invoice-debts.service.ts   # Aggregation engine, Aging buckets, Keyword search, Grand totals, Excel export
+│   │   ├── invoice-debts-export-background.service.ts # Background async Excel export worker & 24h R2 cache
 │   │   └── invoice-debts.service.spec.ts # Jest unit test suite (100% PASS)
-│   └── erp-invoices-core.module.ts    # Đăng ký Controller & Service (InvoiceDebtsController xếp trước)
+│   └── erp-invoices-core.module.ts    # Đăng ký Controller & Services (InvoiceDebtsController xếp trước)
 ```
 
 ### 3.2. Frontend (`erp/erp-web`)
@@ -95,17 +96,18 @@ erp-web/src/
 │   │   └── types/rbac.ts              # ErpResource.INVOICE_DEBTS, RBAC_COLLECTIONS, PERMISSION_RESOURCE_GROUPS
 │   └── accounting/
 │       ├── api/
-│       │   └── invoiceDebtsApi.ts     # Axios API client
+│       │   └── invoiceDebtsApi.ts     # Axios API client (query, options, partner invoices, stats, export excel)
 │       ├── hooks/
 │       │   └── useInvoiceDebtsList.ts # React Query list hook với stale cache & isolation
 │       ├── components/
-│       │   └── InvoicePartnerDebtDetailDrawer.tsx # Drawer XL chi tiết công nợ, KPI, Bar chart, Invoice list
+│       │   ├── InvoiceDebtsExportDrawer.tsx # Drawer xuất Excel theo kỳ & lịch sử tải file
+│       │   └── InvoicePartnerDebtDetailDrawer.tsx # Drawer XL chi tiết công nợ, 4 cột tuổi nợ, KPI, Bar chart, Invoice list
 │       └── pages/
-│           └── InvoiceDebtsPage.tsx   # Trang SpreadsheetPageTemplate 2 tab, Header Filter, Subtotal Popover
+│           └── InvoiceDebtsPage.tsx   # Trang SpreadsheetPageTemplate 2 tab, 4 cột tuổi nợ highlight, Header Filter, Subtotal Popover
 ├── core/
 │   ├── locale/
 │   │   └── accounting/debts/
-│   │       ├── vi.ts                  # Từ điển tiếng Việt 100%
+│   │       ├── vi.ts                  # Từ điển tiếng Việt 100% (ngắn gọn, không ngoặc đơn)
 │   │       └── en.ts                  # Từ điển tiếng Anh 100%
 │   └── components/layout/
 │       ├── sidebar/components/SidebarNav.tsx # Navigation item "Công nợ"
@@ -125,6 +127,11 @@ Tất cả các endpoint dưới đây được bảo vệ bởi `JwtAuthGuard`,
 | `GET` | `/api/v1/erp-invoices/debts` | `partner_type`, `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Lấy danh sách tổng hợp công nợ đối tác nhóm theo Tên & MST (`GROUP BY partnerName, taxCode`), có phân trang, lọc đa chiều và tính Grand Totals |
 | `GET` | `/api/v1/erp-invoices/debts/column-options` | `column_key`, `partner_type`, `search`, `page`, `pageSize`, `filters`, `date_from`, `date_to`, `branch_id` | Lấy danh sách options lọc động cho từng cột trên Header Filter |
 | `GET` | `/api/v1/erp-invoices/debts/:taxCode/invoices` | `:taxCode`, `partner_type`, `date_from`, `date_to`, `partner_name` | Lấy danh sách chi tiết các hóa đơn phát sinh của một đối tác cụ thể theo MST và Tên |
+| `GET` | `/api/v1/erp-invoices/debts/export-excel` | `partner_type`, `date_from`, `date_to`, `search`, `column_search`, `column_filters` | Xuất nhanh file Excel báo cáo công nợ đồng bộ 2 sheet |
+| `POST` | `/api/v1/erp-invoices/debts/export-excel/start` | Body: `{ partnerType, period, dateFrom, dateTo }` | Khởi tạo tiến trình xuất Excel nền lưu trữ Cloudflare R2 |
+| `GET` | `/api/v1/erp-invoices/debts/export-excel/status/:jobId` | `:jobId` | Kiểm tra trạng thái tiến trình xuất Excel ngầm |
+| `GET` | `/api/v1/erp-invoices/debts/export-excel/download/:fileKey` | `:fileKey` | Tải lại file Excel đã tạo trong vòng 24h |
+| `GET` | `/api/v1/erp-invoices/debts/export-excel/history` | `partner_type` | Lấy lịch sử 10 file xuất Excel gần nhất |
 
 ---
 
