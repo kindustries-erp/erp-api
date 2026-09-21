@@ -124,10 +124,24 @@ Service hỗ trợ kết hợp đồng thời nhiều tầng lọc:
 
 ---
 
-## 6. Tích hợp Liên Module
+## 6. Tích hợp Liên Module & Quy Ước Cây Tài Khoản
 
 - **Sổ cái & Nhật ký chung (`general-journal` / `erp_journal_entries`)**: Mỗi dòng bút toán (`erp_journal_entry_lines`) liên kết khóa ngoại tới `erp_chart_of_accounts(id)`.
-- **Sao kê Ngân hàng & Sổ quỹ (`bank-statement`)**: Dùng danh mục tài khoản để định khoản tự động các khoản thu/chi (TK 111, TK 112, TK 131, TK 331...).
+- **Sao kê Ngân hàng & Sổ quỹ (`bank-statement` / `erp_bank_accounts`)**:
+  - Bảng `erp_bank_accounts` liên kết trực tiếp tới tài khoản kế toán chi tiết tương ứng qua cột `accounting_account_id`.
+  - TK `1121` (Tiền Việt Nam) phân cấp tài khoản chi tiết theo từng số tài khoản ngân hàng thực tế:
+    - `11211` – `Techcombank - 111886`
+    - `11212` – `Techcombank - 886111`
+    - `11213` – `BIDV - 8680073168`
+  - Khi hạch toán giao dịch ngân hàng, hệ thống tự động ưu tiên lấy `accounting_account_id` từ tài khoản ngân hàng (`erp_bank_accounts`), nếu chưa gán thì fallback về `1121`.
+- **Tài khoản Trung gian Chờ xử lý (`000` - Loại `OTHER`)**:
+  - `000`: Tài khoản trung gian chờ xử lý (Cấp 1)
+  - `0001`: Bút toán chờ xử lý - Ngân hàng (Cấp 2)
+  - `0002`: Bút toán chờ xử lý - Hóa đơn (Cấp 2)
+  - `0003`: Bút toán chờ xử lý - Khác (Cấp 2)
+- **Chi phí Bán hàng (`641`) & Quản lý Doanh nghiệp (`642`) chuẩn TT200**:
+  - `6411` (Nhân viên), `6412` (Vật liệu, bao bì), `6413` (Dụng cụ), `6414` (Khấu hao), `6415` (Bảo hành), `6417` (Dịch vụ mua ngoài), `6418` (Bằng tiền khác).
+  - `6421` (Nhân viên QL), `6422` (Vật liệu QL), `6423` (Đồ dùng VP), `6424` (Khấu hao), `6425` (Thuế, phí, lệ phí), `6426` (Dự phòng), `6427` (Dịch vụ mua ngoài), `6428` (Bằng tiền khác).
 - **Hóa đơn Điện tử & Thuế (`erp-invoice`)**: Hạch toán thuế GTGT đầu vào/ra (TK 133, TK 3331), doanh thu bán hàng (TK 511), chi phí giá vốn (TK 632).
 
 ---
