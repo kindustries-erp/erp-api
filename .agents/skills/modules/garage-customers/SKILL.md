@@ -34,14 +34,13 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm không sót trang) và `__BLANK__` (lọc khách hàng chưa có mã hoặc thông tin trống).
   - Tích hợp endpoint `GET /cases/customers-debt/column-options` hỗ trợ cascading filter qua tham số `filtersStr`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
-  - Hiển thị danh sách toàn bộ phiếu dịch vụ của khách hàng (`GET /cases/by-customer/:customerCode`).
-  - Tích hợp bộ đo KPI tài chính (Tổng phát sinh, Đã thu, Dư nợ, Tỷ lệ thu hồi, Tuổi nợ lớn nhất).
-  - Bảng danh sách phiếu dịch vụ tích hợp đầy đủ 5 Quick Actions chuẩn hóa đồng bộ 100% với `/garage-cases`:
-    1. 👁️ **Xem chi tiết** (`Eye`): Mở Drawer chi tiết vụ việc ở chế độ xem (`view`).
-    2. ✏️ **Chỉnh sửa** (`Pencil`): Mở Drawer chi tiết vụ việc trực tiếp ở chế độ chỉnh sửa (`edit`).
-    3. 🔄 **Đồng bộ từ KGara** (`RefreshCw`): Kích hoạt `useSyncGarageCaseDetail` đồng bộ chi tiết phiếu trực tiếp từ KGara về ERP.
-    4. ⚖️ **Cấn trừ sao kê** (`Scale`): Mở modal [`GarageCaseSettlementDrawerModal`](file:///home/dev/repos/erp/erp-web/src/modules/garage/components/GarageCaseSettlementDrawerModal.tsx) cấn trừ giao dịch sao kê/tiền mặt vào phiếu dịch vụ ngay trong Drawer.
-    5. 🔗 **Liên kết hóa đơn** (`Link2`): Mở drawer [`InvoiceSelectionDrawer`](file:///home/dev/repos/erp/erp-web/src/modules/garage/components/InvoiceSelectionDrawer.tsx) liên kết hóa đơn VAT đầu ra/đầu vào cho phiếu dịch vụ.
+  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="xl"`, `collapsibleRightPanel={true}`).
+  - **Cột phải (Right Panel)**: Thông tin khách hàng (Tên, Mã KH, SL xe, SL phiếu DV) + Chỉ số công nợ & Thu hồi (Tổng phát sinh, Đã thu, Dư nợ, Tỷ lệ thu hồi, Phân bổ 4 tầng tuổi nợ).
+  - **Cột trái (Left Panel / Main Content)**: Thanh điều hướng `PillTabs` 2 sub-tabs:
+    - **Tab 1. Danh sách phiếu dịch vụ**: `<DataTable variant="spreadsheet">` hiển thị danh sách toàn bộ phiếu dịch vụ của khách hàng (`GET /cases/by-customer/:customerCode`), tích hợp đầy đủ 5 Quick Actions (Xem chi tiết, Chỉnh sửa, Đồng bộ từ KGara, Cấn trừ sao kê, Liên kết hóa đơn), Header Filters và dòng tổng phụ Subtotal Popover.
+    - **Tab 2. Biến động & Phân tích (Visual Debt Analytics)**:
+      - *Hàng 1 (Grid 3:1)*: Biến động phiếu dịch vụ theo tháng (`BarChart` Stacked: Đã thanh toán vs Còn nợ) + Cơ cấu phân bổ 4 tầng tuổi nợ (`DonutChart`).
+      - *Hàng 2 (Grid 1:1)*: Biểu đồ Luân chuyển & Dòng tiền Tích lũy (`LineChart` với 3 đường: Tổng phát sinh tích lũy, Tiền đã thu tích lũy, Dư nợ còn lại) + Cơ cấu Doanh số & Dư nợ theo Từng Phương tiện / Biển số xe (`BarChart` Stacked).
   - Tự động làm mới cache query (`garage-cases-by-customer`, `garage-customers-debt`, `garage-case-financial-summary`) ngay sau khi hoàn tất cấn trừ hoặc liên kết hóa đơn.
 
 ---
