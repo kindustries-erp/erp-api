@@ -278,7 +278,20 @@ Trên giao diện Drawer 2 cột (`erp-web`), toàn bộ thông tin đối tư�
 
 ---
 
-## 8. Quality Control & Testing Commands
+## 8. Frontend Custom Fields Management Page (`/custom-fields`)
+
+Trang quản lý Master Data các trường tùy chỉnh và danh mục động:
+- **Location**: `src/pages/CustomFieldsPage.tsx` (ERP Web)
+- **Route Key**: `custom-fields` (Đường dẫn: `/custom-fields`)
+- **Kiến trúc UI**:
+  - `SpreadsheetPageTemplate` với Header Domain Tabs (`ALL`, `FINANCE`, `INVENTORY`, `PRODUCTION`, `COMMERCE`, `GARAGE`).
+  - Toolbar PillTabs lọc theo từng Phân hệ con (chỉ hiển thị khi đã chọn 1 Khối cụ thể, tự động ẩn khi ở tab Tất cả để giữ toolbar gọn gàng).
+  - 12 Cột DataTable chuẩn hóa: STT 1-based (`#`), Khối nghiệp vụ (`domain`), Phân hệ (`moduleKey`), Mã trường (`code`), Tên hiển thị (`name`), Kiểu dữ liệu (`fieldType`), Phạm vi (`scope`), Nguồn gốc (`isSystem`), Bắt buộc (`isRequired`), Sử dụng (`usageCount`), Thứ tự (`sortOrder`), Trạng thái (`isActive`).
+  - `CustomFieldFormDrawer.tsx`: StandardFormDrawer 2-columns hỗ trợ Tạo mới / Xem / Chỉnh sửa, đa ngôn ngữ VI/EN, quản lý options SELECT và tích hợp Live Preview simulator.
+
+---
+
+## 9. Quality Control & Testing Commands
 
 ```bash
 # 1. Backend tests
