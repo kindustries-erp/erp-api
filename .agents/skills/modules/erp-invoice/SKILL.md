@@ -380,12 +380,25 @@ src/erp-invoices-core/
     - **Backfill Chi nhánh (`branch_id`)**: Nếu DB chưa có chi nhánh, tự động suy diễn và cập nhật.
     - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
 
-### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel`)
+### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel` / `exportExcel`)
 - **Cấu trúc Sheet & Trình bày Bảng**:
-  - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Hàng hóa`.
+  - **Quy chuẩn Thứ tự & Tên Sheet**:
+    - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
+      1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
+      2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
+      3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
+      4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
+    - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
+      1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
+      2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
+      3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
+      4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
+      5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
+      6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+  - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
   - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).
   - **Cột Còn lại**: Nổi bật với màu vàng hổ phách nhạt (`#FEFCE8` / `#FFFDE68A`) thể hiện số dư còn lại của hóa đơn sau cấn trừ.
-  - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Hàng hóa` và sheet `Tổng quan hàng hóa`.
+  - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Bảng kê HHDV` và sheet `Tổng quan HHDV`.
   - **Sheet Công nợ Theo Đối tượng**: Bổ sung sheet tổng hợp công nợ đối tác tính đến ngày kết thúc kỳ báo cáo (`cutoffDate`) với các cột *Lũy kế công nợ*, *Lũy kế cấn trừ*, *Lũy kế còn nợ* và dòng *TỔNG CỘNG* footer.
 - **Định dạng Số liệu & Đơn vị tính**:
   - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
