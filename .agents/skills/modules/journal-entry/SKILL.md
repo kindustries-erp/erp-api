@@ -123,7 +123,8 @@ Controller Base Route: `/api/v1/accounting-core`
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/accounting-core/journal-entries` | `page`, `pageSize`, `search`, `branchId`, `startDate`, `endDate`, `doc_date_from`, `doc_date_to`, `source_type`, `column_search`, `column_filters`, `sort` | Lấy danh sách sổ nhật ký chung kèm dòng định khoản Nợ/Có, đối tượng liên quan, phân trang và object `totals` tính toán đầy đủ |
 | `GET` | `/api/v1/accounting-core/journal-entries/column-options` | `column`, `search`, `page`, `pageSize`, `filters`, `branch_id` | Lấy danh sách distinct options phân trang infinite scroll theo từng cột (`entryNo`, `branch`, `subjectName`, `account`, `opposingAccount`, `status`, `sourceType`, `reference`, `description`, `debit`, `credit`) |
-| `GET` | `/api/v1/accounting-core/journal-entries/:id` | `id` (UUID) | Lấy chi tiết toàn bộ một bút toán nhật ký chung kèm các dòng định khoản và tài khoản kế toán |
+| `GET` | `/api/v1/accounting-core/journal-entries/:id` | `id` (UUID hoặc `entryNo`) | Lấy chi tiết toàn bộ một bút toán nhật ký chung (Dual Lookup: UUID hoặc mã chứng từ string) kèm các dòng định khoản và tài khoản kế toán |
+| `PATCH` | `/api/v1/accounting-core/journal-entries/:id` | `id` (UUID hoặc `entryNo`), `body: UpdateJournalEntryDto` | Cập nhật thông tin chứng từ (ngày hạch toán, ngày CT, chi nhánh, đối tượng, diễn giải) và cập nhật lại danh sách dòng định khoản Nợ/Có với kiểm tra cân bằng kế toán ($\Delta < 0.01$) |
 
 ### Cấu trúc Response của `/journal-entries`:
 ```json
