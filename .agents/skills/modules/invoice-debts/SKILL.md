@@ -149,11 +149,14 @@ Hàm `buildKeywordSqlClause` hỗ trợ cú pháp tìm kiếm chuẩn hóa:
 
 ### 5.3. Drawer Chi Tiết Công Nợ (`InvoicePartnerDebtDetailDrawer`)
 - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="xl"`, `collapsibleRightPanel={true}`).
-- **Cột phải (Right Panel)**: 3 DrawerSection gồm:
+- **Cột phải (Right Panel)**: 2 DrawerSection gồm:
   1. *Thông tin đối tác*: Tên đối tác, MST/CCCD, Phân loại Khách hàng/Nhà cung cấp, Địa chỉ.
   2. *Tổng quan tài chính & KPI công nợ*: 4 thẻ KPI tóm tắt + Phân bổ nợ theo thời hạn (0-30, 31-60, 61-90, >90 ngày).
-  3. *Biến động hóa đơn theo tháng*: BarChart chi phí/doanh thu.
-- **Cột trái (Left Panel / Main Content)**: `<DrawerSection>` bao bọc `<DataTable variant="spreadsheet">` có phân trang client-side (`page`, `pageSize`, options `[10, 20, 50]`), Header Filters đầy đủ, tìm kiếm chính xác/nhiều từ khóa, và dòng tổng phụ Subtotal Popover.
+- **Cột trái (Left Panel / Main Content)**: Thanh điều hướng `PillTabs` 2 sub-tabs:
+  - **Tab 1. Danh sách hóa đơn**: `<DataTable variant="spreadsheet">` hiển thị chi tiết các hóa đơn có phân trang client-side (`page`, `pageSize`, options `[10, 20, 50]`), Header Filters đầy đủ, tìm kiếm chính xác/nhiều từ khóa, và dòng tổng phụ Subtotal Popover.
+  - **Tab 2. Biến động & Phân tích (Visual Debt Analytics)**:
+    - *Hàng 1 (Grid 3:1)*: Biến động hóa đơn theo tháng (`BarChart` Stacked: Đã thu/trả vs Còn nợ) + Cơ cấu phân bổ 4 tầng tuổi nợ (`DonutChart`).
+    - *Hàng 2 (Grid 1:1)*: Biểu đồ Luân chuyển & Dòng tiền Tích lũy (`LineChart` với 3 đường: Tổng giá trị HĐ tích lũy, Tiền đã thu/trả tích lũy, Dư nợ còn lại) + Tỷ lệ Hoàn tất Thanh toán / Thu hồi Nợ theo Tháng (`BarChart` cố định 0-100%).
 
 ---
 
