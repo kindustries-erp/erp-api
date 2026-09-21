@@ -478,6 +478,9 @@ export class InvoiceQueryService {
       qb.andWhere('(inv.seller_tax_code = :ptc OR inv.buyer_tax_code = :ptc)', {
         ptc: query.partner_tax_code,
       });
+    if (query.id) {
+      qb.andWhere('inv.id = :invId', { invId: query.id });
+    }
     if (query.tag_id)
       qb.andWhere(
         `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
@@ -807,6 +810,15 @@ export class InvoiceQueryService {
       qb.andWhere('inv.buyer_name ILIKE :bn', {
         bn: `%${query.buyer_name}%`,
       });
+    if (query.id) {
+      qb.andWhere('inv.id = :invId', { invId: query.id });
+    }
+    if (query.invoice_no) {
+      qb.andWhere('inv.invoice_no = :invNo', { invNo: query.invoice_no });
+    }
+    if (query.serial_no) {
+      qb.andWhere('inv.serial_no = :serNo', { serNo: query.serial_no });
+    }
     if (query.tag_id)
       qb.andWhere(
         `inv.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
@@ -905,8 +917,7 @@ export class InvoiceQueryService {
 
     const workbook = new ExcelJS.Workbook();
 
-    const summarySheet = workbook.addWorksheet('Bảng kê');
-    summarySheet.columns = [
+    const summaryColumns = [
       { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
       { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
       { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
@@ -983,8 +994,7 @@ export class InvoiceQueryService {
       },
     ];
 
-    const detailedSheet = workbook.addWorksheet('Hàng hóa');
-    detailedSheet.columns = [
+    const detailedColumns = [
       { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
       { header: 'Mã hàng hóa', key: 'itemCode', width: 20 },
       { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 40 },
@@ -1037,8 +1047,7 @@ export class InvoiceQueryService {
       { header: 'Phân loại dòng', key: 'invoiceSubcategory', width: 20 },
     ];
 
-    const overviewSheet = workbook.addWorksheet('Tổng quan hàng hóa');
-    overviewSheet.columns = [
+    const overviewColumns = [
       { header: 'Mã hàng hóa', key: 'itemCode', width: 20 },
       { header: 'Tên hàng hóa, dịch vụ', key: 'itemName', width: 45 },
       { header: 'Đơn vị tính', key: 'uom', width: 15 },
@@ -1080,8 +1089,7 @@ export class InvoiceQueryService {
       },
     ];
 
-    const debtSheet = workbook.addWorksheet('Công nợ theo đối tượng');
-    debtSheet.columns = [
+    const debtColumns = [
       { header: 'STT', key: 'stt', width: 8 },
       { header: 'Mã số thuế', key: 'taxCode', width: 18 },
       { header: 'Tên đối tác', key: 'partnerName', width: 45 },
@@ -1141,13 +1149,13 @@ export class InvoiceQueryService {
             cell.fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: { argb: 'FFDCEEFB' }, // pastel ice-blue for transaction reference columns
+              fgColor: { argb: 'FFDCEEFB' },
             };
           } else if (colNumber === 22) {
             cell.fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: { argb: 'FFFDE68A' }, // soft amber for Còn lại column
+              fgColor: { argb: 'FFFDE68A' },
             };
           } else {
             cell.fill = {
@@ -1160,7 +1168,7 @@ export class InvoiceQueryService {
           cell.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FFDCEEFB' }, // subtle highlight for cumulative columns
+            fgColor: { argb: 'FFDCEEFB' },
           };
         } else {
           cell.fill = {
@@ -1179,228 +1187,157 @@ export class InvoiceQueryService {
       };
     };
 
-    applyHeaderStyle(summarySheet, 'summary');
-    applyHeaderStyle(detailedSheet, 'detailed');
-    applyHeaderStyle(overviewSheet, 'overview');
-    applyHeaderStyle(debtSheet, 'debt');
-
-    const overviewMap = new Map<
-      string,
-      {
-        itemCode: string;
+    const createOverviewAccumulator =
+      (map: Map<string, any>) =>
+      (payload: {
+        itemCode?: string;
         itemName: string;
         uom: string;
-        totalQty: number;
-        totalPreVat: number;
-        totalVat: number;
+        qty: number;
+        unitPrice: number;
+        preVatAmount: number;
+        vatAmount: number;
         totalAmount: number;
-        totalUnitPriceWeight: number;
-        lineCount: number;
-      }
-    >();
+      }) => {
+        const itemCode = String(payload.itemCode || '').trim();
+        const itemName =
+          String(payload.itemName || '').trim() || '(Không có tên)';
+        const uom = String(payload.uom || '')
+          .trim()
+          .toUpperCase();
+        const key = `${itemCode.toLowerCase()}__${itemName.toLowerCase()}__${uom.toLowerCase()}`;
 
-    const accumulateOverview = (payload: {
-      itemCode?: string;
-      itemName: string;
-      uom: string;
-      qty: number;
-      unitPrice: number;
-      preVatAmount: number;
-      vatAmount: number;
-      totalAmount: number;
-    }) => {
-      const itemCode = String(payload.itemCode || '').trim();
-      const itemName =
-        String(payload.itemName || '').trim() || '(Không có tên)';
-      const uom = String(payload.uom || '')
-        .trim()
-        .toUpperCase();
-      const key = `${itemCode.toLowerCase()}__${itemName.toLowerCase()}__${uom.toLowerCase()}`;
+        const current = map.get(key) || {
+          itemCode,
+          itemName,
+          uom,
+          totalQty: 0,
+          totalPreVat: 0,
+          totalVat: 0,
+          totalAmount: 0,
+          totalUnitPriceWeight: 0,
+          lineCount: 0,
+        };
 
-      const current = overviewMap.get(key) || {
-        itemCode,
-        itemName,
-        uom,
-        totalQty: 0,
-        totalPreVat: 0,
-        totalVat: 0,
-        totalAmount: 0,
-        totalUnitPriceWeight: 0,
-        lineCount: 0,
+        const qty = Number(payload.qty) || 0;
+        const unitPrice = Number(payload.unitPrice) || 0;
+
+        current.totalQty += qty;
+        current.totalPreVat += Number(payload.preVatAmount) || 0;
+        current.totalVat += Number(payload.vatAmount) || 0;
+        current.totalAmount += Number(payload.totalAmount) || 0;
+        current.totalUnitPriceWeight += unitPrice * qty;
+        current.lineCount += 1;
+
+        map.set(key, current);
       };
 
-      const qty = Number(payload.qty) || 0;
-      const unitPrice = Number(payload.unitPrice) || 0;
+    const writeSummaryRows = (sheet: ExcelJS.Worksheet, invoiceList: any[]) => {
+      for (const inv of invoiceList) {
+        const partnerName =
+          query.direction === 'IN' ? inv.sellerName : inv.buyerName;
+        const taxCode =
+          query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
+        const address =
+          query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
+        const remainingAmount =
+          Number(inv.totalAmount || 0) - Number((inv as any).netOffAmount || 0);
 
-      current.totalQty += qty;
-      current.totalPreVat += Number(payload.preVatAmount) || 0;
-      current.totalVat += Number(payload.vatAmount) || 0;
-      current.totalAmount += Number(payload.totalAmount) || 0;
-      current.totalUnitPriceWeight += unitPrice * qty;
-      current.lineCount += 1;
+        const fullDesc = [
+          inv.description,
+          (inv as any).notes,
+          ...(inv.items || []).map((i: any) => i.description),
+        ]
+          .filter(Boolean)
+          .join(' | ');
 
-      overviewMap.set(key, current);
-    };
-
-    let processed = 0;
-    const progressDenominator = Math.max(items.length, 1);
-    for (const inv of items) {
-      const partnerName =
-        query.direction === 'IN' ? inv.sellerName : inv.buyerName;
-      const taxCode =
-        query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
-      const address =
-        query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
-      const branchName = inv.branchId ? branchMap[inv.branchId] : '';
-      const remainingAmount =
-        Number(inv.totalAmount || 0) - Number((inv as any).netOffAmount || 0);
-
-      const fullDesc = [
-        inv.description,
-        (inv as any).notes,
-        ...(inv.items || []).map((i) => i.description),
-      ]
-        .filter(Boolean)
-        .join(' | ');
-
-      const statusName = formatTaxInvoiceStatus(inv.taxInvoiceStatus);
-      const descriptionLineCount = String(inv.description || '')
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean).length;
-      const invoiceLineCount = Math.max(
-        inv.items?.length || 0,
-        descriptionLineCount,
-        1,
-      );
-
-      summarySheet.addRow({
-        invoiceDate: inv.invoiceDate,
-        serialNo: inv.serialNo,
-        invoiceNo: inv.invoiceNo,
-        partnerName,
-        taxCode,
-        address,
-        headerDiscountAmount: Number(inv.discountAmount) || 0,
-        preVat: Number(inv.preVatAmount) || 0,
-        vatRate: parseVatRateForDisplay(inv.vatRate),
-        vat: Number(inv.vatAmount) || 0,
-        total: Number(inv.totalAmount) || 0,
-        licensePlate: inv.licensePlate || '',
-        wo: inv.settlementOrder || '',
-        description: fullDesc,
-        statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-        branchName: branchMap[inv.branchId || ''] || '',
-        netOffReferences: (inv as any).netOffReferences || '',
-        netOffTransDate: (inv as any).netOffTransDate || '',
-        netOffTransDesc: (inv as any).netOffTransDesc || '',
-        netOffRefAmount: Number((inv as any).netOffRefAmount) || 0,
-        netOffAmount: Number((inv as any).netOffAmount) || 0,
-        remainingAmount,
-      });
-
-      const lastSummaryRow = summarySheet.lastRow;
-      if (lastSummaryRow) {
-        for (let c = 17; c <= 21; c++) {
-          const cell = lastSummaryRow.getCell(c);
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF0F9FF' }, // Soft ice-blue for transaction reference fields
-          };
-        }
-        const remainingCell = lastSummaryRow.getCell(22);
-        remainingCell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFFEFCE8' }, // Distinct soft warm amber for Còn lại
-        };
-      }
-
-      if (!inv.items || inv.items.length === 0) {
-        const fallbackPreVat = Number(inv.preVatAmount) || 0;
-        const fallbackVat = Number(inv.vatAmount) || 0;
-        const fallbackTotal = Number(inv.totalAmount) || 0;
-        const normalizedFallback = classifyInvoiceLine(
-          {
-            description: inv.description,
-            unit: '',
-            quantity: 0,
-            unitPrice: 0,
-            preVatAmount: fallbackPreVat,
-            vatAmount: fallbackVat,
-            totalAmount: fallbackTotal,
-            discountAmount: Number(inv.discountAmount) || 0,
-          },
-          {
-            buyerTaxCode: taxCode,
-            direction: inv.direction,
-            invoiceLineCount,
-            taxInvoiceStatus: inv.taxInvoiceStatus,
-            headerDiscountAmount: Number(inv.discountAmount) || 0,
-            forReportExport: true,
-          },
-        );
-
-        detailedSheet.addRow({
+        sheet.addRow({
           invoiceDate: inv.invoiceDate,
-          itemCode: '',
-          itemName: inv.description || '',
-          uom: '',
           serialNo: inv.serialNo,
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
-          qty: normalizedFallback.quantity,
-          unitPrice: normalizedFallback.unitPrice,
-          preVatAmount: normalizedFallback.preVatAmount,
+          address,
+          headerDiscountAmount: Number(inv.discountAmount) || 0,
+          preVat: Number(inv.preVatAmount) || 0,
           vatRate: parseVatRateForDisplay(inv.vatRate),
-          vatAmount: normalizedFallback.vatAmount,
-          totalAmount: normalizedFallback.totalAmount,
+          vat: Number(inv.vatAmount) || 0,
+          total: Number(inv.totalAmount) || 0,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
           statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
           branchName: branchMap[inv.branchId || ''] || '',
-          invoiceSubcategory:
-            normalizedFallback.invoiceSubcategory === 'DISCOUNT'
-              ? 'Chiết khấu'
-              : normalizedFallback.invoiceSubcategory === 'RESCUE'
-                ? 'Cứu hộ'
-                : 'Thông thường',
+          netOffReferences: (inv as any).netOffReferences || '',
+          netOffTransDate: (inv as any).netOffTransDate || '',
+          netOffTransDesc: (inv as any).netOffTransDesc || '',
+          netOffRefAmount: Number((inv as any).netOffRefAmount) || 0,
+          netOffAmount: Number((inv as any).netOffAmount) || 0,
+          remainingAmount,
         });
 
-        accumulateOverview({
-          itemCode: '',
-          itemName: inv.description || '',
-          uom: '',
-          qty: normalizedFallback.quantity,
-          unitPrice: normalizedFallback.unitPrice,
-          preVatAmount: normalizedFallback.preVatAmount,
-          vatAmount: normalizedFallback.vatAmount,
-          totalAmount: normalizedFallback.totalAmount,
-        });
-      } else {
-        for (const item of inv.items) {
-          const itemPreVat = Number(item.preVatAmount) || 0;
-          const itemVatRateRaw = parseVatRateForDisplay(
-            item.vatRate || inv.vatRate,
-          );
-          const itemVatAmount =
-            Number(item.vatAmount) ||
-            Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
-          const itemTotalAmount =
-            Number(item.totalAmount) || Math.round(itemPreVat + itemVatAmount);
-          const normalizedItem = classifyInvoiceLine(
+        const lastSummaryRow = sheet.lastRow;
+        if (lastSummaryRow) {
+          for (let c = 17; c <= 21; c++) {
+            const cell = lastSummaryRow.getCell(c);
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF0F9FF' },
+            };
+          }
+          const remainingCell = lastSummaryRow.getCell(22);
+          remainingCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFEFCE8' },
+          };
+        }
+      }
+    };
+
+    const writeDetailedRows = (
+      sheet: ExcelJS.Worksheet,
+      invoiceList: any[],
+      onAccumulate?: (payload: any) => void,
+    ) => {
+      for (const inv of invoiceList) {
+        const partnerName =
+          query.direction === 'IN' ? inv.sellerName : inv.buyerName;
+        const taxCode =
+          query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
+        const fullDesc = [
+          inv.description,
+          (inv as any).notes,
+          ...(inv.items || []).map((i: any) => i.description),
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+        const descriptionLineCount = String(inv.description || '')
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean).length;
+        const invoiceLineCount = Math.max(
+          inv.items?.length || 0,
+          descriptionLineCount,
+          1,
+        );
+
+        if (!inv.items || inv.items.length === 0) {
+          const fallbackPreVat = Number(inv.preVatAmount) || 0;
+          const fallbackVat = Number(inv.vatAmount) || 0;
+          const fallbackTotal = Number(inv.totalAmount) || 0;
+          const normalizedFallback = classifyInvoiceLine(
             {
-              description: item.description || '',
-              unit: item.unit || '',
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              preVatAmount: itemPreVat,
-              vatAmount: itemVatAmount,
-              totalAmount: itemTotalAmount,
-              discountAmount: Number(item.discountAmount) || 0,
+              description: inv.description,
+              unit: '',
+              quantity: 0,
+              unitPrice: 0,
+              preVatAmount: fallbackPreVat,
+              vatAmount: fallbackVat,
+              totalAmount: fallbackTotal,
+              discountAmount: Number(inv.discountAmount) || 0,
             },
             {
               buyerTaxCode: taxCode,
@@ -1412,84 +1349,153 @@ export class InvoiceQueryService {
             },
           );
 
-          detailedSheet.addRow({
+          sheet.addRow({
             invoiceDate: inv.invoiceDate,
-            itemCode: item.itemCode || '',
-            itemName: item.description || '',
-            uom: (item.unit || '').trim().toUpperCase(),
+            itemCode: '',
+            itemName: inv.description || '',
+            uom: '',
             serialNo: inv.serialNo,
             invoiceNo: inv.invoiceNo,
             partnerName,
             taxCode,
-            qty: normalizedItem.quantity,
-            unitPrice: normalizedItem.unitPrice,
-            preVatAmount: normalizedItem.preVatAmount,
-            vatRate: itemVatRateRaw,
-            vatAmount: normalizedItem.vatAmount,
-            totalAmount: normalizedItem.totalAmount,
+            qty: normalizedFallback.quantity,
+            unitPrice: normalizedFallback.unitPrice,
+            preVatAmount: normalizedFallback.preVatAmount,
+            vatRate: parseVatRateForDisplay(inv.vatRate),
+            vatAmount: normalizedFallback.vatAmount,
+            totalAmount: normalizedFallback.totalAmount,
             licensePlate: inv.licensePlate || '',
             wo: inv.settlementOrder || '',
             description: fullDesc,
             statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
             branchName: branchMap[inv.branchId || ''] || '',
             invoiceSubcategory:
-              normalizedItem.invoiceSubcategory === 'DISCOUNT'
+              normalizedFallback.invoiceSubcategory === 'DISCOUNT'
                 ? 'Chiết khấu'
-                : normalizedItem.invoiceSubcategory === 'RESCUE'
+                : normalizedFallback.invoiceSubcategory === 'RESCUE'
                   ? 'Cứu hộ'
                   : 'Thông thường',
           });
 
-          accumulateOverview({
-            itemCode: item.itemCode || '',
-            itemName: item.description || '',
-            uom: item.unit || '',
-            qty: normalizedItem.quantity,
-            unitPrice: normalizedItem.unitPrice,
-            preVatAmount: normalizedItem.preVatAmount,
-            vatAmount: normalizedItem.vatAmount,
-            totalAmount: normalizedItem.totalAmount,
+          onAccumulate?.({
+            itemCode: '',
+            itemName: inv.description || '',
+            uom: '',
+            qty: normalizedFallback.quantity,
+            unitPrice: normalizedFallback.unitPrice,
+            preVatAmount: normalizedFallback.preVatAmount,
+            vatAmount: normalizedFallback.vatAmount,
+            totalAmount: normalizedFallback.totalAmount,
           });
+        } else {
+          for (const item of inv.items) {
+            const itemPreVat = Number(item.preVatAmount) || 0;
+            const itemVatRateRaw = parseVatRateForDisplay(
+              item.vatRate || inv.vatRate,
+            );
+            const itemVatAmount =
+              Number(item.vatAmount) ||
+              Math.round(itemPreVat * (Number(itemVatRateRaw) || 0));
+            const itemTotalAmount =
+              Number(item.totalAmount) ||
+              Math.round(itemPreVat + itemVatAmount);
+            const normalizedItem = classifyInvoiceLine(
+              {
+                description: item.description || '',
+                unit: item.unit || '',
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                preVatAmount: itemPreVat,
+                vatAmount: itemVatAmount,
+                totalAmount: itemTotalAmount,
+                discountAmount: Number(item.discountAmount) || 0,
+              },
+              {
+                buyerTaxCode: taxCode,
+                direction: inv.direction,
+                invoiceLineCount,
+                taxInvoiceStatus: inv.taxInvoiceStatus,
+                headerDiscountAmount: Number(inv.discountAmount) || 0,
+                forReportExport: true,
+              },
+            );
+
+            sheet.addRow({
+              invoiceDate: inv.invoiceDate,
+              itemCode: item.itemCode || '',
+              itemName: item.description || '',
+              uom: (item.unit || '').trim().toUpperCase(),
+              serialNo: inv.serialNo,
+              invoiceNo: inv.invoiceNo,
+              partnerName,
+              taxCode,
+              qty: normalizedItem.quantity,
+              unitPrice: normalizedItem.unitPrice,
+              preVatAmount: normalizedItem.preVatAmount,
+              vatRate: itemVatRateRaw,
+              vatAmount: normalizedItem.vatAmount,
+              totalAmount: normalizedItem.totalAmount,
+              licensePlate: inv.licensePlate || '',
+              wo: inv.settlementOrder || '',
+              description: fullDesc,
+              statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
+              branchName: branchMap[inv.branchId || ''] || '',
+              invoiceSubcategory:
+                normalizedItem.invoiceSubcategory === 'DISCOUNT'
+                  ? 'Chiết khấu'
+                  : normalizedItem.invoiceSubcategory === 'RESCUE'
+                    ? 'Cứu hộ'
+                    : 'Thông thường',
+            });
+
+            onAccumulate?.({
+              itemCode: item.itemCode || '',
+              itemName: item.description || '',
+              uom: item.unit || '',
+              qty: normalizedItem.quantity,
+              unitPrice: normalizedItem.unitPrice,
+              preVatAmount: normalizedItem.preVatAmount,
+              vatAmount: normalizedItem.vatAmount,
+              totalAmount: normalizedItem.totalAmount,
+            });
+          }
         }
       }
+    };
 
-      processed += 1;
-      const rowPhaseProgress =
-        45 + Math.floor((processed / progressDenominator) * 50);
-      emitProgress(
-        rowPhaseProgress,
-        `Dang tao noi dung XLSX (${processed}/${items.length})...`,
+    const writeOverviewRows = (
+      sheet: ExcelJS.Worksheet,
+      overviewMap: Map<string, any>,
+    ) => {
+      const overviewRows = Array.from(overviewMap.values()).sort(
+        (a, b) =>
+          a.itemName.localeCompare(b.itemName, 'vi') ||
+          a.itemCode.localeCompare(b.itemCode, 'vi'),
       );
-    }
 
-    const overviewRows = Array.from(overviewMap.values()).sort(
-      (a, b) =>
-        a.itemName.localeCompare(b.itemName, 'vi') ||
-        a.itemCode.localeCompare(b.itemCode, 'vi'),
-    );
+      for (const row of overviewRows) {
+        const avgUnitPrice =
+          row.totalQty > 0
+            ? row.totalUnitPriceWeight / row.totalQty
+            : row.lineCount > 0
+              ? row.totalPreVat / row.lineCount
+              : 0;
 
-    for (const row of overviewRows) {
-      const avgUnitPrice =
-        row.totalQty > 0
-          ? row.totalUnitPriceWeight / row.totalQty
-          : row.lineCount > 0
-            ? row.totalPreVat / row.lineCount
-            : 0;
+        sheet.addRow({
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          uom: row.uom,
+          totalQty: row.totalQty,
+          avgUnitPrice,
+          totalPreVat: row.totalPreVat,
+          totalVat: row.totalVat,
+          totalAmount: row.totalAmount,
+          lineCount: row.lineCount,
+        });
+      }
+    };
 
-      overviewSheet.addRow({
-        itemCode: row.itemCode,
-        itemName: row.itemName,
-        uom: row.uom,
-        totalQty: row.totalQty,
-        avgUnitPrice,
-        totalPreVat: row.totalPreVat,
-        totalVat: row.totalVat,
-        totalAmount: row.totalAmount,
-        lineCount: row.lineCount,
-      });
-    }
-
-    // Build Partner Debt Sheet (Công nợ theo đối tượng)
+    // Build Cumulative map for debt
     let cutoffDate = query.date_to ? query.date_to.substring(0, 10) : '';
     if (!cutoffDate) {
       const dates = items
@@ -1557,125 +1563,257 @@ export class InvoiceQueryService {
       });
     }
 
-    const partnerDebtMap = new Map<
-      string,
-      {
-        taxCode: string;
-        partnerName: string;
-        invoiceCount: number;
-        totalAmount: number;
-        netOffAmount: number;
-        remainingAmount: number;
-        cumulativeDebt: number;
-        cumulativeNetOff: number;
-        cumulativeRemaining: number;
+    const writeDebtRows = (sheet: ExcelJS.Worksheet, invoiceList: any[]) => {
+      const partnerDebtMap = new Map<
+        string,
+        {
+          taxCode: string;
+          partnerName: string;
+          invoiceCount: number;
+          totalAmount: number;
+          netOffAmount: number;
+          remainingAmount: number;
+          cumulativeDebt: number;
+          cumulativeNetOff: number;
+          cumulativeRemaining: number;
+        }
+      >();
+
+      for (const inv of invoiceList) {
+        const partnerName =
+          query.direction === 'IN' ? inv.sellerName : inv.buyerName;
+        const taxCode =
+          query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
+        const pName = String(partnerName || '').trim() || '(Chưa có tên)';
+        const tCode = String(taxCode || '').trim();
+        const key = `${tCode}:::${pName}`;
+
+        const cumData = cumMap.get(key);
+        const current = partnerDebtMap.get(key) || {
+          taxCode: tCode,
+          partnerName: pName,
+          invoiceCount: 0,
+          totalAmount: 0,
+          netOffAmount: 0,
+          remainingAmount: 0,
+          cumulativeDebt: cumData ? cumData.cumTotal : 0,
+          cumulativeNetOff: cumData ? cumData.cumNetOff : 0,
+          cumulativeRemaining: cumData
+            ? cumData.cumTotal - cumData.cumNetOff
+            : 0,
+        };
+
+        const invTotal = Number(inv.totalAmount) || 0;
+        const invNetOff = Number((inv as any).netOffAmount) || 0;
+        const invRemaining = invTotal - invNetOff;
+
+        current.invoiceCount += 1;
+        current.totalAmount += invTotal;
+        current.netOffAmount += invNetOff;
+        current.remainingAmount += invRemaining;
+        if (!cumData) {
+          current.cumulativeDebt += invTotal;
+          current.cumulativeNetOff += invNetOff;
+          current.cumulativeRemaining += invRemaining;
+        }
+
+        partnerDebtMap.set(key, current);
       }
-    >();
 
-    for (const inv of items) {
-      const partnerName =
-        query.direction === 'IN' ? inv.sellerName : inv.buyerName;
-      const taxCode =
-        query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
-      const pName = String(partnerName || '').trim() || '(Chưa có tên)';
-      const tCode = String(taxCode || '').trim();
-      const key = `${tCode}:::${pName}`;
+      const partnerDebtRows = Array.from(partnerDebtMap.values()).sort(
+        (a, b) =>
+          b.cumulativeRemaining - a.cumulativeRemaining ||
+          b.remainingAmount - a.remainingAmount ||
+          a.partnerName.localeCompare(b.partnerName, 'vi'),
+      );
 
-      const cumData = cumMap.get(key);
-      const current = partnerDebtMap.get(key) || {
-        taxCode: tCode,
-        partnerName: pName,
-        invoiceCount: 0,
-        totalAmount: 0,
-        netOffAmount: 0,
-        remainingAmount: 0,
-        cumulativeDebt: cumData ? cumData.cumTotal : 0,
-        cumulativeNetOff: cumData ? cumData.cumNetOff : 0,
-        cumulativeRemaining: cumData ? cumData.cumTotal - cumData.cumNetOff : 0,
-      };
+      let stt = 1;
+      let sumInvoices = 0;
+      let sumTotalAmount = 0;
+      let sumNetOffAmount = 0;
+      let sumRemainingAmount = 0;
+      let sumCumulativeDebt = 0;
+      let sumCumulativeNetOff = 0;
+      let sumCumulativeRemaining = 0;
 
-      const invTotal = Number(inv.totalAmount) || 0;
-      const invNetOff = Number((inv as any).netOffAmount) || 0;
-      const invRemaining = invTotal - invNetOff;
+      for (const row of partnerDebtRows) {
+        sumInvoices += row.invoiceCount;
+        sumTotalAmount += row.totalAmount;
+        sumNetOffAmount += row.netOffAmount;
+        sumRemainingAmount += row.remainingAmount;
+        sumCumulativeDebt += row.cumulativeDebt;
+        sumCumulativeNetOff += row.cumulativeNetOff;
+        sumCumulativeRemaining += row.cumulativeRemaining;
 
-      current.invoiceCount += 1;
-      current.totalAmount += invTotal;
-      current.netOffAmount += invNetOff;
-      current.remainingAmount += invRemaining;
-      if (!cumData) {
-        current.cumulativeDebt += invTotal;
-        current.cumulativeNetOff += invNetOff;
-        current.cumulativeRemaining += invRemaining;
+        sheet.addRow({
+          stt: stt++,
+          taxCode: row.taxCode,
+          partnerName: row.partnerName,
+          invoiceCount: row.invoiceCount,
+          totalAmount: row.totalAmount,
+          netOffAmount: row.netOffAmount,
+          remainingAmount: row.remainingAmount,
+          cumulativeDebt: row.cumulativeDebt,
+          cumulativeNetOff: row.cumulativeNetOff,
+          cumulativeRemaining: row.cumulativeRemaining,
+          status: row.cumulativeRemaining > 0 ? 'Còn nợ' : 'Đã tất toán',
+        });
       }
 
-      partnerDebtMap.set(key, current);
-    }
-
-    const partnerDebtRows = Array.from(partnerDebtMap.values()).sort(
-      (a, b) =>
-        b.cumulativeRemaining - a.cumulativeRemaining ||
-        b.remainingAmount - a.remainingAmount ||
-        a.partnerName.localeCompare(b.partnerName, 'vi'),
-    );
-
-    let stt = 1;
-    let sumInvoices = 0;
-    let sumTotalAmount = 0;
-    let sumNetOffAmount = 0;
-    let sumRemainingAmount = 0;
-    let sumCumulativeDebt = 0;
-    let sumCumulativeNetOff = 0;
-    let sumCumulativeRemaining = 0;
-
-    for (const row of partnerDebtRows) {
-      sumInvoices += row.invoiceCount;
-      sumTotalAmount += row.totalAmount;
-      sumNetOffAmount += row.netOffAmount;
-      sumRemainingAmount += row.remainingAmount;
-      sumCumulativeDebt += row.cumulativeDebt;
-      sumCumulativeNetOff += row.cumulativeNetOff;
-      sumCumulativeRemaining += row.cumulativeRemaining;
-
-      debtSheet.addRow({
-        stt: stt++,
-        taxCode: row.taxCode,
-        partnerName: row.partnerName,
-        invoiceCount: row.invoiceCount,
-        totalAmount: row.totalAmount,
-        netOffAmount: row.netOffAmount,
-        remainingAmount: row.remainingAmount,
-        cumulativeDebt: row.cumulativeDebt,
-        cumulativeNetOff: row.cumulativeNetOff,
-        cumulativeRemaining: row.cumulativeRemaining,
-        status: row.cumulativeRemaining > 0 ? 'Còn nợ' : 'Đã tất toán',
+      const debtSummaryRow = sheet.addRow({
+        stt: '',
+        taxCode: '',
+        partnerName: 'TỔNG CỘNG',
+        invoiceCount: sumInvoices,
+        totalAmount: sumTotalAmount,
+        netOffAmount: sumNetOffAmount,
+        remainingAmount: sumRemainingAmount,
+        cumulativeDebt: sumCumulativeDebt,
+        cumulativeNetOff: sumCumulativeNetOff,
+        cumulativeRemaining: sumCumulativeRemaining,
+        status: '',
       });
-    }
+      debtSummaryRow.font = { bold: true };
+      debtSummaryRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8F0FE' },
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          bottom: { style: 'double' },
+        };
+      });
+    };
 
-    const debtSummaryRow = debtSheet.addRow({
-      stt: '',
-      taxCode: '',
-      partnerName: 'TỔNG CỘNG',
-      invoiceCount: sumInvoices,
-      totalAmount: sumTotalAmount,
-      netOffAmount: sumNetOffAmount,
-      remainingAmount: sumRemainingAmount,
-      cumulativeDebt: sumCumulativeDebt,
-      cumulativeNetOff: sumCumulativeNetOff,
-      cumulativeRemaining: sumCumulativeRemaining,
-      status: '',
-    });
-    debtSummaryRow.font = { bold: true };
-    debtSummaryRow.eachCell((cell) => {
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE8F0FE' },
-      };
-      cell.border = {
-        top: { style: 'thin' },
-        bottom: { style: 'double' },
-      };
-    });
+    const isSingleInvoice = Boolean(query.id && items.length === 1);
+
+    if (isSingleInvoice) {
+      const targetInvoice = items[0];
+      const partnerTaxCode =
+        targetInvoice.direction === 'IN'
+          ? targetInvoice.sellerTaxCode
+          : targetInvoice.buyerTaxCode;
+      const partnerName =
+        targetInvoice.direction === 'IN'
+          ? targetInvoice.sellerName
+          : targetInvoice.buyerName;
+
+      let partnerItems: any[] = items;
+      try {
+        const partnerQb = this.repository
+          .createQueryBuilder('inv')
+          .leftJoinAndSelect('inv.items', 'items')
+          .where('inv.is_deleted = false')
+          .andWhere('inv.direction = :dir', { dir: targetInvoice.direction });
+
+        if (partnerTaxCode && partnerTaxCode.trim()) {
+          if (targetInvoice.direction === 'IN') {
+            partnerQb.andWhere('inv.seller_tax_code = :ptc', {
+              ptc: partnerTaxCode.trim(),
+            });
+          } else {
+            partnerQb.andWhere('inv.buyer_tax_code = :ptc', {
+              ptc: partnerTaxCode.trim(),
+            });
+          }
+        } else if (partnerName && partnerName.trim()) {
+          if (targetInvoice.direction === 'IN') {
+            partnerQb.andWhere('inv.seller_name = :pname', {
+              pname: partnerName.trim(),
+            });
+          } else {
+            partnerQb.andWhere('inv.buyer_name = :pname', {
+              pname: partnerName.trim(),
+            });
+          }
+        }
+
+        partnerQb
+          .orderBy('inv.invoiceDate', 'DESC')
+          .addOrderBy('inv.createdAt', 'DESC');
+        partnerItems = await partnerQb.getMany();
+        partnerItems = await this._loadNetOffAmounts(partnerItems);
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to load partner invoices for export: ${err?.message}`,
+        );
+        partnerItems = items;
+      }
+
+      // 1. Sheet: Chi tiết HĐ (chỉ dữ liệu hóa đơn này)
+      const singleSummarySheet = workbook.addWorksheet('Chi tiết HĐ');
+      singleSummarySheet.columns = summaryColumns;
+      applyHeaderStyle(singleSummarySheet, 'summary');
+      writeSummaryRows(singleSummarySheet, items);
+
+      // 2. Sheet: Bảng kê HHDV HĐ (chỉ hàng hóa của hóa đơn này)
+      const singleDetailedSheet = workbook.addWorksheet('Bảng kê HHDV HĐ');
+      singleDetailedSheet.columns = detailedColumns;
+      applyHeaderStyle(singleDetailedSheet, 'detailed');
+      writeDetailedRows(singleDetailedSheet, items);
+
+      // 3. Sheet: Bảng kê đối tác (tổng hợp toàn bộ hóa đơn của đối tượng đó)
+      const partnerSummarySheet = workbook.addWorksheet('Bảng kê đối tác');
+      partnerSummarySheet.columns = summaryColumns;
+      applyHeaderStyle(partnerSummarySheet, 'summary');
+      writeSummaryRows(partnerSummarySheet, partnerItems);
+
+      // 4. Sheet: Tổng quan HHDV đối tác (đặt trước Bảng kê HHDV)
+      const partnerOverviewSheet = workbook.addWorksheet(
+        'Tổng quan HHDV đối tác',
+      );
+      partnerOverviewSheet.columns = overviewColumns;
+      applyHeaderStyle(partnerOverviewSheet, 'overview');
+
+      // 5. Sheet: Bảng kê HHDV đối tác (toàn bộ hàng hóa của đối tượng đó)
+      const partnerDetailedSheet = workbook.addWorksheet(
+        'Bảng kê HHDV đối tác',
+      );
+      partnerDetailedSheet.columns = detailedColumns;
+      applyHeaderStyle(partnerDetailedSheet, 'detailed');
+
+      const partnerOverviewMap = new Map<string, any>();
+      writeDetailedRows(partnerDetailedSheet, partnerItems, (p) =>
+        createOverviewAccumulator(partnerOverviewMap)(p),
+      );
+      writeOverviewRows(partnerOverviewSheet, partnerOverviewMap);
+
+      // 6. Sheet: Công nợ đối tác
+      const partnerDebtSheet = workbook.addWorksheet('Công nợ đối tác');
+      partnerDebtSheet.columns = debtColumns;
+      applyHeaderStyle(partnerDebtSheet, 'debt');
+      writeDebtRows(partnerDebtSheet, partnerItems);
+    } else {
+      // 1. Sheet: Bảng kê
+      const summarySheet = workbook.addWorksheet('Bảng kê');
+      summarySheet.columns = summaryColumns;
+      applyHeaderStyle(summarySheet, 'summary');
+      writeSummaryRows(summarySheet, items);
+
+      // 2. Sheet: Tổng quan HHDV (đặt trước Bảng kê HHDV)
+      const overviewSheet = workbook.addWorksheet('Tổng quan HHDV');
+      overviewSheet.columns = overviewColumns;
+      applyHeaderStyle(overviewSheet, 'overview');
+
+      // 3. Sheet: Bảng kê HHDV
+      const detailedSheet = workbook.addWorksheet('Bảng kê HHDV');
+      detailedSheet.columns = detailedColumns;
+      applyHeaderStyle(detailedSheet, 'detailed');
+
+      const overviewMap = new Map<string, any>();
+      writeDetailedRows(detailedSheet, items, (p) =>
+        createOverviewAccumulator(overviewMap)(p),
+      );
+      writeOverviewRows(overviewSheet, overviewMap);
+
+      // 4. Sheet: Công nợ theo đối tượng
+      const debtSheet = workbook.addWorksheet('Công nợ theo đối tượng');
+      debtSheet.columns = debtColumns;
+      applyHeaderStyle(debtSheet, 'debt');
+      writeDebtRows(debtSheet, items);
+    }
 
     emitProgress(97, 'Dang dong goi file XLSX...');
     const buffer = await workbook.xlsx.writeBuffer();

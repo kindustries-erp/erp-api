@@ -139,7 +139,7 @@ describe('InvoiceQueryService', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
 
-    const detailedSheet = workbook.getWorksheet('Hàng hóa');
+    const detailedSheet = workbook.getWorksheet('Bảng kê HHDV');
     expect(detailedSheet).toBeDefined();
 
     const headers = detailedSheet!.getRow(1).values as any[];
@@ -149,7 +149,7 @@ describe('InvoiceQueryService', () => {
     expect(headers[4]).toBe('Đơn vị tính');
   });
 
-  it('exportExcel adds Tổng quan hàng hóa sheet without invoiceDate column', async () => {
+  it('exportExcel adds Tổng quan HHDV sheet without invoiceDate column', async () => {
     const qb = createQbMock();
     qb.getMany.mockResolvedValue([
       {
@@ -206,7 +206,7 @@ describe('InvoiceQueryService', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
 
-    const overviewSheet = workbook.getWorksheet('Tổng quan hàng hóa');
+    const overviewSheet = workbook.getWorksheet('Tổng quan HHDV');
     expect(overviewSheet).toBeDefined();
 
     const headers = overviewSheet!.getRow(1).values as any[];
@@ -270,7 +270,7 @@ describe('InvoiceQueryService', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
 
-    const overviewSheet = workbook.getWorksheet('Tổng quan hàng hóa');
+    const overviewSheet = workbook.getWorksheet('Tổng quan HHDV');
     const overviewRows =
       overviewSheet!.getRows(2, overviewSheet!.rowCount - 1) || [];
     const discountRow = overviewRows.find((row) => {
@@ -364,6 +364,13 @@ describe('InvoiceQueryService', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
 
+    expect(workbook.worksheets.map((s) => s.name)).toEqual([
+      'Bảng kê',
+      'Tổng quan HHDV',
+      'Bảng kê HHDV',
+      'Công nợ theo đối tượng',
+    ]);
+
     // 1. Verify Sheet "Bảng kê"
     const summarySheet = workbook.getWorksheet('Bảng kê');
     expect(summarySheet).toBeDefined();
@@ -398,8 +405,8 @@ describe('InvoiceQueryService', () => {
     expect(remainingCell.fill).toBeDefined();
     expect((remainingCell.fill as any).fgColor?.argb).toBe('FFFEFCE8');
 
-    // 2. Verify Sheet "Hàng hóa"
-    const detailedSheet = workbook.getWorksheet('Hàng hóa');
+    // 2. Verify Sheet "Bảng kê HHDV"
+    const detailedSheet = workbook.getWorksheet('Bảng kê HHDV');
     expect(detailedSheet).toBeDefined();
     const detailHeaders = detailedSheet!.getRow(1).values as any[];
     expect(detailHeaders[2]).toBe('Mã hàng hóa');
@@ -1030,5 +1037,115 @@ describe('InvoiceQueryService', () => {
       { value: '101:::C25TTD', label: '101 (C25TTD)' },
       { value: '101:::C26TGL', label: '101 (C26TGL)' },
     ]);
+  });
+
+  it('exportExcel generates 6 sheets for single invoice (id specified) including partner aggregated sheets', async () => {
+    const singleInvoice = {
+      id: 'inv-1',
+      direction: 'IN',
+      invoiceDate: '2026-07-31',
+      serialNo: 'C26ABC',
+      invoiceNo: '12345',
+      sellerName: 'CÔNG TY TNHH ABC',
+      sellerTaxCode: '0123456789',
+      sellerAddress: 'Q1, TP.HCM',
+      preVatAmount: 100000,
+      vatRate: '8',
+      vatAmount: 8000,
+      totalAmount: 108000,
+      discountAmount: 0,
+      licensePlate: '51A-12345',
+      settlementOrder: 'WO-001',
+      description: 'Phi dich vu xe',
+      taxInvoiceStatus: 1,
+      branchId: null,
+      items: [
+        {
+          itemCode: 'LOC-01',
+          description: 'Loc gio dieu hoa',
+          unit: 'Cai',
+          quantity: 2,
+          unitPrice: 50000,
+          preVatAmount: 100000,
+          vatRate: '8',
+          vatAmount: 8000,
+          totalAmount: 108000,
+        },
+      ],
+    };
+
+    const partnerInvoices = [
+      singleInvoice,
+      {
+        id: 'inv-2',
+        direction: 'IN',
+        invoiceDate: '2026-08-01',
+        serialNo: 'C26ABC',
+        invoiceNo: '12346',
+        sellerName: 'CÔNG TY TNHH ABC',
+        sellerTaxCode: '0123456789',
+        sellerAddress: 'Q1, TP.HCM',
+        preVatAmount: 200000,
+        vatRate: '8',
+        vatAmount: 16000,
+        totalAmount: 216000,
+        discountAmount: 0,
+        taxInvoiceStatus: 1,
+        items: [
+          {
+            itemCode: 'LOC-01',
+            description: 'Loc gio dieu hoa',
+            unit: 'Cai',
+            quantity: 4,
+            unitPrice: 50000,
+            preVatAmount: 200000,
+            vatRate: '8',
+            vatAmount: 16000,
+            totalAmount: 216000,
+          },
+        ],
+      },
+    ];
+
+    let queryCallCount = 0;
+    const qb = createQbMock();
+    qb.getMany.mockImplementation(() => {
+      queryCallCount++;
+      if (queryCallCount === 1) {
+        return Promise.resolve([singleInvoice]);
+      }
+      return Promise.resolve(partnerInvoices);
+    });
+
+    const repository = createRepositoryMock(qb) as any;
+    const service = new InvoiceQueryService(repository, {
+      find: jest.fn().mockResolvedValue([]),
+    } as any);
+
+    const buffer = await service.exportExcel({
+      id: 'inv-1',
+      direction: 'IN',
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+
+    const sheetNames = workbook.worksheets.map((s) => s.name);
+    expect(sheetNames).toEqual([
+      'Chi tiết HĐ',
+      'Bảng kê HHDV HĐ',
+      'Bảng kê đối tác',
+      'Tổng quan HHDV đối tác',
+      'Bảng kê HHDV đối tác',
+      'Công nợ đối tác',
+    ]);
+
+    // Sheet 1: Chi tiết HĐ has 1 data row
+    const singleSummarySheet = workbook.getWorksheet('Chi tiết HĐ');
+    expect(singleSummarySheet!.rowCount).toBe(2); // 1 header + 1 row
+
+    // Sheet 3: Bảng kê đối tác has 2 data rows
+    const partnerSummarySheet = workbook.getWorksheet('Bảng kê đối tác');
+    expect(partnerSummarySheet!.rowCount).toBe(3); // 1 header + 2 rows
   });
 });
