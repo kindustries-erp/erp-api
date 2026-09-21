@@ -28,6 +28,7 @@ export type {
 export type { ErpInvoiceItemQuery } from './services/invoice-query.service';
 
 export interface ErpInvoiceQuery {
+  id?: string;
   direction?: string;
   search?: string;
   invoice_no?: string;

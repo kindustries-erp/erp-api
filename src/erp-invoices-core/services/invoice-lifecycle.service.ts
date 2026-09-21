@@ -52,6 +52,8 @@ export class InvoiceLifecycleService {
       'items',
       'voucherNetOffs',
       'voucherNetOffs.bankTransaction',
+      'voucherNetOffs.bankTransaction.bankAccount',
+      'voucherNetOffs.bankTransaction.cashBook',
       'attachments',
       'attachments.attachment',
       'category',
