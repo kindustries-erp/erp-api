@@ -31,6 +31,22 @@ export class InvoiceDashboardController {
   }
 
   @RequirePermissions({
+    resource: ErpResource.INVOICE_DEBTS,
+    action: ErpAction.READ,
+  })
+  @Get('debts-analytics')
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'branch_id', required: false })
+  getDebtsAnalytics(
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('branch_id') branchId?: string,
+  ) {
+    return this.service.getDebtsAnalytics(dateFrom, dateTo, branchId);
+  }
+
+  @RequirePermissions({
     resource: ErpResource.INVOICES,
     action: ErpAction.READ,
   })
