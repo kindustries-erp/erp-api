@@ -853,6 +853,109 @@ export class InvoiceDashboardService {
       maxAgingDays: Number(r.maxAgingDays) || 0,
     }));
 
+    // 5. Compute Forecast Horizons (Cashflow Forecasting Algorithms)
+    // 5.1 Partner Lag Forecast (DSO/DPO Lag Engine)
+    const forecastLagQuery = `
+      SELECT 
+        inv.direction,
+        SUM(
+          CASE 
+            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+                 AND (inv.invoice_date::date + (COALESCE(pl.avg_lag_days, 30) || ' days')::interval)::date <= (CURRENT_DATE + INTERVAL '7 days')::date
+            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            ELSE 0 
+          END
+        ) as "forecastNext7Days",
+        SUM(
+          CASE 
+            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+                 AND (inv.invoice_date::date + (COALESCE(pl.avg_lag_days, 30) || ' days')::interval)::date <= (CURRENT_DATE + INTERVAL '30 days')::date
+            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            ELSE 0 
+          END
+        ) as "forecastNext30Days"
+      FROM erp_invoices inv
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) as net_off_amount
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) netoff ON netoff.invoice_id = inv.id
+      LEFT JOIN (
+        SELECT 
+          COALESCE(NULLIF(TRIM(i2.buyer_tax_code), ''), NULLIF(TRIM(i2.buyer_cccd), ''), NULLIF(TRIM(i2.seller_tax_code), ''), 'KHONG_MST') as tax_code,
+          i2.direction,
+          ROUND(AVG(GREATEST(1, bt2.trans_date::date - i2.invoice_date::date))) as avg_lag_days
+        FROM erp_invoice_voucher_netoff no2
+        JOIN erp_invoices i2 ON i2.id = no2.invoice_id
+        JOIN erp_bank_transactions bt2 ON bt2.id = no2.bank_transaction_id
+        WHERE i2.is_deleted = false
+        GROUP BY 1, 2
+      ) pl ON pl.tax_code = (
+        CASE 
+          WHEN inv.direction = 'OUT' THEN COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')
+          ELSE COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')
+        END
+      ) AND pl.direction = inv.direction
+      WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
+      ${dateFilter}
+      GROUP BY inv.direction
+    `;
+
+    const forecastLagRows = await this.invoiceRepo.query(
+      forecastLagQuery,
+      params,
+    );
+    let outF7 = 0,
+      outF30 = 0,
+      inF7 = 0,
+      inF30 = 0;
+    for (const r of forecastLagRows) {
+      if (r.direction === 'OUT') {
+        outF7 = Number(r.forecastNext7Days) || 0;
+        outF30 = Number(r.forecastNext30Days) || 0;
+      } else if (r.direction === 'IN') {
+        inF7 = Number(r.forecastNext7Days) || 0;
+        inF30 = Number(r.forecastNext30Days) || 0;
+      }
+    }
+
+    // 5.2 IFRS 9 Expected Cashflow & Default Risk Provision
+    const expRec = Math.round(
+      outA0_30 * 0.85 + outA31_60 * 0.6 + outA61_90 * 0.3 + outAOver90 * 0.1,
+    );
+    const expPay = Math.round(
+      inA0_30 * 0.95 + inA31_60 * 0.85 + inA61_90 * 0.7 + inAOver90 * 0.5,
+    );
+    const riskRec = Math.round(
+      outA0_30 * 0.15 + outA31_60 * 0.4 + outA61_90 * 0.7 + outAOver90 * 0.9,
+    );
+    const riskPay = Math.round(
+      inA0_30 * 0.05 + inA31_60 * 0.15 + inA61_90 * 0.3 + inAOver90 * 0.5,
+    );
+
+    const forecastHorizons = {
+      next7Days: {
+        receivable: outF7,
+        payable: inF7,
+        net: outF7 - inF7,
+      },
+      next30Days: {
+        receivable: outF30,
+        payable: inF30,
+        net: outF30 - inF30,
+      },
+      expectedCashflow: {
+        receivable: expRec,
+        payable: expPay,
+        net: expRec - expPay,
+      },
+      defaultRiskProvision: {
+        receivableRisk: riskRec,
+        payableRisk: riskPay,
+        netRisk: riskRec - riskPay,
+      },
+    };
+
     return {
       summary: {
         totalReceivable: outTotal,
@@ -917,9 +1020,398 @@ export class InvoiceDashboardService {
           net: outAOver90 - inAOver90,
         },
       },
+      forecastHorizons,
       cashTrend,
       topReceivableCustomers,
       topPayableSuppliers,
     };
+  }
+
+  /**
+   * Lấy danh sách chi tiết hóa đơn theo từng Mốc thời gian (Time Horizon & Forecast Horizon)
+   */
+  async getTimeHorizonInvoices(
+    horizon: string,
+    query: {
+      dateFrom?: string;
+      dateTo?: string;
+      branchId?: string;
+      direction?: 'ALL' | 'IN' | 'OUT';
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      sortBy?: string;
+      sortOrder?: 'ASC' | 'DESC';
+      columnSearch?: string;
+      columnFilters?: string;
+    },
+  ) {
+    const {
+      dateFrom,
+      dateTo,
+      branchId,
+      direction = 'ALL',
+      search,
+      page = 1,
+      pageSize = 20,
+      sortBy,
+      sortOrder = 'DESC',
+      columnSearch,
+      columnFilters,
+    } = query;
+
+    // Horizon condition
+    let horizonSql = '';
+    let horizonLabel = '';
+    switch (horizon) {
+      case 'nextWeekDue':
+        horizonSql = `(CURRENT_DATE - inv.invoice_date::date) <= 7`;
+        horizonLabel = 'Mới phát sinh (≤ 7 ngày)';
+        break;
+      case 'nextMonthDue':
+        horizonSql = `(CURRENT_DATE - inv.invoice_date::date) <= 30`;
+        horizonLabel = 'Trong hạn chuẩn (≤ 30 ngày)';
+        break;
+      case 'overdue30To90':
+        horizonSql = `(CURRENT_DATE - inv.invoice_date::date) > 30 AND (CURRENT_DATE - inv.invoice_date::date) <= 90`;
+        horizonLabel = 'Quá hạn 31-90 ngày';
+        break;
+      case 'criticalOverdue90Plus':
+        horizonSql = `(CURRENT_DATE - inv.invoice_date::date) > 90`;
+        horizonLabel = 'Quá hạn >90 ngày';
+        break;
+      case 'forecastNext7Days':
+      case 'forecastNextWeek':
+        horizonSql = `(inv.invoice_date::date + (COALESCE(pl.avg_lag_days, 30) || ' days')::interval)::date <= (CURRENT_DATE + INTERVAL '7 days')::date`;
+        horizonLabel = 'Dự báo 7 ngày tới (T+7)';
+        break;
+      case 'forecastNext30Days':
+      case 'forecastNextMonth':
+        horizonSql = `(inv.invoice_date::date + (COALESCE(pl.avg_lag_days, 30) || ' days')::interval)::date <= (CURRENT_DATE + INTERVAL '30 days')::date`;
+        horizonLabel = 'Kế hoạch 30 ngày tới (T+30)';
+        break;
+      case 'expectedCashflow':
+        horizonSql = `1=1`;
+        horizonLabel = 'Dòng tiền kỳ vọng (IFRS 9)';
+        break;
+      case 'defaultRiskProvision':
+        horizonSql = `(CURRENT_DATE - inv.invoice_date::date) > 30`;
+        horizonLabel = 'Dự phòng rủi ro nợ (IFRS 9)';
+        break;
+      default:
+        horizonSql = `1=1`;
+        horizonLabel = 'Mốc thời gian';
+    }
+
+    // Base query for invoices within this horizon with remaining balance > 0
+    let baseQuery = `
+      SELECT 
+        inv.id,
+        inv.invoice_no as "invoiceNo",
+        inv.serial_no as "serialNo",
+        TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') as "invoiceDate",
+        inv.direction,
+        inv.seller_name as "sellerName",
+        inv.seller_tax_code as "sellerTaxCode",
+        inv.seller_address as "sellerAddress",
+        inv.buyer_name as "buyerName",
+        inv.buyer_tax_code as "buyerTaxCode",
+        inv.buyer_personal_name as "buyerPersonalName",
+        inv.buyer_cccd as "buyerCccd",
+        inv.buyer_address as "buyerAddress",
+        CASE 
+          WHEN inv.direction = 'OUT' THEN COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')
+          ELSE COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')
+        END as "partnerName",
+        CASE 
+          WHEN inv.direction = 'OUT' THEN COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')
+          ELSE COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')
+        END as "taxCode",
+        CAST(inv.pre_vat_amount AS NUMERIC) as "preVatAmount",
+        CAST(inv.vat_amount AS NUMERIC) as "vatAmount",
+        CAST(inv.total_amount AS NUMERIC) as "totalAmount",
+        COALESCE(netoff.net_off_amount, 0) as "paidAmount",
+        GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) as "balanceAmount",
+        GREATEST(0, (CURRENT_DATE - inv.invoice_date::date)) as "agingDays",
+        COALESCE(pl.avg_lag_days, 30) as "partnerAvgLagDays",
+        TO_CHAR(inv.invoice_date + (COALESCE(pl.avg_lag_days, 30) || ' days')::interval, 'YYYY-MM-DD') as "estimatedSettlementDate",
+        CASE 
+          WHEN (CURRENT_DATE - inv.invoice_date::date) <= 30 THEN 85
+          WHEN (CURRENT_DATE - inv.invoice_date::date) <= 60 THEN 60
+          WHEN (CURRENT_DATE - inv.invoice_date::date) <= 90 THEN 30
+          ELSE 10
+        END as "recoveryProbability",
+        inv.status,
+        inv.tax_invoice_status as "taxInvoiceStatus",
+        inv.description,
+        inv.branch_id as "branchId"
+      FROM erp_invoices inv
+      LEFT JOIN (
+        SELECT invoice_id, SUM(net_off_amount) as net_off_amount
+        FROM erp_invoice_voucher_netoff
+        GROUP BY invoice_id
+      ) netoff ON netoff.invoice_id = inv.id
+      LEFT JOIN (
+        SELECT 
+          COALESCE(NULLIF(TRIM(i2.buyer_tax_code), ''), NULLIF(TRIM(i2.buyer_cccd), ''), NULLIF(TRIM(i2.seller_tax_code), ''), 'KHONG_MST') as tax_code,
+          i2.direction,
+          ROUND(AVG(GREATEST(1, bt2.trans_date::date - i2.invoice_date::date))) as avg_lag_days
+        FROM erp_invoice_voucher_netoff no2
+        JOIN erp_invoices i2 ON i2.id = no2.invoice_id
+        JOIN erp_bank_transactions bt2 ON bt2.id = no2.bank_transaction_id
+        WHERE i2.is_deleted = false
+        GROUP BY 1, 2
+      ) pl ON pl.tax_code = (
+        CASE 
+          WHEN inv.direction = 'OUT' THEN COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')
+          ELSE COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')
+        END
+      ) AND pl.direction = inv.direction
+      WHERE inv.is_deleted = false 
+        AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
+        AND (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0
+        AND ${horizonSql}
+    `;
+
+    if (dateFrom) {
+      baseQuery += ` AND inv.invoice_date >= '${dateFrom.replace(/'/g, "''")}'`;
+    }
+    if (dateTo) {
+      const effTo = dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo;
+      baseQuery += ` AND inv.invoice_date <= '${effTo.replace(/'/g, "''")}'`;
+    }
+    if (branchId) {
+      if (branchId === 'null') {
+        baseQuery += ` AND inv.branch_id IS NULL`;
+      } else {
+        baseQuery += ` AND inv.branch_id = '${branchId.replace(/'/g, "''")}'`;
+      }
+    }
+
+    // 1. Calculate Summary across ALL directions for this horizon
+    const summarySql = `
+      SELECT 
+        SUM(CASE WHEN q.direction = 'OUT' THEN q."balanceAmount" ELSE 0 END) as "receivableAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q."balanceAmount" ELSE 0 END) as "payableAmount",
+        COUNT(CASE WHEN q.direction = 'OUT' THEN 1 ELSE NULL END) as "receivableCount",
+        COUNT(CASE WHEN q.direction = 'IN' THEN 1 ELSE NULL END) as "payableCount"
+      FROM (${baseQuery}) q
+    `;
+    const summaryRows = await this.invoiceRepo.query(summarySql);
+    const sRow = summaryRows[0] || {};
+    const receivableAmount = Number(sRow.receivableAmount) || 0;
+    const payableAmount = Number(sRow.payableAmount) || 0;
+    const receivableCount = parseInt(sRow.receivableCount || '0', 10);
+    const payableCount = parseInt(sRow.payableCount || '0', 10);
+    const netAmount = receivableAmount - payableAmount;
+
+    // Top 5 Receivable Customers in this horizon
+    const topReceivableSql = `
+      SELECT 
+        q."taxCode",
+        q."partnerName",
+        SUM(q."balanceAmount") as "balanceAmount",
+        COUNT(q.id) as "invoiceCount"
+      FROM (${baseQuery}) q
+      WHERE q.direction = 'OUT'
+      GROUP BY q."taxCode", q."partnerName"
+      ORDER BY "balanceAmount" DESC
+      LIMIT 5
+    `;
+    const rawTopRec = await this.invoiceRepo.query(topReceivableSql);
+    const topReceivablePartners = rawTopRec.map((r: any) => ({
+      taxCode: r.taxCode,
+      partnerName: r.partnerName,
+      balanceAmount: Number(r.balanceAmount) || 0,
+      invoiceCount: parseInt(r.invoiceCount || '0', 10),
+    }));
+
+    // Top 5 Payable Suppliers in this horizon
+    const topPayableSql = `
+      SELECT 
+        q."taxCode",
+        q."partnerName",
+        SUM(q."balanceAmount") as "balanceAmount",
+        COUNT(q.id) as "invoiceCount"
+      FROM (${baseQuery}) q
+      WHERE q.direction = 'IN'
+      GROUP BY q."taxCode", q."partnerName"
+      ORDER BY "balanceAmount" DESC
+      LIMIT 5
+    `;
+    const rawTopPay = await this.invoiceRepo.query(topPayableSql);
+    const topPayablePartners = rawTopPay.map((r: any) => ({
+      taxCode: r.taxCode,
+      partnerName: r.partnerName,
+      balanceAmount: Number(r.balanceAmount) || 0,
+      invoiceCount: parseInt(r.invoiceCount || '0', 10),
+    }));
+
+    // 2. Filter wrapper for items list
+    let filteredQuery = `SELECT * FROM (${baseQuery}) p`;
+    const whereConditions: string[] = [];
+
+    if (direction && direction !== 'ALL') {
+      whereConditions.push(`p.direction = '${direction}'`);
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim().replace(/'/g, "''");
+      whereConditions.push(
+        `(p."invoiceNo" ILIKE '%${s}%' OR p."serialNo" ILIKE '%${s}%' OR p."partnerName" ILIKE '%${s}%' OR p."taxCode" ILIKE '%${s}%' OR p.description ILIKE '%${s}%')`,
+      );
+    }
+
+    if (columnSearch) {
+      try {
+        const cSearch = JSON.parse(columnSearch) as Record<string, string>;
+        for (const [col, rawVal] of Object.entries(cSearch)) {
+          if (!rawVal || !rawVal.trim()) continue;
+          const searchClause = this.buildKeywordSqlClause(
+            `p."${col}"`,
+            rawVal.trim(),
+          );
+          if (searchClause) whereConditions.push(searchClause);
+        }
+      } catch (e) {}
+    }
+
+    if (columnFilters) {
+      try {
+        const cFilters = JSON.parse(columnFilters) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(cFilters)) {
+          if (!vals || vals.length === 0) continue;
+
+          if (vals[0] === '__ALL_MATCHING__') {
+            const searchKeyword = vals[1] || '';
+            if (searchKeyword) {
+              const searchClause = this.buildKeywordSqlClause(
+                `p."${col}"`,
+                searchKeyword,
+              );
+              if (searchClause) whereConditions.push(searchClause);
+            }
+            continue;
+          }
+
+          const hasBlank = vals.includes('__BLANK__');
+          const validVals = vals.filter((v) => v !== '__BLANK__');
+
+          const condParts: string[] = [];
+          if (validVals.length > 0) {
+            const quotedVals = validVals
+              .map((v) => `'${v.replace(/'/g, "''")}'`)
+              .join(', ');
+            condParts.push(`p."${col}" IN (${quotedVals})`);
+          }
+          if (hasBlank) {
+            condParts.push(
+              `(p."${col}" IS NULL OR p."${col}" = '' OR p."${col}" = 'KHONG_MST')`,
+            );
+          }
+          if (condParts.length > 0) {
+            whereConditions.push(`(${condParts.join(' OR ')})`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (whereConditions.length > 0) {
+      filteredQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
+
+    // Count Total
+    const countSql = `SELECT COUNT(*) as count FROM (${filteredQuery}) as t`;
+    const countRes = await this.invoiceRepo.query(countSql);
+    const total = parseInt(countRes[0]?.count || '0', 10);
+
+    // Sorting & Pagination
+    let orderClause = `ORDER BY p."balanceAmount" DESC, p."invoiceDate" DESC`;
+    if (sortBy) {
+      const cleanSortBy = sortBy.replace(/"/g, '');
+      const cleanOrder = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      orderClause = `ORDER BY p."${cleanSortBy}" ${cleanOrder}, p."balanceAmount" DESC`;
+    }
+
+    const safePageSize = Math.max(1, Math.min(200, pageSize));
+    const offset = (Math.max(1, page) - 1) * safePageSize;
+    const dataSql = `${filteredQuery} ${orderClause} LIMIT ${safePageSize} OFFSET ${offset}`;
+    const rawData = await this.invoiceRepo.query(dataSql);
+
+    const items = rawData.map((r: any) => ({
+      id: r.id,
+      invoiceNo: r.invoiceNo,
+      serialNo: r.serialNo,
+      invoiceDate: r.invoiceDate,
+      direction: r.direction,
+      sellerName: r.sellerName,
+      sellerTaxCode: r.sellerTaxCode,
+      sellerAddress: r.sellerAddress,
+      buyerName: r.buyerName || r.buyerPersonalName,
+      buyerTaxCode: r.buyerTaxCode || r.buyerCccd,
+      buyerAddress: r.buyerAddress,
+      partnerName: r.partnerName,
+      taxCode: r.taxCode,
+      preVatAmount: Number(r.preVatAmount) || 0,
+      vatAmount: Number(r.vatAmount) || 0,
+      totalAmount: Number(r.totalAmount) || 0,
+      paidAmount: Number(r.paidAmount) || 0,
+      balanceAmount: Number(r.balanceAmount) || 0,
+      agingDays: parseInt(r.agingDays || '0', 10),
+      status: r.status,
+      taxInvoiceStatus: r.taxInvoiceStatus,
+      description: r.description,
+    }));
+
+    return {
+      summary: {
+        horizon,
+        horizonLabel,
+        receivableAmount,
+        payableAmount,
+        netAmount,
+        receivableCount,
+        payableCount,
+        topReceivablePartners,
+        topPayablePartners,
+      },
+      items,
+      total,
+      page,
+      pageSize: safePageSize,
+      totalPages: Math.ceil(total / safePageSize),
+    };
+  }
+
+  /**
+   * Helper: Xây dựng mệnh đề SQL cho Exact search ("...") và Multi-search (;)
+   */
+  private buildKeywordSqlClause(
+    sqlField: string,
+    searchString: string,
+  ): string | null {
+    if (!searchString || !searchString.trim()) return null;
+
+    const keywords = searchString
+      .split(';')
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    if (keywords.length === 0) return null;
+
+    const clauses = keywords.map((kw) => {
+      let isExact = false;
+      let cleanKw = kw;
+      if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
+        isExact = true;
+        cleanKw = kw.slice(1, -1);
+      }
+      const escaped = cleanKw.replace(/'/g, "''");
+      return isExact
+        ? `${sqlField} ILIKE '${escaped}'`
+        : `${sqlField} ILIKE '%${escaped}%'`;
+    });
+
+    return `(${clauses.join(' OR ')})`;
   }
 }

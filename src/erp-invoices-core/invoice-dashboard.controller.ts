@@ -47,6 +47,51 @@ export class InvoiceDashboardController {
   }
 
   @RequirePermissions({
+    resource: ErpResource.INVOICE_DEBTS,
+    action: ErpAction.READ,
+  })
+  @Get('time-horizons/:horizon/invoices')
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'branch_id', required: false })
+  @ApiQuery({ name: 'direction', required: false, enum: ['ALL', 'IN', 'OUT'] })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'pageSize', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
+  @ApiQuery({ name: 'column_search', required: false })
+  @ApiQuery({ name: 'column_filters', required: false })
+  getTimeHorizonInvoices(
+    @Param('horizon') horizon: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('branch_id') branchId?: string,
+    @Query('direction') direction?: 'ALL' | 'IN' | 'OUT',
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('column_search') columnSearch?: string,
+    @Query('column_filters') columnFilters?: string,
+  ) {
+    return this.service.getTimeHorizonInvoices(horizon, {
+      dateFrom,
+      dateTo,
+      branchId,
+      direction,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) : 20,
+      sortBy,
+      sortOrder,
+      columnSearch,
+      columnFilters,
+    });
+  }
+
+  @RequirePermissions({
     resource: ErpResource.INVOICES,
     action: ErpAction.READ,
   })
