@@ -22,10 +22,15 @@ Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung t
   - Phân loại rõ `sourceType`: `'BANK'` hoặc `'CASH'`.
   - Phân loại luồng tiền: `IN` (Tiền vào / `creditAmount`) vs `OUT` (Tiền ra / `debitAmount`).
   - Gắn nhãn phân loại chi phí/thu nhập (`sys_entity_tags`).
-- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting)**:
+- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting & Zero-Accounting UX)**:
   - Hạch toán trực tiếp sang Sổ Nhật ký Chung (`erp_journal_entries` & `erp_journal_entry_lines`).
-  - Đối soát và cấn trừ thanh toán với Hóa đơn điện tử (`erp_invoice_voucher_netoff`).
-  - Tự động phân tách và làm mới bút toán khi 1 giao dịch ngân hàng cấn trừ cho nhiều hóa đơn của các đối tượng khác nhau.
+  - **Tài khoản Treo Mặc định `T0001`**: Mọi giao dịch sao kê ngân hàng / tiền mặt khi chưa có tài khoản đối ứng cụ thể sẽ tự động dùng tài khoản treo `T0001` (hoặc alias `0001`).
+  - **Tự động Chuyển Đổi Đối ứng khi Cấn trừ (Smart Net-Off Accounting)**:
+    - Khi cấn trừ với Hóa đơn Mua vào (`IN`): Chiều đối ứng `T0001` tự động biến đổi thành `331` (Phải trả NCC).
+    - Khi cấn trừ với Hóa đơn Bán ra (`OUT`): Chiều đối ứng `T0001` tự động biến đổi thành `131` (Phải thu KH).
+    - Khi tháo gỡ cấn trừ: Chiều đối ứng tự động hoàn nguyên về `T0001`.
+    - Phần tiền còn lại (nếu có): Tiếp tục treo ở `T0001`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Hệ thống kiểm tra biến môi trường; nếu chưa bật và giao dịch chưa từng có bút toán trước đó, hệ thống sẽ không tự tiện ghi live vào Nhật ký chung nhằm phục vụ an toàn trong giai đoạn backfill số liệu lịch sử.
 
 ---
 

@@ -22,6 +22,7 @@ import { AccountingCoreService } from '../../accounting-core/services/accounting
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
 
 import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
+import { TransactionAccountingService } from '../../bank-transactions-core/services/transaction-accounting.service';
 import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class InvoiceLifecycleService {
     private readonly r2: R2Service,
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
+    private readonly transactionAccountingService: TransactionAccountingService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -541,6 +543,13 @@ export class InvoiceLifecycleService {
       return invoice;
     }
 
+    if (process.env.ENABLE_LIVE_AUTO_POSTING !== 'true') {
+      this.logger.log(
+        `Live auto-posting is currently disabled (ENABLE_LIVE_AUTO_POSTING !== 'true'). Skipping auto-post for invoice ${id}`,
+      );
+      return invoice;
+    }
+
     if (!invoice.branchId) {
       // Try to recover branchId from linked voucher netoffs
       const netOffs = await this.repository.manager.find(
@@ -587,11 +596,9 @@ export class InvoiceLifecycleService {
       return starts ? starts.id : null;
     };
 
-    const preVat = Math.round((Number(invoice.preVatAmount) || 0) * 100) / 100;
-    const vat = Math.round((Number(invoice.vatAmount) || 0) * 100) / 100;
     const total = Math.round((Number(invoice.totalAmount) || 0) * 100) / 100;
 
-    if (total <= 0 && preVat <= 0) {
+    if (total <= 0) {
       throw new BadRequestException(
         'Giá trị hóa đơn không hợp lệ để hạch toán (Tổng tiền <= 0).',
       );
@@ -607,90 +614,51 @@ export class InvoiceLifecycleService {
     }[] = [];
 
     if (invoice.direction === 'IN') {
-      const debitCode = resolvePurchaseDebitAccountCode(invoice.sellerTaxCode);
-      const debitAccountId =
-        findAccountId(debitCode) ||
-        findAccountId('642') ||
-        findAccountId('632');
-      const vatAccountId = findAccountId('133') || findAccountId('1331');
+      // IN: Nợ T0003 (Chờ xử lý HĐ Mua) / Có 331 (Phải trả người bán)
+      const t0003AccountId = findAccountId('T0003');
       const apAccountId = findAccountId('331');
 
-      if (!debitAccountId || !apAccountId) {
+      if (!t0003AccountId || !apAccountId) {
         throw new BadRequestException(
-          'Không tìm thấy tài khoản kế toán phù hợp (632/642 hoặc 331) trong hệ thống.',
+          'Không tìm thấy tài khoản kế toán phù hợp (T0003 hoặc 331) trong hệ thống.',
         );
       }
 
-      if (preVat > 0) {
-        lines.push({
-          accountId: debitAccountId,
-          debit: preVat,
-          credit: 0,
-          description: userDesc,
-        });
-      }
-      if (vat > 0) {
-        if (!vatAccountId) {
-          throw new BadRequestException(
-            'Không tìm thấy tài khoản thuế GTGT (133) trong hệ thống.',
-          );
-        }
-        lines.push({
-          accountId: vatAccountId,
-          debit: vat,
-          credit: 0,
-          description: `Thuế GTGT ${invoice.invoiceNo}`,
-        });
-      }
-      if (total > 0) {
-        lines.push({
-          accountId: apAccountId,
-          debit: 0,
-          credit: total,
-          description: userDesc,
-        });
-      }
+      lines.push({
+        accountId: t0003AccountId,
+        debit: total,
+        credit: 0,
+        description: userDesc,
+      });
+      lines.push({
+        accountId: apAccountId,
+        debit: 0,
+        credit: total,
+        description: userDesc,
+      });
     } else {
-      // OUT: Nợ 131 / Có 511 / Có 3331
+      // OUT: Nợ 131 (Phải thu khách hàng) / Có T0002 (Chờ xử lý HĐ Bán)
       const arAccountId = findAccountId('131');
-      const revenueAccountId = findAccountId('511') || findAccountId('711');
-      const vatOutAccountId = findAccountId('3331') || findAccountId('333');
+      const t0002AccountId = findAccountId('T0002');
 
-      if (!arAccountId || !revenueAccountId) {
+      if (!arAccountId || !t0002AccountId) {
         throw new BadRequestException(
-          'Không tìm thấy tài khoản kế toán phù hợp (131 hoặc 511) trong hệ thống.',
+          'Không tìm thấy tài khoản kế toán phù hợp (131 hoặc T0002) trong hệ thống.',
         );
       }
 
-      if (total > 0) {
-        lines.push({
-          accountId: arAccountId,
-          debit: total,
-          credit: 0,
-          description: userDesc,
-        });
-      }
-      if (preVat > 0) {
-        lines.push({
-          accountId: revenueAccountId,
-          debit: 0,
-          credit: preVat,
-          description: userDesc,
-        });
-      }
-      if (vat > 0) {
-        if (!vatOutAccountId) {
-          throw new BadRequestException(
-            'Không tìm thấy tài khoản thuế GTGT đầu ra (3331) trong hệ thống.',
-          );
-        }
-        lines.push({
-          accountId: vatOutAccountId,
-          debit: 0,
-          credit: vat,
-          description: `Thuế GTGT ${invoice.invoiceNo}`,
-        });
-      }
+      lines.push({
+        accountId: arAccountId,
+        debit: total,
+        credit: 0,
+        description: userDesc,
+      });
+      lines.push({
+        accountId: t0002AccountId,
+        debit: 0,
+        credit: total,
+        description: userDesc,
+      });
     }
 
     const postingDate = invoice.invoiceDate
@@ -769,6 +737,17 @@ export class InvoiceLifecycleService {
         );
         await this.repository.manager.save(ErpInvoiceVoucherNetOff, newNetOff);
       }
+
+      // Refresh bank transaction journal entries
+      try {
+        await this.transactionAccountingService.refreshJournalEntriesForBankTransaction(
+          p.bankTransactionId,
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to refresh journal entry for bank transaction ${p.bankTransactionId}: ${err?.message}`,
+        );
+      }
     }
 
     return { message: 'Đã liên kết phiếu thành công' };
@@ -779,6 +758,17 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
+
+    try {
+      await this.transactionAccountingService.refreshJournalEntriesForBankTransaction(
+        voucherId,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `Failed to refresh journal entry for removed voucher ${voucherId}: ${err?.message}`,
+      );
+    }
+
     return { message: 'Đã xóa liên kết phiếu thành công' };
   }
 }
