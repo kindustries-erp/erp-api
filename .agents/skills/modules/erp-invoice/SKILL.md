@@ -318,6 +318,16 @@ src/erp-invoices-core/
 
 ### 5.6. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
 - **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+
+### 5.7. Bộ Lọc Cột Nâng Cao, Composite Options & Chế độ Chọn Tất Cả (`__ALL_MATCHING__`)
+- **Composite Column Options (`getColumnOptions` & `getItemColumnOptions`)**:
+  - Đối với cột `invoiceNo`: sinh `value = invoice_no:::serial_no` và `label = invoice_no (serial_no)` (hoặc `(serial_no)` khi chưa có số HĐ).
+  - Đối với cột `partner`: sinh `value = tax_code:::partner_name` và `label = partner_name (tax_code)`.
+  - Giúp phân biệt duy nhất các bản ghi trùng số hóa đơn nhưng khác ký hiệu, tránh hiện tượng tick nhầm checkbox giữa các hóa đơn khác nhau.
+- **Xử lý Filter `_applyColumnFilters`**:
+  - Tự động bóc tách chuỗi `:::` để match chính xác cặp `(invoice_no, serial_no)` hoặc `(tax_code, partner_name)`.
+  - **Hỗ trợ `__ALL_MATCHING__`**: Khi nhận `vals = ["__ALL_MATCHING__", keyword]`, backend áp dụng bộ lọc đa từ khóa (`applyMultiKeywordFilter` / `applyMultiKeywordMultiFieldFilter`) trên các trường tương ứng của cột thay vì điều kiện `IN (...)`.
+  - **Hỗ trợ tìm kiếm nâng cao**: Nhận diện tìm chính xác `"..."` và tìm nhiều từ khóa theo `;` (OR logic).
   1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
      - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
      - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.
