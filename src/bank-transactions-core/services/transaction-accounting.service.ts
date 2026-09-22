@@ -255,7 +255,7 @@ export class TransactionAccountingService {
     });
     if (!txn) return;
 
-    const [apAccountRes, arAccountRes] = await Promise.all([
+    const [apAccountRes, arAccountRes, t0001Res] = await Promise.all([
       this.dataSource.query(
         `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
         ['331'],
@@ -264,9 +264,20 @@ export class TransactionAccountingService {
         `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
         ['131'],
       ),
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code IN ('T0001', '0001') AND is_deleted = false ORDER BY account_code DESC LIMIT 1`,
+      ),
     ]);
     const apAccountId = apAccountRes.length > 0 ? apAccountRes[0].id : null;
     const arAccountId = arAccountRes.length > 0 ? arAccountRes[0].id : null;
+    let t0001AccountId = t0001Res.length > 0 ? t0001Res[0].id : null;
+
+    if (!t0001AccountId) {
+      const fallbackRes = await this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code IN ('T000', '000') AND is_deleted = false ORDER BY account_code DESC LIMIT 1`,
+      );
+      if (fallbackRes.length > 0) t0001AccountId = fallbackRes[0].id;
+    }
 
     let defaultAccountId: string | null = null;
     if (txn.sourceType === 'BANK') {
@@ -315,11 +326,14 @@ export class TransactionAccountingService {
     };
     const groups: Group[] = [];
 
+    const defaultCounterpart =
+      txn.correspondentAccountingAccountId || t0001AccountId;
+
     if (netOffRows.length === 0) {
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
-        counterpartAccountId: txn.correspondentAccountingAccountId,
+        counterpartAccountId: defaultCounterpart,
         branchId: txn.branchId,
         description: baseDescription,
       });
@@ -332,11 +346,12 @@ export class TransactionAccountingService {
             ? row.seller_name || null
             : row.buyer_name || null;
 
-        let counterpartAccountId = txn.correspondentAccountingAccountId;
-        if (row.direction === 'IN' && apAccountId)
+        let counterpartAccountId = defaultCounterpart;
+        if (row.direction === 'IN' && apAccountId) {
           counterpartAccountId = apAccountId;
-        if (row.direction === 'OUT' && arAccountId)
+        } else if (row.direction === 'OUT' && arAccountId) {
           counterpartAccountId = arAccountId;
+        }
 
         const branchId = txn.branchId;
 
@@ -373,7 +388,7 @@ export class TransactionAccountingService {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
-          counterpartAccountId: txn.correspondentAccountingAccountId,
+          counterpartAccountId: defaultCounterpart,
           branchId: txn.branchId,
           description: baseDescription,
         });
@@ -384,8 +399,17 @@ export class TransactionAccountingService {
       `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
       [txn.id, txn.sourceType],
     );
+
+    // GUARD: Nếu chưa bật live auto-posting và chưa từng có bút toán trước đó, bỏ qua việc tự sinh
+    if (
+      process.env.ENABLE_LIVE_AUTO_POSTING !== 'true' &&
+      existingEntries.length === 0
+    ) {
+      return;
+    }
+
     const postingDate =
-      existingEntries.length > 0 ? existingEntries[0].date : new Date();
+      existingEntries.length > 0 ? existingEntries[0].date : txn.transDate;
 
     await this.accountingCoreService.deleteJournalEntryBySource(
       txn.id,

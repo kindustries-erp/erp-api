@@ -13,9 +13,13 @@ Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
 - **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **3 mốc thời gian cố định: 03:15 Sáng, 09:15 Sáng, 15:15 Chiều (Asia/Ho_Chi_Minh)** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
-- **Trích xuất Metadata Tự động & Subscribers**: Tự động nhận diện biển số xe (`license_plate`), số lệnh quyết toán / sửa chữa (`settlement_order`), mã phụ tùng VinFast chuẩn (`BAT21001011`, `EEP73110011AP`, `BEX...`, `SVC...`, `PVT...`) qua `vinfast-part-code.helper.ts` và `ErpInvoiceItemSubscriber` (lắng nghe `beforeInsert` và `beforeUpdate`).
-- **Hạch toán Kế toán Kép (Post / Unpost Journal Entries)**: Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
-- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`) và tự động gán chi nhánh nếu hóa đơn chưa có.
+- **Hạch toán Kế toán Kép & Tài khoản Treo Trung gian (Transit Accounts T0002 / T0003)**:
+  - Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
+  - **Hóa đơn Mua vào (`IN`)**: Hạch toán vào `Nợ T0003 (tiền hàng)` + `Nợ 1331 (thuế)` / `Có 331 (tổng tiền)`, **tuyệt đối không phỏng đoán chi phí 642/632**. Khi phát sinh chi phí thực tế (OPEX, vật tư...), hệ thống giải tỏa `T0003` sang tài khoản chi phí tương ứng để chống double chi phí.
+  - **Hóa đơn Bán ra (`OUT`)**: Hạch toán vào `Nợ 131 (tổng tiền)` / `Có T0002 (doanh thu treo)` + `Có 33311 (thuế đầu ra)`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Chặn tự động sinh bút toán sống khi chưa bật biến môi trường để phục vụ rà soát đối chiếu dữ liệu lịch sử an toàn.
+  - **Vô hiệu hóa Auto-post ngầm trên UI**: Gỡ bỏ lời gọi ngầm `autoPostStandard` khi lưu form hóa đơn để tránh sinh rác dữ liệu ngoài ý muốn.
+- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
 - **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
@@ -318,6 +322,16 @@ src/erp-invoices-core/
 
 ### 5.6. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
 - **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+
+### 5.7. Bộ Lọc Cột Nâng Cao, Composite Options & Chế độ Chọn Tất Cả (`__ALL_MATCHING__`)
+- **Composite Column Options (`getColumnOptions` & `getItemColumnOptions`)**:
+  - Đối với cột `invoiceNo`: sinh `value = invoice_no:::serial_no` và `label = invoice_no (serial_no)` (hoặc `(serial_no)` khi chưa có số HĐ).
+  - Đối với cột `partner`: sinh `value = tax_code:::partner_name` và `label = partner_name (tax_code)`.
+  - Giúp phân biệt duy nhất các bản ghi trùng số hóa đơn nhưng khác ký hiệu, tránh hiện tượng tick nhầm checkbox giữa các hóa đơn khác nhau.
+- **Xử lý Filter `_applyColumnFilters`**:
+  - Tự động bóc tách chuỗi `:::` để match chính xác cặp `(invoice_no, serial_no)` hoặc `(tax_code, partner_name)`.
+  - **Hỗ trợ `__ALL_MATCHING__`**: Khi nhận `vals = ["__ALL_MATCHING__", keyword]`, backend áp dụng bộ lọc đa từ khóa (`applyMultiKeywordFilter` / `applyMultiKeywordMultiFieldFilter`) trên các trường tương ứng của cột thay vì điều kiện `IN (...)`.
+  - **Hỗ trợ tìm kiếm nâng cao**: Nhận diện tìm chính xác `"..."` và tìm nhiều từ khóa theo `;` (OR logic).
   1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
      - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
      - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.

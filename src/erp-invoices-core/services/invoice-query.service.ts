@@ -274,7 +274,7 @@ export class InvoiceQueryService {
         .map((r) => {
           const val = r.value ? String(r.value).trim() : '';
           const sec = r.secondary_val ? String(r.secondary_val).trim() : '';
-          const label = sec ? `${val} (${sec})` : val;
+          const label = sec ? (val ? `${val} (${sec})` : `(${sec})`) : val;
           const value = sec ? `${val}:::${sec}` : val;
           return { value, label: label || val };
         })
@@ -3846,7 +3846,7 @@ export class InvoiceQueryService {
         .map((r) => {
           const val = r.value ? String(r.value).trim() : '';
           const sec = r.secondary_val ? String(r.secondary_val).trim() : '';
-          const label = sec ? `${val} (${sec})` : val;
+          const label = sec ? (val ? `${val} (${sec})` : `(${sec})`) : val;
           const value = sec ? `${val}:::${sec}` : val;
           return { value, label: label || val, secondaryLabel: sec };
         })

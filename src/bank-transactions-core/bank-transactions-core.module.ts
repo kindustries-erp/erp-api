@@ -44,6 +44,10 @@ import { BankStatementExportBackgroundService } from './services/bank-statement-
     TransactionAccountingService,
     BankStatementExportBackgroundService,
   ],
-  exports: [BankTransactionsCoreService, BankStatementExportBackgroundService],
+  exports: [
+    BankTransactionsCoreService,
+    BankStatementExportBackgroundService,
+    TransactionAccountingService,
+  ],
 })
 export class BankTransactionsCoreModule {}
