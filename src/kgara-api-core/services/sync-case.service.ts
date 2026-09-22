@@ -15,6 +15,8 @@ import { SyncGrossProfitService } from './sync-gross-profit.service';
 import {
   parseSafeDate,
   extractNetPayableAmount,
+  extractKgaraClassification,
+  mapKgaraClassificationToErp,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -257,6 +259,26 @@ export class SyncCaseService {
 
           gwCase.branchExternalId = branchExternalId;
           gwCase.rawData = c;
+
+          // KGara Classification extraction & Zero-Overwrite auto-mapping
+          const { kgaraClassification, kgaraClassificationCode } =
+            extractKgaraClassification(c);
+          if (
+            kgaraClassification !== null ||
+            kgaraClassificationCode !== null
+          ) {
+            gwCase.kgaraClassification = kgaraClassification;
+            gwCase.kgaraClassificationCode = kgaraClassificationCode;
+            if (
+              gwCase.classification === null ||
+              gwCase.classification === undefined
+            ) {
+              gwCase.classification = mapKgaraClassificationToErp(
+                kgaraClassificationCode,
+                kgaraClassification,
+              );
+            }
+          }
 
           // Restore case if it was previously soft-deleted
           if (gwCase.kgaraDeletedAt) {
@@ -536,6 +558,25 @@ export class SyncCaseService {
       gwCase.soKhung = caseData.SoKhung;
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
+
+      // KGara Classification extraction & Zero-Overwrite auto-mapping
+      const {
+        kgaraClassification: detailClassification,
+        kgaraClassificationCode: detailClassificationCode,
+      } = extractKgaraClassification(caseData);
+      if (detailClassification !== null || detailClassificationCode !== null) {
+        gwCase.kgaraClassification = detailClassification;
+        gwCase.kgaraClassificationCode = detailClassificationCode;
+        if (
+          gwCase.classification === null ||
+          gwCase.classification === undefined
+        ) {
+          gwCase.classification = mapKgaraClassificationToErp(
+            detailClassificationCode,
+            detailClassification,
+          );
+        }
+      }
 
       // Restore case if it was previously soft-deleted
       if (gwCase.kgaraDeletedAt) {

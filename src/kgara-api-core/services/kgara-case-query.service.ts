@@ -53,12 +53,16 @@ export class KgaraCaseQueryService {
       soChungTu: '"case"."so_chung_tu"',
       licensePlate: '"case"."bien_so_xe"',
       bienSoXe: '"case"."bien_so_xe"',
+      customer:
+        'CONCAT(COALESCE("case"."khach_hang_name", \'\'), \' \', COALESCE("case"."khach_hang_code", \'\'))',
       customerCode: '"case"."khach_hang_code"',
       khachHangCode: '"case"."khach_hang_code"',
       customerName: '"case"."khach_hang_name"',
       khachHangName: '"case"."khach_hang_name"',
       statusName: '"case"."ten_tinh_trang_dich_vu"',
       classification: '"case"."classification"',
+      kgaraClassification: '"case"."kgara_classification"',
+      kgaraClassificationCode: '"case"."kgara_classification_code"',
       branchName: '"case"."branch_external_id"',
       branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:

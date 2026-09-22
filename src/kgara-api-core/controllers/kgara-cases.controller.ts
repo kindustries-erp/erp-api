@@ -215,6 +215,10 @@ export class KgaraCasesController {
         else if (col === 'updatedAt') targetCol = 'case.updatedAt';
         else if (col === 'createdAt') targetCol = 'case.createdAt';
         else if (col === 'classification') targetCol = 'case.classification';
+        else if (col === 'kgaraClassification')
+          targetCol = 'case.kgaraClassification';
+        else if (col === 'kgaraClassificationCode')
+          targetCol = 'case.kgaraClassificationCode';
 
         if (targetCol) {
           if (first) {

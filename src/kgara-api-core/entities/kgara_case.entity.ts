@@ -164,6 +164,28 @@ export class KgaraCase {
   })
   branchExternalId: string | null;
 
+  // ── KGara Sync classification (Immutable from ERP) ─────────────────────────
+
+  /** NguonGocKhachHangName from KGara – Read-only immutable source */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'kgara_classification',
+    nullable: true,
+  })
+  kgaraClassification: string | null;
+
+  /** NguonGocKhachHangCode from KGara – Read-only immutable source */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'kgara_classification_code',
+    nullable: true,
+  })
+  kgaraClassificationCode: string | null;
+
   // ── ERP Local columns ─────────────────────────────────────────────────────
 
   @Index()
