@@ -59,17 +59,33 @@ export class GarageDashboardController {
   @ApiQuery({ name: 'date_to', required: true })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'pageSize', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'payment_status', required: false })
+  @ApiQuery({ name: 'classification', required: false })
+  @ApiQuery({ name: 'sort_by', required: false })
+  @ApiQuery({ name: 'sort_order', required: false })
   getCheckpointCases(
     @Query('date_from') dateFrom: string,
     @Query('date_to') dateTo: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+    @Query('payment_status')
+    paymentStatus?: 'all' | 'remaining' | 'paid' | 'unpaid',
+    @Query('classification') classification?: string,
+    @Query('sort_by') sortBy?: string,
+    @Query('sort_order') sortOrder?: 'ASC' | 'DESC',
   ) {
     return this.service.getCheckpointCases(
       dateFrom,
       dateTo,
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
+      search,
+      paymentStatus,
+      classification,
+      sortBy || 'ngayHoanThanhCongViec',
+      sortOrder || 'DESC',
     );
   }
 
