@@ -1266,6 +1266,14 @@ export class InvoiceDashboardService {
       SELECT 
         SUM(CASE WHEN q.direction = 'OUT' THEN q.${metricField} ELSE 0 END) as "receivableAmount",
         SUM(CASE WHEN q.direction = 'IN' THEN q.${metricField} ELSE 0 END) as "payableAmount",
+        SUM(CASE WHEN q.direction = 'OUT' THEN q."totalAmount" ELSE 0 END) as "receivableTotalAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q."totalAmount" ELSE 0 END) as "payableTotalAmount",
+        SUM(CASE WHEN q.direction = 'OUT' THEN q."paidAmount" ELSE 0 END) as "receivedAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q."paidAmount" ELSE 0 END) as "paidAmount",
+        SUM(CASE WHEN q.direction = 'OUT' THEN q."expectedAmount" ELSE 0 END) as "receivableExpectedAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q."expectedAmount" ELSE 0 END) as "payableExpectedAmount",
+        SUM(CASE WHEN q.direction = 'OUT' THEN q."riskAmount" ELSE 0 END) as "receivableRiskAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q."riskAmount" ELSE 0 END) as "payableRiskAmount",
         COUNT(CASE WHEN q.direction = 'OUT' THEN 1 ELSE NULL END) as "receivableCount",
         COUNT(CASE WHEN q.direction = 'IN' THEN 1 ELSE NULL END) as "payableCount",
         -- Maturity Breakdown for Forecast Horizons (Due in Period vs Overdue Carried Over)
@@ -1283,6 +1291,14 @@ export class InvoiceDashboardService {
     const sRow = summaryRows[0] || {};
     const receivableAmount = Number(sRow.receivableAmount) || 0;
     const payableAmount = Number(sRow.payableAmount) || 0;
+    const receivableTotalAmount = Number(sRow.receivableTotalAmount) || 0;
+    const payableTotalAmount = Number(sRow.payableTotalAmount) || 0;
+    const receivedAmount = Number(sRow.receivedAmount) || 0;
+    const paidAmount = Number(sRow.paidAmount) || 0;
+    const receivableExpectedAmount = Number(sRow.receivableExpectedAmount) || 0;
+    const payableExpectedAmount = Number(sRow.payableExpectedAmount) || 0;
+    const receivableRiskAmount = Number(sRow.receivableRiskAmount) || 0;
+    const payableRiskAmount = Number(sRow.payableRiskAmount) || 0;
     const receivableCount = parseInt(sRow.receivableCount || '0', 10);
     const payableCount = parseInt(sRow.payableCount || '0', 10);
     const netAmount = receivableAmount - payableAmount;
@@ -1712,6 +1728,14 @@ export class InvoiceDashboardService {
         horizonLabel,
         receivableAmount,
         payableAmount,
+        receivableTotalAmount,
+        payableTotalAmount,
+        receivedAmount,
+        paidAmount,
+        receivableExpectedAmount,
+        payableExpectedAmount,
+        receivableRiskAmount,
+        payableRiskAmount,
         netAmount,
         receivableCount,
         payableCount,
