@@ -850,7 +850,7 @@ export class GarageDashboardService {
       baselineMonth: '2026-07',
     };
 
-    // 1.4 Phân bổ Trạng thái Phiếu dịch vụ theo từng tháng trong 6 tháng gần nhất
+    // 1.4 Phân bổ Trạng thái Phiếu dịch vụ (LOẠI TRỪ HỦY) theo từng tháng trong 6 tháng gần nhất
     const sixMonthsAgo = format(subMonths(new Date(), 6), 'yyyy-MM-dd');
     const statusQb = this.caseRepo
       .createQueryBuilder('c')
@@ -864,7 +864,9 @@ export class GarageDashboardService {
         'statusName',
       )
       .addSelect('COUNT(c.id)', 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere(
         'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
         { sixMonthsAgo },
@@ -876,44 +878,60 @@ export class GarageDashboardService {
     const rawStatus = await statusQb.getRawMany();
 
     const statusDistributionByMonth: Record<string, any[]> = {};
-    const statusTotalByMonth: Record<string, number> = {};
+    const statusTotalCountByMonth: Record<string, number> = {};
+    const statusTotalRevenueByMonth: Record<string, number> = {};
     const overallStatusMap: Record<
       string,
-      { statusCode: number; statusName: string; count: number }
+      { statusCode: number; statusName: string; count: number; revenue: number }
     > = {};
     let totalStatusCount = 0;
+    let totalStatusRevenue = 0;
 
     for (const s of rawStatus) {
       const m = s.month;
       const cnt = Number(s.count) || 0;
+      const rev = Number(s.revenue) || 0;
       const statusCode = Number(s.statusCode) || 0;
       const statusName = s.statusName;
 
       if (!statusDistributionByMonth[m]) {
         statusDistributionByMonth[m] = [];
-        statusTotalByMonth[m] = 0;
+        statusTotalCountByMonth[m] = 0;
+        statusTotalRevenueByMonth[m] = 0;
       }
       statusDistributionByMonth[m].push({
         statusCode,
         statusName,
         count: cnt,
+        revenue: rev,
       });
-      statusTotalByMonth[m] += cnt;
+      statusTotalCountByMonth[m] += cnt;
+      statusTotalRevenueByMonth[m] += rev;
 
       const key = `${statusCode}_${statusName}`;
       if (!overallStatusMap[key]) {
-        overallStatusMap[key] = { statusCode, statusName, count: 0 };
+        overallStatusMap[key] = {
+          statusCode,
+          statusName,
+          count: 0,
+          revenue: 0,
+        };
       }
       overallStatusMap[key].count += cnt;
+      overallStatusMap[key].revenue += rev;
       totalStatusCount += cnt;
+      totalStatusRevenue += rev;
     }
 
     // Tính tỷ lệ % theo từng tháng
     for (const [m, items] of Object.entries(statusDistributionByMonth)) {
-      const mTotal = statusTotalByMonth[m] || 1;
+      const mCountTotal = statusTotalCountByMonth[m] || 1;
+      const mRevTotal = statusTotalRevenueByMonth[m] || 1;
       for (const item of items) {
         item.percentage =
-          Math.round(((item.count as number) / mTotal) * 1000) / 10;
+          Math.round(((item.count as number) / mCountTotal) * 1000) / 10;
+        item.revenuePercentage =
+          Math.round(((item.revenue as number) / mRevTotal) * 1000) / 10;
       }
     }
 
@@ -923,12 +941,222 @@ export class GarageDashboardService {
         statusCode: s.statusCode,
         statusName: s.statusName,
         count: s.count,
+        revenue: s.revenue,
         percentage:
           totalStatusCount > 0
             ? Math.round((s.count / totalStatusCount) * 1000) / 10
             : 0,
+        revenuePercentage:
+          totalStatusRevenue > 0
+            ? Math.round((s.revenue / totalStatusRevenue) * 1000) / 10
+            : 0,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // 1.4.1 Phễu Chuyển đổi Dịch vụ (Conversion Funnel) theo 4 nhóm Phân loại ERP
+    const funnelQb = this.caseRepo
+      .createQueryBuilder('c')
+      .select(
+        "TO_CHAR(COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at), 'YYYY-MM')",
+        'month',
+      )
+      .addSelect(
+        `CASE 
+          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          ELSE 'KHAC'
+        END`,
+        'classificationKey',
+      )
+      .addSelect('COUNT(c.id)', 'totalCount')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'totalAmount')
+      .addSelect(
+        'COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN c.id END)',
+        'cancelledCount',
+      )
+      .addSelect(
+        'SUM(CASE WHEN c.tinh_trang_dich_vu = 9 THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        'cancelledAmount',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN c.id END)',
+        'completedCount',
+      )
+      .addSelect(
+        'SUM(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        'completedAmount',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN c.id END)',
+        'inProgressCount',
+      )
+      .addSelect(
+        'SUM(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        'inProgressAmount',
+      )
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
+        { sixMonthsAgo },
+      )
+      .groupBy('1, 2')
+      .orderBy('month', 'DESC');
+
+    const rawFunnel = await funnelQb.getRawMany();
+
+    const buildFunnelObj = () => ({
+      totalIntake: { count: 0, amount: 0 },
+      inProgress: { count: 0, amount: 0, rate: 0 },
+      completed: { count: 0, amount: 0, rate: 0 },
+      cancelled: { count: 0, amount: 0, rate: 0 },
+      byClassification: {
+        SUA_CHUA_CHUNG: {
+          name: 'Sửa chữa chung',
+          totalCount: 0,
+          totalAmount: 0,
+          inProgressCount: 0,
+          inProgressAmount: 0,
+          completedCount: 0,
+          completedAmount: 0,
+          cancelledCount: 0,
+          cancelledAmount: 0,
+          completionRate: 0,
+          cancellationRate: 0,
+        },
+        KY_GUI_NOI_BO: {
+          name: 'Ký gửi / Nội bộ',
+          totalCount: 0,
+          totalAmount: 0,
+          inProgressCount: 0,
+          inProgressAmount: 0,
+          completedCount: 0,
+          completedAmount: 0,
+          cancelledCount: 0,
+          cancelledAmount: 0,
+          completionRate: 0,
+          cancellationRate: 0,
+        },
+        OJ_NGOAI: {
+          name: 'OJ Ngoài',
+          totalCount: 0,
+          totalAmount: 0,
+          inProgressCount: 0,
+          inProgressAmount: 0,
+          completedCount: 0,
+          completedAmount: 0,
+          cancelledCount: 0,
+          cancelledAmount: 0,
+          completionRate: 0,
+          cancellationRate: 0,
+        },
+        KHAC: {
+          name: 'Khác',
+          totalCount: 0,
+          totalAmount: 0,
+          inProgressCount: 0,
+          inProgressAmount: 0,
+          completedCount: 0,
+          completedAmount: 0,
+          cancelledCount: 0,
+          cancelledAmount: 0,
+          completionRate: 0,
+          cancellationRate: 0,
+        },
+      } as Record<string, any>,
+    });
+
+    const conversionFunnel = buildFunnelObj();
+    const conversionFunnelByMonth: Record<
+      string,
+      ReturnType<typeof buildFunnelObj>
+    > = {};
+
+    for (const f of rawFunnel) {
+      const m = f.month;
+      const key = f.classificationKey || 'KHAC';
+      const totCnt = Number(f.totalCount) || 0;
+      const totAmt = Number(f.totalAmount) || 0;
+      const inProgCnt = Number(f.inProgressCount) || 0;
+      const inProgAmt = Number(f.inProgressAmount) || 0;
+      const compCnt = Number(f.completedCount) || 0;
+      const compAmt = Number(f.completedAmount) || 0;
+      const cancCnt = Number(f.cancelledCount) || 0;
+      const cancAmt = Number(f.cancelledAmount) || 0;
+
+      if (!conversionFunnelByMonth[m]) {
+        conversionFunnelByMonth[m] = buildFunnelObj();
+      }
+      const mFunnel = conversionFunnelByMonth[m];
+
+      // Month totals
+      mFunnel.totalIntake.count += totCnt;
+      mFunnel.totalIntake.amount += totAmt;
+      mFunnel.inProgress.count += inProgCnt;
+      mFunnel.inProgress.amount += inProgAmt;
+      mFunnel.completed.count += compCnt;
+      mFunnel.completed.amount += compAmt;
+      mFunnel.cancelled.count += cancCnt;
+      mFunnel.cancelled.amount += cancAmt;
+
+      // Month classification
+      if (mFunnel.byClassification[key]) {
+        const c = mFunnel.byClassification[key];
+        c.totalCount += totCnt;
+        c.totalAmount += totAmt;
+        c.inProgressCount += inProgCnt;
+        c.inProgressAmount += inProgAmt;
+        c.completedCount += compCnt;
+        c.completedAmount += compAmt;
+        c.cancelledCount += cancCnt;
+        c.cancelledAmount += cancAmt;
+      }
+
+      // Overall totals
+      conversionFunnel.totalIntake.count += totCnt;
+      conversionFunnel.totalIntake.amount += totAmt;
+      conversionFunnel.inProgress.count += inProgCnt;
+      conversionFunnel.inProgress.amount += inProgAmt;
+      conversionFunnel.completed.count += compCnt;
+      conversionFunnel.completed.amount += compAmt;
+      conversionFunnel.cancelled.count += cancCnt;
+      conversionFunnel.cancelled.amount += cancAmt;
+
+      // Overall classification
+      if (conversionFunnel.byClassification[key]) {
+        const c = conversionFunnel.byClassification[key];
+        c.totalCount += totCnt;
+        c.totalAmount += totAmt;
+        c.inProgressCount += inProgCnt;
+        c.inProgressAmount += inProgAmt;
+        c.completedCount += compCnt;
+        c.completedAmount += compAmt;
+        c.cancelledCount += cancCnt;
+        c.cancelledAmount += cancAmt;
+      }
+    }
+
+    // Compute conversion rates
+    const computeRates = (target: ReturnType<typeof buildFunnelObj>) => {
+      const tot = target.totalIntake.count || 1;
+      target.inProgress.rate =
+        Math.round((target.inProgress.count / tot) * 1000) / 10;
+      target.completed.rate =
+        Math.round((target.completed.count / tot) * 1000) / 10;
+      target.cancelled.rate =
+        Math.round((target.cancelled.count / tot) * 1000) / 10;
+
+      for (const c of Object.values(target.byClassification)) {
+        const cTot = c.totalCount || 1;
+        c.completionRate = Math.round((c.completedCount / cTot) * 1000) / 10;
+        c.cancellationRate = Math.round((c.cancelledCount / cTot) * 1000) / 10;
+      }
+    };
+
+    computeRates(conversionFunnel);
+    for (const mFunnel of Object.values(conversionFunnelByMonth)) {
+      computeRates(mFunnel);
+    }
 
     // 1.5 Phân bổ Loại Nghiệp vụ (Classification Distribution) theo từng tháng trong 6 tháng gần nhất
     const classificationQb = this.caseRepo
@@ -1059,12 +1287,14 @@ export class GarageDashboardService {
       statusDistributionByMonth,
       classificationDistribution,
       classificationDistributionByMonth,
+      conversionFunnel,
+      conversionFunnelByMonth,
       availableMonths,
     };
   }
 
   /**
-   * 2. Lấy chỉ số KPI Checkpoints (Tháng này / Tuần này / Hôm nay) kèm Sparklines theo Ngày hoàn thành
+   * 2. Lấy chỉ số KPI Checkpoints (Tháng này / Tuần này / Hôm nay) kèm Sparklines theo Ngày hoàn thành & Dự thu Pipeline xe đang làm
    */
   async getCheckpointKpis() {
     const now = new Date();
@@ -1075,6 +1305,8 @@ export class GarageDashboardService {
     const monthCostChart: number[] = [];
     const monthProfitChart: number[] = [];
     const monthTienCoThueChart: number[] = [];
+    const monthPaidChart: number[] = [];
+    const monthReceivableChart: number[] = [];
 
     for (let i = 5; i >= 0; i--) {
       const d = subMonths(now, i);
@@ -1099,6 +1331,8 @@ export class GarageDashboardService {
           'profit',
         )
         .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+        .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+        .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -1112,6 +1346,8 @@ export class GarageDashboardService {
       monthCostChart.push(Number(res?.cost) || 0);
       monthProfitChart.push(Number(res?.profit) || 0);
       monthTienCoThueChart.push(Number(res?.tienCoThue) || 0);
+      monthPaidChart.push(Number(res?.paid) || 0);
+      monthReceivableChart.push(Number(res?.receivable) || 0);
     }
 
     const curMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -1133,6 +1369,8 @@ export class GarageDashboardService {
         'profit',
       )
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -1149,6 +1387,8 @@ export class GarageDashboardService {
     const weekCostChart: number[] = [];
     const weekProfitChart: number[] = [];
     const weekTienCoThueChart: number[] = [];
+    const weekPaidChart: number[] = [];
+    const weekReceivableChart: number[] = [];
 
     for (let i = 3; i >= 0; i--) {
       const d = subWeeks(now, i);
@@ -1178,6 +1418,8 @@ export class GarageDashboardService {
           'profit',
         )
         .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+        .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+        .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -1191,6 +1433,8 @@ export class GarageDashboardService {
       weekCostChart.push(Number(res?.cost) || 0);
       weekProfitChart.push(Number(res?.profit) || 0);
       weekTienCoThueChart.push(Number(res?.tienCoThue) || 0);
+      weekPaidChart.push(Number(res?.paid) || 0);
+      weekReceivableChart.push(Number(res?.receivable) || 0);
     }
 
     const curWeekStart = format(
@@ -1218,6 +1462,8 @@ export class GarageDashboardService {
         'profit',
       )
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -1234,6 +1480,8 @@ export class GarageDashboardService {
     const dayCostChart: number[] = [];
     const dayProfitChart: number[] = [];
     const dayTienCoThueChart: number[] = [];
+    const dayPaidChart: number[] = [];
+    const dayReceivableChart: number[] = [];
 
     for (let i = 6; i >= 0; i--) {
       const d = subDays(now, i);
@@ -1258,6 +1506,8 @@ export class GarageDashboardService {
           'profit',
         )
         .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+        .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+        .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
@@ -1271,6 +1521,8 @@ export class GarageDashboardService {
       dayCostChart.push(Number(res?.cost) || 0);
       dayProfitChart.push(Number(res?.profit) || 0);
       dayTienCoThueChart.push(Number(res?.tienCoThue) || 0);
+      dayPaidChart.push(Number(res?.paid) || 0);
+      dayReceivableChart.push(Number(res?.receivable) || 0);
     }
 
     const curDayStart = format(now, 'yyyy-MM-dd');
@@ -1292,6 +1544,8 @@ export class GarageDashboardService {
         'profit',
       )
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -1302,59 +1556,312 @@ export class GarageDashboardService {
       )
       .getRawOne();
 
+    // 4. Dự thu & Pipeline xe đang làm (Chưa có ngày hoàn thành, không bị hủy)
+    const inProgressCasesQb = this.caseRepo
+      .createQueryBuilder('c')
+      .select(
+        `CASE 
+          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          ELSE 'KHAC'
+        END`,
+        'classificationKey',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NULL');
+
+    // Pipeline tháng này (tất cả xe đang làm)
+    const inProgressMonthRaw = await inProgressCasesQb
+      .clone()
+      .groupBy('1')
+      .getRawMany();
+
+    // Pipeline hôm nay (xe đang làm phát sinh trong ngày)
+    const inProgressTodayRaw = await inProgressCasesQb
+      .clone()
+      .andWhere(
+        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd',
+        { curDayStart, curDayEnd },
+      )
+      .groupBy('1')
+      .getRawMany();
+
+    const formatPipeline = (rawItems: any[]) => {
+      let totalCount = 0;
+      let totalAmount = 0;
+      const byClassification: Record<
+        string,
+        { name: string; count: number; amount: number }
+      > = {
+        SUA_CHUA_CHUNG: { name: 'Sửa chữa chung', count: 0, amount: 0 },
+        KY_GUI_NOI_BO: { name: 'Ký gửi / Nội bộ', count: 0, amount: 0 },
+        OJ_NGOAI: { name: 'OJ Ngoài', count: 0, amount: 0 },
+        KHAC: { name: 'Khác', count: 0, amount: 0 },
+      };
+
+      for (const item of rawItems) {
+        const key = item.classificationKey || 'KHAC';
+        const cnt = Number(item.count) || 0;
+        const amt = Number(item.amount) || 0;
+        totalCount += cnt;
+        totalAmount += amt;
+        if (byClassification[key]) {
+          byClassification[key].count += cnt;
+          byClassification[key].amount += amt;
+        }
+      }
+
+      return {
+        totalCount,
+        totalAmount,
+        byClassification,
+      };
+    };
+
+    const projectedToday = formatPipeline(inProgressTodayRaw);
+    const projectedMonth = formatPipeline(inProgressMonthRaw);
+
+    const mTotalBilled = Number(curMonthRes?.tienCoThue) || 0;
+    const mTotalPaid = Number(curMonthRes?.paid) || 0;
+    const mTotalReceivable = Number(curMonthRes?.receivable) || 0;
+    const mCollectionRate =
+      mTotalBilled > 0
+        ? Math.round((mTotalPaid / mTotalBilled) * 1000) / 10
+        : 0;
+
+    const wTotalBilled = Number(curWeekRes?.tienCoThue) || 0;
+    const wTotalPaid = Number(curWeekRes?.paid) || 0;
+    const wTotalReceivable = Number(curWeekRes?.receivable) || 0;
+    const wCollectionRate =
+      wTotalBilled > 0
+        ? Math.round((wTotalPaid / wTotalBilled) * 1000) / 10
+        : 0;
+
+    const dTotalBilled = Number(curDayRes?.tienCoThue) || 0;
+    const dTotalPaid = Number(curDayRes?.paid) || 0;
+    const dTotalReceivable = Number(curDayRes?.receivable) || 0;
+    const dCollectionRate =
+      dTotalBilled > 0
+        ? Math.round((dTotalPaid / dTotalBilled) * 1000) / 10
+        : 0;
+
     return {
       month: {
         totalRevenue: Number(curMonthRes?.revenue) || 0,
         totalCost: Number(curMonthRes?.cost) || 0,
         totalProfit: Number(curMonthRes?.profit) || 0,
-        totalTienCoThue: Number(curMonthRes?.tienCoThue) || 0,
+        totalTienCoThue: mTotalBilled,
+        totalPaid: mTotalPaid,
+        totalReceivable: mTotalReceivable,
+        collectionRate: mCollectionRate,
         totalCount: Number(curMonthRes?.count) || 0,
         revenueChart: monthRevenueChart,
         costChart: monthCostChart,
         profitChart: monthProfitChart,
         tienCoThueChart: monthTienCoThueChart,
+        paidChart: monthPaidChart,
+        receivableChart: monthReceivableChart,
         labels: monthSparklineLabels,
       },
       week: {
         totalRevenue: Number(curWeekRes?.revenue) || 0,
         totalCost: Number(curWeekRes?.cost) || 0,
         totalProfit: Number(curWeekRes?.profit) || 0,
-        totalTienCoThue: Number(curWeekRes?.tienCoThue) || 0,
+        totalTienCoThue: wTotalBilled,
+        totalPaid: wTotalPaid,
+        totalReceivable: wTotalReceivable,
+        collectionRate: wCollectionRate,
         totalCount: Number(curWeekRes?.count) || 0,
         revenueChart: weekRevenueChart,
         costChart: weekCostChart,
         profitChart: weekProfitChart,
         tienCoThueChart: weekTienCoThueChart,
+        paidChart: weekPaidChart,
+        receivableChart: weekReceivableChart,
         labels: weekSparklineLabels,
       },
       day: {
         totalRevenue: Number(curDayRes?.revenue) || 0,
         totalCost: Number(curDayRes?.cost) || 0,
         totalProfit: Number(curDayRes?.profit) || 0,
-        totalTienCoThue: Number(curDayRes?.tienCoThue) || 0,
+        totalTienCoThue: dTotalBilled,
+        totalPaid: dTotalPaid,
+        totalReceivable: dTotalReceivable,
+        collectionRate: dCollectionRate,
         totalCount: Number(curDayRes?.count) || 0,
         revenueChart: dayRevenueChart,
         costChart: dayCostChart,
         profitChart: dayProfitChart,
         tienCoThueChart: dayTienCoThueChart,
+        paidChart: dayPaidChart,
+        receivableChart: dayReceivableChart,
         labels: daySparklineLabels,
       },
+      projectedToday,
+      projectedMonth,
     };
   }
 
   /**
-   * 3. Lấy danh sách vụ việc trong khoảng thời gian checkpoint (click sparkline)
-   * Sửa lỗi TypeORM 500 ("COALESCE(c" alias not found) bằng cách dùng direct column orderBy('c.ngayHoanThanhCongViec', 'DESC')
+   * 3. Lấy danh sách vụ việc trong khoảng thời gian checkpoint (click sparkline / mở drawer)
+   * Kèm summary toàn kỳ (tổng phải thu, đã thu, còn nợ, % hoàn tất, phân loại ERP) và bộ lọc search/tiến độ nợ
    */
   async getCheckpointCases(
     dateFrom: string,
     dateTo: string,
     page: number = 1,
     pageSize: number = 20,
+    search?: string,
+    paymentStatus?: 'all' | 'remaining' | 'paid' | 'unpaid',
+    classification?: string,
+    sortBy: string = 'ngayHoanThanhCongViec',
+    sortOrder: 'ASC' | 'DESC' = 'DESC',
   ) {
     const effectiveDateTo =
       dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
 
+    // 3.1 Truy vấn Summary Toàn Kỳ (Không bị phân trang)
+    const summaryRaw = await this.caseRepo
+      .createQueryBuilder('c')
+      .leftJoin(
+        KgaraGrossProfit,
+        'gp',
+        'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
+      )
+      .select('COUNT(c.id)', 'totalCount')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'totalTienCoThue')
+      .addSelect(
+        'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
+        'totalRevenue',
+      )
+      .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'totalCost')
+      .addSelect(
+        'SUM(COALESCE(gp.loi_nhuan, c.loi_nhuan, COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) - COALESCE(gp.chi_phi, c.chi_phi, 0), 0))',
+        'totalProfit',
+      )
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'totalPaid')
+      .addSelect(
+        'SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))',
+        'totalRemaining',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0 THEN 1 END)',
+        'paidCount',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) > 0 THEN 1 END)',
+        'remainingCount',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0 THEN 1 END)',
+        'unpaidCount',
+      )
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+        dateTo: effectiveDateTo,
+      })
+      .getRawOne();
+
+    // 3.2 Phân rã theo Phân loại ERP toàn kỳ
+    const classificationSummaryRaw = await this.caseRepo
+      .createQueryBuilder('c')
+      .select(
+        `CASE 
+          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          ELSE 'KHAC'
+        END`,
+        'classificationKey',
+      )
+      .addSelect('COUNT(c.id)', 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
+      .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
+      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'remaining')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+        dateTo: effectiveDateTo,
+      })
+      .groupBy('1')
+      .getRawMany();
+
+    const classificationSummary: Record<
+      string,
+      {
+        name: string;
+        count: number;
+        amount: number;
+        paid: number;
+        remaining: number;
+      }
+    > = {
+      SUA_CHUA_CHUNG: {
+        name: 'Sửa chữa chung',
+        count: 0,
+        amount: 0,
+        paid: 0,
+        remaining: 0,
+      },
+      KY_GUI_NOI_BO: {
+        name: 'Ký gửi / Nội bộ',
+        count: 0,
+        amount: 0,
+        paid: 0,
+        remaining: 0,
+      },
+      OJ_NGOAI: {
+        name: 'OJ Ngoài',
+        count: 0,
+        amount: 0,
+        paid: 0,
+        remaining: 0,
+      },
+      KHAC: { name: 'Khác', count: 0, amount: 0, paid: 0, remaining: 0 },
+    };
+
+    for (const item of classificationSummaryRaw) {
+      const key = item.classificationKey || 'KHAC';
+      if (classificationSummary[key]) {
+        classificationSummary[key].count = Number(item.count) || 0;
+        classificationSummary[key].amount = Number(item.amount) || 0;
+        classificationSummary[key].paid = Number(item.paid) || 0;
+        classificationSummary[key].remaining = Number(item.remaining) || 0;
+      }
+    }
+
+    const totalTienCoThue = Number(summaryRaw?.totalTienCoThue) || 0;
+    const totalPaid = Number(summaryRaw?.totalPaid) || 0;
+    const totalRemaining = Number(summaryRaw?.totalRemaining) || 0;
+    const collectionRate =
+      totalTienCoThue > 0
+        ? Math.round((totalPaid / totalTienCoThue) * 1000) / 10
+        : 0;
+
+    const summary = {
+      totalCount: Number(summaryRaw?.totalCount) || 0,
+      totalTienCoThue,
+      totalRevenue: Number(summaryRaw?.totalRevenue) || 0,
+      totalCost: Number(summaryRaw?.totalCost) || 0,
+      totalProfit: Number(summaryRaw?.totalProfit) || 0,
+      totalPaid,
+      totalRemaining,
+      collectionRate,
+      paidCount: Number(summaryRaw?.paidCount) || 0,
+      remainingCount: Number(summaryRaw?.remainingCount) || 0,
+      unpaidCount: Number(summaryRaw?.unpaidCount) || 0,
+    };
+
+    // 3.3 Truy vấn Danh sách Phân trang có Bộ lọc
     const qb = this.caseRepo
       .createQueryBuilder('c')
       .leftJoinAndMapOne(
@@ -1366,15 +1873,62 @@ export class GarageDashboardService {
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
-        dateFrom,
-      })
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
       .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
         dateTo: effectiveDateTo,
-      })
-      .orderBy('c.ngayHoanThanhCongViec', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
+      });
+
+    // Filter by search keyword
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      qb.andWhere(
+        '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
+        { search: s },
+      );
+    }
+
+    // Filter by payment status
+    if (paymentStatus === 'remaining') {
+      qb.andWhere('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
+    } else if (paymentStatus === 'paid') {
+      qb.andWhere(
+        'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
+      );
+    } else if (paymentStatus === 'unpaid') {
+      qb.andWhere('COALESCE(c.tien_da_thanh_toan, 0) <= 0');
+    }
+
+    // Filter by classification
+    if (classification && classification !== 'ALL') {
+      if (classification === 'SUA_CHUA_CHUNG') {
+        qb.andWhere("c.classification = 'SUA_CHUA_CHUNG'");
+      } else if (classification === 'KY_GUI_NOI_BO') {
+        qb.andWhere(
+          "c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
+        );
+      } else if (classification === 'OJ_NGOAI') {
+        qb.andWhere("c.classification IN ('OJ', 'OJ_NGOAI')");
+      } else if (classification === 'KHAC') {
+        qb.andWhere(
+          "(c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
+        );
+      }
+    }
+
+    // Dynamic sorting
+    if (sortBy === 'tienCoThue') {
+      qb.orderBy('c.tienCoThue', sortOrder);
+    } else if (sortBy === 'tienDaThanhToan') {
+      qb.orderBy('c.tienDaThanhToan', sortOrder);
+    } else if (sortBy === 'tienConPhaiThanhToan') {
+      qb.orderBy('c.tienConPhaiThanhToan', sortOrder);
+    } else if (sortBy === 'doanhThu') {
+      qb.orderBy('COALESCE(c.doanhThu, c.tienCoThue, 0)', sortOrder);
+    } else {
+      qb.orderBy('c.ngayHoanThanhCongViec', sortOrder);
+    }
+
+    qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
 
@@ -1384,6 +1938,8 @@ export class GarageDashboardService {
         const rev = Number(gp?.doanhThu ?? c.doanhThu ?? c.tienCoThue ?? 0);
         const cost = Number(gp?.chiPhi ?? c.chiPhi ?? 0);
         const profit = Number(gp?.loiNhuan ?? c.loiNhuan ?? rev - cost);
+        const rawData = c.rawData || {};
+        const tienThueKH = Number(rawData.TienThueKH ?? 0);
 
         return {
           id: c.id,
@@ -1392,11 +1948,14 @@ export class GarageDashboardService {
           khachHangCode: c.khachHangCode,
           khachHangName: c.khachHangName,
           tenTinhTrangDichVu: c.tenTinhTrangDichVu,
+          classification: c.classification || 'KHAC',
           doanhThu: rev,
           chiPhi: cost,
           loiNhuan: profit,
+          tienCoThue: Number(c.tienCoThue ?? 0),
           tienDaThanhToan: Number(c.tienDaThanhToan ?? 0),
           tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan ?? 0),
+          hasInvoice: tienThueKH > 0,
           ngayHoanThanhCongViec: c.ngayHoanThanhCongViec,
           ngayPhatSinh: c.ngayPhatSinh || c.createdAt,
         };
@@ -1405,6 +1964,8 @@ export class GarageDashboardService {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
+      summary,
+      classificationSummary,
     };
   }
 

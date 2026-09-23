@@ -57,6 +57,15 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Card Doanh thu: **Doanh thu thuần** & **Doanh thu có VAT** (khớp số liệu với bảng chi tiết).
     - Card Chi phí: **Chi phí thuần** & **Chi phí có VAT**.
   - Hỗ trợ click-to-drilldown xem danh sách phiếu dịch vụ chi tiết hoàn thành trong kỳ (`getCheckpointCases`).
+- **Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ (`GarageConversionFunnelCard.tsx`)**:
+  - Hub phân tích 3 tầng tích hợp toàn diện:
+    - **Tầng 1**: 4 Cards tổng quan tiếp nhận & tiến độ (Tổng tiếp nhận, Đang xử lý, Đã hoàn thành, Hủy) kèm sub-badge Dự thu Hôm nay & Tháng này và thanh tỷ lệ chuyển đổi trực quan.
+    - **Tầng 2**: Toolbar điều khiển chuyển đổi hiển thị `[$ Giá trị (VND)] / [Số lượng (Xe)]` ngay phía trên khu vực biểu đồ + Grid 12 cột chứa 3 biểu đồ song song:
+      - Biểu đồ Dòng Thời Gian (6 Tháng, thứ tự Trái sang Phải, stacked bars Doanh số/SL + line % Hoàn tất, click-to-filter tháng).
+      - Donut Chart Cơ Cấu Nghiệp Vụ (ERP) (4 nhóm ERP: Sửa chữa chung, Ký gửi/Nội bộ, OJ Ngoài, Khác).
+      - Donut Chart Phân Bổ Trạng Thái Phiếu DV (Hoàn tất, Đang xử lý, Báo giá, Tiếp nhận, Hủy).
+    - **Tầng 3**: Bảng `<DataTable variant="spreadsheet">` chi tiết 4 phân loại ERP chuẩn `/standardize-table` (STT `#` 40px center, No Blue Mandate, SubtotalSummaryCell footer).
+  - Dữ liệu tính toán độc lập tại `conversionFunnel` & `conversionFunnelByMonth` trong `garage-dashboard.service.ts`, phản hồi tức thì theo kỳ tháng được chọn.
 - **Xuất Báo Cáo Excel Chuyên Nghiệp**:
   - `exportExcel`: Báo cáo Tổng quan Garage 2 sheets (Tổng quan tháng & Chi tiết phiếu dịch vụ).
   - `exportPnlExcel`: Báo cáo P&L theo tháng chi tiết từng dòng doanh thu, chi phí, OPEX, hoa hồng và lợi nhuận ròng.
