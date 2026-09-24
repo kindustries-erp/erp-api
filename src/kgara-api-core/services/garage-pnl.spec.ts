@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GarageDashboardService } from '../garage-dashboard.service';
+import { GaragePnlService } from './garage-pnl.service';
+import { GarageDashboardStatsService } from './garage-dashboard-stats.service';
+import { GarageCheckpointService } from './garage-checkpoint.service';
+import { GarageCustomerStatsService } from './garage-customer-stats.service';
+import { GarageDashboardExportService } from './garage-dashboard-export.service';
 import { GarageOpexService } from './garage-opex.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
-import { KgaraCaseService } from '../entities/kgara_case_service.entity';
-import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
-import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 
-describe('GarageDashboardService - PnL Commission Calculation', () => {
+describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation', () => {
   let service: GarageDashboardService;
+  let pnlService: GaragePnlService;
   let mockCaseRepo: any;
   let mockOpexService: any;
 
@@ -24,21 +27,26 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GarageDashboardService,
+        GaragePnlService,
+        {
+          provide: GarageDashboardStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageCheckpointService,
+          useValue: {},
+        },
+        {
+          provide: GarageCustomerStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageDashboardExportService,
+          useValue: {},
+        },
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,
-        },
-        {
-          provide: getRepositoryToken(KgaraCaseService),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraGrossProfit),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraCaseSettlement),
-          useValue: {},
         },
         {
           provide: GarageOpexService,
@@ -48,6 +56,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     }).compile();
 
     service = module.get<GarageDashboardService>(GarageDashboardService);
+    pnlService = module.get<GaragePnlService>(GaragePnlService);
   });
 
   it('Scenario 1: Net Profit > 0 and No Consignment (Ky Gui = 0) -> Matching User Screenshot', async () => {
@@ -256,7 +265,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
         cogs: '100000000',
         caseCount: '10',
         kyGuiRevenue: '80000000',
-        kyGuiCogs: '40000000',
+        kyGuiCogs: '40000000', // Ky Gui GP = 40.000.000
         kyGuiCaseCount: '3',
         suaChuaChungRevenue: '120000000',
         suaChuaChungCogs: '60000000',

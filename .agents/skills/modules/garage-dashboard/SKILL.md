@@ -123,10 +123,17 @@ src/kgara-api-core/
 │   └── kgara_operating_expense.entity.ts # TypeORM Entity cho kgara_operating_expenses
 ├── services/
 │   ├── garage-opex.service.ts          # CRUD OPEX, recurring upsert & period summary (COGS/OPEX/Commission)
-│   └── garage-opex.service.spec.ts     # Unit tests cho GarageOpexService (Pass 100%)
+│   ├── garage-opex.service.spec.ts     # Unit tests cho GarageOpexService
+│   ├── garage-dashboard-stats.service.ts # Thống kê xu hướng tháng, doanh thu, giá vốn, lãi gộp, tiến độ thu/chi & phễu
+│   ├── garage-checkpoint.service.ts    # Chỉ số KPI Checkpoints (Tháng/Tuần/Hôm nay), Sparklines & Drill-down ca
+│   ├── garage-customer-stats.service.ts # Phân tích khách hàng, doanh thu, lãi gộp & tuổi nợ
+│   ├── garage-dashboard-export.service.ts # Xuất báo cáo Excel 2 sheet (Tổng quan tháng & Chi tiết ca)
+│   ├── garage-pnl.service.ts           # Báo cáo P&L, hoa hồng tự động Sale 10%/DV 10% & xuất Excel P&L
+│   └── garage-pnl.spec.ts              # Unit tests P&L & hoa hồng tự động (Pass 100%)
 ├── garage-dashboard.controller.ts      # REST Controller (Dashboard, Checkpoint, OPEX, P&L, ApplyRecurring)
-├── garage-dashboard.service.ts         # Aggregation Doanh thu/COGS/DirectCost, P&L Report, ExcelJS
-└── kgara-api-core.module.ts            # NestJS Module đăng ký Entity, Controllers & Services
+├── garage-dashboard.service.ts         # Facade Service (~120 dòng): Clean DI delegate sang 5 Sub-Services
+├── garage-dashboard.facade.spec.ts     # Unit tests Facade delegation
+└── kgara-api-core.module.ts            # NestJS Module đăng ký Entity, Controllers & Providers/Exports
 ```
 
 ---

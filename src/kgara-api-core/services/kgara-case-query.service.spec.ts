@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as ExcelJS from 'exceljs';
 import { KgaraCaseQueryService } from './kgara-case-query.service';
+import { KgaraCaseSettlementCalcService } from './kgara-case-settlement-calc.service';
+import { KgaraCaseServicesQueryService } from './kgara-case-services-query.service';
+import { KgaraCaseExportService } from './kgara-case-export.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseService } from '../entities/kgara_case_service.entity';
@@ -118,6 +121,9 @@ describe('KgaraCaseQueryService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         KgaraCaseQueryService,
+        KgaraCaseSettlementCalcService,
+        KgaraCaseServicesQueryService,
+        KgaraCaseExportService,
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,
@@ -153,7 +159,7 @@ describe('KgaraCaseQueryService', () => {
   });
 
   describe('exportCompletedCasesExcel', () => {
-    it('should generate a valid XLSX buffer with 2 sheets', async () => {
+    it('should generate a valid XLSX buffer with SUM, SUBTOTAL and Header row structure', async () => {
       const buffer = await service.exportCompletedCasesExcel({
         date_from: '2026-03-01',
         date_to: '2026-03-31',
@@ -165,27 +171,49 @@ describe('KgaraCaseQueryService', () => {
       expect(buffer).toBeInstanceOf(Buffer);
       expect(buffer.length).toBeGreaterThan(0);
 
-      // Read back with ExcelJS to verify sheets structure
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer as any);
 
       const sheet1 = workbook.getWorksheet('Bảng kê phiếu kết thúc');
       expect(sheet1).toBeDefined();
-      expect(sheet1?.rowCount).toBeGreaterThanOrEqual(2); // Header + 1 row + summary
 
+      // Row 1: SUM Row
+      const row1 = sheet1?.getRow(1);
+      expect(row1?.getCell(5).value).toBe('TỔNG CỘNG (SUM)');
+      expect(row1?.getCell(10).value).toEqual(
+        expect.objectContaining({ formula: 'SUM(J5:J5)' }),
+      );
+
+      // Row 2: SUBTOTAL Row
+      const row2 = sheet1?.getRow(2);
+      expect(row2?.getCell(5).value).toBe('TỔNG THEO BỘ LỌC (SUBTOTAL)');
+      expect(row2?.getCell(10).value).toEqual(
+        expect.objectContaining({ formula: 'SUBTOTAL(9,J5:J5)' }),
+      );
+
+      // Row 4: Header Row
+      const row4 = sheet1?.getRow(4);
+      expect(row4?.getCell(1).value).toBe('STT');
+      expect(row4?.getCell(2).value).toBe('Số phiếu');
+
+      // Row 5: First Data Row
+      const row5 = sheet1?.getRow(5);
+      expect(row5?.getCell(2).value).toBe('PDV-2026-001'); // soChungTu
+      expect(row5?.getCell(3).value).toBe('51G-12345'); // bienSoXe
+      expect(row5?.getCell(6).value).toBe('Chi nhánh Quận 7'); // branchName
+      expect(row5?.getCell(7).value).toBe('Sửa chữa chung'); // classification
+      expect(row5?.getCell(11).value).toBe(15000000); // doanhThu
+      expect(row5?.getCell(12).value).toBe(9000000); // chiPhi
+      expect(row5?.getCell(13).value).toBe(6000000); // loiNhuan
+
+      // Sheet 2: Chi tiết DV & Phụ tùng
       const sheet2 = workbook.getWorksheet('Chi tiết DV & Phụ tùng');
       expect(sheet2).toBeDefined();
-      expect(sheet2?.rowCount).toBeGreaterThanOrEqual(2);
-
-      // Verify row 2 data in Sheet 1
-      const row2 = sheet1?.getRow(2);
-      expect(row2?.getCell(2).value).toBe('PDV-2026-001'); // soChungTu
-      expect(row2?.getCell(3).value).toBe('51G-12345'); // bienSoXe
-      expect(row2?.getCell(6).value).toBe('Chi nhánh Quận 7'); // branchName
-      expect(row2?.getCell(7).value).toBe('Sửa chữa chung'); // classification
-      expect(row2?.getCell(11).value).toBe(15000000); // doanhThu
-      expect(row2?.getCell(12).value).toBe(9000000); // chiPhi
-      expect(row2?.getCell(13).value).toBe(6000000); // loiNhuan
+      expect(sheet2?.getRow(1).getCell(6).value).toBe('TỔNG CỘNG (SUM)');
+      expect(sheet2?.getRow(2).getCell(6).value).toBe(
+        'TỔNG THEO BỘ LỌC (SUBTOTAL)',
+      );
+      expect(sheet2?.getRow(4).getCell(1).value).toBe('STT');
     });
   });
 
@@ -305,7 +333,7 @@ describe('KgaraCaseQueryService', () => {
   });
 
   describe('exportCaseServicesExcel', () => {
-    it('should export formatted excel buffer for case services', async () => {
+    it('should export formatted excel buffer with SUM, SUBTOTAL and Header layout', async () => {
       const mockResultRows = [
         {
           id: 'srv-1',
@@ -385,7 +413,17 @@ describe('KgaraCaseQueryService', () => {
 
       const sheet = workbook.getWorksheet('Chi tiết DV & Phụ tùng');
       expect(sheet).toBeDefined();
-      expect(sheet?.rowCount).toBeGreaterThanOrEqual(2);
+
+      // Row 1: SUM
+      expect(sheet?.getRow(1).getCell(9).value).toBe('TỔNG CỘNG (SUM)');
+      // Row 2: SUBTOTAL
+      expect(sheet?.getRow(2).getCell(9).value).toBe(
+        'TỔNG THEO BỘ LỌC (SUBTOTAL)',
+      );
+      // Row 4: Header
+      expect(sheet?.getRow(4).getCell(1).value).toBe('STT');
+      // Row 5: Data
+      expect(sheet?.getRow(5).getCell(4).value).toBe('PDV-2026-001');
     });
   });
 });

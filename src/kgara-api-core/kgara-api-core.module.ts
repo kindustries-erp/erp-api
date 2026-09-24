@@ -25,7 +25,15 @@ import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { GarageOpexService } from './services/garage-opex.service';
 import { GarageDashboardService } from './garage-dashboard.service';
+import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
+import { GarageCheckpointService } from './services/garage-checkpoint.service';
+import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
+import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
+import { GaragePnlService } from './services/garage-pnl.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+import { KgaraCaseSettlementCalcService } from './services/kgara-case-settlement-calc.service';
+import { KgaraCaseServicesQueryService } from './services/kgara-case-services-query.service';
+import { KgaraCaseExportService } from './services/kgara-case-export.service';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
@@ -70,7 +78,15 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    GarageDashboardStatsService,
+    GarageCheckpointService,
+    GarageCustomerStatsService,
+    GarageDashboardExportService,
+    GaragePnlService,
     KgaraCaseQueryService,
+    KgaraCaseSettlementCalcService,
+    KgaraCaseServicesQueryService,
+    KgaraCaseExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
@@ -94,7 +110,15 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    GarageDashboardStatsService,
+    GarageCheckpointService,
+    GarageCustomerStatsService,
+    GarageDashboardExportService,
+    GaragePnlService,
     KgaraCaseQueryService,
+    KgaraCaseSettlementCalcService,
+    KgaraCaseServicesQueryService,
+    KgaraCaseExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,

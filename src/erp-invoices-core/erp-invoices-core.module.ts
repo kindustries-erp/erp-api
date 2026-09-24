@@ -42,6 +42,11 @@ import { InvoiceExportExcelService } from './services/sub-services/invoice-expor
 import { InvoiceStatsService } from './services/sub-services/invoice-stats.service';
 import { InvoiceItemsQueryService } from './services/sub-services/invoice-items-query.service';
 import { InvoiceItemsExportService } from './services/sub-services/invoice-items-export.service';
+import { InvoiceDashboardStatsService } from './services/sub-services/invoice-dashboard-stats.service';
+import { InvoiceDashboardPartnersService } from './services/sub-services/invoice-dashboard-partners.service';
+import { InvoiceDashboardExportService } from './services/sub-services/invoice-dashboard-export.service';
+import { InvoiceDashboardAnalyticsService } from './services/sub-services/invoice-dashboard-analytics.service';
+import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-dashboard-horizon.service';
 
 @Module({
   imports: [
@@ -86,6 +91,11 @@ import { InvoiceItemsExportService } from './services/sub-services/invoice-items
     InvoiceDebtsDetailService,
     InvoiceDebtsExportService,
     InvoiceDebtsExportBackgroundService,
+    InvoiceDashboardStatsService,
+    InvoiceDashboardPartnersService,
+    InvoiceDashboardExportService,
+    InvoiceDashboardAnalyticsService,
+    InvoiceDashboardHorizonService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
