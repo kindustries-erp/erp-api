@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpEmailAttachment } from './erp_email_attachment.entity';
+import type { ErpEmailAttachment } from './erp_email_attachment.entity';
 
 @Entity({ name: 'erp_email_messages' })
 @Index('idx_erp_email_messages_mailbox_uid', ['mailbox', 'uid'])
@@ -73,6 +73,9 @@ export class ErpEmailMessage {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToMany(() => ErpEmailAttachment, (attachment) => attachment.message)
+  @OneToMany(
+    'ErpEmailAttachment',
+    (attachment: ErpEmailAttachment) => attachment.message,
+  )
   attachments: ErpEmailAttachment[];
 }

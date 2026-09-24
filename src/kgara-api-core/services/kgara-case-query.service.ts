@@ -53,12 +53,16 @@ export class KgaraCaseQueryService {
       soChungTu: '"case"."so_chung_tu"',
       licensePlate: '"case"."bien_so_xe"',
       bienSoXe: '"case"."bien_so_xe"',
+      customer:
+        'CONCAT(COALESCE("case"."khach_hang_name", \'\'), \' \', COALESCE("case"."khach_hang_code", \'\'))',
       customerCode: '"case"."khach_hang_code"',
       khachHangCode: '"case"."khach_hang_code"',
       customerName: '"case"."khach_hang_name"',
       khachHangName: '"case"."khach_hang_name"',
       statusName: '"case"."ten_tinh_trang_dich_vu"',
       classification: '"case"."classification"',
+      kgaraClassification: '"case"."kgara_classification"',
+      kgaraClassificationCode: '"case"."kgara_classification_code"',
       branchName: '"case"."branch_external_id"',
       branchExternalId: '"case"."branch_external_id"',
       isInsuranceClaim:
@@ -1165,6 +1169,873 @@ export class KgaraCaseQueryService {
         cell.border = {
           top: { style: 'thin' },
           bottom: { style: 'double' },
+        };
+      }
+    }
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return Buffer.from(uint8Array);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CASE SERVICES (CHI TIẾT DÒNG DỊCH VỤ & PHỤ TÙNG) QUERY ENGINE
+  // ──────────────────────────────────────────────────────────────────────────
+
+  getCaseServiceColumnSelectExpr(column: string): string | null {
+    const mapping: Record<string, string> = {
+      sanPhamCode: '"srv"."san_pham_code"',
+      sanPhamName: '"srv"."san_pham_name"',
+      noiDungChiTiet: '"srv"."noi_dung_chi_tiet"',
+      loaiSanPhamCode: '"srv"."loai_san_pham_code"',
+      donViTinhText: '"srv"."don_vi_tinh_text"',
+      khoCode: '"srv"."kho_code"',
+      soLuongHoaDon: '"srv"."so_luong_hoa_don"',
+      donGia: '"srv"."don_gia"',
+      tienChuaThue: '"srv"."tien_chua_thue"',
+      thueSuat: '"srv"."thue_suat"',
+      tienCoThue: '"srv"."tien_co_thue"',
+      soGioCongLam: '"srv"."so_gio_cong_lam"',
+      tienDichVu: '"srv"."tien_dich_vu"',
+      tienPhuTung: '"srv"."tien_phu_tung"',
+      giaVonPhuTung: '"srv"."gia_von_phu_tung"',
+      tyLeChietKhauCt: '"srv"."ty_le_chiet_khau_ct"',
+      tienChietKhauCt: '"srv"."tien_chiet_khau_ct"',
+      tienPhuPhi: '"srv"."tien_phu_phi"',
+      caseCode: '"c"."so_chung_tu"',
+      soChungTu: '"c"."so_chung_tu"',
+      licensePlate: '"c"."bien_so_xe"',
+      bienSoXe: '"c"."bien_so_xe"',
+      customer:
+        'CONCAT(COALESCE("c"."khach_hang_name", \'\'), \' \', COALESCE("c"."khach_hang_code", \'\'))',
+      customerCode: '"c"."khach_hang_code"',
+      khachHangCode: '"c"."khach_hang_code"',
+      customerName: '"c"."khach_hang_name"',
+      khachHangName: '"c"."khach_hang_name"',
+      statusName: '"c"."ten_tinh_trang_dich_vu"',
+      status: '"c"."tinh_trang_dich_vu"',
+      classification: '"c"."classification"',
+      branchName: '"c"."branch_external_id"',
+      branchExternalId: '"c"."branch_external_id"',
+      caseDate:
+        'TO_CHAR(COALESCE("c"."ngay_tiep_nhan", "c"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
+      ngayPhatSinh: 'TO_CHAR("c"."ngay_phat_sinh", \'YYYY-MM-DD\')',
+      ngayTiepNhan:
+        'TO_CHAR(COALESCE("c"."ngay_tiep_nhan", "c"."ngay_phat_sinh"), \'YYYY-MM-DD\')',
+      ngayHoanThanhCongViec:
+        'TO_CHAR("c"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
+      completionDate:
+        'TO_CHAR("c"."ngay_hoan_thanh_cong_viec", \'YYYY-MM-DD\')',
+      hasLinkedInvoice:
+        'CASE WHEN EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "c".id) THEN \'YES\' ELSE \'NO\' END',
+    };
+
+    return mapping[column] || null;
+  }
+
+  applySingleCaseServiceColumnFilter(
+    qb: SelectQueryBuilder<KgaraCaseService>,
+    column: string,
+    values: string[],
+    paramPrefix: string,
+  ) {
+    if (!values || values.length === 0) return;
+
+    // 0. Xử lý khoảng ngày (Date Range: "YYYY-MM-DD..YYYY-MM-DD" hoặc "YYYY-MM-DD|YYYY-MM-DD")
+    if (
+      values.length === 1 &&
+      (values[0].includes('..') || values[0].includes('|'))
+    ) {
+      const separator = values[0].includes('..') ? '..' : '|';
+      const [fromDate, toDate] = values[0].split(separator);
+      const filterExpr = this.getCaseServiceColumnSelectExpr(column);
+      if (filterExpr) {
+        if (fromDate) {
+          qb.andWhere(`${filterExpr} >= :${paramPrefix}_from_date`, {
+            [`${paramPrefix}_from_date`]: fromDate,
+          });
+        }
+        if (toDate) {
+          qb.andWhere(`${filterExpr} <= :${paramPrefix}_to_date`, {
+            [`${paramPrefix}_to_date`]: toDate,
+          });
+        }
+        return;
+      }
+    }
+
+    // 1. Xử lý __ALL_MATCHING__ (Chọn tất cả kết quả tìm kiếm)
+    if (values[0] === '__ALL_MATCHING__') {
+      const searchStr = (values[1] || '').trim();
+      if (!searchStr) return;
+      const filterExpr = this.getCaseServiceColumnSelectExpr(column);
+      if (filterExpr) {
+        applyMultiKeywordFilter(
+          qb,
+          `CAST(${filterExpr} AS TEXT)`,
+          searchStr,
+          `${paramPrefix}_search`,
+        );
+      }
+      return;
+    }
+
+    // 2. Cột đặc thù: serviceType / loaiSanPhamCode (DV, PT)
+    if (column === 'serviceType' || column === 'loaiSanPhamCode') {
+      const filtered = values.filter((v) => v !== 'ALL');
+      if (filtered.length > 0) {
+        qb.andWhere(
+          `"srv"."loai_san_pham_code" IN (:...${paramPrefix}_types)`,
+          {
+            [`${paramPrefix}_types`]: filtered,
+          },
+        );
+      }
+      return;
+    }
+
+    // 3. Cột số tiền & số lượng
+    const numericColumns = [
+      'soLuongHoaDon',
+      'donGia',
+      'tienChuaThue',
+      'thueSuat',
+      'tienCoThue',
+      'soGioCongLam',
+      'tienDichVu',
+      'tienPhuTung',
+      'giaVonPhuTung',
+      'tyLeChietKhauCt',
+      'tienChietKhauCt',
+      'tienPhuPhi',
+    ];
+    if (numericColumns.includes(column)) {
+      const filterExpr = this.getCaseServiceColumnSelectExpr(column);
+      if (!filterExpr) return;
+
+      const hasBlank = values.includes('__BLANK__');
+      const realVals = values.filter((v) => v !== '__BLANK__');
+      const numericVals = realVals
+        .map((v) => Number(v))
+        .filter((v) => !isNaN(v));
+
+      const conditions: string[] = [];
+      if (hasBlank) {
+        conditions.push(`(${filterExpr} IS NULL OR ${filterExpr} = 0)`);
+      }
+      if (numericVals.length > 0) {
+        conditions.push(`${filterExpr} IN (:...${paramPrefix}_num_vals)`);
+      }
+
+      if (conditions.length > 0) {
+        qb.andWhere(`(${conditions.join(' OR ')})`, {
+          [`${paramPrefix}_num_vals`]: numericVals,
+        });
+      }
+      return;
+    }
+
+    // 4. Cột phân loại / text thông thường
+    const filterExpr = this.getCaseServiceColumnSelectExpr(column);
+    if (!filterExpr) return;
+
+    const hasBlank = values.includes('__BLANK__');
+    const realVals = values.filter((v) => v !== '__BLANK__');
+
+    if (hasBlank && realVals.length > 0) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '' OR CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals))`,
+        { [`${paramPrefix}_vals`]: realVals },
+      );
+    } else if (hasBlank) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
+    } else {
+      qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
+        [`${paramPrefix}_vals`]: realVals,
+      });
+    }
+  }
+
+  applyCaseServiceFilters(
+    qb: SelectQueryBuilder<KgaraCaseService>,
+    filtersStr?: string,
+    prefix: string = 'list_',
+  ) {
+    if (!filtersStr) return;
+
+    try {
+      const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+      for (const [column, values] of Object.entries(filters)) {
+        if (!values || values.length === 0) continue;
+        this.applySingleCaseServiceColumnFilter(
+          qb,
+          column,
+          values,
+          `${prefix}${column}`,
+        );
+      }
+    } catch {
+      // ignore malformed filter payloads
+    }
+  }
+
+  async findCaseServices(params: {
+    branchId?: string;
+    page?: number | string;
+    pageSize?: number | string;
+    q?: string;
+    from?: string;
+    to?: string;
+    serviceType?: string;
+    filtersStr?: string;
+    sorts?: string | string[];
+  }) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+
+    this.logger.log(
+      `findCaseServices called: branchId=${params.branchId}, page=${page}, pageSize=${pageSize}, q=${params.q}, serviceType=${params.serviceType}, filtersStr=${params.filtersStr}`,
+    );
+
+    const repo =
+      this.serviceRepo || this.caseRepo.manager.getRepository(KgaraCaseService);
+
+    const baseQb = repo
+      .createQueryBuilder('srv')
+      .innerJoin(
+        KgaraCase,
+        'c',
+        'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
+      )
+      .leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id')
+      .where('c.kgara_deleted_at IS NULL');
+
+    if (
+      params.branchId &&
+      params.branchId !== 'null' &&
+      params.branchId !== 'undefined' &&
+      params.branchId.trim() !== ''
+    ) {
+      baseQb.andWhere('c.branch_external_id = :branchId', {
+        branchId: params.branchId.trim(),
+      });
+    }
+
+    if (params.serviceType && params.serviceType !== 'ALL') {
+      baseQb.andWhere('srv.loai_san_pham_code = :serviceType', {
+        serviceType: params.serviceType,
+      });
+    }
+
+    if (params.from) {
+      const fromDate = params.from.includes('T')
+        ? params.from
+        : `${params.from} 00:00:00`;
+      baseQb.andWhere(
+        'COALESCE(c.ngay_tiep_nhan, c.ngay_phat_sinh) >= :fromDate',
+        { fromDate },
+      );
+    }
+
+    if (params.to) {
+      const toDate = params.to.includes('T')
+        ? params.to
+        : `${params.to} 23:59:59.999`;
+      baseQb.andWhere(
+        'COALESCE(c.ngay_tiep_nhan, c.ngay_phat_sinh) <= :toDate',
+        { toDate },
+      );
+    }
+
+    if (params.q) {
+      const query = params.q.trim();
+      baseQb.andWhere(
+        new Brackets((sub) => {
+          sub
+            .where('srv.san_pham_code ILIKE :q', { q: `%${query}%` })
+            .orWhere('srv.san_pham_name ILIKE :q', { q: `%${query}%` })
+            .orWhere('srv.noi_dung_chi_tiet ILIKE :q', { q: `%${query}%` })
+            .orWhere('c.so_chung_tu ILIKE :q', { q: `%${query}%` })
+            .orWhere('c.bien_so_xe ILIKE :q', { q: `%${query}%` })
+            .orWhere('c.khach_hang_name ILIKE :q', { q: `%${query}%` })
+            .orWhere('c.khach_hang_code ILIKE :q', { q: `%${query}%` });
+        }),
+      );
+    }
+
+    this.applyCaseServiceFilters(baseQb, params.filtersStr, 'list_');
+
+    // Tính tổng Grand Totals và Total count trước khi áp dụng ORDER BY / LIMIT / OFFSET
+    const totalsQb = baseQb.clone();
+    totalsQb.orderBy(); // Đảm bảo không có ORDER BY trong câu truy vấn tổng hợp
+    totalsQb.select([
+      'COUNT(srv.id) AS "totalRows"',
+      'COALESCE(SUM(srv.so_luong_hoa_don), 0) AS "soLuongHoaDon"',
+      'COALESCE(SUM(srv.tien_chua_thue), 0) AS "tienChuaThue"',
+      'COALESCE(SUM(srv.tien_co_thue), 0) AS "tienCoThue"',
+      'COALESCE(SUM(srv.tien_dich_vu), 0) AS "tienDichVu"',
+      'COALESCE(SUM(srv.tien_phu_tung), 0) AS "tienPhuTung"',
+      'COALESCE(SUM(srv.gia_von_phu_tung), 0) AS "giaVonPhuTung"',
+      'COALESCE(SUM(srv.tien_chiet_khau_ct), 0) AS "tienChietKhauCt"',
+      'COALESCE(SUM(srv.tien_phu_phi), 0) AS "tienPhuPhi"',
+    ]);
+
+    const rawTotals = await totalsQb.getRawOne();
+    const total = Number(rawTotals?.totalRows || 0);
+
+    const grandTotal = {
+      soLuongHoaDon: Number(rawTotals?.soLuongHoaDon || 0),
+      tienChuaThue: Number(rawTotals?.tienChuaThue || 0),
+      tienCoThue: Number(rawTotals?.tienCoThue || 0),
+      tienDichVu: Number(rawTotals?.tienDichVu || 0),
+      tienPhuTung: Number(rawTotals?.tienPhuTung || 0),
+      giaVonPhuTung: Number(rawTotals?.giaVonPhuTung || 0),
+      tienChietKhauCt: Number(rawTotals?.tienChietKhauCt || 0),
+      tienPhuPhi: Number(rawTotals?.tienPhuPhi || 0),
+    };
+
+    // Sắp xếp cho truy vấn danh sách phân trang
+    const sortsArr = Array.isArray(params.sorts)
+      ? params.sorts
+      : params.sorts
+        ? [params.sorts]
+        : [];
+
+    if (sortsArr.length > 0) {
+      let isFirstSort = true;
+      for (const s of sortsArr) {
+        if (!s) continue;
+        const isDesc = s.startsWith('-');
+        const rawCol = isDesc ? s.substring(1) : s;
+        const colExpr = this.getCaseServiceColumnSelectExpr(rawCol);
+        if (colExpr) {
+          const orderDir = isDesc ? 'DESC' : 'ASC';
+          if (isFirstSort) {
+            baseQb.orderBy(colExpr, orderDir);
+            isFirstSort = false;
+          } else {
+            baseQb.addOrderBy(colExpr, orderDir);
+          }
+        }
+      }
+    } else {
+      baseQb
+        .orderBy('c.ngay_tiep_nhan', 'DESC', 'NULLS LAST')
+        .addOrderBy('c.ngay_phat_sinh', 'DESC', 'NULLS LAST')
+        .addOrderBy('c.so_chung_tu', 'DESC')
+        .addOrderBy('srv.created_at', 'ASC');
+    }
+
+    // Query các bản ghi cho trang hiện tại
+    baseQb
+      .select([
+        'srv.id AS "id"',
+        'srv.hd_phieu_dich_vu_chi_tiet_id AS "hdPhieuDichVuChiTietId"',
+        'srv.hd_phieu_dich_vu_id AS "hdPhieuDichVuId"',
+        'srv.noi_dung_chi_tiet AS "noiDungChiTiet"',
+        'srv.san_pham_code AS "sanPhamCode"',
+        'srv.san_pham_name AS "sanPhamName"',
+        'srv.loai_san_pham_code AS "loaiSanPhamCode"',
+        'srv.don_vi_tinh_text AS "donViTinhText"',
+        'srv.so_luong_hoa_don AS "soLuongHoaDon"',
+        'srv.don_gia AS "donGia"',
+        'srv.tien_chua_thue AS "tienChuaThue"',
+        'srv.thue_suat AS "thueSuat"',
+        'srv.tien_co_thue AS "tienCoThue"',
+        'srv.so_gio_cong_lam AS "soGioCongLam"',
+        'srv.tien_dich_vu AS "tienDichVu"',
+        'srv.tien_phu_tung AS "tienPhuTung"',
+        'srv.gia_von_phu_tung AS "giaVonPhuTung"',
+        'srv.ty_le_chiet_khau_ct AS "tyLeChietKhauCt"',
+        'srv.tien_chiet_khau_ct AS "tienChietKhauCt"',
+        'srv.kho_code AS "khoCode"',
+        'srv.tien_phu_phi AS "tienPhuPhi"',
+        'c.so_chung_tu AS "soChungTu"',
+        'c.bien_so_xe AS "bienSoXe"',
+        'c.khach_hang_code AS "khachHangCode"',
+        'c.khach_hang_name AS "khachHangName"',
+        'c.tinh_trang_dich_vu AS "status"',
+        'c.ten_tinh_trang_dich_vu AS "statusName"',
+        'c.classification AS "classification"',
+        'c.branch_external_id AS "branchExternalId"',
+        'COALESCE(b.name, b.code, c.branch_external_id) AS "branchName"',
+        'TO_CHAR(COALESCE(c.ngay_tiep_nhan, c.ngay_phat_sinh), \'YYYY-MM-DD\') AS "caseDate"',
+        'TO_CHAR(c.ngay_hoan_thanh_cong_viec, \'YYYY-MM-DD\') AS "completionDate"',
+      ])
+      .offset(offset)
+      .limit(pageSize);
+
+    const rawRows = await baseQb.getRawMany();
+
+    const data = rawRows.map((r) => ({
+      id: r.id,
+      hdPhieuDichVuChiTietId: r.hdPhieuDichVuChiTietId,
+      hdPhieuDichVuId: r.hdPhieuDichVuId,
+      soChungTu: r.soChungTu,
+      bienSoXe: r.bienSoXe,
+      khachHangCode: r.khachHangCode,
+      khachHangName: r.khachHangName,
+      caseDate: r.caseDate,
+      completionDate: r.completionDate,
+      branchExternalId: r.branchExternalId,
+      branchName: r.branchName,
+      status: Number(r.status ?? 0),
+      statusName: r.statusName,
+      classification: r.classification,
+      sanPhamCode: r.sanPhamCode,
+      sanPhamName: r.sanPhamName,
+      noiDungChiTiet: r.noiDungChiTiet,
+      loaiSanPhamCode: r.loaiSanPhamCode,
+      donViTinhText: r.donViTinhText,
+      soLuongHoaDon: Number(r.soLuongHoaDon ?? 0),
+      donGia: Number(r.donGia ?? 0),
+      tienChuaThue: Number(r.tienChuaThue ?? 0),
+      thueSuat: Number(r.thueSuat ?? 0),
+      tienCoThue: Number(r.tienCoThue ?? 0),
+      soGioCongLam: Number(r.soGioCongLam ?? 0),
+      tienDichVu: Number(r.tienDichVu ?? 0),
+      tienPhuTung: Number(r.tienPhuTung ?? 0),
+      giaVonPhuTung: Number(r.giaVonPhuTung ?? 0),
+      tyLeChietKhauCt: Number(r.tyLeChietKhauCt ?? 0),
+      tienChietKhauCt: Number(r.tienChietKhauCt ?? 0),
+      khoCode: r.khoCode,
+      tienPhuPhi: Number(r.tienPhuPhi ?? 0),
+    }));
+
+    // Tính tổng lũy kế đến hết trang hiện tại
+    let cumulative = { ...grandTotal };
+    if (page === 1) {
+      cumulative = {
+        soLuongHoaDon: data.reduce(
+          (acc, r) => acc + (Number(r.soLuongHoaDon) || 0),
+          0,
+        ),
+        tienChuaThue: data.reduce(
+          (acc, r) => acc + (Number(r.tienChuaThue) || 0),
+          0,
+        ),
+        tienCoThue: data.reduce(
+          (acc, r) => acc + (Number(r.tienCoThue) || 0),
+          0,
+        ),
+        tienDichVu: data.reduce(
+          (acc, r) => acc + (Number(r.tienDichVu) || 0),
+          0,
+        ),
+        tienPhuTung: data.reduce(
+          (acc, r) => acc + (Number(r.tienPhuTung) || 0),
+          0,
+        ),
+        giaVonPhuTung: data.reduce(
+          (acc, r) => acc + (Number(r.giaVonPhuTung) || 0),
+          0,
+        ),
+        tienChietKhauCt: data.reduce(
+          (acc, r) => acc + (Number(r.tienChietKhauCt) || 0),
+          0,
+        ),
+        tienPhuPhi: data.reduce(
+          (acc, r) => acc + (Number(r.tienPhuPhi) || 0),
+          0,
+        ),
+      };
+    } else if (page * pageSize < total) {
+      try {
+        const cumRows = await baseQb
+          .clone()
+          .select([
+            'srv.so_luong_hoa_don AS "soLuongHoaDon"',
+            'srv.tien_chua_thue AS "tienChuaThue"',
+            'srv.tien_co_thue AS "tienCoThue"',
+            'srv.tien_dich_vu AS "tienDichVu"',
+            'srv.tien_phu_tung AS "tienPhuTung"',
+            'srv.gia_von_phu_tung AS "giaVonPhuTung"',
+            'srv.tien_chiet_khau_ct AS "tienChietKhauCt"',
+            'srv.tien_phu_phi AS "tienPhuPhi"',
+          ])
+          .offset(0)
+          .limit(page * pageSize)
+          .getRawMany();
+
+        cumulative = {
+          soLuongHoaDon: cumRows.reduce(
+            (acc, r) => acc + (Number(r.soLuongHoaDon) || 0),
+            0,
+          ),
+          tienChuaThue: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienChuaThue) || 0),
+            0,
+          ),
+          tienCoThue: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienCoThue) || 0),
+            0,
+          ),
+          tienDichVu: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienDichVu) || 0),
+            0,
+          ),
+          tienPhuTung: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienPhuTung) || 0),
+            0,
+          ),
+          giaVonPhuTung: cumRows.reduce(
+            (acc, r) => acc + (Number(r.giaVonPhuTung) || 0),
+            0,
+          ),
+          tienChietKhauCt: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienChietKhauCt) || 0),
+            0,
+          ),
+          tienPhuPhi: cumRows.reduce(
+            (acc, r) => acc + (Number(r.tienPhuPhi) || 0),
+            0,
+          ),
+        };
+      } catch (err) {
+        this.logger.warn(
+          `Failed to calculate cumulative for case services: ${err}`,
+        );
+      }
+    }
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize) || 1,
+      },
+      totals: {
+        grandTotal,
+        cumulative,
+      },
+    };
+  }
+
+  async getCaseServiceColumnOptions(
+    branchId: string,
+    column: string,
+    search: string = '',
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+    serviceType?: string,
+  ): Promise<{
+    items: string[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const colExpr = this.getCaseServiceColumnSelectExpr(column);
+    if (!colExpr) {
+      return { items: [], total: 0, page: 1, totalPages: 1 };
+    }
+
+    const repo =
+      this.serviceRepo || this.caseRepo.manager.getRepository(KgaraCaseService);
+
+    const qb = repo
+      .createQueryBuilder('srv')
+      .innerJoin(
+        KgaraCase,
+        'c',
+        'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
+      )
+      .where('c.kgara_deleted_at IS NULL');
+
+    if (
+      branchId &&
+      branchId !== 'null' &&
+      branchId !== 'undefined' &&
+      branchId.trim() !== ''
+    ) {
+      qb.andWhere('c.branch_external_id = :branchId', {
+        branchId: branchId.trim(),
+      });
+    }
+
+    if (serviceType && serviceType !== 'ALL') {
+      qb.andWhere('srv.loai_san_pham_code = :serviceType', { serviceType });
+    }
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, values] of Object.entries(filters)) {
+          if (col === column) continue;
+          if (!values || values.length === 0) continue;
+          this.applySingleCaseServiceColumnFilter(
+            qb,
+            col,
+            values,
+            `opt_${col}`,
+          );
+        }
+      } catch {
+        // ignore malformed filter JSON
+      }
+    }
+
+    if (search && search.trim()) {
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${colExpr} AS TEXT)`,
+        search.trim(),
+        'col_opt_search',
+      );
+    }
+
+    qb.select(`DISTINCT CAST(${colExpr} AS TEXT)`, 'val').andWhere(
+      `${colExpr} IS NOT NULL AND CAST(${colExpr} AS TEXT) != ''`,
+    );
+
+    const countQb = qb.clone();
+    countQb.orderBy();
+    const countRes = await countQb.getRawMany();
+    const total = countRes.length;
+
+    qb.orderBy('val', 'ASC')
+      .offset((page - 1) * pageSize)
+      .limit(pageSize);
+
+    const rows = await qb.getRawMany();
+    const items = rows.map((r) => r.val).filter(Boolean);
+
+    return {
+      items,
+      total,
+      page,
+      totalPages: Math.ceil(total / pageSize) || 1,
+    };
+  }
+
+  async exportCaseServicesExcel(params: {
+    branchId?: string;
+    q?: string;
+    from?: string;
+    to?: string;
+    serviceType?: string;
+    filtersStr?: string;
+    sorts?: string | string[];
+  }): Promise<Buffer> {
+    const result = await this.findCaseServices({
+      ...params,
+      page: 1,
+      pageSize: 50000,
+    });
+
+    const items = result.data || [];
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Liouni ERP';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Chi tiết DV & Phụ tùng', {
+      views: [{ state: 'frozen', ySplit: 1, xSplit: 4 }],
+    });
+
+    sheet.columns = [
+      { header: 'STT', key: 'index', width: 6 },
+      { header: 'Ngày tiếp nhận', key: 'caseDate', width: 15 },
+      { header: 'Ngày kết thúc', key: 'completionDate', width: 15 },
+      { header: 'Số phiếu DV', key: 'soChungTu', width: 22 },
+      { header: 'Biển số xe', key: 'bienSoXe', width: 14 },
+      { header: 'Khách hàng', key: 'khachHangName', width: 28 },
+      { header: 'Loại', key: 'loaiHienThi', width: 14 },
+      { header: 'Mã hạng mục', key: 'sanPhamCode', width: 18 },
+      { header: 'Tên hạng mục', key: 'sanPhamName', width: 30 },
+      { header: 'Diễn giải chi tiết', key: 'noiDungChiTiet', width: 35 },
+      { header: 'ĐVT', key: 'donViTinhText', width: 10 },
+      { header: 'Số lượng', key: 'soLuongHoaDon', width: 12 },
+      { header: 'Đơn giá', key: 'donGia', width: 15 },
+      { header: 'Tiền trước thuế', key: 'tienChuaThue', width: 16 },
+      { header: 'Thuế suất (%)', key: 'thueSuat', width: 14 },
+      { header: 'Thành tiền', key: 'tienCoThue', width: 18 },
+      { header: 'Tiền công DV', key: 'tienDichVu', width: 16 },
+      { header: 'Tiền phụ tùng', key: 'tienPhuTung', width: 16 },
+      { header: 'Giá vốn PT', key: 'giaVonPhuTung', width: 16 },
+      { header: 'Chiết khấu', key: 'tienChietKhauCt', width: 14 },
+      { header: 'Mã kho', key: 'khoCode', width: 14 },
+      { header: 'Chi nhánh', key: 'branchName', width: 22 },
+      { header: 'Trạng thái', key: 'statusName', width: 16 },
+      { header: 'Phân loại', key: 'classification', width: 18 },
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 28;
+    headerRow.font = {
+      name: 'Arial',
+      size: 10,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' },
+    };
+    headerRow.alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+      wrapText: true,
+    };
+
+    items.forEach((item, idx) => {
+      const loaiHienThi =
+        item.loaiSanPhamCode === 'PT'
+          ? 'Phụ tùng'
+          : item.loaiSanPhamCode === 'DV'
+            ? 'Công dịch vụ'
+            : item.loaiSanPhamCode || '—';
+
+      const row = sheet.addRow({
+        index: idx + 1,
+        caseDate: item.caseDate || '—',
+        completionDate: item.completionDate || '—',
+        soChungTu: item.soChungTu || '—',
+        bienSoXe: item.bienSoXe || '—',
+        khachHangName: item.khachHangName || '—',
+        loaiHienThi,
+        sanPhamCode: item.sanPhamCode || '—',
+        sanPhamName: item.sanPhamName || '—',
+        noiDungChiTiet: item.noiDungChiTiet || item.sanPhamName || '—',
+        donViTinhText: item.donViTinhText || '—',
+        soLuongHoaDon: item.soLuongHoaDon || 0,
+        donGia: item.donGia || 0,
+        tienChuaThue: item.tienChuaThue || 0,
+        thueSuat: item.thueSuat || 0,
+        tienCoThue: item.tienCoThue || 0,
+        tienDichVu: item.tienDichVu || 0,
+        tienPhuTung: item.tienPhuTung || 0,
+        giaVonPhuTung: item.giaVonPhuTung || 0,
+        tienChietKhauCt: item.tienChietKhauCt || 0,
+        khoCode: item.khoCode || '—',
+        branchName: item.branchName || '—',
+        statusName: item.statusName || '—',
+        classification: item.classification || '—',
+      });
+
+      row.height = 20;
+      row.font = { name: 'Arial', size: 9 };
+      row.alignment = { vertical: 'middle' };
+
+      row.getCell('index').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('caseDate').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('completionDate').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('bienSoXe').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('loaiHienThi').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('donViTinhText').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('thueSuat').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('khoCode').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('statusName').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('classification').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+
+      row.getCell('soLuongHoaDon').numFmt = '#,##0.00';
+      row.getCell('donGia').numFmt = '#,##0';
+      row.getCell('tienChuaThue').numFmt = '#,##0';
+      row.getCell('tienCoThue').numFmt = '#,##0';
+      row.getCell('tienDichVu').numFmt = '#,##0';
+      row.getCell('tienPhuTung').numFmt = '#,##0';
+      row.getCell('giaVonPhuTung').numFmt = '#,##0';
+      row.getCell('tienChietKhauCt').numFmt = '#,##0';
+
+      for (let c = 1; c <= 24; c++) {
+        row.getCell(c).border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+      }
+    });
+
+    // Summary footer row
+    if (items.length > 0) {
+      const summaryRowIdx = items.length + 2;
+      const summaryRow = sheet.getRow(summaryRowIdx);
+      summaryRow.height = 24;
+      summaryRow.font = { name: 'Arial', size: 10, bold: true };
+
+      summaryRow.getCell(1).value = `TỔNG CỘNG (${items.length} dòng)`;
+      sheet.mergeCells(`A${summaryRowIdx}:K${summaryRowIdx}`);
+      summaryRow.getCell(1).alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+
+      summaryRow.getCell(12).value = {
+        formula: `SUM(L2:L${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(14).value = {
+        formula: `SUM(N2:N${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(16).value = {
+        formula: `SUM(P2:P${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(17).value = {
+        formula: `SUM(Q2:Q${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(18).value = {
+        formula: `SUM(R2:R${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(19).value = {
+        formula: `SUM(S2:S${summaryRowIdx - 1})`,
+      };
+      summaryRow.getCell(20).value = {
+        formula: `SUM(T2:T${summaryRowIdx - 1})`,
+      };
+
+      summaryRow.getCell(12).numFmt = '#,##0.00';
+      summaryRow.getCell(14).numFmt = '#,##0';
+      summaryRow.getCell(16).numFmt = '#,##0';
+      summaryRow.getCell(17).numFmt = '#,##0';
+      summaryRow.getCell(18).numFmt = '#,##0';
+      summaryRow.getCell(19).numFmt = '#,##0';
+      summaryRow.getCell(20).numFmt = '#,##0';
+
+      for (let col = 1; col <= 24; col++) {
+        const cell = summaryRow.getCell(col);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF1F5F9' },
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'double', color: { argb: 'FF94A3B8' } },
         };
       }
     }

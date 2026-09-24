@@ -6,6 +6,8 @@
  * Không dùng thư viện ngoài — sử dụng Node.js built-in DOMParser.
  */
 
+import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
+
 export interface ParsedVietnamInvoiceItem {
   itemCode?: string | null;
   description: string;
@@ -384,7 +386,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
     const stt = toNum(getTextIn(el, 'STT', 'stt')) || i + 1;
-    const itemCode =
+    const rawItemCode =
       getTextIn(
         el,
         'MHHDVu',
@@ -399,6 +401,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
         'ma_vt',
       ) ?? null;
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
+    const itemCode = rawItemCode || extractVinfastItemCode(desc) || null;
     const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
     const quantity = getTextIn(el, 'SLuong', 'sluong')
       ? toNum(getTextIn(el, 'SLuong', 'sluong'))
@@ -602,7 +605,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
   const lines = root.getElementsByTagName('InvoiceLine');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const itemCode =
+    const rawItemCode =
       getTextIn(
         line,
         'ItemCode',
@@ -614,6 +617,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
         'ProductCode',
       ) ?? null;
     const desc = getTextIn(line, 'ItemName', 'Description') ?? '';
+    const itemCode = rawItemCode || extractVinfastItemCode(desc) || null;
     const unit = getTextIn(line, 'UnitName', 'Unit') ?? null;
     const quantity = getTextIn(line, 'Quantity')
       ? toNum(getTextIn(line, 'Quantity'))

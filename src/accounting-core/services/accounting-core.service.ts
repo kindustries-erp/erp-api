@@ -13,6 +13,10 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '../../common/utils/query-builder.util';
+import { UpdateJournalEntryDto } from '../dto/update-journal-entry.dto';
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class AccountingCoreService {
@@ -1036,14 +1040,120 @@ export class AccountingCoreService {
     };
   }
 
-  async getJournalEntryById(id: string) {
-    return this.journalEntryRepo
+  async getJournalEntryById(idOrEntryNo: string) {
+    if (!idOrEntryNo || typeof idOrEntryNo !== 'string') {
+      return null;
+    }
+    const trimmed = idOrEntryNo.trim();
+    const isUuid = UUID_REGEX.test(trimmed);
+
+    const qb = this.journalEntryRepo
       .createQueryBuilder('je')
       .leftJoinAndSelect('je.lines', 'lines')
       .leftJoinAndSelect('lines.account', 'account')
-      .leftJoinAndSelect('je.branch', 'branch')
-      .where('je.id = :id', { id })
-      .getOne();
+      .leftJoinAndSelect('je.branch', 'branch');
+
+    if (isUuid) {
+      qb.where('je.id = :id', { id: trimmed });
+    } else {
+      qb.where('je.entryNo = :entryNo', { entryNo: trimmed });
+    }
+
+    return qb.getOne();
+  }
+
+  async updateJournalEntry(idOrEntryNo: string, dto: UpdateJournalEntryDto) {
+    const entry = await this.getJournalEntryById(idOrEntryNo);
+    if (!entry) {
+      throw new NotFoundException(`Bút toán không tồn tại (${idOrEntryNo})`);
+    }
+
+    if (dto.entryNo && dto.entryNo.trim() !== entry.entryNo) {
+      const trimmedEntryNo = dto.entryNo.trim();
+      const existing = await this.journalEntryRepo.findOne({
+        where: { entryNo: trimmedEntryNo, isDeleted: false },
+      });
+      if (existing && existing.id !== entry.id) {
+        throw new BadRequestException(
+          `Số chứng từ "${trimmedEntryNo}" đã tồn tại trên hệ thống`,
+        );
+      }
+      entry.entryNo = trimmedEntryNo;
+    }
+
+    if (dto.date) {
+      entry.date = new Date(dto.date);
+    }
+    if (dto.documentDate !== undefined) {
+      entry.documentDate = dto.documentDate ? new Date(dto.documentDate) : null;
+    }
+    if (dto.description !== undefined) {
+      entry.description = dto.description ? dto.description.trim() : null;
+    }
+    if (dto.subjectName !== undefined) {
+      entry.subjectName = dto.subjectName ? dto.subjectName.trim() : null;
+    }
+    if (dto.branchId) {
+      entry.branchId = dto.branchId;
+    }
+
+    if (dto.lines && Array.isArray(dto.lines)) {
+      if (dto.lines.length === 0) {
+        throw new BadRequestException(
+          'Bút toán phải có ít nhất một dòng hạch toán',
+        );
+      }
+
+      const totalDebit = dto.lines.reduce(
+        (sum, l) => sum + Number(l.debit || 0),
+        0,
+      );
+      const totalCredit = dto.lines.reduce(
+        (sum, l) => sum + Number(l.credit || 0),
+        0,
+      );
+
+      if (Math.abs(totalDebit - totalCredit) >= 0.01) {
+        throw new BadRequestException(
+          'Hạch toán không cân bằng: Tổng Nợ phải bằng Tổng Có',
+        );
+      }
+
+      // Check account validity
+      const uniqueAccountIds = Array.from(
+        new Set(dto.lines.map((l) => l.accountId).filter(Boolean)),
+      );
+      if (uniqueAccountIds.length > 0) {
+        const foundAccounts = await this.chartOfAccountRepo.find({
+          where: uniqueAccountIds.map((id) => ({ id, isDeleted: false })),
+        });
+        if (foundAccounts.length !== uniqueAccountIds.length) {
+          throw new BadRequestException(
+            'Có tài khoản kế toán không tồn tại hoặc đã bị xóa.',
+          );
+        }
+      }
+
+      await this.journalEntryLineRepo.delete({ journalEntryId: entry.id });
+
+      const newLines = dto.lines.map((line, idx) =>
+        this.journalEntryLineRepo.create({
+          journalEntryId: entry.id,
+          accountId: line.accountId,
+          debit: Number(line.debit || 0),
+          credit: Number(line.credit || 0),
+          description: line.description
+            ? line.description.trim()
+            : entry.description || '',
+          sort: idx,
+        }),
+      );
+      await this.journalEntryLineRepo.save(newLines);
+    }
+
+    await this.journalEntryRepo.save(entry);
+
+    return this.getJournalEntryById(entry.id);
   }
 
   async getChartOfAccounts(query: any) {
@@ -1376,17 +1486,29 @@ export class AccountingCoreService {
     };
   }
 
-  async getChartOfAccountById(id: string) {
-    const account = await this.chartOfAccountRepo
+  async getChartOfAccountById(idOrCode: string) {
+    if (!idOrCode || typeof idOrCode !== 'string') {
+      throw new NotFoundException('Tài khoản kế toán không tồn tại');
+    }
+    const trimmed = idOrCode.trim();
+    const isUuid = UUID_REGEX.test(trimmed);
+
+    const qb = this.chartOfAccountRepo
       .createQueryBuilder('coa')
       .leftJoinAndSelect('coa.parent', 'parent')
-      .where('coa.id = :id', { id })
-      .andWhere('coa.isDeleted = false')
-      .getOne();
+      .where('coa.isDeleted = false');
+
+    if (isUuid) {
+      qb.andWhere('coa.id = :id', { id: trimmed });
+    } else {
+      qb.andWhere('coa.accountCode = :code', { code: trimmed });
+    }
+
+    const account = await qb.getOne();
 
     if (!account) {
       throw new NotFoundException(
-        `Tài khoản kế toán không tồn tại (ID: ${id})`,
+        `Tài khoản kế toán không tồn tại (${idOrCode})`,
       );
     }
 

@@ -6,6 +6,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
   let service: InvoiceLifecycleService;
   let repository: any;
   let bankTransactionsCoreService: any;
+  let transactionAccountingService: any;
 
   beforeEach(() => {
     repository = {
@@ -26,7 +27,9 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       },
     };
 
-    bankTransactionsCoreService = {
+    bankTransactionsCoreService = {};
+
+    transactionAccountingService = {
       refreshJournalEntriesForBankTransaction: jest
         .fn()
         .mockResolvedValue(undefined),
@@ -42,6 +45,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
         deleteJournalEntryBySource: jest.fn(),
         updateJournalEntryBranch: jest.fn(),
       } as any,
+      transactionAccountingService,
     );
   });
 
@@ -66,8 +70,11 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     );
     expect(repository.manager.save).toHaveBeenCalled();
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
-    ).not.toHaveBeenCalled();
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-1');
+    expect(
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-2');
   });
 
   it('skips auto-set when linked statements have mixed branches but still links vouchers', async () => {
@@ -89,6 +96,9 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     expect(repository.save).not.toHaveBeenCalled();
     expect(repository.manager.save).toHaveBeenCalled();
     expect(result).toEqual({ message: 'Đã liên kết phiếu thành công' });
+    expect(
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-1');
   });
 
   it('does not override existing invoice branch', async () => {
@@ -106,8 +116,8 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     expect(repository.save).not.toHaveBeenCalled();
     expect(repository.manager.save).toHaveBeenCalled();
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
-    ).not.toHaveBeenCalled();
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-1');
   });
 
   it('skips auto-set when one or more linked statements are missing', async () => {
@@ -128,8 +138,8 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     expect(repository.save).not.toHaveBeenCalled();
     expect(repository.manager.save).toHaveBeenCalled();
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
-    ).not.toHaveBeenCalled();
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-1');
   });
 
   it('skips auto-set when linked statements have empty branch', async () => {
@@ -162,7 +172,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('unlinks voucher without refreshing statement journal entries', async () => {
+  it('unlinks voucher and refreshes statement journal entries', async () => {
     const result = await service.removeVoucherFromInvoice('inv-1', 'txn-1');
 
     expect(repository.manager.delete).toHaveBeenCalledWith(
@@ -174,8 +184,8 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     );
     expect(result).toEqual({ message: 'Đã xóa liên kết phiếu thành công' });
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
-    ).not.toHaveBeenCalled();
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
+    ).toHaveBeenCalledWith('txn-1');
   });
 
   it('updates invoice without refreshing linked statement journals', async () => {
@@ -197,7 +207,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       expect.objectContaining({ id: 'inv-1', notes: 'updated' }),
     );
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
   });
 
@@ -221,21 +231,44 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       { invoiceId: 'inv-1' },
     );
     expect(
-      bankTransactionsCoreService.refreshJournalEntriesForBankTransaction,
+      transactionAccountingService.refreshJournalEntriesForBankTransaction,
     ).not.toHaveBeenCalled();
   });
 
   describe('autoPostStandard', () => {
-    it('auto-posts IN invoice with 642 debit account for tax code in 642 list', async () => {
+    const originalEnv = process.env.ENABLE_LIVE_AUTO_POSTING;
+
+    afterEach(() => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = originalEnv;
+    });
+
+    it('skips auto-posting when ENABLE_LIVE_AUTO_POSTING is not true', async () => {
+      delete process.env.ENABLE_LIVE_AUTO_POSTING;
       const invoice = {
-        id: 'inv-in-642',
+        id: 'inv-in-disabled',
         isDeleted: false,
         branchId: 'branch-1',
         postingStatus: 'UNPOSTED',
         direction: 'IN',
-        sellerTaxCode: '0317121966',
-        preVatAmount: 1000000,
-        vatAmount: 100000,
+        totalAmount: 1100000,
+        invoiceNo: '0000123',
+      };
+      repository.findOne.mockResolvedValue(invoice);
+      const spyPost = jest.spyOn(service, 'postInvoice');
+
+      const result = await service.autoPostStandard('inv-in-disabled');
+      expect(result).toBe(invoice);
+      expect(spyPost).not.toHaveBeenCalled();
+    });
+
+    it('auto-posts IN invoice with T0003 and 331 accounts when enabled', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      const invoice = {
+        id: 'inv-in-transit',
+        isDeleted: false,
+        branchId: 'branch-1',
+        postingStatus: 'UNPOSTED',
+        direction: 'IN',
         totalAmount: 1100000,
         invoiceNo: '0000123',
         invoiceDate: '2026-08-18',
@@ -243,9 +276,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
 
       repository.findOne.mockResolvedValue(invoice);
       repository.manager.query.mockResolvedValueOnce([
-        { id: 'acc-642', account_code: '642' },
-        { id: 'acc-632', account_code: '632' },
-        { id: 'acc-133', account_code: '133' },
+        { id: 'acc-t0003', account_code: 'T0003' },
         { id: 'acc-331', account_code: '331' },
       ]);
 
@@ -253,21 +284,16 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
         .spyOn(service, 'postInvoice')
         .mockResolvedValue(invoice as any);
 
-      await service.autoPostStandard('inv-in-642');
+      await service.autoPostStandard('inv-in-transit');
 
       expect(spyPost).toHaveBeenCalledWith(
-        'inv-in-642',
+        'inv-in-transit',
         expect.objectContaining({
           postingDate: '2026-08-18',
           lines: [
             expect.objectContaining({
-              accountId: 'acc-642',
-              debit: 1000000,
-              credit: 0,
-            }),
-            expect.objectContaining({
-              accountId: 'acc-133',
-              debit: 100000,
+              accountId: 'acc-t0003',
+              debit: 1100000,
               credit: 0,
             }),
             expect.objectContaining({
@@ -280,69 +306,14 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       );
     });
 
-    it('auto-posts IN invoice with 632 debit account for default/VinFast tax codes', async () => {
+    it('auto-posts OUT invoice with 131 and T0002 accounts when enabled', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
       const invoice = {
-        id: 'inv-in-632',
-        isDeleted: false,
-        branchId: 'branch-1',
-        postingStatus: 'UNPOSTED',
-        direction: 'IN',
-        sellerTaxCode: '0108926276', // VinFast
-        preVatAmount: 5000000,
-        vatAmount: 500000,
-        totalAmount: 5500000,
-        invoiceNo: '0000999',
-        invoiceDate: '2026-08-18',
-      };
-
-      repository.findOne.mockResolvedValue(invoice);
-      repository.manager.query.mockResolvedValueOnce([
-        { id: 'acc-642', account_code: '642' },
-        { id: 'acc-632', account_code: '632' },
-        { id: 'acc-133', account_code: '133' },
-        { id: 'acc-331', account_code: '331' },
-      ]);
-
-      const spyPost = jest
-        .spyOn(service, 'postInvoice')
-        .mockResolvedValue(invoice as any);
-
-      await service.autoPostStandard('inv-in-632');
-
-      expect(spyPost).toHaveBeenCalledWith(
-        'inv-in-632',
-        expect.objectContaining({
-          postingDate: '2026-08-18',
-          lines: [
-            expect.objectContaining({
-              accountId: 'acc-632',
-              debit: 5000000,
-              credit: 0,
-            }),
-            expect.objectContaining({
-              accountId: 'acc-133',
-              debit: 500000,
-              credit: 0,
-            }),
-            expect.objectContaining({
-              accountId: 'acc-331',
-              debit: 0,
-              credit: 5500000,
-            }),
-          ],
-        }),
-      );
-    });
-
-    it('auto-posts OUT invoice with 131, 511, 3331 accounts', async () => {
-      const invoice = {
-        id: 'inv-out-1',
+        id: 'inv-out-transit',
         isDeleted: false,
         branchId: 'branch-1',
         postingStatus: 'UNPOSTED',
         direction: 'OUT',
-        preVatAmount: 2000000,
-        vatAmount: 200000,
         totalAmount: 2200000,
         invoiceNo: '0000777',
         invoiceDate: '2026-08-18',
@@ -351,18 +322,17 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       repository.findOne.mockResolvedValue(invoice);
       repository.manager.query.mockResolvedValueOnce([
         { id: 'acc-131', account_code: '131' },
-        { id: 'acc-511', account_code: '511' },
-        { id: 'acc-3331', account_code: '3331' },
+        { id: 'acc-t0002', account_code: 'T0002' },
       ]);
 
       const spyPost = jest
         .spyOn(service, 'postInvoice')
         .mockResolvedValue(invoice as any);
 
-      await service.autoPostStandard('inv-out-1');
+      await service.autoPostStandard('inv-out-transit');
 
       expect(spyPost).toHaveBeenCalledWith(
-        'inv-out-1',
+        'inv-out-transit',
         expect.objectContaining({
           postingDate: '2026-08-18',
           lines: [
@@ -372,14 +342,9 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
               credit: 0,
             }),
             expect.objectContaining({
-              accountId: 'acc-511',
+              accountId: 'acc-t0002',
               debit: 0,
-              credit: 2000000,
-            }),
-            expect.objectContaining({
-              accountId: 'acc-3331',
-              debit: 0,
-              credit: 200000,
+              credit: 2200000,
             }),
           ],
         }),

@@ -30,9 +30,9 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (200px) | `Đã Trả` (200px) | `Còn Phải Trả` (200px, nền neutral) | `Còn Phải Trả Có HĐ` (200px) | `Còn Phải Trả Không HĐ` (200px).
   - Hàng tổng cộng (`summaryRow`): Hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
   - Hỗ trợ Context Menu chuột phải trên từng dòng tháng mở **`GarageMonthDetailDrawer.tsx`** (2-column StandardFormDrawer layout):
-    - **Cột Trái (Main Content)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) và Bảng phân loại theo Hóa đơn Thuế (Có HĐ vs Không HĐ) với các cột `#`, `Loại nghiệp vụ`, `Tổng phát sinh`, `Đã thu/chi`, `Còn lại`, `Tỷ trọng (%)` và dòng tổng cộng `Σ`. Cả 2 bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`), loại bỏ outer wrapper div chống double-border và đồng nhất nút `Xóa bộ lọc (N)` nằm bên trái cạnh tiêu đề section.
+    - **Cột Trái (Main Content)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) với 8 cột chuẩn hóa: `#` (40px), `Loại nghiệp vụ` (200px), `Tổng phát sinh` (140px), `Đã thu/chi` (150px kèm thanh tiến độ), `Còn phải thu/trả` (140px), `Còn phải thu/trả có HĐ` (150px), `Còn phải thu/trả không HĐ` (150px), `Tỷ trọng (%)` (90px) và dòng tổng cộng `Σ`. Bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`), loại bỏ outer wrapper div chống double-border và đồng nhất nút `Xóa bộ lọc (N)` nằm bên trái cạnh tiêu đề section.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
-  - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** (`hd_phieu_dich_vu_id IS NULL`).
+  - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng và từng nhóm Phân loại Nghiệp vụ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
@@ -57,6 +57,15 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Card Doanh thu: **Doanh thu thuần** & **Doanh thu có VAT** (khớp số liệu với bảng chi tiết).
     - Card Chi phí: **Chi phí thuần** & **Chi phí có VAT**.
   - Hỗ trợ click-to-drilldown xem danh sách phiếu dịch vụ chi tiết hoàn thành trong kỳ (`getCheckpointCases`).
+- **Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ (`GarageConversionFunnelCard.tsx`)**:
+  - Hub phân tích 3 tầng tích hợp toàn diện:
+    - **Tầng 1**: 4 Cards tổng quan tiếp nhận & tiến độ (Tổng tiếp nhận, Đang xử lý, Đã hoàn thành, Hủy) kèm sub-badge Dự thu Hôm nay & Tháng này và thanh tỷ lệ chuyển đổi trực quan.
+    - **Tầng 2**: Toolbar điều khiển chuyển đổi hiển thị `[$ Giá trị (VND)] / [Số lượng (Xe)]` ngay phía trên khu vực biểu đồ + Grid 12 cột chứa 3 biểu đồ song song:
+      - Biểu đồ Dòng Thời Gian (6 Tháng, thứ tự Trái sang Phải, stacked bars Doanh số/SL + line % Hoàn tất, click-to-filter tháng).
+      - Donut Chart Cơ Cấu Nghiệp Vụ (ERP) (4 nhóm ERP: Sửa chữa chung, Ký gửi/Nội bộ, OJ Ngoài, Khác).
+      - Donut Chart Phân Bổ Trạng Thái Phiếu DV (Hoàn tất, Đang xử lý, Báo giá, Tiếp nhận, Hủy).
+    - **Tầng 3**: Bảng `<DataTable variant="spreadsheet">` chi tiết 4 phân loại ERP chuẩn `/standardize-table` (STT `#` 40px center, No Blue Mandate, SubtotalSummaryCell footer).
+  - Dữ liệu tính toán độc lập tại `conversionFunnel` & `conversionFunnelByMonth` trong `garage-dashboard.service.ts`, phản hồi tức thì theo kỳ tháng được chọn.
 - **Xuất Báo Cáo Excel Chuyên Nghiệp**:
   - `exportExcel`: Báo cáo Tổng quan Garage 2 sheets (Tổng quan tháng & Chi tiết phiếu dịch vụ).
   - `exportPnlExcel`: Báo cáo P&L theo tháng chi tiết từng dòng doanh thu, chi phí, OPEX, hoa hồng và lợi nhuận ròng.
@@ -186,11 +195,14 @@ Resource RBAC: `garage`
     - [`garageOpexApi.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
     - [`useGarageOpexList.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
-  - Pages & Components:
-    - [`GarageDashboard.tsx`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/pages/GarageDashboard.tsx) (Trang Dashboard chính chứa Section P&L)
-    - [`GaragePnlSection.tsx`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/components/GaragePnlSection.tsx) (Section Báo cáo P&L dạng bảng phân cấp, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
-    - [`GarageOpex.tsx`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
-    - [`GarageOpexDrawer.tsx`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
+  - Pages & Components (Chuẩn `/erp-atomic-refactor`):
+    - [`pages/GarageDashboard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
+    - [`components/GarageStatsCards/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
+    - [`components/GarageConversionFunnelCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
+    - [`components/GaragePnlSection/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 7 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+    - [`components/GaragePaymentProgressCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GaragePaymentProgressCard/) (Tiến độ thu/chi & công nợ dịch vụ theo tháng)
+    - [`GarageOpex.tsx`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
+    - [`GarageOpexDrawer.tsx`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
 
 ---
 

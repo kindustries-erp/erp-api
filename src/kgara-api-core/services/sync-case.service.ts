@@ -15,6 +15,8 @@ import { SyncGrossProfitService } from './sync-gross-profit.service';
 import {
   parseSafeDate,
   extractNetPayableAmount,
+  extractKgaraClassification,
+  mapKgaraClassificationToErp,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -257,6 +259,26 @@ export class SyncCaseService {
 
           gwCase.branchExternalId = branchExternalId;
           gwCase.rawData = c;
+
+          // KGara Classification extraction & Zero-Overwrite auto-mapping
+          const { kgaraClassification, kgaraClassificationCode } =
+            extractKgaraClassification(c);
+          if (
+            kgaraClassification !== null ||
+            kgaraClassificationCode !== null
+          ) {
+            gwCase.kgaraClassification = kgaraClassification;
+            gwCase.kgaraClassificationCode = kgaraClassificationCode;
+            if (
+              gwCase.classification === null ||
+              gwCase.classification === undefined
+            ) {
+              gwCase.classification = mapKgaraClassificationToErp(
+                kgaraClassificationCode,
+                kgaraClassification,
+              );
+            }
+          }
 
           // Restore case if it was previously soft-deleted
           if (gwCase.kgaraDeletedAt) {
@@ -537,6 +559,25 @@ export class SyncCaseService {
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
 
+      // KGara Classification extraction & Zero-Overwrite auto-mapping
+      const {
+        kgaraClassification: detailClassification,
+        kgaraClassificationCode: detailClassificationCode,
+      } = extractKgaraClassification(caseData);
+      if (detailClassification !== null || detailClassificationCode !== null) {
+        gwCase.kgaraClassification = detailClassification;
+        gwCase.kgaraClassificationCode = detailClassificationCode;
+        if (
+          gwCase.classification === null ||
+          gwCase.classification === undefined
+        ) {
+          gwCase.classification = mapKgaraClassificationToErp(
+            detailClassificationCode,
+            detailClassification,
+          );
+        }
+      }
+
       // Restore case if it was previously soft-deleted
       if (gwCase.kgaraDeletedAt) {
         gwCase.kgaraDeletedAt = null;
@@ -548,38 +589,65 @@ export class SyncCaseService {
 
       // Sync Case Services (Lines)
       let linesCount = 0;
-      if (
-        caseData.ListPhieuDichVuChiTiet &&
-        Array.isArray(caseData.ListPhieuDichVuChiTiet)
-      ) {
-        for (const s of caseData.ListPhieuDichVuChiTiet) {
+      const rawLines =
+        caseData.ListPhieuDichVuChiTiet ||
+        caseData.PhieuDichVuChiTiet ||
+        caseData.HoaDonChiTiet;
+
+      if (rawLines && Array.isArray(rawLines)) {
+        for (const s of rawLines) {
+          const detailId =
+            s.HdPhieuDichVuChiTietID ||
+            s.HdPhieuDichVuChiTietId ||
+            s.hdPhieuDichVuChiTietId ||
+            s.ID ||
+            s.Id;
+          if (!detailId) continue;
+
           let srv = await this.caseServiceRepo.findOne({
-            where: { hdPhieuDichVuChiTietId: s.HdPhieuDichVuChiTietID },
+            where: { hdPhieuDichVuChiTietId: detailId },
           });
           if (!srv) {
             srv = new KgaraCaseService();
-            srv.hdPhieuDichVuChiTietId = s.HdPhieuDichVuChiTietID;
+            srv.hdPhieuDichVuChiTietId = detailId;
             srv.hdPhieuDichVuId = targetCaseId;
           }
 
-          srv.noiDungChiTiet = s.NoiDungChiTiet;
-          srv.sanPhamCode = s.SanPhamCode;
-          srv.sanPhamName = s.SanPhamName;
-          srv.loaiSanPhamCode = s.LoaiSanPhamCode;
-          srv.donViTinhText = s.DonViTinhText;
-          srv.soLuongHoaDon = s.SoLuongHoaDon;
-          srv.donGia = s.DonGia;
-          srv.tienChuaThue = s.TienChuaThue;
-          srv.thueSuat = s.ThueSuat;
-          srv.tienCoThue = s.TienCoThue;
-          srv.soGioCongLam = s.SoGioCongLam;
-          srv.tienDichVu = s.TienDichVu;
-          srv.tienPhuTung = s.TienPhuTung;
-          srv.giaVonPhuTung = s.GiaVonPhuTung;
-          srv.tyLeChietKhauCt = s.TyLeChietKhauCt || s.TyLeChietKhauCT;
-          srv.tienChietKhauCt = s.TienChietKhauCt || s.TienChietKhauCT;
-          srv.khoCode = s.KhoCode;
-          srv.tienPhuPhi = s.TienPhuPhi;
+          srv.noiDungChiTiet =
+            s.NoiDungChiTiet || s.TenSanPhamDichVu || s.noiDungChiTiet || null;
+          srv.sanPhamCode = s.SanPhamCode || s.sanPhamCode || null;
+          srv.sanPhamName =
+            s.SanPhamName || s.TenSanPham || s.sanPhamName || null;
+          srv.loaiSanPhamCode = s.LoaiSanPhamCode || s.loaiSanPhamCode || null;
+          srv.donViTinhText =
+            s.DonViTinhText || s.TenDonViTinh || s.donViTinhText || null;
+          srv.soLuongHoaDon = Number(
+            s.SoLuongHoaDon ?? s.SoLuong ?? s.soLuongHoaDon ?? 0,
+          );
+          srv.donGia = Number(s.DonGia ?? s.donGia ?? 0);
+          srv.tienChuaThue = Number(
+            s.TienChuaThue ?? s.ThanhTienChuaThue ?? s.tienChuaThue ?? 0,
+          );
+          srv.thueSuat = Number(s.ThueSuat ?? s.thueSuat ?? 0);
+          srv.tienCoThue = Number(
+            s.TienCoThue ??
+              s.ThanhTienCoThue ??
+              s.ThanhTien ??
+              s.tienCoThue ??
+              0,
+          );
+          srv.soGioCongLam = Number(s.SoGioCongLam ?? s.soGioCongLam ?? 0);
+          srv.tienDichVu = Number(s.TienDichVu ?? s.tienDichVu ?? 0);
+          srv.tienPhuTung = Number(s.TienPhuTung ?? s.tienPhuTung ?? 0);
+          srv.giaVonPhuTung = Number(s.GiaVonPhuTung ?? s.giaVonPhuTung ?? 0);
+          srv.tyLeChietKhauCt = Number(
+            s.TyLeChietKhauCt || s.TyLeChietKhauCT || s.tyLeChietKhauCt || 0,
+          );
+          srv.tienChietKhauCt = Number(
+            s.TienChietKhauCt || s.TienChietKhauCT || s.tienChietKhauCt || 0,
+          );
+          srv.khoCode = s.KhoCode || s.khoCode || null;
+          srv.tienPhuPhi = Number(s.TienPhuPhi ?? s.tienPhuPhi ?? 0);
 
           srv.rawData = s;
           await this.caseServiceRepo.save(srv);
@@ -605,5 +673,126 @@ export class SyncCaseService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Batch sync detailed lines (materials, parts, labor) for all cases matching filter criteria.
+   */
+  async syncCaseDetailsBatch(
+    branchExternalId?: string,
+    options?: {
+      from?: string;
+      to?: string;
+      force?: boolean;
+      concurrency?: number;
+    },
+  ): Promise<{
+    totalCasesProcessed: number;
+    totalLinesSynced: number;
+    errorsCount: number;
+  }> {
+    this.logger.log(
+      `Starting batch sync case details for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, force: ${options?.force}`,
+    );
+
+    const qb = this.caseRepo
+      .createQueryBuilder('c')
+      .where('c.kgaraDeletedAt IS NULL');
+
+    if (
+      branchExternalId &&
+      branchExternalId !== 'null' &&
+      branchExternalId !== 'undefined' &&
+      branchExternalId.trim() !== ''
+    ) {
+      qb.andWhere('c.branchExternalId = :branchId', {
+        branchId: branchExternalId.trim(),
+      });
+    }
+
+    if (options?.from) {
+      const fromDate = options.from.includes('T')
+        ? options.from
+        : `${options.from} 00:00:00`;
+      qb.andWhere('COALESCE(c.ngayTiepNhan, c.ngayPhatSinh) >= :fromDate', {
+        fromDate,
+      });
+    }
+
+    if (options?.to) {
+      const toDate = options.to.includes('T')
+        ? options.to
+        : `${options.to} 23:59:59.999`;
+      qb.andWhere('COALESCE(c.ngayTiepNhan, c.ngayPhatSinh) <= :toDate', {
+        toDate,
+      });
+    }
+
+    const allCases = await qb
+      .orderBy('c.ngayPhatSinh', 'DESC', 'NULLS LAST')
+      .addOrderBy('c.soChungTu', 'DESC')
+      .getMany();
+
+    // Determine target cases to fetch
+    let targetCases = allCases;
+    if (!options?.force) {
+      // Prioritize cases that do not have ListPhieuDichVuChiTiet in rawData or do not have services in DB
+      targetCases = allCases.filter((c) => {
+        const rawList =
+          c.rawData?.ListPhieuDichVuChiTiet ||
+          c.rawData?.PhieuDichVuChiTiet ||
+          c.rawData?.HoaDonChiTiet;
+        return !Array.isArray(rawList) || rawList.length === 0;
+      });
+    }
+
+    this.logger.log(
+      `Batch sync case details: ${targetCases.length} cases need detail sync (out of ${allCases.length} total cases).`,
+    );
+
+    let totalCasesProcessed = 0;
+    let totalLinesSynced = 0;
+    let errorsCount = 0;
+
+    const concurrency = Math.max(1, Math.min(10, options?.concurrency || 5));
+
+    for (let i = 0; i < targetCases.length; i += concurrency) {
+      const batch = targetCases.slice(i, i + concurrency);
+      await Promise.allSettled(
+        batch.map(async (c) => {
+          if (!c.hdPhieuDichVuId) return;
+          const effBranchId = c.branchExternalId || branchExternalId || '';
+          try {
+            const caseData = await this.syncCaseDetail(
+              effBranchId,
+              c.hdPhieuDichVuId,
+            );
+            totalCasesProcessed++;
+            const rawList =
+              caseData?.ListPhieuDichVuChiTiet ||
+              caseData?.PhieuDichVuChiTiet ||
+              caseData?.HoaDonChiTiet;
+            if (Array.isArray(rawList)) {
+              totalLinesSynced += rawList.length;
+            }
+          } catch (err: any) {
+            errorsCount++;
+            this.logger.warn(
+              `Failed to sync detail for case ${c.soChungTu || c.hdPhieuDichVuId}: ${err?.message || err}`,
+            );
+          }
+        }),
+      );
+    }
+
+    this.logger.log(
+      `Finished batch sync case details. Processed ${totalCasesProcessed} cases, ${totalLinesSynced} lines, ${errorsCount} errors.`,
+    );
+
+    return {
+      totalCasesProcessed,
+      totalLinesSynced,
+      errorsCount,
+    };
   }
 }

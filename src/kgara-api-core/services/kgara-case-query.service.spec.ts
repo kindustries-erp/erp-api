@@ -188,4 +188,204 @@ describe('KgaraCaseQueryService', () => {
       expect(row2?.getCell(13).value).toBe(6000000); // loiNhuan
     });
   });
+
+  describe('findCaseServices', () => {
+    it('should return paginated case services with grand totals', async () => {
+      const mockResultRows = [
+        {
+          id: 'srv-1',
+          hdPhieuDichVuChiTietId: 'ct-101',
+          hdPhieuDichVuId: 'hd-101',
+          sanPhamCode: 'DAU_NHOT',
+          sanPhamName: 'Thay dầu nhớt động cơ',
+          noiDungChiTiet: 'Thay dầu Castrol 5W30',
+          loaiSanPhamCode: 'PT',
+          donViTinhText: 'Lít',
+          soLuongHoaDon: '4.0000',
+          donGia: '250000.00',
+          tienChuaThue: '1000000.00',
+          thueSuat: '10.00',
+          tienCoThue: '1100000.00',
+          soGioCongLam: '0.00',
+          tienDichVu: '0.00',
+          tienPhuTung: '1100000.00',
+          giaVonPhuTung: '700000.00',
+          tyLeChietKhauCt: '0.00',
+          tienChietKhauCt: '0.00',
+          khoCode: 'KHO_CHINH',
+          tienPhuPhi: '0.00',
+          soChungTu: 'PDV-2026-001',
+          bienSoXe: '51G-12345',
+          khachHangCode: 'KH-001',
+          khachHangName: 'Công ty Alpha',
+          status: 3,
+          statusName: 'Hoàn tất',
+          classification: 'SUA_CHUA_CHUNG',
+          branchExternalId: 'CN-01',
+          branchName: 'Chi nhánh Quận 7',
+          caseDate: '2026-03-01',
+          completionDate: '2026-03-05',
+        },
+      ];
+
+      const mockTotalsRow = {
+        totalRows: '1',
+        soLuongHoaDon: '4',
+        tienChuaThue: '1000000',
+        tienCoThue: '1100000',
+        tienDichVu: '0',
+        tienPhuTung: '1100000',
+        giaVonPhuTung: '700000',
+        tienChietKhauCt: '0',
+        tienPhuPhi: '0',
+      };
+
+      const mockQb: any = {
+        innerJoin: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        clone: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockTotalsRow),
+        getRawMany: jest.fn().mockResolvedValue(mockResultRows),
+      };
+
+      mockServiceRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await service.findCaseServices({
+        branchId: 'CN-01',
+        page: 1,
+        pageSize: 20,
+        serviceType: 'ALL',
+      });
+
+      expect(res.data).toHaveLength(1);
+      expect(res.data[0].soChungTu).toBe('PDV-2026-001');
+      expect(res.data[0].sanPhamCode).toBe('DAU_NHOT');
+      expect(res.data[0].tienCoThue).toBe(1100000);
+      expect(res.pagination.total).toBe(1);
+      expect(res.totals.grandTotal.tienCoThue).toBe(1100000);
+    });
+  });
+
+  describe('getCaseServiceColumnOptions', () => {
+    it('should return distinct options for specified column', async () => {
+      const mockQb: any = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        clone: jest.fn().mockReturnThis(),
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([{ val: 'DAU_NHOT' }, { val: 'LOC_GIO' }]),
+      };
+
+      mockServiceRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await service.getCaseServiceColumnOptions(
+        'CN-01',
+        'sanPhamCode',
+        '',
+        1,
+        20,
+      );
+
+      expect(res.items).toEqual(['DAU_NHOT', 'LOC_GIO']);
+      expect(res.total).toBe(2);
+    });
+  });
+
+  describe('exportCaseServicesExcel', () => {
+    it('should export formatted excel buffer for case services', async () => {
+      const mockResultRows = [
+        {
+          id: 'srv-1',
+          hdPhieuDichVuChiTietId: 'ct-101',
+          hdPhieuDichVuId: 'hd-101',
+          sanPhamCode: 'DAU_NHOT',
+          sanPhamName: 'Thay dầu nhớt động cơ',
+          noiDungChiTiet: 'Thay dầu Castrol 5W30',
+          loaiSanPhamCode: 'PT',
+          donViTinhText: 'Lít',
+          soLuongHoaDon: '4.0000',
+          donGia: '250000.00',
+          tienChuaThue: '1000000.00',
+          thueSuat: '10.00',
+          tienCoThue: '1100000.00',
+          soGioCongLam: '0.00',
+          tienDichVu: '0.00',
+          tienPhuTung: '1100000.00',
+          giaVonPhuTung: '700000.00',
+          tyLeChietKhauCt: '0.00',
+          tienChietKhauCt: '0.00',
+          khoCode: 'KHO_CHINH',
+          tienPhuPhi: '0.00',
+          soChungTu: 'PDV-2026-001',
+          bienSoXe: '51G-12345',
+          khachHangCode: 'KH-001',
+          khachHangName: 'Công ty Alpha',
+          status: 3,
+          statusName: 'Hoàn tất',
+          classification: 'SUA_CHUA_CHUNG',
+          branchExternalId: 'CN-01',
+          branchName: 'Chi nhánh Quận 7',
+          caseDate: '2026-03-01',
+          completionDate: '2026-03-05',
+        },
+      ];
+
+      const mockTotalsRow = {
+        totalRows: '1',
+        soLuongHoaDon: '4',
+        tienChuaThue: '1000000',
+        tienCoThue: '1100000',
+        tienDichVu: '0',
+        tienPhuTung: '1100000',
+        giaVonPhuTung: '700000',
+        tienChietKhauCt: '0',
+        tienPhuPhi: '0',
+      };
+
+      const mockQb: any = {
+        innerJoin: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        clone: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue(mockTotalsRow),
+        getRawMany: jest.fn().mockResolvedValue(mockResultRows),
+      };
+
+      mockServiceRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const buffer = await service.exportCaseServicesExcel({
+        branchId: 'CN-01',
+        serviceType: 'ALL',
+      });
+
+      expect(buffer).toBeInstanceOf(Buffer);
+      expect(buffer.length).toBeGreaterThan(0);
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer as any);
+
+      const sheet = workbook.getWorksheet('Chi tiết DV & Phụ tùng');
+      expect(sheet).toBeDefined();
+      expect(sheet?.rowCount).toBeGreaterThanOrEqual(2);
+    });
+  });
 });

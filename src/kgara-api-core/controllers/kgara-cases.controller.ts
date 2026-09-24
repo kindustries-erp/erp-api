@@ -108,6 +108,110 @@ export class KgaraCasesController {
     res.end(buffer);
   }
 
+  @Get('cases/services/export/excel')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'serviceType', required: false })
+  @ApiQuery({ name: 'filtersStr', required: false })
+  @ApiQuery({ name: 'sorts', required: false })
+  @ApiQuery({ name: 'branch_id', required: false })
+  @ApiQuery({ name: 'q', required: false })
+  async exportCaseServicesExcel(
+    @Res() res: Response,
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('serviceType') serviceType?: string,
+    @Query('filtersStr') filtersStr?: string,
+    @Query('sorts') sorts?: string | string[],
+    @Query('q') q?: string,
+  ) {
+    const effectiveBranchId = queryBranchId || headerBranchId;
+    const buffer = await this.caseQueryService.exportCaseServicesExcel({
+      branchId: effectiveBranchId || undefined,
+      from,
+      to,
+      serviceType,
+      filtersStr,
+      sorts,
+      q,
+    });
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    const fileName = `Chi_tiet_phieu_dich_vu_${y}${m}${d}_${hh}${mm}${ss}.xlsx`;
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
+  @Get('cases/services/column-options')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  async getCaseServiceColumnOptions(
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId: string,
+    @Query('column') column: string,
+    @Query('search') search: string = '',
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('filtersStr') filtersStr?: string,
+    @Query('serviceType') serviceType?: string,
+  ) {
+    const effectiveBranchId = queryBranchId || headerBranchId;
+    return this.caseQueryService.getCaseServiceColumnOptions(
+      effectiveBranchId,
+      column,
+      search,
+      parseInt(page, 10) || 1,
+      parseInt(pageSize, 10) || 20,
+      filtersStr,
+      serviceType,
+    );
+  }
+
+  @Get('cases/services')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  async getCaseServices(
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '20',
+    @Query('q') q: string = '',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('serviceType') serviceType?: string,
+    @Query('filtersStr') filtersStr?: string,
+    @Query('sorts') sorts?: string | string[],
+  ) {
+    const effectiveBranchId = queryBranchId || headerBranchId;
+    return this.caseQueryService.findCaseServices({
+      branchId: effectiveBranchId,
+      page,
+      pageSize,
+      q,
+      from,
+      to,
+      serviceType,
+      filtersStr,
+      sorts,
+    });
+  }
+
   @Get('cases')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCases(
@@ -215,6 +319,10 @@ export class KgaraCasesController {
         else if (col === 'updatedAt') targetCol = 'case.updatedAt';
         else if (col === 'createdAt') targetCol = 'case.createdAt';
         else if (col === 'classification') targetCol = 'case.classification';
+        else if (col === 'kgaraClassification')
+          targetCol = 'case.kgaraClassification';
+        else if (col === 'kgaraClassificationCode')
+          targetCol = 'case.kgaraClassificationCode';
 
         if (targetCol) {
           if (first) {

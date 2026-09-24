@@ -477,5 +477,116 @@ describe('KgaraSyncService', () => {
         }),
       );
     });
+
+    it('should auto-map NBPQ to OJ and store kgara_classification when classification is NULL', async () => {
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-nbpq-1',
+          SoChungTu: 'SC-NBPQ',
+          NguonGocKhachHangCode: 'NBPQ',
+          NguonGocKhachHangName: 'Nội Bộ PQ',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 1000000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCaseDetail('br-1', 'c-nbpq-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-nbpq-1',
+          kgaraClassification: 'Nội Bộ PQ',
+          kgaraClassificationCode: 'NBPQ',
+          classification: 'OJ',
+        }),
+      );
+    });
+
+    it('should auto-map Sales tặng to KHAC and store kgara_classification when classification is NULL', async () => {
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-sales-1',
+          SoChungTu: 'SC-SALES',
+          NguonGocKhachHangCode: 'Sales tặng',
+          NguonGocKhachHangName: 'Sales tặng',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 500000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCaseDetail('br-1', 'c-sales-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-sales-1',
+          kgaraClassification: 'Sales tặng',
+          kgaraClassificationCode: 'Sales tặng',
+          classification: 'KHAC',
+        }),
+      );
+    });
+
+    it('should auto-map other KGara classification to KY_GUI_NOI_BO when classification is NULL', async () => {
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-kygui-1',
+          SoChungTu: 'SC-KG',
+          NguonGocKhachHangCode: 'KY GUI',
+          NguonGocKhachHangName: 'Xe ký gửi',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 2500000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCaseDetail('br-1', 'c-kygui-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-kygui-1',
+          kgaraClassification: 'Xe ký gửi',
+          kgaraClassificationCode: 'KY GUI',
+          classification: 'KY_GUI_NOI_BO',
+        }),
+      );
+    });
+
+    it('should NOT overwrite user-modified classification even if KGara has classification (Zero-Overwrite)', async () => {
+      const existingUserModifiedCase = {
+        id: 'uuid-789',
+        hdPhieuDichVuId: 'c-user-custom',
+        classification: 'SUA_CHUA_CHUNG', // User modified in ERP
+        erpNotes: 'Đã sửa phân loại tay',
+      };
+
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-user-custom',
+          SoChungTu: 'SC-CUSTOM',
+          NguonGocKhachHangCode: 'NBPQ',
+          NguonGocKhachHangName: 'Nội Bộ PQ',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 4000000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue(existingUserModifiedCase);
+
+      await service.syncCaseDetail('br-1', 'c-user-custom');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-user-custom',
+          kgaraClassification: 'Nội Bộ PQ',
+          kgaraClassificationCode: 'NBPQ',
+          classification: 'SUA_CHUA_CHUNG', // Still SUA_CHUA_CHUNG, NOT overwritten by OJ!
+        }),
+      );
+    });
   });
 });

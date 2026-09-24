@@ -55,9 +55,9 @@ Mỗi domain/module backend đều có tài liệu tri thức chuyên sâu (DB, 
   - **Bán hàng & Sau bán hàng**: `erp-sales-orders`, `sales-report-dashboard`, `after-sales`
   - **Mua hàng & Nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
   - **Kho & Tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`
-  - **Tài chính, Dòng tiền, Hóa đơn & Tài khoản**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-dashboard`, `journal-entry`, `settings-accounts`
+  - **Tài chính, Dòng tiền, Hóa đơn & Tài khoản**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-netoff`, `invoice-dashboard`, `invoice-debts`, `journal-entry`, `settings-accounts`
   - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
-  - **Dịch vụ Garage & Sửa chữa xe**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-gross-profit`
+  - **Dịch vụ Garage & Sửa chữa xe**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-gross-profit`, `garage-invoice-reconciliation`
   - **Hệ thống, Cấu hình, Phân quyền, Tác vụ Toàn cục & Nhật ký**: `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 - Khi cần quét mới hoặc cập nhật tài liệu cho một module: Sử dụng skill `scan-module-knowledge` (`.agents/skills/scan-module-knowledge/SKILL.md`).
 

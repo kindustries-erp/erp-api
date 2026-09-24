@@ -31,6 +31,10 @@ import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_at
 
 import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
 
+import { InvoiceDebtsService } from './services/invoice-debts.service';
+import { InvoiceDebtsExportBackgroundService } from './services/invoice-debts-export-background.service';
+import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -51,7 +55,11 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
     ErpAttachmentsCoreModule,
     VinfastPartsModule,
   ],
-  controllers: [ErpInvoicesCoreController, InvoiceDashboardController],
+  controllers: [
+    InvoiceDebtsController,
+    InvoiceDashboardController,
+    ErpInvoicesCoreController,
+  ],
   providers: [
     InvoiceLifecycleService,
     InvoicePortalService,
@@ -60,6 +68,8 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
     InvoiceQueryService,
     InvoiceExportBackgroundService,
     InvoiceSmartNetoffService,
+    InvoiceDebtsService,
+    InvoiceDebtsExportBackgroundService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -69,6 +79,8 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     InvoiceSmartNetoffService,
+    InvoiceDebtsService,
+    InvoiceDebtsExportBackgroundService,
   ],
 })
 export class ErpInvoicesCoreModule {}

@@ -77,11 +77,13 @@ src/erp-invoices-core/
 
 Base Path: `/api/v1/erp-invoices/dashboard`  
 Guards: `JwtAuthGuard`, `CoreRbacGuard`  
-Resource RBAC: `invoices`
+Resource RBAC: `invoices` (stats, partners, export), `invoice_debts` (debts-analytics, time-horizons)
 
 | Method | Endpoint | Quyền yêu cầu | Query Parameters | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/stats` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Lấy biểu đồ xu hướng hóa đơn theo tháng (`cashIn`, `cashOut`, `vatIn`, `vatOut`) |
+| `GET` | `/debts-analytics` | `{ resource: 'invoice_debts', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Tổng quan tài chính công nợ, phân tầng tuổi nợ, dự báo dòng tiền thuật toán (`forecastHorizons`) & Top đối tác |
+| `GET` | `/time-horizons/:horizon/invoices` | `{ resource: 'invoice_debts', action: 'read' }` | `horizon` (param), `page`, `pageSize`, `search`, `direction`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách hóa đơn chi tiết theo từng mốc tuổi nợ / dự báo (`forecastNext7Days`, `forecastNext30Days`, `expectedCashflow`, `defaultRiskProvision`) kèm độ trễ TB & ngày dự kiến về tiền |
 | `GET` | `/partners` | `{ resource: 'invoices', action: 'read' }` | `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách phân trang tổng hợp doanh thu/chi phí và công nợ phải thu/phải trả theo đối tác |
 | `GET` | `/partners/:taxCode/stats` | `{ resource: 'invoices', action: 'read' }` | `taxCode` (param), `date_from`, `date_to` | Biểu đồ xu hướng doanh thu/chi phí riêng của một đối tác theo MST |
 | `GET` | `/export` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Xuất file báo cáo Excel 5 worksheets (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) |

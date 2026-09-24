@@ -29,6 +29,12 @@ interface Account {
 // DỮ LIỆU: TOÀN CÂY THÔNG TƯ 200/2014/TT-BTC
 // =============================================================================
 const ACCOUNTS: Account[] = [
+  // ─── LOẠI 0: TÀI KHOẢN TRUNG GIAN CHỜ XỬ LÝ ──────────────────────────────
+  { code: '000', name: 'Tài khoản trung gian chờ xử lý', type: 'OTHER', normalBalance: 'DEBIT', level: 1 },
+  { code: '0001', name: 'Bút toán chờ xử lý - Ngân hàng', type: 'OTHER', normalBalance: 'DEBIT', level: 2, parentCode: '000' },
+  { code: '0002', name: 'Bút toán chờ xử lý - Hóa đơn', type: 'OTHER', normalBalance: 'DEBIT', level: 2, parentCode: '000' },
+  { code: '0003', name: 'Bút toán chờ xử lý - Khác', type: 'OTHER', normalBalance: 'DEBIT', level: 2, parentCode: '000' },
+
   // ─── LOẠI 1: TÀI SẢN NGẮN HẠN ───────────────────────────────────────────
   { code: '111', name: 'Tiền mặt', type: 'ASSET', normalBalance: 'DEBIT', level: 1, isCash: true },
   { code: '1111', name: 'Tiền Việt Nam', type: 'ASSET', normalBalance: 'DEBIT', level: 2, parentCode: '111', isCash: true },
@@ -37,6 +43,9 @@ const ACCOUNTS: Account[] = [
 
   { code: '112', name: 'Tiền gửi ngân hàng', type: 'ASSET', normalBalance: 'DEBIT', level: 1 },
   { code: '1121', name: 'Tiền Việt Nam', type: 'ASSET', normalBalance: 'DEBIT', level: 2, parentCode: '112' },
+  { code: '11211', name: 'Techcombank - 111886', type: 'ASSET', normalBalance: 'DEBIT', level: 3, parentCode: '1121' },
+  { code: '11212', name: 'Techcombank - 886111', type: 'ASSET', normalBalance: 'DEBIT', level: 3, parentCode: '1121' },
+  { code: '11213', name: 'BIDV - 8680073168', type: 'ASSET', normalBalance: 'DEBIT', level: 3, parentCode: '1121' },
   { code: '1122', name: 'Ngoại tệ', type: 'ASSET', normalBalance: 'DEBIT', level: 2, parentCode: '112' },
   { code: '1123', name: 'Vàng, bạc, đá quý', type: 'ASSET', normalBalance: 'DEBIT', level: 2, parentCode: '112' },
 
