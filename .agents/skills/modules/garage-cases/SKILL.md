@@ -461,3 +461,27 @@ Khi chỉnh sửa `kgara-api-core`:
 2. Chạy Unit test: `bunx jest src/kgara-api-core/ --forceExit`
 3. Xác minh migration `1780000000000-AddKgaraGrossProfit.ts`, `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
 
+---
+
+## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
+
+### 8.1. Cấu Trúc Facade & Sub-Services
+Module tuân thủ tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor:
+- **Facade (`KgaraCaseQueryService`)**: Service facade 164 dòng giữ nguyên 100% method signatures, delegate sang các Sub-services.
+- **Sub-Services**:
+  - `KgaraCaseExportService` (~580 dòng): Render file Excel 2 sheets với styling chuẩn hóa.
+  - `KgaraCaseServicesQueryService` (~500 dòng): Phân trang, tìm kiếm, subtotal/grand totals và filter options chi tiết DV & phụ tùng.
+  - `KgaraCaseSettlementCalcService` (~55 dòng): Tính toán và cập nhật công nợ/tổng thu vụ việc (`recalculateCaseSettlementSummary`).
+- **Pure Helpers (Pattern C)**:
+  - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
+  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
+
+### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (SUM, SUBTOTAL & Header Style)
+Tất cả các hàm xuất Excel (`exportCompletedCasesExcel`, `exportCaseServicesExcel`) áp dụng cấu trúc:
+- **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu, nền `#F1F5F9`, chữ đậm `#0F172A`.
+- **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi người dùng lọc cột trong Excel, nền `#EFF6FF`, chữ xanh `#1E40AF`, border double bottom.
+- **Row 3**: Hàng trống phân cách (Height 10).
+- **Row 4**: Header cột bảng (Nền `#334155`, chữ trắng, căn giữa, bọc chữ tự động).
+- **Row 5+**: Dữ liệu chi tiết (Font Calibri, border mỏng `#E2E8F0`).
+- **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
+
