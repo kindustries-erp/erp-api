@@ -34,6 +34,14 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
 import { InvoiceDebtsService } from './services/invoice-debts.service';
 import { InvoiceDebtsExportBackgroundService } from './services/invoice-debts-export-background.service';
 import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
+import { InvoiceDebtsQueryService } from './services/sub-services/invoice-debts-query.service';
+import { InvoiceDebtsDetailService } from './services/sub-services/invoice-debts-detail.service';
+import { InvoiceDebtsExportService } from './services/sub-services/invoice-debts-export.service';
+import { InvoiceListQueryService } from './services/sub-services/invoice-list-query.service';
+import { InvoiceExportExcelService } from './services/sub-services/invoice-export-excel.service';
+import { InvoiceStatsService } from './services/sub-services/invoice-stats.service';
+import { InvoiceItemsQueryService } from './services/sub-services/invoice-items-query.service';
+import { InvoiceItemsExportService } from './services/sub-services/invoice-items-export.service';
 
 @Module({
   imports: [
@@ -66,9 +74,17 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
     InvoiceImportService,
     InvoiceFilesService,
     InvoiceQueryService,
+    InvoiceListQueryService,
+    InvoiceExportExcelService,
+    InvoiceStatsService,
+    InvoiceItemsQueryService,
+    InvoiceItemsExportService,
     InvoiceExportBackgroundService,
     InvoiceSmartNetoffService,
     InvoiceDebtsService,
+    InvoiceDebtsQueryService,
+    InvoiceDebtsDetailService,
+    InvoiceDebtsExportService,
     InvoiceDebtsExportBackgroundService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,

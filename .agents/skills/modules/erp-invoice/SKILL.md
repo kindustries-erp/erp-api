@@ -23,6 +23,17 @@ Các nghiệp vụ trọng tâm:
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
 - **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
+- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture)**:
+  - `InvoiceQueryService` đóng vai trò Facade mỏng (~150 dòng) điều phối tới các sub-services chuyên biệt (mỗi file < 1000 dòng):
+    - `InvoiceListQueryService`: Truy vấn danh sách hóa đơn, phân trang, lọc đa chiều, tính grand totals & cumulative totals.
+    - `InvoiceItemsQueryService`: Truy vấn danh sách chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+    - `InvoiceStatsService`: Thống kê KPI, phân tích top mặt hàng, options phân quyền.
+    - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel hóa đơn và dòng hàng chuyên nghiệp đa sheet.
+    - Helpers chuyên trách: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+  - `InvoiceDebtsService` đóng vai trò Facade mỏng (~140 dòng) điều phối tới:
+    - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
+    - `InvoiceDebtsDetailService`: Chi tiết danh sách hóa đơn theo đối tác (`getPartnerInvoices` với parameterized query chống SQL injection).
+    - `InvoiceDebtsExportService`: Xuất file Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
@@ -395,28 +406,37 @@ src/erp-invoices-core/
     - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
 
 ### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel` / `exportExcel`)
-- **Cấu trúc Sheet & Trình bày Bảng**:
-  - **Quy chuẩn Thứ tự & Tên Sheet**:
-    - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
-      1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
-      2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
-      3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
-      4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
-    - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
-      1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
-      2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
-      3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
-      4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
-      5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
-      6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Cấu trúc Bảng Tính & Bố Cục Chuẩn**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức Excel sống `=SUM(Col5:ColN)` (kèm `result` fallback), nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động cập nhật khi người dùng lọc dữ liệu, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng trống phân cách trang nhã (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng in đậm 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Mô tả căn trái, Số tiền/SL căn phải.
+  - **Freeze Panes**: Cố định cuộn tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **AutoFilter**: Đặt tại Hàng 4 từ cột đầu đến cột cuối.
+  - **Chân bảng**: Loại bỏ dòng tổng cộng cuối bảng (vì đã có SUM & SUBTOTAL cố định ở đầu trang).
+- **Quy chuẩn Thứ tự & Tên Sheet**:
+  - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
+    1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
+    2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
+    3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
+    4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
+  - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
+    1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
+    2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
+    3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
+    4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
+    5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
+    6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Cột Chi nhánh & Cấn trừ & Thuế suất**:
   - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
   - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).
   - **Cột Còn lại**: Nổi bật với màu vàng hổ phách nhạt (`#FEFCE8` / `#FFFDE68A`) thể hiện số dư còn lại của hóa đơn sau cấn trừ.
   - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Bảng kê HHDV` và sheet `Tổng quan HHDV`.
-  - **Sheet Công nợ Theo Đối tượng**: Bổ sung sheet tổng hợp công nợ đối tác tính đến ngày kết thúc kỳ báo cáo (`cutoffDate`) với các cột *Lũy kế công nợ*, *Lũy kế cấn trừ*, *Lũy kế còn nợ* và dòng *TỔNG CỘNG* footer.
-- **Định dạng Số liệu & Đơn vị tính**:
-  - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
-  - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
+  - **Cột Thuế suất (`vatRate`)**: Định dạng `%` chuẩn mực qua helper `formatVatRate` (`8%`, `10%`, `0%`, `5.25%`, `KCT`, `KKKNT`, ...).
+  - **Định dạng Số liệu & Đơn vị tính**:
+    - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
+    - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
 
 ---
 

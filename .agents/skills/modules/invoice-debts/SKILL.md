@@ -19,6 +19,11 @@ Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế 
    - **Tổng phải thu / Tổng phải trả (`paymentProgress`)**: Hiển thị số tiền tổng `money(total)` + thanh Progress Bar tỉ lệ thanh toán bên dưới + Tooltip chi tiết (đã thu/trả, còn nợ, %) + Header Filter 3 trạng thái (Đã thu đủ / Thu một phần / Chưa thu hoặc Đã trả đủ / Trả một phần / Chưa trả).
    - **Còn phải thu / Còn phải trả (`balanceAmount`)**: Hiển thị số dư nợ thực tế `money(balance)` với màu sắc trực quan (`emerald` khi hết nợ, `destructive` khi còn nợ) + Header Filter theo số tiền.
 5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
+6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
+   - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
+   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc.
+   - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
+   - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
