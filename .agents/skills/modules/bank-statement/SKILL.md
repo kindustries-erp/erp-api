@@ -22,10 +22,15 @@ Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung t
   - Phân loại rõ `sourceType`: `'BANK'` hoặc `'CASH'`.
   - Phân loại luồng tiền: `IN` (Tiền vào / `creditAmount`) vs `OUT` (Tiền ra / `debitAmount`).
   - Gắn nhãn phân loại chi phí/thu nhập (`sys_entity_tags`).
-- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting)**:
+- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting & Zero-Accounting UX)**:
   - Hạch toán trực tiếp sang Sổ Nhật ký Chung (`erp_journal_entries` & `erp_journal_entry_lines`).
-  - Đối soát và cấn trừ thanh toán với Hóa đơn điện tử (`erp_invoice_voucher_netoff`).
-  - Tự động phân tách và làm mới bút toán khi 1 giao dịch ngân hàng cấn trừ cho nhiều hóa đơn của các đối tượng khác nhau.
+  - **Tài khoản Treo Mặc định `T0001`**: Mọi giao dịch sao kê ngân hàng / tiền mặt khi chưa có tài khoản đối ứng cụ thể sẽ tự động dùng tài khoản treo `T0001` (hoặc alias `0001`).
+  - **Tự động Chuyển Đổi Đối ứng khi Cấn trừ (Smart Net-Off Accounting)**:
+    - Khi cấn trừ với Hóa đơn Mua vào (`IN`): Chiều đối ứng `T0001` tự động biến đổi thành `331` (Phải trả NCC).
+    - Khi cấn trừ với Hóa đơn Bán ra (`OUT`): Chiều đối ứng `T0001` tự động biến đổi thành `131` (Phải thu KH).
+    - Khi tháo gỡ cấn trừ: Chiều đối ứng tự động hoàn nguyên về `T0001`.
+    - Phần tiền còn lại (nếu có): Tiếp tục treo ở `T0001`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Hệ thống kiểm tra biến môi trường; nếu chưa bật và giao dịch chưa từng có bút toán trước đó, hệ thống sẽ không tự tiện ghi live vào Nhật ký chung nhằm phục vụ an toàn trong giai đoạn backfill số liệu lịch sử.
 
 ---
 
@@ -236,6 +241,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **Quy Chuẩn Trình Bày Bảng Tính & Bố Cục**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức `=SUM(Col5:ColN)`, nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động nhảy số theo bộ lọc, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng phân cách trống (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng bold 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Diễn giải căn trái, Số tiền căn phải định dạng `#,##0.00`.
+  - **Freeze Panes & AutoFilter**: Cố định cuộn và đặt dropdown lọc chính xác tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **Chân bảng**: Đã loại bỏ dòng tổng cộng cuối bảng.
 - **API Endpoints Xuất Excel**:
   - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
   - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
@@ -323,10 +336,10 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `description`: Nhãn `Tổng cộng:` (variant `label`).
   - `thu`: Hiển thị tổng Tiền vào / Thu (`variantType="amount"`, `text-emerald-600 font-bold`).
   - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
-  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
-  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
+  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` tính toán từ backend API).
+  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`, tính toán an toàn `amount - netOff`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` từ API).
 - **Quy chuẩn Popover Chi tiết**:
-  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, ...) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
+  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, `Đã cấn trừ`, `Còn lại`) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 

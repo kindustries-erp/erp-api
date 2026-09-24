@@ -280,6 +280,10 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 ### 4.3. Nhóm Đồng Bộ & Sổ Kế Toán
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
+| `GET` | `/cases/services` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `serviceType` (`ALL` \| `DV` \| `PT`), `filtersStr`, `sorts` | Lấy danh sách dòng chi tiết phụ tùng & công dịch vụ phân trang toàn hệ thống, lọc theo phân hệ `serviceType`, tính tổng cộng Grand Total và tổng lũy kế Cumulative |
+| `GET` | `/cases/services/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr`, `serviceType` | Lấy danh sách options phân trang distinct cho bộ lọc cột của bảng Chi tiết dòng dịch vụ & Phụ tùng |
+| `GET` | `/cases/services/export/excel` | `branchId`, `from`, `to`, `serviceType`, `filtersStr`, `sorts`, `q` | Xuất file Excel bảng kê chi tiết phụ tùng và công thợ dịch vụ (`Chi_tiet_phieu_dich_vu_YYYYMMDD_HHmmss.xlsx`) |
+| `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency` | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP |
 | `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
@@ -456,4 +460,28 @@ Khi chỉnh sửa `kgara-api-core`:
 1. Chạy Type-check: `bun run check:ci`
 2. Chạy Unit test: `bunx jest src/kgara-api-core/ --forceExit`
 3. Xác minh migration `1780000000000-AddKgaraGrossProfit.ts`, `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
+
+---
+
+## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
+
+### 8.1. Cấu Trúc Facade & Sub-Services
+Module tuân thủ tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor:
+- **Facade (`KgaraCaseQueryService`)**: Service facade 164 dòng giữ nguyên 100% method signatures, delegate sang các Sub-services.
+- **Sub-Services**:
+  - `KgaraCaseExportService` (~580 dòng): Render file Excel 2 sheets với styling chuẩn hóa.
+  - `KgaraCaseServicesQueryService` (~500 dòng): Phân trang, tìm kiếm, subtotal/grand totals và filter options chi tiết DV & phụ tùng.
+  - `KgaraCaseSettlementCalcService` (~55 dòng): Tính toán và cập nhật công nợ/tổng thu vụ việc (`recalculateCaseSettlementSummary`).
+- **Pure Helpers (Pattern C)**:
+  - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
+  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
+
+### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (SUM, SUBTOTAL & Header Style)
+Tất cả các hàm xuất Excel (`exportCompletedCasesExcel`, `exportCaseServicesExcel`) áp dụng cấu trúc:
+- **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu, nền `#F1F5F9`, chữ đậm `#0F172A`.
+- **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi người dùng lọc cột trong Excel, nền `#EFF6FF`, chữ xanh `#1E40AF`, border double bottom.
+- **Row 3**: Hàng trống phân cách (Height 10).
+- **Row 4**: Header cột bảng (Nền `#334155`, chữ trắng, căn giữa, bọc chữ tự động).
+- **Row 5+**: Dữ liệu chi tiết (Font Calibri, border mỏng `#E2E8F0`).
+- **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
 

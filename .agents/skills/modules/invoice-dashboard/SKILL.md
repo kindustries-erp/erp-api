@@ -62,13 +62,21 @@ erp_invoices (Hóa đơn điện tử / Thuế)
 
 ```text
 src/erp-invoices-core/
-├── invoice-dashboard.controller.ts     # Controller khai báo endpoints, Swagger & RBAC guard
-├── invoice-dashboard.service.ts        # Service xử lý aggregation SQL, tính công nợ & xuất ExcelJS
-├── erp-invoices-core.module.ts         # Đăng ký Controller & Service, exports cho module khác
+├── invoice-dashboard.controller.ts            # Controller khai báo endpoints, Swagger & RBAC guard
+├── invoice-dashboard.service.ts               # FACADE: Chuyển tiếp calls tới 5 sub-services chuyên biệt
+├── erp-invoices-core.module.ts                # Đăng ký Controller & Providers
 ├── entities/
-│   ├── erp_invoice.entity.ts           # Entity hóa đơn chính
-│   └── erp_invoice_voucher_netoff.entity.ts # Entity cấn trừ hóa đơn - sao kê
-└── dto/                                # DTOs dùng chung cho invoice module
+│   ├── erp_invoice.entity.ts                  # Entity hóa đơn chính
+│   └── erp_invoice_voucher_netoff.entity.ts   # Entity cấn trừ hóa đơn - sao kê
+├── services/
+│   └── sub-services/
+│       ├── invoice-dashboard-helpers.ts       # Helpers: buildKeywordSqlClause, normalizeEffectiveDateTo, getExcelColLetter
+│       ├── invoice-dashboard-stats.service.ts # Sub-Service: getDashboardStats, getPartnerStats
+│       ├── invoice-dashboard-partners.service.ts # Sub-Service: getDashboardPartners
+│       ├── invoice-dashboard-export.service.ts # Sub-Service: exportExcel (5 worksheets), getDetailedInvoices
+│       ├── invoice-dashboard-analytics.service.ts # Sub-Service: getDebtsAnalytics (Aging & IFRS 9 ECL)
+│       └── invoice-dashboard-horizon.service.ts # Sub-Service: getTimeHorizonInvoices (CTE partner_lag, timelines, ticket sizes)
+└── dto/                                       # DTOs dùng chung cho invoice module
 ```
 
 ---
@@ -77,11 +85,13 @@ src/erp-invoices-core/
 
 Base Path: `/api/v1/erp-invoices/dashboard`  
 Guards: `JwtAuthGuard`, `CoreRbacGuard`  
-Resource RBAC: `invoices`
+Resource RBAC: `invoices` (stats, partners, export), `invoice_debts` (debts-analytics, time-horizons)
 
 | Method | Endpoint | Quyền yêu cầu | Query Parameters | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/stats` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Lấy biểu đồ xu hướng hóa đơn theo tháng (`cashIn`, `cashOut`, `vatIn`, `vatOut`) |
+| `GET` | `/debts-analytics` | `{ resource: 'invoice_debts', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Tổng quan tài chính công nợ, phân tầng tuổi nợ, dự báo dòng tiền thuật toán (`forecastHorizons`) & Top đối tác |
+| `GET` | `/time-horizons/:horizon/invoices` | `{ resource: 'invoice_debts', action: 'read' }` | `horizon` (param), `page`, `pageSize`, `search`, `direction`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách hóa đơn chi tiết theo từng mốc tuổi nợ / dự báo (`forecastNext7Days`, `forecastNext30Days`, `expectedCashflow`, `defaultRiskProvision`) kèm độ trễ TB & ngày dự kiến về tiền |
 | `GET` | `/partners` | `{ resource: 'invoices', action: 'read' }` | `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách phân trang tổng hợp doanh thu/chi phí và công nợ phải thu/phải trả theo đối tác |
 | `GET` | `/partners/:taxCode/stats` | `{ resource: 'invoices', action: 'read' }` | `taxCode` (param), `date_from`, `date_to` | Biểu đồ xu hướng doanh thu/chi phí riêng của một đối tác theo MST |
 | `GET` | `/export` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Xuất file báo cáo Excel 5 worksheets (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) |

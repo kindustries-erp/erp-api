@@ -1,8 +1,38 @@
 import { InvoiceQueryService } from './invoice-query.service';
+import { InvoiceListQueryService } from './sub-services/invoice-list-query.service';
+import { InvoiceExportExcelService } from './sub-services/invoice-export-excel.service';
+import { InvoiceStatsService } from './sub-services/invoice-stats.service';
+import { InvoiceItemsQueryService } from './sub-services/invoice-items-query.service';
+import { InvoiceItemsExportService } from './sub-services/invoice-items-export.service';
 import * as queryBuilderUtil from '../../common/utils/query-builder.util';
 import * as ExcelJS from 'exceljs';
 
 describe('InvoiceQueryService', () => {
+  const createInvoiceQueryService = (
+    repository: any = {},
+    attributeValueRepo: any = { find: jest.fn().mockResolvedValue([]) },
+    itemRepo: any = { find: jest.fn().mockResolvedValue([]) },
+  ) => {
+    const listQueryService = new InvoiceListQueryService(
+      repository,
+      attributeValueRepo,
+    );
+    const exportExcelService = new InvoiceExportExcelService(repository);
+    const statsService = new InvoiceStatsService(repository);
+    const itemsQueryService = new InvoiceItemsQueryService(
+      repository,
+      itemRepo,
+    );
+    const itemsExportService = new InvoiceItemsExportService(itemsQueryService);
+    return new InvoiceQueryService(
+      listQueryService,
+      exportExcelService,
+      statsService,
+      itemsQueryService,
+      itemsExportService,
+    );
+  };
+
   const createQbMock = () => {
     const qb: any = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -43,9 +73,7 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
       'applyMultiKeywordMultiFieldFilter',
@@ -68,9 +96,7 @@ describe('InvoiceQueryService', () => {
     const qb = createQbMock();
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const multiFieldSpy = jest.spyOn(
       queryBuilderUtil,
       'applyMultiKeywordMultiFieldFilter',
@@ -131,9 +157,7 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -142,11 +166,20 @@ describe('InvoiceQueryService', () => {
     const detailedSheet = workbook.getWorksheet('Bảng kê HHDV');
     expect(detailedSheet).toBeDefined();
 
-    const headers = detailedSheet!.getRow(1).values as any[];
+    const headers = detailedSheet!.getRow(4).values as any[];
     expect(headers[1]).toBe('Ngày phát hành');
     expect(headers[2]).toBe('Mã hàng hóa');
     expect(headers[3]).toBe('Tên hàng hóa, dịch vụ');
     expect(headers[4]).toBe('Đơn vị tính');
+
+    // Verify top rows for SUM and live SUBTOTAL
+    expect(detailedSheet!.getRow(1).getCell(3).value).toBe('TỔNG CỘNG (SUM)');
+    expect(detailedSheet!.getRow(2).getCell(3).value).toBe(
+      'TỔNG THEO BỘ LỌC (SUBTOTAL)',
+    );
+    expect(detailedSheet!.views).toMatchObject([
+      { state: 'frozen', ySplit: 4 },
+    ]);
   });
 
   it('exportExcel adds Tổng quan HHDV sheet without invoiceDate column', async () => {
@@ -198,9 +231,7 @@ describe('InvoiceQueryService', () => {
 
     const repository = createRepositoryMock(qb) as any;
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -209,13 +240,13 @@ describe('InvoiceQueryService', () => {
     const overviewSheet = workbook.getWorksheet('Tổng quan HHDV');
     expect(overviewSheet).toBeDefined();
 
-    const headers = overviewSheet!.getRow(1).values as any[];
+    const headers = overviewSheet!.getRow(4).values as any[];
     expect(headers).toContain('Mã hàng hóa');
     expect(headers).toContain('Tên hàng hóa, dịch vụ');
     expect(headers).toContain('Số lượng');
     expect(headers).not.toContain('Ngày phát hành');
 
-    const firstDataRow = overviewSheet!.getRow(2).values as any[];
+    const firstDataRow = overviewSheet!.getRow(5).values as any[];
     expect(firstDataRow[1]).toBe('BAT-01');
     expect(firstDataRow[2]).toBe('Loc gio dieu hoa');
     expect(firstDataRow[3]).toBe('CAI');
@@ -262,9 +293,7 @@ describe('InvoiceQueryService', () => {
     ]);
 
     const repository = createRepositoryMock(qb) as any;
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const buffer = await service.exportExcel({ direction: 'OUT' });
 
     const workbook = new ExcelJS.Workbook();
@@ -272,7 +301,7 @@ describe('InvoiceQueryService', () => {
 
     const overviewSheet = workbook.getWorksheet('Tổng quan HHDV');
     const overviewRows =
-      overviewSheet!.getRows(2, overviewSheet!.rowCount - 1) || [];
+      overviewSheet!.getRows(5, overviewSheet!.rowCount - 4) || [];
     const discountRow = overviewRows.find((row) => {
       const cellValue = row.getCell(2).value;
       const normalizedCellValue =
@@ -356,9 +385,7 @@ describe('InvoiceQueryService', () => {
       },
     };
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
     const buffer = await service.exportExcel({ direction: 'IN' });
 
     const workbook = new ExcelJS.Workbook();
@@ -374,7 +401,7 @@ describe('InvoiceQueryService', () => {
     // 1. Verify Sheet "Bảng kê"
     const summarySheet = workbook.getWorksheet('Bảng kê');
     expect(summarySheet).toBeDefined();
-    const summaryHeaders = summarySheet!.getRow(1).values as any[];
+    const summaryHeaders = summarySheet!.getRow(4).values as any[];
     expect(summaryHeaders[15]).toBe('Trạng thái');
     expect(summaryHeaders[16]).toBe('Chi nhánh');
     expect(summaryHeaders[17]).toBe('Tham chiếu cấn trừ');
@@ -384,8 +411,9 @@ describe('InvoiceQueryService', () => {
     expect(summaryHeaders[21]).toBe('Số tiền cấn trừ');
     expect(summaryHeaders[22]).toBe('Còn lại');
 
-    // Verify row values in Bảng kê
-    const summaryRow1 = summarySheet!.getRow(2);
+    // Verify row values in Bảng kê (data starts at Row 5)
+    const summaryRow1 = summarySheet!.getRow(5);
+    expect(summaryRow1.getCell(9).value).toBe('10%');
     expect(summaryRow1.getCell(15).value).toBe('Mới');
     expect(summaryRow1.getCell(16).value).toBe('Chi nhánh Đào Trí');
     expect(summaryRow1.getCell(17).value).toBe('FT26253089587018');
@@ -408,7 +436,7 @@ describe('InvoiceQueryService', () => {
     // 2. Verify Sheet "Bảng kê HHDV"
     const detailedSheet = workbook.getWorksheet('Bảng kê HHDV');
     expect(detailedSheet).toBeDefined();
-    const detailHeaders = detailedSheet!.getRow(1).values as any[];
+    const detailHeaders = detailedSheet!.getRow(4).values as any[];
     expect(detailHeaders[2]).toBe('Mã hàng hóa');
     expect(detailHeaders[3]).toBe('Tên hàng hóa, dịch vụ');
     expect(detailHeaders[4]).toBe('Đơn vị tính');
@@ -416,17 +444,18 @@ describe('InvoiceQueryService', () => {
     expect(detailHeaders[19]).toBe('Chi nhánh');
     expect(detailHeaders[20]).toBe('Phân loại dòng');
 
-    const detailRow1 = detailedSheet!.getRow(2);
+    const detailRow1 = detailedSheet!.getRow(5);
     expect(detailRow1.getCell(2).value).toBe('BAT21001011');
     expect(detailRow1.getCell(3).value).toBe('Phụ tùng A');
     expect(detailRow1.getCell(4).value).toBe('BỘ'); // Uppercase
+    expect(detailRow1.getCell(12).value).toBe('10%');
     expect(detailRow1.getCell(18).value).toBe('Mới');
     expect(detailRow1.getCell(19).value).toBe('Chi nhánh Đào Trí');
 
     // 3. Verify Sheet "Công nợ theo đối tượng"
     const debtSheet = workbook.getWorksheet('Công nợ theo đối tượng');
     expect(debtSheet).toBeDefined();
-    const debtHeaders = debtSheet!.getRow(1).values as any[];
+    const debtHeaders = debtSheet!.getRow(4).values as any[];
     expect(debtHeaders[1]).toBe('STT');
     expect(debtHeaders[2]).toBe('Mã số thuế');
     expect(debtHeaders[3]).toBe('Tên đối tác');
@@ -439,7 +468,7 @@ describe('InvoiceQueryService', () => {
     expect(debtHeaders[10]).toBe('Lũy kế còn nợ');
     expect(debtHeaders[11]).toBe('Trạng thái');
 
-    const debtRow1 = debtSheet!.getRow(2);
+    const debtRow1 = debtSheet!.getRow(5);
     expect(debtRow1.getCell(1).value).toBe(1);
     expect(debtRow1.getCell(2).value).toBe('0312345678');
     expect(debtRow1.getCell(3).value).toBe('CÔNG TY TNHH NHÀ CUNG CẤP A');
@@ -452,16 +481,17 @@ describe('InvoiceQueryService', () => {
     expect(debtRow1.getCell(10).value).toBe(500000);
     expect(debtRow1.getCell(11).value).toBe('Còn nợ');
 
-    // Verify Summary Footer Row in Công nợ theo đối tượng
-    const debtSummaryRow = debtSheet!.getRow(3);
-    expect(debtSummaryRow.getCell(3).value).toBe('TỔNG CỘNG');
-    expect(debtSummaryRow.getCell(4).value).toBe(1);
-    expect(debtSummaryRow.getCell(5).value).toBe(1100000);
-    expect(debtSummaryRow.getCell(6).value).toBe(600000);
-    expect(debtSummaryRow.getCell(7).value).toBe(500000);
-    expect(debtSummaryRow.getCell(8).value).toBe(1100000);
-    expect(debtSummaryRow.getCell(9).value).toBe(600000);
-    expect(debtSummaryRow.getCell(10).value).toBe(500000);
+    // Verify SUM & SUBTOTAL Top Rows in Công nợ theo đối tượng
+    const debtSumRow = debtSheet!.getRow(1);
+    expect(debtSumRow.getCell(3).value).toBe('TỔNG CỘNG (SUM)');
+    const debtSubtotalRow = debtSheet!.getRow(2);
+    expect(debtSubtotalRow.getCell(3).value).toBe(
+      'TỔNG THEO BỘ LỌC (SUBTOTAL)',
+    );
+    expect((debtSumRow.getCell(5).value as any).formula).toBe('SUM(E5:E5)');
+    expect((debtSubtotalRow.getCell(5).value as any).formula).toBe(
+      'SUBTOTAL(9,E5:E5)',
+    );
   });
 
   it('findAllItems queries items and returns paginated result with summary', async () => {
@@ -517,7 +547,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -564,7 +594,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -614,7 +644,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -689,7 +719,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -750,7 +780,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -830,7 +860,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(itemQb),
     };
 
-    const service = new InvoiceQueryService(
+    const service = createInvoiceQueryService(
       {} as any,
       { find: jest.fn().mockResolvedValue([]) } as any,
       itemRepo,
@@ -958,9 +988,7 @@ describe('InvoiceQueryService', () => {
       },
     };
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
 
     // Page 1
     const p1 = await service.findAll({
@@ -1019,9 +1047,7 @@ describe('InvoiceQueryService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     };
 
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
 
     const res = await service.getColumnOptions(
       'invoiceNo',
@@ -1118,9 +1144,7 @@ describe('InvoiceQueryService', () => {
     });
 
     const repository = createRepositoryMock(qb) as any;
-    const service = new InvoiceQueryService(repository, {
-      find: jest.fn().mockResolvedValue([]),
-    } as any);
+    const service = createInvoiceQueryService(repository);
 
     const buffer = await service.exportExcel({
       id: 'inv-1',
@@ -1140,12 +1164,12 @@ describe('InvoiceQueryService', () => {
       'Công nợ đối tác',
     ]);
 
-    // Sheet 1: Chi tiết HĐ has 1 data row
+    // Sheet 1: Chi tiết HĐ has 4 top rows + 1 data row (no bottom summary)
     const singleSummarySheet = workbook.getWorksheet('Chi tiết HĐ');
-    expect(singleSummarySheet!.rowCount).toBe(2); // 1 header + 1 row
+    expect(singleSummarySheet!.rowCount).toBe(5);
 
-    // Sheet 3: Bảng kê đối tác has 2 data rows
+    // Sheet 3: Bảng kê đối tác has 4 top rows + 2 data rows (no bottom summary)
     const partnerSummarySheet = workbook.getWorksheet('Bảng kê đối tác');
-    expect(partnerSummarySheet!.rowCount).toBe(3); // 1 header + 2 rows
+    expect(partnerSummarySheet!.rowCount).toBe(6);
   });
 });

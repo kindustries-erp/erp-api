@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, Repository, Not, Brackets } from 'typeorm';
 import { ErpOperatingExpense } from './entities/erp_operating_expense.entity';
@@ -8,13 +13,20 @@ import {
   ListOperatingExpensesQueryDto,
 } from './dto/operating-expense-query.dto';
 import { applyMultiKeywordFilter } from '../common/utils/query-builder.util';
+import { SmartAccountMappingService } from './services/smart-account-mapping.service';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
+import { PostExpenseDto, SettleInvoiceDto } from './dto/settle-invoice.dto';
 
 @Injectable()
 export class OperatingExpensesCoreService {
+  private readonly logger = new Logger(OperatingExpensesCoreService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ErpOperatingExpense)
     private readonly repository: Repository<ErpOperatingExpense>,
+    private readonly smartAccountMappingService: SmartAccountMappingService,
+    private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
   private async generateExpenseNo(manager: any, orderDate?: string) {
@@ -113,6 +125,12 @@ export class OperatingExpensesCoreService {
           dto.auto_generate_next ?? dto.autoGenerateNext ?? false,
         parentRecurringId:
           dto.parent_recurring_id ?? dto.parentRecurringId ?? null,
+        accrualMode: (
+          dto.accrualMode ||
+          dto.accrual_mode ||
+          'NONE'
+        ).toUpperCase(),
+        postingStatus: 'UNPOSTED',
         notes: dto.notes ?? dto.note ?? null,
         createdBy: userId ?? null,
       };
@@ -1052,5 +1070,249 @@ export class OperatingExpensesCoreService {
         status: Not('CANCELLED'),
       },
     });
+  }
+
+  async postExpense(id: string, dto?: PostExpenseDto) {
+    const expense = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!expense) throw new NotFoundException(`Expense ${id} not found`);
+    if (expense.postingStatus === 'POSTED') {
+      throw new BadRequestException('Khoản chi này đã được ghi sổ rồi.');
+    }
+    const accrualMode = (dto?.accrualMode || expense.accrualMode || 'NONE') as
+      | 'NONE'
+      | 'ACCRUED';
+    const accounts =
+      await this.smartAccountMappingService.resolveExpenseAccounts(
+        expense.categoryKey || 'KHAC',
+        accrualMode,
+      );
+
+    let branchId = expense.branchId;
+    if (!branchId) {
+      const branchRows = await this.dataSource.query(
+        `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 1`,
+      );
+      if (branchRows.length > 0) branchId = branchRows[0].id;
+    }
+    if (!branchId) {
+      throw new BadRequestException('Chưa chọn chi nhánh cho khoản chi này.');
+    }
+
+    const postingDate = dto?.postingDate
+      ? new Date(dto.postingDate)
+      : expense.documentDate
+        ? new Date(expense.documentDate)
+        : new Date();
+
+    const description =
+      dto?.description?.trim() ||
+      expense.title ||
+      `Chi phí ${expense.expenseNo}`;
+
+    const amount = Number(expense.totalAmount) || 0;
+    if (amount <= 0) {
+      throw new BadRequestException(
+        'Số tiền chi phí phải lớn hơn 0 để ghi sổ.',
+      );
+    }
+
+    const journalEntry = await this.accountingCoreService.createJournalEntry({
+      branchId,
+      date: postingDate,
+      documentDate: expense.documentDate
+        ? new Date(expense.documentDate)
+        : undefined,
+      description,
+      subjectName: expense.supplierNameSnapshot || undefined,
+      sourceType: 'OPEX',
+      sourceId: expense.id,
+      reference: expense.expenseNo,
+      entryNoPrefix: 'PKT',
+      lines: [
+        {
+          accountId: accounts.debitAccountId,
+          debit: amount,
+          credit: 0,
+          description,
+        },
+        {
+          accountId: accounts.creditAccountId,
+          debit: 0,
+          credit: amount,
+          description,
+        },
+      ],
+    });
+
+    expense.postingStatus = 'POSTED';
+    expense.accrualMode = accrualMode;
+    expense.journalEntryId = journalEntry.id;
+    await this.repository.save(expense);
+
+    return {
+      message: 'Hạch toán ghi sổ thành công',
+      data: expense,
+      journalEntry,
+    };
+  }
+
+  async unpostExpense(id: string) {
+    const expense = await this.repository.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!expense) throw new NotFoundException(`Expense ${id} not found`);
+    if (expense.postingStatus !== 'POSTED') {
+      throw new BadRequestException('Khoản chi này chưa được ghi sổ.');
+    }
+    if (expense.accrualMode === 'SETTLED') {
+      throw new BadRequestException(
+        'Khoản chi này đã được tất toán với hóa đơn. Vui lòng gỡ tất toán trước.',
+      );
+    }
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      expense.id,
+      'OPEX',
+    );
+    expense.postingStatus = 'UNPOSTED';
+    expense.journalEntryId = null;
+    await this.repository.save(expense);
+    return { message: 'Đã hủy ghi sổ khoản chi thành công', data: expense };
+  }
+
+  async settleExpenseWithInvoice(expenseId: string, dto: SettleInvoiceDto) {
+    const expense = await this.repository.findOne({
+      where: { id: expenseId, isDeleted: false },
+    });
+    if (!expense) throw new NotFoundException(`Expense ${expenseId} not found`);
+    if (expense.accrualMode === 'SETTLED') {
+      throw new BadRequestException('Khoản chi phí này đã được tất toán rồi.');
+    }
+    if (expense.accrualMode !== 'ACCRUED') {
+      throw new BadRequestException(
+        'Chỉ có thể tất toán hóa đơn cho khoản chi phí đã trích trước (ACCRUED).',
+      );
+    }
+
+    const invoices = await this.dataSource.query(
+      `SELECT id, invoice_no, serial_no, direction, total_amount, pre_vat_amount, vat_amount, branch_id, buyer_name, seller_name
+       FROM erp_invoices WHERE id = $1 AND is_deleted = false LIMIT 1`,
+      [dto.invoiceId],
+    );
+    if (!invoices || invoices.length === 0) {
+      throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
+    }
+    const invoice = invoices[0];
+
+    // Check if invoice already linked to another expense
+    const otherLinked = await this.repository.findOne({
+      where: {
+        linkedInvoiceId: dto.invoiceId,
+        isDeleted: false,
+        id: Not(expenseId),
+      },
+    });
+    if (otherLinked) {
+      throw new BadRequestException(
+        `Hóa đơn ${invoice.invoice_no} đã được gắn với khoản chi ${otherLinked.expenseNo}.`,
+      );
+    }
+
+    const settleAmount = dto.settleAmount ?? Number(expense.totalAmount);
+    const vatAmount = dto.vatAmount ?? Number(invoice.vat_amount || 0);
+    const totalSettle = Math.round((settleAmount + vatAmount) * 100) / 100;
+
+    // If live auto-posting is enabled, generate settlement journal entry
+    if (process.env.ENABLE_LIVE_AUTO_POSTING === 'true') {
+      const accounts =
+        await this.smartAccountMappingService.resolveExpenseAccounts(
+          expense.categoryKey || 'KHAC',
+          'SETTLED',
+        );
+      const t0003Acc =
+        await this.smartAccountMappingService.findAccountByCode('T0003');
+      const clearingCreditAccountId = t0003Acc
+        ? t0003Acc.id
+        : accounts.creditAccountId;
+
+      const branchId = expense.branchId || invoice.branch_id;
+      const postingDate = dto.postingDate
+        ? new Date(dto.postingDate)
+        : new Date();
+      const description =
+        dto.description ||
+        `Tất toán trích trước ${expense.expenseNo} với HĐ ${invoice.invoice_no}`;
+
+      const lines: {
+        accountId: string;
+        debit: number;
+        credit: number;
+        description?: string;
+      }[] = [
+        {
+          accountId: accounts.debitAccountId, // 335
+          debit: settleAmount,
+          credit: 0,
+          description,
+        },
+      ];
+      if (vatAmount > 0 && accounts.vatAccountId) {
+        lines.push({
+          accountId: accounts.vatAccountId, // 1331
+          debit: vatAmount,
+          credit: 0,
+          description: `Thuế GTGT khấu trừ HĐ ${invoice.invoice_no}`,
+        });
+      }
+      lines.push({
+        accountId: clearingCreditAccountId, // T0003
+        debit: 0,
+        credit: totalSettle,
+        description,
+      });
+
+      await this.accountingCoreService.createJournalEntry({
+        branchId,
+        date: postingDate,
+        description,
+        reference: `${expense.expenseNo}-${invoice.invoice_no}`,
+        sourceType: 'OPEX_SETTLEMENT',
+        sourceId: expense.id,
+        entryNoPrefix: 'PKT',
+        lines,
+      });
+    }
+
+    expense.accrualMode = 'SETTLED';
+    expense.linkedInvoiceId = dto.invoiceId;
+    expense.settledAt = new Date();
+    await this.repository.save(expense);
+
+    return {
+      message: 'Đã gắn hóa đơn và tất toán trích trước thành công',
+      data: expense,
+    };
+  }
+
+  async unsettleExpense(expenseId: string) {
+    const expense = await this.repository.findOne({
+      where: { id: expenseId, isDeleted: false },
+    });
+    if (!expense) throw new NotFoundException(`Expense ${expenseId} not found`);
+    if (expense.accrualMode !== 'SETTLED') {
+      throw new BadRequestException(
+        'Khoản chi này chưa được tất toán với hóa đơn.',
+      );
+    }
+    await this.accountingCoreService.deleteJournalEntryBySource(
+      expense.id,
+      'OPEX_SETTLEMENT',
+    );
+    expense.accrualMode = 'ACCRUED';
+    expense.linkedInvoiceId = null;
+    expense.settledAt = null;
+    await this.repository.save(expense);
+    return { message: 'Đã gỡ hóa đơn tất toán thành công', data: expense };
   }
 }

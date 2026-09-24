@@ -19,6 +19,11 @@ Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế 
    - **Tổng phải thu / Tổng phải trả (`paymentProgress`)**: Hiển thị số tiền tổng `money(total)` + thanh Progress Bar tỉ lệ thanh toán bên dưới + Tooltip chi tiết (đã thu/trả, còn nợ, %) + Header Filter 3 trạng thái (Đã thu đủ / Thu một phần / Chưa thu hoặc Đã trả đủ / Trả một phần / Chưa trả).
    - **Còn phải thu / Còn phải trả (`balanceAmount`)**: Hiển thị số dư nợ thực tế `money(balance)` với màu sắc trực quan (`emerald` khi hết nợ, `destructive` khi còn nợ) + Header Filter theo số tiền.
 5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
+6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
+   - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
+   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc.
+   - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
+   - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
@@ -149,11 +154,14 @@ Hàm `buildKeywordSqlClause` hỗ trợ cú pháp tìm kiếm chuẩn hóa:
 
 ### 5.3. Drawer Chi Tiết Công Nợ (`InvoicePartnerDebtDetailDrawer`)
 - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="xl"`, `collapsibleRightPanel={true}`).
-- **Cột phải (Right Panel)**: 3 DrawerSection gồm:
+- **Cột phải (Right Panel)**: 2 DrawerSection gồm:
   1. *Thông tin đối tác*: Tên đối tác, MST/CCCD, Phân loại Khách hàng/Nhà cung cấp, Địa chỉ.
   2. *Tổng quan tài chính & KPI công nợ*: 4 thẻ KPI tóm tắt + Phân bổ nợ theo thời hạn (0-30, 31-60, 61-90, >90 ngày).
-  3. *Biến động hóa đơn theo tháng*: BarChart chi phí/doanh thu.
-- **Cột trái (Left Panel / Main Content)**: `<DrawerSection>` bao bọc `<DataTable variant="spreadsheet">` có phân trang client-side (`page`, `pageSize`, options `[10, 20, 50]`), Header Filters đầy đủ, tìm kiếm chính xác/nhiều từ khóa, và dòng tổng phụ Subtotal Popover.
+- **Cột trái (Left Panel / Main Content)**: Thanh điều hướng `PillTabs` 2 sub-tabs:
+  - **Tab 1. Danh sách hóa đơn**: `<DataTable variant="spreadsheet">` hiển thị chi tiết các hóa đơn có phân trang client-side (`page`, `pageSize`, options `[10, 20, 50]`), Header Filters đầy đủ, tìm kiếm chính xác/nhiều từ khóa, và dòng tổng phụ Subtotal Popover.
+  - **Tab 2. Biến động & Phân tích (Visual Debt Analytics)**:
+    - *Hàng 1 (Grid 3:1)*: Biến động hóa đơn theo tháng (`BarChart` Stacked: Đã thu/trả vs Còn nợ) + Cơ cấu phân bổ 4 tầng tuổi nợ (`DonutChart`).
+    - *Hàng 2 (Grid 1:1)*: Biểu đồ Luân chuyển & Dòng tiền Tích lũy (`LineChart` với 3 đường: Tổng giá trị HĐ tích lũy, Tiền đã thu/trả tích lũy, Dư nợ còn lại) + Tỷ lệ Hoàn tất Thanh toán / Thu hồi Nợ theo Tháng (`BarChart` cố định 0-100%).
 
 ---
 

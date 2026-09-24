@@ -4,6 +4,10 @@ import { InvoiceDebtsService } from './invoice-debts.service';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { InvoicePartnerType } from '../dto/get-invoice-debts.dto';
 
+import { InvoiceDebtsQueryService } from './sub-services/invoice-debts-query.service';
+import { InvoiceDebtsDetailService } from './sub-services/invoice-debts-detail.service';
+import { InvoiceDebtsExportService } from './sub-services/invoice-debts-export.service';
+
 describe('InvoiceDebtsService', () => {
   let service: InvoiceDebtsService;
   let mockInvoiceRepo: {
@@ -18,6 +22,9 @@ describe('InvoiceDebtsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InvoiceDebtsService,
+        InvoiceDebtsQueryService,
+        InvoiceDebtsDetailService,
+        InvoiceDebtsExportService,
         {
           provide: getRepositoryToken(ErpInvoice),
           useValue: mockInvoiceRepo,

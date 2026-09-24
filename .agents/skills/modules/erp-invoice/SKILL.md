@@ -13,12 +13,27 @@ Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
 - **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **3 mốc thời gian cố định: 03:15 Sáng, 09:15 Sáng, 15:15 Chiều (Asia/Ho_Chi_Minh)** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
-- **Trích xuất Metadata Tự động & Subscribers**: Tự động nhận diện biển số xe (`license_plate`), số lệnh quyết toán / sửa chữa (`settlement_order`), mã phụ tùng VinFast chuẩn (`BAT21001011`, `EEP73110011AP`, `BEX...`, `SVC...`, `PVT...`) qua `vinfast-part-code.helper.ts` và `ErpInvoiceItemSubscriber` (lắng nghe `beforeInsert` và `beforeUpdate`).
-- **Hạch toán Kế toán Kép (Post / Unpost Journal Entries)**: Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
-- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`) và tự động gán chi nhánh nếu hóa đơn chưa có.
+- **Hạch toán Kế toán Kép & Tài khoản Treo Trung gian (Transit Accounts T0002 / T0003)**:
+  - Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
+  - **Hóa đơn Mua vào (`IN`)**: Hạch toán vào `Nợ T0003 (tiền hàng)` + `Nợ 1331 (thuế)` / `Có 331 (tổng tiền)`, **tuyệt đối không phỏng đoán chi phí 642/632**. Khi phát sinh chi phí thực tế (OPEX, vật tư...), hệ thống giải tỏa `T0003` sang tài khoản chi phí tương ứng để chống double chi phí.
+  - **Hóa đơn Bán ra (`OUT`)**: Hạch toán vào `Nợ 131 (tổng tiền)` / `Có T0002 (doanh thu treo)` + `Có 33311 (thuế đầu ra)`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Chặn tự động sinh bút toán sống khi chưa bật biến môi trường để phục vụ rà soát đối chiếu dữ liệu lịch sử an toàn.
+  - **Vô hiệu hóa Auto-post ngầm trên UI**: Gỡ bỏ lời gọi ngầm `autoPostStandard` khi lưu form hóa đơn để tránh sinh rác dữ liệu ngoài ý muốn.
+- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
 - **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
+- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture)**:
+  - `InvoiceQueryService` đóng vai trò Facade mỏng (~150 dòng) điều phối tới các sub-services chuyên biệt (mỗi file < 1000 dòng):
+    - `InvoiceListQueryService`: Truy vấn danh sách hóa đơn, phân trang, lọc đa chiều, tính grand totals & cumulative totals.
+    - `InvoiceItemsQueryService`: Truy vấn danh sách chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+    - `InvoiceStatsService`: Thống kê KPI, phân tích top mặt hàng, options phân quyền.
+    - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel hóa đơn và dòng hàng chuyên nghiệp đa sheet.
+    - Helpers chuyên trách: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+  - `InvoiceDebtsService` đóng vai trò Facade mỏng (~140 dòng) điều phối tới:
+    - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
+    - `InvoiceDebtsDetailService`: Chi tiết danh sách hóa đơn theo đối tác (`getPartnerInvoices` với parameterized query chống SQL injection).
+    - `InvoiceDebtsExportService`: Xuất file Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
@@ -318,6 +333,16 @@ src/erp-invoices-core/
 
 ### 5.6. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
 - **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+
+### 5.7. Bộ Lọc Cột Nâng Cao, Composite Options & Chế độ Chọn Tất Cả (`__ALL_MATCHING__`)
+- **Composite Column Options (`getColumnOptions` & `getItemColumnOptions`)**:
+  - Đối với cột `invoiceNo`: sinh `value = invoice_no:::serial_no` và `label = invoice_no (serial_no)` (hoặc `(serial_no)` khi chưa có số HĐ).
+  - Đối với cột `partner`: sinh `value = tax_code:::partner_name` và `label = partner_name (tax_code)`.
+  - Giúp phân biệt duy nhất các bản ghi trùng số hóa đơn nhưng khác ký hiệu, tránh hiện tượng tick nhầm checkbox giữa các hóa đơn khác nhau.
+- **Xử lý Filter `_applyColumnFilters`**:
+  - Tự động bóc tách chuỗi `:::` để match chính xác cặp `(invoice_no, serial_no)` hoặc `(tax_code, partner_name)`.
+  - **Hỗ trợ `__ALL_MATCHING__`**: Khi nhận `vals = ["__ALL_MATCHING__", keyword]`, backend áp dụng bộ lọc đa từ khóa (`applyMultiKeywordFilter` / `applyMultiKeywordMultiFieldFilter`) trên các trường tương ứng của cột thay vì điều kiện `IN (...)`.
+  - **Hỗ trợ tìm kiếm nâng cao**: Nhận diện tìm chính xác `"..."` và tìm nhiều từ khóa theo `;` (OR logic).
   1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
      - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
      - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.
@@ -381,28 +406,37 @@ src/erp-invoices-core/
     - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
 
 ### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel` / `exportExcel`)
-- **Cấu trúc Sheet & Trình bày Bảng**:
-  - **Quy chuẩn Thứ tự & Tên Sheet**:
-    - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
-      1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
-      2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
-      3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
-      4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
-    - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
-      1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
-      2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
-      3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
-      4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
-      5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
-      6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Cấu trúc Bảng Tính & Bố Cục Chuẩn**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức Excel sống `=SUM(Col5:ColN)` (kèm `result` fallback), nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động cập nhật khi người dùng lọc dữ liệu, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng trống phân cách trang nhã (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng in đậm 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Mô tả căn trái, Số tiền/SL căn phải.
+  - **Freeze Panes**: Cố định cuộn tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **AutoFilter**: Đặt tại Hàng 4 từ cột đầu đến cột cuối.
+  - **Chân bảng**: Loại bỏ dòng tổng cộng cuối bảng (vì đã có SUM & SUBTOTAL cố định ở đầu trang).
+- **Quy chuẩn Thứ tự & Tên Sheet**:
+  - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
+    1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
+    2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
+    3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
+    4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
+  - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
+    1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
+    2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
+    3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
+    4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
+    5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
+    6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Cột Chi nhánh & Cấn trừ & Thuế suất**:
   - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
   - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).
   - **Cột Còn lại**: Nổi bật với màu vàng hổ phách nhạt (`#FEFCE8` / `#FFFDE68A`) thể hiện số dư còn lại của hóa đơn sau cấn trừ.
   - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Bảng kê HHDV` và sheet `Tổng quan HHDV`.
-  - **Sheet Công nợ Theo Đối tượng**: Bổ sung sheet tổng hợp công nợ đối tác tính đến ngày kết thúc kỳ báo cáo (`cutoffDate`) với các cột *Lũy kế công nợ*, *Lũy kế cấn trừ*, *Lũy kế còn nợ* và dòng *TỔNG CỘNG* footer.
-- **Định dạng Số liệu & Đơn vị tính**:
-  - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
-  - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
+  - **Cột Thuế suất (`vatRate`)**: Định dạng `%` chuẩn mực qua helper `formatVatRate` (`8%`, `10%`, `0%`, `5.25%`, `KCT`, `KKKNT`, ...).
+  - **Định dạng Số liệu & Đơn vị tính**:
+    - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
+    - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
 
 ---
 
