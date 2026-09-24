@@ -80,9 +80,7 @@ describe('KgaraCaseSettlementCalcService', () => {
 
     it('should gracefully handle non-existent case', async () => {
       caseRepo.findOne.mockResolvedValue(null);
-      await expect(
-        service.recalculateCaseSettlementSummary('non-existent'),
-      ).resolves.not.toThrow();
+      await service.recalculateCaseSettlementSummary('non-existent');
       expect(caseRepo.update).not.toHaveBeenCalled();
     });
   });
