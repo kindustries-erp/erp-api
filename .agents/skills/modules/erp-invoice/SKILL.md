@@ -23,6 +23,17 @@ Các nghiệp vụ trọng tâm:
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
 - **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
+- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture)**:
+  - `InvoiceQueryService` đóng vai trò Facade mỏng (~150 dòng) điều phối tới các sub-services chuyên biệt (mỗi file < 1000 dòng):
+    - `InvoiceListQueryService`: Truy vấn danh sách hóa đơn, phân trang, lọc đa chiều, tính grand totals & cumulative totals.
+    - `InvoiceItemsQueryService`: Truy vấn danh sách chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+    - `InvoiceStatsService`: Thống kê KPI, phân tích top mặt hàng, options phân quyền.
+    - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel hóa đơn và dòng hàng chuyên nghiệp đa sheet.
+    - Helpers chuyên trách: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+  - `InvoiceDebtsService` đóng vai trò Facade mỏng (~140 dòng) điều phối tới:
+    - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
+    - `InvoiceDebtsDetailService`: Chi tiết danh sách hóa đơn theo đối tác (`getPartnerInvoices` với parameterized query chống SQL injection).
+    - `InvoiceDebtsExportService`: Xuất file Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
