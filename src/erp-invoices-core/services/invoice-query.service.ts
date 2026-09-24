@@ -19,6 +19,7 @@ import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity
 import {
   toInvoiceDto,
   parseVatRateForDisplay,
+  formatVatRate,
 } from '../helpers/invoice-mapper.helper';
 import {
   classifyInvoiceLine,
@@ -48,6 +49,17 @@ export interface ErpInvoiceItemQuery {
   sort_order?: 'asc' | 'desc';
   column_search?: string;
   column_filters?: string;
+}
+
+export function getExcelColumnLetter(colIndex: number): string {
+  let letter = '';
+  let temp = colIndex;
+  while (temp > 0) {
+    const mod = (temp - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    temp = Math.floor((temp - mod) / 26);
+  }
+  return letter;
 }
 
 @Injectable()
@@ -929,12 +941,14 @@ export class InvoiceQueryService {
         key: 'headerDiscountAmount',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Trước thuế GTGT',
         key: 'preVat',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thuế suất',
@@ -947,12 +961,14 @@ export class InvoiceQueryService {
         key: 'vat',
         width: 15,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thành tiền',
         key: 'total',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
@@ -985,12 +1001,14 @@ export class InvoiceQueryService {
         key: 'netOffAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Còn lại',
         key: 'remainingAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
     ];
 
@@ -1008,6 +1026,7 @@ export class InvoiceQueryService {
         key: 'qty',
         width: 15,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Đơn giá',
@@ -1020,6 +1039,7 @@ export class InvoiceQueryService {
         key: 'preVatAmount',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thuế suất',
@@ -1032,12 +1052,14 @@ export class InvoiceQueryService {
         key: 'vatAmount',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thành tiền',
         key: 'totalAmount',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       { header: 'Biển số xe', key: 'licensePlate', width: 15 },
       { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
@@ -1056,6 +1078,7 @@ export class InvoiceQueryService {
         key: 'totalQty',
         width: 18,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Đơn giá bình quân',
@@ -1068,24 +1091,28 @@ export class InvoiceQueryService {
         key: 'totalPreVat',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thuế GTGT',
         key: 'totalVat',
         width: 18,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Thành tiền',
         key: 'totalAmount',
         width: 20,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Số dòng',
         key: 'lineCount',
         width: 12,
         style: { numFmt: '#,##0' },
+        isCount: true,
       },
     ];
 
@@ -1098,92 +1125,204 @@ export class InvoiceQueryService {
         key: 'invoiceCount',
         width: 15,
         style: { numFmt: '#,##0' },
+        isCount: true,
       },
       {
         header: 'Tổng tiền hóa đơn',
         key: 'totalAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Đã cấn trừ',
         key: 'netOffAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Còn lại',
         key: 'remainingAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Lũy kế công nợ',
         key: 'cumulativeDebt',
         width: 24,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Lũy kế cấn trừ',
         key: 'cumulativeNetOff',
         width: 24,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Lũy kế còn nợ',
         key: 'cumulativeRemaining',
         width: 24,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       { header: 'Trạng thái', key: 'status', width: 16 },
     ];
 
-    const applyHeaderStyle = (
+    const borderThin: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+
+    const initSheetStructure = (
       sheet: ExcelJS.Worksheet,
-      sheetType: 'summary' | 'detailed' | 'overview' | 'debt' = 'detailed',
+      columns: Array<{ key: string; width?: number }>,
     ) => {
-      sheet.getRow(1).eachCell((cell, colNumber) => {
-        cell.font = { bold: true };
-        if (sheetType === 'summary') {
-          if (colNumber >= 17 && colNumber <= 21) {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFDCEEFB' },
-            };
-          } else if (colNumber === 22) {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFFDE68A' },
-            };
-          } else {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFE0E0E0' },
-            };
-          }
-        } else if (sheetType === 'debt' && colNumber >= 8 && colNumber <= 10) {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFDCEEFB' },
-          };
-        } else {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE0E0E0' },
-          };
+      sheet.columns = columns.map((c) => ({
+        key: c.key,
+        width: c.width,
+      }));
+      sheet.addRow([]);
+      sheet.addRow([]);
+      sheet.addRow([]);
+      sheet.addRow([]);
+    };
+
+    const finalizeSheetLayout = (
+      sheet: ExcelJS.Worksheet,
+      columns: Array<{
+        header: string;
+        key: string;
+        width: number;
+        style?: { numFmt?: string };
+        isSum?: boolean;
+        isCount?: boolean;
+      }>,
+      calculatedSums: Record<string, number>,
+      labelColIndex = 3,
+    ) => {
+      const totalCols = columns.length;
+      const startRow = 5;
+      const endRow = Math.max(startRow, sheet.rowCount);
+
+      const sumRow = sheet.getRow(1);
+      sumRow.height = 22;
+      sumRow.font = {
+        name: 'Calibri',
+        size: 10.5,
+        bold: true,
+        color: { argb: 'FF0F172A' },
+      };
+
+      const subtotalRow = sheet.getRow(2);
+      subtotalRow.height = 22;
+      subtotalRow.font = {
+        name: 'Calibri',
+        size: 10.5,
+        bold: true,
+        color: { argb: 'FF1E40AF' },
+      };
+
+      const blankRow = sheet.getRow(3);
+      blankRow.height = 10;
+
+      const headerRow = sheet.getRow(4);
+      headerRow.height = 28;
+      headerRow.font = {
+        name: 'Calibri',
+        size: 11,
+        bold: true,
+        color: { argb: 'FFFFFFFF' },
+      };
+      headerRow.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+
+      for (let c = 1; c <= totalCols; c++) {
+        const colDef = columns[c - 1];
+        const colLetter = getExcelColumnLetter(c);
+
+        const cellSum = sumRow.getCell(c);
+        cellSum.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF1F5F9' },
+        };
+        cellSum.border = borderThin;
+
+        const cellSub = subtotalRow.getCell(c);
+        cellSub.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFEFF6FF' },
+        };
+        cellSub.border = {
+          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+
+        const cellHdr = headerRow.getCell(c);
+        cellHdr.value = colDef.header;
+        cellHdr.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF334155' },
+        };
+        cellHdr.border = borderThin;
+
+        if (c === labelColIndex) {
+          cellSum.value = 'TỔNG CỘNG (SUM)';
+          cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
+          cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';
+          cellSub.alignment = { horizontal: 'left', vertical: 'middle' };
         }
-      });
-      sheet.views = [
-        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-      ];
+
+        if (colDef.isSum) {
+          const sumVal = calculatedSums[colDef.key] || 0;
+          cellSum.value = {
+            formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
+            result: sumVal,
+          };
+          cellSum.alignment = { horizontal: 'right', vertical: 'middle' };
+          cellSum.numFmt = colDef.style?.numFmt || '#,##0.00';
+
+          cellSub.value = {
+            formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
+            result: sumVal,
+          };
+          cellSub.alignment = { horizontal: 'right', vertical: 'middle' };
+          cellSub.numFmt = colDef.style?.numFmt || '#,##0.00';
+        } else if (colDef.isCount) {
+          const sumVal = calculatedSums[colDef.key] || 0;
+          cellSum.value = {
+            formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
+            result: sumVal,
+          };
+          cellSum.alignment = { horizontal: 'center', vertical: 'middle' };
+          cellSum.numFmt = colDef.style?.numFmt || '#,##0';
+
+          cellSub.value = {
+            formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
+            result: sumVal,
+          };
+          cellSub.alignment = { horizontal: 'center', vertical: 'middle' };
+          cellSub.numFmt = colDef.style?.numFmt || '#,##0';
+        }
+      }
+
+      sheet.views = [{ state: 'frozen', ySplit: 4 }];
       sheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: sheet.columns.length },
+        from: { row: 4, column: 1 },
+        to: { row: endRow, column: totalCols },
       };
     };
 
@@ -1233,6 +1372,13 @@ export class InvoiceQueryService {
       };
 
     const writeSummaryRows = (sheet: ExcelJS.Worksheet, invoiceList: any[]) => {
+      let sumDiscount = 0;
+      let sumPreVat = 0;
+      let sumVat = 0;
+      let sumTotal = 0;
+      let sumNetOff = 0;
+      let sumRemaining = 0;
+
       for (const inv of invoiceList) {
         const partnerName =
           query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -1240,8 +1386,19 @@ export class InvoiceQueryService {
           query.direction === 'IN' ? inv.sellerTaxCode : inv.buyerTaxCode;
         const address =
           query.direction === 'IN' ? inv.sellerAddress : inv.buyerAddress;
-        const remainingAmount =
-          Number(inv.totalAmount || 0) - Number((inv as any).netOffAmount || 0);
+        const invDiscount = Number(inv.discountAmount) || 0;
+        const invPreVat = Number(inv.preVatAmount) || 0;
+        const invVat = Number(inv.vatAmount) || 0;
+        const invTotal = Number(inv.totalAmount) || 0;
+        const invNetOff = Number((inv as any).netOffAmount) || 0;
+        const remainingAmount = invTotal - invNetOff;
+
+        sumDiscount += invDiscount;
+        sumPreVat += invPreVat;
+        sumVat += invVat;
+        sumTotal += invTotal;
+        sumNetOff += invNetOff;
+        sumRemaining += remainingAmount;
 
         const fullDesc = [
           inv.description,
@@ -1251,18 +1408,18 @@ export class InvoiceQueryService {
           .filter(Boolean)
           .join(' | ');
 
-        sheet.addRow({
+        const row = sheet.addRow({
           invoiceDate: inv.invoiceDate,
           serialNo: inv.serialNo,
           invoiceNo: inv.invoiceNo,
           partnerName,
           taxCode,
           address,
-          headerDiscountAmount: Number(inv.discountAmount) || 0,
-          preVat: Number(inv.preVatAmount) || 0,
-          vatRate: parseVatRateForDisplay(inv.vatRate),
-          vat: Number(inv.vatAmount) || 0,
-          total: Number(inv.totalAmount) || 0,
+          headerDiscountAmount: invDiscount,
+          preVat: invPreVat,
+          vatRate: formatVatRate(inv.vatRate),
+          vat: invVat,
+          total: invTotal,
           licensePlate: inv.licensePlate || '',
           wo: inv.settlementOrder || '',
           description: fullDesc,
@@ -1272,28 +1429,88 @@ export class InvoiceQueryService {
           netOffTransDate: (inv as any).netOffTransDate || '',
           netOffTransDesc: (inv as any).netOffTransDesc || '',
           netOffRefAmount: Number((inv as any).netOffRefAmount) || 0,
-          netOffAmount: Number((inv as any).netOffAmount) || 0,
+          netOffAmount: invNetOff,
           remainingAmount,
         });
 
-        const lastSummaryRow = sheet.lastRow;
-        if (lastSummaryRow) {
-          for (let c = 17; c <= 21; c++) {
-            const cell = lastSummaryRow.getCell(c);
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF0F9FF' },
-            };
-          }
-          const remainingCell = lastSummaryRow.getCell(22);
-          remainingCell.fill = {
+        row.height = 20;
+        row.font = { name: 'Calibri', size: 10 };
+
+        row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(6).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(7).numFmt = '#,##0.00';
+        row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(8).numFmt = '#,##0.00';
+        row.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(10).numFmt = '#,##0.00';
+        row.getCell(11).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(11).numFmt = '#,##0.00';
+        row.getCell(12).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+        row.getCell(13).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+        row.getCell(14).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(15).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+        row.getCell(16).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(17).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+        row.getCell(18).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+        row.getCell(19).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(20).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(20).numFmt = '#,##0.00';
+        row.getCell(21).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(21).numFmt = '#,##0.00';
+        row.getCell(22).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(22).numFmt = '#,##0.00';
+
+        for (let c = 1; c <= 22; c++) {
+          row.getCell(c).border = borderThin;
+        }
+        for (let c = 17; c <= 21; c++) {
+          row.getCell(c).fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FFFEFCE8' },
+            fgColor: { argb: 'FFF0F9FF' },
           };
         }
+        row.getCell(22).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEFCE8' },
+        };
       }
+
+      finalizeSheetLayout(
+        sheet,
+        summaryColumns,
+        {
+          headerDiscountAmount: sumDiscount,
+          preVat: sumPreVat,
+          vat: sumVat,
+          total: sumTotal,
+          netOffAmount: sumNetOff,
+          remainingAmount: sumRemaining,
+        },
+        4,
+      );
     };
 
     const writeDetailedRows = (
@@ -1301,6 +1518,11 @@ export class InvoiceQueryService {
       invoiceList: any[],
       onAccumulate?: (payload: any) => void,
     ) => {
+      let sumQty = 0;
+      let sumPreVat = 0;
+      let sumVat = 0;
+      let sumTotal = 0;
+
       for (const inv of invoiceList) {
         const partnerName =
           query.direction === 'IN' ? inv.sellerName : inv.buyerName;
@@ -1349,7 +1571,12 @@ export class InvoiceQueryService {
             },
           );
 
-          sheet.addRow({
+          sumQty += Number(normalizedFallback.quantity) || 0;
+          sumPreVat += Number(normalizedFallback.preVatAmount) || 0;
+          sumVat += Number(normalizedFallback.vatAmount) || 0;
+          sumTotal += Number(normalizedFallback.totalAmount) || 0;
+
+          const row = sheet.addRow({
             invoiceDate: inv.invoiceDate,
             itemCode: '',
             itemName: inv.description || '',
@@ -1361,7 +1588,7 @@ export class InvoiceQueryService {
             qty: normalizedFallback.quantity,
             unitPrice: normalizedFallback.unitPrice,
             preVatAmount: normalizedFallback.preVatAmount,
-            vatRate: parseVatRateForDisplay(inv.vatRate),
+            vatRate: formatVatRate(inv.vatRate),
             vatAmount: normalizedFallback.vatAmount,
             totalAmount: normalizedFallback.totalAmount,
             licensePlate: inv.licensePlate || '',
@@ -1376,6 +1603,93 @@ export class InvoiceQueryService {
                   ? 'Cứu hộ'
                   : 'Thông thường',
           });
+
+          row.height = 20;
+          row.font = { name: 'Calibri', size: 10 };
+
+          row.getCell(1).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(2).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+          row.getCell(4).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(5).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(6).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(7).alignment = { horizontal: 'left', vertical: 'middle' };
+          row.getCell(8).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(9).alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+          };
+          row.getCell(9).numFmt = '#,##0.00';
+          row.getCell(10).alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+          };
+          row.getCell(10).numFmt = '#,##0.00';
+          row.getCell(11).alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+          };
+          row.getCell(11).numFmt = '#,##0.00';
+          row.getCell(12).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(13).alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+          };
+          row.getCell(13).numFmt = '#,##0.00';
+          row.getCell(14).alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+          };
+          row.getCell(14).numFmt = '#,##0.00';
+          row.getCell(15).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(16).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(17).alignment = {
+            horizontal: 'left',
+            vertical: 'middle',
+          };
+          row.getCell(18).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+          row.getCell(19).alignment = {
+            horizontal: 'left',
+            vertical: 'middle',
+          };
+          row.getCell(20).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+          };
+
+          for (let c = 1; c <= 20; c++) {
+            row.getCell(c).border = borderThin;
+          }
 
           onAccumulate?.({
             itemCode: '',
@@ -1420,7 +1734,12 @@ export class InvoiceQueryService {
               },
             );
 
-            sheet.addRow({
+            sumQty += Number(normalizedItem.quantity) || 0;
+            sumPreVat += Number(normalizedItem.preVatAmount) || 0;
+            sumVat += Number(normalizedItem.vatAmount) || 0;
+            sumTotal += Number(normalizedItem.totalAmount) || 0;
+
+            const row = sheet.addRow({
               invoiceDate: inv.invoiceDate,
               itemCode: item.itemCode || '',
               itemName: item.description || '',
@@ -1432,7 +1751,7 @@ export class InvoiceQueryService {
               qty: normalizedItem.quantity,
               unitPrice: normalizedItem.unitPrice,
               preVatAmount: normalizedItem.preVatAmount,
-              vatRate: itemVatRateRaw,
+              vatRate: formatVatRate(item.vatRate || inv.vatRate),
               vatAmount: normalizedItem.vatAmount,
               totalAmount: normalizedItem.totalAmount,
               licensePlate: inv.licensePlate || '',
@@ -1448,6 +1767,99 @@ export class InvoiceQueryService {
                     : 'Thông thường',
             });
 
+            row.height = 20;
+            row.font = { name: 'Calibri', size: 10 };
+
+            row.getCell(1).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(2).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(3).alignment = {
+              horizontal: 'left',
+              vertical: 'middle',
+            };
+            row.getCell(4).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(5).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(6).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(7).alignment = {
+              horizontal: 'left',
+              vertical: 'middle',
+            };
+            row.getCell(8).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(9).alignment = {
+              horizontal: 'right',
+              vertical: 'middle',
+            };
+            row.getCell(9).numFmt = '#,##0.00';
+            row.getCell(10).alignment = {
+              horizontal: 'right',
+              vertical: 'middle',
+            };
+            row.getCell(10).numFmt = '#,##0.00';
+            row.getCell(11).alignment = {
+              horizontal: 'right',
+              vertical: 'middle',
+            };
+            row.getCell(11).numFmt = '#,##0.00';
+            row.getCell(12).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(13).alignment = {
+              horizontal: 'right',
+              vertical: 'middle',
+            };
+            row.getCell(13).numFmt = '#,##0.00';
+            row.getCell(14).alignment = {
+              horizontal: 'right',
+              vertical: 'middle',
+            };
+            row.getCell(14).numFmt = '#,##0.00';
+            row.getCell(15).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(16).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(17).alignment = {
+              horizontal: 'left',
+              vertical: 'middle',
+            };
+            row.getCell(18).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+            row.getCell(19).alignment = {
+              horizontal: 'left',
+              vertical: 'middle',
+            };
+            row.getCell(20).alignment = {
+              horizontal: 'center',
+              vertical: 'middle',
+            };
+
+            for (let c = 1; c <= 20; c++) {
+              row.getCell(c).border = borderThin;
+            }
+
             onAccumulate?.({
               itemCode: item.itemCode || '',
               itemName: item.description || '',
@@ -1461,6 +1873,18 @@ export class InvoiceQueryService {
           }
         }
       }
+
+      finalizeSheetLayout(
+        sheet,
+        detailedColumns,
+        {
+          qty: sumQty,
+          preVatAmount: sumPreVat,
+          vatAmount: sumVat,
+          totalAmount: sumTotal,
+        },
+        3,
+      );
     };
 
     const writeOverviewRows = (
@@ -1473,26 +1897,74 @@ export class InvoiceQueryService {
           a.itemCode.localeCompare(b.itemCode, 'vi'),
       );
 
-      for (const row of overviewRows) {
+      let sumQty = 0;
+      let sumPreVat = 0;
+      let sumVat = 0;
+      let sumTotal = 0;
+      let sumLines = 0;
+
+      for (const rowData of overviewRows) {
         const avgUnitPrice =
-          row.totalQty > 0
-            ? row.totalUnitPriceWeight / row.totalQty
-            : row.lineCount > 0
-              ? row.totalPreVat / row.lineCount
+          rowData.totalQty > 0
+            ? rowData.totalUnitPriceWeight / rowData.totalQty
+            : rowData.lineCount > 0
+              ? rowData.totalPreVat / rowData.lineCount
               : 0;
 
-        sheet.addRow({
-          itemCode: row.itemCode,
-          itemName: row.itemName,
-          uom: row.uom,
-          totalQty: row.totalQty,
+        sumQty += rowData.totalQty;
+        sumPreVat += rowData.totalPreVat;
+        sumVat += rowData.totalVat;
+        sumTotal += rowData.totalAmount;
+        sumLines += rowData.lineCount;
+
+        const row = sheet.addRow({
+          itemCode: rowData.itemCode,
+          itemName: rowData.itemName,
+          uom: rowData.uom,
+          totalQty: rowData.totalQty,
           avgUnitPrice,
-          totalPreVat: row.totalPreVat,
-          totalVat: row.totalVat,
-          totalAmount: row.totalAmount,
-          lineCount: row.lineCount,
+          totalPreVat: rowData.totalPreVat,
+          totalVat: rowData.totalVat,
+          totalAmount: rowData.totalAmount,
+          lineCount: rowData.lineCount,
         });
+
+        row.height = 20;
+        row.font = { name: 'Calibri', size: 10 };
+
+        row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(4).numFmt = '#,##0.00';
+        row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(5).numFmt = '#,##0.00';
+        row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(6).numFmt = '#,##0.00';
+        row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(7).numFmt = '#,##0.00';
+        row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(8).numFmt = '#,##0.00';
+        row.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(9).numFmt = '#,##0';
+
+        for (let c = 1; c <= 9; c++) {
+          row.getCell(c).border = borderThin;
+        }
       }
+
+      finalizeSheetLayout(
+        sheet,
+        overviewColumns,
+        {
+          totalQty: sumQty,
+          totalPreVat: sumPreVat,
+          totalVat: sumVat,
+          totalAmount: sumTotal,
+          lineCount: sumLines,
+        },
+        2,
+      );
     };
 
     // Build Cumulative map for debt
@@ -1636,55 +2108,73 @@ export class InvoiceQueryService {
       let sumCumulativeNetOff = 0;
       let sumCumulativeRemaining = 0;
 
-      for (const row of partnerDebtRows) {
-        sumInvoices += row.invoiceCount;
-        sumTotalAmount += row.totalAmount;
-        sumNetOffAmount += row.netOffAmount;
-        sumRemainingAmount += row.remainingAmount;
-        sumCumulativeDebt += row.cumulativeDebt;
-        sumCumulativeNetOff += row.cumulativeNetOff;
-        sumCumulativeRemaining += row.cumulativeRemaining;
+      for (const rowData of partnerDebtRows) {
+        sumInvoices += rowData.invoiceCount;
+        sumTotalAmount += rowData.totalAmount;
+        sumNetOffAmount += rowData.netOffAmount;
+        sumRemainingAmount += rowData.remainingAmount;
+        sumCumulativeDebt += rowData.cumulativeDebt;
+        sumCumulativeNetOff += rowData.cumulativeNetOff;
+        sumCumulativeRemaining += rowData.cumulativeRemaining;
 
-        sheet.addRow({
+        const row = sheet.addRow({
           stt: stt++,
-          taxCode: row.taxCode,
-          partnerName: row.partnerName,
-          invoiceCount: row.invoiceCount,
-          totalAmount: row.totalAmount,
-          netOffAmount: row.netOffAmount,
-          remainingAmount: row.remainingAmount,
-          cumulativeDebt: row.cumulativeDebt,
-          cumulativeNetOff: row.cumulativeNetOff,
-          cumulativeRemaining: row.cumulativeRemaining,
-          status: row.cumulativeRemaining > 0 ? 'Còn nợ' : 'Đã tất toán',
+          taxCode: rowData.taxCode,
+          partnerName: rowData.partnerName,
+          invoiceCount: rowData.invoiceCount,
+          totalAmount: rowData.totalAmount,
+          netOffAmount: rowData.netOffAmount,
+          remainingAmount: rowData.remainingAmount,
+          cumulativeDebt: rowData.cumulativeDebt,
+          cumulativeNetOff: rowData.cumulativeNetOff,
+          cumulativeRemaining: rowData.cumulativeRemaining,
+          status: rowData.cumulativeRemaining > 0 ? 'Còn nợ' : 'Đã tất toán',
         });
+
+        row.height = 20;
+        row.font = { name: 'Calibri', size: 10 };
+
+        row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+        row.getCell(4).numFmt = '#,##0';
+        row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(5).numFmt = '#,##0.00';
+        row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(6).numFmt = '#,##0.00';
+        row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(7).numFmt = '#,##0.00';
+        row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(8).numFmt = '#,##0.00';
+        row.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(9).numFmt = '#,##0.00';
+        row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(10).numFmt = '#,##0.00';
+        row.getCell(11).alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+        };
+
+        for (let c = 1; c <= 11; c++) {
+          row.getCell(c).border = borderThin;
+        }
       }
 
-      const debtSummaryRow = sheet.addRow({
-        stt: '',
-        taxCode: '',
-        partnerName: 'TỔNG CỘNG',
-        invoiceCount: sumInvoices,
-        totalAmount: sumTotalAmount,
-        netOffAmount: sumNetOffAmount,
-        remainingAmount: sumRemainingAmount,
-        cumulativeDebt: sumCumulativeDebt,
-        cumulativeNetOff: sumCumulativeNetOff,
-        cumulativeRemaining: sumCumulativeRemaining,
-        status: '',
-      });
-      debtSummaryRow.font = { bold: true };
-      debtSummaryRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE8F0FE' },
-        };
-        cell.border = {
-          top: { style: 'thin' },
-          bottom: { style: 'double' },
-        };
-      });
+      finalizeSheetLayout(
+        sheet,
+        debtColumns,
+        {
+          invoiceCount: sumInvoices,
+          totalAmount: sumTotalAmount,
+          netOffAmount: sumNetOffAmount,
+          remainingAmount: sumRemainingAmount,
+          cumulativeDebt: sumCumulativeDebt,
+          cumulativeNetOff: sumCumulativeNetOff,
+          cumulativeRemaining: sumCumulativeRemaining,
+        },
+        3,
+      );
     };
 
     const isSingleInvoice = Boolean(query.id && items.length === 1);
@@ -1744,35 +2234,30 @@ export class InvoiceQueryService {
 
       // 1. Sheet: Chi tiết HĐ (chỉ dữ liệu hóa đơn này)
       const singleSummarySheet = workbook.addWorksheet('Chi tiết HĐ');
-      singleSummarySheet.columns = summaryColumns;
-      applyHeaderStyle(singleSummarySheet, 'summary');
+      initSheetStructure(singleSummarySheet, summaryColumns);
       writeSummaryRows(singleSummarySheet, items);
 
       // 2. Sheet: Bảng kê HHDV HĐ (chỉ hàng hóa của hóa đơn này)
       const singleDetailedSheet = workbook.addWorksheet('Bảng kê HHDV HĐ');
-      singleDetailedSheet.columns = detailedColumns;
-      applyHeaderStyle(singleDetailedSheet, 'detailed');
+      initSheetStructure(singleDetailedSheet, detailedColumns);
       writeDetailedRows(singleDetailedSheet, items);
 
       // 3. Sheet: Bảng kê đối tác (tổng hợp toàn bộ hóa đơn của đối tượng đó)
       const partnerSummarySheet = workbook.addWorksheet('Bảng kê đối tác');
-      partnerSummarySheet.columns = summaryColumns;
-      applyHeaderStyle(partnerSummarySheet, 'summary');
+      initSheetStructure(partnerSummarySheet, summaryColumns);
       writeSummaryRows(partnerSummarySheet, partnerItems);
 
       // 4. Sheet: Tổng quan HHDV đối tác (đặt trước Bảng kê HHDV)
       const partnerOverviewSheet = workbook.addWorksheet(
         'Tổng quan HHDV đối tác',
       );
-      partnerOverviewSheet.columns = overviewColumns;
-      applyHeaderStyle(partnerOverviewSheet, 'overview');
+      initSheetStructure(partnerOverviewSheet, overviewColumns);
 
       // 5. Sheet: Bảng kê HHDV đối tác (toàn bộ hàng hóa của đối tượng đó)
       const partnerDetailedSheet = workbook.addWorksheet(
         'Bảng kê HHDV đối tác',
       );
-      partnerDetailedSheet.columns = detailedColumns;
-      applyHeaderStyle(partnerDetailedSheet, 'detailed');
+      initSheetStructure(partnerDetailedSheet, detailedColumns);
 
       const partnerOverviewMap = new Map<string, any>();
       writeDetailedRows(partnerDetailedSheet, partnerItems, (p) =>
@@ -1782,25 +2267,21 @@ export class InvoiceQueryService {
 
       // 6. Sheet: Công nợ đối tác
       const partnerDebtSheet = workbook.addWorksheet('Công nợ đối tác');
-      partnerDebtSheet.columns = debtColumns;
-      applyHeaderStyle(partnerDebtSheet, 'debt');
+      initSheetStructure(partnerDebtSheet, debtColumns);
       writeDebtRows(partnerDebtSheet, partnerItems);
     } else {
       // 1. Sheet: Bảng kê
       const summarySheet = workbook.addWorksheet('Bảng kê');
-      summarySheet.columns = summaryColumns;
-      applyHeaderStyle(summarySheet, 'summary');
+      initSheetStructure(summarySheet, summaryColumns);
       writeSummaryRows(summarySheet, items);
 
       // 2. Sheet: Tổng quan HHDV (đặt trước Bảng kê HHDV)
       const overviewSheet = workbook.addWorksheet('Tổng quan HHDV');
-      overviewSheet.columns = overviewColumns;
-      applyHeaderStyle(overviewSheet, 'overview');
+      initSheetStructure(overviewSheet, overviewColumns);
 
       // 3. Sheet: Bảng kê HHDV
       const detailedSheet = workbook.addWorksheet('Bảng kê HHDV');
-      detailedSheet.columns = detailedColumns;
-      applyHeaderStyle(detailedSheet, 'detailed');
+      initSheetStructure(detailedSheet, detailedColumns);
 
       const overviewMap = new Map<string, any>();
       writeDetailedRows(detailedSheet, items, (p) =>
@@ -1810,8 +2291,7 @@ export class InvoiceQueryService {
 
       // 4. Sheet: Công nợ theo đối tượng
       const debtSheet = workbook.addWorksheet('Công nợ theo đối tượng');
-      debtSheet.columns = debtColumns;
-      applyHeaderStyle(debtSheet, 'debt');
+      initSheetStructure(debtSheet, debtColumns);
       writeDebtRows(debtSheet, items);
     }
 
@@ -3936,7 +4416,7 @@ export class InvoiceQueryService {
       }
     };
 
-    worksheet.columns = [
+    const columns = [
       { header: 'STT', key: 'stt', width: 8 },
       { header: 'Số HĐ', key: 'invoiceNo', width: 16 },
       { header: 'Ký hiệu', key: 'serialNo', width: 14 },
@@ -3954,27 +4434,67 @@ export class InvoiceQueryService {
         width: 40,
       },
       { header: 'ĐVT', key: 'unit', width: 10 },
-      { header: 'Số lượng', key: 'quantity', width: 12 },
-      { header: 'Đơn giá', key: 'unitPrice', width: 16 },
-      { header: 'Thành tiền', key: 'preVatAmount', width: 18 },
+      {
+        header: 'Số lượng',
+        key: 'quantity',
+        width: 12,
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
+      },
+      {
+        header: 'Đơn giá',
+        key: 'unitPrice',
+        width: 16,
+        style: { numFmt: '#,##0.00' },
+      },
+      {
+        header: 'Thành tiền',
+        key: 'preVatAmount',
+        width: 18,
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
+      },
       { header: 'Thuế suất', key: 'vatRate', width: 12 },
-      { header: 'Tiền thuế VAT', key: 'vatAmount', width: 16 },
-      { header: 'Chiết khấu', key: 'discountAmount', width: 16 },
-      { header: 'Tổng thanh toán', key: 'totalAmount', width: 20 },
+      {
+        header: 'Tiền thuế VAT',
+        key: 'vatAmount',
+        width: 16,
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
+      },
+      {
+        header: 'Chiết khấu',
+        key: 'discountAmount',
+        width: 16,
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
+      },
+      {
+        header: 'Tổng thanh toán',
+        key: 'totalAmount',
+        width: 20,
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
+      },
       { header: 'Chi nhánh', key: 'branchName', width: 22 },
       { header: 'Trạng thái GĐT', key: 'taxInvoiceStatus', width: 16 },
     ];
 
-    // Style Header Row
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF1E293B' },
+    const borderThin: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
     };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-    headerRow.height = 26;
+
+    worksheet.columns = columns.map((c) => ({
+      key: c.key,
+      width: c.width,
+    }));
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    worksheet.addRow([]);
 
     result.items.forEach((item, index) => {
       const row = worksheet.addRow({
@@ -3996,7 +4516,7 @@ export class InvoiceQueryService {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         preVatAmount: item.preVatAmount,
-        vatRate: item.vatRate ? `${item.vatRate}` : '',
+        vatRate: formatVatRate(item.vatRate),
         vatAmount: item.vatAmount,
         discountAmount: item.discountAmount,
         totalAmount: item.totalAmount,
@@ -4004,50 +4524,203 @@ export class InvoiceQueryService {
         taxInvoiceStatus: formatTaxInvoiceStatus(item.taxInvoiceStatus),
       });
 
-      row.getCell('stt').alignment = { horizontal: 'center' };
-      row.getCell('invoiceDate').alignment = { horizontal: 'center' };
-      row.getCell('taxCode').alignment = { horizontal: 'center' };
-      row.getCell('unit').alignment = { horizontal: 'center' };
-      row.getCell('vatRate').alignment = { horizontal: 'center' };
-      row.getCell('status').alignment = { horizontal: 'center' };
-      row.getCell('postingStatus').alignment = { horizontal: 'center' };
+      row.height = 20;
+      row.font = { name: 'Calibri', size: 10 };
 
+      row.getCell('stt').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('invoiceNo').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('serialNo').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('invoiceDate').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('partnerName').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+      };
+      row.getCell('taxCode').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('itemCode').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('description').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+      };
+      row.getCell('unit').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('quantity').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
       row.getCell('quantity').numFmt = '#,##0.00';
-      row.getCell('unitPrice').numFmt = '#,##0';
-      row.getCell('preVatAmount').numFmt = '#,##0';
-      row.getCell('vatAmount').numFmt = '#,##0';
-      row.getCell('discountAmount').numFmt = '#,##0';
-      row.getCell('totalAmount').numFmt = '#,##0';
+      row.getCell('unitPrice').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+      row.getCell('unitPrice').numFmt = '#,##0.00';
+      row.getCell('preVatAmount').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+      row.getCell('preVatAmount').numFmt = '#,##0.00';
+      row.getCell('vatRate').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+      row.getCell('vatAmount').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+      row.getCell('vatAmount').numFmt = '#,##0.00';
+      row.getCell('discountAmount').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+      row.getCell('discountAmount').numFmt = '#,##0.00';
+      row.getCell('totalAmount').alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+      };
+      row.getCell('totalAmount').numFmt = '#,##0.00';
+      row.getCell('branchName').alignment = {
+        horizontal: 'left',
+        vertical: 'middle',
+      };
+      row.getCell('taxInvoiceStatus').alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+      };
+
+      for (let c = 1; c <= 18; c++) {
+        row.getCell(c).border = borderThin;
+      }
     });
 
-    // Summary Row
-    const summaryRow = worksheet.addRow({
-      stt: '',
-      invoiceNo: 'TỔNG CỘNG',
-      serialNo: '',
-      invoiceDate: '',
-      partnerName: '',
-      taxCode: '',
-      itemCode: '',
-      description: '',
-      unit: '',
+    const totalCols = columns.length;
+    const startRow = 5;
+    const endRow = Math.max(startRow, worksheet.rowCount);
+    const calculatedSums: Record<string, number> = {
       quantity: result.summary.totalQuantity,
-      unitPrice: '',
       preVatAmount: result.summary.totalPreVatAmount,
-      vatRate: '',
       vatAmount: result.summary.totalVatAmount,
       discountAmount: result.summary.totalDiscountAmount,
       totalAmount: result.summary.totalAmount,
-      invoiceSubcategory: '',
-      status: '',
-      postingStatus: '',
-    });
-    summaryRow.font = { bold: true };
-    summaryRow.getCell('quantity').numFmt = '#,##0.00';
-    summaryRow.getCell('preVatAmount').numFmt = '#,##0';
-    summaryRow.getCell('vatAmount').numFmt = '#,##0';
-    summaryRow.getCell('discountAmount').numFmt = '#,##0';
-    summaryRow.getCell('totalAmount').numFmt = '#,##0';
+    };
+
+    const sumRow = worksheet.getRow(1);
+    sumRow.height = 22;
+    sumRow.font = {
+      name: 'Calibri',
+      size: 10.5,
+      bold: true,
+      color: { argb: 'FF0F172A' },
+    };
+
+    const subtotalRow = worksheet.getRow(2);
+    subtotalRow.height = 22;
+    subtotalRow.font = {
+      name: 'Calibri',
+      size: 10.5,
+      bold: true,
+      color: { argb: 'FF1E40AF' },
+    };
+
+    const blankRow = worksheet.getRow(3);
+    blankRow.height = 10;
+
+    const headerRow = worksheet.getRow(4);
+    headerRow.height = 28;
+    headerRow.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    headerRow.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+
+    for (let c = 1; c <= totalCols; c++) {
+      const colDef = columns[c - 1];
+      const colLetter = getExcelColumnLetter(c);
+
+      const cellSum = sumRow.getCell(c);
+      cellSum.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF1F5F9' },
+      };
+      cellSum.border = borderThin;
+
+      const cellSub = subtotalRow.getCell(c);
+      cellSub.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFEFF6FF' },
+      };
+      cellSub.border = {
+        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+
+      const cellHdr = headerRow.getCell(c);
+      cellHdr.value = colDef.header;
+      cellHdr.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF334155' },
+      };
+      cellHdr.border = borderThin;
+
+      if (c === 8) {
+        cellSum.value = 'TỔNG CỘNG (SUM)';
+        cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
+        cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';
+        cellSub.alignment = { horizontal: 'left', vertical: 'middle' };
+      }
+
+      if (colDef.isSum) {
+        const sumVal = calculatedSums[colDef.key] || 0;
+        cellSum.value = {
+          formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
+          result: sumVal,
+        };
+        cellSum.alignment = { horizontal: 'right', vertical: 'middle' };
+        cellSum.numFmt = colDef.style?.numFmt || '#,##0.00';
+
+        cellSub.value = {
+          formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
+          result: sumVal,
+        };
+        cellSub.alignment = { horizontal: 'right', vertical: 'middle' };
+        cellSub.numFmt = colDef.style?.numFmt || '#,##0.00';
+      }
+    }
+
+    worksheet.views = [{ state: 'frozen', ySplit: 4 }];
+    worksheet.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: endRow, column: totalCols },
+    };
 
     const arrayBuffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(arrayBuffer);

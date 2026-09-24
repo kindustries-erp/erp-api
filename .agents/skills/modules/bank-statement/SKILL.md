@@ -241,6 +241,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **Quy Chuẩn Trình Bày Bảng Tính & Bố Cục**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức `=SUM(Col5:ColN)`, nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động nhảy số theo bộ lọc, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng phân cách trống (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng bold 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Diễn giải căn trái, Số tiền căn phải định dạng `#,##0.00`.
+  - **Freeze Panes & AutoFilter**: Cố định cuộn và đặt dropdown lọc chính xác tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **Chân bảng**: Đã loại bỏ dòng tổng cộng cuối bảng.
 - **API Endpoints Xuất Excel**:
   - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
   - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
