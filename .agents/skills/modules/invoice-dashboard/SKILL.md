@@ -62,13 +62,21 @@ erp_invoices (Hóa đơn điện tử / Thuế)
 
 ```text
 src/erp-invoices-core/
-├── invoice-dashboard.controller.ts     # Controller khai báo endpoints, Swagger & RBAC guard
-├── invoice-dashboard.service.ts        # Service xử lý aggregation SQL, tính công nợ & xuất ExcelJS
-├── erp-invoices-core.module.ts         # Đăng ký Controller & Service, exports cho module khác
+├── invoice-dashboard.controller.ts            # Controller khai báo endpoints, Swagger & RBAC guard
+├── invoice-dashboard.service.ts               # FACADE: Chuyển tiếp calls tới 5 sub-services chuyên biệt
+├── erp-invoices-core.module.ts                # Đăng ký Controller & Providers
 ├── entities/
-│   ├── erp_invoice.entity.ts           # Entity hóa đơn chính
-│   └── erp_invoice_voucher_netoff.entity.ts # Entity cấn trừ hóa đơn - sao kê
-└── dto/                                # DTOs dùng chung cho invoice module
+│   ├── erp_invoice.entity.ts                  # Entity hóa đơn chính
+│   └── erp_invoice_voucher_netoff.entity.ts   # Entity cấn trừ hóa đơn - sao kê
+├── services/
+│   └── sub-services/
+│       ├── invoice-dashboard-helpers.ts       # Helpers: buildKeywordSqlClause, normalizeEffectiveDateTo, getExcelColLetter
+│       ├── invoice-dashboard-stats.service.ts # Sub-Service: getDashboardStats, getPartnerStats
+│       ├── invoice-dashboard-partners.service.ts # Sub-Service: getDashboardPartners
+│       ├── invoice-dashboard-export.service.ts # Sub-Service: exportExcel (5 worksheets), getDetailedInvoices
+│       ├── invoice-dashboard-analytics.service.ts # Sub-Service: getDebtsAnalytics (Aging & IFRS 9 ECL)
+│       └── invoice-dashboard-horizon.service.ts # Sub-Service: getTimeHorizonInvoices (CTE partner_lag, timelines, ticket sizes)
+└── dto/                                       # DTOs dùng chung cho invoice module
 ```
 
 ---
