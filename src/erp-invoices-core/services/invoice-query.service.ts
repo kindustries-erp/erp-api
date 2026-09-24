@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Repository } from 'typeorm';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
-import { ErpInvoice } from '../entities/erp_invoice.entity';
-import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
-import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 import { InvoiceListQueryService } from './sub-services/invoice-list-query.service';
 import { InvoiceExportExcelService } from './sub-services/invoice-export-excel.service';
 import { InvoiceStatsService } from './sub-services/invoice-stats.service';
@@ -31,52 +27,13 @@ export class InvoiceQueryService {
   public static readonly EXPORT_PROGRESS_TOTAL_UNITS =
     InvoiceExportExcelService.EXPORT_PROGRESS_TOTAL_UNITS;
 
-  private readonly listQueryService: InvoiceListQueryService;
-  private readonly exportExcelService: InvoiceExportExcelService;
-  private readonly statsService: InvoiceStatsService;
-  private readonly itemsQueryService: InvoiceItemsQueryService;
-  private readonly itemsExportService: InvoiceItemsExportService;
-
   constructor(
-    listQueryService: InvoiceListQueryService,
-    exportExcelService: InvoiceExportExcelService,
-    statsService: InvoiceStatsService,
-    itemsQueryService: InvoiceItemsQueryService,
-    itemsExportService: InvoiceItemsExportService,
-  );
-  constructor(
-    repository: Repository<ErpInvoice>,
-    attributeValueRepository?: Repository<ErpEntityAttributeValue>,
-    itemRepository?: Repository<ErpInvoiceItem>,
-  );
-  constructor(
-    arg1: InvoiceListQueryService | Repository<ErpInvoice>,
-    arg2?: InvoiceExportExcelService | Repository<ErpEntityAttributeValue>,
-    arg3?: InvoiceStatsService | Repository<ErpInvoiceItem>,
-    arg4?: InvoiceItemsQueryService,
-    arg5?: InvoiceItemsExportService,
-  ) {
-    if (arg1 instanceof InvoiceListQueryService) {
-      this.listQueryService = arg1;
-      this.exportExcelService = arg2 as InvoiceExportExcelService;
-      this.statsService = arg3 as InvoiceStatsService;
-      this.itemsQueryService = arg4 as InvoiceItemsQueryService;
-      this.itemsExportService = arg5 as InvoiceItemsExportService;
-    } else {
-      // Fallback cho constructor truyền trực tiếp Repository (tương thích 100% test mocks cũ)
-      const repo = arg1 as Repository<ErpInvoice>;
-      const attrRepo = arg2 as Repository<ErpEntityAttributeValue>;
-      const itemRepo = arg3 as Repository<ErpInvoiceItem>;
-
-      this.listQueryService = new InvoiceListQueryService(repo, attrRepo);
-      this.exportExcelService = new InvoiceExportExcelService(repo);
-      this.statsService = new InvoiceStatsService(repo);
-      this.itemsQueryService = new InvoiceItemsQueryService(repo, itemRepo);
-      this.itemsExportService = new InvoiceItemsExportService(
-        this.itemsQueryService,
-      );
-    }
-  }
+    private readonly listQueryService: InvoiceListQueryService,
+    private readonly exportExcelService: InvoiceExportExcelService,
+    private readonly statsService: InvoiceStatsService,
+    private readonly itemsQueryService: InvoiceItemsQueryService,
+    private readonly itemsExportService: InvoiceItemsExportService,
+  ) {}
 
   /**
    * Column options for advanced filter UI
