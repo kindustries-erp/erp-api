@@ -36,8 +36,12 @@ export class TransactionQueryService {
     return { ...mappedTxn, ...posting };
   }
 
-  private async loadNetOffAmounts(transactions: ErpBankTransaction[]) {
-    if (transactions.length === 0) return transactions;
+  private async loadNetOffAmounts(
+    transactions: ErpBankTransaction[],
+  ): Promise<
+    (ErpBankTransaction & { netOffAmount: string; remainingAmount: string })[]
+  > {
+    if (transactions.length === 0) return [];
     const ids = transactions.map((i) => i.id);
     const netOffs = await this.transactionRepo.manager
       .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
@@ -55,10 +59,19 @@ export class TransactionQueryService {
       {} as Record<string, number>,
     );
 
-    return transactions.map((i) => ({
-      ...i,
-      netOffAmount: String(netOffMap[i.id] || 0),
-    }));
+    return transactions.map((i) => {
+      const netOff = netOffMap[i.id] || 0;
+      const amount = Math.max(
+        Number(i.creditAmount) || 0,
+        Number(i.debitAmount) || 0,
+      );
+      const remaining = Math.max(0, amount - netOff);
+      return {
+        ...i,
+        netOffAmount: String(netOff),
+        remainingAmount: String(remaining),
+      };
+    });
   }
 
   async getTransactions(filter: BankTransactionFilterDto) {
@@ -473,10 +486,17 @@ export class TransactionQueryService {
     // Calculate Grand Totals and Cumulative Totals
     let grandTotalCredit = 0;
     let grandTotalDebit = 0;
+    let grandTotalNetOff = 0;
+    let grandTotalRemaining = 0;
     let cumulativeCredit = 0;
     let cumulativeDebit = 0;
+    let cumulativeNetOff = 0;
+    let cumulativeRemaining = 0;
 
     try {
+      const netOffSubquery = `COALESCE((SELECT SUM(n.net_off_amount) FROM erp_invoice_voucher_netoff n WHERE n.bank_transaction_id = txn.id), 0)`;
+      const remainingSubquery = `GREATEST(0, GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
+
       const totalsQb = qb.clone();
       if (totalsQb.expressionMap) {
         totalsQb.expressionMap.orderBys = {};
@@ -488,10 +508,14 @@ export class TransactionQueryService {
       totalsQb.take?.(undefined);
       totalsQb
         .select('COALESCE(SUM(txn.creditAmount), 0)', 'totalCredit')
-        .addSelect('COALESCE(SUM(txn.debitAmount), 0)', 'totalDebit');
+        .addSelect('COALESCE(SUM(txn.debitAmount), 0)', 'totalDebit')
+        .addSelect(`COALESCE(SUM(${netOffSubquery}), 0)`, 'totalNetOff')
+        .addSelect(`COALESCE(SUM(${remainingSubquery}), 0)`, 'totalRemaining');
       const totalsRaw = await totalsQb.getRawOne();
       grandTotalCredit = parseFloat(totalsRaw?.totalCredit || '0') || 0;
       grandTotalDebit = parseFloat(totalsRaw?.totalDebit || '0') || 0;
+      grandTotalNetOff = parseFloat(totalsRaw?.totalNetOff || '0') || 0;
+      grandTotalRemaining = parseFloat(totalsRaw?.totalRemaining || '0') || 0;
 
       if (page === 1) {
         cumulativeCredit = mappedItems.reduce(
@@ -502,9 +526,19 @@ export class TransactionQueryService {
           (acc, curr) => acc + (Number(curr.debitAmount) || 0),
           0,
         );
+        cumulativeNetOff = mappedItems.reduce(
+          (acc, curr) => acc + (Number(curr.netOffAmount) || 0),
+          0,
+        );
+        cumulativeRemaining = mappedItems.reduce(
+          (acc, curr) => acc + (Number(curr.remainingAmount) || 0),
+          0,
+        );
       } else if (page >= totalPages && totalPages > 0) {
         cumulativeCredit = grandTotalCredit;
         cumulativeDebit = grandTotalDebit;
+        cumulativeNetOff = grandTotalNetOff;
+        cumulativeRemaining = grandTotalRemaining;
       } else {
         const cumQb = qb.clone();
         if (cumQb.expressionMap) {
@@ -513,6 +547,8 @@ export class TransactionQueryService {
         cumQb
           .select('txn.creditAmount', 'credit')
           .addSelect('txn.debitAmount', 'debit')
+          .addSelect(netOffSubquery, 'netOff')
+          .addSelect(remainingSubquery, 'remaining')
           .offset(0)
           .limit(page * pageSize);
         cumQb.skip?.(undefined);
@@ -532,6 +568,15 @@ export class TransactionQueryService {
             (parseFloat(String(curr.debit ?? curr.txn_debit_amount ?? 0)) || 0),
           0,
         );
+        cumulativeNetOff = cumRows.reduce(
+          (acc, curr) =>
+            acc + (parseFloat(String(curr.netOff ?? curr.netoff ?? 0)) || 0),
+          0,
+        );
+        cumulativeRemaining = cumRows.reduce(
+          (acc, curr) => acc + (parseFloat(String(curr.remaining ?? 0)) || 0),
+          0,
+        );
       }
     } catch (e) {
       this.logger.error(`Error calculating totals in getTransactions: ${e}`);
@@ -546,8 +591,12 @@ export class TransactionQueryService {
       totals: {
         grandTotalCredit,
         grandTotalDebit,
+        grandTotalNetOff,
+        grandTotalRemaining,
         cumulativeCredit,
         cumulativeDebit,
+        cumulativeNetOff,
+        cumulativeRemaining,
       },
     };
   }

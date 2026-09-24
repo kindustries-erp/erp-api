@@ -144,8 +144,12 @@ describe('TransactionQueryService', () => {
       totals: {
         grandTotalCredit: 0,
         grandTotalDebit: 0,
+        grandTotalNetOff: 0,
+        grandTotalRemaining: 0,
         cumulativeCredit: 0,
         cumulativeDebit: 0,
+        cumulativeNetOff: 0,
+        cumulativeRemaining: 0,
       },
     });
   });
@@ -203,10 +207,22 @@ describe('TransactionQueryService', () => {
         cnt: '150',
         totalCredit: '31000000000',
         totalDebit: '20000000000',
+        totalNetOff: '0',
+        totalRemaining: '0',
       }),
       getRawMany: jest.fn().mockResolvedValue([
-        { credit: '663650173', debit: '100000000' },
-        { credit: '939237898', debit: '400000000' },
+        {
+          credit: '663650173',
+          debit: '100000000',
+          netOff: '0',
+          remaining: '0',
+        },
+        {
+          credit: '939237898',
+          debit: '400000000',
+          netOff: '0',
+          remaining: '0',
+        },
       ]),
       expressionMap: {
         groupBys: [],
@@ -229,8 +245,12 @@ describe('TransactionQueryService', () => {
     expect(result.totals).toEqual({
       grandTotalCredit: 31000000000,
       grandTotalDebit: 20000000000,
+      grandTotalNetOff: 0,
+      grandTotalRemaining: 0,
       cumulativeCredit: 1602888071,
       cumulativeDebit: 500000000,
+      cumulativeNetOff: 0,
+      cumulativeRemaining: 0,
     });
   });
 });

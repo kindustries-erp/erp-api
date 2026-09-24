@@ -328,10 +328,10 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `description`: Nhãn `Tổng cộng:` (variant `label`).
   - `thu`: Hiển thị tổng Tiền vào / Thu (`variantType="amount"`, `text-emerald-600 font-bold`).
   - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
-  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
-  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
+  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` tính toán từ backend API).
+  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`, tính toán an toàn `amount - netOff`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` từ API).
 - **Quy chuẩn Popover Chi tiết**:
-  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, ...) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
+  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, `Đã cấn trừ`, `Còn lại`) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 
