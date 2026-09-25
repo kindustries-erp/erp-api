@@ -13,6 +13,7 @@ import {
 } from './services/invoice-export-background.service';
 import type { PortalProgressEvent } from './services/invoice-portal.service';
 import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
+import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
 import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
@@ -82,6 +83,7 @@ export class ErpInvoicesCoreService {
     private readonly queryService: InvoiceQueryService,
     private readonly exportBackgroundService: InvoiceExportBackgroundService,
     private readonly smartNetoffService: InvoiceSmartNetoffService,
+    private readonly categoryAutopostService: InvoiceCategoryAutopostService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -382,5 +384,24 @@ export class ErpInvoicesCoreService {
 
   deletePdf(invoiceId: string, fileKey: string) {
     return this.filesService.deletePdf(invoiceId, fileKey);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Category & Auto-Posting
+  // ---------------------------------------------------------------------------
+
+  setInvoiceCategory(invoiceId: string, categoryId: string | null) {
+    return this.categoryAutopostService.setCategoryAndAutoPost(
+      invoiceId,
+      categoryId,
+    );
+  }
+
+  bulkSetInvoiceCategory(invoiceIds: string[], categoryId: string | null) {
+    return this.categoryAutopostService.bulkSetCategory(invoiceIds, categoryId);
+  }
+
+  classifyAndAutoPostInvoice(invoiceId: string) {
+    return this.categoryAutopostService.classifyAndAutoPost(invoiceId);
   }
 }

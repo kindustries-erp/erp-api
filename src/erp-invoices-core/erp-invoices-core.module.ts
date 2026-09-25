@@ -48,6 +48,13 @@ import { InvoiceDashboardExportService } from './services/sub-services/invoice-d
 import { InvoiceDashboardAnalyticsService } from './services/sub-services/invoice-dashboard-analytics.service';
 import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-dashboard-horizon.service';
 
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
+import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -60,11 +67,16 @@ import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-
       CoreUserRole,
       ErpBranch,
       ErpEntityAttributeValue,
+      ErpModuleCategory,
+      ErpChartOfAccount,
+      ErpJournalEntry,
+      ErpJournalEntryLine,
     ]),
     R2Module,
     BankTransactionsCoreModule,
     NotificationsModule,
     AccountingCoreModule,
+    AiHubCoreModule,
     ErpAttachmentsCoreModule,
     VinfastPartsModule,
   ],
@@ -96,6 +108,7 @@ import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-
     InvoiceDashboardExportService,
     InvoiceDashboardAnalyticsService,
     InvoiceDashboardHorizonService,
+    InvoiceCategoryAutopostService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -107,6 +120,7 @@ import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-
     InvoiceSmartNetoffService,
     InvoiceDebtsService,
     InvoiceDebtsExportBackgroundService,
+    InvoiceCategoryAutopostService,
   ],
 })
 export class ErpInvoicesCoreModule {}

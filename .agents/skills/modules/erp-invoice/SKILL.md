@@ -599,6 +599,30 @@ Tab danh sách hóa đơn (`ErpInvoicesTab`) và hook `useInvoiceSummary` tích 
   - `variantType="amount"`, truyền `subtotalAmount` (tổng trang), `cumulativeAmount` (tổng lũy kế từ API `totals.cumulative*`), `grandTotalAmount` (tổng toàn bộ từ API `totals.grandTotal*`).
   - Popover hiển thị 3 tầng dữ liệu chuẩn: `Trang X:`, `↳ Lũy kế (T1 → TX):`, `Tổng toàn bộ (Y trang):`.
   - Thanh tiến độ tỷ trọng và nhãn tỷ trọng trực quan theo tỷ lệ tích lũy: **`Tỷ trọng lũy kế: X%`** (`(cumulativeAmount / grandTotalAmount) * 100%`).
-- **Hợp đồng API Response (`InvoiceQueryService.findAll`)**:
-  - Trả về trường `totals`: `{ grandTotalPreVat, grandTotalVat, grandTotalDiscount, grandTotalAmount, grandTotalNetOff, grandTotalRemaining, cumulativePreVat, cumulativeVat, cumulativeDiscount, cumulativeTotal, cumulativeNetOff, cumulativeRemaining }` được tính toán trực tiếp từ cơ sở dữ liệu đồng bộ với toàn bộ bộ lọc active.
+### 8.7. Tự Động Phân Loại AI 9router & Hạch Toán Kép Theo Thông Tư 99/2025/TT-BTC
+Phân hệ Hóa đơn tích hợp engine AI 9router và tự động hạch toán kép theo chế độ kế toán mới nhất:
+1. **14 Nhóm Danh Mục Chi Phí Chuẩn TT 99**:
+   - `VF_PARTS` $\to$ **TK `1561`** (Hàng hóa VinFast): Áp dụng khi MST người bán $\in$ `{'0108926276', '0202357718'}` (Khớp trực tiếp whitelist 100%, 0 token AI).
+   - `COMMERCIAL_VEHICLES` $\to$ **TK `1562`** (Mua xe ô tô thương mại / Xe lướt).
+   - `OEM_OTHER_PARTS` $\to$ **TK `1563`** (Phụ tùng OEM & Hãng khác: Michelin, Pirelli, Varta, GS, Duy Phát,...).
+   - `WORKSHOP_CONSUMABLES` $\to$ **TK `152`** (Nguyên vật liệu tiêu hao: sơn lót, keo bóng 2K, dung môi, dầu nhớt).
+   - `GARAGE_SUBCONTRACT` $\to$ **TK `632`** (Gia công ngoài & Thầu phụ: sửa vỏ pin EV, phục hồi mâm TNT/Krish, đồng sơn ngoài).
+   - `GARAGE_TOOLS_EQUIPMENT` $\to$ **TK `153`** (Máy móc, thiết bị & CCDC xưởng: máy nén khí, súng siết, cẩu 2 tấn).
+   - `OFFICE_IT_FACILITIES` $\to$ **TK `153`** (Thiết bị CNTT, camera, nội thất văn phòng).
+   - `OPEX_LOGISTICS` $\to$ **TK `6427`** (Giao nhận & Vận chuyển: Grab Express, Cứu hộ 911, Viettel Post).
+   - `OPEX_SECURITY_CLEANING` $\to$ **TK `6427`** (Bảo vệ Hoàng Thiên Hổ, vệ sinh Trí Đức, rác thải Lê Mai, thuê xưởng).
+   - `OPEX_BANK_FEES` $\to$ **TK `635`** (Phí ngân hàng Techcombank, phí POS, lãi vay).
+   - `OPEX_ADMIN` $\to$ **TK `6422`** (Hành chính, VPP, nước khoáng 19L).
+   - `OPEX_LEGAL_CONSULTING` $\to$ **TK `6427`** (Tư vấn luật Wellspring, kế toán BCTC W&A).
+   - `OPEX_IT_SOFTWARE` $\to$ **TK `6427`** (Bản quyền KGARA, email doanh nghiệp, internet cáp quang, 4G).
+   - `OPEX_MARKETING` $\to$ **TK `6428`** (Tiếp thị, video khai trương Hydra, quà tặng tri ân).
+2. **Cơ chế Fallback An Toàn vào TK Tạm `T0003`**:
+   - Khi 9router AI timeout, lỗi mạng, hoặc confidence < 0.7 $\to$ Hạch toán tạm vào `Nợ T0003 / Nợ 1331 / Có 331`.
+   - Khi người dùng chọn lại phân loại trên UI, hệ thống tự động cập nhật *in-place* dòng Nợ của bút toán sang tài khoản đích.
+3. **Kiến trúc Sub-Services & Endpoints Tuân thủ `/api-service-refactor`**:
+   - `InvoiceCategoryAutopostService`: Quản lý auto-post và in-place update journal entries.
+   - `PATCH /api/v1/erp-invoices/:id/category`: Gán phân loại & tự động hạch toán / re-align sổ cái.
+   - `PATCH /api/v1/erp-invoices/bulk-set-category`: Gán phân loại hàng loạt.
+   - `POST /api/v1/erp-invoices/:id/ai-classify-autopost`: Kích hoạt AI 9router phân loại & hạch toán tức thì.
+
 

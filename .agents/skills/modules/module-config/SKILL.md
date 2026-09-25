@@ -11,6 +11,7 @@ Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (E
 1. **Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
    - Khởi tạo sẵn các trường cốt lõi của từng phân hệ chuẩn hóa theo mã `category` (VD: `category` cho `INVOICE_IN`, `INVOICE_OUT`, `GOODS_RECEIPT`, `GOODS_ISSUE`, `INVENTORY_ADJUSTMENT`; cùng các thuộc tính chuyên biệt như `is_valid`, `color`, `version`, `type_production_order`).
    - Tự động map 2 chiều (Dual-Key / Alias Mapping) giữa mã chuẩn `category` và các mã alias cũ (`type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`).
+   - Đồng bộ danh mục `category` cho `INVOICE` / `INVOICE_IN` theo 14 nhóm chi phí Thông tư 99/2025/TT-BTC (`VF_PARTS`, `COMMERCIAL_VEHICLES`, `OEM_OTHER_PARTS`, `WORKSHOP_CONSUMABLES`, `GARAGE_SUBCONTRACT`, `GARAGE_TOOLS_EQUIPMENT`, `OFFICE_IT_FACILITIES`, `OPEX_LOGISTICS`, `OPEX_SECURITY_CLEANING`, `OPEX_BANK_FEES`, `OPEX_ADMIN`, `OPEX_LEGAL_CONSULTING`, `OPEX_IT_SOFTWARE`, `OPEX_MARKETING`).
    - Cố định trường `code` và `fieldType`, được bảo vệ an toàn chống xóa nhầm (`is_system = true`). Admin chỉ có thể đổi nhãn hiển thị (`name`, `name_en`), bật/tắt bắt buộc (`isRequired`), hoặc chỉnh sửa danh sách tùy chọn (`options`). Không được xóa các mã cốt lõi nghiệp vụ.
 2. **Thuộc tính Tùy chỉnh Linh hoạt (`is_system = false`)**:
    - Cho phép Quản trị viên tự do tạo thêm các trường động mới theo nhu cầu doanh nghiệp (hỗ trợ kiểu `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX`).
@@ -168,7 +169,7 @@ Base URL: `/api/v1/module-config` (Hỗ trợ alias `/api/v1/bom-config`, yêu c
 
 | Method | Endpoint | Payload / Params | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/categories` | `query: { moduleKey?: string }` | Lấy danh sách danh mục theo module (kèm thuộc tính & usageCount) |
+| `GET` | `/categories` | `query: { moduleKey?: string }` | Lấy danh sách danh mục theo module (kèm thuộc tính & usageCount). Hỗ trợ alias phân hệ (`INVOICE_IN`/`INVOICE_OUT` tự động query cả `INVOICE` và khử trùng lặp theo `code`). |
 | `POST` | `/categories` | `CreateModuleCategoryDto` | Tạo mới danh mục thuộc module (`moduleKey`, `code`, `name`, `description`) |
 | `PATCH` | `/categories/:id` | `UpdateModuleCategoryDto` | Cập nhật thông tin danh mục |
 | `DELETE` | `/categories/:id` | `id: UUID` | Xóa mềm danh mục (chặn xóa nếu đang có dữ liệu thực thể liên kết) |

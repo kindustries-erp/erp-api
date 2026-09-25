@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -42,6 +43,8 @@ import {
 import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
 import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
 
+import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
+
 export type PortalProgressEvent = {
   processId: string;
   type: string;
@@ -71,6 +74,8 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly vinfastPartsService: VinfastPartsService,
+    @Optional()
+    private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -1027,6 +1032,17 @@ export class InvoicePortalService implements OnModuleInit {
           `Failed to sync Vinfast ledger for ${invoice.invoiceNo}: ${e.message}`,
         ),
       );
+
+    // Trigger AI classification & auto-post for input invoices
+    if (this.categoryAutopostService && invoice.direction === 'IN') {
+      this.categoryAutopostService
+        .classifyAndAutoPost(invoice.id)
+        .catch((e) =>
+          this.logger.warn(
+            `AI classify and auto-post error for invoice ${invoice.invoiceNo}: ${e?.message}`,
+          ),
+        );
+    }
 
     return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
   }

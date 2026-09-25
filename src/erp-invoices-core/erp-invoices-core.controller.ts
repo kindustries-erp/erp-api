@@ -886,6 +886,48 @@ export class ErpInvoicesCoreController {
   }
 
   // ---------------------------------------------------------------------------
+  // Category & Auto-Posting
+  // ---------------------------------------------------------------------------
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Patch('bulk-set-category')
+  async bulkSetCategory(
+    @Body() body: { invoiceIds: string[]; categoryId: string | null },
+  ) {
+    if (!body.invoiceIds || !Array.isArray(body.invoiceIds)) {
+      throw new BadRequestException('invoiceIds phải là một danh sách hợp lệ');
+    }
+    return this.service.bulkSetInvoiceCategory(
+      body.invoiceIds,
+      body.categoryId,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Patch(':id/category')
+  async setCategory(
+    @Param('id') id: string,
+    @Body() body: { categoryId: string | null },
+  ) {
+    return this.service.setInvoiceCategory(id, body.categoryId);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':id/ai-classify-autopost')
+  async aiClassifyAndAutoPost(@Param('id') id: string) {
+    return this.service.classifyAndAutoPostInvoice(id);
+  }
+
+  // ---------------------------------------------------------------------------
   // Server-Sent Events (SSE)
   // ---------------------------------------------------------------------------
 
