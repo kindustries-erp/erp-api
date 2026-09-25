@@ -7,6 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ModuleConfigService } from './module-config.service';
+import { ModuleCategoryService } from './services/module-category.service';
+import { ModuleAttributeDefService } from './services/module-attribute-def.service';
+import { ModuleEntityValueService } from './services/module-entity-value.service';
 import { ErpModuleCategory } from './entities/erp_module_category.entity';
 import { ErpModuleAttributeDef } from './entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
@@ -63,6 +66,9 @@ describe('ModuleConfigService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        ModuleCategoryService,
+        ModuleAttributeDefService,
+        ModuleEntityValueService,
         ModuleConfigService,
         {
           provide: getRepositoryToken(ErpModuleCategory),
@@ -145,7 +151,7 @@ describe('ModuleConfigService', () => {
     });
   });
 
-  describe('createAttributeDef options validation', () => {
+  describe('createAttributeDef options and parentAttrCode validation', () => {
     it('should throw BadRequestException if SELECT options have duplicate keys', async () => {
       mockCategoryRepo.findOne.mockResolvedValue({
         id: 'cat-1',
@@ -165,6 +171,47 @@ describe('ModuleConfigService', () => {
           ],
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should save parentAttrCode correctly when creating attributeDef', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue(null);
+      const res = await service.createAttributeDef({
+        isGlobal: true,
+        moduleKeyGlobal: 'INVOICE_IN',
+        code: 'subcategory',
+        name: 'Nhóm chi phí',
+        parentAttrCode: 'category',
+        fieldType: 'SELECT',
+        options: [{ label: 'Thuê mặt bằng', value: 'RENT' }],
+      });
+      expect(res).toBeDefined();
+      expect(mockAttrDefRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentAttrCode: 'category',
+        }),
+      );
+    });
+
+    it('should save parentAttrCode correctly when updating attributeDef', async () => {
+      mockAttrDefRepo.findOne.mockResolvedValue({
+        id: 'def-subcat',
+        code: 'subcategory',
+        name: 'Nhóm chi phí',
+        parentAttrCode: null,
+        isSystem: false,
+        options: [{ label: 'Thuê nhà', value: 'RENT' }],
+      });
+      mockEntityAttrValueRepo.count.mockResolvedValue(0);
+
+      const res = await service.updateAttributeDef('def-subcat', {
+        parentAttrCode: 'category',
+      });
+      expect(res).toBeDefined();
+      expect(mockAttrDefRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentAttrCode: 'category',
+        }),
+      );
     });
   });
 

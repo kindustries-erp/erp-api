@@ -53,6 +53,7 @@ import { OperatingExpensesCoreModule } from './operating-expenses-core/operating
 import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
+import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 
 @Module({
   imports: [
@@ -161,6 +162,7 @@ import { SystemOperationsCoreModule } from './system-operations-core/system-oper
     OperatingExpensesCoreModule,
     VinfastPartsModule,
     AppConfigModule,
+    AiHubCoreModule,
   ],
   controllers: [AppController],
   providers: [

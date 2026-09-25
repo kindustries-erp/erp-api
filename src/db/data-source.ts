@@ -77,6 +77,9 @@ import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-cat
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
 import { ErpSystemOperation } from '../system-operations-core/entities/erp_system_operation.entity';
+import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
+import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
+import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -85,6 +88,9 @@ const entities = [
   CorePermission,
   CoreUserRole,
   ErpSystemOperation,
+  ErpAiConfig,
+  ErpAiLog,
+  ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
   ErpOperatingExpense,

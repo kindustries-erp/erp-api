@@ -881,16 +881,25 @@ export class GarageDashboardStatsService {
         statusTotalCountByMonth[m] = 0;
         statusTotalRevenueByMonth[m] = 0;
       }
-      statusDistributionByMonth[m].push({
-        statusCode,
-        statusName,
-        count: cnt,
-        revenue: rev,
-      });
+
+      const existingInMonth = statusDistributionByMonth[m].find(
+        (item) => item.statusName === statusName,
+      );
+      if (existingInMonth) {
+        existingInMonth.count += cnt;
+        existingInMonth.revenue += rev;
+      } else {
+        statusDistributionByMonth[m].push({
+          statusCode,
+          statusName,
+          count: cnt,
+          revenue: rev,
+        });
+      }
       statusTotalCountByMonth[m] += cnt;
       statusTotalRevenueByMonth[m] += rev;
 
-      const key = `${statusCode}_${statusName}`;
+      const key = statusName;
       if (!overallStatusMap[key]) {
         overallStatusMap[key] = {
           statusCode,

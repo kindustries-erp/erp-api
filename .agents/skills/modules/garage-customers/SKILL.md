@@ -12,16 +12,17 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
 ### Các Nghiệp vụ Trọng tâm:
 - **Tổng hợp Công nợ theo Khách Hàng (`GET /cases/customers-debt`)**:
   - Nhóm dữ liệu phiếu dịch vụ từ bảng `kgara_cases` theo mã khách hàng (`khach_hang_code`).
-  - **Mốc thời gian theo dõi**: Áp dụng mốc chặn dưới từ tháng 07/2026 (`ngay_phat_sinh >= '2026-07-01'`).
-  - **Chỉ tính Phiếu Hoàn tất**: Chỉ tổng hợp các phiếu dịch vụ đã kết thúc/hoàn tất (`tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu ILIKE '%kết thúc%' / '%hoàn tất%'`), tự động loại trừ các phiếu tiếp nhận, đang sửa, báo giá hoặc đã hủy.
+  - **Mốc thời gian theo dõi**: Áp dụng mốc lọc theo ngày hoàn thành (`ngay_hoan_thanh_cong_viec >= '2026-07-01'`).
+  - **Chỉ tính Phiếu Hoàn tất**: Chỉ tổng hợp các phiếu dịch vụ đã hoàn thành (`ngay_hoan_thanh_cong_viec IS NOT NULL` và `tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu ILIKE '%kết thúc%' / '%hoàn tất%'`), tự động loại trừ các xe chưa hoàn thành.
+  - **Xe chưa hoàn thành (In-Progress Pipeline)**: Không tính vào công nợ phải thu và không tính tuổi nợ (aging = 0).
 - **Phân Tầng Tuổi Nợ (Aging Buckets Matrix)**:
-  - Tự động tính toán số ngày tuổi nợ dựa trên khoảng cách giữa ngày phát sinh phiếu dịch vụ và ngày hiện tại: $\text{agingDays} = \text{CURRENT\_DATE} - \text{DATE(ngay\_phat\_sinh)}$.
+  - Tự động tính toán số ngày tuổi nợ dựa trên khoảng cách giữa **ngày hoàn thành công việc** và ngày hiện tại: $\text{agingDays} = \text{CURRENT\_DATE} - \text{DATE(ngay\_hoan\_thanh\_cong\_viec)}$.
   - Phân loại 4 nhóm tuổi nợ chuẩn tài chính:
     1. `0-30` ngày: Trong hạn.
     2. `31-60` ngày: Cần theo dõi.
     3. `61-90` ngày: Quá hạn.
     4. `>90` ngày: Quá hạn sâu.
-  - Phản ánh chi tiết số tiền nợ còn lại trong từng bracket và xác định `maxAgingDays` cho từng khách hàng.
+  - Phản ánh chi tiết số tiền nợ còn lại trong từng bracket và xác định `maxAgingDays` cho từng khách hàng dựa trên ngày hoàn thành.
 - **Phân Loại Tiến Độ Thanh Toán (Payment Progress)**:
   - `PAID` (Đã thu đủ): `con_phai_thu <= 0 AND da_thanh_toan > 0`.
   - `PARTIAL` (Thu một phần): `da_thanh_toan > 0 AND con_phai_thu > 0`.
@@ -34,14 +35,14 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm không sót trang) và `__BLANK__` (lọc khách hàng chưa có mã hoặc thông tin trống).
   - Tích hợp endpoint `GET /cases/customers-debt/column-options` hỗ trợ cascading filter qua tham số `filtersStr`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
-  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="xl"`, `collapsibleRightPanel={true}`).
-  - **Cột phải (Right Panel)**: Thông tin khách hàng (Tên, Mã KH, SL xe, SL phiếu DV) + Chỉ số công nợ & Thu hồi (Tổng phát sinh, Đã thu, Dư nợ, Tỷ lệ thu hồi, Phân bổ 4 tầng tuổi nợ).
-  - **Cột trái (Left Panel / Main Content)**: Thanh điều hướng `PillTabs` 2 sub-tabs:
-    - **Tab 1. Danh sách phiếu dịch vụ**: `<DataTable variant="spreadsheet">` hiển thị danh sách toàn bộ phiếu dịch vụ của khách hàng (`GET /cases/by-customer/:customerCode`), tích hợp đầy đủ 5 Quick Actions (Xem chi tiết, Chỉnh sửa, Đồng bộ từ KGara, Cấn trừ sao kê, Liên kết hóa đơn), Header Filters và dòng tổng phụ Subtotal Popover.
-    - **Tab 2. Biến động & Phân tích (Visual Debt Analytics)**:
-      - *Hàng 1 (Grid 3:1)*: Biến động phiếu dịch vụ theo tháng (`BarChart` Stacked: Đã thanh toán vs Còn nợ) + Cơ cấu phân bổ 4 tầng tuổi nợ (`DonutChart`).
-      - *Hàng 2 (Grid 1:1)*: Biểu đồ Luân chuyển & Dòng tiền Tích lũy (`LineChart` với 3 đường: Tổng phát sinh tích lũy, Tiền đã thu tích lũy, Dư nợ còn lại) + Cơ cấu Doanh số & Dư nợ theo Từng Phương tiện / Biển số xe (`BarChart` Stacked).
-  - Tự động làm mới cache query (`garage-cases-by-customer`, `garage-customers-debt`, `garage-case-financial-summary`) ngay sau khi hoàn tất cấn trừ hoặc liên kết hóa đơn.
+  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/erp-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
+  - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).
+  - **Cột trái (Left Panel / Main Content)**: `CustomerKpiSummaryCards` + Thanh điều hướng `PillTabs` 4 sub-tabs:
+    - **Tab 1. Phiếu DV hoàn thành (`CustomerCasesTableTab`)**: `<DataTable>` hiển thị các phiếu hoàn thành có công nợ, tính tuổi nợ theo ngày hoàn tất, tích hợp Quick Actions (Xem chi tiết, Cấn trừ sao kê, Liên kết HĐ VAT).
+    - **Tab 2. Xe đang làm (Dự thu - `CustomerPipelineTab`)**: Danh sách các xe đang thực hiện tại xưởng chưa nghiệm thu, không tính nợ/tuổi nợ, hiển thị số tiền dự thu tạm tính.
+    - **Tab 3. Phân bổ theo xe (`CustomerVehicleDebtTab`)**: Bảng thống kê công nợ & tuổi nợ max theo từng biển số xe.
+    - **Tab 4. Phân tích tuổi nợ (`CustomerDebtAgingChartTab`)**: Biểu đồ phân bổ tuổi nợ (`DonutChart`) và biến động doanh thu/thanh toán theo tháng (`BarChart`).
+  - Tự động làm mới cache query (`garage-cases-by-customer`, `garage-customers-debt`) ngay sau khi hoàn tất cấn trừ hoặc liên kết hóa đơn.
 
 ---
 
