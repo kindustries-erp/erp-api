@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
-  NineRouterClientOptions,
 } from './nine-router.types';
 
 @Injectable()
@@ -11,28 +10,19 @@ export class NineRouterClient {
   private readonly logger = new Logger(NineRouterClient.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
-  private readonly timeoutMs: number;
-  private readonly maxRetries: number;
+  private readonly timeoutMs: number = 30000;
+  private readonly maxRetries: number = 2;
 
-  constructor(
-    private readonly configService?: ConfigService,
-    options?: NineRouterClientOptions,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     this.baseUrl =
-      options?.baseUrl ||
       this.configService?.get<string>('NINE_ROUTER_BASE_URL') ||
       process.env.NINE_ROUTER_BASE_URL ||
       'https://9router.liouni.com/v1';
 
     this.apiKey =
-      options?.apiKey ||
       this.configService?.get<string>('NINE_ROUTER_API_KEY') ||
       process.env.NINE_ROUTER_API_KEY ||
       '';
-
-    this.timeoutMs = options?.timeoutMs || 30000;
-    this.maxRetries =
-      options?.maxRetries !== undefined ? options?.maxRetries : 2;
   }
 
   /**

@@ -316,9 +316,10 @@ src/erp-invoices-core/
 - Tự động gắn tiền tố mã hóa đơn (`invoiceNo-serialNo_...`) vào diễn giải từng dòng định khoản.
 - Khi gọi `unpostInvoice`: Tự động xóa bút toán `JournalEntry` tương ứng và xóa sạch các bản ghi cấn trừ `erp_invoice_voucher_netoff`.
 
-### 5.4. Trích xuất Metadata Tự động & Subscribers
-- **Biển số xe (`license_plate`)**: Helper `invoice-metadata.helper.ts` nhận diện các định dạng biển số xe Việt Nam (vd: `51G-123.45`, `30H 987.65`, `BS: 29A-11223`) trong nội dung diễn giải.
-- **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `Lệnh SC...`.
+### 5.4. Trích xuất Metadata Tự động, AI Backfill & Subscribers
+- **Biển số xe (`license_plate`)**: Helper `invoice-metadata.helper.ts` tự động nhận diện các định dạng biển số xe Việt Nam (vd: `51G-123.45`, `50F-090.80`, `50H-319.73`, `30H 987.65`, `50E82434`) từ `description`, `notes` và dòng hàng hóa `items.description`.
+- **AI Backfill CLI Tool (`scripts/backfill-invoice-license-plates.ts`)**: Công cụ CLI tự động trích xuất và cập nhật biển số xe cho hóa đơn bán ra lịch sử bằng AI (`AiHubCoreModule` qua định dạng TOON và Gemini 3.7 Flash Tier `low`), hỗ trợ `--dry-run`, lọc theo `--branch=<branchCode>`, và `--force`.
+- **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `GR-...`, `-WO-...`, `Lệnh SC...`.
 - **Subscriber Phụ tùng VinFast (`ErpInvoiceItemSubscriber`)**: Tự động bắt sự kiện `beforeInsert` và `beforeUpdate` trên `ErpInvoiceItem` để trích xuất mã linh kiện chuẩn (3 chữ cái in hoa + 8 chữ số + 0-2 ký tự) hoặc các trường hợp đặc thù như pin cao áp (`BAT21001011`, `EEP73110011AP`) và động cơ điện bảo hành.
 
 ### 5.5. Tích hợp Thuộc tính Động & Thuộc tính Chung (Dynamic Custom & Global Attributes)

@@ -1,15 +1,23 @@
+import { ConfigService } from '@nestjs/config';
 import { NineRouterClient } from './nine-router.client';
 
 describe('NineRouterClient', () => {
   let client: NineRouterClient;
 
+  const mockConfigService = {
+    get: jest.fn((key: string) => {
+      if (key === 'NINE_ROUTER_BASE_URL') {
+        return 'https://test-9router.liouni.com/v1';
+      }
+      if (key === 'NINE_ROUTER_API_KEY') {
+        return 'test-key';
+      }
+      return null;
+    }),
+  } as unknown as ConfigService;
+
   beforeEach(() => {
-    client = new NineRouterClient(undefined, {
-      baseUrl: 'https://test-9router.liouni.com/v1',
-      apiKey: 'test-key',
-      timeoutMs: 5000,
-      maxRetries: 1,
-    });
+    client = new NineRouterClient(mockConfigService);
   });
 
   it('should be defined', () => {

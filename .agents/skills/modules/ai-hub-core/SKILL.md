@@ -91,9 +91,12 @@ src/ai-hub-core/
 ├── ai-hub-core.service.ts             # Orchestrator: Quản lý config, tier routing, logging, execute
 ├── ai-hub-core.service.spec.ts        # Unit test cho AiHubCoreService
 ├── clients/
-│   ├── nine-router.client.ts          # HTTP/SSE Client kết nối 9router gateway (https://9router.liouni.com)
+│   ├── nine-router.client.ts          # HTTP/SSE Client kết nối 9router gateway (Clean DI: constructor(configService))
 │   ├── nine-router.types.ts           # Định nghĩa Types & Interfaces chuẩn OpenAI/9router
 │   └── nine-router.client.spec.ts     # Unit test cho NineRouterClient
+├── helpers/
+│   ├── json-to-toon.helper.ts         # Universal TOON (Token-Oriented Object Notation) Serializer (-50% tokens)
+│   └── json-to-toon.helper.spec.ts    # Unit test cho JSON to TOON Serializer (13/13 test cases)
 ├── entities/
 │   ├── erp-ai-config.entity.ts        # Entity bảng erp_ai_configs
 │   ├── erp-ai-log.entity.ts           # Entity bảng erp_ai_logs
@@ -104,11 +107,15 @@ src/ai-hub-core/
 │   ├── update-ai-config.dto.ts        # DTO cập nhật cấu hình phân hệ AI
 │   └── create-prompt-template.dto.ts  # DTO tạo/cập nhật prompt template
 └── handlers/
-    ├── invoice-ai.handler.ts          # Handler phân hệ Hóa đơn & OCR
+    ├── invoice-ai.handler.ts          # Handler Hóa đơn & OCR (hỗ trợ extractInvoiceData & extractLicensePlate với TOON)
+    ├── invoice-ai.handler.spec.ts     # Unit test cho InvoiceAiHandler
     ├── accounting-ai.handler.ts       # Handler phân hệ Kế toán & Định khoản tự động
     ├── purchasing-ai.handler.ts       # Handler phân hệ Mua hàng & Báo giá NCC
     ├── inventory-ai.handler.ts        # Handler phân hệ Kho & Rủi ro tồn kho
     └── copilot-ai.handler.ts          # Handler phân hệ Trợ lý Copilot
+
+scripts/
+└── backfill-invoice-license-plates.ts # CLI Tool trích xuất & backfill biển số xe cho hóa đơn bán ra (hỗ trợ --dry-run, --branch, --force)
 ```
 
 ---
@@ -129,9 +136,12 @@ Controller Base Route: `/api/ai-hub` (Bảo vệ bởi `JwtAuthGuard`)
 
 ---
 
-## 5. Tích hợp Liên Module
+## 5. Tích hợp Liên Module & Utilities
 
-- **Kế toán & Hóa đơn (`erp-invoices-core`, `accounting-core`)**: Import `AiHubCoreModule` để dùng `InvoiceAiHandler` và `AccountingAiHandler` hỗ trợ người dùng nhập liệu tự động.
+- **Universal TOON Serializer (`json-to-toon.helper.ts`)**:
+  - Chuyển đổi mọi cấu trúc JSON đa cấp thành định dạng bảng thụt lề TOON (Token-Oriented Object Notation).
+  - Giảm **~46% - 52% số lượng tokens** đầu vào so với JSON thô, tăng tốc độ xử lý và độ chính xác trích xuất của LLM.
+- **Kế toán & Hóa đơn (`erp-invoices-core`, `accounting-core`)**: Import `AiHubCoreModule` để dùng `InvoiceAiHandler` (trích xuất hóa đơn, bóc tách biển số xe qua TOON) và `AccountingAiHandler` hỗ trợ người dùng nhập liệu tự động.
 - **Mua hàng & Kho (`purchase-orders-core`, `inventory-core`)**: Dùng `PurchasingAiHandler` để so sánh giá và `InventoryAiHandler` để phân tích rủi ro tồn kho an toàn.
 - **Frontend (`erp-web`)**:
   - Tích hợp các nút hành động ngữ cảnh (Contextual AI Action Buttons).
@@ -144,11 +154,12 @@ Controller Base Route: `/api/ai-hub` (Bảo vệ bởi `JwtAuthGuard`)
 Khi chỉnh sửa module `ai-hub-core`:
 1. **Chạy Unit Tests**:
    ```bash
-   bun test src/ai-hub-core/
+   bunx jest src/ai-hub-core/ --forceExit
    ```
 2. **Build Kiểm tra Type**:
    ```bash
-   bun run build
+   bun run type:check
    ```
 3. **Kiểm tra Migration Database**:
    - Migration file: `src/migrations/20260925134500-CreateAiHubTables.ts`.
+
