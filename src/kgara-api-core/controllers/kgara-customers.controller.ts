@@ -44,11 +44,12 @@ export class KgaraCustomersController {
     const whereConditions: string[] = [
       '"case"."kgara_deleted_at" IS NULL',
       '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" = \'Kết thúc\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\')',
+      '"case"."ngay_hoan_thanh_cong_viec" IS NOT NULL',
     ];
     const queryParams: any[] = [];
 
     whereConditions.push(
-      `"case"."ngay_phat_sinh" >= $${queryParams.length + 1}`,
+      `"case"."ngay_hoan_thanh_cong_viec" >= $${queryParams.length + 1}`,
     );
     queryParams.push(effectiveFrom);
 
@@ -61,9 +62,9 @@ export class KgaraCustomersController {
 
     if (to) {
       whereConditions.push(
-        `"case"."ngay_phat_sinh" <= $${queryParams.length + 1}`,
+        `"case"."ngay_hoan_thanh_cong_viec" <= $${queryParams.length + 1}`,
       );
-      queryParams.push(to);
+      queryParams.push(to.length === 10 ? `${to} 23:59:59.999` : to);
     }
 
     if (q) {
@@ -183,7 +184,7 @@ export class KgaraCustomersController {
           } else if (col === 'maxAgingDays') {
             const subConds: string[] = [];
             const maxAgingExpr =
-              'COALESCE(MAX(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 THEN CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now())) ELSE 0 END), 0)';
+              'COALESCE(MAX(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 THEN CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec") ELSE 0 END), 0)';
             if (values.includes('0-30')) {
               subConds.push(`(${maxAgingExpr} <= 30)`);
             }
@@ -293,10 +294,10 @@ export class KgaraCustomersController {
         COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS total_revenue,
         COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS total_paid,
         COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS total_balance,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_0_30,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_31_60,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_61_90,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_over_90
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_0_30,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_31_60,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_61_90,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS total_aging_over_90
       FROM "kgara_cases" "case"
       ${whereClause}
     `;
@@ -318,10 +319,10 @@ export class KgaraCustomersController {
             COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS tong_doanh_thu,
             COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS da_thanh_toan,
             COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS con_phai_thu,
-            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_0_30,
-            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_31_60,
-            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_61_90,
-            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_0_30,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_31_60,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_61_90,
+            COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
           FROM "kgara_cases" "case"
           ${whereClause}
           GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
@@ -358,7 +359,11 @@ export class KgaraCustomersController {
           sortParts.push(`so_phieu ${dir}`);
         else if (col === 'maxAgingDays' || col === 'aging')
           sortParts.push(`max_aging_days ${dir}`);
-        else if (col === 'latestDate' || col === 'ngayPhatSinh')
+        else if (
+          col === 'latestDate' ||
+          col === 'ngayHoanThanhCongViec' ||
+          col === 'ngayPhatSinh'
+        )
           sortParts.push(`ngay_gan_nhat ${dir}`);
       }
       if (sortParts.length > 0) {
@@ -383,13 +388,13 @@ export class KgaraCustomersController {
         COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS tong_doanh_thu,
         COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS da_thanh_toan,
         COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS con_phai_thu,
-        MAX("case"."ngay_phat_sinh") AS ngay_gan_nhat,
-        MIN("case"."ngay_phat_sinh") AS ngay_xa_nhat,
-        COALESCE(MAX(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 THEN CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now())) ELSE 0 END), 0)::int AS max_aging_days,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_0_30,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_31_60,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_61_90,
-        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE(COALESCE("case"."ngay_phat_sinh", now()))) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
+        MAX("case"."ngay_hoan_thanh_cong_viec") AS ngay_gan_nhat,
+        MIN("case"."ngay_hoan_thanh_cong_viec") AS ngay_xa_nhat,
+        COALESCE(MAX(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 THEN CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec") ELSE 0 END), 0)::int AS max_aging_days,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) <= 30 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_0_30,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 31 AND 60 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_31_60,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) BETWEEN 61 AND 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_61_90,
+        COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
       FROM "kgara_cases" "case"
       ${whereClause}
       GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
@@ -485,7 +490,8 @@ export class KgaraCustomersController {
           FROM "kgara_cases"
           WHERE "kgara_deleted_at" IS NULL
             AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
-            AND "ngay_phat_sinh" >= '2026-07-01'
+            AND "ngay_hoan_thanh_cong_viec" IS NOT NULL
+            AND "ngay_hoan_thanh_cong_viec" >= '2026-07-01'
             ${branchCond}
           GROUP BY COALESCE("khach_hang_code", 'UNKNOWN')
         ) sub
@@ -550,7 +556,8 @@ export class KgaraCustomersController {
         stDonePattern: '%hoàn tất%',
       },
     );
-    query.andWhere('case.ngayPhatSinh >= :baselineDate', {
+    query.andWhere('case.ngayHoanThanhCongViec IS NOT NULL');
+    query.andWhere('case.ngayHoanThanhCongViec >= :baselineDate', {
       baselineDate: '2026-07-01',
     });
     query.andWhere(`${selectExpr} IS NOT NULL`);
@@ -675,16 +682,9 @@ export class KgaraCustomersController {
       .createQueryBuilder('case')
       .where('case.kgaraDeletedAt IS NULL')
       .andWhere(
-        '(case.tinhTrangDichVu = 3 OR case.tenTinhTrangDichVu = :stFinished OR case.tenTinhTrangDichVu ILIKE :stFinPattern OR case.tenTinhTrangDichVu ILIKE :stDonePattern)',
-        {
-          stFinished: 'Kết thúc',
-          stFinPattern: '%kết thúc%',
-          stDonePattern: '%hoàn tất%',
-        },
-      )
-      .andWhere('case.ngayPhatSinh >= :baselineDate', {
-        baselineDate: '2026-07-01',
-      });
+        '(case.ngayHoanThanhCongViec >= :baselineDate OR case.ngayPhatSinh >= :baselineDate OR case.createdAt >= :baselineDate)',
+        { baselineDate: '2026-07-01' },
+      );
 
     if (customerCode === 'UNKNOWN' || customerCode === 'NO_CODE') {
       query.andWhere('case.khachHangCode IS NULL');
@@ -696,7 +696,8 @@ export class KgaraCustomersController {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
     }
 
-    query.orderBy('case.ngayPhatSinh', 'DESC');
+    query.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST');
+    query.addOrderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST');
 
     const cases = await query.getMany();
 
@@ -729,14 +730,25 @@ export class KgaraCustomersController {
       }
     }
 
+    const today = new Date();
+
     const enriched = cases.map((c) => {
-      const pDate = c.ngayPhatSinh ? new Date(c.ngayPhatSinh) : null;
-      const today = new Date();
+      const isCompleted =
+        Boolean(c.ngayHoanThanhCongViec) &&
+        (c.tinhTrangDichVu === 3 ||
+          c.tenTinhTrangDichVu === 'Kết thúc' ||
+          (c.tenTinhTrangDichVu &&
+            c.tenTinhTrangDichVu.toLowerCase().includes('kết thúc')) ||
+          (c.tenTinhTrangDichVu &&
+            c.tenTinhTrangDichVu.toLowerCase().includes('hoàn tất')));
+
       let agingDays = 0;
-      if (pDate) {
-        const diffTime = Math.abs(today.getTime() - pDate.getTime());
+      if (isCompleted && c.ngayHoanThanhCongViec) {
+        const cDate = new Date(c.ngayHoanThanhCongViec);
+        const diffTime = Math.abs(today.getTime() - cDate.getTime());
         agingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
+
       const setInfo = settlementsMap[c.id];
       const hasSettlement = setInfo !== undefined;
       const targetRev = extractNetPayableAmount(c);
@@ -747,6 +759,7 @@ export class KgaraCustomersController {
 
       return {
         ...c,
+        isCompleted,
         agingDays,
         tienCoThue: targetRev,
         tienDaThanhToan: totalPaid,
