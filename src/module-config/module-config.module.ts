@@ -5,6 +5,9 @@ import { ErpModuleAttributeDef } from './entities/erp_module_attribute_def.entit
 import { ErpEntityAttributeValue } from './entities/erp_entity_attribute_value.entity';
 import { ModuleConfigController } from './module-config.controller';
 import { ModuleConfigService } from './module-config.service';
+import { ModuleCategoryService } from './services/module-category.service';
+import { ModuleAttributeDefService } from './services/module-attribute-def.service';
+import { ModuleEntityValueService } from './services/module-entity-value.service';
 
 @Module({
   imports: [
@@ -15,7 +18,17 @@ import { ModuleConfigService } from './module-config.service';
     ]),
   ],
   controllers: [ModuleConfigController],
-  providers: [ModuleConfigService],
-  exports: [ModuleConfigService],
+  providers: [
+    ModuleCategoryService,
+    ModuleAttributeDefService,
+    ModuleEntityValueService,
+    ModuleConfigService,
+  ],
+  exports: [
+    ModuleCategoryService,
+    ModuleAttributeDefService,
+    ModuleEntityValueService,
+    ModuleConfigService,
+  ],
 })
 export class ModuleConfigModule {}

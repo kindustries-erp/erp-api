@@ -150,8 +150,12 @@ src/module-config/
 ├── helpers/
 │   ├── entity-custom-fields.helper.ts     # Shared Helper saveInTx & enrichOne/enrichMany
 │   └── entity-custom-fields.helper.spec.ts
+├── services/                              # Sub-Services chuẩn theo /api-service-refactor
+│   ├── module-category.service.ts         # Quản lý CRUD Danh mục
+│   ├── module-attribute-def.service.ts    # Quản lý Định nghĩa thuộc tính & Options usage guard
+│   └── module-entity-value.service.ts     # Quản lý Giá trị thực thể & Transactions
 ├── module-config.controller.ts            # Alias router ['module-config', 'bom-config']
-├── module-config.service.ts
+├── module-config.service.ts               # Facade Service (< 120 LoC, Clean DI)
 ├── module-config.service.spec.ts
 └── module-config.module.ts
 ```
