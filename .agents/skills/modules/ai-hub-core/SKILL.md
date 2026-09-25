@@ -107,7 +107,7 @@ src/ai-hub-core/
 │   ├── update-ai-config.dto.ts        # DTO cập nhật cấu hình phân hệ AI
 │   └── create-prompt-template.dto.ts  # DTO tạo/cập nhật prompt template
 └── handlers/
-    ├── invoice-ai.handler.ts          # Handler Hóa đơn & OCR (hỗ trợ extractInvoiceData & extractLicensePlate với TOON)
+    ├── invoice-ai.handler.ts          # Handler Hóa đơn & OCR (hỗ trợ extractInvoiceData, extractLicensePlate với TOON, và classifyInvoiceCategory phân loại 14 nhóm Thông tư 99 với VinFast whitelist & fallback T0003)
     ├── invoice-ai.handler.spec.ts     # Unit test cho InvoiceAiHandler
     ├── accounting-ai.handler.ts       # Handler phân hệ Kế toán & Định khoản tự động
     ├── purchasing-ai.handler.ts       # Handler phân hệ Mua hàng & Báo giá NCC

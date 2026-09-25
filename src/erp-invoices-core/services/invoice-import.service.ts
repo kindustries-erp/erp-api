@@ -8,6 +8,7 @@ import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { R2Service } from '../../r2/r2.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
+import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
 import {
   parseVietnamInvoiceXml,
   XmlParseError,
@@ -65,6 +66,8 @@ export class InvoiceImportService {
     private readonly branchRepository?: Repository<ErpBranch>,
     @Optional()
     private readonly vinfastPartsService?: VinfastPartsService,
+    @Optional()
+    private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -639,6 +642,17 @@ export class InvoiceImportService {
             parsed.relatedSerialNo,
             savedInvoice,
           );
+        }
+
+        // 3.7. Tự động phân loại AI & Hạch toán đối với hóa đơn mua vào (direction = IN)
+        if (this.categoryAutopostService && savedInvoice.direction === 'IN') {
+          this.categoryAutopostService
+            .classifyAndAutoPost(savedInvoice.id)
+            .catch((e) =>
+              this.logger.warn(
+                `AI classify and auto-post error for invoice ${savedInvoice.invoiceNo}: ${e?.message}`,
+              ),
+            );
         }
 
         created++;

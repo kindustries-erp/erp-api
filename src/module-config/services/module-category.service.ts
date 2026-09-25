@@ -48,22 +48,34 @@ export class ModuleCategoryService {
     return usageMap;
   }
 
-  /**
-   * Lấy danh sách Categories theo moduleKey kèm theo AttributeDefs và usageCount cho từng Def
-   */
   async getCategories(moduleKey?: string): Promise<ErpModuleCategory[]> {
     const where: any = { isDeleted: false };
     if (moduleKey) {
-      where.moduleKey = moduleKey.trim().toUpperCase();
+      const normalizedKey = moduleKey.trim().toUpperCase();
+      if (normalizedKey === 'INVOICE_IN' || normalizedKey === 'INVOICE') {
+        where.moduleKey = In(['INVOICE_IN', 'INVOICE']);
+      } else {
+        where.moduleKey = normalizedKey;
+      }
     }
 
-    const categories = await this.categoryRepo.find({
+    const rawCategories = await this.categoryRepo.find({
       where,
       order: { createdAt: 'ASC' },
       relations: {
         attributeDefs: true,
       },
     });
+
+    // Deduplicate by code if both INVOICE and INVOICE_IN exist
+    const seenCodes = new Set<string>();
+    const categories: ErpModuleCategory[] = [];
+    for (const cat of rawCategories) {
+      if (!seenCodes.has(cat.code)) {
+        seenCodes.add(cat.code);
+        categories.push(cat);
+      }
+    }
 
     // Lấy usageCount cho tất cả attributeDefs
     const allDefs = categories.flatMap((c) => c.attributeDefs || []);

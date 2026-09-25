@@ -93,6 +93,12 @@ describe('ErpInvoicesCoreService', () => {
       getSuggestionsForSingleInvoice: jest.fn(),
     };
 
+    const categoryAutopostService: any = {
+      setInvoiceCategoryAndAutopost: jest.fn(),
+      bulkSetInvoiceCategoryAndAutopost: jest.fn(),
+      classifyAndAutopostInvoice: jest.fn(),
+    };
+
     service = new ErpInvoicesCoreService(
       lifecycleService,
       portalService,
@@ -101,6 +107,7 @@ describe('ErpInvoicesCoreService', () => {
       queryService,
       exportBackgroundService,
       smartNetoffService,
+      categoryAutopostService,
     );
   });
 
