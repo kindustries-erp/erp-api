@@ -38,16 +38,29 @@ export interface InvoiceAccountResolution {
 }
 
 /**
- * Phân giải các tài khoản kế toán đối ứng cho hóa đơn đầu vào dựa trên mã danh mục.
+ * Phân giải các tài khoản kế toán đối ứng cho hóa đơn đầu vào dựa trên mã danh mục
+ * và tài khoản Nợ override từ cơ sở dữ liệu (nếu có).
+ *
+ * Chuỗi Fallback 3 tầng an toàn:
+ * 1. overrideDebitAccountCode (nếu có giá trị từ DB Category link)
+ * 2. CATEGORY_TO_DEBIT_ACCOUNT_MAP[categoryCode] (14 phân loại chuẩn TT99)
+ * 3. FALLBACK_PURCHASE_DEBIT_ACCOUNT = 'T0003' (Fallback an toàn)
+ *
  * @param categoryCode Mã phân loại danh mục (vd: 'VF_PARTS', 'OPEX_LOGISTICS'...)
+ * @param overrideDebitAccountCode Mã TK Nợ ghi đè cấu hình động từ DB (nếu có)
  * @returns Cấu trúc tài khoản Nợ/Có chuẩn TT99
  */
 export function resolveInvoiceAccountsByCategory(
   categoryCode?: string | null,
+  overrideDebitAccountCode?: string | null,
 ): InvoiceAccountResolution {
   const cleanCode = (categoryCode || '').trim();
+  const cleanOverride = (overrideDebitAccountCode || '').trim();
+
   const debitAccountCode =
-    CATEGORY_TO_DEBIT_ACCOUNT_MAP[cleanCode] || FALLBACK_PURCHASE_DEBIT_ACCOUNT;
+    cleanOverride ||
+    CATEGORY_TO_DEBIT_ACCOUNT_MAP[cleanCode] ||
+    FALLBACK_PURCHASE_DEBIT_ACCOUNT;
   const isFallback = debitAccountCode === FALLBACK_PURCHASE_DEBIT_ACCOUNT;
 
   return {

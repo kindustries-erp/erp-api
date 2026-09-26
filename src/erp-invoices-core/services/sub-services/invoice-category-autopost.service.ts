@@ -47,7 +47,7 @@ export class InvoiceCategoryAutopostService {
   ): Promise<ErpInvoice> {
     const invoice = await this.invoiceRepo.findOne({
       where: { id: invoiceId, isDeleted: false },
-      relations: ['category', 'items'],
+      relations: ['category', 'category.defaultDebitAccount', 'items'],
     });
 
     if (!invoice) {
@@ -59,7 +59,31 @@ export class InvoiceCategoryAutopostService {
       categoryCode !== undefined
         ? categoryCode
         : invoice.category?.code || null;
-    const resolution = resolveInvoiceAccountsByCategory(activeCategoryCode);
+
+    // Lấy override debit account code từ DB qua FK quan hệ
+    // (chỉ dùng nếu account chưa bị soft-delete; isActive=false vẫn hợp lệ)
+    let overrideDebitAccountCode: string | null = null;
+    if (
+      invoice.category?.defaultDebitAccount &&
+      !invoice.category.defaultDebitAccount.isDeleted
+    ) {
+      overrideDebitAccountCode =
+        invoice.category.defaultDebitAccount.accountCode || null;
+    }
+
+    const resolution = resolveInvoiceAccountsByCategory(
+      activeCategoryCode,
+      overrideDebitAccountCode,
+    );
+
+    const logSource = overrideDebitAccountCode
+      ? `[FK_OVERRIDE: ${overrideDebitAccountCode}]`
+      : resolution.isFallback
+        ? `[T0003_FALLBACK]`
+        : `[STATIC_MAP: ${resolution.debitAccountCode}]`;
+    this.logger.log(
+      `Resolved Invoice ${invoice.invoiceNo} category ${activeCategoryCode || 'NONE'} -> Debit Account ${resolution.debitAccountCode} via ${logSource}`,
+    );
 
     // 1. Tải danh mục tài khoản kế toán
     const accounts = await this.chartOfAccountRepo.find({

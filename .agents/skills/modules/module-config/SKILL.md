@@ -91,10 +91,12 @@ erDiagram
 | `name` | `varchar(255)` | NO | | Tên hiển thị danh mục (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên hiển thị tiếng Anh |
 | `description` | `text` | YES | | Mô tả chi tiết danh mục |
+| `default_debit_account_id` | `uuid` | YES | `FK -> erp_chart_of_accounts(id) ON DELETE SET NULL` | TK Nợ mặc định khi hạch toán hóa đơn theo danh mục (Dynamic Account Linking) |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái kích hoạt |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | Default `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | Default `now()` | Thời điểm cập nhật |
+
 
 ### B. Bảng Định nghĩa Thuộc tính: `erp_module_attribute_defs`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
