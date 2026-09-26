@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { Subject } from 'rxjs';
-import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
+import {
+  VINFAST_CAR_PART_CODES,
+  isVinfastCarPartCode,
+} from './vinfast-car-part-codes';
 import {
   VinfastPartsExportBackgroundService,
   type VinfastPartsExportHistoryResult,
@@ -74,10 +77,21 @@ export class ReportsCoreService {
     );
   }
 
+  private readonly fifoCache = new Map<
+    string,
+    { data: any[]; expiresAt: number }
+  >();
+
   private async calculateVinfastFifo(
     dateTo?: string,
     groupInterval: string = 'month',
   ) {
+    const cacheKey = `${dateTo || 'ALL'}_${groupInterval}`;
+    const cached = this.fifoCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     let dateFilter = '';
     const params: any[] = [];
     if (dateTo) {
@@ -199,7 +213,12 @@ export class ReportsCoreService {
         m.totalCogs += cogsForThisOut;
       }
     }
-    return Object.values(monthMetrics);
+    const result = Object.values(monthMetrics);
+    this.fifoCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + 15000,
+    });
+    return result;
   }
 
   private buildFifoMonthlyValuesSql(metrics: any[], paramStartIndex: number) {
@@ -597,13 +616,17 @@ export class ReportsCoreService {
     let totalCumulativeCogsMotorbike = 0;
 
     for (const m of fifoMetrics) {
-      if (query.itemCode && m.itemCode !== query.itemCode) continue;
-
-      let isCarPart = false;
-      const normalizedCode = m.itemCode ? m.itemCode.toUpperCase().trim() : '';
-      if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
-        isCarPart = true;
+      if (query.itemCode) {
+        const qCode = query.itemCode.toUpperCase().trim();
+        const bareQCode = qCode.replace(/^VF-/, '');
+        const mCode = (m.itemCode || '').toUpperCase().trim();
+        const bareMCode = mCode.replace(/^VF-/, '');
+        if (mCode !== qCode && bareMCode !== bareQCode) {
+          continue;
+        }
       }
+
+      const isCarPart = isVinfastCarPartCode(m.itemCode);
       const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
 
       if (vType === 'CAR') {

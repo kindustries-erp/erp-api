@@ -414,3 +414,21 @@ export const VINFAST_CAR_PART_CODES = [
   'SVK20000017',
   'SVK73000002',
 ] as const;
+
+const CAR_PART_CODE_SET = new Set(
+  VINFAST_CAR_PART_CODES.flatMap((code) => [
+    code.toUpperCase().trim(),
+    (code.startsWith('VF-') ? code : `VF-${code}`).toUpperCase().trim(),
+  ]),
+);
+
+/**
+ * Kiểm tra xem một mã phụ tùng có thuộc danh mục Phụ tùng Ô tô VinFast hay không (hỗ trợ cả có và không có tiền tố VF-).
+ * Độ phức tạp: O(1)
+ */
+export function isVinfastCarPartCode(code?: string | null): boolean {
+  if (!code) return false;
+  const normalized = code.toUpperCase().trim();
+  const bare = normalized.replace(/^VF-/, '');
+  return CAR_PART_CODE_SET.has(normalized) || CAR_PART_CODE_SET.has(bare);
+}

@@ -521,4 +521,158 @@ describe('ReportsCoreService', () => {
     expect(motorbikeBuySheet.rowCount).toBe(2);
     expect(motorbikeSellSheet.rowCount).toBe(2);
   });
+
+  describe('isVinfastCarPartCode & VinFast Dashboard Dual Compatibility', () => {
+    it('correctly identifies car part codes with and without VF- prefix', () => {
+      const { isVinfastCarPartCode } = require('./vinfast-car-part-codes');
+      expect(isVinfastCarPartCode('BAT21001011')).toBe(true);
+      expect(isVinfastCarPartCode('VF-BAT21001011')).toBe(true);
+      expect(isVinfastCarPartCode('BEX20000873')).toBe(true);
+      expect(isVinfastCarPartCode('VF-BEX20000873')).toBe(true);
+      expect(isVinfastCarPartCode('CHS73060025AB')).toBe(true);
+      expect(isVinfastCarPartCode('VF-CHS73060025AB')).toBe(true);
+
+      // Motorbike / generic parts should return false
+      expect(isVinfastCarPartCode('11002345')).toBe(false);
+      expect(isVinfastCarPartCode('VF-11002345')).toBe(false);
+      expect(isVinfastCarPartCode('52200101')).toBe(false);
+      expect(isVinfastCarPartCode('VF-52200101')).toBe(false);
+      expect(isVinfastCarPartCode(null)).toBe(false);
+      expect(isVinfastCarPartCode(undefined)).toBe(false);
+      expect(isVinfastCarPartCode('')).toBe(false);
+    });
+
+    it('getVinfastPartsDashboard correctly separates CAR and MOTORBIKE data when part_sku has VF- prefix', async () => {
+      // Mock calculateVinfastFifo SQL rows
+      dataSource.query.mockResolvedValueOnce([
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'IN',
+          qty: '10',
+          unit_cost: '1000000',
+          pre_vat_amount: '10000000',
+          transaction_date: '2026-06-15',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'OUT',
+          qty: '4',
+          unit_cost: '1200000',
+          pre_vat_amount: '4800000',
+          transaction_date: '2026-06-20',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+        {
+          part_sku: 'VF-11002345',
+          direction: 'IN',
+          qty: '20',
+          unit_cost: '50000',
+          pre_vat_amount: '1000000',
+          transaction_date: '2026-06-15',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'Lọc gió xe máy',
+        },
+        {
+          part_sku: 'VF-11002345',
+          direction: 'OUT',
+          qty: '10',
+          unit_cost: '70000',
+          pre_vat_amount: '700000',
+          transaction_date: '2026-06-22',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'Lọc gió xe máy',
+        },
+      ]);
+
+      // 1. Query for vehicleType = CAR
+      const carResult = await service.getVinfastPartsDashboard({
+        vehicleType: 'CAR',
+        groupBy: 'month',
+      });
+
+      expect(carResult.summary.revenue).toBe(4800000);
+      expect(carResult.summary.cogs).toBe(4000000);
+      expect(carResult.summary.grossProfit).toBe(800000);
+      expect(carResult.summary.byVehicleType.CAR.revenue).toBe(4800000);
+      expect(carResult.summary.byVehicleType.CAR.cogs).toBe(4000000);
+      expect(carResult.summary.byVehicleType.MOTORBIKE.revenue).toBe(700000);
+      expect(carResult.summary.byVehicleType.MOTORBIKE.cogs).toBe(500000);
+      expect(carResult.trend.length).toBe(1);
+      expect(carResult.trend[0].revenue).toBe(4800000);
+      expect(carResult.trend[0].cogs).toBe(4000000);
+    });
+
+    it('getVinfastPartsDashboard supports dual compatibility for query.itemCode with or without VF- prefix', async () => {
+      dataSource.query.mockResolvedValueOnce([
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'IN',
+          qty: '5',
+          unit_cost: '1000000',
+          pre_vat_amount: '5000000',
+          transaction_date: '2026-07-10',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'OUT',
+          qty: '2',
+          unit_cost: '1200000',
+          pre_vat_amount: '2400000',
+          transaction_date: '2026-07-12',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+      ]);
+
+      // Search with bare code 'BAT21001011'
+      const resultBare = await service.getVinfastPartsDashboard({
+        itemCode: 'BAT21001011',
+      });
+      expect(resultBare.summary.revenue).toBe(2400000);
+      expect(resultBare.trend.length).toBe(1);
+
+      dataSource.query.mockResolvedValueOnce([
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'IN',
+          qty: '5',
+          unit_cost: '1000000',
+          pre_vat_amount: '5000000',
+          transaction_date: '2026-07-10',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+        {
+          part_sku: 'VF-BAT21001011',
+          direction: 'OUT',
+          qty: '2',
+          unit_cost: '1200000',
+          pre_vat_amount: '2400000',
+          transaction_date: '2026-07-12',
+          is_adjustment: false,
+          adj_sign: 1,
+          item_name: 'HV BATTERY 41.9KWH',
+        },
+      ]);
+
+      // Search with prefixed code 'VF-BAT21001011'
+      const resultPrefixed = await service.getVinfastPartsDashboard({
+        itemCode: 'VF-BAT21001011',
+      });
+      expect(resultPrefixed.summary.revenue).toBe(2400000);
+      expect(resultPrefixed.trend.length).toBe(1);
+    });
+  });
 });
