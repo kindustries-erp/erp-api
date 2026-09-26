@@ -459,41 +459,118 @@ export class TransactionQueryService {
       } catch (e) {}
     }
 
-    let sortBy = filter.sortBy;
-    let sortOrder = filter.sortOrder;
+    const sortList: string[] = [];
+    if (filter.sorts && filter.sorts.length > 0) {
+      if (Array.isArray(filter.sorts)) {
+        sortList.push(...filter.sorts);
+      } else if (typeof filter.sorts === 'string') {
+        try {
+          const parsed = JSON.parse(filter.sorts);
+          if (Array.isArray(parsed)) sortList.push(...parsed);
+          else sortList.push(filter.sorts);
+        } catch {
+          sortList.push(filter.sorts);
+        }
+      }
+    } else if (filter.sortBy) {
+      const orderPrefix = filter.sortOrder?.toUpperCase() === 'DESC' ? '-' : '';
+      sortList.push(`${orderPrefix}${filter.sortBy}`);
+    }
 
-    if (!sortBy && filter.sorts && filter.sorts.length > 0) {
-      const firstSort = filter.sorts[0];
-      if (typeof firstSort === 'string') {
-        if (firstSort.startsWith('-')) {
-          sortBy = firstSort.substring(1);
-          sortOrder = 'DESC';
+    let hasOrder = false;
+    for (const sortField of sortList) {
+      if (!sortField || typeof sortField !== 'string') continue;
+      const isDesc = sortField.startsWith('-');
+      const rawField = isDesc ? sortField.substring(1) : sortField;
+      const order = isDesc ? 'DESC' : 'ASC';
+
+      let orderExpr = '';
+      if (
+        rawField === 'transDate' ||
+        rawField === 'trans_date' ||
+        rawField === 'date'
+      ) {
+        orderExpr = 'txn.transDate';
+      } else if (
+        rawField === 'account' ||
+        rawField === 'bankAccount' ||
+        rawField === 'cashBook'
+      ) {
+        orderExpr =
+          filter.sourceType === 'BANK'
+            ? 'bankAccount.bankName'
+            : filter.sourceType === 'CASH'
+              ? 'cashBook.name'
+              : 'COALESCE(bankAccount.bankName, cashBook.name)';
+      } else if (
+        rawField === 'referenceNumber' ||
+        rawField === 'reference_number' ||
+        rawField === 'refNum'
+      ) {
+        orderExpr = 'txn.referenceNumber';
+      } else if (rawField === 'description') {
+        orderExpr = 'txn.description';
+      } else if (
+        rawField === 'thu' ||
+        rawField === 'creditAmount' ||
+        rawField === 'credit_amount'
+      ) {
+        orderExpr = 'txn.creditAmount';
+      } else if (
+        rawField === 'chi' ||
+        rawField === 'debitAmount' ||
+        rawField === 'debit_amount'
+      ) {
+        orderExpr = 'txn.debitAmount';
+      } else if (rawField === 'amount') {
+        orderExpr =
+          '(COALESCE(txn.creditAmount, 0) - COALESCE(txn.debitAmount, 0))';
+      } else if (rawField === 'balance') {
+        orderExpr = 'txn.balance';
+      } else if (rawField === 'netOffAmount' || rawField === 'net_off_amount') {
+        orderExpr =
+          'COALESCE((SELECT SUM(n.net_off_amount) FROM erp_invoice_voucher_netoff n WHERE n.bank_transaction_id = txn.id), 0)';
+      } else if (
+        rawField === 'remainingAmount' ||
+        rawField === 'remaining_amount'
+      ) {
+        orderExpr =
+          '(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - COALESCE((SELECT SUM(n.net_off_amount) FROM erp_invoice_voucher_netoff n WHERE n.bank_transaction_id = txn.id), 0))';
+      } else if (
+        rawField === 'correspondentName' ||
+        rawField === 'partner' ||
+        rawField === 'partnerName' ||
+        rawField === 'corrName'
+      ) {
+        orderExpr =
+          "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))";
+      } else if (
+        rawField === 'correspondentAccount' ||
+        rawField === 'corrAccount'
+      ) {
+        orderExpr = 'txn.correspondentAccount';
+      } else if (rawField === 'correspondentBank' || rawField === 'corrBank') {
+        orderExpr = 'txn.correspondentBank';
+      } else if (rawField === 'branch' || rawField === 'branchId') {
+        orderExpr = 'branch.name';
+      } else if (rawField === 'createdAt' || rawField === 'created_at') {
+        orderExpr = 'txn.createdAt';
+      }
+
+      if (orderExpr) {
+        if (!hasOrder) {
+          qb.orderBy(orderExpr, order);
+          hasOrder = true;
         } else {
-          sortBy = firstSort;
-          sortOrder = 'ASC';
+          qb.addOrderBy(orderExpr, order);
         }
       }
     }
 
-    if (sortBy) {
-      const validSorts = ['transDate', 'debitAmount', 'creditAmount', 'amount'];
-      if (validSorts.includes(sortBy)) {
-        const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-        if (sortBy === 'amount') {
-          qb.addSelect(
-            '(COALESCE(txn.creditAmount, 0) - COALESCE(txn.debitAmount, 0))',
-            'calc_amount',
-          );
-          qb.orderBy('calc_amount', order);
-        } else {
-          qb.orderBy(`txn.${sortBy}`, order);
-        }
-        qb.addOrderBy('txn.createdAt', 'DESC');
-      } else {
-        qb.orderBy('txn.transDate', 'DESC').addOrderBy('txn.createdAt', 'DESC');
-      }
-    } else {
+    if (!hasOrder) {
       qb.orderBy('txn.transDate', 'DESC').addOrderBy('txn.createdAt', 'DESC');
+    } else {
+      qb.addOrderBy('txn.createdAt', 'DESC');
     }
 
     qb.skip((page - 1) * pageSize).take(pageSize);
