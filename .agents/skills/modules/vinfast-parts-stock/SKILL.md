@@ -55,7 +55,7 @@ Các chức năng cốt lõi:
 
 ---
 
-## 3. Cấu trúc Source Code Backend
+## 3. Cấu trúc Source Code Backend (Chuẩn /api-service-refactor)
 
 ```text
 src/vinfast-parts/
@@ -64,11 +64,19 @@ src/vinfast-parts/
 ├── entities/
 │   ├── vinfast-parts-catalog.entity.ts                   # Entity bảng vinfast_parts_catalog
 │   └── vinfast-parts-ledger.entity.ts                    # Entity bảng vinfast_parts_ledger
+├── engines/
+│   ├── vinfast-fifo.engine.ts                            # Pure Engine tính toán FIFO độc lập
+│   └── vinfast-fifo.engine.spec.ts                       # Unit tests cho FIFO Engine
+├── helpers/
+│   └── vinfast-parts-query.helper.ts                     # Helper thuần túy sinh SQL multi-keyword, exact search, blank filter
 ├── services/
+│   ├── vinfast-parts-stock.service.ts                    # Sub-service quản lý tồn kho, column-options, summary
+│   ├── vinfast-parts-ledger.service.ts                   # Sub-service quản lý lịch sử sổ cái, FIFO unit rows
+│   ├── vinfast-parts-sync.service.ts                     # Sub-service quản lý SKU resolve, sync catalog & ledger
 │   └── vinfast-parts-stock-export-background.service.ts  # Service quản lý job xuất Excel ngầm, SSE progress, TTL 24h
 ├── vinfast-parts.controller.ts                           # Controller định tuyến API, SSE streams, Swagger, Guard
-├── vinfast-parts.service.ts                              # Service chứa logic sync catalog, sync ledger, tính FIFO & export Excel
-└── vinfast-parts.module.ts                               # Module NestJS đăng ký TypeORM và Background Service
+├── vinfast-parts.service.ts                              # Facade Service tinh gọn, Clean DI Constructor
+└── vinfast-parts.module.ts                               # Module NestJS đăng ký TypeORM, Sub-services & Background Service
 ```
 
 ---
@@ -83,7 +91,7 @@ Tags: `VinFast Parts`
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/vinfast-parts/sync-catalog` | Đồng bộ danh mục phụ tùng từ toàn bộ hóa đơn mua hàng VinFast |
 | `POST` | `/api/v1/vinfast-parts/sync-ledger` | Khởi chạy đồng bộ sổ cái IN/OUT theo dải ngày (`dateFrom`, `dateTo`, `clearDb`) |
-| `GET` | `/api/v1/vinfast-parts/stock` | Lấy danh sách số dư tồn kho phụ tùng (`vehicleType`, `stockTab` [`ALL`, `IN_STOCK`, `OUT_OF_STOCK`, `NEGATIVE`], `search`, `sortBy`, `sortDir`, `column_filters`, phân trang), trả về kèm `summary` (Grand Totals: `totalQtyIn`, `totalQtyOut`, `totalQtyBalance`) và `cumulative` totals ($T1 \rightarrow T_{page}$) |
+| `GET` | `/api/v1/vinfast-parts/stock` | Lấy danh sách số dư tồn kho phụ tùng (`vehicleType`, `stockTab` [`ALL`, `IN_STOCK`, `OUT_OF_STOCK`, `NEGATIVE`], `search`, `sortBy`, `sortDir`, `column_filters`, phân trang), trả về song song `items` và `data: items` kèm `summary` (Grand Totals) và `cumulative` totals |
 | `GET` | `/api/v1/vinfast-parts/stock/column-options` | Lấy danh sách giá trị distinct cho bộ lọc cột của bảng tồn kho (hỗ trợ lọc theo `stockTab`) |
 | `GET` | `/api/v1/vinfast-parts/ledger/:sku` | Lấy lịch sử giao dịch sổ cái theo mã SKU (truy vết dòng tiền & luân chuyển) |
 | `GET` | `/api/v1/vinfast-parts/fifo-rows/:sku` | Lấy bảng kê phân rã đơn vị FIFO (mapping từng đơn vị nhập với xuất/tồn) |
@@ -97,17 +105,18 @@ Tags: `VinFast Parts`
 
 ## 5. Logic Nghiệp vụ Trọng tâm
 
-### 5.1. Bóc tách & Chuẩn hóa Mã Phụ Tùng (`resolveVinfastSku`)
+### 5.1. Bóc tách & Chuẩn hóa Mã Phụ Tùng (`resolveVinfastSku` / Tiền tố `VF-`)
+- **Quy tắc chuẩn hóa 100% SKU có tiền tố `VF-`**:
+  - Mẫu: `/^(?:VF-)?([A-Z]{3,6}[0-9]{5,8}[A-Z0-9]{0,3})/` $\to$ Gán `VF-<PART_NO>`.
+  - Mã số thuần 5-10 số (classic part number) $\to$ Gán `VF-<NUMBERS>`.
 - **Mã số thuế bên bán của VinFast (`VINFAST_SELLER_TAX_CODES`)**:
   - `0108926276` (VinFast Trading & Production)
   - `0318334886`
   - `0202357718`
-- **Quy tắc Regex bóc tách SKU chuẩn**:
-  - Mẫu: `/([A-Z]{3}[0-9][A-Z0-9]*)/` (3 chữ cái in hoa, 1 số, theo sau bởi các ký tự chữ số).
 - **Quy tắc ngoại lệ đặc biệt**:
-  - `VF5_HV_BATTERY_PACK_38_KWH` -> SKU gán: `EEP73110011AP`
-  - `HV_BATTERY_41_9KWH` / `HV_BATTERY_41_9_KWH` / `BAT21001011` -> SKU gán: `BAT21001011`
-  - `HV_BATTERY_PACK` -> SKU gán: `EEP73110011ALL`
+  - `VF5_HV_BATTERY_PACK_38_KWH` -> SKU gán: `VF-EEP73110011AP`
+  - `HV_BATTERY_41_9KWH` / `HV_BATTERY_41_9_KWH` / `BAT21001011` -> SKU gán: `VF-BAT21001011`
+  - `HV_BATTERY_PACK` -> SKU gán: `VF-EEP73110011ALL`
 
 ### 5.2. Phân loại Ô tô (`CAR`) vs Xe máy (`MOTORBIKE`)
 - Sử dụng tập hằng số `VINFAST_CAR_PART_CODES` từ `src/reports-core/vinfast-car-part-codes.ts`.
