@@ -19,6 +19,7 @@ Các nghiệp vụ trọng tâm:
   - **Hóa đơn Bán ra (`OUT`)**: Hạch toán vào `Nợ 131 (tổng tiền)` / `Có T0002 (doanh thu treo)` + `Có 33311 (thuế đầu ra)`.
   - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Chặn tự động sinh bút toán sống khi chưa bật biến môi trường để phục vụ rà soát đối chiếu dữ liệu lịch sử an toàn.
   - **Vô hiệu hóa Auto-post ngầm trên UI**: Gỡ bỏ lời gọi ngầm `autoPostStandard` khi lưu form hóa đơn để tránh sinh rác dữ liệu ngoài ý muốn.
+  - **Đồng bộ 2 Chiều & Mã Tham Chiếu Chuẩn**: `InvoiceCategoryAutopostService` tự động sinh và duy trì mã tham chiếu `reference = [Số HĐ]-[Ký hiệu HĐ]` cùng `source_id = invoice.id` sang Sổ cái (`erp_journal_entries`) cho cả luồng tạo mới và tái hạch toán In-Place khi đổi danh mục.
 - **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
@@ -497,7 +498,7 @@ bun run check:ci
 
 Thư mục: `src/modules/erp-invoices-core/components/ErpInvoicesTab/`
 
-Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`erp-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
+Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`ui-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
 
 ```
 src/modules/erp-invoices-core/components/ErpInvoicesTab/
@@ -553,7 +554,7 @@ Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối
   - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
 
 ### 8.4. Cấu Trúc Atomic Tab "Tài chính" (`ErpInvoiceSettlementTab`) & Drawer Đối Soát Dòng Tiền (`VoucherNetoffSelectionModal`)
-Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `erp-atomic-refactor`:
+Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `ui-atomic-refactor`:
 
 ```
 src/modules/erp-invoices-core/components/

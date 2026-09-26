@@ -49,6 +49,7 @@ import { InvoiceDashboardAnalyticsService } from './services/sub-services/invoic
 import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-dashboard-horizon.service';
 
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -68,6 +69,7 @@ import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-
       ErpBranch,
       ErpEntityAttributeValue,
       ErpModuleCategory,
+      ErpModuleAttributeDef,
       ErpChartOfAccount,
       ErpJournalEntry,
       ErpJournalEntryLine,

@@ -9,6 +9,7 @@ import { In, Repository } from 'typeorm';
 
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpModuleCategory } from '../../../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../../../module-config/entities/erp_module_attribute_def.entity';
 import { ErpChartOfAccount } from '../../../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../../../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../../../accounting-core/entities/erp_journal_entry_line.entity';
@@ -28,6 +29,8 @@ export class InvoiceCategoryAutopostService {
     private readonly invoiceRepo: Repository<ErpInvoice>,
     @InjectRepository(ErpModuleCategory)
     private readonly categoryRepo: Repository<ErpModuleCategory>,
+    @InjectRepository(ErpModuleAttributeDef)
+    private readonly attrDefRepo: Repository<ErpModuleAttributeDef>,
     @InjectRepository(ErpChartOfAccount)
     private readonly chartOfAccountRepo: Repository<ErpChartOfAccount>,
     @InjectRepository(ErpJournalEntry)
@@ -60,10 +63,38 @@ export class InvoiceCategoryAutopostService {
         ? categoryCode
         : invoice.category?.code || null;
 
-    // Lấy override debit account code từ DB qua FK quan hệ
-    // (chỉ dùng nếu account chưa bị soft-delete; isActive=false vẫn hợp lệ)
+    // Lấy override debit account code từ DB:
+    // Ưu tiên 1: Dynamic Option Config trong ErpModuleAttributeDef (cấu hình trường tùy chỉnh phân loại)
     let overrideDebitAccountCode: string | null = null;
+    if (activeCategoryCode) {
+      try {
+        const categoryAttrDefs = await this.attrDefRepo.find({
+          where: {
+            code: 'category',
+            isDeleted: false,
+          },
+        });
+        for (const def of categoryAttrDefs) {
+          if (Array.isArray(def.options)) {
+            const matchedOpt = def.options.find(
+              (opt) => opt.value === activeCategoryCode,
+            );
+            if (matchedOpt?.accountCode) {
+              overrideDebitAccountCode = matchedOpt.accountCode;
+              break;
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to lookup ErpModuleAttributeDef for category ${activeCategoryCode}: ${err?.message}`,
+        );
+      }
+    }
+
+    // Ưu tiên 2: Từ FK quan hệ category.defaultDebitAccount (nếu có)
     if (
+      !overrideDebitAccountCode &&
       invoice.category?.defaultDebitAccount &&
       !invoice.category.defaultDebitAccount.isDeleted
     ) {
@@ -77,7 +108,7 @@ export class InvoiceCategoryAutopostService {
     );
 
     const logSource = overrideDebitAccountCode
-      ? `[FK_OVERRIDE: ${overrideDebitAccountCode}]`
+      ? `[DB_OVERRIDE: ${overrideDebitAccountCode}]`
       : resolution.isFallback
         ? `[T0003_FALLBACK]`
         : `[STATIC_MAP: ${resolution.debitAccountCode}]`;
@@ -134,8 +165,25 @@ export class InvoiceCategoryAutopostService {
             }
           }
         }
+        // Đảm bảo reference, sourceId và sourceType luôn đồng bộ
+        const invoiceRef = invoice.serialNo
+          ? `${invoice.invoiceNo}-${invoice.serialNo}`
+          : invoice.invoiceNo;
+        if (
+          !je.reference ||
+          je.reference !== invoiceRef ||
+          !je.sourceId ||
+          je.sourceId !== invoice.id ||
+          je.sourceType !== 'INVOICE'
+        ) {
+          await this.journalEntryRepo.update(je.id, {
+            reference: invoiceRef,
+            sourceId: invoice.id,
+            sourceType: 'INVOICE',
+          });
+        }
         this.logger.log(
-          `Re-aligned Journal Entry ${je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode}`,
+          `Re-aligned Journal Entry ${je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
         );
         return invoice;
       }

@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { InvoiceCategoryAutopostService } from './invoice-category-autopost.service';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpModuleCategory } from '../../../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../../../module-config/entities/erp_module_attribute_def.entity';
 import { ErpChartOfAccount } from '../../../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../../../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../../../accounting-core/entities/erp_journal_entry_line.entity';
@@ -13,6 +14,7 @@ describe('InvoiceCategoryAutopostService', () => {
   let service: InvoiceCategoryAutopostService;
   let mockInvoiceRepo: any;
   let mockCategoryRepo: any;
+  let mockAttrDefRepo: any;
   let mockCoaRepo: any;
   let mockJeRepo: any;
   let mockJeLineRepo: any;
@@ -91,12 +93,17 @@ describe('InvoiceCategoryAutopostService', () => {
       findOne: jest.fn(),
     };
 
+    mockAttrDefRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+
     mockCoaRepo = {
       find: jest.fn().mockResolvedValue(mockCoaList),
     };
 
     mockJeRepo = {
       findOne: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     mockJeLineRepo = {
@@ -120,6 +127,10 @@ describe('InvoiceCategoryAutopostService', () => {
         {
           provide: getRepositoryToken(ErpModuleCategory),
           useValue: mockCategoryRepo,
+        },
+        {
+          provide: getRepositoryToken(ErpModuleAttributeDef),
+          useValue: mockAttrDefRepo,
         },
         {
           provide: getRepositoryToken(ErpChartOfAccount),
@@ -289,6 +300,54 @@ describe('InvoiceCategoryAutopostService', () => {
     expect(res.isFallback).toBe(false);
     expect(mockInvoiceRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ categoryId: 'cat-grab' }),
+    );
+  });
+
+  it('should use overrideDebitAccountCode configured in ErpModuleAttributeDef options', async () => {
+    mockInvoiceRepo.findOne.mockResolvedValue({
+      id: 'inv-5',
+      invoiceNo: '8888',
+      direction: 'IN',
+      branchId: 'branch-1',
+      preVatAmount: '2000000',
+      vatAmount: '200000',
+      totalAmount: '2200000',
+      postingStatus: 'UNPOSTED',
+      invoiceDate: '2026-09-25',
+    });
+
+    // Mock ErpModuleAttributeDef có option CUSTOM_PARTS với accountCode: '1563'
+    mockAttrDefRepo.find.mockResolvedValue([
+      {
+        id: 'attr-cat-1',
+        code: 'category',
+        options: [
+          {
+            value: 'CUSTOM_PARTS',
+            label: 'Linh kiện tùy chỉnh',
+            accountCode: '1563',
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.autoPostInvoiceByCategory(
+      'inv-5',
+      'CUSTOM_PARTS',
+    );
+
+    expect(result.postingStatus).toBe('POSTED');
+    expect(mockAccountingService.createJournalEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchId: 'branch-1',
+        lines: expect.arrayContaining([
+          expect.objectContaining({
+            accountId: 'coa-1563',
+            debit: 2000000,
+            credit: 0,
+          }),
+        ]),
+      }),
     );
   });
 });
