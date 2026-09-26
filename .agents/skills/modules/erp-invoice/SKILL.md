@@ -28,9 +28,10 @@ Các nghiệp vụ trọng tâm:
   - `InvoiceQueryService` đóng vai trò Facade mỏng (~150 dòng) điều phối tới các sub-services chuyên biệt (mỗi file < 1000 dòng):
     - `InvoiceListQueryService`: Truy vấn danh sách hóa đơn, phân trang, lọc đa chiều, tính grand totals & cumulative totals.
     - `InvoiceItemsQueryService`: Truy vấn danh sách chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+    - `InvoiceItemCodeResolverService`: Sub-service điều phối phân loại và gán **Mã Hàng (`item_code`)** chuẩn hóa theo cơ chế **AI-First (9router AI Gateway) ➔ Rule-based Fallback (Regex / Vendor Matching) ➔ Preserve Guard** bảo toàn mã khi đồng bộ lại từ Cổng Thuế.
     - `InvoiceStatsService`: Thống kê KPI, phân tích top mặt hàng, options phân quyền.
     - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel hóa đơn và dòng hàng chuyên nghiệp đa sheet.
-    - Helpers chuyên trách: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+    - Helpers chuyên trách: `vinfast-part-code.helper.ts`, `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
   - `InvoiceDebtsService` đóng vai trò Facade mỏng (~140 dòng) điều phối tới:
     - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
     - `InvoiceDebtsDetailService`: Chi tiết danh sách hóa đơn theo đối tác (`getPartnerInvoices` với parameterized query chống SQL injection).

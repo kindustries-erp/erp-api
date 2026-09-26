@@ -46,6 +46,29 @@ export interface ClassifyInvoiceCategoryResult {
   isVfDirectMatch?: boolean;
 }
 
+export interface ClassifyLineItemInput {
+  lineIndex: number;
+  description?: string;
+  unit?: string;
+  quantity?: number;
+  unitPrice?: number;
+  preVatAmount?: number;
+  discountAmount?: number;
+  totalAmount?: number;
+  sellerName?: string;
+  sellerTaxCode?: string;
+  buyerName?: string;
+}
+
+export interface ClassifyLineItemResult {
+  lineIndex: number;
+  itemCode: string | null;
+  itemType: 'PARTS' | 'SERVICE' | 'MATERIAL' | 'DISCOUNT' | 'OTHER';
+  isDiscountDeduction: boolean;
+  confidence: number;
+  reason: string;
+}
+
 export interface ClassifyInvoiceInput {
   invoiceNo?: string;
   serialNo?: string;
@@ -389,6 +412,173 @@ Chỉ trả về định dạng JSON hợp lệ, không bọc markdown hay thêm
         confidence: 0,
         reason: text,
       };
+    }
+  }
+
+  /**
+   * Phân loại chi tiết từng dòng hàng hóa/dịch vụ trên hóa đơn bằng AI (9router Gateway).
+   * Hỗ trợ trích xuất cả mã phụ tùng VinFast chính hãng, cứu hộ, chiết khấu, thầu phụ, tiện ích, vật tư.
+   */
+  async classifyInvoiceLineItemsWithAi(
+    items: ClassifyLineItemInput[],
+    tier: string = 'low',
+    modelOverride?: string,
+  ): Promise<ClassifyLineItemResult[]> {
+    if (!items || items.length === 0) return [];
+
+    const toonData = jsonToToon({
+      lines: items.map((it) => ({
+        idx: it.lineIndex,
+        desc: it.description,
+        unit: it.unit,
+        qty: it.quantity,
+        price: it.unitPrice,
+        preVat: it.preVatAmount,
+        disc: it.discountAmount,
+        seller: it.sellerName,
+        sellerTax: it.sellerTaxCode,
+      })),
+    });
+
+    const systemPrompt = `Bạn là Chuyên gia Master Data & Kế toán Trưởng ERP Garage Ô tô.
+Nhiệm vụ: Đọc thông tin chi tiết từng dòng hàng hóa/dịch vụ trên hóa đơn đầu vào và gán MÃ HÀNG CHUẨN HÓA (item_code), LOẠI MẶT HÀNG (item_type) và XÁC ĐỊNH TÍNH CHẤT GIẢM TRỪ (isDiscountDeduction).
+
+HƯỚNG DẪN PHÂN LOẠI & TRÍCH XUẤT MÃ HÀNG:
+
+1. PHỤ TÙNG CHÍNH HÃNG VINFAST & OEM (ƯU TIÊN TRÍCH XUẤT MÃ GỐC):
+   - Đọc tên hàng hóa, tìm và trích xuất MÃ PART NUMBER CHUẨN của nhà sản xuất đặt ở đầu hoặc trong mô tả:
+     + Ví dụ: "BIW20002460 - ĐỆM_CAO_SU_TAY_NẮM_MỞ_CỬA_BÊN_I" -> item_code: "BIW20002460", item_type: "PARTS"
+     + Ví dụ: "CHS20000814 - LỐP XE" -> item_code: "CHS20000814", item_type: "PARTS"
+     + Ví dụ: "EEP30032001 - ẮC QUY 12V" -> item_code: "EEP30032001", item_type: "PARTS"
+     + Ví dụ: "FLU10006075 - Ga điều hòa R134" -> item_code: "FLU10006075", item_type: "MATERIAL"
+     + Ví dụ: "VF5_HV_BATTERY_PACK_38_KWH" -> item_code: "EEP73110011AP", item_type: "PARTS"
+     + Ví dụ: "HV_BATTERY_41.9KWH" hoặc "BAT21001011" -> item_code: "BAT21001011", item_type: "PARTS"
+     + Ví dụ: "ĐỘNG CƠ ĐIỆN BẢO HÀNH" -> item_code: "PVT20030000", item_type: "PARTS"
+     + Ví dụ: "LFP00000216 Chẩn đoán lỗi pin" -> item_code: "LFP00000216", item_type: "SERVICE"
+
+2. CỨU HỘ & CẨU KÉO XE:
+   - Cước chở xe, cẩu kéo xe tai nạn/sự cố của CÔNG TY CỔ PHẦN DỊCH VỤ VÂN SƠN -> item_code: "DV-CUUHO-VANSON", item_type: "SERVICE", isDiscountDeduction: false.
+   - Cứu hộ giao thông 911 SÀI GÒN -> item_code: "DV-CUUHO-911", item_type: "SERVICE", isDiscountDeduction: false.
+   - Cứu hộ kéo xe chung khác -> item_code: "DV-CUUHO", item_type: "SERVICE", isDiscountDeduction: false.
+
+3. CHIẾT KHẤU, GIẢM GIÁ & KHUYẾN MẠI (LƯU Ý: LÀ PHÉP TRỪ VÀO TỔNG TIỀN):
+   - Chiết khấu từ GRAB -> item_code: "CK-GRAB", item_type: "DISCOUNT", isDiscountDeduction: true.
+   - Chiết khấu thương mại từ GSM (Xanh SM) -> item_code: "CK-GSM", item_type: "DISCOUNT", isDiscountDeduction: true.
+   - Chiết khấu mua hàng / giảm giá chung -> item_code: "CK-THUONGMAI", item_type: "DISCOUNT", isDiscountDeduction: true.
+
+4. CÔNG THỢ & GIA CÔNG THẦU PHỤ:
+   - Gia công mâm, hàn lazang, phục hồi mâm ô tô (TNT Auto) -> item_code: "DV-GIACONG-MAM", item_type: "SERVICE", isDiscountDeduction: false.
+   - Phục hồi thước lái, tiện đĩa thắng -> item_code: "DV-GIACONG-THUOCLAI", item_type: "SERVICE", isDiscountDeduction: false.
+   - Dịch vụ thay thế cầu chì Pyro VinFast theo số VIN -> item_code: "DV-THAY-PYRO", item_type: "SERVICE", isDiscountDeduction: false.
+   - Sửa chữa thầu phụ xe ngoài -> item_code: "DV-SUACHUA-NGOAI", item_type: "SERVICE", isDiscountDeduction: false.
+
+5. DỊCH VỤ VẬN HÀNH, TIỆN ÍCH & MẶT BẰNG:
+   - Phí dịch vụ bảo vệ an ninh (Thắng Lợi 24H) -> item_code: "DV-BAOVE", item_type: "SERVICE", isDiscountDeduction: false.
+   - Vệ sinh công nghiệp xưởng/VP (Trí Đức Clean, Biwase) -> item_code: "DV-VESINH", item_type: "SERVICE", isDiscountDeduction: false.
+   - Dịch vụ tư vấn kế toán, pháp lý (W&A, Wellspring Law) -> item_code: "DV-TUVAN", item_type: "SERVICE", isDiscountDeduction: false.
+   - Cước vận chuyển, giao nhận phụ tùng (Grab Express, Viettel Post) -> item_code: "DV-CUOC-GIAOHANG", item_type: "SERVICE", isDiscountDeduction: false.
+   - Xử lý rác thải công nghiệp / y tế -> item_code: "DV-RACTHAI", item_type: "SERVICE", isDiscountDeduction: false.
+
+6. VẬT TƯ TIÊU HAO XƯỞNG (SƠN, DẦU, GAS, KEO):
+   - Sơn lót, sơn màu, keo bóng 2K, chất đóng rắn -> item_code: "VT-SON-2K", item_type: "MATERIAL", isDiscountDeduction: false.
+   - Dầu động cơ, dầu nhớt phuy/can, dầu hộp số -> item_code: "VT-DAU-NHOT", item_type: "MATERIAL", isDiscountDeduction: false.
+   - Gas lạnh điều hòa R134a -> item_code: "VT-GAS-R134", item_type: "MATERIAL", isDiscountDeduction: false.
+   - Nước làm mát động cơ -> item_code: "VT-NUOC-LAMMAT", item_type: "MATERIAL", isDiscountDeduction: false.
+   - Giấy nhám, băng keo, vải lau, màng bọc nilong -> item_code: "VT-TIEUHAO-XUONG", item_type: "MATERIAL", isDiscountDeduction: false.
+
+7. KHÁC / HÀNG HÓA CHUNG:
+   - Nước uống tiếp khách/thợ (Biwase, Viva 19L), VPP -> item_code: "HH-VANPHONGPHAM", item_type: "OTHER", isDiscountDeduction: false.
+
+ĐỊNH DẠNG ĐẦU RA JSON BẮT BUỘC:
+{
+  "items": [
+    {
+      "lineIndex": 0,
+      "itemCode": "BIW20002460",
+      "itemType": "PARTS" | "SERVICE" | "MATERIAL" | "DISCOUNT" | "OTHER",
+      "isDiscountDeduction": false,
+      "confidence": 0.98,
+      "reason": "Mã phụ tùng đệm cao su tay nắm VinFast trích xuất từ tên hàng"
+    }
+  ]
+}`;
+
+    const userPrompt = `Danh sách các dòng hàng hóa/dịch vụ (TOON format):\n${toonData}`;
+
+    try {
+      const completion = await this.nineRouterClient.complete({
+        model: modelOverride || tier,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.0,
+      });
+
+      const content = completion.choices[0]?.message?.content || '{}';
+      return this.parseLineItemsClassificationResult(content, items);
+    } catch (err: any) {
+      this.logger.warn(
+        `AI classify line items failed for ${items.length} items: ${err?.message}`,
+      );
+      return [];
+    }
+  }
+
+  private parseLineItemsClassificationResult(
+    text: string,
+    originalItems: ClassifyLineItemInput[],
+  ): ClassifyLineItemResult[] {
+    try {
+      const clean = text
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+      const parsed = JSON.parse(clean);
+      const rawList = Array.isArray(parsed.items)
+        ? parsed.items
+        : Array.isArray(parsed)
+          ? parsed
+          : [];
+
+      return rawList.map((item: any, idx: number) => {
+        const lineIdx =
+          typeof item.lineIndex === 'number'
+            ? item.lineIndex
+            : (originalItems[idx]?.lineIndex ?? idx);
+        const itemCode =
+          typeof item.itemCode === 'string' && item.itemCode.trim().length > 0
+            ? item.itemCode.trim()
+            : null;
+        const validTypes = [
+          'PARTS',
+          'SERVICE',
+          'MATERIAL',
+          'DISCOUNT',
+          'OTHER',
+        ];
+        const itemType = validTypes.includes(item.itemType)
+          ? item.itemType
+          : 'OTHER';
+        const confidence =
+          typeof item.confidence === 'number' ? item.confidence : 0.8;
+        const isDiscountDeduction =
+          Boolean(item.isDiscountDeduction) || itemType === 'DISCOUNT';
+
+        return {
+          lineIndex: lineIdx,
+          itemCode,
+          itemType,
+          isDiscountDeduction,
+          confidence,
+          reason: item.reason || 'Classified by 9router AI',
+        };
+      });
+    } catch (e) {
+      this.logger.warn(
+        `Failed to parse line items classification JSON: ${text.slice(0, 200)}`,
+      );
+      return [];
     }
   }
 }

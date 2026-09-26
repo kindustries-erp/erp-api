@@ -55,6 +55,7 @@ import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.e
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
 import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
 
 @Module({
   imports: [
@@ -111,6 +112,7 @@ import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-
     InvoiceDashboardAnalyticsService,
     InvoiceDashboardHorizonService,
     InvoiceCategoryAutopostService,
+    InvoiceItemCodeResolverService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -123,6 +125,7 @@ import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-
     InvoiceDebtsService,
     InvoiceDebtsExportBackgroundService,
     InvoiceCategoryAutopostService,
+    InvoiceItemCodeResolverService,
   ],
 })
 export class ErpInvoicesCoreModule {}

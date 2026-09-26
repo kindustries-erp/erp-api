@@ -230,4 +230,93 @@ describe('InvoiceAiHandler', () => {
       expect(result.reason).toContain('AI Failure');
     });
   });
+
+  describe('classifyInvoiceLineItemsWithAi', () => {
+    it('should extract VinFast part numbers, rescue, discount, and materials via AI', async () => {
+      const mockAiResponse = {
+        id: 'chatcmpl-items',
+        object: 'chat.completion',
+        created: 1700000000,
+        model: 'gemini-3.7-flash-tiered',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({
+                items: [
+                  {
+                    lineIndex: 0,
+                    itemCode: 'BIW20002460',
+                    itemType: 'PARTS',
+                    isDiscountDeduction: false,
+                    confidence: 0.98,
+                    reason: 'Mã phụ tùng VinFast chính hãng',
+                  },
+                  {
+                    lineIndex: 1,
+                    itemCode: 'DV-CUUHO-VANSON',
+                    itemType: 'SERVICE',
+                    isDiscountDeduction: false,
+                    confidence: 0.95,
+                    reason: 'Cước chở xe cứu hộ Vân Sơn',
+                  },
+                  {
+                    lineIndex: 2,
+                    itemCode: 'CK-GRAB',
+                    itemType: 'DISCOUNT',
+                    isDiscountDeduction: true,
+                    confidence: 0.99,
+                    reason: 'Dòng chiết khấu trừ vào cước Grab',
+                  },
+                ],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      };
+
+      (mockNineRouterClient.complete as jest.Mock).mockResolvedValue(
+        mockAiResponse,
+      );
+
+      const result = await handler.classifyInvoiceLineItemsWithAi([
+        {
+          lineIndex: 0,
+          description: 'BIW20002460 - ĐỆM_CAO_SU_TAY_NẮM_MỞ_CỬA',
+          quantity: 3,
+          unitPrice: 27063,
+          sellerName: 'CÔNG TY CỔ PHẦN VINFAST VIỆT NAM',
+        },
+        {
+          lineIndex: 1,
+          description: 'Cước Phí Chở Xe BKS 50H-749.34 về Phú Mỹ Hưng',
+          unit: 'Chuyến',
+          sellerName: 'CÔNG TY CỔ PHẦN DỊCH VỤ VÂN SƠN',
+        },
+        {
+          lineIndex: 2,
+          description: 'Chiết khấu mã A-9MVK34HGWL8TAV',
+          preVatAmount: 14815,
+          sellerName: 'CÔNG TY TNHH GRAB',
+        },
+      ]);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].itemCode).toBe('BIW20002460');
+      expect(result[0].itemType).toBe('PARTS');
+      expect(result[1].itemCode).toBe('DV-CUUHO-VANSON');
+      expect(result[1].itemType).toBe('SERVICE');
+      expect(result[2].itemCode).toBe('CK-GRAB');
+      expect(result[2].itemType).toBe('DISCOUNT');
+      expect(result[2].isDiscountDeduction).toBe(true);
+    });
+
+    it('should return empty array when input items is empty', async () => {
+      const result = await handler.classifyInvoiceLineItemsWithAi([]);
+      expect(result).toEqual([]);
+      expect(mockNineRouterClient.complete).not.toHaveBeenCalled();
+    });
+  });
 });

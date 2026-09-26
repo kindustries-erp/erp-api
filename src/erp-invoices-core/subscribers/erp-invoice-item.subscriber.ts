@@ -6,7 +6,7 @@ import {
   UpdateEvent,
 } from 'typeorm';
 import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
-import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
+import { extractStandardItemCode } from '../helpers/vinfast-part-code.helper';
 
 @EventSubscriber()
 export class ErpInvoiceItemSubscriber implements EntitySubscriberInterface<ErpInvoiceItem> {
@@ -20,7 +20,20 @@ export class ErpInvoiceItemSubscriber implements EntitySubscriberInterface<ErpIn
 
   beforeInsert(event: InsertEvent<ErpInvoiceItem>) {
     if (event.entity && event.entity.description && !event.entity.itemCode) {
-      event.entity.itemCode = extractVinfastItemCode(event.entity.description);
+      const resolved = extractStandardItemCode({
+        description: event.entity.description,
+        itemCode: event.entity.itemCode,
+        unit: event.entity.unit,
+        discountAmount: event.entity.discountAmount
+          ? Number(event.entity.discountAmount)
+          : null,
+        preVatAmount: event.entity.preVatAmount
+          ? Number(event.entity.preVatAmount)
+          : null,
+      });
+      if (resolved.itemCode) {
+        event.entity.itemCode = resolved.itemCode;
+      }
     }
   }
 
@@ -31,9 +44,19 @@ export class ErpInvoiceItemSubscriber implements EntitySubscriberInterface<ErpIn
       event.entity.description !== event.databaseEntity?.description
     ) {
       // Re-extract if description changed
-      const extractedCode = extractVinfastItemCode(event.entity.description);
-      if (extractedCode) {
-        event.entity.itemCode = extractedCode;
+      const resolved = extractStandardItemCode({
+        description: event.entity.description,
+        itemCode: event.entity.itemCode,
+        unit: event.entity.unit,
+        discountAmount: event.entity.discountAmount
+          ? Number(event.entity.discountAmount)
+          : null,
+        preVatAmount: event.entity.preVatAmount
+          ? Number(event.entity.preVatAmount)
+          : null,
+      });
+      if (resolved.itemCode) {
+        event.entity.itemCode = resolved.itemCode;
       }
     }
   }

@@ -21,6 +21,7 @@ import {
   resolveInInvoiceBranchCode,
 } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
+import { extractStandardItemCode } from '../helpers/vinfast-part-code.helper';
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -399,6 +400,13 @@ export class InvoiceImportService {
             parsed.items &&
             parsed.items.length > 0
           ) {
+            const existingMap = new Map<string, string>();
+            for (const ex of existingInvoice.items || []) {
+              if (ex.description && ex.itemCode) {
+                existingMap.set(ex.description.trim(), ex.itemCode);
+              }
+            }
+
             const invoiceLineCount = parsed.items.length;
             const itemEntities = parsed.items.map((item) => {
               const classification = classifyInvoiceLine(item, {
@@ -411,9 +419,26 @@ export class InvoiceImportService {
                 ),
               });
 
+              const existingCode = item.description
+                ? existingMap.get(item.description.trim())
+                : undefined;
+              const resolved = extractStandardItemCode({
+                description: item.description,
+                itemCode: item.itemCode || existingCode,
+                unit: item.unit,
+                preVatAmount: item.preVatAmount,
+                discountAmount: item.discountAmount,
+                sellerName: existingInvoice.sellerName,
+                sellerTaxCode: existingInvoice.sellerTaxCode,
+              });
+
               return this.repository.manager.create(ErpInvoiceItem, {
                 invoiceId: existingInvoice.id,
-                itemCode: item.itemCode || undefined,
+                itemCode:
+                  resolved.itemCode ||
+                  existingCode ||
+                  item.itemCode ||
+                  undefined,
                 description: item.description,
                 unit: item.unit,
                 quantity: item.quantity != null ? String(item.quantity) : null,
@@ -424,7 +449,6 @@ export class InvoiceImportService {
                 vatAmount: String(item.vatAmount ?? 0),
                 discountAmount: String(item.discountAmount ?? 0),
                 totalAmount: String(item.totalAmount ?? 0),
-                itemType: (classification as any)?.itemType ?? null,
               });
             });
             await this.repository.manager.save(ErpInvoiceItem, itemEntities);
@@ -592,9 +616,19 @@ export class InvoiceImportService {
               headerDiscountAmount: Number(savedInvoice.discountAmount ?? 0),
             });
 
+            const resolved = extractStandardItemCode({
+              description: item.description,
+              itemCode: item.itemCode,
+              unit: item.unit,
+              preVatAmount: item.preVatAmount,
+              discountAmount: item.discountAmount,
+              sellerName: savedInvoice.sellerName,
+              sellerTaxCode: savedInvoice.sellerTaxCode,
+            });
+
             return this.repository.manager.create(ErpInvoiceItem, {
               invoiceId: savedInvoice.id,
-              itemCode: item.itemCode || undefined,
+              itemCode: resolved.itemCode || item.itemCode || undefined,
               description: item.description,
               unit: item.unit,
               quantity: item.quantity != null ? String(item.quantity) : null,
@@ -604,7 +638,6 @@ export class InvoiceImportService {
               vatAmount: String(item.vatAmount ?? 0),
               discountAmount: String(item.discountAmount ?? 0),
               totalAmount: String(item.totalAmount ?? 0),
-              itemType: (classification as any)?.itemType ?? null,
             });
           });
 
