@@ -134,8 +134,25 @@ export class InvoiceCategoryAutopostService {
             }
           }
         }
+        // Đảm bảo reference, sourceId và sourceType luôn đồng bộ
+        const invoiceRef = invoice.serialNo
+          ? `${invoice.invoiceNo}-${invoice.serialNo}`
+          : invoice.invoiceNo;
+        if (
+          !je.reference ||
+          je.reference !== invoiceRef ||
+          !je.sourceId ||
+          je.sourceId !== invoice.id ||
+          je.sourceType !== 'INVOICE'
+        ) {
+          await this.journalEntryRepo.update(je.id, {
+            reference: invoiceRef,
+            sourceId: invoice.id,
+            sourceType: 'INVOICE',
+          });
+        }
         this.logger.log(
-          `Re-aligned Journal Entry ${je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode}`,
+          `Re-aligned Journal Entry ${je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
         );
         return invoice;
       }

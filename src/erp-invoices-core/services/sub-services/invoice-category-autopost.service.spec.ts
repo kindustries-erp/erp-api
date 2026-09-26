@@ -97,6 +97,7 @@ describe('InvoiceCategoryAutopostService', () => {
 
     mockJeRepo = {
       findOne: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     mockJeLineRepo = {
