@@ -498,7 +498,7 @@ bun run check:ci
 
 Thư mục: `src/modules/erp-invoices-core/components/ErpInvoicesTab/`
 
-Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`erp-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
+Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`ui-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
 
 ```
 src/modules/erp-invoices-core/components/ErpInvoicesTab/
@@ -554,7 +554,7 @@ Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối
   - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
 
 ### 8.4. Cấu Trúc Atomic Tab "Tài chính" (`ErpInvoiceSettlementTab`) & Drawer Đối Soát Dòng Tiền (`VoucherNetoffSelectionModal`)
-Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `erp-atomic-refactor`:
+Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `ui-atomic-refactor`:
 
 ```
 src/modules/erp-invoices-core/components/

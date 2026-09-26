@@ -35,7 +35,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm không sót trang) và `__BLANK__` (lọc khách hàng chưa có mã hoặc thông tin trống).
   - Tích hợp endpoint `GET /cases/customers-debt/column-options` hỗ trợ cascading filter qua tham số `filtersStr`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
-  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/erp-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
+  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/ui-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
   - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).
   - **Cột trái (Left Panel / Main Content)**: `CustomerKpiSummaryCards` + Thanh điều hướng `PillTabs` 4 sub-tabs:
     - **Tab 1. Phiếu DV hoàn thành (`CustomerCasesTableTab`)**: `<DataTable>` hiển thị các phiếu hoàn thành có công nợ, tính tuổi nợ theo ngày hoàn tất, tích hợp Quick Actions (Xem chi tiết, Cấn trừ sao kê, Liên kết HĐ VAT).

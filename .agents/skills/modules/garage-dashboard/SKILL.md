@@ -202,7 +202,7 @@ Resource RBAC: `garage`
     - [`garageOpexApi.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
     - [`useGarageOpexList.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
-  - Pages & Components (Chuẩn `/erp-atomic-refactor`):
+  - Pages & Components (Chuẩn `/ui-atomic-refactor`):
     - [`pages/GarageDashboard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
     - [`components/GarageConversionFunnelCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
