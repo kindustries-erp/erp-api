@@ -621,10 +621,31 @@ Phân hệ Hóa đơn tích hợp engine AI 9router và tự động hạch toá
 2. **Cơ chế Fallback An Toàn vào TK Tạm `T0003`**:
    - Khi 9router AI timeout, lỗi mạng, hoặc confidence < 0.7 $\to$ Hạch toán tạm vào `Nợ T0003 / Nợ 1331 / Có 331`.
    - Khi người dùng chọn lại phân loại trên UI, hệ thống tự động cập nhật *in-place* dòng Nợ của bút toán sang tài khoản đích.
-3. **Kiến trúc Sub-Services & Endpoints Tuân thủ `/api-service-refactor`**:
-   - `InvoiceCategoryAutopostService`: Quản lý auto-post và in-place update journal entries.
-   - `PATCH /api/v1/erp-invoices/:id/category`: Gán phân loại & tự động hạch toán / re-align sổ cái.
-   - `PATCH /api/v1/erp-invoices/bulk-set-category`: Gán phân loại hàng loạt.
-   - `POST /api/v1/erp-invoices/:id/ai-classify-autopost`: Kích hoạt AI 9router phân loại & hạch toán tức thì.
+### 8.8. Chuẩn Hóa Mã Hàng Dòng Hóa Đơn Đầu Vào Theo Hệ Thống Tiền Tố (Prefix Taxonomy)
+Toàn bộ chi tiết từng dòng mặt hàng hóa đơn đầu vào (`erp_invoice_items` với `direction = 'IN'`) được phân giải và gán mã chuẩn hóa có tiền tố phân cấp rõ ràng:
+1. **Phụ Tùng VinFast (`VF-<PART_NO>`)**: Trích xuất Part Number chính hãng kèm tiền tố `VF-` (VD: `VF-BEX20001151`, `VF-BAT21001011`, `VF-PWT73011010AC`, `VF-106206`).
+2. **Phụ Tùng OEM & Hãng khác (`PT-<PART_NO>`)**: Trích xuất Part Number nhà sản xuất kèm tiền tố `PT-` (VD: `PT-0K95K15909`, `PT-214432B020`, `PT-225/60R17`, `PT-A2055018201`, `PT-97701-Q6400`, `PT-CHUNG`).
+3. **Vật Tư Tiêu Hao Xưởng (`VT-*`)**:
+   - `VT-SON`: Sơn lót, sơn màu, bóng 2K, chất đóng rắn, dung môi pha sơn.
+   - `VT-GAS`: Gas lạnh điều hòa R134a, R1234yf.
+   - `VT-DAU-NHOT`: Dầu động cơ, dầu hộp số, nhớt, mỡ bôi trơn.
+   - `VT-KEO`: Keo dán kính, keo silicon A500, keo AB.
+   - `VT-HOACHAT`: Nước làm mát động cơ, chất tẩy sơn, nước rửa kính.
+   - `VT-TIEU-HAO`: Toàn bộ vật tư tiêu hao phụ xưởng (giấy nhám P180-P1200, giẻ lau, băng keo 3M, bạt nilong phủ xe, phễu lọc sơn, lon pha, găng tay nitrile, quần áo thợ, điện nước xưởng).
+4. **Dịch Vụ & Thầu Phụ (`DV-*`)**:
+   - `DV-CUUHO`: Toàn bộ dịch vụ cứu hộ, cẩu kéo chở xe tai nạn về garage (Vân Sơn, 911, địa phương).
+   - `DV-GIACONG`: Gia công tiện mâm lazang (`DV-GIACONG-MAM`), phục hồi thước lái (`DV-GIACONG-THUOCLAI`), tiện đĩa thắng.
+   - `DV-SUACHUA`: Thuê ngoài sửa củ đề, phục hồi vỏ pin, công thợ sửa chữa.
+   - `DV-VANCHUYEN`: Cước giao nhận phụ tùng Grab Express, chuyển phát nhanh Viettel Post.
+   - `DV-BAOVE`, `DV-VESINH`, `DV-TUVAN`, `DV-IT`, `DV-INAN`: Các dịch vụ vận hành tiện ích.
+5. **Chiết Khấu & Giảm Trừ (`CK-*`)**:
+   - `CK-GSM`, `CK-GRAB`, `CK-THUONGMAI` (`isDiscountDeduction: true`, tự động cấn trừ công nợ và giảm giá trị mua).
+6. **Công Cụ Dụng Cụ (`CCDC-*`)**:
+   - `CCDC-XUONG`: Súng siết bulong, cuộn rulo ống khí, cẩu móc máy, máy nén khí.
+   - `CCDC-VP`: Thiết bị mạng TP-Link, camera quan sát, máy in.
+7. **Hành Chính & VPP (`HC-*`)**:
+   - `HC-NUOC`: Nước uống tiếp khách/thợ (Biwase, Viva, Lavie, Aquafina, Ion Life).
+   - `HC-VPP`: Giấy in A4, bìa còng, giấy in bill.
+
 
 

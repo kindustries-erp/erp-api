@@ -5,7 +5,7 @@ import {
 } from '../../../ai-hub-core/handlers/invoice-ai.handler';
 import {
   extractStandardItemCode,
-  StandardItemCodeResult,
+  normalizePrefix,
 } from '../../helpers/vinfast-part-code.helper';
 
 export interface ResolveLineItemInput {
@@ -36,11 +36,14 @@ export interface ResolvedLineItemCode {
     | 'EXISTING_PRESERVED'
     | 'AI_CLASSIFIED'
     | 'VINFAST_PARTS'
+    | 'OEM_PARTS'
     | 'RESCUE_RULE'
     | 'DISCOUNT_RULE'
     | 'SUBCONTRACT_RULE'
     | 'SERVICE_RULE'
     | 'CONSUMABLES_RULE'
+    | 'TOOLS_RULE'
+    | 'ADMIN_RULE'
     | 'FALLBACK';
   reason?: string;
 }
@@ -48,8 +51,8 @@ export interface ResolvedLineItemCode {
 /**
  * Sub-service điều phối phân loại và gán mã hàng (item_code) chi tiết từng dòng hóa đơn.
  * Tuân thủ cơ chế Hybrid AI-First:
- * 1. Preserve Guard: Bảo toàn mã đã có.
- * 2. AI-First: Trích xuất bằng 9router AI (cả VinFast & Services).
+ * 1. Preserve Guard: Bảo toàn và chuẩn hóa tiền tố mã đã có.
+ * 2. AI-First: Trích xuất bằng 9router AI theo đúng Prefix Taxonomy (VF-, PT-, VT-, DV-, CK-, CCDC-, HC-).
  * 3. Rule-based Fallback: Tự động fallback sang Regex / Vendor Matching khi AI offline hoặc low confidence.
  */
 @Injectable()
@@ -67,26 +70,29 @@ export class InvoiceItemCodeResolverService {
       enableAi?: boolean;
       aiTier?: string;
       modelOverride?: string;
+      forceAll?: boolean;
     },
   ): Promise<ResolvedLineItemCode[]> {
     if (!items || items.length === 0) return [];
 
     const enableAi = options?.enableAi ?? true;
     const aiTier = options?.aiTier ?? 'low';
+    const forceAll = options?.forceAll ?? false;
 
     const results: ResolvedLineItemCode[] = [];
     const pendingAiInputs: ClassifyLineItemInput[] = [];
     const pendingAiIndices: number[] = [];
 
-    // Bước 1: Kiểm tra Preserve Guard cho từng dòng
+    // Bước 1: Kiểm tra Preserve Guard cho từng dòng (nếu không bật forceAll)
     items.forEach((item, idx) => {
       const lineIdx = item.lineIndex ?? idx;
       if (
+        !forceAll &&
         item.existingItemCode &&
         item.existingItemCode.trim() !== '' &&
         item.existingItemCode.toUpperCase() !== 'NULL'
       ) {
-        // Dòng đã có mã hợp lệ -> Giữ nguyên tuyệt đối
+        // Dòng đã có mã hợp lệ -> Giữ nguyên và chuẩn hóa tiền tố
         const preserved = extractStandardItemCode({
           existingItemCode: item.existingItemCode,
           description: item.description,
@@ -97,15 +103,15 @@ export class InvoiceItemCodeResolverService {
         results[lineIdx] = {
           id: item.id,
           lineIndex: lineIdx,
-          itemCode: preserved.itemCode!,
+          itemCode: normalizePrefix(preserved.itemCode, preserved.itemType),
           itemType: preserved.itemType,
           isDiscountDeduction: preserved.isDiscountDeduction,
           confidence: 1.0,
           source: 'EXISTING_PRESERVED',
-          reason: 'Bảo toàn mã đã tồn tại trước đó',
+          reason: 'Bảo toàn và chuẩn hóa tiền tố mã đã tồn tại',
         };
       } else {
-        // Dòng chưa có mã -> Chuẩn bị danh sách gọi AI
+        // Dòng cần phân loại -> Chuẩn bị danh sách gọi AI
         pendingAiInputs.push({
           lineIndex: lineIdx,
           description: item.description || '',
@@ -145,7 +151,7 @@ export class InvoiceItemCodeResolverService {
       }
     }
 
-    // Bước 3: Áp dụng kết quả AI hoặc Fallback Rule-based cho từng dòng chưa giải quyết
+    // Bước 3: Áp dụng kết quả AI hoặc Fallback Rule-based cho từng dòng
     for (let i = 0; i < pendingAiInputs.length; i++) {
       const lineIdx = pendingAiIndices[i];
       const origItem = items.find(
@@ -154,11 +160,12 @@ export class InvoiceItemCodeResolverService {
       const aiResult = aiResultsMap.get(lineIdx);
 
       if (aiResult && aiResult.itemCode) {
-        // Áp dụng kết quả từ AI
+        // Áp dụng kết quả từ AI (kèm hậu kiểm normalizePrefix)
+        const finalCode = normalizePrefix(aiResult.itemCode, aiResult.itemType);
         results[lineIdx] = {
           id: origItem?.id,
           lineIndex: lineIdx,
-          itemCode: aiResult.itemCode,
+          itemCode: finalCode,
           itemType: aiResult.itemType,
           isDiscountDeduction: aiResult.isDiscountDeduction,
           confidence: aiResult.confidence,
@@ -176,10 +183,12 @@ export class InvoiceItemCodeResolverService {
           preVatAmount: Number(origItem?.preVatAmount || 0),
         });
 
+        const finalCode = normalizePrefix(ruleRes.itemCode, ruleRes.itemType);
+
         results[lineIdx] = {
           id: origItem?.id,
           lineIndex: lineIdx,
-          itemCode: ruleRes.itemCode || 'HH-CHUNG',
+          itemCode: finalCode,
           itemType: ruleRes.itemType,
           isDiscountDeduction: ruleRes.isDiscountDeduction,
           confidence: 0.9,
@@ -201,6 +210,7 @@ export class InvoiceItemCodeResolverService {
       enableAi?: boolean;
       aiTier?: string;
       modelOverride?: string;
+      forceAll?: boolean;
     },
   ): Promise<ResolvedLineItemCode> {
     const list = await this.resolveBatch([item], options);
@@ -208,7 +218,7 @@ export class InvoiceItemCodeResolverService {
       list[0] || {
         id: item.id,
         lineIndex: 0,
-        itemCode: 'HH-CHUNG',
+        itemCode: 'PT-CHUNG',
         itemType: 'OTHER',
         isDiscountDeduction: false,
         confidence: 0.5,

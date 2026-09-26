@@ -21,8 +21,11 @@ export class ReportsCoreService {
     .map((taxCode) => `'${taxCode.replace(/'/g, "''")}'`)
     .join(', ');
 
-  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.map(
-    (code) => `'${code.replace(/'/g, "''")}'`,
+  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.flatMap(
+    (code) => [
+      `'${code.replace(/'/g, "''")}'`,
+      `'${(code.startsWith('VF-') ? code : 'VF-' + code).replace(/'/g, "''")}'`,
+    ],
   ).join(', ');
 
   constructor(
@@ -510,17 +513,19 @@ export class ReportsCoreService {
       CASE
         WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
           OR ${canonicalExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
-          THEN 'EEP73110011AP'
+          THEN 'VF-EEP73110011AP'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9KWH%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9_KWH%'
           OR ${canonicalExpr} LIKE '%BAT21001011%'
-          THEN 'BAT21001011'
+          THEN 'VF-BAT21001011'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_PACK%'
-          THEN 'EEP73110011ALL'
+          THEN 'VF-EEP73110011ALL'
+        WHEN ${normalizedExpr} LIKE 'VF-%' AND SUBSTRING(${normalizedExpr} FROM '^(VF-[A-Z0-9]+)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '^(VF-[A-Z0-9]+)')
         WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)') IS NOT NULL
-          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
+          THEN 'VF-' || SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
         ELSE NULL
       END
     `;

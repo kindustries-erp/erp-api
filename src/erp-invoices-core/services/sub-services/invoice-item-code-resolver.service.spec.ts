@@ -18,30 +18,30 @@ describe('InvoiceItemCodeResolverService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should preserve existing itemCode when present (Preserve Guard)', async () => {
+  it('should preserve and normalize existing itemCode when present (Preserve Guard)', async () => {
     const result = await service.resolveBatch([
       {
         lineIndex: 0,
-        existingItemCode: 'CUSTOM-PRESERVED-CODE',
+        existingItemCode: 'PT-CUSTOM-PRESERVED-CODE',
         description: 'Bất kỳ mô tả nào',
       },
     ]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].itemCode).toBe('CUSTOM-PRESERVED-CODE');
+    expect(result[0].itemCode).toBe('PT-CUSTOM-PRESERVED-CODE');
     expect(result[0].source).toBe('EXISTING_PRESERVED');
     expect(
       mockInvoiceAiHandler.classifyInvoiceLineItemsWithAi,
     ).not.toHaveBeenCalled();
   });
 
-  it('should use AI results when AI returns valid code with confidence >= 0.7', async () => {
+  it('should use AI results and ensure prefix normalization when AI returns valid code', async () => {
     (
       mockInvoiceAiHandler.classifyInvoiceLineItemsWithAi as jest.Mock
     ).mockResolvedValue([
       {
         lineIndex: 0,
-        itemCode: 'BIW20002460',
+        itemCode: 'VF-BIW20002460',
         itemType: 'PARTS',
         isDiscountDeduction: false,
         confidence: 0.98,
@@ -58,12 +58,12 @@ describe('InvoiceItemCodeResolverService', () => {
     ]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].itemCode).toBe('BIW20002460');
+    expect(result[0].itemCode).toBe('VF-BIW20002460');
     expect(result[0].itemType).toBe('PARTS');
     expect(result[0].source).toBe('AI_CLASSIFIED');
   });
 
-  it('should fallback to Rule-based engine when AI fails or confidence is low', async () => {
+  it('should fallback to Rule-based engine when AI fails and produce standard prefix', async () => {
     (
       mockInvoiceAiHandler.classifyInvoiceLineItemsWithAi as jest.Mock
     ).mockRejectedValue(new Error('9router network error'));
@@ -78,7 +78,7 @@ describe('InvoiceItemCodeResolverService', () => {
     ]);
 
     expect(result).toHaveLength(1);
-    expect(result[0].itemCode).toBe('DV-CUUHO-VANSON');
+    expect(result[0].itemCode).toBe('DV-CUUHO');
     expect(result[0].itemType).toBe('SERVICE');
     expect(result[0].source).toBe('RESCUE_RULE');
   });

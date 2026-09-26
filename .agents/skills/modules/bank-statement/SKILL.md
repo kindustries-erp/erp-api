@@ -215,7 +215,10 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
      $$|\sum \text{debit} - \sum \text{credit}| < 0.01$$
   4. Tạo hoặc cập nhật chứng từ `erp_journal_entries` với mã tham chiếu nguồn `sourceId = txn.id`, `sourceType = 'BANK'` hoặc `'CASH'`.
 
-### 5.3. Thuật toán Bộ Lọc Nâng Cao & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+### 5.3. Thuật toán Bộ Lọc Nâng Cao, Sắp Xếp Tự Động & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+- **Sắp xếp Tự động Server-Side (Default Server-side Sorting)**:
+  - Khi không có tham số sắp xếp từ FE, backend mặc định sắp xếp: `txn.transDate DESC, txn.createdAt DESC`.
+  - Hỗ trợ đầy đủ dictionary 14+ cột sort (`transDate`, `thu`, `chi`, `balance`, `netOffAmount`, `remainingAmount`, `account`, `referenceNumber`, `description`, `correspondentName`, `branch`,...) kèm tie-breaker `txn.createdAt DESC`.
 - **Lọc Khoảng Ngày Múi Giờ Việt Nam (Timezone-Aware Date Range Filter)**:
   - Do `trans_date` trong database PostgreSQL lưu theo mốc UTC, khi lọc theo khoảng ngày (`startDate` - `endDate`), hệ thống áp dụng chuyển đổi múi giờ chuẩn trong SQL:
     ```sql
@@ -298,16 +301,22 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 ```text
 src/modules/bank-statements/components/BankStatementsTab/
 ├── utils.ts                                     # Preset configs, column groups, default visibility
-├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync)
-├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
+├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync, < 170 LoC)
+├── BankStatementsTab.tsx                        # Main view coordinator (< 120 LoC)
+├── BankStatementSection.tsx                     # Presentational spreadsheet view (< 170 LoC)
 ├── index.tsx                                    # Re-export entry
+├── hooks/
+│   └── useBankStatementFilters.ts               # Filter state management (noDefaultPeriod: true)
 ├── components/
-│   ├── BankStatementColumns.tsx                 # 15+ column definitions với createColumnHeaderFilter
+│   ├── BankStatementCellRenderers.tsx           # Atomic cell renderers (< 130 LoC)
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions (< 180 LoC)
 │   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
 │   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
 │   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
 └── __tests__/
-    └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
+    ├── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox
+    ├── BankStatementsTabSummaryCell.test.tsx    # Unit tests SubtotalSummaryCell
+    └── BankStatementsTabUnified.test.tsx        # Unit tests tab coordinator
 ```
 
 ### 8.4. Chuẩn Hóa Cột Bảng & Infinite Scroll (`BankStatementColumns.tsx`)

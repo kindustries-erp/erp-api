@@ -247,7 +247,7 @@ describe('InvoiceAiHandler', () => {
                 items: [
                   {
                     lineIndex: 0,
-                    itemCode: 'BIW20002460',
+                    itemCode: 'VF-BIW20002460',
                     itemType: 'PARTS',
                     isDiscountDeduction: false,
                     confidence: 0.98,
@@ -255,7 +255,7 @@ describe('InvoiceAiHandler', () => {
                   },
                   {
                     lineIndex: 1,
-                    itemCode: 'DV-CUUHO-VANSON',
+                    itemCode: 'DV-CUUHO',
                     itemType: 'SERVICE',
                     isDiscountDeduction: false,
                     confidence: 0.95,
@@ -304,9 +304,9 @@ describe('InvoiceAiHandler', () => {
       ]);
 
       expect(result).toHaveLength(3);
-      expect(result[0].itemCode).toBe('BIW20002460');
+      expect(result[0].itemCode).toBe('VF-BIW20002460');
       expect(result[0].itemType).toBe('PARTS');
-      expect(result[1].itemCode).toBe('DV-CUUHO-VANSON');
+      expect(result[1].itemCode).toBe('DV-CUUHO');
       expect(result[1].itemType).toBe('SERVICE');
       expect(result[2].itemCode).toBe('CK-GRAB');
       expect(result[2].itemType).toBe('DISCOUNT');
