@@ -160,12 +160,14 @@ export class TransactionQueryService {
       ).andWhere('et.tag_id IN (:...tagIds)', { tagIds: filter.tagIds });
     }
 
-    if (filter.column_filters) {
+    const rawColumnFilters = filter.column_filters || filter.columnFilters;
+    if (rawColumnFilters) {
       try {
-        const cFilters = JSON.parse(filter.column_filters) as Record<
-          string,
-          string[]
-        >;
+        const cFilters = (
+          typeof rawColumnFilters === 'string'
+            ? JSON.parse(rawColumnFilters)
+            : rawColumnFilters
+        ) as Record<string, string[]>;
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           let filterField = '';
@@ -322,12 +324,14 @@ export class TransactionQueryService {
       } catch (e) {}
     }
 
-    if (filter.column_search) {
+    const rawColumnSearch = filter.column_search || filter.columnSearch;
+    if (rawColumnSearch) {
       try {
-        const cSearch = JSON.parse(filter.column_search) as Record<
-          string,
-          string
-        >;
+        const cSearch = (
+          typeof rawColumnSearch === 'string'
+            ? JSON.parse(rawColumnSearch)
+            : rawColumnSearch
+        ) as Record<string, string>;
 
         const netOffSubquery = `COALESCE((SELECT SUM(net_off_amount) FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id), 0)`;
         const remainingAmountSubquery = `(GREATEST(COALESCE(txn.credit_amount, 0), COALESCE(txn.debit_amount, 0)) - ${netOffSubquery})`;
@@ -455,19 +459,34 @@ export class TransactionQueryService {
       } catch (e) {}
     }
 
-    if (filter.sortBy) {
+    let sortBy = filter.sortBy;
+    let sortOrder = filter.sortOrder;
+
+    if (!sortBy && filter.sorts && filter.sorts.length > 0) {
+      const firstSort = filter.sorts[0];
+      if (typeof firstSort === 'string') {
+        if (firstSort.startsWith('-')) {
+          sortBy = firstSort.substring(1);
+          sortOrder = 'DESC';
+        } else {
+          sortBy = firstSort;
+          sortOrder = 'ASC';
+        }
+      }
+    }
+
+    if (sortBy) {
       const validSorts = ['transDate', 'debitAmount', 'creditAmount', 'amount'];
-      if (validSorts.includes(filter.sortBy)) {
-        const order =
-          filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-        if (filter.sortBy === 'amount') {
+      if (validSorts.includes(sortBy)) {
+        const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        if (sortBy === 'amount') {
           qb.addSelect(
             '(COALESCE(txn.creditAmount, 0) - COALESCE(txn.debitAmount, 0))',
             'calc_amount',
           );
           qb.orderBy('calc_amount', order);
         } else {
-          qb.orderBy(`txn.${filter.sortBy}`, order);
+          qb.orderBy(`txn.${sortBy}`, order);
         }
         qb.addOrderBy('txn.createdAt', 'DESC');
       } else {
