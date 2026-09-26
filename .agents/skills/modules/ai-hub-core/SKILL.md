@@ -17,7 +17,7 @@ Các nghiệp vụ trọng tâm:
   - `Tier high` *(Gemini 3.7 Flash High)*: Dự báo rủi ro tồn kho, phân tích số liệu tài chính phức tạp.
   - `Tier ultra` *(GPT-6 Astra / Claude Opus)*: Trợ lý điều hành Copilot cao cấp.
 - **5 Phân hệ Domain Handlers chuyên biệt**:
-  - `InvoiceAiHandler`: Trích xuất dữ liệu hóa đơn tài chính (OCR/Text) thành JSON cấu trúc phục vụ tạo hóa đơn và đối chiếu PO/GRN.
+  - `InvoiceAiHandler`: Trích xuất dữ liệu hóa đơn tài chính (OCR/Text), phân loại chi tiết từng dòng hàng hóa `classifyInvoiceLineItemsWithAi` (Mã phụ tùng VinFast, Cứu hộ, Chiết khấu giảm trừ, Thầu phụ, Dịch vụ, Vật tư), trích xuất biển số xe qua định dạng nén TOON và đối chiếu PO/GRN.
   - `AccountingAiHandler`: Gợi ý tự động cặp tài khoản Nợ/Có (tuân thủ Thông tư 200 & 133 của Bộ Tài chính) kèm độ tin cậy `confidence`.
   - `PurchasingAiHandler`: So sánh đa chiều báo giá các nhà cung cấp, đánh giá rủi ro giao hàng và tối ưu hóa chi phí đơn mua hàng.
   - `InventoryAiHandler`: Phân tích biến động xuất nhập tồn, đánh giá nguy cơ thiếu hàng (stockout) hoặc tồn kho quá hạn (overstock).

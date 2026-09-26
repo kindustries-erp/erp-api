@@ -41,7 +41,10 @@ import {
   authenticateGdtWithSession,
 } from '../helpers/gdt-session.helper';
 import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
-import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
+import {
+  extractVinfastItemCode,
+  extractStandardItemCode,
+} from '../helpers/vinfast-part-code.helper';
 
 import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
 
@@ -1479,12 +1482,17 @@ export class InvoicePortalService implements OnModuleInit {
         const disc = i.stckhau != null ? Number(i.stckhau) : 0;
         const total = preVat + vatAmt - disc;
 
-        const itemCode =
-          i.mhhdvu ||
-          i.mhang ||
-          i.ma ||
-          extractVinfastItemCode(i.ten) ||
-          undefined;
+        const rawCode = i.mhhdvu || i.mhang || i.ma || undefined;
+        const resolved = extractStandardItemCode({
+          description: i.ten,
+          itemCode: rawCode,
+          unit: i.dvtinh,
+          preVatAmount: preVat,
+          discountAmount: disc,
+          sellerName: json.nbten,
+          sellerTaxCode: invoice.sellerTaxCode,
+        });
+        const itemCode = resolved.itemCode || rawCode || undefined;
 
         return {
           itemCode,

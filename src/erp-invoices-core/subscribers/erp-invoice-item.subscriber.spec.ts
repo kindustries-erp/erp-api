@@ -123,6 +123,22 @@ describe('VinFast Part Code Extraction & ErpInvoiceItemSubscriber', () => {
       expect(entity.itemCode).toBe('CUSTOM_CODE');
     });
 
+    it('sets itemCode on beforeInsert for rescue or discounts', () => {
+      const rescueEntity = new ErpInvoiceItem();
+      rescueEntity.description = 'Cước cứu hộ kéo xe tai nạn Vân Sơn';
+      rescueEntity.itemCode = null;
+
+      subscriber.beforeInsert({ entity: rescueEntity } as any);
+      expect(rescueEntity.itemCode).toBe('DV-CUUHO-VANSON');
+
+      const discountEntity = new ErpInvoiceItem();
+      discountEntity.description = 'Chiết khấu GrabFood tháng 9';
+      discountEntity.itemCode = null;
+
+      subscriber.beforeInsert({ entity: discountEntity } as any);
+      expect(discountEntity.itemCode).toBe('CK-GRAB');
+    });
+
     it('updates itemCode on beforeUpdate if description changes', () => {
       const entity = new ErpInvoiceItem();
       entity.description = 'BEX20000881 - NẮP';
