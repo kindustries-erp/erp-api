@@ -97,4 +97,36 @@ describe('InvoiceCategoryAccountMappingHelper', () => {
   it('should have exactly 14 category keys in CATEGORY_TO_DEBIT_ACCOUNT_MAP', () => {
     expect(Object.keys(CATEGORY_TO_DEBIT_ACCOUNT_MAP)).toHaveLength(14);
   });
+
+  describe('3-Tier Fallback with DB overrideDebitAccountCode', () => {
+    it('should prioritize DB overrideDebitAccountCode over static TT99 map (Tier 1)', () => {
+      const res = resolveInvoiceAccountsByCategory('VF_PARTS', '6421');
+      expect(res.debitAccountCode).toBe('6421');
+      expect(res.categoryCode).toBe('VF_PARTS');
+      expect(res.isFallback).toBe(false);
+    });
+
+    it('should fallback to static TT99 map when override is null or empty (Tier 2)', () => {
+      const resNull = resolveInvoiceAccountsByCategory('VF_PARTS', null);
+      expect(resNull.debitAccountCode).toBe('1561');
+      expect(resNull.isFallback).toBe(false);
+
+      const resEmpty = resolveInvoiceAccountsByCategory('VF_PARTS', '   ');
+      expect(resEmpty.debitAccountCode).toBe('1561');
+      expect(resEmpty.isFallback).toBe(false);
+    });
+
+    it('should fallback to T0003 when override is empty and category is unknown (Tier 3)', () => {
+      const res = resolveInvoiceAccountsByCategory('CUSTOM_CAT', '');
+      expect(res.debitAccountCode).toBe(FALLBACK_PURCHASE_DEBIT_ACCOUNT);
+      expect(res.isFallback).toBe(true);
+    });
+
+    it('should use DB override even when categoryCode is null or empty', () => {
+      const res = resolveInvoiceAccountsByCategory(null, '6422');
+      expect(res.debitAccountCode).toBe('6422');
+      expect(res.categoryCode).toBeNull();
+      expect(res.isFallback).toBe(false);
+    });
+  });
 });

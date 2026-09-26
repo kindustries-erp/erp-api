@@ -64,6 +64,7 @@ export class ModuleCategoryService {
       order: { createdAt: 'ASC' },
       relations: {
         attributeDefs: true,
+        defaultDebitAccount: true,
       },
     });
 
@@ -130,6 +131,7 @@ export class ModuleCategoryService {
       nameEn: dto.nameEn ? dto.nameEn.trim() : null,
       description: dto.description ? dto.description.trim() : null,
       moduleKey,
+      defaultDebitAccountId: dto.defaultDebitAccountId || null,
       isActive: dto.isActive !== undefined ? dto.isActive : true,
     });
 
@@ -177,6 +179,9 @@ export class ModuleCategoryService {
     }
     if (dto.description !== undefined) {
       category.description = dto.description ? dto.description.trim() : null;
+    }
+    if (dto.defaultDebitAccountId !== undefined) {
+      category.defaultDebitAccountId = dto.defaultDebitAccountId || null;
     }
     if (dto.isActive !== undefined) {
       category.isActive = dto.isActive;
