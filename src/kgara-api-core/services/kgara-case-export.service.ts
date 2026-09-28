@@ -307,33 +307,102 @@ export class KgaraCaseExportService {
       row.font = { name: 'Calibri', size: 10 };
       row.alignment = { vertical: 'middle' };
 
-      row.getCell('index').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('bienSoXe').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('classification').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('ngayTiepNhan').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('ngayHoanThanhCongViec').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('tenTinhTrangDichVu').alignment = {
+      // Gán border, numFmt và alignment cho từng cell theo column def
+      for (let col = 1; col <= COMPLETED_CASES_COLUMNS.length; col++) {
+        const colDef = COMPLETED_CASES_COLUMNS[col - 1];
+        const cell = row.getCell(col);
+        cell.border = borderThin;
+        if (colDef.style?.numFmt) {
+          cell.numFmt = colDef.style.numFmt;
+        }
+        if (colDef.align) {
+          cell.alignment = {
+            horizontal: colDef.align,
+            vertical: 'middle',
+          };
+        }
+      }
+
+      // Soft color highlight cho ô Trạng thái (đồng bộ 4 nhóm với UI KgaraCaseStatusBadge)
+      const statusText = String(c.tenTinhTrangDichVu || 'Đã kết thúc');
+      const statusLower = statusText.toLowerCase();
+      const statusCell = row.getCell('tenTinhTrangDichVu');
+      statusCell.alignment = {
         horizontal: 'center',
         vertical: 'middle',
       };
 
-      for (let col = 1; col <= COMPLETED_CASES_COLUMNS.length; col++) {
-        row.getCell(col).border = borderThin;
+      if (
+        statusLower.includes('kết thúc') ||
+        statusLower.includes('hoàn thành') ||
+        statusLower.includes('hoàn tất') ||
+        statusLower.includes('giao xe') ||
+        statusLower.includes('xong') ||
+        statusLower.includes('đã thanh toán')
+      ) {
+        // Nhóm 1: Hoàn tất / Kết thúc -> Green/Emerald pastel
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFECFDF5' },
+        };
+        statusCell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF065F46' },
+        };
+      } else if (
+        statusLower.includes('hủy') ||
+        statusLower.includes('từ chối') ||
+        statusLower.includes('không duyệt')
+      ) {
+        // Nhóm 2: Hủy / Từ chối -> Red pastel
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEE2E2' },
+        };
+        statusCell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF991B1B' },
+        };
+      } else if (
+        statusLower.includes('đang sửa') ||
+        statusLower.includes('đang làm') ||
+        statusLower.includes('tiếp nhận') ||
+        statusLower.includes('đang xử lý') ||
+        statusLower.includes('kiểm tra') ||
+        statusLower.includes('sửa chữa') ||
+        statusLower.includes('xử lý')
+      ) {
+        // Nhóm 3: Đang làm / Đang xử lý -> Amber pastel
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEF3C7' },
+        };
+        statusCell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF92400E' },
+        };
+      } else {
+        // Nhóm 4: Báo giá / Nháp / Chờ duyệt / Khác -> Slate Gray pastel
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF1F5F9' },
+        };
+        statusCell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF475569' },
+        };
       }
     });
 
@@ -469,37 +538,23 @@ export class KgaraCaseExportService {
         row.font = { name: 'Calibri', size: 10 };
         row.alignment = { vertical: 'middle' };
 
-        row.getCell('index').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-        row.getCell('bienSoXe').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-        row.getCell('loaiHienThi').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-        row.getCell('donViTinhText').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-        row.getCell('thueSuat').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-        row.getCell('khoCode').alignment = {
-          horizontal: 'center',
-          vertical: 'middle',
-        };
-
         for (
           let col = 1;
           col <= COMPLETED_CASE_SERVICES_COLUMNS.length;
           col++
         ) {
-          row.getCell(col).border = borderThin;
+          const colDef = COMPLETED_CASE_SERVICES_COLUMNS[col - 1];
+          const cell = row.getCell(col);
+          cell.border = borderThin;
+          if (colDef.style?.numFmt) {
+            cell.numFmt = colDef.style.numFmt;
+          }
+          if (colDef.align) {
+            cell.alignment = {
+              horizontal: colDef.align,
+              vertical: 'middle',
+            };
+          }
         }
       }
     }
@@ -612,49 +667,19 @@ export class KgaraCaseExportService {
       row.font = { name: 'Calibri', size: 10 };
       row.alignment = { vertical: 'middle' };
 
-      row.getCell('index').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('caseDate').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('completionDate').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('bienSoXe').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('loaiHienThi').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('donViTinhText').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('thueSuat').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('khoCode').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('statusName').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-      row.getCell('classification').alignment = {
-        horizontal: 'center',
-        vertical: 'middle',
-      };
-
       for (let c = 1; c <= CASE_SERVICES_EXPORT_COLUMNS.length; c++) {
-        row.getCell(c).border = borderThin;
+        const colDef = CASE_SERVICES_EXPORT_COLUMNS[c - 1];
+        const cell = row.getCell(c);
+        cell.border = borderThin;
+        if (colDef.style?.numFmt) {
+          cell.numFmt = colDef.style.numFmt;
+        }
+        if (colDef.align) {
+          cell.alignment = {
+            horizontal: colDef.align,
+            vertical: 'middle',
+          };
+        }
       }
     });
 

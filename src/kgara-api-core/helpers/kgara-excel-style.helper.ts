@@ -230,7 +230,12 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'Biển số xe', key: 'bienSoXe', width: 14, align: 'center' },
   { header: 'Mã KH', key: 'khachHangCode', width: 16, align: 'left' },
   { header: 'Tên khách hàng', key: 'khachHangName', width: 32, align: 'left' },
-  { header: 'Chi nhánh', key: 'branchName', width: 22, align: 'left' },
+  {
+    header: 'Trạng thái',
+    key: 'tenTinhTrangDichVu',
+    width: 18,
+    align: 'center',
+  },
   { header: 'Phân loại', key: 'classification', width: 18, align: 'center' },
   { header: 'Ngày tiếp nhận', key: 'ngayTiepNhan', width: 16, align: 'center' },
   {
@@ -245,7 +250,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 22,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Doanh thu (VNĐ)',
@@ -253,7 +258,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 20,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Chi phí / Giá vốn (VNĐ)',
@@ -261,7 +266,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 22,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Lợi nhuận gộp (VNĐ)',
@@ -269,14 +274,14 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 22,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Biên LN (%)',
     key: 'margin',
     width: 14,
     align: 'right',
-    style: { numFmt: '0.0"%"' },
+    style: { numFmt: '0.0%' },
   },
   {
     header: 'Đã thu (VNĐ)',
@@ -284,7 +289,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 20,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Còn nợ (VNĐ)',
@@ -292,7 +297,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 20,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Hóa đơn VAT liên kết',
@@ -300,12 +305,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     width: 25,
     align: 'left',
   },
-  {
-    header: 'Trạng thái',
-    key: 'tenTinhTrangDichVu',
-    width: 18,
-    align: 'center',
-  },
+  { header: 'Chi nhánh', key: 'branchName', width: 22, align: 'left' },
 ];
 
 /**
@@ -343,7 +343,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     key: 'donGia',
     width: 16,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Thành tiền trước thuế (VNĐ)',
@@ -351,14 +351,14 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 22,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Thuế suất',
     key: 'thueSuat',
     width: 12,
     align: 'center',
-    style: { numFmt: '0"%"' },
+    style: { numFmt: '0.0%' },
   },
   {
     header: 'Thành tiền có thuế (VNĐ)',
@@ -366,7 +366,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 22,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Giờ công',
@@ -382,7 +382,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 18,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Tiền phụ tùng (VNĐ)',
@@ -390,7 +390,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 18,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Giá vốn PT (VNĐ)',
@@ -398,7 +398,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 18,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Chiết khấu (VNĐ)',
@@ -406,7 +406,7 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     width: 16,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   { header: 'Mã kho', key: 'khoCode', width: 14, align: 'center' },
   { header: 'Ghi chú / Phụ phí', key: 'ghiChu', width: 20, align: 'left' },
@@ -450,7 +450,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     key: 'donGia',
     width: 15,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Tiền trước thuế',
@@ -458,14 +458,14 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 16,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Thuế suất (%)',
     key: 'thueSuat',
     width: 14,
     align: 'center',
-    style: { numFmt: '0.0"%"' },
+    style: { numFmt: '0.0%' },
   },
   {
     header: 'Thành tiền',
@@ -473,7 +473,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 18,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Tiền công DV',
@@ -481,7 +481,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 16,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Tiền phụ tùng',
@@ -489,7 +489,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 16,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Giá vốn PT',
@@ -497,7 +497,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 16,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   {
     header: 'Chiết khấu',
@@ -505,10 +505,65 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     width: 14,
     isSum: true,
     align: 'right',
-    style: { numFmt: '#,##0' },
+    style: { numFmt: '#,##0.00' },
   },
   { header: 'Mã kho', key: 'khoCode', width: 14, align: 'center' },
   { header: 'Chi nhánh', key: 'branchName', width: 22, align: 'left' },
   { header: 'Trạng thái', key: 'statusName', width: 16, align: 'center' },
   { header: 'Phân loại', key: 'classification', width: 18, align: 'center' },
 ];
+
+/**
+ * Sinh tên file Excel bảng kê phiếu dịch vụ chuẩn hóa kèm phân loại và trạng thái
+ * Format: Bang_ke_phieu_dich_vu_{PhanLoai}_{TrangThai}_{YYYYMMDD}_{HHmmss}.xlsx
+ */
+export function buildGarageCaseExportFileName(
+  classification?: string,
+  status?: string,
+  date: Date = new Date(),
+): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  const timestamp = `${y}${m}${d}_${hh}${mm}${ss}`;
+
+  let classLabel = 'Tat_ca_phan_loai';
+  if (classification && classification !== 'ALL') {
+    switch (classification) {
+      case 'KY_GUI_NOI_BO':
+        classLabel = 'Ky_gui_noi_bo';
+        break;
+      case 'SUA_CHUA_CHUNG':
+        classLabel = 'Sua_chua_chung';
+        break;
+      case 'OJ':
+        classLabel = 'OJ';
+        break;
+      case 'OJ_NGOAI':
+        classLabel = 'OJ_ngoai';
+        break;
+      case 'KHAC':
+        classLabel = 'Khac';
+        break;
+      default:
+        classLabel = classification.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+  }
+
+  let statusLabel = 'Ket_thuc';
+  if (status) {
+    if (status.toLowerCase() === 'all') {
+      statusLabel = 'Tat_ca_trang_thai';
+    } else if (status.toLowerCase() === 'completed') {
+      statusLabel = 'Ket_thuc';
+    } else {
+      statusLabel = status.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+  }
+
+  return `Bang_ke_phieu_dich_vu_${classLabel}_${statusLabel}_${timestamp}.xlsx`;
+}

@@ -5,6 +5,7 @@ import { KgaraCaseQueryService } from './kgara-case-query.service';
 import { KgaraCaseSettlementCalcService } from './kgara-case-settlement-calc.service';
 import { KgaraCaseServicesQueryService } from './kgara-case-services-query.service';
 import { KgaraCaseExportService } from './kgara-case-export.service';
+import { buildGarageCaseExportFileName } from '../helpers/kgara-excel-style.helper';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseService } from '../entities/kgara_case_service.entity';
@@ -200,11 +201,24 @@ describe('KgaraCaseQueryService', () => {
       const row5 = sheet1?.getRow(5);
       expect(row5?.getCell(2).value).toBe('PDV-2026-001'); // soChungTu
       expect(row5?.getCell(3).value).toBe('51G-12345'); // bienSoXe
-      expect(row5?.getCell(6).value).toBe('Chi nhánh Quận 7'); // branchName
+      expect(row5?.getCell(6).value).toBe('Hoàn tất'); // tenTinhTrangDichVu (Trạng thái)
+      expect(row5?.getCell(6).fill).toEqual(
+        expect.objectContaining({
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFECFDF5' },
+        }),
+      );
       expect(row5?.getCell(7).value).toBe('Sửa chữa chung'); // classification
+      expect(row5?.getCell(10).numFmt).toBe('#,##0.00'); // tienCoThue format
       expect(row5?.getCell(11).value).toBe(15000000); // doanhThu
+      expect(row5?.getCell(11).numFmt).toBe('#,##0.00'); // doanhThu format
       expect(row5?.getCell(12).value).toBe(9000000); // chiPhi
+      expect(row5?.getCell(12).numFmt).toBe('#,##0.00'); // chiPhi format
       expect(row5?.getCell(13).value).toBe(6000000); // loiNhuan
+      expect(row5?.getCell(13).numFmt).toBe('#,##0.00'); // loiNhuan format
+      expect(row5?.getCell(14).numFmt).toBe('0.0%'); // margin format
+      expect(row5?.getCell(18).value).toBe('Chi nhánh Quận 7'); // branchName (Chi nhánh at the end)
 
       // Sheet 2: Chi tiết DV & Phụ tùng
       const sheet2 = workbook.getWorksheet('Chi tiết DV & Phụ tùng');
@@ -424,6 +438,44 @@ describe('KgaraCaseQueryService', () => {
       expect(sheet?.getRow(4).getCell(1).value).toBe('STT');
       // Row 5: Data
       expect(sheet?.getRow(5).getCell(4).value).toBe('PDV-2026-001');
+    });
+  });
+
+  describe('buildGarageCaseExportFileName', () => {
+    const fixedDate = new Date('2026-03-05T12:30:45');
+
+    it('should format filename with classification and status correctly', () => {
+      const fileName = buildGarageCaseExportFileName(
+        'KY_GUI_NOI_BO',
+        'completed',
+        fixedDate,
+      );
+      expect(fileName).toBe(
+        'Bang_ke_phieu_dich_vu_Ky_gui_noi_bo_Ket_thuc_20260305_123045.xlsx',
+      );
+    });
+
+    it('should format filename with all status and empty classification correctly', () => {
+      const fileName = buildGarageCaseExportFileName(
+        undefined,
+        'all',
+        fixedDate,
+      );
+      expect(fileName).toBe(
+        'Bang_ke_phieu_dich_vu_Tat_ca_phan_loai_Tat_ca_trang_thai_20260305_123045.xlsx',
+      );
+    });
+
+    it('should format filename with specific classifications and default status', () => {
+      expect(
+        buildGarageCaseExportFileName('SUA_CHUA_CHUNG', undefined, fixedDate),
+      ).toBe(
+        'Bang_ke_phieu_dich_vu_Sua_chua_chung_Ket_thuc_20260305_123045.xlsx',
+      );
+
+      expect(
+        buildGarageCaseExportFileName('OJ_NGOAI', 'completed', fixedDate),
+      ).toBe('Bang_ke_phieu_dich_vu_OJ_ngoai_Ket_thuc_20260305_123045.xlsx');
     });
   });
 });
