@@ -22,6 +22,7 @@ import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.en
 import { KgaraClientService } from '../kgara-client.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
 import { extractNetPayableAmount } from '../kgara-sync.service';
+import { buildGarageCaseExportFileName } from '../helpers/kgara-excel-style.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
@@ -90,14 +91,7 @@ export class KgaraCasesController {
       q,
     });
 
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    const fileName = `Bang_ke_phieu_dich_vu_ket_thuc_${y}${m}${d}_${hh}${mm}${ss}.xlsx`;
+    const fileName = buildGarageCaseExportFileName(classification, status);
 
     res.set({
       'Content-Type':
