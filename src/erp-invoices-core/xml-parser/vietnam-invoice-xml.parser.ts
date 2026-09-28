@@ -10,6 +10,7 @@ import {
   extractVinfastItemCode,
   extractStandardItemCode,
 } from '../helpers/vinfast-part-code.helper';
+import { normalizeUom } from '../helpers/uom.helper';
 
 export interface ParsedVietnamInvoiceItem {
   itemCode?: string | null;
@@ -409,7 +410,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
       extractStandardItemCode({ description: desc, itemCode: rawItemCode })
         .itemCode ||
       null;
-    const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
+    const unit = normalizeUom(getTextIn(el, 'DVTinh', 'dvtinh'));
     const quantity = getTextIn(el, 'SLuong', 'sluong')
       ? toNum(getTextIn(el, 'SLuong', 'sluong'))
       : null;
@@ -609,7 +610,12 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     getTextIn(root, 'Description', 'ItemDescription', 'GoodName') ?? null;
 
   const items: ParsedVietnamInvoiceItem[] = [];
-  const lines = root.getElementsByTagName('InvoiceLine');
+  const lines =
+    root.getElementsByTagName('InvoiceLine').length > 0
+      ? root.getElementsByTagName('InvoiceLine')
+      : root.getElementsByTagName('Row').length > 0
+        ? root.getElementsByTagName('Row')
+        : root.getElementsByTagName('Item');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const rawItemCode =
@@ -629,7 +635,7 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
       extractStandardItemCode({ description: desc, itemCode: rawItemCode })
         .itemCode ||
       null;
-    const unit = getTextIn(line, 'UnitName', 'Unit') ?? null;
+    const unit = normalizeUom(getTextIn(line, 'UnitName', 'Unit'));
     const quantity = getTextIn(line, 'Quantity')
       ? toNum(getTextIn(line, 'Quantity'))
       : null;
