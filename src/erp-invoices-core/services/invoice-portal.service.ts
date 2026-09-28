@@ -1185,6 +1185,17 @@ export class InvoicePortalService implements OnModuleInit {
         );
       }
     }
+
+    // Trigger AI classification & auto-post for input invoices in background sync
+    if (this.categoryAutopostService && invoice.direction === 'IN') {
+      this.categoryAutopostService
+        .classifyAndAutoPost(invoice.id)
+        .catch((e) =>
+          this.logger.warn(
+            `AI classify and auto-post error for invoice ${invoice.invoiceNo}: ${e?.message}`,
+          ),
+        );
+    }
   }
 
   /**
