@@ -113,7 +113,8 @@ describe('InvoiceCategoryAutopostService', () => {
     mockAccountingService = {
       createJournalEntry: jest
         .fn()
-        .mockResolvedValue({ id: 'je-1', entryNo: 'HĐM-20260925-01' }),
+        .mockResolvedValue({ id: 'je-1', entryNo: 'HĐM-20260925-0001' }),
+      generateEntryNo: jest.fn().mockResolvedValue('HĐM-20260925-0001'),
     };
 
     mockInvoiceAiHandler = {
@@ -267,6 +268,13 @@ describe('InvoiceCategoryAutopostService', () => {
     expect(mockJeLineRepo.update).not.toHaveBeenCalledWith(
       'line-credit-1',
       expect.anything(),
+    );
+    // Should upgrade legacy entryNo to standardized format
+    expect(mockJeRepo.update).toHaveBeenCalledWith(
+      'je-old-1',
+      expect.objectContaining({
+        entryNo: 'HĐM-20260925-0001',
+      }),
     );
     // Should NOT create new JE
     expect(mockAccountingService.createJournalEntry).not.toHaveBeenCalled();

@@ -165,10 +165,16 @@ export class InvoiceCategoryAutopostService {
             }
           }
         }
-        // Đảm bảo reference, sourceId và sourceType luôn đồng bộ
+        // Đảm bảo reference, sourceId, sourceType và format entryNo luôn đồng bộ
         const invoiceRef = invoice.serialNo
           ? `${invoice.invoiceNo}-${invoice.serialNo}`
           : invoice.invoiceNo;
+        const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
+        const postingDate = invoice.invoiceDate
+          ? new Date(invoice.invoiceDate)
+          : new Date();
+
+        const updatePayload: Partial<ErpJournalEntry> = {};
         if (
           !je.reference ||
           je.reference !== invoiceRef ||
@@ -176,14 +182,36 @@ export class InvoiceCategoryAutopostService {
           je.sourceId !== invoice.id ||
           je.sourceType !== 'INVOICE'
         ) {
-          await this.journalEntryRepo.update(je.id, {
-            reference: invoiceRef,
-            sourceId: invoice.id,
-            sourceType: 'INVOICE',
-          });
+          updatePayload.reference = invoiceRef;
+          updatePayload.sourceId = invoice.id;
+          updatePayload.sourceType = 'INVOICE';
         }
+
+        // Tự động nâng cấp entryNo nếu chưa chuẩn format tuần tự sạch PREFIX-YYYYMMDD-XXXX (4 chữ số)
+        const isStandardEntryNo = /^[A-ZĐ_]+-\d{8}-\d{4}$/.test(
+          je.entryNo || '',
+        );
+        if (!isStandardEntryNo) {
+          const branchId = invoice.branchId || je.branchId || '';
+          const newEntryNo = await this.accountingCoreService.generateEntryNo(
+            'INVOICE',
+            postingDate,
+            branchId,
+            false,
+            entryNoPrefix,
+          );
+          updatePayload.entryNo = newEntryNo;
+          this.logger.log(
+            `Upgraded legacy Journal Entry number: ${je.entryNo} -> ${newEntryNo} for Invoice ${invoice.invoiceNo}`,
+          );
+        }
+
+        if (Object.keys(updatePayload).length > 0) {
+          await this.journalEntryRepo.update(je.id, updatePayload);
+        }
+
         this.logger.log(
-          `Re-aligned Journal Entry ${je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
+          `Re-aligned Journal Entry ${updatePayload.entryNo || je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
         );
         return invoice;
       }

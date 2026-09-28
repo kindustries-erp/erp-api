@@ -18,6 +18,8 @@ import { UpdateJournalEntryDto } from '../dto/update-journal-entry.dto';
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+import { ErpDocumentSequence } from '../entities/erp_document_sequence.entity';
+
 @Injectable()
 export class AccountingCoreService {
   private readonly logger = new Logger(AccountingCoreService.name);
@@ -29,8 +31,14 @@ export class AccountingCoreService {
     private readonly journalEntryRepo: Repository<ErpJournalEntry>,
     @InjectRepository(ErpJournalEntryLine)
     private readonly journalEntryLineRepo: Repository<ErpJournalEntryLine>,
+    @InjectRepository(ErpDocumentSequence)
+    private readonly sequenceRepo: Repository<ErpDocumentSequence>,
   ) {}
 
+  /**
+   * Sinh số chứng từ tuần tự sạch (Format: PREFIX-YYYYMMDD-0001)
+   * Sử dụng Atomic Row-level Upsert trên bảng erp_document_sequences chống 100% race condition khi chạy bulk hoặc tạo tay.
+   */
   async generateEntryNo(
     sourceType: 'BANK' | 'CASH' | 'INVOICE' | string,
     transDate: Date,
@@ -44,36 +52,59 @@ export class AccountingCoreService {
     const day = String(date.getDate()).padStart(2, '0');
     const yyyymmdd = `${year}${month}${day}`;
 
-    let prefix = 'CT';
+    let docPrefix = 'CT';
     if (customPrefix) {
-      prefix = `${customPrefix}-${yyyymmdd}`;
+      docPrefix = customPrefix;
     } else if (sourceType === 'BANK') {
-      prefix = isReceipt ? `UNT-${yyyymmdd}` : `UNC-${yyyymmdd}`;
+      docPrefix = isReceipt ? 'UNT' : 'UNC';
     } else if (sourceType === 'CASH') {
-      prefix = isReceipt ? `PT-${yyyymmdd}` : `PC-${yyyymmdd}`;
+      docPrefix = isReceipt ? 'PT' : 'PC';
     } else {
-      prefix = `CT-${year}${month}`; // legacy fallback
+      docPrefix = 'CT';
     }
 
-    const lastEntry = await this.journalEntryRepo
-      .createQueryBuilder('je')
-      .where('je.branchId = :branchId', { branchId })
-      .andWhere('je.entryNo LIKE :prefix', { prefix: `${prefix}-%` })
-      .orderBy('je.entryNo', 'DESC')
-      .getOne();
-
     let nextCount = 1;
-    if (lastEntry && lastEntry.entryNo) {
-      const parts = lastEntry.entryNo.split('-');
-      const lastPart = parts[parts.length - 1];
-      const lastCount = parseInt(lastPart, 10);
-      if (!isNaN(lastCount)) {
-        nextCount = lastCount + 1;
+    try {
+      const cleanBranchId = branchId || null;
+      // Atomic Upsert: Tăng sequence nguyên tử an toàn tuyệt đối
+      const res: Array<{ current_value: number }> =
+        await this.journalEntryRepo.manager.query(
+          `
+        INSERT INTO erp_document_sequences (prefix, period, branch_id, current_value, updated_at)
+        VALUES ($1, $2, $3, 1, NOW())
+        ON CONFLICT (prefix, period, COALESCE(branch_id, '00000000-0000-0000-0000-000000000000'::uuid))
+        DO UPDATE SET current_value = erp_document_sequences.current_value + 1, updated_at = NOW()
+        RETURNING current_value;
+        `,
+          [docPrefix, yyyymmdd, cleanBranchId],
+        );
+
+      if (res && res.length > 0 && res[0].current_value !== undefined) {
+        nextCount = Number(res[0].current_value);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Failed to execute atomic sequence increment, falling back to query MAX: ${err?.message}`,
+      );
+      // Fallback query MAX from erp_journal_entries
+      const fullPrefix = `${docPrefix}-${yyyymmdd}`;
+      const lastEntry = await this.journalEntryRepo
+        .createQueryBuilder('je')
+        .where('je.entryNo LIKE :prefix', { prefix: `${fullPrefix}-%` })
+        .orderBy('je.entryNo', 'DESC')
+        .getOne();
+
+      if (lastEntry?.entryNo) {
+        const parts = lastEntry.entryNo.split('-');
+        if (parts.length >= 3) {
+          const seq = parseInt(parts[2], 10);
+          if (!isNaN(seq)) nextCount = seq + 1;
+        }
       }
     }
 
-    const newEntryNo = `${prefix}-${String(nextCount).padStart(2, '0')}`;
-    return newEntryNo;
+    const seqStr = String(nextCount).padStart(4, '0');
+    return `${docPrefix}-${yyyymmdd}-${seqStr}`;
   }
 
   async deleteJournalEntryBySource(sourceId: string, sourceType: string) {
