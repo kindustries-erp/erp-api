@@ -28,6 +28,9 @@ import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
+import { KgaraCaseConfigService } from '../services/kgara-case-config.service';
+import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';
+import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 
 @ApiTags('greenway_cases')
 @ApiBearerAuth()
@@ -49,6 +52,7 @@ export class KgaraCasesController {
     private readonly linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
     private readonly client: KgaraClientService,
     private readonly caseQueryService: KgaraCaseQueryService,
+    private readonly caseConfigService: KgaraCaseConfigService,
   ) {}
 
   @Get('branches')
@@ -221,6 +225,7 @@ export class KgaraCasesController {
   ) {
     const query = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoinAndSelect('case.category', 'cat')
       .leftJoinAndMapOne(
         'case.grossProfit',
         KgaraGrossProfit,
@@ -593,6 +598,12 @@ export class KgaraCasesController {
       this.logger.error('Failed to calculate case query totals', err);
     }
 
+    await EntityCustomFieldsHelper.enrichMany(
+      this.caseRepo.manager.connection,
+      'GARAGE_CASE',
+      enrichedData,
+    );
+
     return {
       data: enrichedData,
       pagination: {
@@ -882,6 +893,7 @@ export class KgaraCasesController {
 
     let caseData = await this.caseRepo.findOne({
       where: whereConditions,
+      relations: ['category'],
     });
     if (!caseData && branchId) {
       const freshData = await this.client.getCaseDetail(externalId, branchId);
@@ -900,6 +912,11 @@ export class KgaraCasesController {
         `Case with externalId ${externalId} not found`,
       );
     }
+    await EntityCustomFieldsHelper.enrichOne(
+      this.caseRepo.manager.connection,
+      'GARAGE_CASE',
+      caseData,
+    );
     return caseData;
   }
 
@@ -914,10 +931,18 @@ export class KgaraCasesController {
       ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
       : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
 
-    const caseData = await this.caseRepo.findOne({ where: whereConditions });
+    const caseData = await this.caseRepo.findOne({
+      where: whereConditions,
+      relations: ['category'],
+    });
     if (!caseData) {
       throw new NotFoundException(`Case with id ${id} not found`);
     }
+    await EntityCustomFieldsHelper.enrichOne(
+      this.caseRepo.manager.connection,
+      'GARAGE_CASE',
+      caseData,
+    );
     return caseData;
   }
 
@@ -930,23 +955,7 @@ export class KgaraCasesController {
     @Param('id') id: string,
     @Body() body: { erpNotes: string | null },
   ) {
-    const isUuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        id,
-      );
-    const whereConditions = isUuid
-      ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
-      : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
-
-    const caseData = await this.caseRepo.findOne({
-      where: whereConditions,
-    });
-    if (!caseData) {
-      throw new NotFoundException(`Case with id ${id} not found`);
-    }
-    caseData.erpNotes = body.erpNotes;
-    await this.caseRepo.save(caseData);
-    return caseData;
+    return this.caseConfigService.updateErpNotes(id, body.erpNotes);
   }
 
   @Patch('cases/:id/config')
@@ -956,33 +965,8 @@ export class KgaraCasesController {
   })
   async updateCaseConfig(
     @Param('id') id: string,
-    @Body()
-    body: {
-      classification?: string | null;
-      erpNotes?: string | null;
-    },
+    @Body() body: UpdateCaseConfigDto,
   ) {
-    const isUuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        id,
-      );
-    const whereConditions = isUuid
-      ? [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }]
-      : [{ soChungTu: id }, { hdPhieuDichVuId: id }];
-
-    const caseData = await this.caseRepo.findOne({
-      where: whereConditions,
-    });
-    if (!caseData) {
-      throw new NotFoundException(`Case with id ${id} not found`);
-    }
-    if (body.classification !== undefined) {
-      caseData.classification = body.classification;
-    }
-    if (body.erpNotes !== undefined) {
-      caseData.erpNotes = body.erpNotes;
-    }
-    await this.caseRepo.save(caseData);
-    return caseData;
+    return this.caseConfigService.updateCaseConfig(id, body);
   }
 }

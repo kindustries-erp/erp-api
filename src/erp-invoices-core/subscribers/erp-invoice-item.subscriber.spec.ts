@@ -141,6 +141,15 @@ describe('VinFast Part Code Extraction & ErpInvoiceItemSubscriber', () => {
       expect(discountEntity.itemCode).toBe('CK-GRAB');
     });
 
+    it('normalizes unit to UPPERCASE on beforeInsert', () => {
+      const entity = new ErpInvoiceItem();
+      entity.description = 'Dầu nhớt động cơ';
+      entity.unit = '  can  ';
+
+      subscriber.beforeInsert({ entity } as any);
+      expect(entity.unit).toBe('CAN');
+    });
+
     it('updates itemCode on beforeUpdate if description changes', () => {
       const entity = new ErpInvoiceItem();
       entity.description = 'BEX20000881 - NẮP';
@@ -150,6 +159,14 @@ describe('VinFast Part Code Extraction & ErpInvoiceItemSubscriber', () => {
 
       subscriber.beforeUpdate({ entity, databaseEntity } as any);
       expect(entity.itemCode).toBe('VF-BEX20000881');
+    });
+
+    it('normalizes unit to UPPERCASE on beforeUpdate if unit provided', () => {
+      const entity = new ErpInvoiceItem();
+      entity.unit = 'bộ';
+
+      subscriber.beforeUpdate({ entity } as any);
+      expect(entity.unit).toBe('BỘ');
     });
   });
 });

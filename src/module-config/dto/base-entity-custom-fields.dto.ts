@@ -13,4 +13,12 @@ export class BaseEntityCustomFieldsDto {
   @IsOptional()
   @IsObject()
   customAttributes?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description: 'Dữ liệu thuộc tính chung toàn phân hệ (Global Attributes)',
+    example: {},
+  })
+  @IsOptional()
+  @IsObject()
+  globalAttributes?: Record<string, any>;
 }
