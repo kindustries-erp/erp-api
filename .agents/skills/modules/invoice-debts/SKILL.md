@@ -85,11 +85,17 @@ erp-api/src/
 │   ├── dto/
 │   │   └── get-invoice-debts.dto.ts   # GetInvoiceDebtsQueryDto, GetInvoiceDebtColumnOptionsQueryDto
 │   ├── controllers/
-│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts, /export-excel...)
+│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts, /export/excel...)
 │   ├── services/
-│   │   ├── invoice-debts.service.ts   # Aggregation engine, Aging buckets, Keyword search, Grand totals, Excel export
+│   │   ├── invoice-debts.service.ts   # FACADE Service (Aggregation, Aging buckets, Excel export orchestration)
 │   │   ├── invoice-debts-export-background.service.ts # Background async Excel export worker & 24h R2 cache
-│   │   └── invoice-debts.service.spec.ts # Jest unit test suite (100% PASS)
+│   │   ├── invoice-debts.service.spec.ts # Jest unit test suite (100% PASS)
+│   │   └── sub-services/
+│   │       ├── invoice-debts-query.service.ts # Query engine tổng hợp công nợ & options
+│   │       ├── invoice-debts-detail.service.ts # Query chi tiết hóa đơn đối tác
+│   │       ├── invoice-debts-export.service.ts # Orchestrator xuất Excel đồng bộ Sheet 1 & Sheet 2 (< 200 LoC)
+│   │       ├── invoice-debts-export-styles.helper.ts # Pure Helper: Columns, Slate-700, Aging colors, Freeze ySplit=4, SUM/SUBTOTAL
+│   │       └── invoice-debts-export-styles.helper.spec.ts # Co-located unit test
 │   └── erp-invoices-core.module.ts    # Đăng ký Controller & Services (InvoiceDebtsController xếp trước)
 ```
 
