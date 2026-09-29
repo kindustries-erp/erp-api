@@ -79,8 +79,18 @@ export class InvoiceCategoryAutopostService {
             const matchedOpt = def.options.find(
               (opt) => opt.value === activeCategoryCode,
             );
-            if (matchedOpt?.accountCode) {
-              overrideDebitAccountCode = matchedOpt.accountCode;
+            if (matchedOpt?.accountCode && matchedOpt.accountCode.trim()) {
+              overrideDebitAccountCode = matchedOpt.accountCode.trim();
+              break;
+            }
+            const rawText =
+              matchedOpt?.label ||
+              (matchedOpt as any)?.labels?.vi ||
+              (matchedOpt as any)?.labels?.en ||
+              '';
+            const match = rawText.match(/\[(?:TK\s*)?([0-9A-Z]+)\]/i);
+            if (match && match[1]) {
+              overrideDebitAccountCode = match[1].trim();
               break;
             }
           }
