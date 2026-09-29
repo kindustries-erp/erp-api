@@ -14,6 +14,7 @@ import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
 
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
@@ -31,6 +32,7 @@ import { GarageCustomerStatsService } from './services/garage-customer-stats.ser
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+import { KgaraCaseConfigService } from './services/kgara-case-config.service';
 import { KgaraCaseSettlementCalcService } from './services/kgara-case-settlement-calc.service';
 import { KgaraCaseServicesQueryService } from './services/kgara-case-services-query.service';
 import { KgaraCaseExportService } from './services/kgara-case-export.service';
@@ -64,6 +66,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
       KgaraGrossProfit,
       KgaraCaseSettlement,
       KgaraOperatingExpense,
+      ErpModuleCategory,
       CoreUser,
     ]),
     ConfigModule,
@@ -84,6 +87,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageDashboardExportService,
     GaragePnlService,
     KgaraCaseQueryService,
+    KgaraCaseConfigService,
     KgaraCaseSettlementCalcService,
     KgaraCaseServicesQueryService,
     KgaraCaseExportService,
@@ -116,6 +120,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageDashboardExportService,
     GaragePnlService,
     KgaraCaseQueryService,
+    KgaraCaseConfigService,
     KgaraCaseSettlementCalcService,
     KgaraCaseServicesQueryService,
     KgaraCaseExportService,

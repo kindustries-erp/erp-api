@@ -51,6 +51,7 @@ describe('KgaraSyncService', () => {
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
       upsert: jest.fn().mockResolvedValue({ identifiers: [] }),
       createQueryBuilder: jest.fn().mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
@@ -218,6 +219,7 @@ describe('KgaraSyncService', () => {
       };
 
       caseRepo.createQueryBuilder.mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([mockExistingCase]),
@@ -266,6 +268,7 @@ describe('KgaraSyncService', () => {
 
       const andWhereMock = jest.fn().mockReturnThis();
       caseRepo.createQueryBuilder.mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: andWhereMock,
         getMany: jest.fn().mockResolvedValue([]),
@@ -274,8 +277,8 @@ describe('KgaraSyncService', () => {
       await service.syncCasesForBranch('br-1', '2026-05-01', '2026-05-31');
 
       expect(andWhereMock).toHaveBeenCalledWith(
-        '(case.classification != :ojNgoai OR case.classification IS NULL)',
-        { ojNgoai: 'OJ_NGOAI' },
+        '(COALESCE(cat.code, case.classification) NOT IN (:...excluded) OR (cat.code IS NULL AND case.classification IS NULL))',
+        { excluded: ['OJ', 'OJ_NGOAI'] },
       );
     });
   });

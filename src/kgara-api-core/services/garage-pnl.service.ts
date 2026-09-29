@@ -28,6 +28,7 @@ export class GaragePnlService {
     // 1. Tổng hợp Doanh thu & Chi phí giá vốn từ các vụ việc hoàn thành trong tháng
     const qb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .leftJoin(
         KgaraGrossProfit,
         'gp',
@@ -39,46 +40,47 @@ export class GaragePnlService {
       )
       .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cogs')
       .addSelect('COUNT(c.id)', 'caseCount')
-      // Mảng Ký gửi / Nội bộ (dựa vào kgara_cases.classification)
+      // Mảng Ký gửi / Nội bộ (dựa vào category code hoặc classification)
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'kyGuiRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'kyGuiCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
         'kyGuiCaseCount',
       )
       // Mảng Sửa chữa chung
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'suaChuaChungRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'suaChuaChungCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN c.id END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN c.id END)",
         'suaChuaChungCaseCount',
       )
       // Phân khúc OJ
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'ojRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'ojCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN 1 END)",
         'ojCaseCount',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(

@@ -278,6 +278,7 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
@@ -289,11 +290,12 @@ export class GarageCheckpointService {
     // 4. Dự thu & Pipeline xe đang làm (Chưa có ngày hoàn thành, không bị hủy)
     const inProgressCasesQb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .select(
         `CASE 
-          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
-          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
-          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
           ELSE 'KHAC'
         END`,
         'classificationKey',
@@ -301,6 +303,7 @@ export class GarageCheckpointService {
       .addSelect('COUNT(c.id)', 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NULL');
 
@@ -491,6 +494,7 @@ export class GarageCheckpointService {
         'unpaidCount',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
@@ -502,11 +506,12 @@ export class GarageCheckpointService {
     // 3.2 Phân rã theo Phân loại ERP toàn kỳ
     const classificationSummaryRaw = await this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .select(
         `CASE 
-          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
-          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
-          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
+          WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
+          WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
+          WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
           ELSE 'KHAC'
         END`,
         'classificationKey',
@@ -516,6 +521,7 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'remaining')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
@@ -591,9 +597,10 @@ export class GarageCheckpointService {
       unpaidCount: Number(summaryRaw?.unpaidCount) || 0,
     };
 
-    // 3.3 Truy vấn Danh sách Phân trang có Bộ lọc
+    // 3.3 Truy vấn Danh sách Phan trang có Bộ lọc
     const qb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .leftJoinAndMapOne(
         'c.grossProfit',
         KgaraGrossProfit,
@@ -601,6 +608,7 @@ export class GarageCheckpointService {
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
@@ -631,16 +639,18 @@ export class GarageCheckpointService {
     // Filter by classification
     if (classification && classification !== 'ALL') {
       if (classification === 'SUA_CHUA_CHUNG') {
-        qb.andWhere("c.classification = 'SUA_CHUA_CHUNG'");
+        qb.andWhere("COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG'");
       } else if (classification === 'KY_GUI_NOI_BO') {
         qb.andWhere(
-          "c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
+          "COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
         );
       } else if (classification === 'OJ_NGOAI') {
-        qb.andWhere("c.classification IN ('OJ', 'OJ_NGOAI')");
+        qb.andWhere(
+          "COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')",
+        );
       } else if (classification === 'KHAC') {
         qb.andWhere(
-          "(c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
+          "(COALESCE(cat.code, c.classification) IS NULL OR COALESCE(cat.code, c.classification) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
         );
       }
     }

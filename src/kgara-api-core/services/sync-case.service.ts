@@ -12,6 +12,7 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -138,6 +139,16 @@ export class SyncCaseService {
     try {
       const updatedCaseDates = new Set<string>();
       const syncedIds = new Set<string>();
+      const categories =
+        typeof this.caseRepo.manager?.find === 'function'
+          ? await this.caseRepo.manager.find(ErpModuleCategory, {
+              where: { moduleKey: 'GARAGE_CASE' },
+            })
+          : [];
+      const categoryMap = new Map<string, string>();
+      for (const cat of categories) {
+        categoryMap.set(cat.code, cat.id);
+      }
       do {
         const response = await this.client.getCases(
           branchExternalId,
@@ -277,6 +288,10 @@ export class SyncCaseService {
                 kgaraClassificationCode,
                 kgaraClassification,
               );
+              if (!gwCase.categoryId && gwCase.classification) {
+                gwCase.categoryId =
+                  categoryMap.get(gwCase.classification) || null;
+              }
             }
           }
 
@@ -575,6 +590,18 @@ export class SyncCaseService {
             detailClassificationCode,
             detailClassification,
           );
+          if (!gwCase.categoryId && gwCase.classification) {
+            const cat =
+              typeof this.caseRepo.manager?.findOne === 'function'
+                ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                    where: {
+                      moduleKey: 'GARAGE_CASE',
+                      code: gwCase.classification,
+                    },
+                  })
+                : null;
+            if (cat) gwCase.categoryId = cat.id;
+          }
         }
       }
 

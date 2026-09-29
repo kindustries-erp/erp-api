@@ -43,6 +43,7 @@ export class KgaraCustomersController {
 
     const whereConditions: string[] = [
       '"case"."kgara_deleted_at" IS NULL',
+      '"case"."exclude_from_debt" IS NOT TRUE',
       '("case"."tinh_trang_dich_vu" = 3 OR "case"."ten_tinh_trang_dich_vu" = \'Kết thúc\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%kết thúc%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%hoàn tất%\')',
       '"case"."ngay_hoan_thanh_cong_viec" IS NOT NULL',
     ];
@@ -489,6 +490,7 @@ export class KgaraCustomersController {
           SELECT COUNT("id") AS so_phieu
           FROM "kgara_cases"
           WHERE "kgara_deleted_at" IS NULL
+            AND "exclude_from_debt" IS NOT TRUE
             AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
             AND "ngay_hoan_thanh_cong_viec" IS NOT NULL
             AND "ngay_hoan_thanh_cong_viec" >= '2026-07-01'

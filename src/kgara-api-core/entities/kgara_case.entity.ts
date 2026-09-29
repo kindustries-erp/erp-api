@@ -3,9 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 
 /**
  * KGara V2 case record (HdPhieuDichVu).
@@ -189,6 +192,30 @@ export class KgaraCase {
   // ── ERP Local columns ─────────────────────────────────────────────────────
 
   @Index()
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne('ErpModuleCategory', { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'category_id' })
+  category?: ErpModuleCategory | null;
+
+  @Index()
+  @Column({
+    type: 'boolean',
+    name: 'exclude_from_reports',
+    default: false,
+  })
+  excludeFromReports: boolean;
+
+  @Index()
+  @Column({
+    type: 'boolean',
+    name: 'exclude_from_debt',
+    default: false,
+  })
+  excludeFromDebt: boolean;
+
+  @Index()
   @Column({
     type: 'varchar',
     length: 100,
@@ -210,6 +237,11 @@ export class KgaraCase {
 
   @Column({ type: 'jsonb', name: 'raw_data', nullable: true })
   rawData: any;
+
+  // ── Dynamic Custom Fields (Module Config EAV) ──────────────────────────────
+  customAttributes?: Record<string, any>;
+  attributes?: Record<string, any>;
+  attributeValues?: any[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
