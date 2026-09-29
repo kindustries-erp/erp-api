@@ -41,6 +41,7 @@ export class GarageCustomerStatsService {
       FROM kgara_cases c
       LEFT JOIN kgara_gross_profit gp ON gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu
       WHERE c.kgara_deleted_at IS NULL 
+        AND (c.exclude_from_reports IS NOT TRUE)
         AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)
         AND c.ngay_hoan_thanh_cong_viec IS NOT NULL
         ${dateFrom ? `AND c.ngay_hoan_thanh_cong_viec >= '${dateFrom}'` : ''}
