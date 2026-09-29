@@ -27,6 +27,8 @@ export function getCaseColumnSelectExpr(column: string): string | null {
     exclude_from_reports: '"case"."exclude_from_reports"',
     excludeFromDebt: '"case"."exclude_from_debt"',
     exclude_from_debt: '"case"."exclude_from_debt"',
+    exclusionRules:
+      'CASE WHEN "case"."exclude_from_reports" IS TRUE THEN \'EXCLUDE_REPORTS\' WHEN "case"."exclude_from_debt" IS TRUE THEN \'EXCLUDE_DEBT\' ELSE \'NORMAL\' END',
     kgaraClassification: '"case"."kgara_classification"',
     kgaraClassificationCode: '"case"."kgara_classification_code"',
     branchName: '"case"."branch_external_id"',
@@ -206,6 +208,26 @@ export function applySingleCaseColumnFilter(
     if (values.includes('NO')) {
       conditions.push(
         'NOT EXISTS (SELECT 1 FROM kgara_case_linked_invoice l WHERE l."caseDbId" = "case".id)',
+      );
+    }
+    if (conditions.length > 0) {
+      qb.andWhere(`(${conditions.join(' OR ')})`);
+    }
+    return;
+  }
+
+  // 5.1 Cột đặc thù: exclusionRules (Quy tắc loại trừ)
+  if (column === 'exclusionRules') {
+    const conditions: string[] = [];
+    if (values.includes('EXCLUDE_REPORTS')) {
+      conditions.push('"case"."exclude_from_reports" IS TRUE');
+    }
+    if (values.includes('EXCLUDE_DEBT')) {
+      conditions.push('"case"."exclude_from_debt" IS TRUE');
+    }
+    if (values.includes('NORMAL') || values.includes('NONE')) {
+      conditions.push(
+        '("case"."exclude_from_reports" IS NOT TRUE AND "case"."exclude_from_debt" IS NOT TRUE)',
       );
     }
     if (conditions.length > 0) {

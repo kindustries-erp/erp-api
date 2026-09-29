@@ -650,6 +650,7 @@ export class KgaraCasesController {
 
     const query = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoin('case.category', 'cat')
       .leftJoin(
         KgaraGrossProfit,
         'gp',

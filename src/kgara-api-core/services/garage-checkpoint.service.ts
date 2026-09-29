@@ -64,6 +64,7 @@ export class GarageCheckpointService {
         .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
         .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.exclude_from_reports IS NOT TRUE)')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(
@@ -103,6 +104,7 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
@@ -151,6 +153,7 @@ export class GarageCheckpointService {
         .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
         .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.exclude_from_reports IS NOT TRUE)')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(
@@ -196,6 +199,7 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
       .addSelect('COUNT(c.id)', 'count')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
@@ -239,6 +243,7 @@ export class GarageCheckpointService {
         .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
         .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
         .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.exclude_from_reports IS NOT TRUE)')
         .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
         .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
         .andWhere(

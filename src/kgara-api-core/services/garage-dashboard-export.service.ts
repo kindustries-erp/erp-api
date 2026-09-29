@@ -120,6 +120,7 @@ export class GarageDashboardExportService {
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
