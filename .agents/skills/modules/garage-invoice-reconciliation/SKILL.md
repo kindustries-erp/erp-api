@@ -90,15 +90,25 @@ flowchart TD
 
 ## 5. Cơ Chế Đồng Bộ 2 Chiều (Bidirectional Net-Off & Settlement Sync)
 
-Khi ghi nhận liên kết `kgara_case_linked_invoice`:
-1. **Hóa Đơn $\rightarrow$ Phiếu Dịch Vụ**:
-   * Quét bảng `erp_invoice_voucher_netoff` lấy toàn bộ giao dịch sao kê đã thanh toán cho Hóa đơn.
-   * Tự động thêm bản ghi tương ứng vào `kgara_case_settlements` (`settlement_type = 'RECEIPT'`, `source_channel = 'ON_SYSTEM'`).
-   * Tự động tính lại `tien_da_thanh_toan` và giảm trừ `tien_con_phai_thanh_toan` trên `kgara_cases`.
-2. **Phiếu Dịch Vụ $\rightarrow$ Hóa Đơn**:
-   * Nếu Phiếu dịch vụ được thêm giao dịch sao kê trước, hệ thống tự động sinh bản ghi `erp_invoice_voucher_netoff` cho các Hóa đơn liên kết tương ứng.
-3. **Khi Gỡ Liên Kết**:
-   * Tự động dọn dẹp các bản ghi settlement kế thừa và hoàn nguyên số dư công nợ của phiếu dịch vụ.
+Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](file:///home/dev/repos/erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-service-refactor` Pattern C).
+
+1. **Nhận diện liên kết linh hoạt (Dual Linkage)**:
+   * Hỗ trợ cả 2 cơ chế liên kết đồng thời bằng phép `UNION`:
+     - Qua bảng quan hệ đa-đa `kgara_case_linked_invoice` (giữa `caseDbId` và `invoiceId`).
+     - Qua trường tham chiếu mềm `erp_invoices.settlement_order = kgara_cases.so_chung_tu`.
+2. **Hóa Đơn $\rightarrow$ Phiếu Dịch Vụ**:
+   * Khi kế toán cấn trừ sao kê trên Drawer Hóa đơn (`InvoiceLifecycleService.linkVouchersToInvoice` hoặc `TransactionAccountingService.linkInvoiceToTransaction`):
+   * Quét bảng `erp_invoice_voucher_netoff` gom nhóm theo `bank_transaction_id` lấy tổng số tiền đã net-off cho các hóa đơn liên kết với Vụ việc.
+   * Tự động upsert bản ghi tương ứng vào `kgara_case_settlements` (`settlement_type = 'RECEIPT'`, `source_channel = 'ON_SYSTEM'`, `amount = total_net_off`).
+   * Tự động tính lại `tien_da_thanh_toan` và giảm trừ `tien_con_phai_thanh_toan` trên `kgara_cases` theo chuẩn Pure Cashflow.
+3. **Phiếu Dịch Vụ $\rightarrow$ Hóa Đơn**:
+   * Khi Phiếu dịch vụ được thêm giao dịch sao kê trực tiếp trên Tab Tài chính (`KgaraCaseFinancialController.addCaseSettlement`), hệ thống tự động sinh bản ghi `erp_invoice_voucher_netoff` cho các Hóa đơn liên kết.
+4. **Khi Gỡ Cấn Trừ / Gỡ Liên Kết**:
+   * Khi gỡ sao kê khỏi hóa đơn (`removeVoucherFromInvoice`, `unpostInvoice`), gỡ sao kê khỏi giao dịch (`removeInvoiceFromTransaction`), hoặc gỡ hóa đơn khỏi vụ việc (`removeLinkedInvoice`):
+   * Tự động dọn dẹp các bản ghi settlement `ON_SYSTEM` kế thừa bị mồ côi và hoàn nguyên số dư công nợ của phiếu dịch vụ.
+   * Tuyệt đối bảo toàn nguyên vẹn các bản ghi thanh toán ngoài sổ `OFF_SYSTEM_MANUAL`.
+5. **Script Công Cụ Khắc Phục / Đồng Bộ Hàng Loạt**:
+   * `scripts/sync-invoice-netoffs-to-case-settlements.ts`: Cho phép quét và đồng bộ lại toàn bộ vụ việc chưa khớp settlement với cờ `--dry-run` và `--env=production`.
 
 ---
 

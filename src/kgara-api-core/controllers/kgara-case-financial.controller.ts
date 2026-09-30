@@ -23,6 +23,7 @@ import { DocumentTraceabilityService } from '../../common/services/document-trac
 import { GarageSmartSettlementService } from '../services/garage-smart-settlement.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
 import { extractNetPayableAmount } from '../kgara-sync.service';
+import { syncSingleCaseSettlementsFromInvoiceNetOffs } from '../helpers/kgara-case-netoff-sync.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
@@ -147,40 +148,11 @@ export class KgaraCaseFinancialController {
           }
         }
 
-        // 2. Chiều Invoice -> Case: Nếu Hóa đơn đã có cấn trừ sao kê sẵn, cấn trừ sang Phiếu dịch vụ
-        const invoiceNetOffs = await this.settlementRepo.manager.query(
-          `SELECT n.bank_transaction_id, n.net_off_amount, t.trans_date, t.correspondent_name, t.description
-           FROM erp_invoice_voucher_netoff n
-           LEFT JOIN erp_bank_transactions t ON t.id = n.bank_transaction_id
-           WHERE n.invoice_id = $1`,
-          [item.invoiceId],
+        // 2. Chiều Invoice -> Case: Đồng bộ toàn bộ cấn trừ sao kê của Hóa đơn sang Phiếu dịch vụ
+        await syncSingleCaseSettlementsFromInvoiceNetOffs(
+          this.settlementRepo.manager,
+          id,
         );
-
-        for (const no of invoiceNetOffs) {
-          if (!no.bank_transaction_id) continue;
-          const existingCaseSettlement = await this.settlementRepo.findOne({
-            where: {
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-            },
-          });
-
-          if (!existingCaseSettlement) {
-            const newSettlement = this.settlementRepo.create({
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-              settlementType: targetSettlementType,
-              sourceChannel: 'ON_SYSTEM',
-              amount: Number(no.net_off_amount || 0),
-              transDate: no.trans_date,
-              partnerName: no.correspondent_name,
-              note: `Đồng bộ cấn trừ từ hóa đơn liên kết`,
-            });
-            await this.settlementRepo.save(newSettlement);
-          }
-        }
-
-        await this.caseQueryService.recalculateCaseSettlementSummary(id);
       } catch (syncErr) {
         this.logger.warn(
           `Could not sync bi-directional settlements and netoff: ${syncErr}`,
@@ -249,7 +221,11 @@ export class KgaraCaseFinancialController {
         this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
       }
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
-      await this.caseQueryService.recalculateCaseSettlementSummary(id);
+      // Bi-directional sync: Đồng bộ & tính lại settlements cho vụ việc sau khi gỡ hóa đơn
+      await syncSingleCaseSettlementsFromInvoiceNetOffs(
+        this.linkedInvoiceRepo.manager,
+        id,
+      );
     }
     return { success: true };
   }
