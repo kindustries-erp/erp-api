@@ -37,7 +37,6 @@ import { ErpAttachmentsCoreModule } from './erp-attachments-core/erp-attachments
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { isCronEnabled } from './common/utils/cron.util';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
@@ -57,7 +56,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 
 @Module({
   imports: [
-    ...(isCronEnabled() ? [ScheduleModule.forRoot()] : []),
+    ScheduleModule.forRoot(),
     SystemOperationsCoreModule,
     ReportsCoreModule,
     CommonModule,

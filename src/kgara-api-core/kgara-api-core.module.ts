@@ -16,6 +16,8 @@ import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity
 
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CorePermission } from '../rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
 
@@ -68,6 +70,8 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
       KgaraOperatingExpense,
       ErpModuleCategory,
       CoreUser,
+      CorePermission,
+      CoreUserRole,
     ]),
     ConfigModule,
     NotificationsModule,

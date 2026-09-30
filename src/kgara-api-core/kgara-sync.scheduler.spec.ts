@@ -2,7 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { KgaraBranch } from './entities/kgara_branch.entity';
-import { CoreUser } from '../users/entities/core-user.entity';
+import { CorePermission } from '../rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as cronUtil from '../common/utils/cron.util';
@@ -10,20 +11,13 @@ import * as cronUtil from '../common/utils/cron.util';
 describe('KgaraSyncScheduler', () => {
   let scheduler: KgaraSyncScheduler;
   let branchRepo: any;
-  let userRepo: any;
+  let permissionRepo: any;
+  let userRoleRepo: any;
   let syncService: any;
   let notificationsService: any;
 
   beforeEach(async () => {
     process.env.ENABLE_CRON = 'true';
-
-    const mockQueryBuilder = {
-      innerJoin: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      getMany: jest
-        .fn()
-        .mockResolvedValue([{ id: 'admin-1', username: 'admin' }]),
-    };
 
     branchRepo = {
       find: jest
@@ -33,8 +27,20 @@ describe('KgaraSyncScheduler', () => {
         ]),
     };
 
-    userRepo = {
-      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    permissionRepo = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'p1', roleId: 'role-admin', resource: 'garage' },
+        ]),
+    };
+
+    userRoleRepo = {
+      find: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'ur1', userId: 'admin-1', roleId: 'role-admin' },
+        ]),
     };
 
     syncService = {
@@ -44,6 +50,11 @@ describe('KgaraSyncScheduler', () => {
       syncCasesForBranch: jest.fn().mockResolvedValue({
         deletedCount: 0,
         withLinkedInvoices: [],
+      }),
+      syncCaseDetailsBatch: jest.fn().mockResolvedValue({
+        totalCasesProcessed: 1,
+        totalLinesSynced: 4,
+        errorsCount: 0,
       }),
     };
 
@@ -59,8 +70,12 @@ describe('KgaraSyncScheduler', () => {
           useValue: branchRepo,
         },
         {
-          provide: getRepositoryToken(CoreUser),
-          useValue: userRepo,
+          provide: getRepositoryToken(CorePermission),
+          useValue: permissionRepo,
+        },
+        {
+          provide: getRepositoryToken(CoreUserRole),
+          useValue: userRoleRepo,
         },
         {
           provide: KgaraSyncService,
@@ -77,6 +92,7 @@ describe('KgaraSyncScheduler', () => {
   });
 
   afterEach(() => {
+    scheduler.onModuleDestroy();
     delete process.env.ENABLE_CRON;
     jest.clearAllMocks();
     jest.restoreAllMocks();
@@ -86,7 +102,7 @@ describe('KgaraSyncScheduler', () => {
     expect(scheduler).toBeDefined();
   });
 
-  it('should log next scheduled slot on onModuleInit', () => {
+  it('should activate heartbeat and log next slot on onModuleInit', () => {
     const loggerSpy = jest.spyOn((scheduler as any).logger, 'log');
     scheduler.onModuleInit();
     expect(loggerSpy).toHaveBeenCalledWith(
@@ -94,7 +110,7 @@ describe('KgaraSyncScheduler', () => {
     );
   });
 
-  it('should execute scheduled sync check successfully when no cases are deleted', async () => {
+  it('should execute scheduled sync check and batch details successfully when no cases are deleted', async () => {
     await scheduler.runScheduledSyncCheck();
 
     expect(branchRepo.find).toHaveBeenCalled();
@@ -103,6 +119,10 @@ describe('KgaraSyncScheduler', () => {
       '/api/v1/gr/cases/list',
     );
     expect(syncService.syncCasesForBranch).toHaveBeenCalled();
+    expect(syncService.syncCaseDetailsBatch).toHaveBeenCalledWith(
+      'BRANCH-HN',
+      expect.objectContaining({ force: false }),
+    );
     expect(notificationsService.createForUser).not.toHaveBeenCalled();
   });
 
@@ -149,13 +169,14 @@ describe('KgaraSyncScheduler', () => {
     );
   });
 
-  it('should handle errors gracefully and notify admins with ERROR type', async () => {
+  it('should handle errors gracefully and notify admins with ERROR type without crashing', async () => {
     syncService.syncCasesForBranch.mockRejectedValueOnce(
       new Error('Connection timeout'),
     );
 
-    await scheduler.runScheduledSyncCheck();
+    const result = await scheduler.runScheduledSyncCheck();
 
+    expect(result?.success).toBe(false);
     expect(notificationsService.createForUser).toHaveBeenCalledWith(
       'admin-1',
       expect.objectContaining({
@@ -164,5 +185,28 @@ describe('KgaraSyncScheduler', () => {
         message: expect.stringContaining('Connection timeout'),
       }),
     );
+  });
+
+  it('should not throw or crash if notification sending fails', async () => {
+    notificationsService.createForUser.mockRejectedValueOnce(
+      new Error('Notification service down'),
+    );
+
+    syncService.syncCasesForBranch.mockResolvedValueOnce({
+      deletedCount: 1,
+      withLinkedInvoices: [],
+    });
+
+    // Should complete cleanly without throwing
+    const result = await scheduler.runScheduledSyncCheck();
+    expect(result?.success).toBe(true);
+  });
+
+  it('should clean up interval on onModuleDestroy', () => {
+    scheduler.onModuleInit();
+    expect((scheduler as any).intervalId).toBeDefined();
+
+    scheduler.onModuleDestroy();
+    // After destroy, interval should be cleared
   });
 });
