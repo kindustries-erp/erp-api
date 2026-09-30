@@ -162,7 +162,8 @@ async function run() {
               `UPDATE kgara_cases 
                SET kgara_classification = $1, 
                    kgara_classification_code = $2,
-                   classification = COALESCE(classification, $3)
+                   classification = COALESCE(classification, $3),
+                   exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN true ELSE exclude_from_debt END
                WHERE id = $4`,
               [kgaraClassification, kgaraClassificationCode, autoMapped, c.id],
             );
@@ -258,6 +259,7 @@ async function run() {
                          SET kgara_classification = $1, 
                              kgara_classification_code = $2,
                              classification = COALESCE(classification, $3),
+                             exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN true ELSE exclude_from_debt END,
                              raw_data = $4
                          WHERE id = $5`,
                         [

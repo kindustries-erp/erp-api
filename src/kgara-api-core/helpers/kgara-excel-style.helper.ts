@@ -541,10 +541,8 @@ export function buildGarageCaseExportFileName(
         classLabel = 'Sua_chua_chung';
         break;
       case 'OJ':
-        classLabel = 'OJ';
-        break;
       case 'OJ_NGOAI':
-        classLabel = 'OJ_ngoai';
+        classLabel = 'OJ';
         break;
       case 'KHAC':
         classLabel = 'Khac';

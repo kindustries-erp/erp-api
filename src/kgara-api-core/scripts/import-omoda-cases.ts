@@ -105,13 +105,14 @@ async function importOmodaCases() {
           branch_external_id,
           classification,
           erp_notes,
+          exclude_from_debt,
           kgara_delete_count,
           kgara_deleted_at,
           raw_data,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, true, $23, $24, $25, NOW(), NOW()
         )
         ON CONFLICT (hd_phieu_dich_vu_id) DO UPDATE SET
           so_chung_tu = EXCLUDED.so_chung_tu,
@@ -133,6 +134,7 @@ async function importOmodaCases() {
           branch_external_id = EXCLUDED.branch_external_id,
           classification = EXCLUDED.classification,
           erp_notes = EXCLUDED.erp_notes,
+          exclude_from_debt = true,
           kgara_delete_count = 0,
           kgara_deleted_at = NULL,
           raw_data = EXCLUDED.raw_data,
@@ -158,7 +160,7 @@ async function importOmodaCases() {
           endDate,
           item['SỐ KHUNG'] || null,
           DEFAULT_BRANCH_ID,
-          'OJ_NGOAI',
+          'OJ',
           note,
           0,
           null,

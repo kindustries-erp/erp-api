@@ -32,8 +32,8 @@ export interface CompletedCasesExportParams {
 const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
   SUA_CHUA_CHUNG: 'Sửa chữa chung',
-  OJ: 'OJ',
-  OJ_NGOAI: 'OJ ngoài',
+  OJ: 'Xe ngoài (OJ)',
+  OJ_NGOAI: 'Xe ngoài (OJ)',
   KHAC: 'Khác',
 };
 

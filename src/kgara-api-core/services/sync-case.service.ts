@@ -148,6 +148,12 @@ export class SyncCaseService {
       const categoryMap = new Map<string, string>();
       for (const cat of categories) {
         categoryMap.set(cat.code, cat.id);
+        if (cat.code === 'OJ_NGOAI') {
+          categoryMap.set('OJ', cat.id);
+        }
+        if (cat.code === 'OJ') {
+          categoryMap.set('OJ_NGOAI', cat.id);
+        }
       }
       do {
         const response = await this.client.getCases(
@@ -292,6 +298,18 @@ export class SyncCaseService {
                 gwCase.categoryId =
                   categoryMap.get(gwCase.classification) || null;
               }
+            }
+          }
+
+          if (
+            gwCase.classification === 'OJ' ||
+            gwCase.classification === 'OJ_NGOAI'
+          ) {
+            gwCase.classification = 'OJ';
+            gwCase.excludeFromDebt = true;
+            if (!gwCase.categoryId) {
+              gwCase.categoryId =
+                categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
             }
           }
 
@@ -594,14 +612,40 @@ export class SyncCaseService {
             const cat =
               typeof this.caseRepo.manager?.findOne === 'function'
                 ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
-                    where: {
-                      moduleKey: 'GARAGE_CASE',
-                      code: gwCase.classification,
-                    },
+                    where: [
+                      { moduleKey: 'GARAGE_CASE', code: gwCase.classification },
+                      {
+                        moduleKey: 'GARAGE_CASE',
+                        code:
+                          gwCase.classification === 'OJ'
+                            ? 'OJ_NGOAI'
+                            : gwCase.classification,
+                      },
+                    ],
                   })
                 : null;
             if (cat) gwCase.categoryId = cat.id;
           }
+        }
+      }
+
+      if (
+        gwCase.classification === 'OJ' ||
+        gwCase.classification === 'OJ_NGOAI'
+      ) {
+        gwCase.classification = 'OJ';
+        gwCase.excludeFromDebt = true;
+        if (!gwCase.categoryId) {
+          const cat =
+            typeof this.caseRepo.manager?.findOne === 'function'
+              ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                  where: [
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ' },
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ_NGOAI' },
+                  ],
+                })
+              : null;
+          if (cat) gwCase.categoryId = cat.id;
         }
       }
 
