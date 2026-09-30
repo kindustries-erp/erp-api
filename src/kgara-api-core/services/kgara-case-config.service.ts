@@ -63,7 +63,7 @@ export class KgaraCaseConfigService {
         });
         if (cat) {
           caseData.categoryId = cat.id;
-          caseData.classification = cat.code;
+          caseData.classification = cat.code === 'OJ_NGOAI' ? 'OJ' : cat.code;
         } else {
           caseData.categoryId = resolvedCategoryId;
         }
@@ -75,10 +75,18 @@ export class KgaraCaseConfigService {
       }
     } else if (resolvedClassification !== undefined) {
       if (resolvedClassification) {
+        const normalizedClass =
+          resolvedClassification === 'OJ_NGOAI' ? 'OJ' : resolvedClassification;
         const cat = await this.categoryRepo.findOne({
-          where: { code: resolvedClassification, moduleKey: 'GARAGE_CASE' },
+          where: [
+            { code: normalizedClass, moduleKey: 'GARAGE_CASE' },
+            {
+              code: normalizedClass === 'OJ' ? 'OJ_NGOAI' : normalizedClass,
+              moduleKey: 'GARAGE_CASE',
+            },
+          ],
         });
-        caseData.classification = resolvedClassification;
+        caseData.classification = normalizedClass;
         if (cat) {
           caseData.categoryId = cat.id;
         }
@@ -88,12 +96,19 @@ export class KgaraCaseConfigService {
       }
     }
 
+    if (caseData.classification === 'OJ_NGOAI') {
+      caseData.classification = 'OJ';
+    }
+
     // 2. Cập nhật các cờ loại trừ
     if (dto.excludeFromReports !== undefined) {
       caseData.excludeFromReports = dto.excludeFromReports;
     }
     if (dto.excludeFromDebt !== undefined) {
       caseData.excludeFromDebt = dto.excludeFromDebt;
+    } else if (caseData.classification === 'OJ') {
+      // Tự động kích hoạt loại trừ công nợ cho phân loại Xe ngoài (OJ) nếu chưa được chỉ định
+      caseData.excludeFromDebt = true;
     }
 
     // 3. Cập nhật ghi chú ERP
@@ -110,8 +125,8 @@ export class KgaraCaseConfigService {
     if (dto.excludeFromReports !== undefined) {
       customAttrsToSave['exclude_from_reports'] = dto.excludeFromReports;
     }
-    if (dto.excludeFromDebt !== undefined) {
-      customAttrsToSave['exclude_from_debt'] = dto.excludeFromDebt;
+    if (dto.excludeFromDebt !== undefined || caseData.classification === 'OJ') {
+      customAttrsToSave['exclude_from_debt'] = caseData.excludeFromDebt;
     }
 
     // 5. Lưu dữ liệu trong Transaction an toàn

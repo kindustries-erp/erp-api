@@ -473,9 +473,9 @@ describe('KgaraCaseQueryService', () => {
         'Bang_ke_phieu_dich_vu_Sua_chua_chung_Ket_thuc_20260305_123045.xlsx',
       );
 
-      expect(
-        buildGarageCaseExportFileName('OJ_NGOAI', 'completed', fixedDate),
-      ).toBe('Bang_ke_phieu_dich_vu_OJ_ngoai_Ket_thuc_20260305_123045.xlsx');
+      expect(buildGarageCaseExportFileName('OJ', 'completed', fixedDate)).toBe(
+        'Bang_ke_phieu_dich_vu_OJ_Ket_thuc_20260305_123045.xlsx',
+      );
     });
   });
 });

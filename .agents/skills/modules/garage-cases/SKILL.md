@@ -50,9 +50,9 @@ Các nghiệp vụ trọng tâm:
 | `branch_external_id` | `varchar(100)` | YES | `NULL` | Mã chi nhánh KGara quản lý (**Index**) |
 | `data_as_of` | `timestamptz` | YES | `NULL` | Dấu mốc thời gian phản hồi từ máy chủ KGara |
 | `category_id` | `uuid` | YES | `NULL` | Khóa ngoại danh mục phân loại (`FK -> erp_module_categories.id`) (**Index**) |
-| `classification` | `varchar(100)` | YES | `NULL` | Mã phân loại nghiệp vụ ERP: `'SUA_CHUA_CHUNG'`, `'KY_GUI_NOI_BO'`, `'OJ_NGOAI'`, `'KHAC'` (**Index**) |
+| `classification` | `varchar(100)` | YES | `NULL` | Mã phân loại nghiệp vụ ERP: `'SUA_CHUA_CHUNG'`, `'KY_GUI_NOI_BO'`, `'OJ'`, `'KHAC'` (**Index**). Đã chuẩn hóa toàn bộ `'OJ_NGOAI'` về `'OJ'`. |
 | `exclude_from_reports` | `boolean` | NO | `false` | Cờ loại trừ khỏi báo cáo P&L xưởng & Dashboard (**Index**) |
-| `exclude_from_debt` | `boolean` | NO | `false` | Cờ loại trừ khỏi tính toán công nợ khách hàng (**Index**) |
+| `exclude_from_debt` | `boolean` | NO | `false` | Cờ loại trừ khỏi tính toán công nợ khách hàng (**Index**). Khi phân loại là `'OJ'`, hệ thống tự động kích hoạt `exclude_from_debt = true`. |
 | `erp_notes` | `varchar` | YES | `NULL` | Ghi chú nghiệp vụ nội bộ trên ERP |
 | `kgara_deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm đánh dấu phiếu bị xóa trên KGara (**Index**) |
 | `kgara_delete_count` | `integer` | NO | `0` | Bộ đếm số lần vắng mặt trong các kỳ sync (**Index**) |
@@ -320,7 +320,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.3. Thuật toán Phát hiện Xóa Mềm Vụ việc (`detectAndMarkDeletedCases`)
 1. Khi đồng bộ theo khoảng ngày (`from`, `to`), hệ thống lấy toàn bộ danh sách `hd_phieu_dich_vu_id` trả về từ API KGara đưa vào tập hợp `syncedIds`.
-2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`), **loại trừ các bản ghi có phân loại nghiệp vụ ghi nhận ngoài (`classification = 'OJ_NGOAI'`)** để bảo vệ dữ liệu nội bộ không bị xóa nhầm.
+2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`), **loại trừ các bản ghi có phân loại nghiệp vụ ghi nhận ngoài (`classification IN ('OJ', 'OJ_NGOAI')`)** để bảo vệ dữ liệu nội bộ không bị xóa nhầm.
 3. Xác định các vụ việc có trong ERP nhưng không xuất hiện trong `syncedIds`.
 4. Tăng bộ đếm `kgara_delete_count += 1`.
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.

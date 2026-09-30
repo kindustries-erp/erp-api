@@ -183,24 +183,28 @@ describe('KgaraCaseConfigService', () => {
       expect(result.categoryId).toBe('cat-uuid-2');
     });
 
-    it('should accept and merge attributes and globalAttributes into customAttributes', async () => {
-      const existingCase = { ...mockCase } as KgaraCase;
+    it('should normalize OJ_NGOAI to OJ and automatically set excludeFromDebt = true', async () => {
+      const existingCase = { ...mockCase, excludeFromDebt: false } as KgaraCase;
       caseRepo.findOne.mockResolvedValue(existingCase);
+      categoryRepo.findOne.mockResolvedValue({
+        id: 'cat-oj-id',
+        code: 'OJ_NGOAI',
+        moduleKey: 'GARAGE_CASE',
+      } as ErpModuleCategory);
 
-      await service.updateCaseConfig(existingCase.id, {
-        attributes: { attr_field_1: 'val1' },
-        globalAttributes: { global_field_1: 'val2' },
-        customAttributes: { custom_field_1: 'val3' },
+      const result = await service.updateCaseConfig(existingCase.id, {
+        classification: 'OJ_NGOAI',
       });
 
+      expect(result.classification).toBe('OJ');
+      expect(result.excludeFromDebt).toBe(true);
+      expect(result.categoryId).toBe('cat-oj-id');
       expect(EntityCustomFieldsHelper.saveInTx).toHaveBeenCalledWith(
         mockManager,
         'GARAGE_CASE',
         existingCase.id,
         expect.objectContaining({
-          attr_field_1: 'val1',
-          global_field_1: 'val2',
-          custom_field_1: 'val3',
+          exclude_from_debt: true,
         }),
       );
     });

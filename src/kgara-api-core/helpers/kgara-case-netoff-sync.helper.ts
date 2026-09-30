@@ -149,12 +149,18 @@ export async function syncSingleCaseSettlementsFromInvoiceNetOffs(
     }
 
     // 4. Dọn dẹp các settlements ON_SYSTEM kế thừa từ HĐ mà giao dịch sao kê không còn nữa
+    const inheritCondition = `(
+      category = 'AUTO_NETOFF_INVOICE'
+      OR note LIKE '%hóa đơn liên kết%'
+      OR note LIKE '%Cấn trừ tự động từ HĐ%'
+    )`;
+
     if (activeTxnIds.length > 0) {
       await manager.query(
         `DELETE FROM kgara_case_settlements
          WHERE case_id = $1 
            AND source_channel = 'ON_SYSTEM'
-           AND note LIKE '%hóa đơn liên kết%'
+           AND ${inheritCondition}
            AND (bank_transaction_id IS NULL OR NOT (bank_transaction_id = ANY($2::uuid[])))`,
         [caseId, activeTxnIds],
       );
@@ -163,7 +169,7 @@ export async function syncSingleCaseSettlementsFromInvoiceNetOffs(
         `DELETE FROM kgara_case_settlements
          WHERE case_id = $1 
            AND source_channel = 'ON_SYSTEM'
-           AND note LIKE '%hóa đơn liên kết%'`,
+           AND ${inheritCondition}`,
         [caseId],
       );
     }

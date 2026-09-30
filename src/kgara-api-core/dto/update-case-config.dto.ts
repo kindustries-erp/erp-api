@@ -19,7 +19,7 @@ export class UpdateCaseConfigDto extends BaseEntityCustomFieldsDto {
 
   @ApiPropertyOptional({
     description:
-      'Mã phân loại nghiệp vụ ERP (SUA_CHUA_CHUNG, KY_GUI_NOI_BO, OJ_NGOAI, KHAC)',
+      'Mã phân loại nghiệp vụ ERP (SUA_CHUA_CHUNG, KY_GUI_NOI_BO, OJ, KHAC)',
     example: 'SUA_CHUA_CHUNG',
   })
   @IsOptional()
