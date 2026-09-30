@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -316,6 +318,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.READ,
   })
   @Post('bulk-net-offs')
+  @HttpCode(HttpStatus.OK)
   getBulkNetOffs(@Body('ids') ids: string[]) {
     return this.service.getBulkNetOffs(ids);
   }
@@ -325,6 +328,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.READ,
   })
   @Post('smart-net-off-suggestions')
+  @HttpCode(HttpStatus.OK)
   getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
     return this.service.getSmartNetOffSuggestions(invoiceIds);
   }

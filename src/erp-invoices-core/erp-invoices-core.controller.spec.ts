@@ -8,6 +8,8 @@ describe('ErpInvoicesCoreController', () => {
     syncFromPortal: jest.fn(),
     linkVouchersToInvoice: jest.fn(),
     removeVoucherFromInvoice: jest.fn(),
+    getBulkNetOffs: jest.fn(),
+    getSmartNetOffSuggestions: jest.fn(),
   } as any;
   const notificationsService = {
     createForUser: jest.fn(),
@@ -107,5 +109,35 @@ describe('ErpInvoicesCoreController', () => {
       'txn-1',
     );
     expect(result).toEqual({ message: 'Đã xóa liên kết phiếu thành công' });
+  });
+
+  it('delegates getSmartNetOffSuggestions endpoint to service.getSmartNetOffSuggestions', async () => {
+    const mockSuggestions = {
+      'inv-1': [
+        {
+          bankTransactionId: 'txn-1',
+          confidenceScore: 0.95,
+          confidenceLevel: 'HIGH',
+        },
+      ],
+    };
+    service.getSmartNetOffSuggestions.mockResolvedValue(mockSuggestions);
+
+    const result = await controller.getSmartNetOffSuggestions(['inv-1']);
+
+    expect(service.getSmartNetOffSuggestions).toHaveBeenCalledWith(['inv-1']);
+    expect(result).toEqual(mockSuggestions);
+  });
+
+  it('delegates getBulkNetOffs endpoint to service.getBulkNetOffs', async () => {
+    const mockBulkNetOffs = [
+      { invoiceId: 'inv-1', bankTransactionId: 'txn-1', netOffAmount: 100 },
+    ];
+    service.getBulkNetOffs.mockResolvedValue(mockBulkNetOffs);
+
+    const result = await controller.getBulkNetOffs(['inv-1']);
+
+    expect(service.getBulkNetOffs).toHaveBeenCalledWith(['inv-1']);
+    expect(result).toEqual(mockBulkNetOffs);
   });
 });
