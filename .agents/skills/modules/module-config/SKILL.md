@@ -110,7 +110,7 @@ erDiagram
 | `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string>, parentValue?: string }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ và cascading theo option cha) |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string>, parentValue?: string, accountCode?: string, defaultDebitAccountId?: string }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ, cascading theo option cha, và liên kết tài khoản kế toán tự động theo TT99) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
 | `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |
@@ -266,7 +266,7 @@ Trên giao diện Drawer 2 cột (`erp-web`), toàn bộ thông tin đối tư�
     </DrawerField>
   </DrawerSection>
 
-  {/* Tầng 3: THUỘC TÍNH TÙY CHỈNH (ModuleEntityCustomFieldsSection: Category & Dynamic Custom Attributes) */}
+  {/* Tầng 3: THUỘC TÍNH TÙY CHỈNH (ModuleEntityCustomFieldsSection: src/shared/features/custom-fields/) */}
   <ModuleEntityCustomFieldsSection
     moduleKey="SALES_ORDER"
     entityId={entity?.id}
