@@ -11,7 +11,7 @@ Phân hệ Quản lý Hóa đơn Điện tử (`erp-invoices-core`) là trung t�
 
 Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
-- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **3 mốc thời gian cố định: 03:15 Sáng, 09:15 Sáng, 15:15 Chiều (Asia/Ho_Chi_Minh)** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
+- **Tiến trình Đồng bộ Tự động Định kỳ (5-Slot Heartbeat Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **5 mốc thời gian cố định: 09:15, 15:15, 16:15, 17:15, 21:15 (Asia/Ho_Chi_Minh)** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
 - **Hạch toán Kế toán Kép & Tài khoản Treo Trung gian (Transit Accounts T0002 / T0003)**:
   - Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
@@ -22,20 +22,34 @@ Các nghiệp vụ trọng tâm:
   - **Đồng bộ 2 Chiều & Mã Tham Chiếu Chuẩn**: `InvoiceCategoryAutopostService` tự động sinh và duy trì mã tham chiếu `reference = [Số HĐ]-[Ký hiệu HĐ]` cùng `source_id = invoice.id` sang Sổ cái (`erp_journal_entries`) cho cả luồng tạo mới và tái hạch toán In-Place khi đổi danh mục.
 - **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
-- **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
-- **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
-- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture)**:
-  - `InvoiceQueryService` đóng vai trò Facade mỏng (~150 dòng) điều phối tới các sub-services chuyên biệt (mỗi file < 1000 dòng):
-    - `InvoiceListQueryService`: Truy vấn danh sách hóa đơn, phân trang, lọc đa chiều, tính grand totals & cumulative totals.
-    - `InvoiceItemsQueryService`: Truy vấn danh sách chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
-    - `InvoiceItemCodeResolverService`: Sub-service điều phối phân loại và gán **Mã Hàng (`item_code`)** chuẩn hóa theo cơ chế **AI-First (9router AI Gateway) ➔ Rule-based Fallback (Regex / Vendor Matching) ➔ Preserve Guard** bảo toàn mã khi đồng bộ lại từ Cổng Thuế.
-    - `InvoiceStatsService`: Thống kê KPI, phân tích top mặt hàng, options phân quyền.
-    - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel hóa đơn và dòng hàng chuyên nghiệp đa sheet.
-    - Helpers chuyên trách: `vinfast-part-code.helper.ts`, `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
-  - `InvoiceDebtsService` đóng vai trò Facade mỏng (~140 dòng) điều phối tới:
-    - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
-    - `InvoiceDebtsDetailService`: Chi tiết danh sách hóa đơn theo đối tác (`getPartnerInvoices` với parameterized query chống SQL injection).
-    - `InvoiceDebtsExportService`: Xuất file Excel báo cáo công nợ đồng bộ 2 sheet.
+- **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream` và `/debts/export/excel/progress/stream`.
+- **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`), phân tích chân trời tài chính (`InvoiceDashboardHorizonService`) và xuất Excel đối soát.
+- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture - Pattern A & B)**:
+  - **Sub-Controllers REST (Pattern A)**:
+    - `ErpInvoicesCoreController`: Thin Controller quản lý CRUD, sync GDT, R2 files, hạch toán Post/Unpost.
+    - `InvoiceDebtsController`: Sub-controller chuyên trách Báo cáo & Chi tiết công nợ đối tác (`/api/v1/erp-invoices/debts`).
+    - `InvoiceDashboardController`: Sub-controller chuyên trách Dashboard, KPI & Phân tích chân trời tài chính (`/api/v1/erp-invoices/dashboard`).
+  - **Sub-Services & Facades (Pattern B)**:
+    - `InvoiceQueryService` (Facade ~150 dòng) điều phối:
+      - `InvoiceListQueryService`: Phân trang, lọc đa chiều, tính grand & cumulative totals.
+      - `InvoiceItemsQueryService`: Chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+      - `InvoiceItemCodeResolverService`: Phân loại & gán Mã Hàng chuẩn hóa AI-First (9router) ➔ Rule-based Regex ➔ Preserve Guard.
+      - `InvoiceStatsService`: Thống kê KPI, top mặt hàng, filter options.
+      - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel trực tiếp đa sheet.
+      - `InvoiceCategoryAutopostService`: Tự động đồng bộ hạch toán sổ cái khi đổi danh mục.
+      - Helpers: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+    - `InvoiceDebtsService` (Facade ~140 dòng) điều phối:
+      - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
+      - `InvoiceDebtsDetailService`: Chi tiết hóa đơn theo đối tác (`getPartnerInvoices` parameterized SQL).
+      - `InvoiceDebtsExportService`: Xuất file Excel công nợ đồng bộ 2 sheet kèm helper styles `invoice-debts-export-styles.helper.ts`.
+      - `InvoiceDebtsExportBackgroundService`: Xuất Excel công nợ tác vụ nền qua SSE.
+    - `InvoiceDashboardService` (Facade ~120 dòng) điều phối:
+      - `InvoiceDashboardStatsService`: Thống kê tổng hợp số lượng & doanh thu/thuế.
+      - `InvoiceDashboardPartnersService`: Cơ cấu đối tác & nhà cung cấp trọng yếu.
+      - `InvoiceDashboardHorizonService`: Phân tích dòng tiền & dự báo chân trời tài chính.
+      - `InvoiceDashboardAnalyticsService`: Phân tích sâu xu hướng hóa đơn.
+      - `InvoiceDashboardExportService`: Xuất báo cáo Dashboard đa sheet.
+      - `invoice-dashboard-helpers.ts`: Các hàm thuần túy tính toán tỷ trọng & format.
 
 ---
 
@@ -141,6 +155,8 @@ Các nghiệp vụ trọng tâm:
 
 ```text
 src/erp-invoices-core/
+├── controllers/
+│   └── invoice-debts.controller.ts            # Sub-controller Báo cáo & Chi tiết công nợ đối tác (/debts)
 ├── dto/
 │   ├── create-erp-invoice.dto.ts              # DTO tạo hóa đơn + nested items
 │   ├── update-erp-invoice.dto.ts              # DTO cập nhật hóa đơn (PartialType)
@@ -154,6 +170,7 @@ src/erp-invoices-core/
 │   └── erp_invoice_attachment.entity.ts       # TypeORM Entity bảng erp_invoice_attachments
 ├── helpers/
 │   ├── gdt-captcha-solver.helper.ts           # Helper giải mã Captcha cổng thuế GDT
+│   ├── gdt-cron-state.helper.ts               # Helper quản lý trạng thái tạm dừng/mở khóa Cron GDT
 │   ├── gdt-session.helper.ts                  # Helper quản lý Cookie Jar và khởi tạo phiên WAF GDT (F5 BIG-IP)
 │   ├── invoice-branch.helper.ts               # Helper tự động suy diễn Chi nhánh từ MST/cấu hình
 │   ├── invoice-gdt.helper.ts                  # Helper gọi HTTP API sang Cổng thuế GDT
@@ -161,25 +178,49 @@ src/erp-invoices-core/
 │   ├── invoice-metadata.helper.ts             # Helper regex trích xuất Biển số xe & Lệnh sửa chữa
 │   └── out-invoice-display.helper.ts          # Helper phân loại nghiệp vụ dòng hóa đơn đầu ra
 ├── services/
-│   ├── invoice-export-background.service.ts   # Quản lý hàng đợi xuất Excel nền + SSE stream
-│   ├── invoice-files.service.ts               # Xử lý upload/download PDF/XML trên Cloudflare R2 & nén ZIP
-│   ├── invoice-import.service.ts              # Xử lý nhập hàng loạt XML/PDF/ZIP hỗn hợp
+│   ├── invoice-debts.service.ts               # FACADE: Báo cáo công nợ & chi tiết theo đối tác
+│   ├── invoice-debts-export-background.service.ts # Quản lý xuất Excel công nợ nền + SSE stream
+│   ├── invoice-query.service.ts               # FACADE: Phân trang, lọc, thống kê & xuất Excel hóa đơn
+│   ├── invoice-export-background.service.ts   # Quản lý xuất Excel danh sách hóa đơn nền + SSE stream
+│   ├── invoice-files.service.ts               # Upload/download PDF/XML Cloudflare R2 & nén ZIP stream
+│   ├── invoice-import.service.ts              # Nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
-│   ├── invoice-portal.service.ts              # Xử lý sync GDT, login, captcha, bulk download XML
-│   ├── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
-│   └── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (Strict Match Rule & Xếp hạng 6 cấp độ)
+│   ├── invoice-portal.service.ts              # Sync GDT, auto-relogin, captcha, bulk download XML
+│   ├── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (6 cấp độ)
+│   └── sub-services/                          # SUB-SERVICES: Logic chuyên sâu tuân thủ SRP (< 1000 dòng)
+│       ├── invoice-debts-query.service.ts     # Query danh sách công nợ tổng hợp & options
+│       ├── invoice-debts-detail.service.ts    # Query chi tiết hóa đơn theo đối tác (parameterized SQL)
+│       ├── invoice-debts-export.service.ts    # Xuất Excel công nợ 2 sheet đồng bộ
+│       ├── invoice-debts-export-styles.helper.ts # Styling helper Excel công nợ
+│       ├── invoice-list-query.service.ts      # Query phân trang, lọc đa cột, grand & cumulative totals
+│       ├── invoice-items-query.service.ts     # Query chi tiết dòng hàng hóa đơn
+│       ├── invoice-items-query-helpers.ts     # Helpers lọc & phân loại dòng hàng
+│       ├── invoice-stats.service.ts           # Thống kê KPI, top mặt hàng, options phân quyền
+│       ├── invoice-export-excel.service.ts    # Xuất Excel trực tiếp bảng hóa đơn
+│       ├── invoice-items-export.service.ts    # Xuất Excel trực tiếp bảng chi tiết dòng hàng
+│       ├── invoice-export-excel-columns.helper.ts # Định nghĩa cột Excel
+│       ├── invoice-export-excel-writers.helper.ts # Writer format số liệu Excel
+│       ├── invoice-query-helpers.ts           # Helpers SQL query & filters
+│       ├── invoice-item-code-resolver.service.ts # Phân giải mã hàng chuẩn hóa AI-First 9router
+│       ├── invoice-category-autopost.service.ts # Tự động hạch toán sổ cái khi đổi danh mục
+│       ├── invoice-dashboard-stats.service.ts # Thống kê số lượng, doanh thu, thuế Dashboard
+│       ├── invoice-dashboard-partners.service.ts # Cơ cấu đối tác & nhà cung cấp Dashboard
+│       ├── invoice-dashboard-horizon.service.ts # Phân tích dòng tiền & chân trời tài chính
+│       ├── invoice-dashboard-analytics.service.ts # Phân tích sâu xu hướng hóa đơn
+│       ├── invoice-dashboard-export.service.ts # Xuất báo cáo Dashboard đa sheet
+│       └── invoice-dashboard-helpers.ts      # Helpers tính tỷ trọng & format số Dashboard
 ├── subscribers/
 │   └── erp-invoice-item.subscriber.ts         # TypeORM Subscriber tự nhận diện mã phụ tùng VinFast
 ├── utils/
 │   └── normalize-invoice-no.ts                # Chuẩn hóa chuỗi số hóa đơn
 ├── xml-parser/
 │   └── vietnam-invoice-xml.parser.ts          # Bộ phân tích XML hóa đơn Việt Nam độc lập
-├── erp-invoices-core.controller.ts            # REST Controller chính cho CRUD, sync GDT, files, hạch toán
-├── erp-invoices-core.service.ts               # Facade Service điều phối các subservices
-├── erp-invoices-cron.service.ts               # Background Cron tự động đồng bộ GDT định kỳ
-├── erp-invoices-core.module.ts                # NestJS Module đăng ký DI
-├── invoice-dashboard.controller.ts            # Controller báo cáo thống kê Dashboard hóa đơn
-└── invoice-dashboard.service.ts               # Service tổng hợp số liệu Dashboard và báo cáo đối tác
+├── erp-invoices-core.controller.ts            # Thin REST Controller CRUD, sync GDT, files, hạch toán
+├── erp-invoices-core.service.ts               # Master Facade Service điều phối lifecycle, portal, files
+├── erp-invoices-cron.service.ts               # Background 5-Slot Heartbeat Cron đồng bộ GDT định kỳ
+├── erp-invoices-core.module.ts                # NestJS Module đăng ký DI sạch theo clean constructor
+├── invoice-dashboard.controller.ts            # Sub-controller báo cáo thống kê Dashboard hóa đơn
+└── invoice-dashboard.service.ts               # FACADE: Tổng hợp số liệu Dashboard và báo cáo đối tác
 ```
 
 ---

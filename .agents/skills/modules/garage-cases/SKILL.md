@@ -14,7 +14,7 @@ Các nghiệp vụ trọng tâm:
 - **Chi tiết Dòng Dịch vụ & Phụ tùng (`kgara_case_services`)**: Bóc tách chi tiết từng dòng công việc trong phiếu dịch vụ, phân biệt rõ dòng công lao động (`tien_dich_vu`, `so_gio_cong_lam`) và dòng phụ tùng vật tư (`tien_phu_tung`, `gia_von_phu_tung`, `kho_code`).
 - **Đồng bộ Dữ liệu Tự động & Tăng dần (Incremental Watermark Sync)**: Kết nối với API KGara bằng cơ chế Bearer Token tự động làm mới, hỗ trợ đồng bộ theo dải ngày (`from`, `to`) hoặc đồng bộ tăng dần (`updatedSince`) với bộ đệm lùi thời gian (10 phút) tránh mất mát dữ liệu.
 - **Phát hiện & Quản lý Xóa mềm Vụ việc (Soft-delete & Deletion Counter)**: Thuật toán kiểm đếm số lần vắng mặt (`kgara_delete_count`). Khi vụ việc không còn tồn tại trên KGara qua 2 lần quét liên tiếp, hệ thống sẽ đánh dấu xóa mềm (`kgara_deleted_at`). Nếu vụ việc xuất hiện trở lại, hệ thống tự động phục hồi.
-- **Cảnh báo Thông minh & Giám sát Tự động (Hourly Scheduler & Notifications)**: Cron job chạy hàng giờ kiểm tra tính toàn vẹn dữ liệu cho từng chi nhánh (quét 2 tháng gần nhất từ ngày chạy), tự động gửi thông báo (`NotificationsService`) tới tài khoản Admin nếu phát hiện phiếu bị xóa, đặc biệt cảnh báo nghiêm ngặt các phiếu đang có chứng từ hóa đơn liên kết.
+- **Cảnh báo Thông minh & Giám sát Tự động (5-Slot Heartbeat Scheduler & Notifications)**: Scheduler chạy tự động tại 5 mốc giờ (`09:15`, `15:15`, `16:15`, `17:15`, `21:15` Asia/Ho_Chi_Minh) theo cơ chế Heartbeat 30s kết hợp `@Cron` dự phòng, quét dữ liệu 2 tháng gần nhất cho từng chi nhánh, tự động nạp chi tiết phụ tùng/công thợ (`syncCaseDetailsBatch`), và gửi thông báo an toàn qua RBAC (`CorePermission`/`CoreUserRole`) tới tài khoản có quyền khi phát hiện phiếu bị xóa hoặc có cảnh báo.
 - **Tổng hợp & Báo cáo Lợi Nhuận Gộp Vụ Việc (`kgara_gross_profit`)**: Bóc tách chỉ số tài chính $\text{Lợi Nhuận Gộp (LoiNhuan)} = \text{Doanh Thu (DoanhThu)} - \text{Chi Phí / Giá Vốn (ChiPhi)}$ theo từng vụ việc, tính tổng hợp kỳ báo cáo (`TongCong: { DoanhThu, ChiPhi, LaiGop }`), waterfall sync các tháng có phát sinh và đối soát với hóa đơn thuế GTGT.
 - **Liên kết Hóa đơn Điện tử & Sổ sách ERP (`kgara_case_linked_invoice`)**: Hỗ trợ liên kết 2 chiều giữa vụ việc dịch vụ / bản ghi lợi nhuận gộp với hóa đơn điện tử (`erp_invoices`) phục vụ công tác đối soát kế toán và quyết toán chi phí.
 - **Truy xuất Báo cáo Chi tiết & Sổ Nhật ký KGara (Gross Profit Journal Proxy)**: Tích hợp proxy gọi trực tiếp sang API báo cáo sổ nhật ký chi tiết (`/reports/gross-profit-detail/journal`) của KGara để kiểm tra từng bút toán chi phí gốc.
@@ -326,12 +326,17 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.
 6. Nếu một vụ việc đã bị xóa mềm sau đó xuất hiện trở lại trong danh sách sync: Hệ thống tự động đặt lại `kgara_deleted_at = null` và `kgara_delete_count = 0` (Restoration).
 
-### 5.4. Lịch Quét Tự động Hàng Giờ 2 Tháng Gần Nhất & Cảnh báo Admin (`KgaraSyncScheduler`)
-- Chạy tự động vào mỗi đầu giờ (`@Cron(CronExpression.EVERY_HOUR)`).
-- **Cửa sổ đồng bộ nâng cao**: Quét dữ liệu trong phạm vi **2 tháng gần nhất tính từ thời điểm chạy** (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh đang hoạt động.
-- Nếu phát hiện vụ việc bị xóa mềm:
-  - Tự động kiểm tra liên kết hóa đơn trong `kgara_case_linked_invoice`.
-  - Gửi thông báo loại `WARNING` tới tất cả Admin nếu vụ việc bị xóa đang có hóa đơn liên kết; gửi thông báo loại `INFO` nếu không có hóa đơn liên kết.
+### 5.4. Lịch Quét Tự Động 5 Mốc Giờ 2 Tháng Gần Nhất & Cảnh Báo An Toàn (`KgaraSyncScheduler`)
+- Chạy tự động tại 5 mốc thời gian cố định: **`09:15`**, **`15:15`**, **`16:15`**, **`17:15`**, **`21:15`** (Asia/Ho_Chi_Minh).
+- **Cơ chế lập lịch kép (Heartbeat 30s + @Cron)**:
+  - Heartbeat `setInterval` (30s) trong `onModuleInit()` kiểm tra `isWithinSyncWindow()` với cửa sổ 45 phút giúp bù giờ nếu server khởi động lại trễ.
+  - Decorator `@Cron('0 15 9,15,16,17,21 * * *')` làm lớp kích hoạt dự phòng song song với khóa slot `lastExecutedSlotKey` chống chạy lặp.
+- **Cửa sổ đồng bộ 2 tháng gần nhất & Kéo chi tiết**:
+  - Quét dữ liệu trong phạm vi 2 tháng gần nhất tính từ thời điểm chạy (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh.
+  - Tự động gọi `syncCaseDetailsBatch` (`force: false`) nạp dòng phụ tùng & công thợ cho các vụ việc chưa có chi tiết.
+- **Cảnh báo Thông minh Zero-Crash**:
+  - Tra cứu người nhận thông báo an toàn thông qua quyền RBAC `CorePermission` (`resource IN ('garage', '*')`) và `CoreUserRole`. Bọc `try/catch` độc lập không làm gián đoạn luồng sync DB chính.
+  - Gửi thông báo loại `WARNING` tới người dùng có quyền nếu vụ việc bị xóa đang có hóa đơn liên kết; gửi thông báo loại `INFO` nếu không có hóa đơn liên kết.
 
 ### 5.5. Thuật toán Tổng Hợp Báo Cáo Lợi Nhuận Gộp (`getGrossProfitReport`)
 1. Truy vấn toàn bộ bản ghi trong bảng `kgara_gross_profit` theo `branchExternalId` và dải ngày `reportFrom >= from`, `reportTo <= to`.
