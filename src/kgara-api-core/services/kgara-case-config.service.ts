@@ -63,12 +63,14 @@ export class KgaraCaseConfigService {
         });
         if (cat) {
           caseData.categoryId = cat.id;
+          caseData.category = cat;
           caseData.classification = cat.code === 'OJ_NGOAI' ? 'OJ' : cat.code;
         } else {
           caseData.categoryId = resolvedCategoryId;
         }
       } else {
         caseData.categoryId = null;
+        caseData.category = null as any;
         if (resolvedClassification === undefined) {
           caseData.classification = null;
         }

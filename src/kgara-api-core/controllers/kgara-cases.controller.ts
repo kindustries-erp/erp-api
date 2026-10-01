@@ -778,7 +778,10 @@ export class KgaraCasesController {
   @Get('cases/by-code/:code')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseByCode(@Param('code') code: string) {
-    let caseData = await this.caseRepo.findOne({ where: { soChungTu: code } });
+    let caseData = await this.caseRepo.findOne({
+      where: { soChungTu: code },
+      relations: ['category'],
+    });
     if (!caseData) {
       throw new NotFoundException(`Case with code ${code} not found`);
     }
@@ -812,6 +815,13 @@ export class KgaraCasesController {
         await this.caseRepo.save(caseData);
       }
     }
+
+    await EntityCustomFieldsHelper.enrichOne(
+      this.caseRepo.manager.connection,
+      'GARAGE_CASE',
+      caseData,
+    );
+
     return caseData;
   }
 
