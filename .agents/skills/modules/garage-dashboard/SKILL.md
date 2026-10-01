@@ -160,6 +160,8 @@ Resource RBAC: `garage`
 | `DELETE`| `/opex/:id` | `{ resource: 'garage', action: 'delete' }`| `id` (uuid) | Xóa khoản chi phí vận hành |
 | `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L theo tháng kèm `cogsAdjustment` |
 | `GET` | `/pnl-report/export` | `{ resource: 'garage', action: 'read' }`| `year`, `month` | Xuất file Excel Báo cáo P&L theo tháng |
+| `GET` | `/debts-analytics` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Phân tích tổng hợp công nợ KH vs NCC, mốc thời gian & dự báo IFRS 9 |
+| `GET` | `/time-horizons/:horizon/cases` | `{ resource: 'garage', action: 'read' }` | `horizon`, `date_from`, `date_to`, `branch_id`, pagination | Danh sách vụ việc chi tiết theo mốc thời gian cho Drawer |
 
 ---
 
