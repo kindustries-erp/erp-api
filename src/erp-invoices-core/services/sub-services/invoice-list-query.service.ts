@@ -379,7 +379,15 @@ export class InvoiceListQueryService {
     const qb = this.repository
       .createQueryBuilder('inv')
       .leftJoin(
-        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        `(
+          SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM (
+            SELECT invoice_id, net_off_amount FROM erp_invoice_voucher_netoff
+            UNION ALL
+            SELECT original_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+            UNION ALL
+            SELECT adjusting_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+          ) unified_netoff GROUP BY invoice_id
+        )`,
         'netoff_agg',
         'netoff_agg.invoice_id = inv.id',
       )
@@ -539,6 +547,20 @@ export class InvoiceListQueryService {
         .addSelect(
           'COALESCE(SUM(COALESCE(netoff_agg.net_off_sum, 0)), 0)',
           'totalNetOff',
+        )
+        .addSelect(
+          `COALESCE(SUM(
+            CASE
+              WHEN inv.tax_invoice_status = 3 OR inv.total_amount < 0 THEN
+                CASE
+                  WHEN COALESCE(netoff_agg.net_off_sum, 0) >= ABS(inv.total_amount) THEN 0
+                  ELSE inv.total_amount + COALESCE(netoff_agg.net_off_sum, 0)
+                END
+              ELSE
+                GREATEST(0, inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0))
+            END
+          ), 0)`,
+          'totalRemaining',
         );
 
       const totalsRaw = await totalsQb.getRawOne();
@@ -547,7 +569,10 @@ export class InvoiceListQueryService {
       grandTotalDiscount = parseFloat(totalsRaw?.totalDiscount || '0') || 0;
       grandTotalAmount = parseFloat(totalsRaw?.totalAmount || '0') || 0;
       grandTotalNetOff = parseFloat(totalsRaw?.totalNetOff || '0') || 0;
-      grandTotalRemaining = grandTotalAmount - grandTotalNetOff;
+      grandTotalRemaining =
+        totalsRaw?.totalRemaining !== undefined
+          ? parseFloat(totalsRaw.totalRemaining || '0') || 0
+          : grandTotalAmount - grandTotalNetOff;
 
       if (page === 1) {
         cumulativePreVat = mappedItems.reduce(
@@ -570,7 +595,17 @@ export class InvoiceListQueryService {
           (acc, curr) => acc + (parseFloat((curr as any).netOffAmount) || 0),
           0,
         );
-        cumulativeRemaining = cumulativeTotal - cumulativeNetOff;
+        cumulativeRemaining = mappedItems.reduce((acc, curr: any) => {
+          const total = parseFloat(curr.totalAmount) || 0;
+          const netOff = parseFloat(curr.netOffAmount) || 0;
+          const isAdj = curr.taxInvoiceStatus === 3 || total < 0;
+          const rem = isAdj
+            ? netOff >= Math.abs(total)
+              ? 0
+              : total + netOff
+            : Math.max(0, total - netOff);
+          return acc + rem;
+        }, 0);
       } else if (page >= totalPages && totalPages > 0) {
         cumulativePreVat = grandTotalPreVat;
         cumulativeVat = grandTotalVat;
@@ -588,6 +623,7 @@ export class InvoiceListQueryService {
           .addSelect('inv.vat_amount', 'vat')
           .addSelect('inv.discount_amount', 'discount')
           .addSelect('inv.total_amount', 'total')
+          .addSelect('inv.tax_invoice_status', 'taxStatus')
           .addSelect('COALESCE(netoff_agg.net_off_sum, 0)', 'netoff')
           .offset(0)
           .limit(page * pageSize);
@@ -619,7 +655,21 @@ export class InvoiceListQueryService {
             acc + (parseFloat(r.netoff ?? r.netoff_agg_net_off_sum ?? 0) || 0),
           0,
         );
-        cumulativeRemaining = cumulativeTotal - cumulativeNetOff;
+        cumulativeRemaining = cumRows.reduce((acc, r) => {
+          const total = parseFloat(r.total ?? r.inv_total_amount ?? 0) || 0;
+          const netOff =
+            parseFloat(r.netoff ?? r.netoff_agg_net_off_sum ?? 0) || 0;
+          const taxStatus = Number(
+            r.taxStatus ?? r.inv_tax_invoice_status ?? 0,
+          );
+          const isAdj = taxStatus === 3 || total < 0;
+          const rem = isAdj
+            ? netOff >= Math.abs(total)
+              ? 0
+              : total + netOff
+            : Math.max(0, total - netOff);
+          return acc + rem;
+        }, 0);
       }
     } catch (e) {
       this.logger.error(`Error calculating totals in findAll invoices: ${e}`);

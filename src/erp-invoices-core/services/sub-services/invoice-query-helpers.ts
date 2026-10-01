@@ -48,6 +48,45 @@ export async function _loadNetOffAmounts(
 
   const rawRows = (await qb.getRawMany()) || [];
 
+  // Query adjustment netoffs for both original invoices and adjusting invoices
+  let adjRows: any[] = [];
+  try {
+    adjRows = await manager.query(
+      `
+      SELECT 
+        adj.original_invoice_id as "invoiceId",
+        adj.offset_amount as "netOffAmount",
+        adj_inv.invoice_no as "refNo",
+        adj_inv.invoice_date as "transDate",
+        COALESCE(adj.notes, 'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no) as "description",
+        'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no as "accountingDescription",
+        CAST(adj_inv.total_amount AS NUMERIC) as "refAmount"
+      FROM erp_invoice_adjustment_netoff adj
+      JOIN erp_invoices adj_inv ON adj_inv.id = adj.adjusting_invoice_id
+      WHERE adj.original_invoice_id = ANY($1)
+
+      UNION ALL
+
+      SELECT 
+        adj.adjusting_invoice_id as "invoiceId",
+        adj.offset_amount as "netOffAmount",
+        orig_inv.invoice_no as "refNo",
+        orig_inv.invoice_date as "transDate",
+        COALESCE(adj.notes, 'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no) as "description",
+        'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no as "accountingDescription",
+        CAST(orig_inv.total_amount AS NUMERIC) as "refAmount"
+      FROM erp_invoice_adjustment_netoff adj
+      JOIN erp_invoices orig_inv ON orig_inv.id = adj.original_invoice_id
+      WHERE adj.adjusting_invoice_id = ANY($1)
+      `,
+      [ids],
+    );
+  } catch (_e) {
+    // Ignore if table not present in certain environments
+  }
+
+  const combinedRows = [...rawRows, ...(adjRows || [])];
+
   const netOffMap: Record<
     string,
     {
@@ -66,7 +105,7 @@ export async function _loadNetOffAmounts(
     }
   > = {};
 
-  for (const row of rawRows) {
+  for (const row of combinedRows) {
     const invId = row.invoiceId;
     if (!netOffMap[invId]) {
       netOffMap[invId] = {

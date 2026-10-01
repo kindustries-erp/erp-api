@@ -1,5 +1,5 @@
 ---
-name: erp-invoice
+name: erp-invoice-api
 description: Module tri thức Quản lý Hóa đơn Điện tử & Hóa đơn Thuế (ERP Invoices) trong erp-api (erp-invoices-core). Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic đồng bộ GDT tự động, multi-strategy XML parser, hạch toán kế toán kép, cấn trừ sổ quỹ/ngân hàng và lưu trữ Cloudflare R2.
 ---
 
@@ -108,6 +108,7 @@ Các nghiệp vụ trọng tâm:
 | `posting_status` | `varchar(20)` | NO | `'UNPOSTED'` | Trạng thái hạch toán: `UNPOSTED`, `POSTED` |
 | `posting_date` | `date` | YES | `NULL` | Ngày hạch toán sổ cái |
 | `journal_entry_id` | `uuid` | YES | `NULL` | FK tham chiếu `accounting_journal_entries.id` |
+| `effective_data` | `jsonb` | YES | `NULL` | Lưu trữ dữ liệu hiệu lực sau điều chỉnh: `{ isAdjusted, adjustingInvoiceId, adjustingInvoiceNo, adjustingSerialNo, adjustedAt, effectiveValues: { licensePlate, settlementOrder, totalAmount, ... }, diffLog: [] }` |
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
@@ -141,7 +142,18 @@ Các nghiệp vụ trọng tâm:
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
 
-### 2.4. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
+### 2.4. Bảng `erp_invoice_adjustment_netoff` (Cấn Trừ Hóa Đơn Điều Chỉnh & Hóa Đơn Gốc)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `original_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn bị điều chỉnh) |
+| `adjusting_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn điều chỉnh) |
+| `offset_amount` | `numeric(18,2)` | NO | `0` | Số tiền cấn trừ (giá trị tuyệt đối của phần điều chỉnh giảm) |
+| `notes` | `text` | YES | `NULL` | Ghi chú đối soát cấn trừ |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.5. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
@@ -538,93 +550,71 @@ bun run check:ci
 
 ## 8. Kiến trúc Frontend & Cấu trúc Atomic (`erp-web`)
 
-Thư mục: `src/modules/erp-invoices-core/components/ErpInvoicesTab/`
+> [!NOTE]
+> Đặc tả chi tiết đầy đủ về giao diện, route, components và tương tác UX của phân hệ Hóa đơn được tài liệu hóa chuyên sâu tại skill:
+> 👉 [`erp-invoice-web`](file:///home/dev/repos-dev/erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md)
 
-Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`ui-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
+### 8.1. Trang Hợp Nhất 6 Tabs (`/erp-invoices`)
+Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route trung tâm duy nhất:
+- **Container Page**: `src/pages/ErpInvoicesPage.tsx`
+- **Legacy Routing**: Các route cũ (`/erp-invoices-in`, `/erp-invoices-out`, `/erp-invoices-draft`, `/invoice-dashboard`) đều tự động forward hoặc render `ErpInvoicesPage` với prop `initialTab` tương ứng.
+- **Hệ thống 6 Tabs trong `ErpInvoicesTab`**:
+  1. `tab=dashboard`: **Tổng quan** (mount trực tiếp component `<InvoiceDashboard />` - View 0, phân tích KPI, xu hướng dòng tiền, thuế VAT, công nợ).
+  2. `tab=in` (mặc định): **Hóa đơn mua vào** (Header Table chiều `IN`, bộ lọc `tax_tab` `[ Tất cả | Mới | Thay thế | Điều chỉnh ]` + `view_mode` Combobox).
+  3. `tab=in-lines`: **Chi tiết mua vào** (Lines Table chiều `IN`, bộ lọc `subcat` `[ Tất cả dòng | Hàng hóa | Chiết khấu ]`).
+  4. `tab=out`: **Hóa đơn bán ra** (Header Table chiều `OUT`, bộ lọc `tax_tab` + `view_mode` Combobox).
+  5. `tab=out-lines`: **Chi tiết bán ra** (Lines Table chiều `OUT`, bộ lọc `subcat`).
+  6. `tab=draft`: **Hóa đơn nháp** (`ErpInvoicesDraftPage` - Quản lý hóa đơn SInvoice Viettel nháp).
 
+### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-atomic-refactor`)
+Toàn bộ source code frontend của module nằm tại `src/modules/erp-invoices-core/` và tuân thủ nghiêm ngặt chuẩn Atomic 3 tầng:
+
+```text
+src/modules/erp-invoices-core/components/
+├── atoms/                                      # TẦNG 1: NGUYÊN TỬ CƠ BẢN
+│   └── invoice-status-badge/                   # Reusable Badges (Trạng thái GDT, Hạch toán, KQ Kiểm tra)
+├── molecules/                                  # TẦNG 2: PHÂN TỬ GIAO DIỆN
+│   ├── coming-soon-tab-content/                # Placeholder tab đang hoàn thiện
+│   ├── erp-invoice-pdf-preview/                # Khung xem trước file PDF inline
+│   ├── invoice-attachments-cell/               # Cột icon XML + popover danh sách PDF
+│   ├── invoice-items-popover/                  # Popover bảng 15 cột chi tiết mặt hàng
+│   ├── invoice-no-cell/                        # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono)
+│   ├── invoice-partner-cell/                   # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono)
+│   ├── invoice-view-mode-combobox/             # Dropdown chọn chế độ xem (Tổng quan, Kiểm toán, Custom)
+│   ├── settlement-progress-card/               # KPI theo dõi tiến độ thanh toán & nợ còn lại
+│   ├── settlement-voucher-list/                # Danh sách chứng từ thanh toán/thu tiền đã cấn trừ
+│   ├── voucher-netoff-input/                   # Input nhập số tiền cấn trừ có format
+│   └── ...                                     # XML upload, preview frames, date slots
+└── organisms/                                  # TẦNG 3: KHỐI CHỨC NĂNG HOÀN CHỈNH (39 Organisms)
+    ├── erp-invoices-tab/                       # Container chính (/erp-invoices)
+    │   ├── ErpInvoicesTab.tsx                  # Main View nhúng SpreadsheetPageTemplate & InvoiceDashboard (View 0)
+    │   ├── ErpInvoicesTab.hook.tsx             # Orchestrator Hook quản lý tabs, sync SSE, dynamic columns
+    │   ├── ErpInvoicesTab.helper.ts            # Helper tính toán & định dạng
+    │   ├── ErpInvoicesTabHeaderSection.tsx     # Header Toolbar, PillTabs thuế, Search, Action buttons
+    │   ├── ErpInvoicesTabColumns.tsx           # Khai báo cấu hình cột
+    │   ├── ErpInvoicesTabDrawers.tsx           # Gom cụm các Drawer xem & xử lý hóa đơn
+    │   └── ErpInvoicesTabBulkModals.tsx        # Gom cụm các Modal/Drawer thao tác hàng loạt
+    ├── erp-invoice-items-section/              # Lines Table (/erp-invoices?tab=in-lines / out-lines)
+    ├── erp-invoice-detail-drawer/              # Drawer Chi Tiết Hóa Đơn Chuẩn Hóa 7 Tabs (StandardFormDrawer)
+    ├── erp-invoice-partner-tab/                # Tab Giao dịch 2 cột trong Drawer Chi tiết
+    ├── erp-invoice-settlement-tab/             # Tab Tài chính & Đối soát trong Drawer Chi tiết
+    ├── voucher-netoff-selection-modal/         # Drawer Đối soát Dòng tiền (Sao kê & Sổ quỹ)
+    └── ...                                     # 33 Organisms khác (Import XML, Bulk Net-off, Traceability Graph...)
 ```
-src/modules/erp-invoices-core/components/ErpInvoicesTab/
-├── index.tsx                                    # Entry export backward-compatible
-├── ErpInvoicesTab.tsx                           # Main View: SpreadsheetPageTemplate + Drawers + Modals
-├── useErpInvoicesTabLogic.tsx                   # Orchestrator Hook kết hợp các sub-hooks chuyên biệt
-├── utils.ts                                     # Pure functions, formatters & constants
-├── hooks/
-│   ├── useInvoiceBulkActions.tsx                # Quản lý selection, bulk download ZIP, bulk edit/posting/netoff
-│   ├── useInvoiceTableHandlers.ts               # Sort state, column search/filter, dynamic column options
-│   ├── useInvoiceSummary.tsx                    # Tính toán dòng tổng cộng Footer Summary Row
-│   └── useInvoiceModals.ts                      # Quản lý state mở/đóng 12 Drawers, Preview PDF, Export, Sync
-└── components/
-    ├── InvoiceViewModeCombobox.tsx              # Dropdown chọn/chỉnh sửa chế độ xem (Tổng quan, Kiểm toán, Custom)
-    ├── InvoiceViewConfigDrawer.tsx              # Drawer cấu hình cột hiển thị & Reset về mặc định
-    ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối và định vị thứ tự 14+ cột bảng dữ liệu
-    ├── InvoiceDrawers.tsx                       # Gom cụm 10 Drawer/Modal xem & xử lý hóa đơn
-    ├── InvoiceBulkModals.tsx                    # Gom cụm các Modal/Drawer thao tác hàng loạt
-    ├── cells/
-    │   ├── InvoiceNoCell.tsx                    # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono)
-    │   ├── InvoicePartnerCell.tsx               # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono)
-    │   ├── InvoiceAttachmentsCell.tsx           # Icon XML + Popover quản lý danh sách file PDF
-    │   ├── InvoiceItemsPopover.tsx              # Popover bảng chi tiết mặt hàng 15 cột trong ô Diễn giải
-    │   └── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
-    └── columns/
-        ├── generalColumns.tsx                   # Nhóm cột chung (Ngày HĐ, Số/Ký hiệu HĐ, Bên bán/mua & MST, Chi nhánh,...)
-        ├── taxColumns.tsx                       # Nhóm cột thuế (Loại HĐ, Trạng thái GDT, KQ Kiểm tra, HĐ hợp lệ)
-        └── amountColumns.tsx                    # Nhóm cột số tiền (Diễn giải 2 dòng 250px, Chiết khấu, Tiền trước VAT, VAT, Tổng tiền, Thuế suất, Cấn trừ,...)
-```
 
-### 8.1. Thứ tự & Bố cục Cột Chuẩn Hóa
+### 8.3. Thứ tự & Bố cục Cột Chuẩn Hóa
 Bảng hóa đơn được tối ưu hóa hiển thị với thứ tự trực quan:
 `Ngày HĐ` $\to$ `Số / Ký hiệu HĐ` (120px) $\to$ `Bên bán / MST` (250px) $\to$ `Loại HĐ` $\to$ `Diễn giải` (250px, 2 dòng) $\to$ `Trước GTGT` $\to$ `Thuế GTGT` $\to$ `Thành tiền` $\to$ **`Chiết khấu`** $\to$ **`Thuế suất GTGT`** $\to$ **`Trạng thái (GDT)`** $\to$ **`KQ Kiểm tra`** $\to$ `Cấn trừ` $\to$ `Còn lại` $\to$ `Hạch toán` $\to$ `Chi nhánh` $\to$ `Chứng từ`.
 
-### 8.2. Drawer Chi Tiết Hóa Đơn (`ErpInvoiceInternalDrawer`) & Thứ Tự 7 Top Tabs
+### 8.4. Drawer Chi Tiết Hóa Đơn (`ErpInvoiceDetailDrawer`) & Thứ Tự 7 Top Tabs
 Drawer chi tiết hóa đơn sử dụng `StandardFormDrawer` với 7 Tabs điều hướng trên cùng (`resolvedDrawerTabs`):
 1. **`invoice_details`** (`t("tabDetails", "Chi tiết")` - icon `FileText`): Form hóa đơn & Template xem trước XML/PDF chi tiết.
-2. **`partner`** (`t("tabTransactions", "Giao dịch")` - icon `Building2`, `hideRightPanel: true`): Hồ sơ đối tác & Bảng danh sách hóa đơn liên quan dạng 2 cột.
+2. **`partner`** (`t("tabTransactions", "Giao dịch")` - icon `Building2`, `hideRightPanel: true`): Hồ sơ đối tác & Bảng danh sách hóa đơn liên quan dạng 2 cột (`ErpInvoicePartnerTab`).
 3. **`financials`** (`t("tabFinancials", "Tài chính")` - icon `Wallet`): Cấn trừ sao kê ngân hàng & Sổ quỹ tiền mặt (`ErpInvoiceSettlementTab`).
 4. **`linked_docs`** (`t("tabLinkedDocs", "Chứng từ liên kết")` - icon `Link2`, `hideRightPanel: true`): Sơ đồ mạng lưới chứng từ liên kết đa chặng Canvas Graph (`DrawerDocumentTraceability`).
 5. **`attachments`** (`t("tabAttachments", "Tài liệu đính kèm")` - icon `Paperclip`): Quản lý danh sách file PDF đính kèm & Tải lên tệp mới (`ErpInvoicePdfUpload`).
 6. **`accounting`** (`t("tabAccounting", "Hạch toán kế toán")` - icon `BookOpen`): Bút toán sổ cái & Định khoản kế toán kép (`PostingSection`).
 7. **`history`** (`t("tabHistory", "Lịch sử & Kiểm duyệt")` - icon `History`): Nhật ký kiểm toán & Timeline trạng thái (`DrawerAuditTimeline`).
-
-### 8.3. Cấu Trúc Tab "Giao dịch" (`ErpInvoicePartnerTab`) - Layout 2 Cột
-Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối ưu không gian và không bị nested scroll:
-- **Cột Trái (Main Content)**:
-  - Bọc bằng `<DrawerSection title={t("partnerInvoicesList", "Danh sách hóa đơn")} collapsible fitViewportHeight className="mb-0 h-full flex flex-col">`.
-  - Bên trong là `<StandardTable variant="spreadsheet" minWidth={550}>` hiển thị 4 cột tinh gọn: `Ngày HĐ`, `Số HĐ & Ký hiệu` (`InvoiceNoCell`), `Tổng tiền`, `Diễn giải`.
-  - Tự động kích hoạt thanh cuộn dọc nội bộ của bảng, không bị tràn ra ngoài Drawer Section.
-- **Cột Phải (Sidebar ~340px, Sticky)**:
-  - Section 1: `<DrawerSection title={t("partnerProfile", "Hồ sơ đối tác")} collapsible>` (Tên đối tác + copy, Role badge, MST + copy, Địa chỉ, Ngân hàng).
-  - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
-
-### 8.4. Cấu Trúc Atomic Tab "Tài chính" (`ErpInvoiceSettlementTab`) & Drawer Đối Soát Dòng Tiền (`VoucherNetoffSelectionModal`)
-Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `ui-atomic-refactor`:
-
-```
-src/modules/erp-invoices-core/components/
-├── ErpInvoiceSettlementTab/                     # Tab Tài chính trong Drawer Chi tiết HĐ
-│   ├── index.ts                                 # Barrel export
-│   ├── types.ts                                 # Types & ActiveVoucherItem
-│   ├── ErpInvoiceSettlementTab.tsx              # Main Container (< 60 LoC)
-│   ├── hooks/useErpInvoiceSettlementLogic.ts    # Logic tính toán tiến độ, nợ còn lại, link/unlink voucher
-│   └── components/
-│       ├── SettlementProgressCard.tsx           # KPI theo dõi tiến độ thanh toán & nợ còn lại
-│       └── SettlementVoucherList.tsx            # Danh sách chứng từ thanh toán/thu tiền đã cấn trừ
-│
-└── VoucherNetoffSelectionModal/                 # Drawer Đối soát Dòng tiền (Sao kê & Sổ quỹ)
-    ├── index.ts                                 # Barrel export
-    ├── types.ts                                 # Enums (SettlementType, ManualCategory, TabKey)
-    ├── utils.ts                                 # Pure calculation helpers (Net-off sum, remaining debt)
-    ├── VoucherNetoffSelectionModal.tsx          # Main Container (< 120 LoC)
-    ├── hooks/
-    │   ├── useVoucherNetoffSelectionLogic.ts    # State multi-select, query sao kê, smart suggestions, submit
-    │   └── useVoucherNetoffTabs.tsx             # Cấu trúc DrawerTopTabBar (Tab 1: Sao kê, Tab 2: Sổ quỹ Sắp ra mắt)
-    └── components/
-        ├── AllBankTransactionsTable.tsx         # Bảng danh sách sao kê ngân hàng & bộ lọc đa chiều
-        ├── SelectedBankTransactionsTable.tsx    # Bảng giao dịch đã chọn (STT 1-based, 100% i18n keys)
-        ├── NetOffRightPanel.tsx                 # Cột phải 4 section (Chiều đối soát, Tiến độ tài chính, Gợi ý, Lịch sử)
-        ├── OffSystemManualSection.tsx           # Form ghi nhận dòng tiền ngoài sổ sách
-        ├── ComingSoonTabContent.tsx             # Placeholder Sắp ra mắt cho tab Sổ quỹ
-        └── NetOffInput.tsx                      # Input số tiền cấn trừ có kiểm soát validation
-```
 
 ### 8.5. Cơ chế Gợi Ý Đối Soát Sao Kê Thông Minh (Smart Net-Off Engine)
 `InvoiceSmartNetOffService` (`POST /erp-invoices/smart-net-off-suggestions`) sử dụng thuật toán tính điểm đa tín hiệu (Multi-Signal Scoring):

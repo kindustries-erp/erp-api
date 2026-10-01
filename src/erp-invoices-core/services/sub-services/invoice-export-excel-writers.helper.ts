@@ -39,7 +39,12 @@ export const writeSummaryRows = (
     const invVat = Number(inv.vatAmount) || 0;
     const invTotal = Number(inv.totalAmount) || 0;
     const invNetOff = Number((inv as any).netOffAmount) || 0;
-    const remainingAmount = invTotal - invNetOff;
+    const isAdj = inv.taxInvoiceStatus === 3 || invTotal < 0;
+    const remainingAmount = isAdj
+      ? invNetOff >= Math.abs(invTotal)
+        ? 0
+        : invTotal + invNetOff
+      : Math.max(0, invTotal - invNetOff);
 
     sumDiscount += invDiscount;
     sumPreVat += invPreVat;
@@ -657,7 +662,12 @@ export const writeDebtRows = (
 
     const invTotal = Number(inv.totalAmount) || 0;
     const invNetOff = Number((inv as any).netOffAmount) || 0;
-    const invRemaining = invTotal - invNetOff;
+    const isAdj = inv.taxInvoiceStatus === 3 || invTotal < 0;
+    const invRemaining = isAdj
+      ? invNetOff >= Math.abs(invTotal)
+        ? 0
+        : invTotal + invNetOff
+      : Math.max(0, invTotal - invNetOff);
 
     current.invoiceCount += 1;
     current.totalAmount += invTotal;

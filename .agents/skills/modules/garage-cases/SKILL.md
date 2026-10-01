@@ -216,7 +216,9 @@ src/kgara-api-core/
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
-│   └── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, Column Defs & buildGarageCaseExportFileName)
+│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, Column Defs & buildGarageCaseExportFileName)
+│   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode ghép Số chứng từ + Biển số xe, lọc cột & distinct options)
+│   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
@@ -251,9 +253,9 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
 | `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell |
 | `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 2 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, hỗ trợ multi-tier loader tự động bóc tách và làm giàu dữ liệu dòng từ DB, rawData và live API |
-| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
+| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `caseCode` ghép Số chứng từ + Biển số xe, `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
-| `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
+| `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
 | `PATCH`| `/cases/:id/config` | `id`, Body: `UpdateCaseConfigDto` (`categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt`, `erpNotes`, `customAttributes`, `attributes`, `globalAttributes`) | Cập nhật phân loại danh mục Module Config, 2 cờ loại trừ (báo cáo, công nợ), ghi chú và thuộc tính động cho vụ việc |
 | `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc (Legacy alias) |
@@ -277,7 +279,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`), sắp xếp `ngayPhatSinh DESC` |
-| `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc |
+| `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc hoặc UUID (xử lý qua `KgaraCaseLookupService`) |
 | `POST`| `/sync/gross-profit` | `@BranchId()`, Query/Body: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
 | `GET` | `/reports/gross-profit-detail` | `@BranchId()`, Query: `from`, `to` | Proxy gọi trực tiếp API báo cáo chi tiết lợi nhuận gộp từ máy chủ KGara |
 | `GET` | `/reports/gross-profit-detail/journal` | `@BranchId()`, Query: `from`, `to`, `vuViecID` | Proxy lấy sổ nhật ký hạch toán chi phí/doanh thu chi tiết của vụ việc |

@@ -8,7 +8,8 @@ import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
  */
 export function getCaseColumnSelectExpr(column: string): string | null {
   const mapping: Record<string, string> = {
-    caseCode: '"case"."so_chung_tu"',
+    caseCode:
+      'CONCAT(COALESCE("case"."so_chung_tu", \'\'), CASE WHEN "case"."bien_so_xe" IS NOT NULL AND "case"."bien_so_xe" != \'\' THEN CONCAT(\' (\', "case"."bien_so_xe", \')\') ELSE \'\' END)',
     soChungTu: '"case"."so_chung_tu"',
     licensePlate: '"case"."bien_so_xe"',
     bienSoXe: '"case"."bien_so_xe"',
@@ -420,7 +421,8 @@ export function getCaseServiceColumnSelectExpr(column: string): string | null {
     tyLeChietKhauCt: '"srv"."ty_le_chiet_khau_ct"',
     tienChietKhauCt: '"srv"."tien_chiet_khau_ct"',
     tienPhuPhi: '"srv"."tien_phu_phi"',
-    caseCode: '"c"."so_chung_tu"',
+    caseCode:
+      'CONCAT(COALESCE("c"."so_chung_tu", \'\'), CASE WHEN "c"."bien_so_xe" IS NOT NULL AND "c"."bien_so_xe" != \'\' THEN CONCAT(\' (\', "c"."bien_so_xe", \')\') ELSE \'\' END)',
     soChungTu: '"c"."so_chung_tu"',
     licensePlate: '"c"."bien_so_xe"',
     bienSoXe: '"c"."bien_so_xe"',

@@ -43,6 +43,7 @@ import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
+import { KgaraCaseLookupService } from './services/kgara-case-lookup.service';
 
 import { KgaraApiCoreController } from './kgara-api-core.controller';
 import { GarageDashboardController } from './garage-dashboard.controller';
@@ -104,6 +105,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    KgaraCaseLookupService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -138,6 +140,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    KgaraCaseLookupService,
   ],
 })
 export class KgaraApiCoreModule {}

@@ -39,6 +39,8 @@ import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
+import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
+import { ExecuteAdjustmentNetoffDto } from './dto/invoice-adjustment-reconciliation.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -49,7 +51,26 @@ export class ErpInvoicesCoreController {
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
     private readonly traceabilityService: DocumentTraceabilityService,
+    private readonly adjustmentService: InvoiceAdjustmentService,
   ) {}
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get(':id/adjustment-reconciliation')
+  getAdjustmentReconciliation(@Param('id') id: string) {
+    return this.adjustmentService.getAdjustmentReconciliation(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post('adjustment-netoff')
+  executeAdjustmentNetoff(@Body() dto: ExecuteAdjustmentNetoffDto) {
+    return this.adjustmentService.executeAdjustmentNetoff(dto);
+  }
 
   @RequirePermissions({
     resource: ErpResource.INVOICES,

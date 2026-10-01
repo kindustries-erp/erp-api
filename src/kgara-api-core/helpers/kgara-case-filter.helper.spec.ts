@@ -11,7 +11,10 @@ import {
 describe('kgara-case-filter.helper', () => {
   describe('getCaseColumnSelectExpr', () => {
     it('should map standard case columns to SQL expressions', () => {
-      expect(getCaseColumnSelectExpr('caseCode')).toBe('"case"."so_chung_tu"');
+      expect(getCaseColumnSelectExpr('caseCode')).toBe(
+        'CONCAT(COALESCE("case"."so_chung_tu", \'\'), CASE WHEN "case"."bien_so_xe" IS NOT NULL AND "case"."bien_so_xe" != \'\' THEN CONCAT(\' (\', "case"."bien_so_xe", \')\') ELSE \'\' END)',
+      );
+      expect(getCaseColumnSelectExpr('soChungTu')).toBe('"case"."so_chung_tu"');
       expect(getCaseColumnSelectExpr('licensePlate')).toBe(
         '"case"."bien_so_xe"',
       );
