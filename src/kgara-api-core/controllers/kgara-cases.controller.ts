@@ -31,6 +31,7 @@ import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraCaseConfigService } from '../services/kgara-case-config.service';
 import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
+import { KgaraCaseLookupService } from '../services/kgara-case-lookup.service';
 
 @ApiTags('greenway_cases')
 @ApiBearerAuth()
@@ -53,6 +54,7 @@ export class KgaraCasesController {
     private readonly client: KgaraClientService,
     private readonly caseQueryService: KgaraCaseQueryService,
     private readonly caseConfigService: KgaraCaseConfigService,
+    private readonly caseLookupService: KgaraCaseLookupService,
   ) {}
 
   @Get('branches')
@@ -778,114 +780,13 @@ export class KgaraCasesController {
   @Get('cases/by-code/:code')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseByCode(@Param('code') code: string) {
-    let caseData = await this.caseRepo.findOne({
-      where: { soChungTu: code },
-      relations: ['category'],
-    });
-    if (!caseData) {
-      throw new NotFoundException(`Case with code ${code} not found`);
-    }
-
-    if (
-      !caseData.rawData?.ListPhieuDichVuChiTiet &&
-      !caseData.rawData?.HoaDonChiTiet
-    ) {
-      const freshData = await this.client.getCaseDetail(
-        caseData.hdPhieuDichVuId,
-        caseData.branchExternalId!,
-      );
-      if (freshData) {
-        const payload = freshData.data || freshData;
-        caseData.rawData = { ...caseData.rawData, ...payload };
-        const netPayable = extractNetPayableAmount(payload);
-        if (netPayable > 0) {
-          caseData.tienCoThue = netPayable;
-          const settlements = await this.settlementRepo.find({
-            where: { caseId: caseData.id },
-          });
-          const totalReceipts = settlements
-            .filter((s) => s.settlementType === 'RECEIPT')
-            .reduce((sum, s) => sum + Number(s.amount || 0), 0);
-          caseData.tienDaThanhToan = totalReceipts;
-          caseData.tienConPhaiThanhToan = Math.max(
-            0,
-            netPayable - totalReceipts,
-          );
-        }
-        await this.caseRepo.save(caseData);
-      }
-    }
-
-    await EntityCustomFieldsHelper.enrichOne(
-      this.caseRepo.manager.connection,
-      'GARAGE_CASE',
-      caseData,
-    );
-
-    return caseData;
+    return this.caseLookupService.findCaseByCodeOrId(code);
   }
 
   @Get('cases/by-code/:code/gross-profit')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitByCode(@Param('code') code: string) {
-    const grossProfit = await this.grossProfitRepo.findOne({
-      where: { vuViecCode: code },
-    });
-    if (!grossProfit) {
-      const caseData = await this.caseRepo.findOne({
-        where: { soChungTu: code },
-      });
-      if (caseData) {
-        const rev = Number(
-          caseData.doanhThu ?? caseData.rawData?.DoanhThu ?? 0,
-        );
-        const cost = Number(caseData.chiPhi ?? caseData.rawData?.ChiPhi ?? 0);
-        const profit = Number(
-          caseData.loiNhuan ?? caseData.rawData?.LoiNhuan ?? rev - cost,
-        );
-        const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
-        return {
-          id: null,
-          DoanhThu: rev,
-          ChiPhi: cost,
-          LoiNhuan: profit,
-          BienLoiNhuan: margin,
-          VuViecCode: code,
-          VuViecName: null,
-          VuViecID: caseData.hdPhieuDichVuId,
-          ...(caseData.rawData as object),
-        };
-      }
-      return {
-        id: null,
-        DoanhThu: 0,
-        ChiPhi: 0,
-        LoiNhuan: 0,
-        BienLoiNhuan: 0,
-        VuViecCode: code,
-        VuViecName: null,
-        VuViecID: null,
-      };
-    }
-    const gp = grossProfit;
-    const rev = Number(gp.doanhThu) || 0;
-    const cost = Number(gp.chiPhi) || 0;
-    const profit = Number(gp.loiNhuan) || rev - cost;
-    const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
-    return {
-      id: gp.id,
-      createdAt: gp.createdAt,
-      updatedAt: gp.updatedAt,
-      DoanhThu: rev,
-      ChiPhi: cost,
-      LoiNhuan: profit,
-      BienLoiNhuan: margin,
-      VuViecCode: gp.vuViecCode,
-      VuViecName: gp.vuViecName,
-      TenKhachHang: gp.tenKhachHang,
-      VuViecID: gp.hdPhieuDichVuId,
-      ...(gp.rawData as object),
-    };
+    return this.caseLookupService.findGrossProfitByCodeOrId(code);
   }
 
   @Get('cases/external/:externalId')
