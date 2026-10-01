@@ -108,6 +108,7 @@ Các nghiệp vụ trọng tâm:
 | `posting_status` | `varchar(20)` | NO | `'UNPOSTED'` | Trạng thái hạch toán: `UNPOSTED`, `POSTED` |
 | `posting_date` | `date` | YES | `NULL` | Ngày hạch toán sổ cái |
 | `journal_entry_id` | `uuid` | YES | `NULL` | FK tham chiếu `accounting_journal_entries.id` |
+| `effective_data` | `jsonb` | YES | `NULL` | Lưu trữ dữ liệu hiệu lực sau điều chỉnh: `{ isAdjusted, adjustingInvoiceId, adjustingInvoiceNo, adjustingSerialNo, adjustedAt, effectiveValues: { licensePlate, settlementOrder, totalAmount, ... }, diffLog: [] }` |
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
@@ -141,7 +142,18 @@ Các nghiệp vụ trọng tâm:
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
 
-### 2.4. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
+### 2.4. Bảng `erp_invoice_adjustment_netoff` (Cấn Trừ Hóa Đơn Điều Chỉnh & Hóa Đơn Gốc)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `original_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn bị điều chỉnh) |
+| `adjusting_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn điều chỉnh) |
+| `offset_amount` | `numeric(18,2)` | NO | `0` | Số tiền cấn trừ (giá trị tuyệt đối của phần điều chỉnh giảm) |
+| `notes` | `text` | YES | `NULL` | Ghi chú đối soát cấn trừ |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.5. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |

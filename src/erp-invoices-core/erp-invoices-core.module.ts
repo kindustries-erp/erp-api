@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAdjustmentNetOff } from './entities/erp_invoice_adjustment_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
@@ -56,6 +57,7 @@ import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_ent
 import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
 import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
 import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
+import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
 
 @Module({
   imports: [
@@ -63,6 +65,7 @@ import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-
       ErpInvoice,
       ErpInvoiceItem,
       ErpInvoiceVoucherNetOff,
+      ErpInvoiceAdjustmentNetOff,
       ErpInvoiceAttachment,
       CompanyProfile,
       CorePermission,
@@ -113,6 +116,7 @@ import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-
     InvoiceDashboardHorizonService,
     InvoiceCategoryAutopostService,
     InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -126,6 +130,7 @@ import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-
     InvoiceDebtsExportBackgroundService,
     InvoiceCategoryAutopostService,
     InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
   ],
 })
 export class ErpInvoicesCoreModule {}

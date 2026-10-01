@@ -127,7 +127,15 @@ export class InvoiceExportExcelService {
 
     if (needsNetOffJoin) {
       qb.leftJoin(
-        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        `(
+          SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM (
+            SELECT invoice_id, net_off_amount FROM erp_invoice_voucher_netoff
+            UNION ALL
+            SELECT original_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+            UNION ALL
+            SELECT adjusting_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+          ) unified_netoff GROUP BY invoice_id
+        )`,
         'netoff_agg',
         'netoff_agg.invoice_id = inv.id',
       );

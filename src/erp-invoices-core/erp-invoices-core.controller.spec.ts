@@ -17,6 +17,10 @@ describe('ErpInvoicesCoreController', () => {
   const traceabilityService = {
     getInvoiceTraceabilityGraph: jest.fn(),
   } as any;
+  const adjustmentService = {
+    getAdjustmentReconciliation: jest.fn(),
+    executeAdjustmentNetoff: jest.fn(),
+  } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -24,6 +28,7 @@ describe('ErpInvoicesCoreController', () => {
       service,
       notificationsService,
       traceabilityService,
+      adjustmentService,
     );
   });
 
