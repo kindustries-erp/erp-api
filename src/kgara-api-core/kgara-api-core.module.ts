@@ -54,6 +54,9 @@ import { KgaraSyncController } from './controllers/kgara-sync.controller';
 import { KgaraReportsController } from './controllers/kgara-reports.controller';
 import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
 
+import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.service';
+import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -86,6 +89,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageOpexService,
     GarageDashboardService,
     GarageDashboardStatsService,
+    GarageDebtsAnalyticsService,
     GarageCheckpointService,
     GarageCustomerStatsService,
     GarageDashboardExportService,
@@ -104,6 +108,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
   controllers: [
     KgaraApiCoreController,
     GarageDashboardController,
+    GarageDebtsAnalyticsController,
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
