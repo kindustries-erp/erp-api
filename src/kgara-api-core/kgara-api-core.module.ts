@@ -34,6 +34,7 @@ import { GarageCustomerStatsService } from './services/garage-customer-stats.ser
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+import { KgaraCaseListQueryService } from './services/kgara-case-list-query.service';
 import { KgaraCaseConfigService } from './services/kgara-case-config.service';
 import { KgaraCaseSettlementCalcService } from './services/kgara-case-settlement-calc.service';
 import { KgaraCaseServicesQueryService } from './services/kgara-case-services-query.service';
@@ -95,6 +96,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,
     KgaraCaseSettlementCalcService,
@@ -130,6 +132,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,
     KgaraCaseSettlementCalcService,

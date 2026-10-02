@@ -86,6 +86,47 @@ export class KgaraCaseLookupService {
   }
 
   /**
+   * Tra cứu chi tiết vụ việc theo externalId (hdPhieuDichVuId hoặc UUID), tự động đồng bộ từ KGara nếu chưa có
+   */
+  async findCaseByExternalId(
+    externalId: string,
+    branchId?: string,
+  ): Promise<KgaraCase> {
+    const isUuid = UUID_REGEX.test(externalId);
+    const whereConditions = isUuid
+      ? [{ id: externalId }, { hdPhieuDichVuId: externalId }]
+      : [{ hdPhieuDichVuId: externalId }, { soChungTu: externalId }];
+
+    let caseData = await this.caseRepo.findOne({
+      where: whereConditions,
+      relations: ['category'],
+    });
+    if (!caseData && branchId) {
+      const freshData = await this.client.getCaseDetail(externalId, branchId);
+      if (freshData) {
+        const payload = freshData.data || freshData;
+        caseData = this.caseRepo.create({
+          hdPhieuDichVuId: externalId,
+          branchExternalId: branchId,
+          rawData: payload,
+        });
+        await this.caseRepo.save(caseData);
+      }
+    }
+    if (!caseData) {
+      throw new NotFoundException(
+        `Case with externalId ${externalId} not found`,
+      );
+    }
+    await EntityCustomFieldsHelper.enrichOne(
+      this.dataSource,
+      'GARAGE_CASE',
+      caseData,
+    );
+    return caseData;
+  }
+
+  /**
    * Tra cứu nhanh Lãi gộp theo Mã chứng từ (vuViecCode / soChungTu) hoặc UUID nội bộ (id)
    */
   async findGrossProfitByCodeOrId(codeOrId: string): Promise<any> {

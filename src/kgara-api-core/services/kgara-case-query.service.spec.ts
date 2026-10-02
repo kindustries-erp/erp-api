@@ -5,6 +5,7 @@ import { KgaraCaseQueryService } from './kgara-case-query.service';
 import { KgaraCaseSettlementCalcService } from './kgara-case-settlement-calc.service';
 import { KgaraCaseServicesQueryService } from './kgara-case-services-query.service';
 import { KgaraCaseExportService } from './kgara-case-export.service';
+import { KgaraCaseListQueryService } from './kgara-case-list-query.service';
 import { buildGarageCaseExportFileName } from '../helpers/kgara-excel-style.helper';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -125,6 +126,14 @@ describe('KgaraCaseQueryService', () => {
         KgaraCaseSettlementCalcService,
         KgaraCaseServicesQueryService,
         KgaraCaseExportService,
+        {
+          provide: KgaraCaseListQueryService,
+          useValue: {
+            findCases: jest.fn(),
+            getCaseColumnOptions: jest.fn(),
+            getGrossProfitReport: jest.fn(),
+          },
+        },
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,

@@ -14,11 +14,6 @@ describe('KgaraCasesController', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
       caseLookupServiceMock,
     );
   });
