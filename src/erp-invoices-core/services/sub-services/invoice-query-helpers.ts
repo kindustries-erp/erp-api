@@ -234,7 +234,7 @@ export function _applyColumnSearch(
       );
     } else if (key === 'serialNo') {
       applyMultiKeywordFilter(qb, 'inv.serial_no', val, 'serialNoSearch');
-    } else if (key === 'partner') {
+    } else if (key === 'partner' || key === 'partnerName') {
       if (direction === 'IN') {
         applyMultiKeywordMultiFieldFilter(
           qb,
@@ -474,7 +474,7 @@ export function _applyColumnFilters(
       if (conds.length > 0) {
         qb.andWhere(`(${conds.join(' OR ')})`, params);
       }
-    } else if (key === 'partner') {
+    } else if (key === 'partner' || key === 'partnerName') {
       const hasBlank = vals.includes('__BLANK__');
       const realVals = vals.filter((v) => v !== '__BLANK__');
       const nameField =

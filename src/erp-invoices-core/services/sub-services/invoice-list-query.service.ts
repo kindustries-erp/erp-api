@@ -65,7 +65,7 @@ export class InvoiceListQueryService {
       selectField = 'TRIM(inv.invoice_no)';
       customSecondaryField = 'TRIM(inv.serial_no)';
       isCustomGroupColumn = true;
-    } else if (column === 'partner') {
+    } else if (column === 'partner' || column === 'partnerName') {
       isCustomGroupColumn = true;
       if (direction === 'IN') {
         selectField = "TRIM(COALESCE(inv.seller_name, ''))";
@@ -152,7 +152,7 @@ export class InvoiceListQueryService {
           search,
           'search_invoiceNo',
         );
-      } else if (column === 'partner') {
+      } else if (column === 'partner' || column === 'partnerName') {
         if (direction === 'IN') {
           applyMultiKeywordMultiFieldFilter(
             qb,
@@ -249,7 +249,7 @@ export class InvoiceListQueryService {
           seen.add(x.value);
           return true;
         });
-    } else if (column === 'partner') {
+    } else if (column === 'partner' || column === 'partnerName') {
       const seen = new Set<string>();
       items = results
         .map((r) => {
@@ -308,7 +308,7 @@ export class InvoiceListQueryService {
         branchId: ['inv.branchId', 'branchId'],
       };
 
-      if (query.sort_by === 'partner') {
+      if (query.sort_by === 'partner' || query.sort_by === 'partnerName') {
         const col =
           query.direction === 'IN'
             ? ['inv.sellerName', 'sellerName']

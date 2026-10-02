@@ -1065,6 +1065,46 @@ describe('InvoiceQueryService', () => {
     ]);
   });
 
+  it('getColumnOptions supports partnerName alias identically to partner', async () => {
+    const rawRows = [{ value: 'CONG TY ABC', secondary_val: '0123456789' }];
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(rawRows),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '1' }),
+      }),
+    };
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+
+    const service = createInvoiceQueryService(repository);
+    const res = await service.getColumnOptions(
+      'partnerName',
+      '',
+      1,
+      20,
+      undefined,
+      'OUT',
+    );
+
+    expect(res.total).toBe(1);
+    expect(res.items).toEqual([
+      { value: '0123456789:::CONG TY ABC', label: 'CONG TY ABC (0123456789)' },
+    ]);
+  });
+
   it('exportExcel generates 6 sheets for single invoice (id specified) including partner aggregated sheets', async () => {
     const singleInvoice = {
       id: 'inv-1',

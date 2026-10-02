@@ -245,7 +245,7 @@ src/erp-invoices-core/
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/erp-invoices` | `invoices` | `read` | Lấy danh sách hóa đơn phân trang, tìm kiếm đa trường, lọc ngày, lọc chiều (`IN`/`OUT`) |
 | `GET` | `/erp-invoices/items` | `invoices` | `read` | Lấy danh sách chi tiết các dòng diễn giải mặt hàng hóa đơn phân trang, tìm kiếm đa trường, lọc theo phân loại dòng (`invoice_subcategory`), lọc ngày, đối tác và thống kê KPI dòng tiền/thuế |
-| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
+| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện (hỗ trợ alias `partner` / `partnerName` định dạng composite kèm MST, `invoiceNo`, các cột số tiền, `licensePlate`...) |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn (HTTP 200 OK) |
 | `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (HTTP 200 OK, Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
