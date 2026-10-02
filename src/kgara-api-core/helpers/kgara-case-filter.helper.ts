@@ -1,15 +1,17 @@
-import { SelectQueryBuilder } from 'typeorm';
+import { Brackets, SelectQueryBuilder } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseService } from '../entities/kgara_case_service.entity';
-import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
+import {
+  applyMultiKeywordFilter,
+  applyMultiKeywordMultiFieldFilter,
+} from '../../common/utils/query-builder.util';
 
 /**
  * Ánh xạ tên cột sang biểu thức SQL cho truy vấn Vụ việc (KgaraCase)
  */
 export function getCaseColumnSelectExpr(column: string): string | null {
   const mapping: Record<string, string> = {
-    caseCode:
-      'CONCAT(COALESCE("case"."so_chung_tu", \'\'), CASE WHEN "case"."bien_so_xe" IS NOT NULL AND "case"."bien_so_xe" != \'\' THEN CONCAT(\' (\', "case"."bien_so_xe", \')\') ELSE \'\' END)',
+    caseCode: '"case"."so_chung_tu"',
     soChungTu: '"case"."so_chung_tu"',
     licensePlate: '"case"."bien_so_xe"',
     bienSoXe: '"case"."bien_so_xe"',
@@ -121,6 +123,28 @@ export function applySingleCaseColumnFilter(
   if (values[0] === '__ALL_MATCHING__') {
     const searchStr = (values[1] || '').trim();
     if (!searchStr) return;
+    if (column === 'caseCode' || column === 'soChungTu') {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        ['"case"."so_chung_tu"', '"case"."bien_so_xe"'],
+        searchStr,
+        `${paramPrefix}_search`,
+      );
+      return;
+    }
+    if (column === 'customer') {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        [
+          '"case"."khach_hang_name"',
+          '"case"."khach_hang_code"',
+          'CONCAT(COALESCE("case"."khach_hang_name", \'\'), \' \', COALESCE("case"."khach_hang_code", \'\'))',
+        ],
+        searchStr,
+        `${paramPrefix}_search`,
+      );
+      return;
+    }
     const filterExpr = getCaseColumnSelectExpr(column);
     if (filterExpr) {
       applyMultiKeywordFilter(
@@ -331,25 +355,182 @@ export function applySingleCaseColumnFilter(
     return;
   }
 
+  // 8.1 Cột đặc thù: caseCode / soChungTu (Số chứng từ / Biển số xe)
+  if (column === 'caseCode' || column === 'soChungTu') {
+    const hasBlank = values.includes('__BLANK__');
+    const realVals = values.filter((v) => v !== '__BLANK__');
+
+    if (realVals.length === 0) {
+      if (hasBlank) {
+        qb.andWhere(
+          '("case"."so_chung_tu" IS NULL OR "case"."so_chung_tu" = \'\')',
+        );
+      }
+      return;
+    }
+
+    qb.andWhere(
+      new Brackets((sqb) => {
+        let first = true;
+        if (hasBlank) {
+          sqb.where(
+            '("case"."so_chung_tu" IS NULL OR "case"."so_chung_tu" = \'\')',
+          );
+          first = false;
+        }
+
+        const plainVals: string[] = [];
+        realVals.forEach((rawVal, idx) => {
+          const val = rawVal.trim();
+          if (val.includes(';')) {
+            const multiCond = new Brackets((innerQb) => {
+              applyMultiKeywordMultiFieldFilter(
+                innerQb,
+                ['"case"."so_chung_tu"', '"case"."bien_so_xe"'],
+                val,
+                `${paramPrefix}_multi_${idx}`,
+              );
+            });
+            if (first) {
+              sqb.where(multiCond);
+              first = false;
+            } else {
+              sqb.orWhere(multiCond);
+            }
+          } else if (
+            val.startsWith('"') &&
+            val.endsWith('"') &&
+            val.length >= 2
+          ) {
+            const clean = val.slice(1, -1).trim();
+            const param = `${paramPrefix}_exact_${idx}`;
+            const cond =
+              '("case"."so_chung_tu" ILIKE :' +
+              param +
+              ' OR "case"."bien_so_xe" ILIKE :' +
+              param +
+              " OR REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') ILIKE :" +
+              param +
+              ')';
+            if (first) {
+              sqb.where(cond, { [param]: clean });
+              first = false;
+            } else {
+              sqb.orWhere(cond, { [param]: clean });
+            }
+          } else {
+            plainVals.push(val);
+          }
+        });
+
+        const expandedPlainVals: string[] = [];
+        plainVals.forEach((pv) => {
+          if (pv.includes(':::')) {
+            const [c, p] = pv.split(':::').map((s) => s.trim());
+            if (c) expandedPlainVals.push(c);
+            if (p) expandedPlainVals.push(p);
+          } else {
+            expandedPlainVals.push(pv);
+          }
+        });
+
+        if (expandedPlainVals.length > 0) {
+          const param = `${paramPrefix}_in_vals`;
+          const cond =
+            '("case"."so_chung_tu" IN (:...' +
+            param +
+            ') OR "case"."bien_so_xe" IN (:...' +
+            param +
+            ") OR REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') IN (:..." +
+            param +
+            '))';
+          if (first) {
+            sqb.where(cond, { [param]: expandedPlainVals });
+            first = false;
+          } else {
+            sqb.orWhere(cond, { [param]: expandedPlainVals });
+          }
+        }
+      }),
+    );
+    return;
+  }
+
   const filterExpr = getCaseColumnSelectExpr(column);
   if (!filterExpr) return;
 
-  // 9. Xử lý __BLANK__ (Lọc giá trị trống / null)
+  // 9. Xử lý các cột text thông thường & __BLANK__
   const hasBlank = values.includes('__BLANK__');
   const realVals = values.filter((v) => v !== '__BLANK__');
 
-  if (hasBlank && realVals.length > 0) {
-    qb.andWhere(
-      `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '' OR CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals))`,
-      { [`${paramPrefix}_vals`]: realVals },
-    );
-  } else if (hasBlank) {
-    qb.andWhere(`(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`);
-  } else {
-    qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
-      [`${paramPrefix}_vals`]: realVals,
-    });
+  if (realVals.length === 0) {
+    if (hasBlank) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
+    }
+    return;
   }
+
+  qb.andWhere(
+    new Brackets((sqb) => {
+      let first = true;
+      if (hasBlank) {
+        sqb.where(
+          `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+        );
+        first = false;
+      }
+
+      const plainVals: string[] = [];
+      realVals.forEach((rawVal, idx) => {
+        const val = rawVal.trim();
+        if (val.includes(';')) {
+          const multiCond = new Brackets((innerQb) => {
+            applyMultiKeywordFilter(
+              innerQb,
+              `CAST(${filterExpr} AS TEXT)`,
+              val,
+              `${paramPrefix}_txt_multi_${idx}`,
+            );
+          });
+          if (first) {
+            sqb.where(multiCond);
+            first = false;
+          } else {
+            sqb.orWhere(multiCond);
+          }
+        } else if (
+          val.startsWith('"') &&
+          val.endsWith('"') &&
+          val.length >= 2
+        ) {
+          const clean = val.slice(1, -1).trim();
+          const param = `${paramPrefix}_txt_exact_${idx}`;
+          const cond = `CAST(${filterExpr} AS TEXT) ILIKE :${param}`;
+          if (first) {
+            sqb.where(cond, { [param]: clean });
+            first = false;
+          } else {
+            sqb.orWhere(cond, { [param]: clean });
+          }
+        } else {
+          plainVals.push(val);
+        }
+      });
+
+      if (plainVals.length > 0) {
+        const param = `${paramPrefix}_txt_in`;
+        const cond = `CAST(${filterExpr} AS TEXT) IN (:...${param})`;
+        if (first) {
+          sqb.where(cond, { [param]: plainVals });
+          first = false;
+        } else {
+          sqb.orWhere(cond, { [param]: plainVals });
+        }
+      }
+    }),
+  );
 }
 
 /**
@@ -421,8 +602,7 @@ export function getCaseServiceColumnSelectExpr(column: string): string | null {
     tyLeChietKhauCt: '"srv"."ty_le_chiet_khau_ct"',
     tienChietKhauCt: '"srv"."tien_chiet_khau_ct"',
     tienPhuPhi: '"srv"."tien_phu_phi"',
-    caseCode:
-      'CONCAT(COALESCE("c"."so_chung_tu", \'\'), CASE WHEN "c"."bien_so_xe" IS NOT NULL AND "c"."bien_so_xe" != \'\' THEN CONCAT(\' (\', "c"."bien_so_xe", \')\') ELSE \'\' END)',
+    caseCode: '"c"."so_chung_tu"',
     soChungTu: '"c"."so_chung_tu"',
     licensePlate: '"c"."bien_so_xe"',
     bienSoXe: '"c"."bien_so_xe"',
@@ -490,6 +670,15 @@ export function applySingleCaseServiceColumnFilter(
   if (values[0] === '__ALL_MATCHING__') {
     const searchStr = (values[1] || '').trim();
     if (!searchStr) return;
+    if (column === 'caseCode' || column === 'soChungTu') {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        ['"c"."so_chung_tu"', '"c"."bien_so_xe"'],
+        searchStr,
+        `${paramPrefix}_search`,
+      );
+      return;
+    }
     const filterExpr = getCaseServiceColumnSelectExpr(column);
     if (filterExpr) {
       applyMultiKeywordFilter(
@@ -552,25 +741,174 @@ export function applySingleCaseServiceColumnFilter(
     return;
   }
 
-  // 4. Cột phân loại / text thông thường
+  // 4. Cột phân loại / text thông thường & caseCode cho service
+  if (column === 'caseCode' || column === 'soChungTu') {
+    const hasBlank = values.includes('__BLANK__');
+    const realVals = values.filter((v) => v !== '__BLANK__');
+    if (realVals.length === 0) {
+      if (hasBlank) {
+        qb.andWhere('("c"."so_chung_tu" IS NULL OR "c"."so_chung_tu" = \'\')');
+      }
+      return;
+    }
+    qb.andWhere(
+      new Brackets((sqb) => {
+        let first = true;
+        if (hasBlank) {
+          sqb.where('("c"."so_chung_tu" IS NULL OR "c"."so_chung_tu" = \'\')');
+          first = false;
+        }
+        const plainVals: string[] = [];
+        realVals.forEach((rawVal, idx) => {
+          const val = rawVal.trim();
+          if (val.includes(';')) {
+            const multiCond = new Brackets((innerQb) => {
+              applyMultiKeywordMultiFieldFilter(
+                innerQb,
+                ['"c"."so_chung_tu"', '"c"."bien_so_xe"'],
+                val,
+                `${paramPrefix}_srv_multi_${idx}`,
+              );
+            });
+            if (first) {
+              sqb.where(multiCond);
+              first = false;
+            } else {
+              sqb.orWhere(multiCond);
+            }
+          } else if (
+            val.startsWith('"') &&
+            val.endsWith('"') &&
+            val.length >= 2
+          ) {
+            const clean = val.slice(1, -1).trim();
+            const param = `${paramPrefix}_srv_exact_${idx}`;
+            const cond =
+              '("c"."so_chung_tu" ILIKE :' +
+              param +
+              ' OR "c"."bien_so_xe" ILIKE :' +
+              param +
+              " OR REGEXP_REPLACE(LOWER(\"c\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') ILIKE :" +
+              param +
+              ')';
+            if (first) {
+              sqb.where(cond, { [param]: clean });
+              first = false;
+            } else {
+              sqb.orWhere(cond, { [param]: clean });
+            }
+          } else {
+            plainVals.push(val);
+          }
+        });
+
+        const expandedPlainVals: string[] = [];
+        plainVals.forEach((pv) => {
+          if (pv.includes(':::')) {
+            const [c, p] = pv.split(':::').map((s) => s.trim());
+            if (c) expandedPlainVals.push(c);
+            if (p) expandedPlainVals.push(p);
+          } else {
+            expandedPlainVals.push(pv);
+          }
+        });
+
+        if (expandedPlainVals.length > 0) {
+          const param = `${paramPrefix}_srv_in`;
+          const cond =
+            '("c"."so_chung_tu" IN (:...' +
+            param +
+            ') OR "c"."bien_so_xe" IN (:...' +
+            param +
+            ") OR REGEXP_REPLACE(LOWER(\"c\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') IN (:..." +
+            param +
+            '))';
+          if (first) {
+            sqb.where(cond, { [param]: expandedPlainVals });
+            first = false;
+          } else {
+            sqb.orWhere(cond, { [param]: expandedPlainVals });
+          }
+        }
+      }),
+    );
+    return;
+  }
+
   const filterExpr = getCaseServiceColumnSelectExpr(column);
   if (!filterExpr) return;
 
   const hasBlank = values.includes('__BLANK__');
   const realVals = values.filter((v) => v !== '__BLANK__');
 
-  if (hasBlank && realVals.length > 0) {
-    qb.andWhere(
-      `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '' OR CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals))`,
-      { [`${paramPrefix}_vals`]: realVals },
-    );
-  } else if (hasBlank) {
-    qb.andWhere(`(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`);
-  } else {
-    qb.andWhere(`CAST(${filterExpr} AS TEXT) IN (:...${paramPrefix}_vals)`, {
-      [`${paramPrefix}_vals`]: realVals,
-    });
+  if (realVals.length === 0) {
+    if (hasBlank) {
+      qb.andWhere(
+        `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+      );
+    }
+    return;
   }
+
+  qb.andWhere(
+    new Brackets((sqb) => {
+      let first = true;
+      if (hasBlank) {
+        sqb.where(
+          `(${filterExpr} IS NULL OR CAST(${filterExpr} AS TEXT) = '')`,
+        );
+        first = false;
+      }
+
+      const plainVals: string[] = [];
+      realVals.forEach((rawVal, idx) => {
+        const val = rawVal.trim();
+        if (val.includes(';')) {
+          const multiCond = new Brackets((innerQb) => {
+            applyMultiKeywordFilter(
+              innerQb,
+              `CAST(${filterExpr} AS TEXT)`,
+              val,
+              `${paramPrefix}_srv_txt_multi_${idx}`,
+            );
+          });
+          if (first) {
+            sqb.where(multiCond);
+            first = false;
+          } else {
+            sqb.orWhere(multiCond);
+          }
+        } else if (
+          val.startsWith('"') &&
+          val.endsWith('"') &&
+          val.length >= 2
+        ) {
+          const clean = val.slice(1, -1).trim();
+          const param = `${paramPrefix}_srv_txt_exact_${idx}`;
+          const cond = `CAST(${filterExpr} AS TEXT) ILIKE :${param}`;
+          if (first) {
+            sqb.where(cond, { [param]: clean });
+            first = false;
+          } else {
+            sqb.orWhere(cond, { [param]: clean });
+          }
+        } else {
+          plainVals.push(val);
+        }
+      });
+
+      if (plainVals.length > 0) {
+        const param = `${paramPrefix}_srv_txt_in`;
+        const cond = `CAST(${filterExpr} AS TEXT) IN (:...${param})`;
+        if (first) {
+          sqb.where(cond, { [param]: plainVals });
+          first = false;
+        } else {
+          sqb.orWhere(cond, { [param]: plainVals });
+        }
+      }
+    }),
+  );
 }
 
 /**

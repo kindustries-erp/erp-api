@@ -217,7 +217,7 @@ src/kgara-api-core/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
 │   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, Column Defs & buildGarageCaseExportFileName)
-│   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode ghép Số chứng từ + Biển số xe, lọc cột & distinct options)
+│   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
 │   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
@@ -228,12 +228,13 @@ src/kgara-api-core/
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
     ├── kgara-case-export.service.ts        # Sub-Service chuyên trách xuất file Excel 2 Sheets bảng kê phiếu dịch vụ và chi tiết DV/PT
+    ├── kgara-case-list-query.service.ts    # Sub-Service chuyên trách tìm kiếm danh sách vụ việc, phân trang, lọc distinct options theo số chứng từ / biển số xe và báo cáo lãi gộp
     ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
     ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
     ├── sync-debt.service.ts                # Sub-Service đồng bộ sổ nợ phải thu (AR) & phải trả NCC 331 (AP)
     ├── sync-deletion.service.ts            # Sub-Service thuật toán phát hiện và đánh dấu xóa mềm
     ├── sync-run-logger.service.ts          # Sub-Service quản lý audit log (GwSyncRun) & incremental watermark
-    ├── kgara-case-query.service.ts         # Query engine & recalculateCaseSettlementSummary helper
+    ├── kgara-case-query.service.ts         # Facade Query engine & recalculateCaseSettlementSummary helper (< 300 LoC)
     ├── kgara-case-config.service.ts        # Sub-Service quản lý phân loại danh mục, cờ loại trừ (báo cáo, công nợ) & EAV custom fields
     ├── kgara-case-config.service.spec.ts   # Unit test cho KgaraCaseConfigService
     ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)

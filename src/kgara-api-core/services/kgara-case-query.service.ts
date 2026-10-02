@@ -17,8 +17,19 @@ import {
   KgaraCaseExportService,
   CompletedCasesExportParams,
 } from './kgara-case-export.service';
+import {
+  KgaraCaseListQueryService,
+  FindCasesParams,
+  CaseColumnOptionsParams,
+  GrossProfitReportParams,
+} from './kgara-case-list-query.service';
 
-export type { CompletedCasesExportParams };
+export type {
+  CompletedCasesExportParams,
+  FindCasesParams,
+  CaseColumnOptionsParams,
+  GrossProfitReportParams,
+};
 
 /**
  * Facade Service cho toàn bộ truy vấn, báo cáo và xuất Excel của KGara Cases
@@ -29,7 +40,24 @@ export class KgaraCaseQueryService {
     private readonly settlementCalcService: KgaraCaseSettlementCalcService,
     private readonly caseServicesQueryService: KgaraCaseServicesQueryService,
     private readonly exportService: KgaraCaseExportService,
+    private readonly caseListQueryService: KgaraCaseListQueryService,
   ) {}
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CASE LIST QUERIES & DISTINCT OPTIONS (Delegated to KgaraCaseListQueryService)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async findCases(params: FindCasesParams) {
+    return this.caseListQueryService.findCases(params);
+  }
+
+  async getCaseColumnOptions(params: CaseColumnOptionsParams) {
+    return this.caseListQueryService.getCaseColumnOptions(params);
+  }
+
+  async getGrossProfitReport(params: GrossProfitReportParams) {
+    return this.caseListQueryService.getGrossProfitReport(params);
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // CASE FILTERS & QUERY HELPERS (Delegated to Pure Helper)
