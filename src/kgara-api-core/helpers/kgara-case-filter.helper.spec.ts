@@ -21,6 +21,15 @@ describe('kgara-case-filter.helper', () => {
       expect(getCaseColumnSelectExpr('totalAmount')).toBe(
         '"case"."tien_co_thue"',
       );
+      expect(getCaseColumnSelectExpr('doanhThu')).toBe(
+        'COALESCE("case"."doanh_thu", "gp"."doanh_thu")',
+      );
+      expect(getCaseColumnSelectExpr('chiPhi')).toBe(
+        'COALESCE("case"."chi_phi", "gp"."chi_phi")',
+      );
+      expect(getCaseColumnSelectExpr('doanhThu')).not.toContain('tien_co_thue');
+      expect(getCaseColumnSelectExpr('loiNhuan')).not.toContain('tien_co_thue');
+      expect(getCaseColumnSelectExpr('margin')).not.toContain('tien_co_thue');
       expect(getCaseColumnSelectExpr('invalidColumn')).toBeNull();
     });
   });

@@ -38,15 +38,14 @@ export function getCaseColumnSelectExpr(column: string): string | null {
     branchExternalId: '"case"."branch_external_id"',
     isInsuranceClaim:
       "CASE WHEN COALESCE((\"case\".\"raw_data\" ->> 'XeLamBaoHiem')::boolean, false) THEN 'yes' ELSE 'no' END",
-    doanhThu:
-      'COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")',
+    doanhThu: 'COALESCE("case"."doanh_thu", "gp"."doanh_thu")',
     chiPhi: 'COALESCE("case"."chi_phi", "gp"."chi_phi")',
     loiNhuan:
-      'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))',
+      'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", CASE WHEN "case"."doanh_thu" IS NOT NULL OR "gp"."doanh_thu" IS NOT NULL THEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0) ELSE NULL END)',
     margin:
-      'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
+      'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu")) * 100)::numeric, 1) ELSE NULL END',
     bienLoiNhuan:
-      'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100)::numeric, 1) ELSE 0 END',
+      'CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) > 0 THEN ROUND(((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu")) * 100)::numeric, 1) ELSE NULL END',
     totalAmount: '"case"."tien_co_thue"',
     tienCoThue: '"case"."tien_co_thue"',
     tongPhaiThu: '"case"."tien_co_thue"',
@@ -287,7 +286,7 @@ export function applySingleCaseColumnFilter(
 
   // 7. Cột đặc thù: margin / bienLoiNhuan (Biên lợi nhuận)
   if (column === 'margin' || column === 'bienLoiNhuan') {
-    const marginExpr = `(CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) > 0 THEN ((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")) * 100) ELSE 0 END)`;
+    const marginExpr = `(CASE WHEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) > 0 THEN ((COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0)) / COALESCE("case"."doanh_thu", "gp"."doanh_thu")) * 100) ELSE 0 END)`;
 
     const conditions: string[] = [];
     const hasBlank = values.includes('__BLANK__');
@@ -318,7 +317,7 @@ export function applySingleCaseColumnFilter(
 
     if (hasBlank) {
       conditions.push(
-        `(COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) <= 0)`,
+        `(COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) <= 0)`,
       );
     }
 
