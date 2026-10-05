@@ -428,10 +428,16 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
     - ⚖️ **Cấn trừ sao kê** (`Scale` icon) $\rightarrow$ Mở modal cấn trừ giao dịch ngân hàng/sổ quỹ vào vụ việc.
     - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.
 
-### 5.12. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
-- Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
-  - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
-  - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
+### 5.12. Xử lý An Toàn ID Tạm Thời & Luồng Staging Thu/Chi Ngoài Sổ Sách (Off-System Manual Cashflow Staging)
+- **Luồng Ghi nhận Thu/Chi Ngoài Sổ sách (`OFF_SYSTEM_MANUAL`) trong Tab Tài chính Drawer**:
+  - Khi ở chế độ Chỉnh sửa (`editMode`), form "Ghi nhận Dòng tiền Ngoài sổ sách" cho phép nhập số tiền, kênh (Tiền mặt ngoài, CK Cá nhân, Khác), người nộp/nhận và ghi chú.
+  - Nút **"Thêm vào danh sách"** (`handleAddManualToDraft`) đẩy giao dịch vào mảng bản nháp `pendingAddedSettlements` với `isPending: true`, tiền tố `tmp-...`, đồng thời tự động cập nhật ngay số dư công nợ/tiền đã thu trên client preview (`getActiveFinancialSummary`).
+  - Giao diện bảng danh sách đã ghi nhận hiển thị badge trực quan **"Chờ lưu"** và cho phép xóa/hủy trước khi lưu.
+  - Khi có ít nhất 1 khoản chờ lưu hoặc chỉnh sửa thuộc tính, nút chính **"Lưu thay đổi"** (`handleSaveAll`) ở footer drawer được kích hoạt (`totalHasPendingChanges = true`). Khi bấm lưu, hệ thống gọi batch `POST /cases/:id/settlements` để ghi nhận toàn bộ vào cơ sở dữ liệu.
+- **Xử lý An toàn ID Tạm thời**:
+  - Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
+    - **Client-side (`useGarageCaseEditForm.ts`)**: Hàm `createClientId()` luôn sinh tiền tố `tmp-...`. Khi xóa item tạm thời, hàm `removeSettlement` và `removeLinkedInvoice` lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
+    - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
 
 ### 5.13. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
 - **Mốc thời gian theo dõi**: Toàn bộ nghiệp vụ theo dõi công nợ đối tác xưởng Garage áp dụng mốc chặn dưới từ tháng 07/2026 (`>= 2026-07-01`).
