@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
 import { TransactionAccountingService } from './transaction-accounting.service';
@@ -74,10 +74,9 @@ export class TransactionQueryService {
     });
   }
 
-  async getTransactions(filter: BankTransactionFilterDto) {
-    const page = filter.page || 1;
-    const pageSize = filter.pageSize || 20;
-
+  buildTransactionQueryBuilder(
+    filter: BankTransactionFilterDto,
+  ): SelectQueryBuilder<ErpBankTransaction> {
     const qb = this.transactionRepo
       .createQueryBuilder('txn')
       .leftJoinAndSelect('txn.branch', 'branch')
@@ -572,6 +571,15 @@ export class TransactionQueryService {
     } else {
       qb.addOrderBy('txn.createdAt', 'DESC');
     }
+
+    return qb;
+  }
+
+  async getTransactions(filter: BankTransactionFilterDto) {
+    const page = filter.page || 1;
+    const pageSize = filter.pageSize || 20;
+
+    const qb = this.buildTransactionQueryBuilder(filter);
 
     qb.skip((page - 1) * pageSize).take(pageSize);
 
