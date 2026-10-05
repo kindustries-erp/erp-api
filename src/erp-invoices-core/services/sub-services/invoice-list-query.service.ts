@@ -484,15 +484,17 @@ export class InvoiceListQueryService {
     _applyColumnSearch(qb, columnSearch, query.direction);
     _applyColumnFilters(qb, columnFilters, query.direction);
 
-    let qbOrderColumn = orderColumn;
+    let qbOrdered = qb;
     if (query.sort_by === 'invoiceNo') {
-      qbOrderColumn =
-        "NULLIF(regexp_replace(inv.invoice_no, '\\\\D', '', 'g'), '')::numeric";
-    }
-
-    let qbOrdered = qb.orderBy(qbOrderColumn, orderDirection);
-    if (query.sort_by === 'invoiceNo') {
-      qbOrdered = qbOrdered.addOrderBy('inv.invoiceNo', orderDirection);
+      qb.addSelect(
+        "NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric",
+        'inv_invoice_no_num',
+      );
+      qbOrdered = qb
+        .orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')
+        .addOrderBy('inv.invoiceNo', orderDirection);
+    } else {
+      qbOrdered = qb.orderBy(orderColumn, orderDirection);
     }
 
     const searchResults = await qbOrdered

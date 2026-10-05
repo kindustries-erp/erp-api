@@ -1212,4 +1212,68 @@ describe('InvoiceQueryService', () => {
     const partnerSummarySheet = workbook.getWorksheet('Bảng kê đối tác');
     expect(partnerSummarySheet!.rowCount).toBe(6);
   });
+
+  it('findAll sorts invoiceNo by numeric select alias with NULLS LAST to avoid TypeORM alias splitting error', async () => {
+    const qb: any = {
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { orderBys: {}, selects: [] },
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({}),
+      }),
+    };
+
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: {
+        query: jest.fn().mockResolvedValue([]),
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
+        }),
+      },
+    };
+
+    const service = createInvoiceQueryService(repository);
+
+    await service.findAll({
+      direction: 'OUT',
+      sort_by: 'invoiceNo',
+      sort_order: 'desc',
+      page: 1,
+      pageSize: 50,
+    });
+
+    // Must addSelect with numeric regex extracting digits
+    expect(qb.addSelect).toHaveBeenCalledWith(
+      "NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric",
+      'inv_invoice_no_num',
+    );
+
+    // orderBy must use alias instead of raw SQL expression to prevent TypeORM alias split bug
+    expect(qb.orderBy).toHaveBeenCalledWith(
+      'inv_invoice_no_num',
+      'DESC',
+      'NULLS LAST',
+    );
+    expect(qb.addOrderBy).toHaveBeenCalledWith('inv.invoiceNo', 'DESC');
+  });
 });
