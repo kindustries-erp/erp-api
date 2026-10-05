@@ -245,7 +245,7 @@ src/erp-invoices-core/
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/erp-invoices` | `invoices` | `read` | Lấy danh sách hóa đơn phân trang, tìm kiếm đa trường, lọc ngày, lọc chiều (`IN`/`OUT`) |
 | `GET` | `/erp-invoices/items` | `invoices` | `read` | Lấy danh sách chi tiết các dòng diễn giải mặt hàng hóa đơn phân trang, tìm kiếm đa trường, lọc theo phân loại dòng (`invoice_subcategory`), lọc ngày, đối tác và thống kê KPI dòng tiền/thuế |
-| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
+| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện (hỗ trợ alias `partner` / `partnerName` định dạng composite kèm MST, `invoiceNo`, các cột số tiền, `licensePlate`...) |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
 | `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn (HTTP 200 OK) |
 | `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (HTTP 200 OK, Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
@@ -493,6 +493,17 @@ src/erp-invoices-core/
   - **Định dạng Số liệu & Đơn vị tính**:
     - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
     - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
+
+### 5.11. Cơ chế Sắp xếp & Phân trang QueryBuilder (Sorting & Pagination Gotchas)
+- **Sắp xếp theo Số hóa đơn (`invoiceNo`)**:
+  - Cột `invoice_no` lưu dưới dạng `varchar(128)`. Khi người dùng yêu cầu sắp xếp theo `invoiceNo`, hệ thống trích xuất phần số qua biểu thức POSIX regex PostgreSQL: `NULLIF(regexp_replace(inv.invoice_no, '\D', '', 'g'), '')::numeric`.
+  - **TypeORM Gotcha khi kết hợp Collection Joins và Pagination (`skip`/`take`)**:
+    - Khi truy vấn `findAll` thực hiện `leftJoinAndSelect` với quan hệ mảng (`items`, `attachments`) cùng `skip` / `take`, TypeORM sẽ tách thành 2 bước thực thi (subquery lấy danh sách IDs phân trang).
+    - **Tuyệt đối không truyền biểu thức raw SQL chứa dấu chấm hoặc ngoặc trực tiếp vào `qb.orderBy(...)`** (ví dụ `qb.orderBy("NULLIF(regexp_replace(inv.invoice_no...))")`). TypeORM regex parser sẽ tách chuỗi tại dấu chấm `.` đầu tiên và nhận định phần trước dấu chấm là tên table alias (`"NULLIF(regexp_replace(inv"`), gây lỗi sập hệ thống `TypeORMError: "..." alias was not found. Maybe you forgot to join it?`.
+    - **Quy chuẩn xử lý**:
+      1. Đăng ký alias tường minh qua `qb.addSelect("NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric", 'inv_invoice_no_num')`.
+      2. Gọi `qb.orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')`.
+      3. Gọi `addOrderBy('inv.invoiceNo', orderDirection)` làm tiêu chí thứ cấp ổn định thứ tự các số hóa đơn có cùng phần số hoặc chuỗi ký tự thuần.
 
 ---
 

@@ -3,13 +3,13 @@ name: invoice-debts
 description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong Liouni ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
 ---
 
-# 📦 Module Tri Thức: Báo Cáo Công Nợ Khách Hàng & Nhà Cung Cấp (Invoice Debts) - Backend & Frontend
+# 📦 Module Tri Thức: Công Nợ Theo Đối Tượng (Invoice Debts) - Backend & Frontend
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế toán & Dòng tiền, cung cấp khả năng theo dõi, đối soát và phân tích tuổi nợ thời gian thực cho cả hai luồng đối tác:
-- **Công nợ Khách hàng (Phải thu - `CUSTOMER` / Hóa đơn bán ra `OUT`)**: Tổng hợp doanh thu hóa đơn bán ra, số tiền khách hàng đã thanh toán qua cấn trừ sổ quỹ/ngân hàng (`erp_invoice_voucher_netoff`), số dư còn phải thu và tuổi nợ tối đa (`maxAgingDays`).
-- **Công nợ Nhà cung cấp (Phải trả - `SUPPLIER` / Hóa đơn mua vào `IN`)**: Tổng hợp chi phí hóa đơn mua vào, số tiền doanh nghiệp đã thanh toán cho nhà cung cấp, số dư còn phải trả và cảnh báo nợ quá hạn.
+Module Công Nợ Theo Đối Tượng (`invoice-debts`, hiển thị trên Sidebar tại Menu Nhóm **"Hóa đơn"** > Sub-menu **"Công nợ theo đối tượng"**) là phân hệ thuộc nhóm Kế toán & Dòng tiền, cung cấp khả năng theo dõi, đối soát và phân tích tuổi nợ thời gian thực cho cả hai luồng đối tác:
+- **Khách hàng (Phải thu - `CUSTOMER` / Hóa đơn bán ra `OUT`)**: Tổng hợp doanh thu hóa đơn bán ra, số tiền khách hàng đã thanh toán qua cấn trừ sổ quỹ/ngân hàng (`erp_invoice_voucher_netoff`), số dư còn phải thu và tuổi nợ tối đa (`maxAgingDays`).
+- **Nhà cung cấp (Phải trả - `SUPPLIER` / Hóa đơn mua vào `IN`)**: Tổng hợp chi phí hóa đơn mua vào, số tiền doanh nghiệp đã thanh toán cho nhà cung cấp, số dư còn phải trả và cảnh báo nợ quá hạn.
 
 ### Các đặc điểm nghiệp vụ trọng tâm:
 1. **Tổng hợp thời gian thực (Zero-Lag Real-Time Aggregation)**: Không duy trì bảng số dư tĩnh gây lệch số liệu; dữ liệu được tổng hợp trực tiếp từ bảng hóa đơn gốc `erp_invoices` kết hợp `LEFT JOIN` với bảng cấn trừ thanh toán `erp_invoice_voucher_netoff`.
@@ -121,10 +121,10 @@ erp-web/src/
 │   │       ├── vi.ts                  # Từ điển tiếng Việt 100% (ngắn gọn, không ngoặc đơn)
 │   │       └── en.ts                  # Từ điển tiếng Anh 100%
 │   └── components/layout/
-│       ├── sidebar/components/SidebarNav.tsx # Navigation item "Công nợ"
-│       └── hooks/useNavItems.tsx      # Command search bar item
+│       ├── sidebar/components/invoice-nav-group/ # Molecule L2: Nhóm menu Hóa đơn chứa Sub-menu "Công nợ theo đối tượng"
+│       └── hooks/useNavItems.tsx      # Command search bar item ("Công nợ theo đối tượng")
 └── pages/
-    └── InvoiceDebtsPage.tsx           # Page wrapper định tuyến trong App.tsx
+    └── InvoiceDebtsPage.tsx           # Page (L5): Đồng bộ URL Query Param (?tab=overview | customers | suppliers)
 ```
 
 ---

@@ -15,6 +15,7 @@ import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { ErpBankAccount } from '../entities/erp_bank_account.entity';
 import { ErpCashBook } from '../entities/erp_cash_book.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
+import { TransactionQueryService } from './transaction-query.service';
 
 export type BankStatementExportProgressEvent = {
   processId: 'bank-statement-xlsx-export' | 'ping';
@@ -92,6 +93,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     private readonly bankAccountRepo: Repository<ErpBankAccount>,
     @InjectRepository(ErpCashBook)
     private readonly cashBookRepo: Repository<ErpCashBook>,
+    private readonly transactionQueryService: TransactionQueryService,
   ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
@@ -353,59 +355,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   ): Promise<Buffer> {
     onProgress(10, 'Đang truy vấn dữ liệu giao dịch...');
 
-    const qb = this.transactionRepo
-      .createQueryBuilder('txn')
-      .leftJoinAndSelect('txn.branch', 'branch')
-      .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
-      .leftJoinAndSelect('txn.cashBook', 'cashBook')
-      .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
-      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
-
-    if (query.sourceType) {
-      qb.andWhere('txn.sourceType = :sourceType', {
-        sourceType: query.sourceType,
-      });
-    }
-    if (query.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: query.branchId });
-    }
-    if (query.bankAccountId) {
-      qb.andWhere('txn.bankAccountId = :bankAccountId', {
-        bankAccountId: query.bankAccountId,
-      });
-    }
-    if (query.cashBookId) {
-      qb.andWhere('txn.cashBookId = :cashBookId', {
-        cashBookId: query.cashBookId,
-      });
-    }
-    if (query.startDate) {
-      qb.andWhere('txn.transDate >= :startDate', {
-        startDate: query.startDate,
-      });
-    }
-    if (query.endDate) {
-      qb.andWhere('txn.transDate <= :endDate', {
-        endDate:
-          query.endDate.length === 10
-            ? `${query.endDate} 23:59:59`
-            : query.endDate,
-      });
-    }
-    if (query.transactionType === 'IN') {
-      qb.andWhere('txn.creditAmount > 0');
-    } else if (query.transactionType === 'OUT') {
-      qb.andWhere('txn.debitAmount > 0');
-    }
-
-    if (query.search) {
-      qb.andWhere(
-        '(txn.description ILIKE :search OR txn.referenceNumber ILIKE :search OR txn.correspondentAccount ILIKE :search OR txn.correspondentName ILIKE :search)',
-        { search: `%${query.search}%` },
-      );
-    }
-
-    qb.orderBy('txn.transDate', 'DESC').addOrderBy('txn.createdAt', 'DESC');
+    const qb = this.transactionQueryService.buildTransactionQueryBuilder(query);
 
     const transactions = await qb.getMany();
 
@@ -792,6 +742,9 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   }
 
   private buildQueryFingerprint(query: BankTransactionFilterDto): string {
+    const rawColumnFilters = query.column_filters || query.columnFilters;
+    const rawColumnSearch = query.column_search || query.columnSearch;
+
     const stable = {
       sourceType: query.sourceType || '',
       branchId: query.branchId || '',
@@ -801,8 +754,19 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       endDate: query.endDate || '',
       transactionType: query.transactionType || '',
       search: query.search || '',
-      columnFilters: query.column_filters || '',
-      columnSearch: query.column_search || '',
+      tagIds: Array.isArray(query.tagIds)
+        ? [...query.tagIds].sort().join(',')
+        : '',
+      columnFilters:
+        typeof rawColumnFilters === 'object'
+          ? JSON.stringify(rawColumnFilters)
+          : rawColumnFilters || '',
+      columnSearch:
+        typeof rawColumnSearch === 'object'
+          ? JSON.stringify(rawColumnSearch)
+          : rawColumnSearch || '',
+      sortBy: query.sortBy || '',
+      sortOrder: query.sortOrder || '',
     };
     return JSON.stringify(stable);
   }

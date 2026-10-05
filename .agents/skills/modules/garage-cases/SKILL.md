@@ -416,7 +416,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
       - `'completed'`: Hoàn tất / Đã giao xe (`tinh_trang_dich_vu = 3` hoặc tên chứa `'kết thúc'`, `'hoàn tất'`, `'hoàn thành'`, `'giao xe'`, `'xong'`, `'đã thanh toán'`).
     - **Ngày tiếp nhận (`caseDate` / `ngayTiepNhan`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker dải ngày từ - đến.
     - **Ngày kết thúc (`ngayHoanThanhCongViec`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker + Tùy chọn `(blank)` để lọc phiếu chưa kết thúc.
-    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")`, định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
+    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu")` (không fallback về `tien_co_thue` để tránh sai lệch doanh thu khi chưa hoàn thành), định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
     - **Chi phí (`chiPhi`)**: Áp dụng `COALESCE("case"."chi_phi", "gp"."chi_phi")`, định dạng tiền tệ và lọc `__BLANK__`.
     - **Lợi nhuận (`loiNhuan`)**: Áp dụng `COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", DoanhThu - ChiPhi)`, định dạng tiền tệ và lọc `__BLANK__`.
     - **Biên LN (`margin`)**: Tính toán tỷ lệ % margin tức thời và hỗ trợ 4 phân khúc chọn nhanh: `'HIGH'` ($\ge 50\%$), `'MID'` ($20\% - 50\%$), `'LOW'` ($0\% - 20\%$), `'NEGATIVE'` ($< 0\%$) cùng lọc `__BLANK__`.

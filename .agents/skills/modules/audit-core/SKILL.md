@@ -124,7 +124,7 @@ Hàm `sanitizeAuditPayload` đệ quy kiểm tra và bảo vệ:
     LIMIT 2000
   );
   ```
-- Thực hiện xóa theo từng mẻ `2000` dòng lặp lại cho đến khi hết, tránh tình trạng khóa bảng hoặc làm nghẽn CPU trên Neon DB.
+- Thực hiện xóa theo từng mẻ `2000` dòng lặp lại cho đến khi hết, tránh tình trạng khóa bảng hoặc làm nghẽn CPU trên PostgreSQL database.
 
 ### 5.4. Tính Toán So Sánh Diff Thông Minh (`buildDiff`)
 Cung cấp phương thức `buildDiff(beforePayload, afterPayload)` trả về danh sách các trường thay đổi thực tế:

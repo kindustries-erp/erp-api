@@ -1,6 +1,6 @@
 ---
 name: db-migrate
-description: Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, có guard cho Neon pooler URL, backup trước khi apply schema và runbook migrate Production DB sang cơ chế Module Config mới.
+description: Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, kết nối PostgreSQL Dedicated/Local (db-dev.liouni.com), backup trước khi apply schema và runbook migrate Production DB.
 ---
 
 # Hướng dẫn DB Migrate & Production Runbook (`erp-api`)
@@ -10,14 +10,12 @@ Bất cứ khi nào làm việc với Database liên quan đến migration hay c
 
 ---
 
-## 0. Quy tắc Database Connection & Neon URL (Bắt buộc)
+## 0. Quy tắc Database Connection (Bắt buộc)
 
-- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định.
+- **PostgreSQL Dedicated:** Môi trường hiện tại sử dụng PostgreSQL Dedicated / nội bộ (`db-dev.liouni.com:5433` hoặc local container). Không còn sử dụng Neon DB Cloud.
+- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env.local` hoặc `.env.production`).
 - **Fallback `DB_HOST` / `DB_PORT`:** Nếu file `.env` không có `DATABASE_URL` nhưng có cấu hình `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, `DB_SSL`, runner sẽ tự động ghép chuỗi kết nối chuẩn `postgresql://USER:PASS@HOST:PORT/DB?sslmode=...`.
-- **Neon Pooler Guard:** Nếu URL kết nối đến Neon host chứa `-pooler` thì runner tự động chuẩn hóa:
-  - `ep-xxx-pooler...` ➔ `ep-xxx...`
-  - Bỏ `channel_binding=require` khỏi query string nếu có.
-- **Lý do:** Tránh lỗi ngắt kết nối/transaction khi chạy DDL qua pooler và hỗ trợ linh hoạt cả môi trường Neon cloud lẫn PostgreSQL nội bộ / local (`DB_HOST`).
+- **Pooler Compatibility Guard:** Runner vẫn giữ bộ lọc tự động chuẩn hóa URL nếu gặp chuỗi kết nối pooler legacy để đảm bảo an toàn tuyệt đối khi chạy DDL migration.
 
 ---
 

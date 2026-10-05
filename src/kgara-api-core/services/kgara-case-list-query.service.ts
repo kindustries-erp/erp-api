@@ -201,6 +201,8 @@ export class KgaraCaseListQueryService {
     const take = parseInt(String(pageSize), 10) || 20;
     const skip = (parseInt(String(page), 10) - 1 || 0) * take;
 
+    const baseQuery = query.clone();
+
     query.take(take).skip(skip);
 
     const [data, total] = await query.getManyAndCount();
@@ -320,7 +322,7 @@ export class KgaraCaseListQueryService {
     let cumulativeRemainingPayable = 0;
 
     try {
-      const totalsQb = query.clone();
+      const totalsQb = baseQuery.clone();
       if (totalsQb.expressionMap) {
         totalsQb.expressionMap.orderBys = {};
         totalsQb.expressionMap.selects = [];
@@ -332,7 +334,7 @@ export class KgaraCaseListQueryService {
 
       totalsQb
         .select(
-          'COALESCE(SUM(COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0)), 0)',
+          'COALESCE(SUM(COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0)), 0)',
           'totalRevenue',
         )
         .addSelect(
@@ -340,7 +342,7 @@ export class KgaraCaseListQueryService {
           'totalCost',
         )
         .addSelect(
-          'COALESCE(SUM(COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))), 0)',
+          'COALESCE(SUM(COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", CASE WHEN "case"."doanh_thu" IS NOT NULL OR "gp"."doanh_thu" IS NOT NULL THEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0) ELSE 0 END)), 0)',
           'totalProfit',
         )
         .addSelect(
@@ -411,18 +413,15 @@ export class KgaraCaseListQueryService {
         cumulativePaidCost = grandTotalPaidCost;
         cumulativeRemainingPayable = grandTotalRemainingPayable;
       } else {
-        const cumQb = query.clone();
+        const cumQb = baseQuery.clone();
         if (cumQb.expressionMap) {
           cumQb.expressionMap.selects = [];
         }
         cumQb
-          .select(
-            'COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0)',
-            'rev',
-          )
+          .select('COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0)', 'rev')
           .addSelect('COALESCE("case"."chi_phi", "gp"."chi_phi", 0)', 'cost')
           .addSelect(
-            'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0))',
+            'COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", CASE WHEN "case"."doanh_thu" IS NOT NULL OR "gp"."doanh_thu" IS NOT NULL THEN COALESCE("case"."doanh_thu", "gp"."doanh_thu", 0) - COALESCE("case"."chi_phi", "gp"."chi_phi", 0) ELSE 0 END)',
             'profit',
           )
           .addSelect('COALESCE("case"."tien_co_thue", 0)', 'receivable')
