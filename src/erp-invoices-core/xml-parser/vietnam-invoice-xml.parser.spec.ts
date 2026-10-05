@@ -89,4 +89,54 @@ describe('vietnam-invoice-xml.parser', () => {
     expect(parsed?.items[0].itemCode).toBe('VF-EEP63012001AB');
     expect(parsed?.items[0].unit).toBe('CÁI');
   });
+
+  it('should parse TT78 personal customer invoice with HVTNMHang and empty Ten/MST', () => {
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+<HDon>
+  <DLHDon>
+    <TTChung>
+      <SHDon>1208</SHDon>
+      <KHHDOn>C26TGA</KHHDOn>
+      <NLap>2026-07-13</NLap>
+    </TTChung>
+    <NDHDon>
+      <NBan>
+        <Ten>CÔNG TY CỔ PHẦN GREENWAY AUTOMOTIVES - CHI NHÁNH NAM SÀI GÒN</Ten>
+        <MST>0318334886-003</MST>
+      </NBan>
+      <NMua>
+        <Ten/>
+        <MST/>
+        <DChi>Buôn Kŏ Hneh , Cư Mgar, Daklak</DChi>
+        <SDThoai>0777030927</SDThoai>
+        <HVTNMHang>NGUYỄN THỊ THÙY TRANG</HVTNMHang>
+      </NMua>
+      <DSHHDVu>
+        <HHDVu>
+          <STT>1</STT>
+          <THHDVu>MỨC KHẤU TRỪ VÀ GIẢM TRỪ THEO QUY ĐỊNH CỦA BẢO HIỂM CHO XE 47A49851 QT GR-PDV2606-0028</THHDVu>
+          <DVTinh>Chiếc</DVTinh>
+          <SLuong>1</SLuong>
+          <DGia>2905926</DGia>
+          <ThTien>2905926</ThTien>
+        </HHDVu>
+      </DSHHDVu>
+      <TToan>
+        <TgTCThue>2905926</TgTCThue>
+        <TgTThue>232474</TgTThue>
+        <TgTTTBSo>3138400</TgTTTBSo>
+      </TToan>
+    </NDHDon>
+  </DLHDon>
+</HDon>`;
+
+    const parsed = parseVietnamInvoiceXml(xml);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.invoiceNo).toBe('1208');
+    expect(parsed?.buyerName).toBeNull();
+    expect(parsed?.buyerTaxCode).toBeNull();
+    expect(parsed?.buyerPersonalName).toBe('NGUYỄN THỊ THÙY TRANG');
+    expect(parsed?.buyerAddress).toBe('Buôn Kŏ Hneh , Cư Mgar, Daklak');
+    expect(parsed?.totalAmount).toBe(3138400);
+  });
 });

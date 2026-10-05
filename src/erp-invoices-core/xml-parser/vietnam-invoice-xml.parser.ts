@@ -353,8 +353,17 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     doc.getElementsByTagName('NMua')[0];
   const buyerName = getTextIn(nmua ?? null, 'Ten', 'ten') ?? null;
   const buyerPersonalName =
-    getTextIn(nmua ?? null, 'HoTen', 'hoten', 'TNNMua', 'tnnmua', 'TenNMua') ??
-    null;
+    getTextIn(
+      nmua ?? null,
+      'HVTNMHang',
+      'hvtnmhang',
+      'HoTen',
+      'hoten',
+      'TNNMua',
+      'tnnmua',
+      'TenNMua',
+      'NMuaHVTNMHang',
+    ) ?? null;
   const buyerCccd =
     getTextIn(nmua ?? null, 'CCCD', 'cccd', 'CMND', 'cmnd', 'HoChieu') ?? null;
   const buyerTaxCode = getTextIn(nmua ?? null, 'MST', 'mst') ?? null;

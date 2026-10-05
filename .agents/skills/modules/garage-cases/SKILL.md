@@ -422,10 +422,11 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
     - **Biên LN (`margin`)**: Tính toán tỷ lệ % margin tức thời và hỗ trợ 4 phân khúc chọn nhanh: `'HIGH'` ($\ge 50\%$), `'MID'` ($20\% - 50\%$), `'LOW'` ($0\% - 20\%$), `'NEGATIVE'` ($< 0\%$) cùng lọc `__BLANK__`.
   - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
   - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí các Quick Actions thuận tiện:
-    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.
+    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View (`initialEditMode: false`, `quote_details`).
     - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
+    - ⚖️ **Đối soát** (`Scale` icon trong Context Menu dòng bảng `GarageCasesTable`, `GarageCasePartnerTab`, `GarageCaseServicesSection`) $\rightarrow$ Mở Drawer chuyển thẳng vào tab **Tài chính (`financials`)** và kích hoạt sẵn chế độ chỉnh sửa (`editMode: true`), cho phép đối soát cấn trừ hóa đơn và dòng tiền tức thời.
+    - 🔗 **Liên kết hóa đơn trong Mã CT** (`Link2` icon trong `GarageCaseCodeCell`) $\rightarrow$ Mở tab Tài chính ở chế độ xem (`editMode: false`) để tra cứu.
     - 🔄 **Đồng bộ từ KGara** (`RefreshCw` icon) $\rightarrow$ Kích hoạt đồng bộ chi tiết vụ việc trực tiếp từ KGara.
-    - ⚖️ **Cấn trừ sao kê** (`Scale` icon) $\rightarrow$ Mở modal cấn trừ giao dịch ngân hàng/sổ quỹ vào vụ việc.
     - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.
 
 ### 5.12. Xử lý An Toàn ID Tạm Thời & Luồng Staging Thu/Chi Ngoài Sổ Sách (Off-System Manual Cashflow Staging)
