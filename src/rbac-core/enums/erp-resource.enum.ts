@@ -27,4 +27,6 @@ export enum ErpResource {
   PURCHASE_REQUESTS = 'purchase_requests',
   VEHICLES = 'vehicles',
   VINFAST = 'vinfast',
+  DASHBOARD = 'dashboard',
+  ATTACHMENTS = 'attachments',
 }
