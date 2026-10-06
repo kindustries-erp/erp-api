@@ -38,19 +38,22 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
-  - Bảng tài chính thiết kế tinh giản, trung tính (chỉ highlight nhẹ dòng Lợi nhuận ròng sau hoa hồng).
-  - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Phát sinh OJ` (Cột riêng cho Omoda/Jaecoo kèm % tỷ trọng & biên LN nằm bên trái Tháng này) | `Tháng này` (Tổng) | `Tháng trước` (Tổng).
-  - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước, tháng này và cột OJ (COGS, OPEX, Gross Margin, Net Margin).
+  - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Tháng T` (Kỳ chọn - font-bold) | `Tháng T-1` | `Tháng T-2` (Loại bỏ cột riêng OJ, phát sinh liên quan OJ được hiển thị chi tiết dưới dạng dòng phụ `Trong đó: Phát sinh liên quan OJ` xuyên suốt cả 3 tháng).
+  - Thiết kế **Ô Tài Chính 2 Tầng (Two-Tier Financial Cell - `PnlAmountCell`)**:
+    - **Hàng 1 (Main Amount)**: Số tiền chính căn phải, font mono, `whitespace-nowrap` (tuyệt đối không bị rớt dòng đơn vị `đ`).
+    - **Hàng 2 (Sub-text %)**: Căn phải ngay dưới số tiền với font nhỏ (`text-[10px]`), gồm **Delta %** (so sánh với tháng liền kề trước, xanh lá nếu tốt, đỏ nếu chi phí tăng/doanh thu giảm) và **% Doanh thu (% DT)** của chính tháng đó.
+    - **Cột Danh Mục**: Loại bỏ các badge % lẻ tẻ để giữ cột Danh mục thoáng đãng, thuần túy tên khoản mục; toàn bộ % DT được hiển thị chuẩn xác ở Hàng 2 của từng cột tháng tương ứng.
+  - Tự động ghép nối và đối soát dòng con chi tiết giữa 3 tháng liên tiếp (`mergePnlItems`), hiển thị đầy đủ số tiền và tỷ lệ biến động (delta) giữa các kỳ tháng.
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
-  - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:
-    1. `I. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
-    2. `II. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài + Direct Costs nhập tay)
-    3. `III. Lợi nhuận gộp` (`Gross Profit = Revenue - COGS`, kèm % Biên LN gộp)
-    4. `IV. Chi phí vận hành` (Tổng hợp các khoản OPEX trong tháng)
-    5. `V. Lợi nhuận ròng (trước hoa hồng)` (`Net Profit Before Commission = Gross Profit - OPEX`)
-    6. `VI. Hoa hồng` (Tổng hợp các khoản hoa hồng `HOA_HONG_*` trong tháng)
-    7. `VII. Lợi nhuận ròng (sau hoa hồng)` (`Net Profit After Commission = Net Profit Before Commission - Commission`, kèm % Biên LN ròng)
-  - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước và số tiền chi riêng cho OJ cho từng danh mục phát sinh.
+  - Tổng hợp tự động 8 chỉ mục tài chính phân cấp (3 cấp số 1, 1.1, 1.1.1 và 4 cấp cho OJ):
+    1. `1. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
+    2. `2. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài + Direct Costs nhập tay)
+    3. `3. Lợi nhuận gộp` (`Gross Profit = Revenue - COGS`, kèm % Biên LN gộp)
+    4. `4. Chi phí bán hàng` (Gồm Hoa hồng cho Sale 10% tính theo Tỷ lệ lãi gộp ký gửi)
+    5. `5. Chi phí vận hành` (Tổng hợp các khoản OPEX trong tháng)
+    6. `6. Lợi nhuận ròng` (`Net Profit = Gross Profit - Selling Expenses - OPEX`)
+    7. `7. Thưởng và Hoa hồng Dịch vụ` (Hoa hồng cho DV 10% tính trên 10% Lợi nhuận ròng)
+    8. `8. Lợi nhuận giữ lại của Garage (Sau hoa hồng DV)` (`Retained Profit = Net Profit - Service Commission`, kèm % Biên LN giữ lại)
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
@@ -168,30 +171,31 @@ Resource RBAC: `garage`
 ## 5. Logic Nghiệp vụ & Thuật toán Trọng tâm
 
 ### 5.1. Công thức Báo cáo Lợi nhuận (P&L) & Tính Tự Động Hoa Hồng:
-1. **Doanh thu ($R$)**:
+1. **1. Doanh thu ($R$)**:
    $$\sum \text{COALESCE}(gp.\text{doanh\_thu}, c.\text{doanh\_thu}, c.\text{tien\_co\_thue}, 0)$$
    áp dụng cho các phiếu hoàn thành trong tháng `TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM') = :periodStr`.
-2. **Chi phí giá vốn ($C_{COGS}$)**:
+2. **2. Chi phí giá vốn ($C_{COGS}$)**:
    $$C_{COGS} = \sum \text{COALESCE}(gp.\text{chi\_phi}, c.\text{chi\_phi}, 0) + \sum \text{DirectCosts}_{\text{nhập tay}}$$
    với $\text{DirectCosts}$ là các khoản OPEX có `category_key IN ('HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC')`.
-3. **Lợi nhuận gộp ($GP$) & Phân loại Phiếu dịch vụ (`c.classification`)**:
+3. **3. Lợi nhuận gộp ($GP$) & Phân loại Phiếu dịch vụ (`c.classification`)**:
    - $GP = R - C_{COGS}, \quad \text{Gross Margin} = \frac{GP}{R} \times 100\%$
    - **Lợi nhuận gộp Ký gửi ($GP_{kg}$)**: Doanh thu - Chi phí của các phiếu có `c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')` hoàn thành trong kỳ.
    - **Tỷ lệ lãi gộp ký gửi ($R_{kg}$)**:
      $$R_{kg} = \begin{cases} \frac{GP_{kg}}{GP} \times 100\% & \text{khi } GP > 0 \text{ và } GP_{kg} > 0 \\ 0\% & \text{ngược lại} \end{cases}$$
-4. **Chi phí vận hành ($OPEX$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key NOT LIKE 'HOA_HONG_%'` và `category_key NOT IN ('CHI_PHI_TRUC_TIEP_KHAC')` trong kỳ.
-5. **Lợi nhuận ròng trước hoa hồng ($NP_{pre}$)**:
-   $$NP_{pre} = GP - OPEX$$
-6. **Hoa hồng tự động ($COMM$)**:
+4. **4. Chi phí bán hàng ($SE$)**:
    - **Hoa hồng cho Sale (10%)**:
-     $$\text{Comm}_{sale} = \begin{cases} \text{round}(NP_{pre} \times R_{kg} \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
+     $$\text{Comm}_{sale} = \begin{cases} \text{round}((GP - OPEX) \times R_{kg} \times 10\%) & \text{khi } (GP - OPEX) > 0 \\ 0 & \text{ngược lại} \end{cases}$$
+   - $SE = \text{Comm}_{sale} + \sum \text{Selling Expenses nhập tay}$
+5. **5. Chi phí vận hành ($OPEX$)**:
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì, Khấu hao, Chi phí khác).
+6. **6. Lợi nhuận ròng ($NP$)**:
+   $$NP = GP - SE - OPEX$$
+7. **7. Thưởng và Hoa hồng Dịch vụ ($COMM_{dv}$)**:
    - **Hoa hồng cho Dịch vụ (10%)**:
-     $$\text{Comm}_{dv} = \begin{cases} \text{round}((NP_{pre} - \text{Comm}_{sale}) \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
-   - **Tổng Hoa hồng**:
-     $$COMM = \text{Comm}_{sale} + \text{Comm}_{dv} + \sum \text{Manual Commissions (HOA\_HONG\_KHAC)}$$
-7. **Lợi nhuận ròng sau hoa hồng ($NP_{post}$)**:
-   $$NP_{post} = NP_{pre} - COMM, \quad \text{Net Margin} = \frac{NP_{post}}{R} \times 100\%$$
+     $$\text{Comm}_{dv} = \begin{cases} \text{round}(NP \times 10\%) & \text{khi } NP > 0 \\ 0 & \text{khi } NP \le 0 \end{cases}$$
+   - $COMM_{dv} = \text{Comm}_{dv} + \sum \text{Manual Commissions (HOA\_HONG\_KHAC)}$
+8. **8. Lợi nhuận giữ lại của Garage ($RP$)**:
+   $$RP = NP - COMM_{dv}, \quad \text{Retained Margin} = \frac{RP}{R} \times 100\%$$
 
 ---
 
