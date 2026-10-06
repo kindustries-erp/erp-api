@@ -378,10 +378,13 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
      - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
-- **Ma trận Quyền hạn Thao tác trên Dòng tiền**:
+- **Ma trận Quyền hạn Thao tác trên Dòng tiền & Chế độ Chỉnh sửa (RBAC Matrix)**:
   - `OFF_SYSTEM_MANUAL` (Sổ ngoài / Tiền mặt): Cho phép **Thêm**, **Sửa** (qua `PATCH /cases/:id/settlements/:settlementId`), và **Xóa**.
   - `ON_SYSTEM` (Sao kê ngân hàng / Sổ quỹ ERP): Cho phép **Thêm** và **Xóa**; **Chặn Sửa** trực tiếp (nút Sửa hiển thị mờ kèm Tooltip giải thích; Backend guard trả về `400 BadRequestException`).
   - `isViaInvoice` (Cấn trừ tự động từ Hóa đơn): **Khóa hoàn toàn** không cho Sửa/Xóa trực tiếp; hiển thị icon Khóa kèm Tooltip: _"Cấn trừ tự động từ hóa đơn liên kết. Để gỡ, hãy xóa liên kết hóa đơn tương ứng."_
+  - **Quyền Thao tác Thu / Chi tiền (`canEditFinancial`)**: Các nút **"Thu tiền"** ("Thu KH", "Thu BH" trong bảng Phải thu) và **"Chi tiền"** (trong bảng Phụ tùng và Dịch vụ) chỉ hiển thị và cho phép click khi user có quyền sửa Hóa đơn (`INVOICES:update`) hoặc Sao kê / Sổ quỹ (`BANK_STATEMENTS:update` / `CASH_STATEMENTS:update`). Nếu không có quyền, cột hiển thị dấu gạch ngang (`---`) và chặn mọi trigger thanh toán.
+  - **Quyền Bật/Tắt Chế độ Chỉnh sửa Vụ việc (`canUpdateGarage`)**: Chỉ người dùng có quyền `GARAGE:update` mới có thể chuyển đổi trạng thái chỉnh sửa (`editMode`), hiển thị nút "Chỉnh sửa" trên header Drawer hoặc kích hoạt edit mode từ các trigger ngoài bảng. Nếu thiếu quyền, Drawer luôn ở chế độ xem (`view`), nút "Chỉnh sửa" bị ẩn, và mọi lời gọi `startEdit()` đều bị chặn an toàn kèm thông báo lỗi.
+  - **Bảo vệ Backend (`KgaraCaseFinancialController`)**: Áp dụng decorator `@RequireAnyPermissions` trên tất cả endpoints liên kết hóa đơn (`POST/DELETE linked-invoices`: `GARAGE:update` || `INVOICES:update`) và dòng tiền vụ việc (`POST/DELETE/PATCH settlements`: `GARAGE:create`/`update` || `INVOICES:update` || `BANK_STATEMENTS:update` || `CASH_STATEMENTS:update`).
 - **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
   - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
   - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
