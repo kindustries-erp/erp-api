@@ -138,3 +138,26 @@ SELECT id, so_chung_tu, tien_co_thue, tien_da_thanh_toan, tien_con_phai_thanh_to
 FROM kgara_cases
 WHERE tien_con_phai_thanh_toan < -0.01;
 ```
+
+---
+
+## 7. Quy Chuẩn Giao Diện Drawer Đối Soát & Dòng Tiền Ngoài Sổ (`erp-web`)
+
+1. **Kiến Trúc Drawer (`CaseLinePaymentDrawer` & `GarageCaseReconciliationDrawer`)**:
+   * Dùng hook `useGarageCaseReconciliationLogic` để quản lý tập trung toàn bộ state đối soát (Hóa đơn đầu vào/ra, Sao kê ngân hàng, Sổ quỹ, Dòng tiền ngoài sổ).
+   * Chuẩn hóa Drawer 2 cột `layout="2-columns"` theo `/standardize-drawer`.
+   * Cấu trúc Atomic Organism chuẩn `/ui-atomic-refactor`: Phân rã thành `src/modules/garage/components/organisms/manual-cashflow-tab-content/` (mọi file < 180 LoC, co-located tests).
+
+2. **Quy Trình Nhập Dòng Tiền Ngoài Sổ (Draft-First, Local Staging & Batch Submit)**:
+   * **Form Nhập Liệu 1 Hàng 3 Cột**: Bỏ visual selector phương thức (mặc định `TIEN_MAT_NGOAI`). 3 trường cốt lõi bố trí trên cùng 1 hàng: Người nộp/nhận, Số tiền (VNĐ) kèm text tiếng Việt, Ngày phát sinh với App component chuẩn `<DatePicker />`.
+   * **Nút "Thêm vào danh sách"**: Chỉ thêm hàng mới vào danh sách chờ lưu (`pendingManualSettlements`) ở client state với `isPending: true`, hiển thị badge `Chờ lưu`, reset form để nhập tiếp, **tuyệt đối không gọi API backend tại bước này**.
+   * **Xóa Tạm Local (Staged Deletion)**: Bấm nút Xóa (Thùng rác đỏ) ở hàng đã lưu trong DB chỉ đưa ID vào `pendingDeletedSettlementIds`, ẩn hàng và trừ tổng tiền tức thì trên client. **Tuyệt đối không gọi API xóa ngay**. Nếu đóng drawer, DB được bảo toàn 100%.
+   * **Nút Submit Footer ("Ghi nhận chi/thu ngoài sổ" / "Lưu thay đổi")**: Kích hoạt khi có thêm tạm, xóa tạm hoặc đang nhập `manualAmount > 0`. Khi bấm, hệ thống thực hiện batch song song: gọi `garageApi.removeCaseSettlement` cho các khoản bị xóa và `garageApi.addCaseSettlement` cho các khoản tạo mới, sau đó mới invalidate cache và đóng drawer.
+
+3. **Chuẩn Hóa Bảng Dòng Tiền Ngoài Sổ (`/standardize-table`)**:
+   * Cột STT: `#`, 40px center, `{idx}` chuẩn (cấm `{idx + 1}`).
+   * **Loại bỏ hoàn toàn cột action tĩnh** (`key: "action"` cố định).
+   * **Floated Action Button**: Kích hoạt qua `rowHoverActions` truyền vào `DataTable` (kết hợp `TableRowHoverActions`). Khi hover chuột vào bất kỳ dòng nào, Floating Action Bar kính mờ hiện ra ở góc phải kèm icon Thùng rác đỏ (`variant: "danger"`), cho phép xóa tạm khỏi memory state hoặc đánh dấu pending delete.
+   * **Chỉ báo tổng số lượng**: Header DrawerSection hiển thị chi tiết số lượng `(X GD, Y chờ lưu)` khi có các khoản pending.
+
+
