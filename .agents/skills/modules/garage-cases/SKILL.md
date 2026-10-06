@@ -508,3 +508,42 @@ Tất cả các hàm xuất Excel (`exportCompletedCasesExcel`, `exportCaseServi
 - **Row 5+**: Dữ liệu chi tiết (Font Calibri, border mỏng `#E2E8F0`).
 - **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
 
+---
+
+## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
+
+### 9.1. Phân Tầng Tab Tài Chính & Khối 3 Bảng Chuẩn Hóa (`QuoteFinancialsTabContent`)
+Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của Sổ báo giá được di chuyển từ tab Chi tiết sang phía trên Master Domain Switcher trong Tab Tài chính (`GarageCaseFinancialsTab`), hiển thị theo thứ tự chuẩn hóa:
+1. **Bảng Phải thu & Phân bổ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
+   - Dữ liệu: `QuoteFinancialItem[]` (build từ `buildFinancialItems`).
+   - Cột chuẩn: STT 40px, Thứ tự `#`, Nhóm nghiệp vụ (Doanh thu / Giảm trừ / Thanh toán / Hoa hồng / Lợi nhuận), Khoản mục tài chính, Tỷ lệ %, Số tiền (VND), Bên chịu phí (Khách hàng / Bảo hiểm / Garage).
+   - **2 Cột Thanh toán riêng biệt**:
+     - Cột **Khách hàng TT**: Kích hoạt cho các dòng Khách hàng thanh toán, click mở `CaseLinePaymentDrawer` với `payer = "KH"`.
+     - Cột **Bảo hiểm TT**: Kích hoạt độc quyền cho các dòng liên quan Bảo hiểm (`payer === "BH"`), click mở `CaseLinePaymentDrawer` với `payer = "BH"`. Các dòng không thuộc bảo hiểm hiển thị `---`.
+   - Footer: Tổng cộng kiểm tra tính khớp nối giữa tổng doanh thu phải thu và các khoản thanh toán.
+2. **Bảng Chi tiết Vật tư & Phụ tùng (`QuotePartsTable`)** — Đứng thứ hai:
+   - Dữ liệu: Lọc các dòng `itemType === "PT"`.
+    - Cột: STT, Loại (badge Vật tư emerald), Mã PT, Tên phụ tùng, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, Bảo hiểm duyệt, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
+    - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+3. **Bảng Chi tiết Nhân công & Dịch vụ (`QuoteServicesTable`)** — Đứng thứ ba:
+   - Dữ liệu: Lọc các dòng `itemType === "DV"`.
+   - Cột: STT, Loại (badge Dịch vụ amber), Mã DV, Tên dịch vụ, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
+   - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+
+### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
+- Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
+  - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
+  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+  - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` bên trái với thứ tự đảo ngược ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`).
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách kèm lịch sử cấn trừ.
+  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section:
+    - Thông tin định danh khoản mục (Phân loại, Mã, Tên, Bên chịu phí / thanh toán).
+    - KPI Bar tiến độ cấn trừ: Số tiền mục tiêu | Đã chọn cấn trừ | Còn thiếu kèm Progress Bar màu emerald.
+  - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
+
+### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
+- Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
+  - Loại bỏ hoàn toàn switch `Bảng dữ liệu` / `Bản in` khỏi tab Chi tiết (vì bảng dữ liệu đã chuyển sang Tab Tài chính).
+  - Khối bảng in tài liệu (`QuoteDocumentTables`): Tự động phát hiện khi vụ việc có bảo hiểm (`hasInsuranceParts` / `hasInsuranceServices`), tự động bổ sung cột **BH duyệt** và hàng tổng kết **Tổng BH duyệt chi trả** riêng biệt cho từng khối phụ tùng và nhân công.
+
