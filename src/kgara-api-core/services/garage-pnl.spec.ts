@@ -119,13 +119,16 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(report.revenue).toBe(444218804);
     expect(report.cogs).toBe(241508218);
     expect(report.grossProfit).toBe(202710586);
+    expect(report.sellingExpenses.total).toBe(0);
     expect(report.opex.total).toBe(146500000);
+    expect(report.netProfit).toBe(56210586);
     expect(report.netProfitBeforeCommission).toBe(56210586);
 
     // Auto commission breakdown
     expect(report.commission.auto.kyGuiProfitRate).toBe(0);
     expect(report.commission.auto.saleCommission).toBe(0);
     expect(report.commission.auto.dvCommission).toBe(5621059);
+    expect(report.serviceCommission.dvCommission).toBe(5621059);
     expect(report.commission.total).toBe(5621059);
     expect(report.netProfitAfterCommission).toBe(50589527);
   });
@@ -166,12 +169,17 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(report.kyGui.grossProfit).toBe(40000000);
     expect(report.kyGui.grossProfitRatio).toBe(40); // 40%
 
-    expect(report.netProfitBeforeCommission).toBe(50000000); // 100M - 50M
+    // Selling Expenses = 50M * 40% * 10% = 2.000.000
+    expect(report.sellingExpenses.total).toBe(2000000);
+    expect(report.opex.total).toBe(50000000);
 
-    // Sale HH = 50M * 40% * 10% = 2.000.000
+    // Lợi nhuận ròng = 100M (GP) - 2M (Selling) - 50M (OPEX) = 48.000.000
+    expect(report.netProfit).toBe(48000000);
+
+    // DV HH = 48M * 10% = 4.800.000
     expect(report.commission.auto.saleCommission).toBe(2000000);
-    // DV HH = (50M - 2M) * 10% = 4.800.000
     expect(report.commission.auto.dvCommission).toBe(4800000);
+    expect(report.serviceCommission.dvCommission).toBe(4800000);
     expect(report.commission.total).toBe(6800000);
     expect(report.netProfitAfterCommission).toBe(43200000);
   });

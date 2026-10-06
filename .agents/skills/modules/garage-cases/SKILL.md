@@ -216,7 +216,8 @@ src/kgara-api-core/
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
-│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, Column Defs & buildGarageCaseExportFileName)
+│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, COMPLETED_CASES_COLUMNS, CASE_PNL_COLUMNS & buildGarageCaseExportFileName)
+│   ├── kgara-completed-cases-sheet.builder.ts # Sheet Builders cho file xuất Excel đa sheets (Sheet 1: Thu/Trả P1, Sheet 2: Theo dõi PnL, Sheet 3: Chi tiết DV/PT)
 │   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
 │   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
@@ -227,7 +228,9 @@ src/kgara-api-core/
 ├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
-    ├── kgara-case-export.service.ts        # Sub-Service chuyên trách xuất file Excel 2 Sheets bảng kê phiếu dịch vụ và chi tiết DV/PT
+    ├── kgara-case-export.service.ts        # Facade Service (< 50 LoC) điều phối xuất Excel theo chuẩn api-service-refactor
+    ├── kgara-completed-cases-export.service.ts # Sub-Service chuyên trách xuất file Excel 3 Sheets bảng kê phiếu kết thúc, theo dõi PnL và chi tiết DV/PT (< 300 LoC)
+    ├── kgara-case-services-export.service.ts # Sub-Service chuyên trách xuất riêng bảng kê chi tiết dịch vụ & phụ tùng (< 150 LoC)
     ├── kgara-case-list-query.service.ts    # Sub-Service chuyên trách tìm kiếm danh sách vụ việc, phân trang, lọc distinct options theo số chứng từ / biển số xe và báo cáo lãi gộp
     ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
     ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
@@ -253,11 +256,12 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
 | `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell |
-| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 2 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, hỗ trợ multi-tier loader tự động bóc tách và làm giàu dữ liệu dòng từ DB, rawData và live API |
+| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 3 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & công nợ hai chiều Thu/Trả, `Theo dõi PnL` phân tích lợi nhuận gộp/biên LN/đánh giá sinh lời, và `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, gắn công thức Excel động tự động tính cấn trừ Phải - Đã |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `caseCode` ghép Số chứng từ + Biển số xe, `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
+| `PATCH`| `/cases/:id/lines-cost` | `id`, Body: `{ lines: [{ detailId, giaVonPhuTung }] }` | Cập nhật giá vốn thủ công cho từng dòng phụ tùng của vụ việc (lưu vào `kgara_case_services` và `rawData`) |
 | `PATCH`| `/cases/:id/config` | `id`, Body: `UpdateCaseConfigDto` (`categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt`, `erpNotes`, `customAttributes`, `attributes`, `globalAttributes`) | Cập nhật phân loại danh mục Module Config, 2 cờ loại trừ (báo cáo, công nợ), ghi chú và thuộc tính động cho vụ việc |
 | `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc (Legacy alias) |
 | `GET` | `/cases/:id/services` | `id` (`hd_phieu_dich_vu_id`) | Lấy danh sách chi tiết các dòng công việc và phụ tùng của vụ việc |
@@ -489,22 +493,112 @@ Khi chỉnh sửa `kgara-api-core`:
 ## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
 
 ### 8.1. Cấu Trúc Facade & Sub-Services
-Module tuân thủ tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor:
-- **Facade (`KgaraCaseQueryService`)**: Service facade 164 dòng giữ nguyên 100% method signatures, delegate sang các Sub-services.
-- **Sub-Services**:
-  - `KgaraCaseExportService` (~580 dòng): Render file Excel 2 sheets với styling chuẩn hóa.
-  - `KgaraCaseServicesQueryService` (~500 dòng): Phân trang, tìm kiếm, subtotal/grand totals và filter options chi tiết DV & phụ tùng.
-  - `KgaraCaseSettlementCalcService` (~55 dòng): Tính toán và cập nhật công nợ/tổng thu vụ việc (`recalculateCaseSettlementSummary`).
-- **Pure Helpers (Pattern C)**:
+Module tuân thủ nghiêm ngặt tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor (1 signature duy nhất, không overload, không union type):
+- **Query Facade (`KgaraCaseQueryService`)**: Service facade giữ nguyên 100% method signatures, delegate sang các Sub-services.
+- **Export Facade (`KgaraCaseExportService` - 42 dòng)**: Service facade tinh gọn điều phối xuất Excel, delegate sang các Sub-services:
+  - `KgaraCompletedCasesExportService` (~250 dòng): Quản lý truy vấn dữ liệu vụ việc, sổ thanh toán thực tế (`kgara_case_settlements`), hóa đơn liên kết và dòng chi tiết để xây dựng workbook 3 sheets chuyên nghiệp.
+  - `KgaraCaseServicesExportService` (~140 dòng): Chuyên trách xuất bảng kê chi tiết dịch vụ & phụ tùng độc lập (`exportCaseServicesExcel`).
+- **Pure Helpers & Sheet Builders (Pattern C)**:
+  - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
+  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
   - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
-  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
 
-### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (SUM, SUBTOTAL & Header Style)
-Tất cả các hàm xuất Excel (`exportCompletedCasesExcel`, `exportCaseServicesExcel`) áp dụng cấu trúc:
-- **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu, nền `#F1F5F9`, chữ đậm `#0F172A`.
-- **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi người dùng lọc cột trong Excel, nền `#EFF6FF`, chữ xanh `#1E40AF`, border double bottom.
-- **Row 3**: Hàng trống phân cách (Height 10).
-- **Row 4**: Header cột bảng (Nền `#334155`, chữ trắng, căn giữa, bọc chữ tự động).
-- **Row 5+**: Dữ liệu chi tiết (Font Calibri, border mỏng `#E2E8F0`).
-- **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
+### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (3 Sheets & 6 Dải Màu Biên LN Tương Phản Cao)
+Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
+- **Sheet 1: `Bảng kê phiếu kết thúc` (23 cột - 2 Cột Ghi chú Thu & Trả riêng biệt & Phân tầng màu Biên LN)**:
+  - Cụm Phải thu: `Phải thu (VNĐ)` (J), `Đã thu (VNĐ)` (K), `Còn lại phải thu (VNĐ)` (L, formula `=J{r}-K{r}`).
+  - **Cột Ghi chú thu (M)**: Nằm ngay bên phải cột Còn lại phải thu, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ khách hàng (chờ bảo hiểm duyệt, đối soát...).
+  - Cụm Phải trả: `Phải trả (VNĐ)` (N), `Đã trả (VNĐ)` (O), `Còn lại phải trả (VNĐ)` (P, formula `=N{r}-O{r}`).
+  - **Cột Ghi chú trả (Q)**: Nằm ngay bên phải cột Còn lại phải trả, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ thợ/nhà cung cấp (chờ hóa đơn đầu vào, bảo hành...).
+  - Cụm P&L nhanh: `Doanh thu (VNĐ)` (R), `Chi phí / Giá vốn (VNĐ)` (S), `Lợi nhuận gộp (VNĐ)` (T, formula `=R{r}-S{r}`).
+  - **Biên LN (%) (U)**: Formula `=IF(R{r}>0, T{r}/R{r}, 0)`, tự động áp dụng hàm `styleMarginCell` đồng bộ 6 dải màu tương phản cao như Sheet 2.
+  - Tham chiếu: `Hóa đơn VAT liên kết` (V), `Chi nhánh` (W).
+- **Sheet 2: `Theo dõi lãi lỗ` (15 cột - Phân 6 Dải Màu Biên LN Tương Phản Cao)**:
+  - Bóc tách: Doanh thu Công DV (G), Doanh thu Phụ tùng (H), Tổng Doanh thu (I, formula `=G{r}+H{r}`), Giá vốn Phụ tùng (J), Chi phí thợ / Khác (K), Tổng Chi phí (L, formula `=J{r}+K{r}`), Lợi nhuận gộp (M, formula `=I{r}-L{r}`).
+  - **Biên LN (%) (N)**: Formula `=IF(I{r}>0, M{r}/I{r}, 0)`, tự động phân bổ 6 dải màu tương phản cao, triệt tiêu na ná màu:
+    1. Lỗ ($< 0\%$): Đỏ Red-200 (`#FECACA` / chữ đỏ đậm `#991B1B`).
+    2. Hòa vốn / Rất thấp ($0\% - 20\%$): Cam hổ phách Orange-200 (`#FED7AA` / chữ cam đất `#9A3412`).
+    3. Trung bình ($20\% - 40\%$): Xanh da trời tươi Sky-200 (`#BAE6FD` / chữ xanh dương `#0369A1`).
+    4. Khá / Tốt ($40\% - 60\%$): Xanh lá mạ Green-200 (`#BBF7D0` / chữ xanh lá đậm `#15803D`).
+    5. Rất cao ($60\% - 80\%$): Xanh mòng két Teal-200 (`#99F6E4` / chữ xanh đậm `#0F766E`).
+    6. Xuất sắc / Siêu LN ($\ge 80\%$): Tím phong lan Purple-200 (`#E9D5FF` / chữ tím đậm `#6B21A8`).
+  - Tham chiếu: `Chi nhánh` (O) - Đã loại bỏ cột O Đánh giá PnL riêng biệt.
+- **Sheet 3: `Chi tiết DV & Phụ tùng` (20 cột)**: Bảng kê chi tiết từng dòng công việc và phụ tùng theo vụ việc.
+- **Hàng Tổng**:
+  - **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu.
+  - **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi lọc cột trong Excel.
+  - **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
+
+---
+
+## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
+
+### 9.1. Phân Tầng Tab Tài Chính & Khối 3 Bảng Chuẩn Hóa (`QuoteFinancialsTabContent`)
+Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của Sổ báo giá được di chuyển từ tab Chi tiết sang phía trên Master Domain Switcher trong Tab Tài chính (`GarageCaseFinancialsTab`), hiển thị theo thứ tự chuẩn hóa:
+1. **Bảng Phải thu & Phân bổ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
+   - Dữ liệu: `QuoteFinancialItem[]` (build từ `buildFinancialItems`).
+   - Cột chuẩn: STT 40px, Thứ tự `#`, Nhóm nghiệp vụ (Doanh thu / Giảm trừ / Thanh toán / Hoa hồng / Lợi nhuận), Khoản mục tài chính, Tỷ lệ %, Số tiền (VND), Bên chịu phí (Khách hàng / Bảo hiểm / Garage).
+   - **2 Cột Thanh toán riêng biệt**:
+     - Cột **Khách hàng TT**: Kích hoạt cho các dòng Khách hàng thanh toán, click mở `CaseLinePaymentDrawer` với `payer = "KH"`.
+     - Cột **Bảo hiểm TT**: Kích hoạt độc quyền cho các dòng liên quan Bảo hiểm (`payer === "BH"`), click mở `CaseLinePaymentDrawer` với `payer = "BH"`. Các dòng không thuộc bảo hiểm hiển thị `---`.
+   - Footer: Tổng cộng kiểm tra tính khớp nối giữa tổng doanh thu phải thu và các khoản thanh toán.
+2. **Bảng Chi tiết Vật tư & Phụ tùng (`QuotePartsTable`)** — Đứng thứ hai:
+   - Dữ liệu: Lọc các dòng `itemType === "PT"`.
+    - Cột: STT, Loại (badge Vật tư emerald), Mã PT, Tên phụ tùng, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, Bảo hiểm duyệt, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
+    - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+3. **Bảng Chi tiết Nhân công & Dịch vụ (`QuoteServicesTable`)** — Đứng thứ ba:
+   - Dữ liệu: Lọc các dòng `itemType === "DV"`.
+   - Cột: STT, Loại (badge Dịch vụ amber), Mã DV, Tên dịch vụ, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
+   - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+
+### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
+- Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
+  - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
+  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+  - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` bên trái với thứ tự đảo ngược ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`).
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách kèm lịch sử cấn trừ.
+  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section:
+    - Thông tin định danh khoản mục (Phân loại, Mã, Tên, Bên chịu phí / thanh toán).
+    - KPI Bar tiến độ cấn trừ: Số tiền mục tiêu | Đã chọn cấn trừ | Còn thiếu kèm Progress Bar màu emerald.
+  - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
+
+### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
+- Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
+  - Loại bỏ hoàn toàn switch `Bảng dữ liệu` / `Bản in` khỏi tab Chi tiết (vì bảng dữ liệu đã chuyển sang Tab Tài chính).
+  - Khối bảng in tài liệu (`QuoteDocumentTables`): Tự động phát hiện khi vụ việc có bảo hiểm (`hasInsuranceParts` / `hasInsuranceServices`), tự động bổ sung cột **BH duyệt** và hàng tổng kết **Tổng BH duyệt chi trả** riêng biệt cho từng khối phụ tùng và nhân công.
+
+### 9.4. Cơ Chế Làm Giàu Giá Vốn Phụ Tùng (Cost Enrichment) & Phân Rã Kiến Trúc Atomic Bảng Sổ Báo Giá
+
+#### 1. Thách thức kỹ thuật từ KGara API
+- Endpoint `/api/v1/gr/cases/detail` của KGara trả về `GiaVonPhuTung = 0` trên 100% dòng (ngay cả các ca đã kết thúc và phát sinh giá vốn lớn như `GR-PDV2609-0056` hay `GR-PDV2609-0074`).
+- Tuy nhiên, KGara lưu trữ chi tiết hạch toán giá vốn trong **Sổ nhật ký chi phí** (`/api/v1/gr/reports/gross-profit-detail/journal`).
+
+#### 2. Thuật toán làm giàu giá vốn 3 tầng (`KgaraCostEnricherHelper`)
+- Khi người dùng mở xem vụ việc trên ERP (`findCaseByCodeOrId`), nếu vụ việc đã hoàn tất hoặc có số liệu lãi gộp:
+  1. Hệ thống tự động fetch Sổ nhật ký chi phí (`journal items`) của vụ việc.
+  2. **Tầng 1 - Vốn Phụ tùng Xuất kho (`TK 1541 / TK 152`)**: Bóc tách từ các Phiếu xuất kho (`GR-PX...`). Tự động chuẩn hóa chuỗi tên (loại bỏ tag biển số xe `[51M80574] - [...]`), khớp tên và số lượng với từng dòng phụ tùng, tự động tính:
+     $$\text{GiaVonPhuTung} = \text{round}\left(\frac{\text{ChiPhi}}{\text{SoLuong}}\right), \quad \text{TongVon} = \text{ChiPhi}$$
+  3. **Tầng 2 - Vốn Gia công / Dịch vụ Mua ngoài (`TK 1542 / TK 331`)**: Gom vào `outsourceCost`.
+  4. **Tầng 3 - Hoa hồng Môi giới / Chi phí khác (`TK 1543 / TK 335`)**: Gom vào `commissionCost`.
+  5. Tự động cập nhật `giaVonPhuTung` vào `rawData.ListPhieuDichVuChiTiet` và lưu trữ trong bảng `kgara_case_services`.
+
+#### 3. Phân rã kiến trúc Atomic Bảng Sổ Báo Giá (`/ui-atomic-refactor`)
+Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue Mandate, 100% i18n, Co-located Vitest), file `QuoteDocumentTables.tsx` (trước đây 321 LoC) đã được phân rã thành:
+1. **`QuotePartsDocumentTable`** (`quote-parts-document-table/`):
+   - Kích thước: ~136 LoC.
+   - Hiển thị đầy đủ cột **ĐG vốn** và **Tổng vốn**. Nếu có giá vốn xuất kho: hiển thị `formatNumber(row.unitCost)`; nếu chưa phân bổ (do mua ngoài gộp): hiển thị `---`.
+   - Footer: Dòng cộng tổng tiền bán, tổng vốn phụ tùng, và dòng **Lãi gộp phụ tùng** ($\text{Doanh thu PT} - \text{Vốn PT}$) kèm biên lợi nhuận %.
+2. **`QuoteServicesDocumentTable`** (`quote-services-document-table/`):
+   - Kích thước: ~104 LoC.
+   - Hiển thị bảng công thợ / dịch vụ kèm kỹ thuật viên phụ trách và tổng cộng.
+3. **`QuoteDocumentCostSummary`** (`quote-document-cost-summary/`):
+   - Kích thước: ~60 LoC.
+   - Hiển thị khối đối soát 3 tầng chi phí minh bạch đối ứng với Sổ chi phí KGara:
+     - 1. Phụ tùng kho (1541)
+     - 2. Mua ngoài/DV (1542)
+     - 3. Hoa hồng/Khác (1543)
+     - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
+4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
+
 

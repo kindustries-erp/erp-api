@@ -49,4 +49,21 @@ describe('KgaraCasesController', () => {
       expect(result).toEqual(mockResult);
     });
   });
+
+  describe('updateCaseLinesCost', () => {
+    it('should delegate updateCaseLinesCost to lookup service', async () => {
+      caseLookupServiceMock.updateCaseLinesCost = jest
+        .fn()
+        .mockResolvedValue({ id: 'case-1' });
+
+      const lines = [{ detailId: 'line-1', giaVonPhuTung: 150000 }];
+      const result = await controller.updateCaseLinesCost('case-1', { lines });
+
+      expect(caseLookupServiceMock.updateCaseLinesCost).toHaveBeenCalledWith(
+        'case-1',
+        lines,
+      );
+      expect(result).toEqual({ id: 'case-1' });
+    });
+  });
 });
