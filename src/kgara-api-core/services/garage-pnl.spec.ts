@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GarageDashboardService } from '../garage-dashboard.service';
+import { GaragePnlService } from './garage-pnl.service';
+import { GarageDashboardStatsService } from './garage-dashboard-stats.service';
+import { GarageCheckpointService } from './garage-checkpoint.service';
+import { GarageCustomerStatsService } from './garage-customer-stats.service';
+import { GarageDashboardExportService } from './garage-dashboard-export.service';
 import { GarageOpexService } from './garage-opex.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
-import { KgaraCaseService } from '../entities/kgara_case_service.entity';
-import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
-import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 
-describe('GarageDashboardService - PnL Commission Calculation', () => {
+describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation', () => {
   let service: GarageDashboardService;
+  let pnlService: GaragePnlService;
   let mockCaseRepo: any;
   let mockOpexService: any;
 
@@ -24,21 +27,26 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GarageDashboardService,
+        GaragePnlService,
+        {
+          provide: GarageDashboardStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageCheckpointService,
+          useValue: {},
+        },
+        {
+          provide: GarageCustomerStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageDashboardExportService,
+          useValue: {},
+        },
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,
-        },
-        {
-          provide: getRepositoryToken(KgaraCaseService),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraGrossProfit),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraCaseSettlement),
-          useValue: {},
         },
         {
           provide: GarageOpexService,
@@ -48,6 +56,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     }).compile();
 
     service = module.get<GarageDashboardService>(GarageDashboardService);
+    pnlService = module.get<GaragePnlService>(GaragePnlService);
   });
 
   it('Scenario 1: Net Profit > 0 and No Consignment (Ky Gui = 0) -> Matching User Screenshot', async () => {
@@ -110,13 +119,16 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     expect(report.revenue).toBe(444218804);
     expect(report.cogs).toBe(241508218);
     expect(report.grossProfit).toBe(202710586);
+    expect(report.sellingExpenses.total).toBe(0);
     expect(report.opex.total).toBe(146500000);
+    expect(report.netProfit).toBe(56210586);
     expect(report.netProfitBeforeCommission).toBe(56210586);
 
     // Auto commission breakdown
     expect(report.commission.auto.kyGuiProfitRate).toBe(0);
     expect(report.commission.auto.saleCommission).toBe(0);
     expect(report.commission.auto.dvCommission).toBe(5621059);
+    expect(report.serviceCommission.dvCommission).toBe(5621059);
     expect(report.commission.total).toBe(5621059);
     expect(report.netProfitAfterCommission).toBe(50589527);
   });
@@ -157,12 +169,17 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     expect(report.kyGui.grossProfit).toBe(40000000);
     expect(report.kyGui.grossProfitRatio).toBe(40); // 40%
 
-    expect(report.netProfitBeforeCommission).toBe(50000000); // 100M - 50M
+    // Selling Expenses = 50M * 40% * 10% = 2.000.000
+    expect(report.sellingExpenses.total).toBe(2000000);
+    expect(report.opex.total).toBe(50000000);
 
-    // Sale HH = 50M * 40% * 10% = 2.000.000
+    // Lợi nhuận ròng = 100M (GP) - 2M (Selling) - 50M (OPEX) = 48.000.000
+    expect(report.netProfit).toBe(48000000);
+
+    // DV HH = 48M * 10% = 4.800.000
     expect(report.commission.auto.saleCommission).toBe(2000000);
-    // DV HH = (50M - 2M) * 10% = 4.800.000
     expect(report.commission.auto.dvCommission).toBe(4800000);
+    expect(report.serviceCommission.dvCommission).toBe(4800000);
     expect(report.commission.total).toBe(6800000);
     expect(report.netProfitAfterCommission).toBe(43200000);
   });
@@ -256,7 +273,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
         cogs: '100000000',
         caseCount: '10',
         kyGuiRevenue: '80000000',
-        kyGuiCogs: '40000000',
+        kyGuiCogs: '40000000', // Ky Gui GP = 40.000.000
         kyGuiCaseCount: '3',
         suaChuaChungRevenue: '120000000',
         suaChuaChungCogs: '60000000',

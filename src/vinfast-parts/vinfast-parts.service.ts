@@ -1,121 +1,35 @@
 import * as ExcelJS from 'exceljs';
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, Not } from 'typeorm';
-import { VinfastPartsCatalog } from './entities/vinfast-parts-catalog.entity';
-import { VinfastPartsLedger } from './entities/vinfast-parts-ledger.entity';
-import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
-import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
-
 import { Subject } from 'rxjs';
-import { VINFAST_CAR_PART_CODES } from '../reports-core/vinfast-car-part-codes';
-import { FifoUnitRow } from './dto/fifo-unit-row.dto';
-
-function buildRawMultiKeywordSql(
-  sqlField: string,
-  searchString: string,
-  startIndex: number,
-  params: any[],
-): { sql: string; nextIndex: number } {
-  if (!searchString) return { sql: '', nextIndex: startIndex };
-
-  const keywords = searchString
-    .split(';')
-    .map((k) => k.trim())
-    .filter((k) => k.length > 0);
-
-  if (keywords.length === 0) return { sql: '', nextIndex: startIndex };
-
-  const parts: string[] = [];
-  let idx = startIndex;
-
-  for (const kw of keywords) {
-    if (kw === '__BLANK__') {
-      parts.push(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-    } else if (kw.startsWith('"') && kw.endsWith('"') && kw.length >= 2) {
-      const clean = kw.slice(1, -1);
-      parts.push(`${sqlField} ILIKE $${idx}`);
-      params.push(clean);
-      idx++;
-    } else {
-      parts.push(`${sqlField} ILIKE $${idx}`);
-      params.push(`%${kw}%`);
-      idx++;
-    }
-  }
-
-  const sql = ` AND (${parts.join(' OR ')})`;
-  return { sql, nextIndex: idx };
-}
-
-function buildRawColumnFilterSql(
-  sqlField: string,
-  vals: string[],
-  startIndex: number,
-  params: any[],
-): { sql: string; nextIndex: number } {
-  if (!vals || vals.length === 0) return { sql: '', nextIndex: startIndex };
-
-  const hasBlank = vals.includes('__BLANK__');
-  const nonBlankVals = vals.filter((v) => v !== '__BLANK__');
-  const conditions: string[] = [];
-  let idx = startIndex;
-
-  if (nonBlankVals.length > 0) {
-    conditions.push(`${sqlField} = ANY($${idx})`);
-    params.push(nonBlankVals);
-    idx++;
-  }
-  if (hasBlank) {
-    conditions.push(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-  }
-
-  if (conditions.length === 0) return { sql: '', nextIndex: idx };
-  const sql = ` AND (${conditions.join(' OR ')})`;
-  return { sql, nextIndex: idx };
-}
+import { VinfastPartsSyncService } from './services/vinfast-parts-sync.service';
+import { VinfastPartsStockService } from './services/vinfast-parts-stock.service';
+import { VinfastPartsLedgerService } from './services/vinfast-parts-ledger.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { VinfastPartsLedger } from './entities/vinfast-parts-ledger.entity';
+import { VinfastPartsCatalog } from './entities/vinfast-parts-catalog.entity';
 
 @Injectable()
 export class VinfastPartsService {
   private readonly logger = new Logger(VinfastPartsService.name);
   public readonly progress$ = new Subject<any>();
 
-  private readonly VINFAST_SELLER_TAX_CODES = [
-    '0108926276',
-    '0318334886',
-    '0202357718',
-  ];
-
-  private resolveVinfastSku(
-    itemCode: string | null,
-    description: string | null,
-  ): string | null {
-    const norm = (description || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-    if (norm.includes('VF5_HV_BATTERY_PACK_38_KWH')) return 'EEP73110011AP';
-    if (
-      norm.includes('HV_BATTERY_41_9KWH') ||
-      norm.includes('HV_BATTERY_41_9_KWH') ||
-      norm.includes('BAT21001011')
-    )
-      return 'BAT21001011';
-    if (norm.includes('HV_BATTERY_PACK')) return 'EEP73110011ALL';
-
-    const upperDesc = (description || '').toUpperCase();
-    const match = upperDesc.match(/([A-Z]{3}[0-9][A-Z0-9]*)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return itemCode || null;
-  }
-
   constructor(
-    @InjectRepository(VinfastPartsCatalog)
-    private catalogRepo: Repository<VinfastPartsCatalog>,
+    private readonly syncService: VinfastPartsSyncService,
+    private readonly stockService: VinfastPartsStockService,
+    private readonly ledgerService: VinfastPartsLedgerService,
     @InjectRepository(VinfastPartsLedger)
-    private ledgerRepo: Repository<VinfastPartsLedger>,
-    @InjectRepository(ErpInvoiceItem)
-    private invoiceItemRepo: Repository<ErpInvoiceItem>,
+    private readonly ledgerRepo: Repository<VinfastPartsLedger>,
+    @InjectRepository(VinfastPartsCatalog)
+    private readonly catalogRepo: Repository<VinfastPartsCatalog>,
   ) {}
+
+  public resolveVinfastSku(
+    itemCode: string | null | undefined,
+    description: string | null | undefined,
+  ): string | null {
+    return this.syncService.resolveVinfastSku(itemCode, description);
+  }
 
   async syncCatalog(options?: {
     dateFrom?: string;
@@ -123,152 +37,10 @@ export class VinfastPartsService {
     progress$?: any;
     clearDb?: boolean;
   }) {
-    this.logger.log('Starting VinFast Parts Catalog sync...');
-    if (options?.clearDb) {
-      this.logger.log('Clearing old VinFast ledger and catalog before sync...');
-      await this.ledgerRepo.delete({});
-      await this.catalogRepo.delete({});
-      if (options.progress$) {
-        options.progress$.next({
-          processId: 'vinfast-sync',
-          type: 'clear',
-          total: 0,
-          current: 0,
-          message: 'Đã xóa sạch dữ liệu Danh mục và Sổ cái cũ.',
-          completed: false,
-        });
-      }
-    }
-
-    if (options?.progress$) {
-      options.progress$.next({
-        processId: 'vinfast-sync',
-        type: 'catalog',
-        total: 100,
-        current: 0,
-        message: options.dateFrom
-          ? `Đang quét hóa đơn trong hệ thống từ ${options.dateFrom} đến ${options.dateTo}...`
-          : `Đang quét hóa đơn trong DB...`,
-        completed: false,
-      });
-    }
-
-    // 1. Get all distinct purchased items with parsed code
-    const qb = this.invoiceItemRepo
-      .createQueryBuilder('ii')
-      .innerJoin('ii.invoice', 'i')
-      .select('ii.itemCode', 'sku')
-      .addSelect('MAX(ii.description)', 'raw_description')
-      .addSelect('MAX(ii.unit)', 'uom')
-      .where('ii.itemCode IS NOT NULL')
-      .andWhere('i.direction = :direction', { direction: 'IN' })
-      .andWhere('i.sellerTaxCode IN (:...taxCodes)', {
-        taxCodes: this.VINFAST_SELLER_TAX_CODES,
-      })
-      .andWhere('i.taxInvoiceStatus != :status', { status: 6 });
-
-    if (options?.dateFrom && options?.dateTo) {
-      qb.andWhere('i.invoiceDate >= :dateFrom AND i.invoiceDate <= :dateTo', {
-        dateFrom: options.dateFrom,
-        dateTo: options.dateTo,
-      });
-    }
-
-    const rawItems = await qb.groupBy('ii.itemCode').getRawMany();
-
-    this.logger.log(`Found ${rawItems.length} unique purchased items to sync.`);
-    if (options?.progress$) {
-      options.progress$.next({
-        processId: 'vinfast-sync',
-        type: 'catalog',
-        total: rawItems.length,
-        current: 0,
-        message: `Đang bóc tách mã phụ tùng từ ${rawItems.length} hóa đơn trong DB...`,
-        completed: false,
-      });
-    }
-
-    let addedCount = 0;
-    let processedCount = 0;
-
-    // Process items in chunks
-    for (const item of rawItems) {
-      processedCount++;
-      let { sku, raw_description, uom } = item;
-      sku = this.resolveVinfastSku(sku, raw_description);
-      if (!sku) continue;
-
-      const existing = await this.catalogRepo.findOne({ where: { sku } });
-      if (!existing) {
-        // Extract name by removing the code from the beginning
-        // Pattern: [CODE][space or dash][name]
-        const nameRegex = new RegExp(`^${sku}\\s*[-–]?\\s*(.*)$`);
-        const match = (raw_description || '').match(nameRegex);
-        const name =
-          match && match[1] ? match[1].trim() : (raw_description || sku).trim();
-
-        // Normalize UOM
-        let normalizedUom = uom || 'Chiếc';
-        if (normalizedUom.toUpperCase() === 'CHIẾC') normalizedUom = 'Chiếc';
-        if (normalizedUom.toUpperCase() === 'CÁI') normalizedUom = 'Cái';
-
-        // Check if service
-        const isService = ['EEH', 'EMT', 'LFP'].some((prefix) =>
-          sku.startsWith(prefix),
-        );
-
-        const newItem = this.catalogRepo.create({
-          sku,
-          name,
-          uom: normalizedUom,
-          isService,
-        });
-
-        await this.catalogRepo.save(newItem);
-        addedCount++;
-      }
-    }
-
-    // Add specific warranty items that might not have IN invoices
-    const warrantyItems = [
-      { sku: 'BAT21001011', name: 'HV BATTERY 41.9KWH', isService: false },
-      { sku: 'PVT20030000', name: 'Động cơ điện (Bảo hành)', isService: false },
-      { sku: 'BEX69063002AB', name: 'ĐÈN HẬU PHẢI', isService: false },
-    ];
-
-    for (const wItem of warrantyItems) {
-      const existing = await this.catalogRepo.findOne({
-        where: { sku: wItem.sku },
-      });
-      if (!existing) {
-        await this.catalogRepo.save(
-          this.catalogRepo.create({
-            sku: wItem.sku,
-            name: wItem.name,
-            uom: 'Chiếc',
-            isService: wItem.isService,
-            notes: 'Added from manual warranty list',
-          }),
-        );
-        addedCount++;
-      }
-    }
-
-    this.logger.log(`Catalog sync completed. Added ${addedCount} new items.`);
-    if (options?.progress$) {
-      options.progress$.next({
-        processId: 'vinfast-sync',
-        type: 'catalog',
-        total: rawItems.length,
-        current: rawItems.length,
-        message: `Cập nhật Danh mục (Catalog): Thêm mới ${addedCount} mã, Bỏ qua ${rawItems.length - addedCount} mã.`,
-        completed: false,
-      });
-    }
-    return {
-      addedCount,
-      totalProcessed: rawItems.length + warrantyItems.length,
-    };
+    return this.syncService.syncCatalog({
+      ...options,
+      progress$: options?.progress$ || this.progress$,
+    });
   }
 
   async syncLedger(options?: {
@@ -276,175 +48,10 @@ export class VinfastPartsService {
     dateTo?: string;
     progress$?: any;
   }) {
-    this.logger.log('Starting VinFast Parts Ledger sync...');
-
-    // We process items that have itemCode mapped to our catalog
-    const qb = this.invoiceItemRepo
-      .createQueryBuilder('ii')
-      .innerJoinAndSelect('ii.invoice', 'i')
-      .where('ii.itemCode IS NOT NULL')
-      .andWhere(
-        '( (i.direction = :inDir AND i.sellerTaxCode IN (:...taxCodes)) OR i.direction = :outDir )',
-        {
-          inDir: 'IN',
-          outDir: 'OUT',
-          taxCodes: this.VINFAST_SELLER_TAX_CODES,
-        },
-      );
-
-    if (options?.dateFrom && options?.dateTo) {
-      qb.andWhere('i.invoiceDate >= :dateFrom AND i.invoiceDate <= :dateTo', {
-        dateFrom: options.dateFrom,
-        dateTo: options.dateTo,
-      });
-    }
-
-    const invoiceItems = await qb.getMany();
-
-    let processedCount = 0;
-    let addedCount = 0;
-    let skippedCount = 0;
-    let updatedCount = 0;
-    let deletedCount = 0;
-
-    for (const ii of invoiceItems) {
-      const i = ii.invoice;
-      if (!i) continue;
-
-      const sku = this.resolveVinfastSku(ii.itemCode, ii.description);
-      if (!sku) continue;
-
-      processedCount++;
-      if (options?.progress$ && processedCount % 50 === 0) {
-        options.progress$.next({
-          processId: 'vinfast-sync',
-          type: 'ledger',
-          total: invoiceItems.length,
-          current: processedCount,
-          message: `Đang xử lý Sổ cái: ${processedCount}/${invoiceItems.length} dòng...`,
-          completed: false,
-        });
-      }
-
-      // Make sure the SKU exists in catalog
-      const catalogItem = await this.catalogRepo.findOne({ where: { sku } });
-      if (!catalogItem) {
-        skippedCount++;
-        continue;
-      }
-
-      if (catalogItem.isService) {
-        skippedCount++;
-        continue;
-      }
-
-      const existing = await this.ledgerRepo.findOne({
-        where: { invoiceItemId: ii.id },
-      });
-
-      const status = i.taxInvoiceStatus;
-
-      // 1. Canceled Invoice -> Delete if exists, otherwise skip
-      if (status === 6) {
-        if (existing) {
-          await this.ledgerRepo.remove(existing);
-          deletedCount++;
-        } else {
-          skippedCount++;
-        }
-        continue;
-      }
-
-      let qty = Number(ii.quantity) || 1;
-      let preVatAmount = Number(ii.preVatAmount) || 0;
-      let unitCost = Number(ii.unitPrice) || null;
-      let isAdjustment = false;
-      let adjSign = 1;
-
-      if (status === 3) {
-        isAdjustment = true;
-        if (preVatAmount < 0) {
-          adjSign = -1;
-        } else if (preVatAmount > 0) {
-          adjSign = 1;
-        }
-
-        if (qty === 1 && Math.abs(preVatAmount) > 0) {
-          qty = 0;
-        } else if (qty < 0) {
-          adjSign = -1;
-        }
-
-        qty = Math.abs(qty);
-        preVatAmount = Math.abs(preVatAmount);
-      }
-
-      if (existing) {
-        let changed = false;
-        if (existing.qty !== qty) {
-          existing.qty = qty;
-          changed = true;
-        }
-        if (existing.preVatAmount !== preVatAmount) {
-          existing.preVatAmount = preVatAmount;
-          changed = true;
-        }
-        if (existing.isAdjustment !== isAdjustment) {
-          existing.isAdjustment = isAdjustment;
-          changed = true;
-        }
-        if (existing.adjSign !== adjSign) {
-          existing.adjSign = adjSign;
-          changed = true;
-        }
-
-        if (changed) {
-          await this.ledgerRepo.save(existing);
-          updatedCount++;
-        } else {
-          skippedCount++;
-        }
-        continue;
-      }
-
-      const ledgerEntry = this.ledgerRepo.create({
-        partSku: sku,
-        invoiceItemId: ii.id,
-        invoiceId: i.id,
-        direction: i.direction as 'IN' | 'OUT',
-        qty,
-        unitCost: i.direction === 'IN' ? unitCost : null,
-        preVatAmount,
-        transactionDate: i.invoiceDate,
-        licensePlate: i.direction === 'OUT' ? i.licensePlate : null,
-        isAdjustment,
-        adjSign,
-      });
-
-      await this.ledgerRepo.save(ledgerEntry);
-      addedCount++;
-    }
-
-    this.logger.log(
-      `Ledger sync completed. Processed: ${processedCount}, Added: ${addedCount}, Updated: ${updatedCount}, Deleted: ${deletedCount}, Skipped: ${skippedCount}`,
-    );
-    if (options?.progress$) {
-      options.progress$.next({
-        processId: 'vinfast-sync',
-        type: 'ledger',
-        total: invoiceItems.length,
-        current: processedCount,
-        message: `Cập nhật Sổ cái (Ledger): Đã xử lý ${processedCount} dòng, Thêm mới ${addedCount}, Cập nhật ${updatedCount}, Xóa ${deletedCount}, Bỏ qua ${skippedCount}.`,
-        completed: true,
-      });
-    }
-    return {
-      processedCount,
-      addedCount,
-      updatedCount,
-      deletedCount,
-      skippedCount,
-    };
+    return this.syncService.syncLedger({
+      ...options,
+      progress$: options?.progress$ || this.progress$,
+    });
   }
 
   async getPartsStock(
@@ -459,298 +66,18 @@ export class VinfastPartsService {
     columnFilters?: string,
     stockTab?: string,
   ) {
-    const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    let vehicleTypeFilter = '';
-    if (vehicleType) {
-      if (vehicleType === 'oto' || vehicleType === 'CAR') {
-        vehicleTypeFilter = ` AND c.sku IN (${carCodesStr})`;
-      } else if (vehicleType === 'xemay' || vehicleType === 'MOTORBIKE') {
-        vehicleTypeFilter = ` AND c.sku NOT IN (${carCodesStr})`;
-      }
-    }
-
-    let searchFilter = '';
-    if (search) {
-      searchFilter += ` AND (c.sku ILIKE $${paramIndex} OR c.name ILIKE $${paramIndex})`;
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-
-    let cSearchFilter = '';
-    let havingSearchFilter = '';
-    if (columnSearch) {
-      try {
-        const parsed = JSON.parse(columnSearch);
-        for (const [col, val] of Object.entries(parsed)) {
-          if (!val) continue;
-          const strVal = typeof val === 'string' ? val : JSON.stringify(val);
-          if (col === 'sku') {
-            const res = buildRawMultiKeywordSql(
-              'c.sku',
-              strVal,
-              paramIndex,
-              params,
-            );
-            cSearchFilter += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (col === 'name') {
-            const res = buildRawMultiKeywordSql(
-              'c.name',
-              strVal,
-              paramIndex,
-              params,
-            );
-            cSearchFilter += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (col === 'uom') {
-            const res = buildRawMultiKeywordSql(
-              'c.uom',
-              strVal,
-              paramIndex,
-              params,
-            );
-            cSearchFilter += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-            const res = buildRawMultiKeywordSql(
-              `CAST("${col}" AS TEXT)`,
-              strVal,
-              paramIndex,
-              params,
-            );
-            havingSearchFilter += res.sql;
-            paramIndex = res.nextIndex;
-          }
-        }
-      } catch (e) {}
-    }
-
-    let cFiltersSql = '';
-    let havingFiltersSql = '';
-    if (columnFilters) {
-      try {
-        const parsed = JSON.parse(columnFilters);
-        for (const [col, vals] of Object.entries(parsed)) {
-          const arr = vals as string[];
-          if (!arr || arr.length === 0) continue;
-          if (col === 'sku') {
-            const res = buildRawColumnFilterSql(
-              'c.sku',
-              arr,
-              paramIndex,
-              params,
-            );
-            cFiltersSql += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (col === 'name') {
-            const res = buildRawColumnFilterSql(
-              'c.name',
-              arr,
-              paramIndex,
-              params,
-            );
-            cFiltersSql += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (col === 'uom') {
-            const res = buildRawColumnFilterSql(
-              'c.uom',
-              arr,
-              paramIndex,
-              params,
-            );
-            cFiltersSql += res.sql;
-            paramIndex = res.nextIndex;
-          } else if (col === 'vehicleType') {
-            const isCar = arr.includes('CAR');
-            const isMoto = arr.includes('MOTORBIKE');
-            if (isCar && !isMoto) {
-              cFiltersSql += ` AND c.sku IN (${carCodesStr})`;
-            } else if (!isCar && isMoto) {
-              cFiltersSql += ` AND c.sku NOT IN (${carCodesStr})`;
-            }
-          } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-            const res = buildRawColumnFilterSql(
-              `CAST("${col}" AS TEXT)`,
-              arr,
-              paramIndex,
-              params,
-            );
-            havingFiltersSql += res.sql;
-            paramIndex = res.nextIndex;
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (stockTab === 'IN_STOCK') {
-      havingFiltersSql += ' AND "qtyBalance" > 0';
-    } else if (stockTab === 'OUT_OF_STOCK') {
-      havingFiltersSql += ' AND "qtyBalance" = 0';
-    } else if (stockTab === 'NEGATIVE') {
-      havingFiltersSql += ' AND "qtyBalance" < 0';
-    } else if (stockTab === 'IN') {
-      havingFiltersSql += ' AND "qtyIn" > 0';
-    } else if (stockTab === 'OUT') {
-      havingFiltersSql += ' AND "qtyOut" > 0';
-    }
-
-    let orderSql = 'ORDER BY "qtyBalance" DESC, sku ASC';
-    if (sorts) {
-      try {
-        const sortsArr = JSON.parse(sorts) as string[];
-        if (sortsArr.length > 0) {
-          const sortFields: string[] = [];
-          for (const s of sortsArr) {
-            const isDesc = s.startsWith('-');
-            const col = s.replace(/^-/, '');
-            const dir = isDesc ? 'DESC' : 'ASC';
-            let sqlCol = '';
-            if (col === 'sku') sqlCol = 'sku';
-            else if (col === 'name') sqlCol = 'name';
-            else if (col === 'uom') sqlCol = 'uom';
-            else if (col === 'qtyIn') sqlCol = '"qtyIn"';
-            else if (col === 'qtyOut') sqlCol = '"qtyOut"';
-            else if (col === 'qtyBalance') sqlCol = '"qtyBalance"';
-
-            if (sqlCol) {
-              sortFields.push(`${sqlCol} ${dir} NULLS LAST`);
-            }
-          }
-          if (sortFields.length > 0) {
-            orderSql = `ORDER BY ${sortFields.join(', ')}`;
-          }
-        }
-      } catch (e) {}
-    } else if (sortBy) {
-      let sqlCol = '';
-      if (sortBy === 'sku') sqlCol = 'sku';
-      else if (sortBy === 'name') sqlCol = 'name';
-      else if (sortBy === 'uom') sqlCol = 'uom';
-      else if (sortBy === 'qtyIn') sqlCol = '"qtyIn"';
-      else if (sortBy === 'qtyOut') sqlCol = '"qtyOut"';
-      else if (sortBy === 'qtyBalance') sqlCol = '"qtyBalance"';
-
-      const dir = sortDir === 'asc' ? 'ASC' : 'DESC';
-      if (sqlCol) orderSql = `ORDER BY ${sqlCol} ${dir} NULLS LAST`;
-    }
-
-    const whereClause = `WHERE c.is_service = false ${vehicleTypeFilter} ${searchFilter} ${cSearchFilter} ${cFiltersSql}`;
-
-    const baseQuery = `
-      WITH StockData AS (
-        SELECT 
-          c.sku, 
-          c.name, 
-          c.uom, 
-          c.is_service as "isService",
-          CASE WHEN c.sku IN (${carCodesStr}) THEN 'CAR' ELSE 'MOTORBIKE' END as "vehicleType",
-          COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) as "qtyIn",
-          COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
-          (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
-        FROM vinfast_parts_catalog c
-        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
-        ${whereClause}
-        GROUP BY c.sku, c.name, c.uom, c.is_service
-      )
-    `;
-
-    const finalQuery = `
-      ${baseQuery}
-      SELECT * FROM StockData
-      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
-      ${orderSql}
-      LIMIT ${limit} OFFSET ${(page - 1) * limit}
-    `;
-
-    const countQuery = `
-      ${baseQuery}
-      SELECT COUNT(*) as total FROM StockData
-      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
-    `;
-
-    const summaryQuery = `
-      ${baseQuery}
-      SELECT 
-        COALESCE(SUM("qtyIn"), 0) as "totalQtyIn",
-        COALESCE(SUM("qtyOut"), 0) as "totalQtyOut",
-        COALESCE(SUM("qtyBalance"), 0) as "totalQtyBalance"
-      FROM StockData
-      WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
-    `;
-
-    const [items, countResult, summaryResult] = await Promise.all([
-      this.catalogRepo.query(finalQuery, params),
-      this.catalogRepo.query(countQuery, params),
-      this.catalogRepo.query(summaryQuery, params),
-    ]);
-
-    const total = parseInt(countResult[0]?.total || '0', 10);
-    const totalPages = Math.ceil(total / limit);
-
-    const totalQtyIn = parseFloat(summaryResult[0]?.totalQtyIn || '0');
-    const totalQtyOut = parseFloat(summaryResult[0]?.totalQtyOut || '0');
-    const totalQtyBalance = parseFloat(
-      summaryResult[0]?.totalQtyBalance || '0',
-    );
-
-    let cumulativeQtyIn = totalQtyIn;
-    let cumulativeQtyOut = totalQtyOut;
-    let cumulativeQtyBalance = totalQtyBalance;
-
-    if (page === 1) {
-      cumulativeQtyIn = items.reduce(
-        (acc: number, cur: any) => acc + parseFloat(cur.qtyIn || '0'),
-        0,
-      );
-      cumulativeQtyOut = items.reduce(
-        (acc: number, cur: any) => acc + parseFloat(cur.qtyOut || '0'),
-        0,
-      );
-      cumulativeQtyBalance = items.reduce(
-        (acc: number, cur: any) => acc + parseFloat(cur.qtyBalance || '0'),
-        0,
-      );
-    } else if (page > 1 && page < totalPages) {
-      const cumulativeQuery = `
-        ${baseQuery}
-        SELECT 
-          COALESCE(SUM("qtyIn"), 0) as "cumulativeQtyIn",
-          COALESCE(SUM("qtyOut"), 0) as "cumulativeQtyOut",
-          COALESCE(SUM("qtyBalance"), 0) as "cumulativeQtyBalance"
-        FROM (
-          SELECT "qtyIn", "qtyOut", "qtyBalance"
-          FROM StockData
-          WHERE 1=1 ${havingSearchFilter} ${havingFiltersSql}
-          ${orderSql}
-          LIMIT ${page * limit}
-        ) sub
-      `;
-      const cumResult = await this.catalogRepo.query(cumulativeQuery, params);
-      cumulativeQtyIn = parseFloat(cumResult[0]?.cumulativeQtyIn || '0');
-      cumulativeQtyOut = parseFloat(cumResult[0]?.cumulativeQtyOut || '0');
-      cumulativeQtyBalance = parseFloat(
-        cumResult[0]?.cumulativeQtyBalance || '0',
-      );
-    }
-
-    return {
-      data: items,
-      total,
+    return this.stockService.getPartsStock(
+      vehicleType,
       page,
       limit,
-      totalPages,
-      summary: {
-        totalQtyIn,
-        totalQtyOut,
-        totalQtyBalance,
-        cumulativeQtyIn,
-        cumulativeQtyOut,
-        cumulativeQtyBalance,
-      },
-    };
+      search,
+      sortBy,
+      sortDir,
+      sorts,
+      columnSearch,
+      columnFilters,
+      stockTab,
+    );
   }
 
   async getStockColumnOptions(
@@ -758,431 +85,27 @@ export class VinfastPartsService {
     search?: string,
     page: number = 1,
     limit: number = 20,
-    filtersStr?: string,
+    filters?: string,
     vehicleType?: string,
     stockTab?: string,
   ) {
-    const carCodesStr = VINFAST_CAR_PART_CODES.map((c) => `'${c}'`).join(',');
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    let vehicleTypeFilter = '';
-    if (vehicleType) {
-      if (vehicleType === 'oto' || vehicleType === 'CAR') {
-        vehicleTypeFilter = ` AND c.sku IN (${carCodesStr})`;
-      } else if (vehicleType === 'xemay' || vehicleType === 'MOTORBIKE') {
-        vehicleTypeFilter = ` AND c.sku NOT IN (${carCodesStr})`;
-      }
-    }
-
-    let cFiltersSql = '';
-    let havingFiltersSql = '';
-    if (filtersStr) {
-      try {
-        const filters = JSON.parse(filtersStr);
-        for (const [col, vals] of Object.entries(filters)) {
-          const arr = vals as string[];
-          if (!arr || arr.length === 0) continue;
-          if (col === 'vehicleType') {
-            const isCar = arr.includes('CAR');
-            const isMoto = arr.includes('MOTORBIKE');
-            if (isCar && !isMoto) {
-              cFiltersSql += ` AND c.sku IN (${carCodesStr})`;
-            } else if (!isCar && isMoto) {
-              cFiltersSql += ` AND c.sku NOT IN (${carCodesStr})`;
-            }
-          } else if (col !== columnKey) {
-            if (col === 'sku') {
-              const res = buildRawColumnFilterSql(
-                'c.sku',
-                arr,
-                paramIndex,
-                params,
-              );
-              cFiltersSql += res.sql;
-              paramIndex = res.nextIndex;
-            } else if (col === 'name') {
-              const res = buildRawColumnFilterSql(
-                'c.name',
-                arr,
-                paramIndex,
-                params,
-              );
-              cFiltersSql += res.sql;
-              paramIndex = res.nextIndex;
-            } else if (col === 'uom') {
-              const res = buildRawColumnFilterSql(
-                'c.uom',
-                arr,
-                paramIndex,
-                params,
-              );
-              cFiltersSql += res.sql;
-              paramIndex = res.nextIndex;
-            } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(col)) {
-              const res = buildRawColumnFilterSql(
-                `CAST("${col}" AS TEXT)`,
-                arr,
-                paramIndex,
-                params,
-              );
-              havingFiltersSql += res.sql;
-              paramIndex = res.nextIndex;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    let searchSql = '';
-    let havingSearchSql = '';
-    if (search) {
-      if (columnKey === 'sku') {
-        const res = buildRawMultiKeywordSql(
-          'c.sku',
-          search,
-          paramIndex,
-          params,
-        );
-        searchSql += res.sql;
-        paramIndex = res.nextIndex;
-      } else if (columnKey === 'name') {
-        const res = buildRawMultiKeywordSql(
-          'c.name',
-          search,
-          paramIndex,
-          params,
-        );
-        searchSql += res.sql;
-        paramIndex = res.nextIndex;
-      } else if (columnKey === 'uom') {
-        const res = buildRawMultiKeywordSql(
-          'c.uom',
-          search,
-          paramIndex,
-          params,
-        );
-        searchSql += res.sql;
-        paramIndex = res.nextIndex;
-      } else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(columnKey)) {
-        const res = buildRawMultiKeywordSql(
-          `CAST("${columnKey}" AS TEXT)`,
-          search,
-          paramIndex,
-          params,
-        );
-        havingSearchSql += res.sql;
-        paramIndex = res.nextIndex;
-      }
-    }
-
-    if (stockTab === 'IN_STOCK') {
-      havingFiltersSql += ' AND "qtyBalance" > 0';
-    } else if (stockTab === 'OUT_OF_STOCK') {
-      havingFiltersSql += ' AND "qtyBalance" = 0';
-    } else if (stockTab === 'NEGATIVE') {
-      havingFiltersSql += ' AND "qtyBalance" < 0';
-    } else if (stockTab === 'IN') {
-      havingFiltersSql += ' AND "qtyIn" > 0';
-    } else if (stockTab === 'OUT') {
-      havingFiltersSql += ' AND "qtyOut" > 0';
-    }
-
-    let selectCol = 'sku';
-    if (columnKey === 'name') selectCol = 'name';
-    else if (columnKey === 'uom') selectCol = 'uom';
-    else if (columnKey === 'sku') selectCol = 'sku';
-    else if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(columnKey))
-      selectCol = `"${columnKey}"`;
-
-    const baseQuery = `
-      WITH StockData AS (
-        SELECT 
-          c.sku, 
-          c.name, 
-          c.uom, 
-          c.is_service as "isService",
-          CASE WHEN c.sku IN (${carCodesStr}) THEN 'CAR' ELSE 'MOTORBIKE' END as "vehicleType",
-          COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) as "qtyIn",
-          COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
-          (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
-        FROM vinfast_parts_catalog c
-        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
-        WHERE c.is_service = false ${vehicleTypeFilter} ${cFiltersSql} ${searchSql}
-        GROUP BY c.sku, c.name, c.uom, c.is_service
-      )
-    `;
-
-    const query = `
-      ${baseQuery}
-      SELECT DISTINCT CAST(${selectCol} AS TEXT) as value
-      FROM StockData
-      WHERE 1=1 ${havingFiltersSql} ${havingSearchSql}
-      ORDER BY value ASC
-      LIMIT ${limit} OFFSET ${(page - 1) * limit}
-    `;
-
-    const countQuery = `
-      ${baseQuery}
-      SELECT COUNT(DISTINCT CAST(${selectCol} AS TEXT)) as total
-      FROM StockData
-      WHERE 1=1 ${havingFiltersSql} ${havingSearchSql}
-    `;
-
-    const [items, countResult] = await Promise.all([
-      this.catalogRepo.query(query, params),
-      this.catalogRepo.query(countQuery, params),
-    ]);
-
-    const total = parseInt(countResult[0]?.total || '0', 10);
-    return {
-      items: items.map((i: any) => i.value).filter((v: any) => v != null),
-      total,
+    return this.stockService.getStockColumnOptions(
+      columnKey,
+      vehicleType,
+      search,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
-    };
+      filters,
+      stockTab,
+    );
   }
 
   async getPartLedgerHistory(sku: string) {
-    // Return IN transactions and OUT transactions separately or together,
-    // we need to return them in a way that helps trace FIFO.
-    // Let's just return all ledger entries ordered by date and creation time
-    const query = `
-      SELECT 
-        l.id,
-        l.direction,
-        l.qty::numeric as qty,
-        l.unit_cost::numeric as "unitCost",
-        l.pre_vat_amount::numeric as "preVatAmount",
-        l.transaction_date as "transactionDate",
-        l.is_adjustment as "isAdjustment",
-        l.adj_sign as "adjSign",
-        l.invoice_id as "invoiceId",
-        i.invoice_no as "invoiceNo",
-        i.invoice_date as "invoiceDate",
-        i.buyer_name as "buyerName",
-        i.seller_name as "sellerName",
-        i.buyer_tax_code as "buyerTaxCode",
-        i.seller_tax_code as "sellerTaxCode",
-        i.license_plate as "licensePlate"
-      FROM vinfast_parts_ledger l
-      JOIN erp_invoices i ON i.id = l.invoice_id
-      WHERE l.part_sku = $1 AND i.tax_invoice_status IN (1, 3)
-      ORDER BY l.transaction_date ASC, l.created_at ASC
-    `;
-
-    const entries = await this.ledgerRepo.query(query, [sku]);
-
-    // We will do a mini-FIFO calculation here to attach the exact unit_cost for OUT transactions
-    // so the UI can just display it.
-    const inQueue: { id: string; qty: number; unitCost: number }[] = [];
-
-    for (const row of entries) {
-      let qty = Number(row.qty || 0);
-      let amount = Number(row.preVatAmount || 0);
-
-      if (row.isAdjustment && row.adjSign === -1) {
-        qty = -qty;
-        amount = -amount;
-      }
-
-      if (row.direction === 'IN') {
-        if (qty > 0) {
-          inQueue.push({
-            id: row.id,
-            qty,
-            unitCost: Number(row.unitCost || 0),
-          });
-        } else if (qty < 0) {
-          let qToReverse = Math.abs(qty);
-          while (qToReverse > 0 && inQueue.length > 0) {
-            const batch = inQueue[0];
-            if (batch.qty <= qToReverse) {
-              qToReverse -= batch.qty;
-              inQueue.shift();
-            } else {
-              batch.qty -= qToReverse;
-              qToReverse = 0;
-            }
-          }
-        }
-        row.calculatedCogs = null;
-      } else {
-        let cogsForThisOut = 0;
-        if (qty > 0) {
-          let qNeeded = qty;
-          while (qNeeded > 0) {
-            if (inQueue.length === 0) {
-              break;
-            }
-            const batch = inQueue[0];
-            if (batch.qty <= qNeeded) {
-              cogsForThisOut += batch.qty * batch.unitCost;
-              qNeeded -= batch.qty;
-              inQueue.shift();
-            } else {
-              cogsForThisOut += qNeeded * batch.unitCost;
-              batch.qty -= qNeeded;
-              qNeeded = 0;
-            }
-          }
-        }
-        // Save the calculated avg unit cost for this OUT transaction
-        row.calculatedCogs = cogsForThisOut;
-        row.calculatedUnitCost = qty !== 0 ? cogsForThisOut / qty : 0;
-      }
-    }
-
-    return entries;
+    return this.ledgerService.getPartLedgerHistory(sku);
   }
 
   async getFifoUnitRows(sku: string, page: number = 1, limit: number = 100) {
-    const query = `
-      SELECT 
-        l.id,
-        l.direction,
-        l.qty::numeric as qty,
-        l.unit_cost::numeric as "unitCost",
-        l.pre_vat_amount::numeric as "preVatAmount",
-        l.transaction_date as "transactionDate",
-        l.is_adjustment as "isAdjustment",
-        l.adj_sign as "adjSign",
-        i.id as "invoiceId",
-        i.invoice_no as "invoiceNo",
-        i.invoice_date as "invoiceDate",
-        i.buyer_name as "buyerName",
-        i.seller_name as "sellerName",
-        i.license_plate as "licensePlate"
-      FROM vinfast_parts_ledger l
-      JOIN erp_invoices i ON i.id = l.invoice_id
-      WHERE l.part_sku = $1 AND i.tax_invoice_status IN (1, 3)
-      ORDER BY l.transaction_date ASC, l.created_at ASC
-    `;
-
-    const entries = await this.ledgerRepo.query(query, [sku]);
-
-    const unitRows: FifoUnitRow[] = [];
-    let unitIndexCounter = 1;
-    // We keep a queue of indices pointing to IN units in unitRows
-    const inQueue: number[] = [];
-
-    for (const row of entries) {
-      let qty = Number(row.qty || 0);
-      let amount = Number(row.preVatAmount || 0);
-
-      if (row.isAdjustment && row.adjSign === -1) {
-        qty = -qty;
-        amount = -amount;
-      }
-
-      if (row.direction === 'IN') {
-        if (qty > 0) {
-          const unitCost = Number(row.unitCost || 0);
-          unitRows.push({
-            unitIndex: unitIndexCounter++,
-            inLedgerId: row.id,
-            inDate: row.transactionDate,
-            inInvoiceNo: row.invoiceNo,
-            inInvoiceId: row.invoiceId,
-            inUnitCost: unitCost,
-            qty: qty,
-            status: 'IN_STOCK',
-          });
-          inQueue.push(unitRows.length - 1);
-        } else if (qty < 0) {
-          let qToReverse = Math.abs(qty);
-          while (qToReverse > 0 && inQueue.length > 0) {
-            const rowIndex = inQueue[0];
-            const unitRow = unitRows[rowIndex];
-
-            if (unitRow.qty! <= qToReverse + 0.0001) {
-              // tolerance
-              qToReverse -= unitRow.qty!;
-              unitRow.status = 'ADJUSTMENT';
-              inQueue.shift();
-            } else {
-              unitRow.qty =
-                Math.round((unitRow.qty! - qToReverse) * 10000) / 10000;
-              unitRows.push({
-                ...unitRow,
-                qty: qToReverse,
-                unitIndex: unitIndexCounter++,
-                status: 'ADJUSTMENT',
-              });
-              qToReverse = 0;
-            }
-          }
-        }
-      } else if (row.direction === 'OUT') {
-        if (qty > 0) {
-          const outPricePerUnit = qty !== 0 ? amount / qty : 0;
-          let qNeeded = qty;
-          while (qNeeded > 0 && inQueue.length > 0) {
-            const rowIndex = inQueue[0];
-            const unitRow = unitRows[rowIndex];
-
-            if (unitRow.qty! <= qNeeded + 0.0001) {
-              qNeeded -= unitRow.qty!;
-              unitRow.outLedgerId = row.id;
-              unitRow.outDate = row.transactionDate;
-              unitRow.outInvoiceNo = row.invoiceNo;
-              unitRow.outInvoiceId = row.invoiceId;
-              unitRow.licensePlate = row.licensePlate;
-              unitRow.outPrice = outPricePerUnit;
-              unitRow.cogsFifo = unitRow.inUnitCost;
-              unitRow.profit = outPricePerUnit - unitRow.inUnitCost;
-              unitRow.status = 'SOLD';
-              inQueue.shift();
-            } else {
-              const consumed = Math.round(qNeeded * 10000) / 10000;
-              unitRow.qty =
-                Math.round((unitRow.qty! - consumed) * 10000) / 10000;
-
-              unitRows.push({
-                ...unitRow,
-                qty: consumed,
-                unitIndex: unitIndexCounter++,
-                outLedgerId: row.id,
-                outDate: row.transactionDate,
-                outInvoiceNo: row.invoiceNo,
-                outInvoiceId: row.invoiceId,
-                licensePlate: row.licensePlate,
-                outPrice: outPricePerUnit,
-                cogsFifo: unitRow.inUnitCost,
-                profit: outPricePerUnit - unitRow.inUnitCost,
-                status: 'SOLD',
-              });
-              qNeeded = 0;
-            }
-          }
-        }
-      }
-    }
-
-    // Filter out ADJUSTMENT if we don't want them in the regular display?
-    // Let's keep them so the unit index is consistent, or maybe remove them.
-    // The user wants to see what's in stock and what's sold.
-    // We'll keep them but UI can show them as adjusted.
-    const validRows = unitRows;
-
-    // Sort by status SOLD first, then chronological (unitIndex ASC)
-    validRows.sort((a, b) => {
-      if (a.status === 'SOLD' && b.status !== 'SOLD') return -1;
-      if (a.status !== 'SOLD' && b.status === 'SOLD') return 1;
-      return a.unitIndex - b.unitIndex;
-    });
-
-    const total = validRows.length;
-    const items = validRows.slice((page - 1) * limit, page * limit);
-
-    return {
-      data: items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return this.ledgerService.getFifoUnitRows(sku, page, limit);
   }
 
   async exportStockExcel(options: {
@@ -1210,7 +133,7 @@ export class VinfastPartsService {
       undefined,
       columnFilters,
     );
-    const skus = overviewData.data.map((d: any) => d.sku);
+    const skus = overviewData.items.map((d: any) => d.sku);
 
     if (skus.length === 0) {
       throw new Error('Không có dữ liệu tồn kho để xuất.');
@@ -1268,9 +191,6 @@ export class VinfastPartsService {
       closingBalanceQty: number;
       closingBalanceValue: number;
     }[] = [];
-    const summaryRows = overviewData.data;
-
-    const carCodesStr = VINFAST_CAR_PART_CODES;
 
     for (const [sku, entries] of entriesBySku.entries()) {
       const inQueue: { id: string; qty: number; unitCost: number }[] = [];
@@ -1394,310 +314,68 @@ export class VinfastPartsService {
         closingBalanceQty: periodClosingBalanceQty,
         closingBalanceValue: periodClosingBalanceValue,
       });
-
-      let totalOutCogs = 0;
-      let balanceValue = 0;
-
-      // Tính Cogs của những đơn đã lọc (để báo cáo) hoặc toàn bộ?
-      // Summary sheet thường show toàn bộ lịch sử (stock) nên lấy tất cả COGS
-      for (const row of entries) {
-        if (row.direction === 'OUT' && row.calculatedCogs) {
-          totalOutCogs += row.calculatedCogs;
-        }
-      }
-      for (const q of inQueue) {
-        balanceValue += q.qty * q.unitCost;
-      }
-      const summaryItem = summaryRows.find((s: any) => s.sku === sku);
-      if (summaryItem) {
-        summaryItem.totalOutCogs = totalOutCogs;
-        summaryItem.balanceValue = balanceValue;
-        summaryItem.vehicleTypeStr = carCodesStr.includes(sku as any)
-          ? 'Ô tô'
-          : 'Xe máy';
-      }
     }
 
-    onProgress?.(70, totalProgress, 'Đang tạo Excel Workbook...');
+    onProgress?.(80, totalProgress, 'Đang tạo workbook Excel...');
 
     const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Liouni ERP';
 
-    // Header format function
-    const setupSheetHeader = (sheet: ExcelJS.Worksheet, colCount: number) => {
-      sheet.getRow(1).font = { bold: true };
-      sheet.getRow(1).alignment = { horizontal: 'center' };
-      sheet.getRow(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' },
-      };
-      sheet.views = [
-        { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' },
-      ];
-      sheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: colCount },
-      };
-    };
-
-    // --- SHEET 1: TỔNG HỢP ---
-    const summarySheet = workbook.addWorksheet('Tổng hợp tồn kho');
+    // Sheet 1: Tổng hợp tồn kho
+    const summarySheet = workbook.addWorksheet('Tổng Hợp Tồn Kho');
     summarySheet.columns = [
-      { header: 'Mã phụ tùng', key: 'sku', width: 20 },
-      { header: 'Tên phụ tùng', key: 'name', width: 40 },
-      { header: 'Loại xe', key: 'vehicleTypeStr', width: 14 },
+      { header: 'STT', key: 'stt', width: 8 },
+      { header: 'Mã Phụ Tùng', key: 'sku', width: 22 },
+      { header: 'Tên Phụ Tùng', key: 'name', width: 35 },
       { header: 'ĐVT', key: 'uom', width: 12 },
-      { header: 'Tổng SL nhập', key: 'qtyIn', width: 15 },
-      { header: 'Tổng SL xuất', key: 'qtyOut', width: 15 },
-      { header: 'Tồn cuối (SL)', key: 'qtyBalance', width: 15 },
-      { header: 'Giá vốn FIFO xuất', key: 'totalOutCogs', width: 20 },
-      { header: 'Giá trị tồn cuối FIFO', key: 'balanceValue', width: 20 },
+      { header: 'Tổng Nhập', key: 'qtyIn', width: 16 },
+      { header: 'Tổng Xuất', key: 'qtyOut', width: 16 },
+      { header: 'Tồn Kho', key: 'qtyBalance', width: 16 },
     ];
-    setupSheetHeader(summarySheet, 9);
 
-    summaryRows.forEach((row: any) => {
+    overviewData.items.forEach((item: any, idx: number) => {
       summarySheet.addRow({
-        sku: row.sku,
-        name: row.name,
-        vehicleTypeStr: row.vehicleTypeStr,
-        uom: row.uom,
-        qtyIn: parseFloat(row.qtyIn || '0'),
-        qtyOut: parseFloat(row.qtyOut || '0'),
-        totalOutCogs: row.totalOutCogs || 0,
-        qtyBalance: parseFloat(row.qtyBalance || '0'),
-        balanceValue: row.balanceValue || 0,
+        stt: idx + 1,
+        sku: item.sku,
+        name: item.name,
+        uom: item.uom,
+        qtyIn: Number(item.qtyIn || 0),
+        qtyOut: Number(item.qtyOut || 0),
+        qtyBalance: Number(item.qtyBalance || 0),
       });
     });
 
-    summarySheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        [
-          'qtyIn',
-          'qtyOut',
-          'totalOutCogs',
-          'qtyBalance',
-          'balanceValue',
-        ].forEach((k) => {
-          row.getCell(k).numFmt = '#,##0.00';
-        });
-      }
-    });
-
-    // --- SHEET 2: XUẤT NHẬP TỒN (STOCK LEDGER) ---
-    const ledgerSheet = workbook.addWorksheet('Xuất Nhập Tồn');
+    // Sheet 2: Sổ Cái Chi Tiết FIFO
+    const ledgerSheet = workbook.addWorksheet('Sổ Cái Chi Tiết FIFO');
     ledgerSheet.columns = [
-      { key: 'transactionDate', width: 15 },
-      { key: 'invoiceNo', width: 15 },
-      { key: 'partSku', width: 20 },
-      { key: 'partName', width: 40 },
-      { key: 'unit', width: 10 },
-      { key: 'partnerName', width: 35 },
-      { key: 'qtyIn', width: 15 },
-      { key: 'unitCostIn', width: 18 },
-      { key: 'amountIn', width: 20 },
-      { key: 'qtyOut', width: 15 },
-      { key: 'unitCostOut', width: 18 },
-      { key: 'amountOut', width: 20 },
-      { key: 'runningBalanceQty', width: 15 },
-      { key: 'runningBalanceValue', width: 20 },
-      { key: 'perfQty', width: 15 },
-      { key: 'perfUnitCost', width: 18 },
-      { key: 'perfTotalCost', width: 20 },
-      { key: 'perfSellPrice', width: 18 },
-      { key: 'perfTotalRevenue', width: 20 },
-      { key: 'perfProfit', width: 20 },
-      { key: 'perfMargin', width: 15 },
-    ];
-
-    // Double Header
-    const row1 = ledgerSheet.addRow([
-      'Ngày',
-      'Số hóa đơn',
-      'Mã phụ tùng',
-      'Sản phẩm / Hàng hóa',
-      'ĐVT',
-      'Đối tác',
-      'Nhập kho',
-      '',
-      '',
-      'Xuất kho - FIFO',
-      '',
-      '',
-      'Tồn kho',
-      '',
-      'Hiệu quả kinh doanh',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ]);
-    const row2 = ledgerSheet.addRow([
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      'Số lượng',
-      'Đơn giá',
-      'Thành tiền',
-      'Số lượng',
-      'Đơn giá',
-      'Thành tiền',
-      'Số lượng',
-      'Thành tiền',
-      'Số lượng',
-      'Đơn giá mua',
-      'Giá mua',
-      'Đơn giá bán',
-      'Giá bán',
-      'Lợi nhuận',
-      '% Lợi nhuận',
-    ]);
-
-    // Merging for Header
-    ledgerSheet.mergeCells('A1:A2');
-    ledgerSheet.mergeCells('B1:B2');
-    ledgerSheet.mergeCells('C1:C2');
-    ledgerSheet.mergeCells('D1:D2');
-    ledgerSheet.mergeCells('E1:E2');
-    ledgerSheet.mergeCells('F1:F2');
-    ledgerSheet.mergeCells('G1:I1');
-    ledgerSheet.mergeCells('J1:L1');
-    ledgerSheet.mergeCells('M1:N1');
-    ledgerSheet.mergeCells('O1:U1');
-
-    // Header styling
-    [row1, row2].forEach((r) => {
-      r.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      r.alignment = { horizontal: 'center', vertical: 'middle' };
-      r.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF002B5E' },
-        };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFFFFFFF' } },
-          left: { style: 'thin', color: { argb: 'FFFFFFFF' } },
-          bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } },
-          right: { style: 'thin', color: { argb: 'FFFFFFFF' } },
-        };
-      });
-    });
-
-    // Freeze pane
-    ledgerSheet.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 2, activeCell: 'A3' },
+      { header: 'Mã Phụ Tùng', key: 'partSku', width: 22 },
+      { header: 'Tên Phụ Tùng', key: 'partName', width: 30 },
+      { header: 'Ngày Giao Dịch', key: 'transactionDate', width: 15 },
+      { header: 'Số Hóa Đơn', key: 'invoiceNo', width: 15 },
+      { header: 'Chiều', key: 'direction', width: 10 },
+      { header: 'Số Lượng', key: 'qty', width: 14 },
+      { header: 'Đơn Giá', key: 'unitCost', width: 16 },
+      { header: 'Thành Tiền', key: 'amount', width: 18 },
+      { header: 'Biển Số Xe', key: 'licensePlate', width: 15 },
+      { header: 'Tồn Lũy Kế', key: 'runningBalanceQty', width: 16 },
+      { header: 'Giá Trị Tồn Lũy Kế', key: 'runningBalanceValue', width: 20 },
     ];
 
     for (const section of ledgerSections) {
-      if (
-        section.rows.length === 0 &&
-        section.openingBalanceQty === 0 &&
-        section.closingBalanceQty === 0
-      )
-        continue;
-
-      // Opening balance row
-      if (dateFrom) {
-        const obRow = ledgerSheet.addRow({
-          transactionDate: 'Tồn đầu kỳ',
+      for (const row of section.rows) {
+        ledgerSheet.addRow({
           partSku: section.sku,
           partName: section.partName,
-          unit: section.unit,
-          runningBalanceQty: section.openingBalanceQty,
-          runningBalanceValue: section.openingBalanceValue,
-        });
-        obRow.font = { italic: true, bold: true };
-        obRow.getCell('runningBalanceQty').numFmt = '#,##0.00';
-        obRow.getCell('runningBalanceValue').numFmt = '#,##0';
-      }
-
-      // Ledger entries
-      for (const row of section.rows) {
-        const isOut = row.direction === 'OUT';
-        const partnerName = isOut ? row.buyerName : row.sellerName;
-        const isAdjNegative = row.isAdjustment && row.adjSign === -1;
-        const rawQty = parseFloat(row.qty || '0');
-        const displayQty = isAdjNegative ? -rawQty : rawQty;
-        const unitCost = isOut
-          ? parseFloat(row.calculatedUnitCost || '0')
-          : parseFloat(row.unitCost || '0');
-        const amount = isOut
-          ? parseFloat(row.calculatedCogs || '0')
-          : parseFloat(row.preVatAmount || '0');
-
-        let perfQty: any = '';
-        let perfUnitCost: any = '';
-        let perfTotalCost: any = '';
-        let perfSellPrice: any = '';
-        let perfTotalRevenue: any = '';
-        let perfProfit: any = '';
-        let perfMargin: any = '';
-
-        if (isOut) {
-          const sellAmount = parseFloat(row.preVatAmount || '0');
-          const sellPrice = rawQty !== 0 ? sellAmount / rawQty : 0;
-          const profit = sellAmount - amount;
-          const marginPct = sellAmount > 0 ? profit / sellAmount : 0;
-
-          perfQty = displayQty;
-          perfUnitCost = unitCost;
-          perfTotalCost = amount;
-          perfSellPrice = sellPrice;
-          perfTotalRevenue = sellAmount;
-          perfProfit = profit;
-          perfMargin = marginPct;
-        }
-
-        const entryRow = ledgerSheet.addRow({
           transactionDate: row.transactionDate,
           invoiceNo: row.invoiceNo,
-          partSku: row.partSku,
-          partName: row.partName,
-          unit: row.unit,
-          partnerName,
-          qtyIn: isOut ? '' : displayQty,
-          unitCostIn: isOut ? '' : unitCost,
-          amountIn: isOut ? '' : isAdjNegative ? -amount : amount,
-          qtyOut: isOut ? displayQty : '',
-          unitCostOut: isOut ? unitCost : '',
-          amountOut: isOut ? amount : '',
+          direction: row.direction,
+          qty: Number(row.qty || 0),
+          unitCost: Number(row.unitCost || 0),
+          amount: Number(row.preVatAmount || 0),
+          licensePlate: row.licensePlate || '',
           runningBalanceQty: row.runningBalanceQty,
           runningBalanceValue: row.runningBalanceValue,
-          perfQty,
-          perfUnitCost,
-          perfTotalCost,
-          perfSellPrice,
-          perfTotalRevenue,
-          perfProfit,
-          perfMargin,
         });
-
-        // formatting numbers
-        [
-          'unitCostIn',
-          'amountIn',
-          'unitCostOut',
-          'amountOut',
-          'runningBalanceValue',
-          'perfUnitCost',
-          'perfTotalCost',
-          'perfSellPrice',
-          'perfTotalRevenue',
-          'perfProfit',
-        ].forEach((k) => {
-          entryRow.getCell(k).numFmt = '#,##0.00';
-        });
-        ['qtyIn', 'qtyOut', 'runningBalanceQty', 'perfQty'].forEach((k) => {
-          entryRow.getCell(k).numFmt = '#,##0.00';
-        });
-        if (isOut) {
-          entryRow.getCell('perfMargin').numFmt = '0.0%';
-        }
       }
     }
 

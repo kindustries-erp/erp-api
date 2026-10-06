@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -37,6 +39,8 @@ import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
+import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
+import { ExecuteAdjustmentNetoffDto } from './dto/invoice-adjustment-reconciliation.dto';
 
 @ApiTags('erp_invoices')
 @ApiBearerAuth()
@@ -47,7 +51,26 @@ export class ErpInvoicesCoreController {
     private readonly service: ErpInvoicesCoreService,
     private readonly notificationsService: NotificationsService,
     private readonly traceabilityService: DocumentTraceabilityService,
+    private readonly adjustmentService: InvoiceAdjustmentService,
   ) {}
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @Get(':id/adjustment-reconciliation')
+  getAdjustmentReconciliation(@Param('id') id: string) {
+    return this.adjustmentService.getAdjustmentReconciliation(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post('adjustment-netoff')
+  executeAdjustmentNetoff(@Body() dto: ExecuteAdjustmentNetoffDto) {
+    return this.adjustmentService.executeAdjustmentNetoff(dto);
+  }
 
   @RequirePermissions({
     resource: ErpResource.INVOICES,
@@ -316,6 +339,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.READ,
   })
   @Post('bulk-net-offs')
+  @HttpCode(HttpStatus.OK)
   getBulkNetOffs(@Body('ids') ids: string[]) {
     return this.service.getBulkNetOffs(ids);
   }
@@ -325,6 +349,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.READ,
   })
   @Post('smart-net-off-suggestions')
+  @HttpCode(HttpStatus.OK)
   getSmartNetOffSuggestions(@Body('invoiceIds') invoiceIds: string[]) {
     return this.service.getSmartNetOffSuggestions(invoiceIds);
   }
@@ -883,6 +908,48 @@ export class ErpInvoicesCoreController {
   @Delete(':id/pdfs/:key')
   deletePdf(@Param('id') id: string, @Param('key') key: string) {
     return this.service.deletePdf(id, decodeURIComponent(key));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Category & Auto-Posting
+  // ---------------------------------------------------------------------------
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Patch('bulk-set-category')
+  async bulkSetCategory(
+    @Body() body: { invoiceIds: string[]; categoryId: string | null },
+  ) {
+    if (!body.invoiceIds || !Array.isArray(body.invoiceIds)) {
+      throw new BadRequestException('invoiceIds phải là một danh sách hợp lệ');
+    }
+    return this.service.bulkSetInvoiceCategory(
+      body.invoiceIds,
+      body.categoryId,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Patch(':id/category')
+  async setCategory(
+    @Param('id') id: string,
+    @Body() body: { categoryId: string | null },
+  ) {
+    return this.service.setInvoiceCategory(id, body.categoryId);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':id/ai-classify-autopost')
+  async aiClassifyAndAutoPost(@Param('id') id: string) {
+    return this.service.classifyAndAutoPostInvoice(id);
   }
 
   // ---------------------------------------------------------------------------

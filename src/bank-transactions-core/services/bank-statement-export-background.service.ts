@@ -15,6 +15,7 @@ import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { ErpBankAccount } from '../entities/erp_bank_account.entity';
 import { ErpCashBook } from '../entities/erp_cash_book.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
+import { TransactionQueryService } from './transaction-query.service';
 
 export type BankStatementExportProgressEvent = {
   processId: 'bank-statement-xlsx-export' | 'ping';
@@ -92,6 +93,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     private readonly bankAccountRepo: Repository<ErpBankAccount>,
     @InjectRepository(ErpCashBook)
     private readonly cashBookRepo: Repository<ErpCashBook>,
+    private readonly transactionQueryService: TransactionQueryService,
   ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
@@ -353,59 +355,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   ): Promise<Buffer> {
     onProgress(10, 'Đang truy vấn dữ liệu giao dịch...');
 
-    const qb = this.transactionRepo
-      .createQueryBuilder('txn')
-      .leftJoinAndSelect('txn.branch', 'branch')
-      .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
-      .leftJoinAndSelect('txn.cashBook', 'cashBook')
-      .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
-      .where('txn.isDeleted = :isDeleted', { isDeleted: false });
-
-    if (query.sourceType) {
-      qb.andWhere('txn.sourceType = :sourceType', {
-        sourceType: query.sourceType,
-      });
-    }
-    if (query.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: query.branchId });
-    }
-    if (query.bankAccountId) {
-      qb.andWhere('txn.bankAccountId = :bankAccountId', {
-        bankAccountId: query.bankAccountId,
-      });
-    }
-    if (query.cashBookId) {
-      qb.andWhere('txn.cashBookId = :cashBookId', {
-        cashBookId: query.cashBookId,
-      });
-    }
-    if (query.startDate) {
-      qb.andWhere('txn.transDate >= :startDate', {
-        startDate: query.startDate,
-      });
-    }
-    if (query.endDate) {
-      qb.andWhere('txn.transDate <= :endDate', {
-        endDate:
-          query.endDate.length === 10
-            ? `${query.endDate} 23:59:59`
-            : query.endDate,
-      });
-    }
-    if (query.transactionType === 'IN') {
-      qb.andWhere('txn.creditAmount > 0');
-    } else if (query.transactionType === 'OUT') {
-      qb.andWhere('txn.debitAmount > 0');
-    }
-
-    if (query.search) {
-      qb.andWhere(
-        '(txn.description ILIKE :search OR txn.referenceNumber ILIKE :search OR txn.correspondentAccount ILIKE :search OR txn.correspondentName ILIKE :search)',
-        { search: `%${query.search}%` },
-      );
-    }
-
-    qb.orderBy('txn.transDate', 'DESC').addOrderBy('txn.createdAt', 'DESC');
+    const qb = this.transactionQueryService.buildTransactionQueryBuilder(query);
 
     const transactions = await qb.getMany();
 
@@ -442,7 +392,13 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       query.sourceType === 'CASH' ? 'Sổ quỹ Tiền mặt' : 'Sao kê Ngân hàng';
     const worksheet = workbook.addWorksheet(sheetName);
 
-    worksheet.columns = [
+    const columns: Array<{
+      header: string;
+      key: string;
+      width: number;
+      style?: { numFmt?: string };
+      isSum?: boolean;
+    }> = [
       { header: 'STT', key: 'stt', width: 8 },
       {
         header: query.sourceType === 'CASH' ? 'Sổ quỹ' : 'Ngân hàng',
@@ -456,31 +412,35 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         header: 'Thu (VND)',
         key: 'credit',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Chi (VND)',
         key: 'debit',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Số dư (VND)',
         key: 'balance',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
       },
       {
         header: 'Đã cấn trừ (VND)',
         key: 'netOffAmount',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       {
         header: 'Còn lại (VND)',
         key: 'remainingAmount',
         width: 18,
-        style: { numFmt: '#,##0' },
+        style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
       { header: 'TK đối ứng', key: 'correspondentAccount', width: 18 },
       { header: 'Tên đối tác', key: 'correspondentName', width: 30 },
@@ -488,18 +448,32 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       { header: 'Chi nhánh', key: 'branchName', width: 22 },
     ];
 
-    // Style header row
-    const headerRow = worksheet.getRow(1);
-    headerRow.height = 28;
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF1F4E78' },
-      };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    });
+    const getColLetter = (colIndex: number): string => {
+      let letter = '';
+      let temp = colIndex;
+      while (temp > 0) {
+        const mod = (temp - 1) % 26;
+        letter = String.fromCharCode(65 + mod) + letter;
+        temp = Math.floor((temp - mod) / 26);
+      }
+      return letter;
+    };
+
+    worksheet.columns = columns.map((c) => ({
+      key: c.key,
+      width: c.width,
+    }));
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+    worksheet.addRow([]);
+
+    const borderThin = {
+      top: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
+    };
 
     let totalCredit = 0;
     let totalDebit = 0;
@@ -528,7 +502,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         ? new Date(item.transDate).toLocaleString('vi-VN')
         : '-';
 
-      worksheet.addRow({
+      const row = worksheet.addRow({
         stt: index + 1,
         account: accountText,
         transDate: transDateStr,
@@ -544,41 +518,146 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         correspondentBank: item.correspondentBank || '',
         branchName: item.branch?.name || '',
       });
+
+      row.height = 20;
+      row.font = { name: 'Calibri', size: 10 };
+
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(5).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(6).numFmt = '#,##0.00';
+      row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(7).numFmt = '#,##0.00';
+      row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(8).numFmt = '#,##0.00';
+      row.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(9).numFmt = '#,##0.00';
+      row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(10).numFmt = '#,##0.00';
+      row.getCell(11).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(12).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(13).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(14).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      for (let c = 1; c <= 14; c++) {
+        row.getCell(c).border = borderThin;
+      }
     });
 
     onProgress(85, 'Đang tổng hợp dữ liệu và hoàn tất file...');
 
-    // Summary row
-    const summaryRow = worksheet.addRow({
-      stt: 'TỔNG CỘNG',
-      account: '',
-      transDate: '',
-      referenceNumber: '',
-      description: `Tổng số: ${transactions.length} giao dịch`,
+    const totalCols = columns.length;
+    const startRow = 5;
+    const endRow = Math.max(startRow, worksheet.rowCount);
+    const calculatedSums: Record<string, number> = {
       credit: totalCredit,
       debit: totalDebit,
-      balance: '',
       netOffAmount: totalNetOff,
       remainingAmount: totalRemaining,
-      correspondentAccount: '',
-      correspondentName: '',
-      correspondentBank: '',
-      branchName: '',
-    });
+    };
 
-    summaryRow.height = 24;
-    summaryRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.fill = {
+    const sumRow = worksheet.getRow(1);
+    sumRow.height = 22;
+    sumRow.font = {
+      name: 'Calibri',
+      size: 10.5,
+      bold: true,
+      color: { argb: 'FF0F172A' },
+    };
+
+    const subtotalRow = worksheet.getRow(2);
+    subtotalRow.height = 22;
+    subtotalRow.font = {
+      name: 'Calibri',
+      size: 10.5,
+      bold: true,
+      color: { argb: 'FF1E40AF' },
+    };
+
+    const blankRow = worksheet.getRow(3);
+    blankRow.height = 10;
+
+    const headerRow = worksheet.getRow(4);
+    headerRow.height = 28;
+    headerRow.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    headerRow.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+
+    for (let c = 1; c <= totalCols; c++) {
+      const colDef = columns[c - 1];
+      const colLetter = getColLetter(c);
+
+      const cellSum = sumRow.getCell(c);
+      cellSum.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFF2F2F2' },
+        fgColor: { argb: 'FFF1F5F9' },
       };
-      cell.border = {
-        top: { style: 'thin' },
-        bottom: { style: 'double' },
+      cellSum.border = borderThin;
+
+      const cellSub = subtotalRow.getCell(c);
+      cellSub.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFEFF6FF' },
       };
-    });
+      cellSub.border = {
+        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+
+      const cellHdr = headerRow.getCell(c);
+      cellHdr.value = colDef.header;
+      cellHdr.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF334155' },
+      };
+      cellHdr.border = borderThin;
+
+      if (c === 5) {
+        cellSum.value = 'TỔNG CỘNG (SUM)';
+        cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
+        cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';
+        cellSub.alignment = { horizontal: 'left', vertical: 'middle' };
+      }
+
+      if (colDef.isSum) {
+        const sumVal = calculatedSums[colDef.key] || 0;
+        cellSum.value = {
+          formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
+          result: sumVal,
+        };
+        cellSum.alignment = { horizontal: 'right', vertical: 'middle' };
+        cellSum.numFmt = colDef.style?.numFmt || '#,##0.00';
+
+        cellSub.value = {
+          formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
+          result: sumVal,
+        };
+        cellSub.alignment = { horizontal: 'right', vertical: 'middle' };
+        cellSub.numFmt = colDef.style?.numFmt || '#,##0.00';
+      }
+    }
+
+    worksheet.views = [{ state: 'frozen', ySplit: 4 }];
+    worksheet.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: endRow, column: totalCols },
+    };
 
     const buffer = await workbook.xlsx.writeBuffer();
     onProgress(100, 'Tạo file hoàn tất!');
@@ -663,6 +742,9 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   }
 
   private buildQueryFingerprint(query: BankTransactionFilterDto): string {
+    const rawColumnFilters = query.column_filters || query.columnFilters;
+    const rawColumnSearch = query.column_search || query.columnSearch;
+
     const stable = {
       sourceType: query.sourceType || '',
       branchId: query.branchId || '',
@@ -672,8 +754,19 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       endDate: query.endDate || '',
       transactionType: query.transactionType || '',
       search: query.search || '',
-      columnFilters: query.column_filters || '',
-      columnSearch: query.column_search || '',
+      tagIds: Array.isArray(query.tagIds)
+        ? [...query.tagIds].sort().join(',')
+        : '',
+      columnFilters:
+        typeof rawColumnFilters === 'object'
+          ? JSON.stringify(rawColumnFilters)
+          : rawColumnFilters || '',
+      columnSearch:
+        typeof rawColumnSearch === 'object'
+          ? JSON.stringify(rawColumnSearch)
+          : rawColumnSearch || '',
+      sortBy: query.sortBy || '',
+      sortOrder: query.sortOrder || '',
     };
     return JSON.stringify(stable);
   }

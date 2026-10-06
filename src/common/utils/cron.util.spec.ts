@@ -77,35 +77,39 @@ describe('cron.util', () => {
     });
   });
 
-  describe('isWithinSyncWindow (03:15, 09:15, 15:15 Asia/Ho_Chi_Minh GMT+7)', () => {
-    it('returns true at 03:15, 09:15, 15:15 in VN timezone', () => {
-      // 03:15 VN (GMT+7) = 20:15 UTC ngày hôm trước
-      expect(isWithinSyncWindow(new Date('2026-09-19T20:15:00.000Z'))).toBe(
-        true,
-      );
-      // 03:45 VN
-      expect(isWithinSyncWindow(new Date('2026-09-19T20:45:00.000Z'))).toBe(
-        true,
-      );
+  describe('isWithinSyncWindow (09:15, 15:15, 16:15, 17:15, 21:15 Asia/Ho_Chi_Minh GMT+7)', () => {
+    it('returns true at 09:15, 15:15, 16:15, 17:15, 21:15 in VN timezone', () => {
       // 09:15 VN = 02:15 UTC
       expect(isWithinSyncWindow(new Date('2026-09-20T02:15:00.000Z'))).toBe(
+        true,
+      );
+      // 09:45 VN
+      expect(isWithinSyncWindow(new Date('2026-09-20T02:45:00.000Z'))).toBe(
         true,
       );
       // 15:15 VN = 08:15 UTC
       expect(isWithinSyncWindow(new Date('2026-09-20T08:15:00.000Z'))).toBe(
         true,
       );
+      // 16:15 VN = 09:15 UTC
+      expect(isWithinSyncWindow(new Date('2026-09-20T09:15:00.000Z'))).toBe(
+        true,
+      );
+      // 17:15 VN = 10:15 UTC
+      expect(isWithinSyncWindow(new Date('2026-09-20T10:15:00.000Z'))).toBe(
+        true,
+      );
+      // 21:15 VN = 14:15 UTC
+      expect(isWithinSyncWindow(new Date('2026-09-20T14:15:00.000Z'))).toBe(
+        true,
+      );
       // Alias check
       expect(
-        isWithinInvoiceSyncWindow(new Date('2026-09-20T08:15:00.000Z')),
+        isWithinInvoiceSyncWindow(new Date('2026-09-20T14:15:00.000Z')),
       ).toBe(true);
     });
 
     it('returns false before minute 15 during sync hours', () => {
-      // 03:00 VN (20:00 UTC) -> trước 03:15
-      expect(isWithinSyncWindow(new Date('2026-09-19T20:00:00.000Z'))).toBe(
-        false,
-      );
       // 09:14 VN (02:14 UTC) -> trước 09:15
       expect(isWithinSyncWindow(new Date('2026-09-20T02:14:59.000Z'))).toBe(
         false,
@@ -114,9 +118,25 @@ describe('cron.util', () => {
       expect(isWithinSyncWindow(new Date('2026-09-20T08:05:00.000Z'))).toBe(
         false,
       );
+      // 16:10 VN (09:10 UTC) -> trước 16:15
+      expect(isWithinSyncWindow(new Date('2026-09-20T09:10:00.000Z'))).toBe(
+        false,
+      );
+      // 17:14 VN (10:14 UTC) -> trước 17:15
+      expect(isWithinSyncWindow(new Date('2026-09-20T10:14:00.000Z'))).toBe(
+        false,
+      );
+      // 21:10 VN (14:10 UTC) -> trước 21:15
+      expect(isWithinSyncWindow(new Date('2026-09-20T14:10:00.000Z'))).toBe(
+        false,
+      );
     });
 
-    it('returns false outside 03h, 09h, 15h', () => {
+    it('returns false outside 09h, 15h, 16h, 17h, 21h', () => {
+      // 03:15 VN (20:15 UTC ngày hôm trước) -> đã thay bằng 21:15
+      expect(isWithinSyncWindow(new Date('2026-09-19T20:15:00.000Z'))).toBe(
+        false,
+      );
       // 10:15 VN (03:15 UTC)
       expect(isWithinSyncWindow(new Date('2026-09-20T03:15:00.000Z'))).toBe(
         false,
@@ -125,37 +145,48 @@ describe('cron.util', () => {
       expect(isWithinSyncWindow(new Date('2026-09-20T17:15:00.000Z'))).toBe(
         false,
       );
-      // 21:15 VN (14:15 UTC)
-      expect(isWithinSyncWindow(new Date('2026-09-20T14:15:00.000Z'))).toBe(
-        false,
-      );
     });
   });
 
   describe('getNextSyncSlot', () => {
     it('calculates next slot correctly within the same day', () => {
-      // 02:00 VN -> next is 03:15
-      const res1 = getNextSyncSlot(new Date('2026-09-20T19:00:00.000Z'));
-      expect(res1.slotHour).toBe(3);
+      // 02:00 VN (19:00 UTC hôm trước) -> next is 09:15
+      const res1 = getNextSyncSlot(new Date('2026-09-19T19:00:00.000Z'));
+      expect(res1.slotHour).toBe(9);
       expect(res1.slotMinute).toBe(15);
-      expect(res1.slotLabel).toBe('03:15');
+      expect(res1.slotLabel).toBe('09:15');
 
-      // 05:00 VN -> next is 09:15
-      const res2 = getNextSyncSlot(new Date('2026-09-20T22:00:00.000Z'));
+      // 05:00 VN (22:00 UTC hôm trước) -> next is 09:15
+      const res2 = getNextSyncSlot(new Date('2026-09-19T22:00:00.000Z'));
       expect(res2.slotHour).toBe(9);
       expect(res2.slotLabel).toBe('09:15');
 
-      // 10:00 VN -> next is 15:15
+      // 10:00 VN (03:00 UTC) -> next is 15:15
       const res3 = getNextInvoiceSyncSlot(new Date('2026-09-20T03:00:00.000Z'));
       expect(res3.slotHour).toBe(15);
       expect(res3.slotLabel).toBe('15:15');
+
+      // 15:30 VN (08:30 UTC) -> next is 16:15
+      const res4 = getNextSyncSlot(new Date('2026-09-20T08:30:00.000Z'));
+      expect(res4.slotHour).toBe(16);
+      expect(res4.slotLabel).toBe('16:15');
+
+      // 16:30 VN (09:30 UTC) -> next is 17:15
+      const res5 = getNextSyncSlot(new Date('2026-09-20T09:30:00.000Z'));
+      expect(res5.slotHour).toBe(17);
+      expect(res5.slotLabel).toBe('17:15');
+
+      // 18:00 VN (11:00 UTC) -> next is 21:15
+      const res6 = getNextSyncSlot(new Date('2026-09-20T11:00:00.000Z'));
+      expect(res6.slotHour).toBe(21);
+      expect(res6.slotLabel).toBe('21:15');
     });
 
-    it('wraps around to 03:15 next day when after 15:15', () => {
-      // 16:00 VN (09:00 UTC) -> next is 03:15 next day
-      const res = getNextSyncSlot(new Date('2026-09-20T09:00:00.000Z'));
-      expect(res.slotHour).toBe(3);
-      expect(res.slotLabel).toBe('03:15');
+    it('wraps around to 09:15 next day when after 21:15', () => {
+      // 22:00 VN (15:00 UTC) -> next is 09:15 next day
+      const res = getNextSyncSlot(new Date('2026-09-20T15:00:00.000Z'));
+      expect(res.slotHour).toBe(9);
+      expect(res.slotLabel).toBe('09:15');
       expect(res.nextSlotDate.getDate()).toBe(21);
     });
   });

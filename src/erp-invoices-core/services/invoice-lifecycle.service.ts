@@ -23,7 +23,11 @@ import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_ba
 
 import { ErpEntityAttributeValue } from '../../module-config/entities/erp_entity_attribute_value.entity';
 import { TransactionAccountingService } from '../../bank-transactions-core/services/transaction-accounting.service';
-import { extractVinfastItemCode } from '../helpers/vinfast-part-code.helper';
+import {
+  extractVinfastItemCode,
+  extractStandardItemCode,
+} from '../helpers/vinfast-part-code.helper';
+import { syncInvoiceNetOffToCaseSettlements } from '../../kgara-api-core/helpers/kgara-case-netoff-sync.helper';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -181,18 +185,29 @@ export class InvoiceLifecycleService {
       vatAmount: String(dto.vatAmount ?? 0),
       discountAmount: String(dto.discountAmount ?? 0),
       totalAmount: String(dto.totalAmount ?? 0),
-      items: dto.items?.map((i) => ({
-        itemCode: i.itemCode || extractVinfastItemCode(i.description) || null,
-        description: i.description,
-        unit: i.unit,
-        quantity: i.quantity != null ? String(i.quantity) : null,
-        unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
-        preVatAmount: String(i.preVatAmount ?? 0),
-        vatRate: i.vatRate != null ? String(i.vatRate) : null,
-        vatAmount: String(i.vatAmount ?? 0),
-        discountAmount: String(i.discountAmount ?? 0),
-        totalAmount: String(i.totalAmount ?? 0),
-      })),
+      items: dto.items?.map((i) => {
+        const resolved = extractStandardItemCode({
+          description: i.description,
+          itemCode: i.itemCode,
+          unit: i.unit,
+          discountAmount: i.discountAmount,
+          preVatAmount: i.preVatAmount,
+          sellerName: dto.sellerName,
+          sellerTaxCode: dto.sellerTaxCode,
+        });
+        return {
+          itemCode: resolved.itemCode || i.itemCode || null,
+          description: i.description,
+          unit: i.unit,
+          quantity: i.quantity != null ? String(i.quantity) : null,
+          unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
+          preVatAmount: String(i.preVatAmount ?? 0),
+          vatRate: i.vatRate != null ? String(i.vatRate) : null,
+          vatAmount: String(i.vatAmount ?? 0),
+          discountAmount: String(i.discountAmount ?? 0),
+          totalAmount: String(i.totalAmount ?? 0),
+        };
+      }),
     } as any);
 
     extractInvoiceMetadata(invoice);
@@ -227,11 +242,32 @@ export class InvoiceLifecycleService {
     this.repository.merge(existing, updatePayload);
 
     if (dto.items) {
+      // Preserve Guard: preserve existing itemCode if set previously
+      const existingMap = new Map<string, string>();
+      for (const ex of existing.items || []) {
+        if (ex.description && ex.itemCode) {
+          existingMap.set(ex.description.trim(), ex.itemCode);
+        }
+      }
+
       await this.repository.manager.delete(ErpInvoiceItem, { invoiceId: id });
-      const newItems = dto.items.map((i) =>
-        this.repository.manager.create(ErpInvoiceItem, {
+      const newItems = dto.items.map((i) => {
+        const existingCode = i.description
+          ? existingMap.get(i.description.trim())
+          : undefined;
+        const resolved = extractStandardItemCode({
+          description: i.description,
+          itemCode: i.itemCode || existingCode,
+          unit: i.unit,
+          discountAmount: i.discountAmount,
+          preVatAmount: i.preVatAmount,
+          sellerName: existing.sellerName,
+          sellerTaxCode: existing.sellerTaxCode,
+        });
+
+        return this.repository.manager.create(ErpInvoiceItem, {
           invoiceId: id,
-          itemCode: i.itemCode || extractVinfastItemCode(i.description) || null,
+          itemCode: resolved.itemCode || existingCode || i.itemCode || null,
           description: i.description,
           unit: i.unit,
           quantity: i.quantity != null ? String(i.quantity) : null,
@@ -241,8 +277,8 @@ export class InvoiceLifecycleService {
           vatAmount: String(i.vatAmount ?? 0),
           discountAmount: String(i.discountAmount ?? 0),
           totalAmount: String(i.totalAmount ?? 0),
-        }),
-      );
+        });
+      });
       await this.repository.manager.save(ErpInvoiceItem, newItems);
       delete (existing as any).items;
     }
@@ -526,6 +562,8 @@ export class InvoiceLifecycleService {
       await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
         invoiceId: id,
       });
+      // Bi-directional sync: Dọn dẹp cấn trừ ở Phiếu dịch vụ Garage liên kết
+      await syncInvoiceNetOffToCaseSettlements(this.repository.manager, id);
     }
 
     invoice.postingStatus = 'UNPOSTED';
@@ -750,6 +788,12 @@ export class InvoiceLifecycleService {
       }
     }
 
+    // Bi-directional sync: Đồng bộ cấn trừ sang Phiếu dịch vụ Garage liên kết
+    await syncInvoiceNetOffToCaseSettlements(
+      this.repository.manager,
+      invoiceId,
+    );
+
     return { message: 'Đã liên kết phiếu thành công' };
   }
 
@@ -758,6 +802,12 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
+
+    // Bi-directional sync: Đồng bộ cấn trừ sang Phiếu dịch vụ Garage liên kết
+    await syncInvoiceNetOffToCaseSettlements(
+      this.repository.manager,
+      invoiceId,
+    );
 
     try {
       await this.transactionAccountingService.refreshJournalEntriesForBankTransaction(

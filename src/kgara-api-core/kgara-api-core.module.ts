@@ -14,7 +14,10 @@ import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
 
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
+import { CorePermission } from '../rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
 
@@ -25,12 +28,25 @@ import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { GarageOpexService } from './services/garage-opex.service';
 import { GarageDashboardService } from './garage-dashboard.service';
+import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
+import { GarageCheckpointService } from './services/garage-checkpoint.service';
+import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
+import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
+import { GaragePnlService } from './services/garage-pnl.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
+import { KgaraCaseListQueryService } from './services/kgara-case-list-query.service';
+import { KgaraCaseConfigService } from './services/kgara-case-config.service';
+import { KgaraCaseSettlementCalcService } from './services/kgara-case-settlement-calc.service';
+import { KgaraCaseServicesQueryService } from './services/kgara-case-services-query.service';
+import { KgaraCaseExportService } from './services/kgara-case-export.service';
+import { KgaraCompletedCasesExportService } from './services/kgara-completed-cases-export.service';
+import { KgaraCaseServicesExportService } from './services/kgara-case-services-export.service';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
+import { KgaraCaseLookupService } from './services/kgara-case-lookup.service';
 
 import { KgaraApiCoreController } from './kgara-api-core.controller';
 import { GarageDashboardController } from './garage-dashboard.controller';
@@ -41,6 +57,9 @@ import { KgaraGrossProfitController } from './controllers/kgara-gross-profit.con
 import { KgaraSyncController } from './controllers/kgara-sync.controller';
 import { KgaraReportsController } from './controllers/kgara-reports.controller';
 import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
+
+import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.service';
+import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
 
 @Module({
   imports: [
@@ -56,7 +75,10 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
       KgaraGrossProfit,
       KgaraCaseSettlement,
       KgaraOperatingExpense,
+      ErpModuleCategory,
       CoreUser,
+      CorePermission,
+      CoreUserRole,
     ]),
     ConfigModule,
     NotificationsModule,
@@ -70,16 +92,31 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    GarageDashboardStatsService,
+    GarageDebtsAnalyticsService,
+    GarageCheckpointService,
+    GarageCustomerStatsService,
+    GarageDashboardExportService,
+    GaragePnlService,
+    KgaraCaseListQueryService,
     KgaraCaseQueryService,
+    KgaraCaseConfigService,
+    KgaraCaseSettlementCalcService,
+    KgaraCaseServicesQueryService,
+    KgaraCaseExportService,
+    KgaraCompletedCasesExportService,
+    KgaraCaseServicesExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    KgaraCaseLookupService,
   ],
   controllers: [
     KgaraApiCoreController,
     GarageDashboardController,
+    GarageDebtsAnalyticsController,
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
@@ -94,12 +131,25 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
     GarageSmartSettlementService,
     GarageOpexService,
     GarageDashboardService,
+    GarageDashboardStatsService,
+    GarageCheckpointService,
+    GarageCustomerStatsService,
+    GarageDashboardExportService,
+    GaragePnlService,
+    KgaraCaseListQueryService,
     KgaraCaseQueryService,
+    KgaraCaseConfigService,
+    KgaraCaseSettlementCalcService,
+    KgaraCaseServicesQueryService,
+    KgaraCaseExportService,
+    KgaraCompletedCasesExportService,
+    KgaraCaseServicesExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    KgaraCaseLookupService,
   ],
 })
 export class KgaraApiCoreModule {}

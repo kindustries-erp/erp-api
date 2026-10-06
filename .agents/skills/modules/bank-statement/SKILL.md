@@ -215,7 +215,10 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
      $$|\sum \text{debit} - \sum \text{credit}| < 0.01$$
   4. Tạo hoặc cập nhật chứng từ `erp_journal_entries` với mã tham chiếu nguồn `sourceId = txn.id`, `sourceType = 'BANK'` hoặc `'CASH'`.
 
-### 5.3. Thuật toán Bộ Lọc Nâng Cao & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+### 5.3. Thuật toán Bộ Lọc Nâng Cao, Sắp Xếp Tự Động & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+- **Sắp xếp Tự động Server-Side (Default Server-side Sorting)**:
+  - Khi không có tham số sắp xếp từ FE, backend mặc định sắp xếp: `txn.transDate DESC, txn.createdAt DESC`.
+  - Hỗ trợ đầy đủ dictionary 14+ cột sort (`transDate`, `thu`, `chi`, `balance`, `netOffAmount`, `remainingAmount`, `account`, `referenceNumber`, `description`, `correspondentName`, `branch`,...) kèm tie-breaker `txn.createdAt DESC`.
 - **Lọc Khoảng Ngày Múi Giờ Việt Nam (Timezone-Aware Date Range Filter)**:
   - Do `trans_date` trong database PostgreSQL lưu theo mốc UTC, khi lọc theo khoảng ngày (`startDate` - `endDate`), hệ thống áp dụng chuyển đổi múi giờ chuẩn trong SQL:
     ```sql
@@ -241,6 +244,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **Quy Chuẩn Trình Bày Bảng Tính & Bố Cục**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức `=SUM(Col5:ColN)`, nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động nhảy số theo bộ lọc, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng phân cách trống (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng bold 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Diễn giải căn trái, Số tiền căn phải định dạng `#,##0.00`.
+  - **Freeze Panes & AutoFilter**: Cố định cuộn và đặt dropdown lọc chính xác tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **Chân bảng**: Đã loại bỏ dòng tổng cộng cuối bảng.
 - **API Endpoints Xuất Excel**:
   - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
   - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
@@ -290,17 +301,57 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 ```text
 src/modules/bank-statements/components/BankStatementsTab/
 ├── utils.ts                                     # Preset configs, column groups, default visibility
-├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync)
-├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
+├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync, < 170 LoC)
+├── BankStatementsTab.tsx                        # Main view coordinator (< 120 LoC)
+├── BankStatementSection.tsx                     # Presentational spreadsheet view (< 170 LoC)
 ├── index.tsx                                    # Re-export entry
+├── hooks/
+│   └── useBankStatementFilters.ts               # Filter state management (noDefaultPeriod: true)
 ├── components/
-│   ├── BankStatementColumns.tsx                 # 15+ column definitions với createColumnHeaderFilter
+│   ├── BankStatementCellRenderers.tsx           # Atomic cell renderers (< 130 LoC)
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions (< 180 LoC)
 │   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
 │   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
-│   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+│   ├── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+│   └── bank-statement-export-drawer/            # Drawer xuất Excel 2 chế độ (< 180 LoC, No Blue Mandate)
+│       ├── components/
+│       │   ├── CustomRadioIndicator.tsx         # [Atom L1] Vòng tròn radio neutral (0% blue)
+│       │   ├── FilterConditionBadge.tsx         # [Atom L1] Badge hiển thị điều kiện lọc cột & chi nhánh
+│       │   ├── BankStatementExportModeSelector.tsx # [Molecule L2] Chọn 2 chế độ (0% outline khi active)
+│       │   ├── BankStatementExportFilterPreview.tsx # [Molecule L2] Tóm tắt filter bảng sao kê & lọc cột
+│       │   └── BankStatementExportConditionSection.tsx # [Molecule L2] Right panel điều kiện xuất
+│       ├── BankStatementExportDrawer.tsx        # [Organism L3] Container mỏng StandardFormDrawer
+│       ├── BankStatementExportDrawer.form.hook.ts # [Hook] State form chọn kỳ, dates, account, txType
+│       ├── BankStatementExportDrawer.hook.ts    # [Hook] State exportMode, submit export & download
+│       ├── BankStatementExportDrawer.sync.hook.ts # [Hook] SSE background tracking & auto-download
+│       ├── BankStatementExportDrawer.columns.tsx # [Hook] Columns bảng lịch sử xuất (amber badge)
+│       ├── BankStatementExportDrawer.helper.tsx # Helper formatters ngày, text overflow & getColumnLabel
+│       ├── BankStatementExportDrawer.type.ts    # Props, BankStatementColumnFilterItem & FilterSummary types
+│       └── BankStatementExportDrawer.test.tsx   # Co-located Vitest tests
 └── __tests__/
-    └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
+    ├── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox
+    ├── BankStatementsTabSummaryCell.test.tsx    # Unit tests SubtotalSummaryCell
+    └── BankStatementsTabUnified.test.tsx        # Unit tests tab coordinator
 ```
+
+### 8.6. Drawer Xuất Excel Sao Kê Ngân Hàng (`bank-statement-export-drawer`)
+- **Hai chế độ xuất dữ liệu linh hoạt (`exportMode`)**:
+  - `by-period` (Theo kỳ - Mặc định): Cho phép chọn theo kỳ định sẵn hoặc tùy chỉnh khoảng ngày `dateFrom` - `dateTo`, lọc theo tài khoản ngân hàng / sổ quỹ và loại giao dịch.
+  - `by-current-filter` (Theo filter hiện tại): Giữ nguyên toàn bộ các điều kiện lọc và tìm kiếm đang xem trên bảng (`search`, `startDate`, `endDate`, `bankAccountId`, `cashBookId`, `transactionType`, `branchId`, `column_filters`, `column_search`, `sortBy`, `sortOrder`).
+- **Trích Xuất Bộ Lọc Cột Tự Động (Header Filter Extraction)**:
+  - Tự động quét cả `tableState.columnFilters` (danh sách checkbox chọn) và `tableState.columnSearch` (tìm kiếm từ khóa trên từng cột).
+  - Tích hợp `COLUMN_LABEL_MAP` & `getColumnLabel(colKey)` để chuyển mã cột kỹ thuật (ví dụ `description`, `referenceNumber`, `transactionType`, ...) thành nhãn tiếng Việt chuẩn (`Nội dung giao dịch`, `Số tham chiếu`, `Loại giao dịch`, ...).
+  - Khi không có ngày bắt đầu / ngày kết thúc, giao diện hiển thị rõ ràng `Tất cả thời gian` thay vì `📅 -`.
+- **Kiến Trúc UI Atomic 5 Tầng Chuẩn Mực (< 180 LoC)**:
+  - **Atom L1**: `CustomRadioIndicator.tsx` (radio indicator phẳng), `FilterConditionBadge.tsx` (badge điều kiện lọc với tooltip thông minh khi text vượt quá 28 ký tự).
+  - **Molecule L2**: `BankStatementExportModeSelector.tsx`, `BankStatementExportFilterPreview.tsx` (render lưới thẻ tóm tắt và danh sách badge lọc cột), `BankStatementExportConditionSection.tsx`.
+  - **Organism L3**: `BankStatementExportDrawer.tsx` (form drawer điều phối).
+  - Khống chế cứng 100% file mã nguồn < 175 LoC, độc lập tầng và co-located test.
+- **Tác vụ nền & Auto-Download**: Hỗ trợ Server-Sent Events (SSE) theo dõi tiến độ nền, cơ chế tự động tải file khi sẵn sàng và bảng lịch sử có thể resize cột.
+- **Đồng Nhất Bộ Lọc Backend (Unified Query Architecture)**:
+  - `BankStatementExportBackgroundService` inject và tái sử dụng trực tiếp `TransactionQueryService.buildTransactionQueryBuilder(query)` thay vì tự viết query riêng.
+  - Đảm bảo 100% các điều kiện lọc nâng cao (`column_filters` bao gồm `__ALL_MATCHING__`, `column_search`, `tagIds`, `sorts`) được áp dụng chính xác tuyệt đối vào file Excel xuất ra, đồng nhất hoàn toàn với kết quả hiển thị trên bảng.
+  - Cơ chế `buildQueryFingerprint` nhận diện đầy đủ biến thể `column_filters`, `column_search` và `tagIds` để chống cache sai khi điều kiện lọc thay đổi.
 
 ### 8.4. Chuẩn Hóa Cột Bảng & Infinite Scroll (`BankStatementColumns.tsx`)
 - Toàn bộ cột bảng được xây dựng thông qua **`createColumnHeaderFilter`**:

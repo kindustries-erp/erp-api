@@ -1,6 +1,6 @@
 ---
 name: operating-expenses
-description: Module tri thức Quản lý Chi phí Vận hành (Operating Expenses), Hạch toán Trích trước & Tất toán Hóa đơn chống Double Chi phí trong erp-api (operating-expenses-core) và erp-web. Chứa toàn bộ database schema (erp_operating_expenses, erp_expense_account_rules), DTOs, API endpoints, logic phân kỳ Tháng/Năm, Động cơ Phát sinh Định kỳ (Recurrence Engine: this vs this_and_future), Smart Account Mapping (Lương 334, BHXH 3383, Thuê nhà 335), giải tỏa tài khoản treo T0003 và tích hợp tự động với Nhật ký chung (accounting-core).
+description: "Module tri thức Quản lý Chi phí Vận hành (Operating Expenses), Hạch toán Trích trước & Tất toán Hóa đơn chống Double Chi phí trong erp-api (operating-expenses-core) và erp-web. Chứa toàn bộ database schema (erp_operating_expenses, erp_expense_account_rules), DTOs, API endpoints, logic phân kỳ Tháng/Năm, Động cơ Phát sinh Định kỳ (Recurrence Engine: this vs this_and_future), Smart Account Mapping (Lương 334, BHXH 3383, Thuê nhà 335), giải tỏa tài khoản treo T0003 và tích hợp tự động với Nhật ký chung (accounting-core)."
 ---
 
 # 📦 Module Tri Thức: Chi Phí Vận Hành & Hạch Toán Tự Động (Operating Expenses Core)

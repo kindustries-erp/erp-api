@@ -3,11 +3,14 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import type { ErpModuleAttributeDef } from './erp_module_attribute_def.entity';
+import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_module_categories' })
 @Index(['moduleKey', 'code'], { unique: true })
@@ -29,6 +32,13 @@ export class ErpModuleCategory {
 
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
+
+  @Column({ type: 'uuid', name: 'default_debit_account_id', nullable: true })
+  defaultDebitAccountId: string | null;
+
+  @ManyToOne(() => ErpChartOfAccount, { nullable: true, eager: false })
+  @JoinColumn({ name: 'default_debit_account_id' })
+  defaultDebitAccount: ErpChartOfAccount | null;
 
   @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive: boolean;

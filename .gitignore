@@ -22,7 +22,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # Local test scripts
-/scripts/
+/scripts/*
 !/scripts/sync-db.sh
+!/scripts/backfill-out-invoices.ts
+!/scripts/backfill-invoice-license-plates.ts
+!/scripts/backfill-unclassified-invoices.ts
+!/scripts/standardize-journal-entry-numbers.ts
+!/scripts/sync-invoice-netoffs-to-case-settlements.ts
 backups/
 scratch/

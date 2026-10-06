@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ErpInvoice } from './entities/erp_invoice.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAdjustmentNetOff } from './entities/erp_invoice_adjustment_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
@@ -34,6 +35,29 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
 import { InvoiceDebtsService } from './services/invoice-debts.service';
 import { InvoiceDebtsExportBackgroundService } from './services/invoice-debts-export-background.service';
 import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
+import { InvoiceDebtsQueryService } from './services/sub-services/invoice-debts-query.service';
+import { InvoiceDebtsDetailService } from './services/sub-services/invoice-debts-detail.service';
+import { InvoiceDebtsExportService } from './services/sub-services/invoice-debts-export.service';
+import { InvoiceListQueryService } from './services/sub-services/invoice-list-query.service';
+import { InvoiceExportExcelService } from './services/sub-services/invoice-export-excel.service';
+import { InvoiceStatsService } from './services/sub-services/invoice-stats.service';
+import { InvoiceItemsQueryService } from './services/sub-services/invoice-items-query.service';
+import { InvoiceItemsExportService } from './services/sub-services/invoice-items-export.service';
+import { InvoiceDashboardStatsService } from './services/sub-services/invoice-dashboard-stats.service';
+import { InvoiceDashboardPartnersService } from './services/sub-services/invoice-dashboard-partners.service';
+import { InvoiceDashboardExportService } from './services/sub-services/invoice-dashboard-export.service';
+import { InvoiceDashboardAnalyticsService } from './services/sub-services/invoice-dashboard-analytics.service';
+import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-dashboard-horizon.service';
+
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
+import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
+import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
 
 @Module({
   imports: [
@@ -41,17 +65,24 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
       ErpInvoice,
       ErpInvoiceItem,
       ErpInvoiceVoucherNetOff,
+      ErpInvoiceAdjustmentNetOff,
       ErpInvoiceAttachment,
       CompanyProfile,
       CorePermission,
       CoreUserRole,
       ErpBranch,
       ErpEntityAttributeValue,
+      ErpModuleCategory,
+      ErpModuleAttributeDef,
+      ErpChartOfAccount,
+      ErpJournalEntry,
+      ErpJournalEntryLine,
     ]),
     R2Module,
     BankTransactionsCoreModule,
     NotificationsModule,
     AccountingCoreModule,
+    AiHubCoreModule,
     ErpAttachmentsCoreModule,
     VinfastPartsModule,
   ],
@@ -66,10 +97,26 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
     InvoiceImportService,
     InvoiceFilesService,
     InvoiceQueryService,
+    InvoiceListQueryService,
+    InvoiceExportExcelService,
+    InvoiceStatsService,
+    InvoiceItemsQueryService,
+    InvoiceItemsExportService,
     InvoiceExportBackgroundService,
     InvoiceSmartNetoffService,
     InvoiceDebtsService,
+    InvoiceDebtsQueryService,
+    InvoiceDebtsDetailService,
+    InvoiceDebtsExportService,
     InvoiceDebtsExportBackgroundService,
+    InvoiceDashboardStatsService,
+    InvoiceDashboardPartnersService,
+    InvoiceDashboardExportService,
+    InvoiceDashboardAnalyticsService,
+    InvoiceDashboardHorizonService,
+    InvoiceCategoryAutopostService,
+    InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -81,6 +128,9 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
     InvoiceSmartNetoffService,
     InvoiceDebtsService,
     InvoiceDebtsExportBackgroundService,
+    InvoiceCategoryAutopostService,
+    InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
   ],
 })
 export class ErpInvoicesCoreModule {}

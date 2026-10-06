@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { Subject } from 'rxjs';
-import { VINFAST_CAR_PART_CODES } from './vinfast-car-part-codes';
+import {
+  VINFAST_CAR_PART_CODES,
+  isVinfastCarPartCode,
+} from './vinfast-car-part-codes';
 import {
   VinfastPartsExportBackgroundService,
   type VinfastPartsExportHistoryResult,
@@ -21,8 +24,11 @@ export class ReportsCoreService {
     .map((taxCode) => `'${taxCode.replace(/'/g, "''")}'`)
     .join(', ');
 
-  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.map(
-    (code) => `'${code.replace(/'/g, "''")}'`,
+  private readonly vinfastCarPartCodesSql = VINFAST_CAR_PART_CODES.flatMap(
+    (code) => [
+      `'${code.replace(/'/g, "''")}'`,
+      `'${(code.startsWith('VF-') ? code : 'VF-' + code).replace(/'/g, "''")}'`,
+    ],
   ).join(', ');
 
   constructor(
@@ -71,10 +77,21 @@ export class ReportsCoreService {
     );
   }
 
+  private readonly fifoCache = new Map<
+    string,
+    { data: any[]; expiresAt: number }
+  >();
+
   private async calculateVinfastFifo(
     dateTo?: string,
     groupInterval: string = 'month',
   ) {
+    const cacheKey = `${dateTo || 'ALL'}_${groupInterval}`;
+    const cached = this.fifoCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     let dateFilter = '';
     const params: any[] = [];
     if (dateTo) {
@@ -196,7 +213,12 @@ export class ReportsCoreService {
         m.totalCogs += cogsForThisOut;
       }
     }
-    return Object.values(monthMetrics);
+    const result = Object.values(monthMetrics);
+    this.fifoCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + 15000,
+    });
+    return result;
   }
 
   private buildFifoMonthlyValuesSql(metrics: any[], paramStartIndex: number) {
@@ -510,17 +532,19 @@ export class ReportsCoreService {
       CASE
         WHEN ${normalizedExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
           OR ${canonicalExpr} LIKE '%VF5_HV_BATTERY_PACK_38_KWH%'
-          THEN 'EEP73110011AP'
+          THEN 'VF-EEP73110011AP'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_41.9KWH%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9KWH%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_41_9_KWH%'
           OR ${canonicalExpr} LIKE '%BAT21001011%'
-          THEN 'BAT21001011'
+          THEN 'VF-BAT21001011'
         WHEN ${normalizedExpr} LIKE '%HV_BATTERY_PACK%'
           OR ${canonicalExpr} LIKE '%HV_BATTERY_PACK%'
-          THEN 'EEP73110011ALL'
+          THEN 'VF-EEP73110011ALL'
+        WHEN ${normalizedExpr} LIKE 'VF-%' AND SUBSTRING(${normalizedExpr} FROM '^(VF-[A-Z0-9]+)') IS NOT NULL
+          THEN SUBSTRING(${normalizedExpr} FROM '^(VF-[A-Z0-9]+)')
         WHEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)') IS NOT NULL
-          THEN SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
+          THEN 'VF-' || SUBSTRING(${normalizedExpr} FROM '([A-Z]{3}[0-9][A-Z0-9]*)')
         ELSE NULL
       END
     `;
@@ -592,13 +616,17 @@ export class ReportsCoreService {
     let totalCumulativeCogsMotorbike = 0;
 
     for (const m of fifoMetrics) {
-      if (query.itemCode && m.itemCode !== query.itemCode) continue;
-
-      let isCarPart = false;
-      const normalizedCode = m.itemCode ? m.itemCode.toUpperCase().trim() : '';
-      if (VINFAST_CAR_PART_CODES.includes(normalizedCode)) {
-        isCarPart = true;
+      if (query.itemCode) {
+        const qCode = query.itemCode.toUpperCase().trim();
+        const bareQCode = qCode.replace(/^VF-/, '');
+        const mCode = (m.itemCode || '').toUpperCase().trim();
+        const bareMCode = mCode.replace(/^VF-/, '');
+        if (mCode !== qCode && bareMCode !== bareQCode) {
+          continue;
+        }
       }
+
+      const isCarPart = isVinfastCarPartCode(m.itemCode);
       const vType = isCarPart ? 'CAR' : 'MOTORBIKE';
 
       if (vType === 'CAR') {

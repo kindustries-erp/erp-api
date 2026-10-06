@@ -318,4 +318,50 @@ export class ErpInvoice {
     cascade: true,
   })
   attachments: ErpInvoiceAttachment[];
+
+  @Column({ type: 'jsonb', name: 'effective_data', nullable: true })
+  effectiveData: InvoiceEffectiveData | null;
+
+  @OneToMany(
+    'ErpInvoiceAdjustmentNetOff',
+    (netoff: any) => netoff.originalInvoice,
+  )
+  adjustingNetOffs: import('typeorm').Relation<any>[];
+
+  @OneToMany(
+    'ErpInvoiceAdjustmentNetOff',
+    (netoff: any) => netoff.adjustingInvoice,
+  )
+  adjustedByNetOffs: import('typeorm').Relation<any>[];
+}
+
+export interface InvoiceEffectiveData {
+  isAdjusted?: boolean;
+  hasInfoAdjustment?: boolean;
+  adjustingInvoiceId?: string;
+  adjustingInvoiceNo?: string;
+  adjustingSerialNo?: string;
+  adjustedAt?: string;
+  lastAdjustedAt?: string;
+  lastAdjustingInvoiceId?: string;
+  effectiveValues?: {
+    buyerTaxCode?: string;
+    buyerName?: string;
+    buyerAddress?: string;
+    licensePlate?: string;
+    buyerCccd?: string;
+    settlementOrder?: string;
+  };
+  diffLog?: Array<{
+    field: string;
+    fieldNameVi: string;
+    oldValue: string;
+    newValue: string;
+  }>;
+  infoDiffs?: Array<{
+    field: string;
+    fieldNameVi: string;
+    oldValue: string;
+    newValue: string;
+  }>;
 }

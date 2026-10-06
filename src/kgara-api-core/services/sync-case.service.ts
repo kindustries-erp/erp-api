@@ -12,6 +12,7 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -138,6 +139,22 @@ export class SyncCaseService {
     try {
       const updatedCaseDates = new Set<string>();
       const syncedIds = new Set<string>();
+      const categories =
+        typeof this.caseRepo.manager?.find === 'function'
+          ? await this.caseRepo.manager.find(ErpModuleCategory, {
+              where: { moduleKey: 'GARAGE_CASE' },
+            })
+          : [];
+      const categoryMap = new Map<string, string>();
+      for (const cat of categories) {
+        categoryMap.set(cat.code, cat.id);
+        if (cat.code === 'OJ_NGOAI') {
+          categoryMap.set('OJ', cat.id);
+        }
+        if (cat.code === 'OJ') {
+          categoryMap.set('OJ_NGOAI', cat.id);
+        }
+      }
       do {
         const response = await this.client.getCases(
           branchExternalId,
@@ -277,6 +294,22 @@ export class SyncCaseService {
                 kgaraClassificationCode,
                 kgaraClassification,
               );
+              if (!gwCase.categoryId && gwCase.classification) {
+                gwCase.categoryId =
+                  categoryMap.get(gwCase.classification) || null;
+              }
+            }
+          }
+
+          if (
+            gwCase.classification === 'OJ' ||
+            gwCase.classification === 'OJ_NGOAI'
+          ) {
+            gwCase.classification = 'OJ';
+            gwCase.excludeFromDebt = true;
+            if (!gwCase.categoryId) {
+              gwCase.categoryId =
+                categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
             }
           }
 
@@ -575,6 +608,44 @@ export class SyncCaseService {
             detailClassificationCode,
             detailClassification,
           );
+          if (!gwCase.categoryId && gwCase.classification) {
+            const cat =
+              typeof this.caseRepo.manager?.findOne === 'function'
+                ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                    where: [
+                      { moduleKey: 'GARAGE_CASE', code: gwCase.classification },
+                      {
+                        moduleKey: 'GARAGE_CASE',
+                        code:
+                          gwCase.classification === 'OJ'
+                            ? 'OJ_NGOAI'
+                            : gwCase.classification,
+                      },
+                    ],
+                  })
+                : null;
+            if (cat) gwCase.categoryId = cat.id;
+          }
+        }
+      }
+
+      if (
+        gwCase.classification === 'OJ' ||
+        gwCase.classification === 'OJ_NGOAI'
+      ) {
+        gwCase.classification = 'OJ';
+        gwCase.excludeFromDebt = true;
+        if (!gwCase.categoryId) {
+          const cat =
+            typeof this.caseRepo.manager?.findOne === 'function'
+              ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                  where: [
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ' },
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ_NGOAI' },
+                  ],
+                })
+              : null;
+          if (cat) gwCase.categoryId = cat.id;
         }
       }
 

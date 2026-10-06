@@ -31,6 +31,8 @@ export interface BomAttributeOption {
     [key: string]: string | undefined;
   };
   parentValue?: string;
+  accountCode?: string | null;
+  defaultDebitAccountId?: string | null;
 }
 
 export type ModuleAttributeOption = BomAttributeOption;

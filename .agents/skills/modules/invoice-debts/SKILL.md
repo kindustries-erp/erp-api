@@ -3,13 +3,13 @@ name: invoice-debts
 description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong Liouni ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
 ---
 
-# 📦 Module Tri Thức: Báo Cáo Công Nợ Khách Hàng & Nhà Cung Cấp (Invoice Debts) - Backend & Frontend
+# 📦 Module Tri Thức: Công Nợ Theo Đối Tượng (Invoice Debts) - Backend & Frontend
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế toán & Dòng tiền, cung cấp khả năng theo dõi, đối soát và phân tích tuổi nợ thời gian thực cho cả hai luồng đối tác:
-- **Công nợ Khách hàng (Phải thu - `CUSTOMER` / Hóa đơn bán ra `OUT`)**: Tổng hợp doanh thu hóa đơn bán ra, số tiền khách hàng đã thanh toán qua cấn trừ sổ quỹ/ngân hàng (`erp_invoice_voucher_netoff`), số dư còn phải thu và tuổi nợ tối đa (`maxAgingDays`).
-- **Công nợ Nhà cung cấp (Phải trả - `SUPPLIER` / Hóa đơn mua vào `IN`)**: Tổng hợp chi phí hóa đơn mua vào, số tiền doanh nghiệp đã thanh toán cho nhà cung cấp, số dư còn phải trả và cảnh báo nợ quá hạn.
+Module Công Nợ Theo Đối Tượng (`invoice-debts`, hiển thị trên Sidebar tại Menu Nhóm **"Hóa đơn"** > Sub-menu **"Công nợ theo đối tượng"**) là phân hệ thuộc nhóm Kế toán & Dòng tiền, cung cấp khả năng theo dõi, đối soát và phân tích tuổi nợ thời gian thực cho cả hai luồng đối tác:
+- **Khách hàng (Phải thu - `CUSTOMER` / Hóa đơn bán ra `OUT`)**: Tổng hợp doanh thu hóa đơn bán ra, số tiền khách hàng đã thanh toán qua cấn trừ sổ quỹ/ngân hàng (`erp_invoice_voucher_netoff`), số dư còn phải thu và tuổi nợ tối đa (`maxAgingDays`).
+- **Nhà cung cấp (Phải trả - `SUPPLIER` / Hóa đơn mua vào `IN`)**: Tổng hợp chi phí hóa đơn mua vào, số tiền doanh nghiệp đã thanh toán cho nhà cung cấp, số dư còn phải trả và cảnh báo nợ quá hạn.
 
 ### Các đặc điểm nghiệp vụ trọng tâm:
 1. **Tổng hợp thời gian thực (Zero-Lag Real-Time Aggregation)**: Không duy trì bảng số dư tĩnh gây lệch số liệu; dữ liệu được tổng hợp trực tiếp từ bảng hóa đơn gốc `erp_invoices` kết hợp `LEFT JOIN` với bảng cấn trừ thanh toán `erp_invoice_voucher_netoff`.
@@ -19,6 +19,11 @@ Module Báo cáo Công nợ (`invoice-debts`) là phân hệ thuộc nhóm Kế 
    - **Tổng phải thu / Tổng phải trả (`paymentProgress`)**: Hiển thị số tiền tổng `money(total)` + thanh Progress Bar tỉ lệ thanh toán bên dưới + Tooltip chi tiết (đã thu/trả, còn nợ, %) + Header Filter 3 trạng thái (Đã thu đủ / Thu một phần / Chưa thu hoặc Đã trả đủ / Trả một phần / Chưa trả).
    - **Còn phải thu / Còn phải trả (`balanceAmount`)**: Hiển thị số dư nợ thực tế `money(balance)` với màu sắc trực quan (`emerald` khi hết nợ, `destructive` khi còn nợ) + Header Filter theo số tiền.
 5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
+6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
+   - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
+   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc.
+   - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
+   - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 
 ---
 
@@ -80,11 +85,17 @@ erp-api/src/
 │   ├── dto/
 │   │   └── get-invoice-debts.dto.ts   # GetInvoiceDebtsQueryDto, GetInvoiceDebtColumnOptionsQueryDto
 │   ├── controllers/
-│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts, /export-excel...)
+│   │   └── invoice-debts.controller.ts# REST API endpoints (/api/v1/erp-invoices/debts, /export/excel...)
 │   ├── services/
-│   │   ├── invoice-debts.service.ts   # Aggregation engine, Aging buckets, Keyword search, Grand totals, Excel export
+│   │   ├── invoice-debts.service.ts   # FACADE Service (Aggregation, Aging buckets, Excel export orchestration)
 │   │   ├── invoice-debts-export-background.service.ts # Background async Excel export worker & 24h R2 cache
-│   │   └── invoice-debts.service.spec.ts # Jest unit test suite (100% PASS)
+│   │   ├── invoice-debts.service.spec.ts # Jest unit test suite (100% PASS)
+│   │   └── sub-services/
+│   │       ├── invoice-debts-query.service.ts # Query engine tổng hợp công nợ & options
+│   │       ├── invoice-debts-detail.service.ts # Query chi tiết hóa đơn đối tác
+│   │       ├── invoice-debts-export.service.ts # Orchestrator xuất Excel đồng bộ Sheet 1 & Sheet 2 (< 200 LoC)
+│   │       ├── invoice-debts-export-styles.helper.ts # Pure Helper: Columns, Slate-700, Aging colors, Freeze ySplit=4, SUM/SUBTOTAL
+│   │       └── invoice-debts-export-styles.helper.spec.ts # Co-located unit test
 │   └── erp-invoices-core.module.ts    # Đăng ký Controller & Services (InvoiceDebtsController xếp trước)
 ```
 
@@ -110,10 +121,10 @@ erp-web/src/
 │   │       ├── vi.ts                  # Từ điển tiếng Việt 100% (ngắn gọn, không ngoặc đơn)
 │   │       └── en.ts                  # Từ điển tiếng Anh 100%
 │   └── components/layout/
-│       ├── sidebar/components/SidebarNav.tsx # Navigation item "Công nợ"
-│       └── hooks/useNavItems.tsx      # Command search bar item
+│       ├── sidebar/components/invoice-nav-group/ # Molecule L2: Nhóm menu Hóa đơn chứa Sub-menu "Công nợ theo đối tượng"
+│       └── hooks/useNavItems.tsx      # Command search bar item ("Công nợ theo đối tượng")
 └── pages/
-    └── InvoiceDebtsPage.tsx           # Page wrapper định tuyến trong App.tsx
+    └── InvoiceDebtsPage.tsx           # Page (L5): Đồng bộ URL Query Param (?tab=overview | customers | suppliers)
 ```
 
 ---

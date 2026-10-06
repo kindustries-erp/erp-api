@@ -519,6 +519,8 @@ export class RbacCoreService {
         resource: 'vinfast',
         label: 'Vinfast (Phụ tùng & Xưởng)',
       },
+      { resource: 'dashboard', label: 'Dashboard / Tổng quan hệ thống' },
+      { resource: 'attachments', label: 'Attachments / Quản lý tài liệu' },
     ];
   }
 }

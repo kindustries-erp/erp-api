@@ -29,6 +29,10 @@ description: Trợ lý giúp Agent/Developer chia tách các NestJS Controller (
 1. **Bảo toàn REST API Contract**: Tuyệt đối không thay đổi route path (`@Get`, `@Post`), HTTP status, headers, query params hoặc DTO response.
 2. **Bảo toàn Service Method Signatures (Backward Compatibility)**: Khi chia nhỏ Service, file Service gốc phải đóng vai trò **Facade**, delegate sang các Sub-Services để không làm gãy các Controller hoặc Module khác đang gọi tới.
 3. **Quản lý Transaction an toàn**: Các thao tác ghi nhiều bảng cần transaction (`queryRunner` / `entityManager`) phải được đóng gói trọn vẹn trong 1 service hoặc truyền transaction context rõ ràng, tránh mở nhiều connection lồng nhau.
+4. **Bảo toàn tính toàn vẹn của NestJS Dependency Injection (Clean Constructor Mandate)**:
+   * **TUYỆT ĐỐI CẤM** sử dụng TypeScript Constructor Overloading hoặc Union Types (`arg1: SubService | Repository<Entity>`) trong các class `@Injectable()`.
+   * **Lý do**: TypeScript `emitDecoratorMetadata` sinh `design:paramtypes` dựa trên signature thực thi. Union types làm metadata bị gán `undefined` / `Object`, gây crash NestJS runtime (`UnknownDependenciesException`) dù `tsc` và `build` đều pass.
+   * **Quy chuẩn**: Luôn dùng clean DI constructor 1 signature duy nhất và cập nhật unit tests (`*.spec.ts`) để truyền mock sub-services thay vì dùng constructor overload fallback.
 
 ---
 
@@ -148,6 +152,11 @@ export class ReportsCoreService {
 }
 ```
 
+> [!CAUTION]
+> **Quy tắc Constructor của Facade:**
+> * ❌ **CẤM:** Dùng constructor overload hoặc union types (`constructor(arg1: SubService | Repository<Entity>)`) để né việc cập nhật unit tests. Điều này làm hỏng reflection metadata của NestJS và crash container lúc runtime!
+> * ✅ **ĐÚNG:** Luôn viết constructor DI rõ ràng với 1 signature duy nhất: `constructor(private readonly sub1: SubService1, private readonly sub2: SubService2) {}`.
+
 #### 3. Cập nhật NestJS Module:
 ```typescript
 // src/reports-core/reports-core.module.ts
@@ -203,19 +212,60 @@ export function calculateAgingBuckets(
 
 ---
 
+### Pattern D: Tách biệt Tuyệt đối DTO & Entity (Zero-Entity Leaking)
+
+*Áp dụng cho:* Mọi Controller và Service trong `erp-api` (theo chuẩn NestJS Best Practices 2026).
+
+#### Nguyên tắc cốt lõi:
+1. **DTOs** (`dto/*.dto.ts`): Xác định hình dạng dữ liệu đi vào và ra khỏi API, được validate qua `class-validator` và `class-transformer`.
+2. **Entities** (`entities/*.entity.ts`): Mô hình hóa bảng CSDL vật lý (TypeORM decorators), chỉ dùng bên trong tầng Service / Repository.
+3. **Tuyệt đối KHÔNG trả Entity trực tiếp từ Controller**:
+   * Làm lộ các trường nội bộ (mật khẩu, hash, cờ hệ thống, audit fields).
+   * Khóa chặt contract API vào cấu trúc database, khiến việc sửa đổi bảng CSDL gây gãy frontend.
+   * Luôn map Entity sang Response DTO trước khi trả về client.
+
+---
+
+### Pattern E: Domain Handlers Pattern (Cho Gateway & Multi-Domain Modules)
+
+*Áp dụng cho:* Các module đóng vai trò điều phối trung tâm hoặc tích hợp nhiều phân hệ (như `ai-hub-core`, `email-ingest`, `system-operations-core`).
+
+#### Cấu trúc thư mục:
+```
+src/ai-hub-core/
+├── ai-hub-core.module.ts              # Export CoreService và các Handlers
+├── ai-hub-core.controller.ts          # Thin Controller (nhận DTO -> gọi Service -> trả DTO)
+├── ai-hub-core.service.ts             # Orchestrator & Audit Logger
+├── ai-hub-core.service.spec.ts        # Unit test co-located
+├── clients/                           # Giao tiếp HTTP / External Gateway
+│   ├── nine-router.client.ts
+│   └── nine-router.client.spec.ts
+└── handlers/                          # Business logic đóng gói theo từng phân hệ
+    ├── invoice-ai.handler.ts          # Logic phân hệ hóa đơn
+    ├── accounting-ai.handler.ts       # Logic phân hệ kế toán
+    ├── purchasing-ai.handler.ts       # Logic phân hệ mua hàng
+    ├── inventory-ai.handler.ts        # Logic phân hệ kho
+    └── copilot-ai.handler.ts          # Logic trợ lý Copilot
+```
+
+---
+
 ## 5. Quy Trình Thực Hiện Từng Bước (Refactoring Checklist)
 
 Khi được giao nhiệm vụ refactor một file lớn:
 
 - [ ] **Bước 1: Quét và phân tích:** Chạy `bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts` để nắm tổng quan.
 - [ ] **Bước 2: Lập danh sách Public Methods:** Liệt kê các method công khai của Service/Controller cần refactor và nhóm chúng theo từng Domain.
-- [ ] **Bước 3: Tạo thư mục & File con:** Tạo thư mục `services/` hoặc `controllers/` tương ứng.
-- [ ] **Bước 4: Di chuyển Logic:** Chuyển từng nhóm method sang Sub-Service tương ứng kèm theo private helpers và imports.
-- [ ] **Bước 5: Thiết lập Facade:** Biến file Service ban đầu thành Facade delegate.
-- [ ] **Bước 6: Cập nhật NestJS Module:** Khai báo toàn bộ Sub-Services mới vào mảng `providers` của module tương ứng.
-- [ ] **Bước 7: Di chuyển/Tạo Unit Tests:** Tạo các file `.spec.ts` cho từng Sub-Service con.
+- [ ] **Bước 3: Tạo thư mục & File con:** Tạo thư mục `services/`, `controllers/` hoặc `handlers/` tương ứng.
+- [ ] **Bước 4: Di chuyển Logic:** Chuyển từng nhóm method sang Sub-Service / Handler tương ứng kèm theo private helpers và imports.
+- [ ] **Bước 5: Thiết lập Facade / Orchestrator:** Biến file Service ban đầu thành Facade delegate. **Bắt buộc dùng Clean DI constructor, tuyệt đối không dùng constructor overload / union types.**
+- [ ] **Bước 6: Cập nhật NestJS Module:** Khai báo toàn bộ Sub-Services / Handlers mới vào mảng `providers` và `exports` của module tương ứng.
+- [ ] **Bước 7: Cập nhật & Tạo Unit Tests Co-located:**
+  - Tạo các file `.spec.ts` đặt ngay cạnh từng Sub-Service / Handler con.
+  - Cập nhật file `.spec.ts` của Facade Service: inject các mock sub-services thay vì truyền raw Repository.
 - [ ] **Bước 8: Kiểm thử & Xác nhận:**
   ```bash
-  bun run build      # Đảm bảo TypeScript không có bất kỳ lỗi compile nào
+  bun run build      # Đảm bảo TypeScript và SWC/NestJS build thành công
   bun run test       # Đảm bảo toàn bộ test cases hiện tại đều PASS
   ```
+

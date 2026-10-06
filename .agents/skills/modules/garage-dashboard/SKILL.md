@@ -38,19 +38,37 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
-  - Bảng tài chính thiết kế tinh giản, trung tính (chỉ highlight nhẹ dòng Lợi nhuận ròng sau hoa hồng).
-  - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Phát sinh OJ` (Cột riêng cho Omoda/Jaecoo kèm % tỷ trọng & biên LN nằm bên trái Tháng này) | `Tháng này` (Tổng) | `Tháng trước` (Tổng).
-  - Bổ sung các badge % tỷ trọng theo doanh thu cho cột tháng trước, tháng này và cột OJ (COGS, OPEX, Gross Margin, Net Margin).
+  - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
+    - Bố trí trực tiếp trên Card Header của `GaragePnlSection`, nằm giữa bộ chọn kỳ tháng và nút Xuất Excel.
+    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/ui-atomic-refactor`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
+    - Hai chế độ hiển thị:
+      - **Toàn bộ** (`isOjOnly = false`, mặc định): Xem kết quả kinh doanh chung toàn xưởng; hiển thị các hàng phân cấp con `Trong đó: Phát sinh liên quan OJ` (1.1.1, 2.1.1, 3.1, 5.1.1, 6.1, 7.1.1, 8.1) để đối soát đóng góp của mảng OJ.
+      - **Riêng OJ** (`isOjOnly = true`): Chỉ hiển thị kết quả kinh doanh của riêng mảng OJ. Hàng chính bind trực tiếp từ `report.oj`, `prevReport.oj`, `prev2Report.oj`. Tự động ẩn toàn bộ các dòng con `Trong đó: Phát sinh liên quan OJ`, lọc danh sách chi phí vận hành (OPEX) và chi phí trực tiếp nhập tay chỉ giữ lại các mục có phát sinh OJ (`ojAmount > 0`), có fallback hint thân thiện nếu kỳ chưa có chi phí phân bổ cho OJ.
+    - Phân tách cấu trúc 100% files < 180 LoC: bóc tách `PnlDvCommissionRow.tsx` và `PnlKyGuiCommissionDetailRows.tsx` độc lập, đồng thời 100% từ điển i18n (`vi.ts` & `en.ts`).
+  - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Tháng T` (Kỳ chọn - font-bold) | `Tháng T-1` | `Tháng T-2` (Loại bỏ cột riêng OJ, phát sinh liên quan OJ được hiển thị chi tiết dưới dạng dòng phụ `Trong đó: Phát sinh liên quan OJ` xuyên suốt cả 3 tháng).
+  - Thiết kế **Ô Tài Chính 2 Tầng (Two-Tier Financial Cell - `PnlAmountCell`)**:
+    - **Hàng 1 (Main Amount)**: Số tiền chính căn phải, font mono, `whitespace-nowrap` (tuyệt đối không bị rớt dòng đơn vị `đ`).
+    - **Hàng 2 (Sub-text %)**: Căn phải ngay dưới số tiền với font nhỏ (`text-[10px]`), gồm **Delta %** (so sánh với tháng liền kề trước, xanh lá nếu tốt, đỏ nếu chi phí tăng/doanh thu giảm) và **% Doanh thu (% DT)** của chính tháng đó.
+    - **Cột Danh Mục**: Loại bỏ các badge % lẻ tẻ để giữ cột Danh mục thoáng đãng, thuần túy tên khoản mục; toàn bộ % DT được hiển thị chuẩn xác ở Hàng 2 của từng cột tháng tương ứng.
+  - Tự động ghép nối và đối soát dòng con chi tiết giữa 3 tháng liên tiếp (`mergePnlItems`), hiển thị đầy đủ số tiền và tỷ lệ biến động (delta) giữa các kỳ tháng.
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
-  - Tổng hợp tự động 7 chỉ mục tài chính phân cấp:
-    1. `I. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
-    2. `II. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài + Direct Costs nhập tay)
-    3. `III. Lợi nhuận gộp` (`Gross Profit = Revenue - COGS`, kèm % Biên LN gộp)
-    4. `IV. Chi phí vận hành` (Tổng hợp các khoản OPEX trong tháng)
-    5. `V. Lợi nhuận ròng (trước hoa hồng)` (`Net Profit Before Commission = Gross Profit - OPEX`)
-    6. `VI. Hoa hồng` (Tổng hợp các khoản hoa hồng `HOA_HONG_*` trong tháng)
-    7. `VII. Lợi nhuận ròng (sau hoa hồng)` (`Net Profit After Commission = Net Profit Before Commission - Commission`, kèm % Biên LN ròng)
-  - Tự động ghép nối và đối soát dòng con chi tiết giữa 2 tháng (`mergePnlItems`), hiển thị đầy đủ số tiền tháng trước và số tiền chi riêng cho OJ cho từng danh mục phát sinh.
+  - **Tổng hợp tự động 8 chỉ mục tài chính phân cấp (Số La Mã I → VIII)**:
+    - Toàn bộ 8 mục Numeric Level 1 sử dụng số La Mã (`text-sm font-bold tracking-tight text-foreground`) kèm icon biểu trưng nằm **ngay bên phải** nhãn chữ:
+      1. `I. Doanh Thu` (Icon `TrendingUp` bên phải)
+      2. `II. Chi phí (Giá vốn)` (Icon `Boxes` bên phải)
+      3. `III. Lợi nhuận gộp` (Icon `TrendingUp` bên phải, đã di dời từ phía trước ra phía sau text)
+      4. `IV. Chi phí bán hàng` (Icon `ShoppingBag` bên phải)
+      5. `V. Chi phí vận hành` (Icon `Building2` bên phải, kèm nút `Thêm CP`)
+      6. `VI. Lợi nhuận ròng` (Icon `Coins` bên phải)
+      7. `VII. Thưởng và Hoa hồng Dịch vụ` (Icon `Award` bên phải)
+      8. `VIII. Lợi nhuận giữ lại của Garage (Sau hoa hồng DV)` (Icon `ShieldCheck` bên phải)
+  - **Cơ chế Thu gọn / Mở rộng (Expand / Collapse)**:
+    - **Từng mục Level 1**: Tích hợp nút `ChevronDown` / `ChevronRight` tại `PnlLevel1HeaderCell`, click để ẩn / hiện các dòng con cấp 2 và cấp 3 của riêng mục đó.
+    - **Toàn cục (Global Toggle)**: Nút `ChevronsUpDown` trên Header cột Danh Mục cho phép 1-click **Thu gọn tất cả** (đưa bảng về 8 dòng số La Mã tổng quan) hoặc **Mở rộng tất cả** (bung toàn bộ chi tiết).
+  - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+    - `usePnlCollapseState.ts`: Hook quản lý map đóng/mở 8 sections.
+    - `PnlLevel1HeaderCell.tsx`: Molecule chuẩn hóa hiển thị chevron, tiêu đề La Mã và icon bên phải.
+    - `PnlOpexItemRow.tsx`: Molecule bóc tách từ `PnlOpexRows.tsx` để khống chế 100% files dưới 180 LoC.
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
@@ -123,10 +141,17 @@ src/kgara-api-core/
 │   └── kgara_operating_expense.entity.ts # TypeORM Entity cho kgara_operating_expenses
 ├── services/
 │   ├── garage-opex.service.ts          # CRUD OPEX, recurring upsert & period summary (COGS/OPEX/Commission)
-│   └── garage-opex.service.spec.ts     # Unit tests cho GarageOpexService (Pass 100%)
+│   ├── garage-opex.service.spec.ts     # Unit tests cho GarageOpexService
+│   ├── garage-dashboard-stats.service.ts # Thống kê xu hướng tháng, doanh thu, giá vốn, lãi gộp, tiến độ thu/chi & phễu
+│   ├── garage-checkpoint.service.ts    # Chỉ số KPI Checkpoints (Tháng/Tuần/Hôm nay), Sparklines & Drill-down ca
+│   ├── garage-customer-stats.service.ts # Phân tích khách hàng, doanh thu, lãi gộp & tuổi nợ
+│   ├── garage-dashboard-export.service.ts # Xuất báo cáo Excel 2 sheet (Tổng quan tháng & Chi tiết ca)
+│   ├── garage-pnl.service.ts           # Báo cáo P&L, hoa hồng tự động Sale 10%/DV 10% & xuất Excel P&L
+│   └── garage-pnl.spec.ts              # Unit tests P&L & hoa hồng tự động (Pass 100%)
 ├── garage-dashboard.controller.ts      # REST Controller (Dashboard, Checkpoint, OPEX, P&L, ApplyRecurring)
-├── garage-dashboard.service.ts         # Aggregation Doanh thu/COGS/DirectCost, P&L Report, ExcelJS
-└── kgara-api-core.module.ts            # NestJS Module đăng ký Entity, Controllers & Services
+├── garage-dashboard.service.ts         # Facade Service (~120 dòng): Clean DI delegate sang 5 Sub-Services
+├── garage-dashboard.facade.spec.ts     # Unit tests Facade delegation
+└── kgara-api-core.module.ts            # NestJS Module đăng ký Entity, Controllers & Providers/Exports
 ```
 
 ---
@@ -153,36 +178,39 @@ Resource RBAC: `garage`
 | `DELETE`| `/opex/:id` | `{ resource: 'garage', action: 'delete' }`| `id` (uuid) | Xóa khoản chi phí vận hành |
 | `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L theo tháng kèm `cogsAdjustment` |
 | `GET` | `/pnl-report/export` | `{ resource: 'garage', action: 'read' }`| `year`, `month` | Xuất file Excel Báo cáo P&L theo tháng |
+| `GET` | `/debts-analytics` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Phân tích tổng hợp công nợ KH vs NCC, mốc thời gian & dự báo IFRS 9 |
+| `GET` | `/time-horizons/:horizon/cases` | `{ resource: 'garage', action: 'read' }` | `horizon`, `date_from`, `date_to`, `branch_id`, pagination | Danh sách vụ việc chi tiết theo mốc thời gian cho Drawer |
 
 ---
 
 ## 5. Logic Nghiệp vụ & Thuật toán Trọng tâm
 
 ### 5.1. Công thức Báo cáo Lợi nhuận (P&L) & Tính Tự Động Hoa Hồng:
-1. **Doanh thu ($R$)**:
+1. **1. Doanh thu ($R$)**:
    $$\sum \text{COALESCE}(gp.\text{doanh\_thu}, c.\text{doanh\_thu}, c.\text{tien\_co\_thue}, 0)$$
    áp dụng cho các phiếu hoàn thành trong tháng `TO_CHAR(c.ngay_hoan_thanh_cong_viec, 'YYYY-MM') = :periodStr`.
-2. **Chi phí giá vốn ($C_{COGS}$)**:
+2. **2. Chi phí giá vốn ($C_{COGS}$)**:
    $$C_{COGS} = \sum \text{COALESCE}(gp.\text{chi\_phi}, c.\text{chi\_phi}, 0) + \sum \text{DirectCosts}_{\text{nhập tay}}$$
    với $\text{DirectCosts}$ là các khoản OPEX có `category_key IN ('HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC')`.
-3. **Lợi nhuận gộp ($GP$) & Phân loại Phiếu dịch vụ (`c.classification`)**:
+3. **3. Lợi nhuận gộp ($GP$) & Phân loại Phiếu dịch vụ (`c.classification`)**:
    - $GP = R - C_{COGS}, \quad \text{Gross Margin} = \frac{GP}{R} \times 100\%$
    - **Lợi nhuận gộp Ký gửi ($GP_{kg}$)**: Doanh thu - Chi phí của các phiếu có `c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')` hoàn thành trong kỳ.
    - **Tỷ lệ lãi gộp ký gửi ($R_{kg}$)**:
      $$R_{kg} = \begin{cases} \frac{GP_{kg}}{GP} \times 100\% & \text{khi } GP > 0 \text{ và } GP_{kg} > 0 \\ 0\% & \text{ngược lại} \end{cases}$$
-4. **Chi phí vận hành ($OPEX$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` có `category_key NOT LIKE 'HOA_HONG_%'` và `category_key NOT IN ('CHI_PHI_TRUC_TIEP_KHAC')` trong kỳ.
-5. **Lợi nhuận ròng trước hoa hồng ($NP_{pre}$)**:
-   $$NP_{pre} = GP - OPEX$$
-6. **Hoa hồng tự động ($COMM$)**:
+4. **4. Chi phí bán hàng ($SE$)**:
    - **Hoa hồng cho Sale (10%)**:
-     $$\text{Comm}_{sale} = \begin{cases} \text{round}(NP_{pre} \times R_{kg} \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
+     $$\text{Comm}_{sale} = \begin{cases} \text{round}((GP - OPEX) \times R_{kg} \times 10\%) & \text{khi } (GP - OPEX) > 0 \\ 0 & \text{ngược lại} \end{cases}$$
+   - $SE = \text{Comm}_{sale} + \sum \text{Selling Expenses nhập tay}$
+5. **5. Chi phí vận hành ($OPEX$)**:
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì, Khấu hao, Chi phí khác).
+6. **6. Lợi nhuận ròng ($NP$)**:
+   $$NP = GP - SE - OPEX$$
+7. **7. Thưởng và Hoa hồng Dịch vụ ($COMM_{dv}$)**:
    - **Hoa hồng cho Dịch vụ (10%)**:
-     $$\text{Comm}_{dv} = \begin{cases} \text{round}((NP_{pre} - \text{Comm}_{sale}) \times 10\%) & \text{khi } NP_{pre} > 0 \\ 0 & \text{khi } NP_{pre} \le 0 \end{cases}$$
-   - **Tổng Hoa hồng**:
-     $$COMM = \text{Comm}_{sale} + \text{Comm}_{dv} + \sum \text{Manual Commissions (HOA\_HONG\_KHAC)}$$
-7. **Lợi nhuận ròng sau hoa hồng ($NP_{post}$)**:
-   $$NP_{post} = NP_{pre} - COMM, \quad \text{Net Margin} = \frac{NP_{post}}{R} \times 100\%$$
+     $$\text{Comm}_{dv} = \begin{cases} \text{round}(NP \times 10\%) & \text{khi } NP > 0 \\ 0 & \text{khi } NP \le 0 \end{cases}$$
+   - $COMM_{dv} = \text{Comm}_{dv} + \sum \text{Manual Commissions (HOA\_HONG\_KHAC)}$
+8. **8. Lợi nhuận giữ lại của Garage ($RP$)**:
+   $$RP = NP - COMM_{dv}, \quad \text{Retained Margin} = \frac{RP}{R} \times 100\%$$
 
 ---
 
@@ -195,7 +223,7 @@ Resource RBAC: `garage`
     - [`garageOpexApi.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
     - [`useGarageOpexList.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
-  - Pages & Components (Chuẩn `/erp-atomic-refactor`):
+  - Pages & Components (Chuẩn `/ui-atomic-refactor`):
     - [`pages/GarageDashboard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
     - [`components/GarageConversionFunnelCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)

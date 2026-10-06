@@ -31,6 +31,7 @@ import { ErpProductionOrderMaterial } from '../production-core/entities/erp_prod
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from '../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAdjustmentNetOff } from '../erp-invoices-core/entities/erp_invoice_adjustment_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { SysFile } from '../files/entities/sys-file.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
@@ -77,6 +78,9 @@ import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-cat
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
 import { ErpSystemOperation } from '../system-operations-core/entities/erp_system_operation.entity';
+import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
+import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
+import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -85,6 +89,9 @@ const entities = [
   CorePermission,
   CoreUserRole,
   ErpSystemOperation,
+  ErpAiConfig,
+  ErpAiLog,
+  ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
   ErpOperatingExpense,
@@ -111,6 +118,7 @@ const entities = [
   ErpInvoice,
   ErpInvoiceItem,
   ErpInvoiceVoucherNetOff,
+  ErpInvoiceAdjustmentNetOff,
   CompanyProfile,
   SysFile,
   ErpInventoryTrackingSerial,

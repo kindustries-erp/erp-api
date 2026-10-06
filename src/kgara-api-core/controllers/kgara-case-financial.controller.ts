@@ -23,9 +23,13 @@ import { DocumentTraceabilityService } from '../../common/services/document-trac
 import { GarageSmartSettlementService } from '../services/garage-smart-settlement.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
 import { extractNetPayableAmount } from '../kgara-sync.service';
+import { syncSingleCaseSettlementsFromInvoiceNetOffs } from '../helpers/kgara-case-netoff-sync.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
-import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -48,7 +52,11 @@ export class KgaraCaseFinancialController {
   ) {}
 
   @Get('cases/:id/linked-invoices')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.INVOICES, action: ErpAction.READ },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+  )
   async getLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -69,10 +77,11 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/linked-invoices')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.CREATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+  )
   async addLinkedInvoice(
     @Param('id') id: string,
     @Body()
@@ -147,40 +156,11 @@ export class KgaraCaseFinancialController {
           }
         }
 
-        // 2. Chiều Invoice -> Case: Nếu Hóa đơn đã có cấn trừ sao kê sẵn, cấn trừ sang Phiếu dịch vụ
-        const invoiceNetOffs = await this.settlementRepo.manager.query(
-          `SELECT n.bank_transaction_id, n.net_off_amount, t.trans_date, t.correspondent_name, t.description
-           FROM erp_invoice_voucher_netoff n
-           LEFT JOIN erp_bank_transactions t ON t.id = n.bank_transaction_id
-           WHERE n.invoice_id = $1`,
-          [item.invoiceId],
+        // 2. Chiều Invoice -> Case: Đồng bộ toàn bộ cấn trừ sao kê của Hóa đơn sang Phiếu dịch vụ
+        await syncSingleCaseSettlementsFromInvoiceNetOffs(
+          this.settlementRepo.manager,
+          id,
         );
-
-        for (const no of invoiceNetOffs) {
-          if (!no.bank_transaction_id) continue;
-          const existingCaseSettlement = await this.settlementRepo.findOne({
-            where: {
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-            },
-          });
-
-          if (!existingCaseSettlement) {
-            const newSettlement = this.settlementRepo.create({
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-              settlementType: targetSettlementType,
-              sourceChannel: 'ON_SYSTEM',
-              amount: Number(no.net_off_amount || 0),
-              transDate: no.trans_date,
-              partnerName: no.correspondent_name,
-              note: `Đồng bộ cấn trừ từ hóa đơn liên kết`,
-            });
-            await this.settlementRepo.save(newSettlement);
-          }
-        }
-
-        await this.caseQueryService.recalculateCaseSettlementSummary(id);
       } catch (syncErr) {
         this.logger.warn(
           `Could not sync bi-directional settlements and netoff: ${syncErr}`,
@@ -208,10 +188,11 @@ export class KgaraCaseFinancialController {
   }
 
   @Delete('cases/:id/linked-invoices/:linkedId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.DELETE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+  )
   async removeLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
@@ -249,7 +230,11 @@ export class KgaraCaseFinancialController {
         this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
       }
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
-      await this.caseQueryService.recalculateCaseSettlementSummary(id);
+      // Bi-directional sync: Đồng bộ & tính lại settlements cho vụ việc sau khi gỡ hóa đơn
+      await syncSingleCaseSettlementsFromInvoiceNetOffs(
+        this.linkedInvoiceRepo.manager,
+        id,
+      );
     }
     return { success: true };
   }
@@ -368,7 +353,11 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/settlements')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.INVOICES, action: ErpAction.READ },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+  )
   async getCaseSettlements(@Param('id') id: string) {
     return this.settlementRepo.query(
       `SELECT s.id::text as "id", 
@@ -423,10 +412,13 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/settlements')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.CREATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async addCaseSettlement(
     @Param('id') id: string,
     @Body()
@@ -499,10 +491,13 @@ export class KgaraCaseFinancialController {
   }
 
   @Delete('cases/:id/settlements/:settlementId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.DELETE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async removeCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,
@@ -553,10 +548,12 @@ export class KgaraCaseFinancialController {
   }
 
   @Patch('cases/:id/settlements/:settlementId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.UPDATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async updateCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ErpChartOfAccount } from './entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from './entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from './entities/erp_journal_entry_line.entity';
+import { ErpDocumentSequence } from './entities/erp_document_sequence.entity';
 import { AccountingCoreController } from './controllers/accounting-core.controller';
 import { AccountingCoreService } from './services/accounting-core.service';
 import { CommonModule } from '../common/common.module';
@@ -13,6 +14,7 @@ import { CommonModule } from '../common/common.module';
       ErpChartOfAccount,
       ErpJournalEntry,
       ErpJournalEntryLine,
+      ErpDocumentSequence,
     ]),
     CommonModule,
   ],

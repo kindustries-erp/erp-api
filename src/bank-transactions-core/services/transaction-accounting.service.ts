@@ -10,6 +10,7 @@ import { PostBankTransactionDto } from '../dto/post-bank-transaction.dto';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import { syncInvoiceNetOffToCaseSettlements } from '../../kgara-api-core/helpers/kgara-case-netoff-sync.helper';
 
 @Injectable()
 export class TransactionAccountingService {
@@ -507,64 +508,10 @@ export class TransactionAccountingService {
 
     // Bi-directional sync: Đồng bộ cấn trừ sang các Phiếu dịch vụ Garage đang liên kết với Hóa đơn này
     try {
-      const linkedCases = await this.dataSource.query(
-        `SELECT l."caseDbId", l."linkType", c.id, c.tien_co_thue, c.doanh_thu
-         FROM kgara_case_linked_invoice l
-         JOIN kgara_cases c ON c.id = l."caseDbId"
-         WHERE l."invoiceId" = $1`,
-        [payload.invoiceId],
+      await syncInvoiceNetOffToCaseSettlements(
+        this.dataSource.manager,
+        payload.invoiceId,
       );
-
-      for (const lc of linkedCases) {
-        const caseId = lc.caseDbId || lc.id;
-        const isOut = (lc.linkType || invRow.direction) === 'OUT';
-        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-
-        const existingCaseSettlement = await this.dataSource.query(
-          `SELECT id FROM kgara_case_settlements WHERE case_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-          [caseId, txnId],
-        );
-
-        if (existingCaseSettlement && existingCaseSettlement.length > 0) {
-          await this.dataSource.query(
-            `UPDATE kgara_case_settlements SET amount = $1, updated_at = now() WHERE id = $2`,
-            [netOffAmount, existingCaseSettlement[0].id],
-          );
-        } else {
-          await this.dataSource.query(
-            `INSERT INTO kgara_case_settlements (id, case_id, bank_transaction_id, settlement_type, source_channel, amount, trans_date, partner_name, note, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, 'ON_SYSTEM', $4, $5, $6, $7, now(), now())`,
-            [
-              caseId,
-              txnId,
-              targetSettlementType,
-              netOffAmount,
-              txn.transDate || null,
-              txn.correspondentName ||
-                invRow.buyer_name ||
-                invRow.seller_name ||
-                null,
-              `Cấn trừ tự động từ hóa đơn ${invRow.invoice_no || ''}`.trim(),
-            ],
-          );
-        }
-
-        // Cập nhật lại công nợ phiếu dịch vụ
-        await this.dataSource.query(
-          `WITH sums AS (
-             SELECT COALESCE(SUM(amount), 0) as total_receipts
-             FROM kgara_case_settlements
-             WHERE case_id = $1 AND settlement_type = 'RECEIPT'
-           )
-           UPDATE kgara_cases
-           SET tien_da_thanh_toan = sums.total_receipts,
-               tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
-               updated_at = now()
-           FROM sums
-           WHERE id = $1`,
-          [caseId],
-        );
-      }
     } catch (caseSyncErr) {
       // Non-blocking
     }
@@ -590,8 +537,12 @@ export class TransactionAccountingService {
       [txnId, invoiceIdOrNetOffId],
     );
 
-    const affectedInvoiceIds = Array.from(
-      new Set(affectedNetOffs.map((r: any) => r.invoice_id).filter(Boolean)),
+    const affectedInvoiceIds: string[] = Array.from(
+      new Set(
+        affectedNetOffs
+          .map((r: any) => (r.invoice_id ? String(r.invoice_id) : ''))
+          .filter(Boolean),
+      ),
     );
 
     // 2. Xóa bản ghi net-off
@@ -601,37 +552,14 @@ export class TransactionAccountingService {
       [txnId, invoiceIdOrNetOffId],
     );
 
-    // 3. Bi-directional cascade delete: Tự động xóa cấn trừ sao kê ở các Phiếu dịch vụ kết nối
+    // 3. Bi-directional cascade delete: Tự động cập nhật cấn trừ sao kê ở các Phiếu dịch vụ kết nối
     try {
       for (const invId of affectedInvoiceIds) {
-        const linkedCases = await this.dataSource.query(
-          `SELECT DISTINCT "caseDbId" FROM kgara_case_linked_invoice WHERE "invoiceId" = $1`,
-          [invId],
+        if (!invId) continue;
+        await syncInvoiceNetOffToCaseSettlements(
+          this.dataSource.manager,
+          invId,
         );
-
-        for (const lc of linkedCases) {
-          const caseId = lc.caseDbId;
-          await this.dataSource.query(
-            `DELETE FROM kgara_case_settlements WHERE case_id = $1 AND bank_transaction_id = $2`,
-            [caseId, txnId],
-          );
-
-          // Cập nhật lại công nợ phiếu dịch vụ
-          await this.dataSource.query(
-            `WITH sums AS (
-               SELECT COALESCE(SUM(amount), 0) as total_receipts
-               FROM kgara_case_settlements
-               WHERE case_id = $1 AND settlement_type = 'RECEIPT'
-             )
-             UPDATE kgara_cases
-             SET tien_da_thanh_toan = sums.total_receipts,
-                 tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
-                 updated_at = now()
-             FROM sums
-             WHERE id = $1`,
-            [caseId],
-          );
-        }
       }
     } catch (caseDelSyncErr) {
       // Non-blocking

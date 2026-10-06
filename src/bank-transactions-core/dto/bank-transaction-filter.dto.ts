@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  Allow,
   IsArray,
   IsDateString,
   IsEnum,
@@ -10,6 +11,33 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
+
+function transformJsonParam(value: any): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof value === 'string' ? value : String(value);
+}
+
+function transformSortsParam(value: any): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    if (value.startsWith('[') && value.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [value];
+  }
+  return undefined;
+}
 
 export class BankTransactionFilterDto {
   @ApiProperty({ required: false, type: [String] })
@@ -85,14 +113,34 @@ export class BankTransactionFilterDto {
   transactionType?: 'IN' | 'OUT';
 
   @ApiProperty({ required: false })
-  @IsString()
+  @Transform(({ value }) => transformJsonParam(value))
   @IsOptional()
-  column_search?: string;
+  @Allow()
+  column_search?: any;
 
   @ApiProperty({ required: false })
-  @IsString()
+  @Transform(({ value }) => transformJsonParam(value))
   @IsOptional()
-  column_filters?: string;
+  @Allow()
+  columnSearch?: any;
+
+  @ApiProperty({ required: false })
+  @Transform(({ value }) => transformJsonParam(value))
+  @IsOptional()
+  @Allow()
+  column_filters?: any;
+
+  @ApiProperty({ required: false })
+  @Transform(({ value }) => transformJsonParam(value))
+  @IsOptional()
+  @Allow()
+  columnFilters?: any;
+
+  @ApiProperty({ required: false, type: [String] })
+  @Transform(({ value }) => transformSortsParam(value))
+  @IsArray()
+  @IsOptional()
+  sorts?: string[];
 
   @ApiProperty({ required: false })
   @IsString()

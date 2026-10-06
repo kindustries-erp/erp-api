@@ -62,7 +62,18 @@ describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () 
           provide: GarageSmartSettlementService,
           useValue: { getSuggestionsForCase: jest.fn() },
         },
-        KgaraCaseQueryService,
+        {
+          provide: KgaraCaseQueryService,
+          useValue: {
+            recalculateCaseSettlementSummary: jest
+              .fn()
+              .mockResolvedValue(undefined),
+            exportCompletedCasesExcel: jest.fn(),
+            findCaseServices: jest.fn(),
+            getCaseServiceColumnOptions: jest.fn(),
+            exportCaseServicesExcel: jest.fn(),
+          },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)

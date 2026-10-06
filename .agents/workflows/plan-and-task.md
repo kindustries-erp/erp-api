@@ -22,6 +22,7 @@ graph LR
 2. **Strict Sequence**: `Database (Schema/Migration)` ➔ `API (DTO/Service/Controller/RBAC)` ➔ `QC & Jest Tests`.
 3. **Atomic Task & Concrete DoD**: Mỗi task (1–2 files), có mã lệnh kiểm thử (**Verification Command**) chạy ngay.
 4. **Brain Artifacts**: Lưu trữ qua `implementation_plan.md` (kế hoạch) và `walkthrough.md` (nghiệm thu).
+5. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
 
 ---
 
@@ -58,8 +59,10 @@ Phân chia task theo thứ tự: `Phase 1: DB & Migration` ➔ `Phase 2: API & L
 
 ### 🔹 GIAI ĐOẠN 5: Execution, Test-First & Walkthrough (Thực Thi & Nghiệm Thu)
 - Thực thi tuần tự, chuyển `[/]`, chạy Verification Command đạt 100% trước khi tick `[x]`.
+- **Knowledge-Sync on Task Completion**: Nếu task làm thay đổi Schema, DTO hay API Endpoint, cập nhật ngay vào Module Skill liên quan trước khi kết thúc task.
 - Chạy Pre-commit check (`bun run check:ci && bun run test`).
-- Tạo báo cáo nghiệm thu `walkthrough.md` đính kèm test logs.
+- **Nghiệm thu & Đồng bộ Tri thức**: Cập nhật Module Skill (`.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
+- Tạo báo cáo nghiệm thu `walkthrough.md` đính kèm test logs và trạng thái đồng bộ skill.
 
 ---
 
@@ -104,6 +107,31 @@ Phân chia task theo thứ tự: `Phase 1: DB & Migration` ➔ `Phase 2: API & L
 - [ ] **Task 2.3: Controller Endpoints & RBAC Guards**
   - **Files**: `[MODIFY]` `src/modules/.../controller.ts`
 
-### Phase 3: QC & Test Verification
+### Phase 3: QC & Knowledge Sync
 - [ ] **Task 3.1: Full Check CI & Tests** | **Verification**: `bun run check:ci && bun run test`
+- [ ] **Task 3.2: Đồng bộ Module Skill**
+  - **Files**: `[MODIFY]` `.agents/skills/modules/<module>/SKILL.md` (hoặc chạy `/scan-module-knowledge`)
+  - **DoD**: Cập nhật DTOs, endpoints, tables mới vào Module Skill.
+```
+
+---
+
+## 📦 MẪU BÁO CÁO NGHIỆM THU (`walkthrough.md`)
+
+```markdown
+# 🚀 Walkthrough & Verification Report: [Tên Tính Năng]
+
+## 📝 Tóm Tắt Thay Đổi
+| Phân hệ | File | Loại | Mô tả |
+| :--- | :--- | :---: | :--- |
+| **DB**  | `src/database/migrations/...` | `NEW` | Migration mới |
+| **API** | `src/modules/.../service.ts` | `MODIFY` | Logic nghiệp vụ & Transaction |
+
+## 🧪 Bằng Chứng Xác Thực (Test Evidence)
+- **Unit Tests**: `bunx jest` ➔ `PASS (100% test suites)`
+- **CI Check**: `bun run check:ci` ➔ `PASS (0 errors)`
+
+## 🧠 Tri Thức & Skill Đồng Bộ (Knowledge Sync)
+- **Module Skill**: Đã cập nhật `[path/to/SKILL.md]` (hoặc: *Không có thay đổi schema/contract*).
+- **Current Truth**: Đã liên kết vào `liouni-erp-api-current-truth`.
 ```

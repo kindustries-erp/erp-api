@@ -26,7 +26,7 @@ Khi người dùng yêu cầu "Upload hàng loạt PDF hóa đơn", hãy thực 
    - Tên file có thể không theo một chuẩn cố định (ví dụ không có `YYYYMMDD_HDMH_`), nhưng thường sẽ chứa **Số Hóa Đơn** và/hoặc **Ký Hiệu Hóa Đơn**.
    - Cách tiếp cận tốt nhất là: Truy vấn danh sách hóa đơn đầu vào (`direction = 'IN'`) từ database. Với mỗi file, kiểm tra xem tên file có chứa `invoice_no` (và tùy chọn `serial_no`) hay không. Dùng Regular Expression với word boundaries `\b` để tránh nhận diện nhầm (ví dụ số hóa đơn `119` không được match với chuỗi `1192` trong tên file).
 4. **Viết script tự động bằng Node.js / Bun:**
-   - Kết nối DB Neon bằng thư viện `pg` hoặc chuỗi `psql` commandline tùy vào số lượng. Khuyến khích viết script `bun` dùng `@aws-sdk/client-s3` và `postgres` (hoặc `pg`).
+   - Kết nối PostgreSQL DB bằng thư viện `pg` hoặc chuỗi `psql` commandline tùy vào số lượng. Khuyến khích viết script `bun` dùng `@aws-sdk/client-s3` và `postgres` (hoặc `pg`).
    - Nhận thêm tham số direction (IN hoặc OUT) để quét đúng loại hóa đơn. VD: `bun run bulk-upload.ts /path/to/pdf IN` hoặc `bun run bulk-upload.ts /path/to/pdf OUT`.
    - Ứng với mỗi file PDF tìm được:
      - Upload lên Cloudflare R2 tại đường dẫn: `invoices/<Direction>/<Năm>/<Tháng>/<Tên File.pdf>`

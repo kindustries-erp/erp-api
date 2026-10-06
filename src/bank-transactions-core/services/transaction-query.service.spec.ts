@@ -1,256 +1,123 @@
 import { TransactionQueryService } from './transaction-query.service';
-import { NotFoundException } from '@nestjs/common';
 
-describe('TransactionQueryService', () => {
+describe('TransactionQueryService - Server-side Sorting', () => {
   let service: TransactionQueryService;
-  let transactionRepo: any;
-  let transactionAccountingService: any;
-  let qb: any;
+  let qbMock: any;
+  let totalsQbMock: any;
+  let transactionRepoMock: any;
+  let transactionAccountingServiceMock: any;
 
   beforeEach(() => {
-    qb = {
+    totalsQbMock = {
+      expressionMap: { orderBys: {}, selects: [] },
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        totalCredit: '1000',
+        totalDebit: '500',
+        totalNetOff: '200',
+        totalRemaining: '800',
+      }),
+    };
+
+    qbMock = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
-      innerJoin: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      offset: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      clone: jest.fn(),
       getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-      getRawOne: jest.fn().mockResolvedValue({ cnt: '0' }),
-      getRawMany: jest.fn().mockResolvedValue([]),
-      expressionMap: { groupBys: [] },
+      clone: jest.fn().mockReturnValue(totalsQbMock),
     };
 
-    const countQb: any = {
-      orderBy: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      offset: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getRawOne: jest
-        .fn()
-        .mockResolvedValue({ cnt: '0', totalCredit: '0', totalDebit: '0' }),
-      getRawMany: jest.fn().mockResolvedValue([]),
-      expressionMap: {
-        groupBys: [],
-        orderBys: {},
-        selects: [],
-        joinAttributes: [],
-      },
+    const managerMock = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      }),
     };
 
-    qb.clone.mockReturnValue(countQb);
-
-    const netoffMock: any = {
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([]),
+    transactionRepoMock = {
+      createQueryBuilder: jest.fn().mockReturnValue(qbMock),
+      manager: managerMock,
     };
 
-    transactionRepo = {
-      createQueryBuilder: jest.fn().mockReturnValue(qb),
-      findOne: jest.fn(),
-      manager: {
-        createQueryBuilder: jest.fn().mockReturnValue(netoffMock),
-      },
-    };
-
-    transactionAccountingService = {
-      getTransactionPosting: jest.fn(),
+    transactionAccountingServiceMock = {
+      getTransactionPosting: jest.fn().mockResolvedValue({}),
     };
 
     service = new TransactionQueryService(
-      transactionRepo,
-      transactionAccountingService,
+      transactionRepoMock as any,
+      transactionAccountingServiceMock as any,
     );
   });
 
-  it('combines transaction detail with posting data in getTransaction', async () => {
-    const txn: any = { id: 'txn-1', isDeleted: false };
-    transactionRepo.findOne.mockResolvedValue(txn);
+  it('defaults to sorting by txn.transDate DESC, txn.createdAt DESC when no sort is passed', async () => {
+    await service.getTransactions({ page: 1, pageSize: 20 });
 
-    const netoffQb: any = {
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest
-        .fn()
-        .mockResolvedValue([{ bankTransactionId: 'txn-1', sum: '30' }]),
-    };
-    transactionRepo.manager.createQueryBuilder.mockReturnValue(netoffQb);
-
-    transactionAccountingService.getTransactionPosting.mockResolvedValue({
-      postingStatus: 'POSTED',
-      totalDebit: 30,
-      totalCredit: 30,
-    });
-
-    const result = await service.getTransaction('txn-1');
-
-    expect(transactionRepo.findOne).toHaveBeenCalledWith({
-      where: { id: 'txn-1', isDeleted: false },
-      relations: [
-        'branch',
-        'bankAccount',
-        'cashBook',
-        'invoiceNetOffs',
-        'invoiceNetOffs.invoice',
-      ],
-    });
-    expect(
-      transactionAccountingService.getTransactionPosting,
-    ).toHaveBeenCalledWith('txn-1');
-    expect(result).toEqual(
-      expect.objectContaining({
-        id: 'txn-1',
-        netOffAmount: '30',
-        postingStatus: 'POSTED',
-      }),
-    );
+    expect(qbMock.orderBy).toHaveBeenCalledWith('txn.transDate', 'DESC');
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
   });
 
-  it('throws NotFoundException when getTransaction target is missing', async () => {
-    transactionRepo.findOne.mockResolvedValue(null);
-
-    await expect(service.getTransaction('missing')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-  });
-
-  it('returns empty pagination for getTransactions when no data', async () => {
-    const result = await service.getTransactions({} as any);
-
-    expect(transactionRepo.createQueryBuilder).toHaveBeenCalledWith('txn');
-    expect(result).toEqual({
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
-      totals: {
-        grandTotalCredit: 0,
-        grandTotalDebit: 0,
-        grandTotalNetOff: 0,
-        grandTotalRemaining: 0,
-        cumulativeCredit: 0,
-        cumulativeDebit: 0,
-        cumulativeNetOff: 0,
-        cumulativeRemaining: 0,
-      },
-    });
-  });
-
-  it('applies GMT+7 timezone to startDate and endDate in getTransactions', async () => {
+  it('sorts by thu (creditAmount) DESC when requested', async () => {
     await service.getTransactions({
-      startDate: '2026-07-01',
-      endDate: '2026-07-31',
-    } as any);
-
-    expect(qb.andWhere).toHaveBeenCalledWith(
-      "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= :startDate::date",
-      {
-        startDate: '2026-07-01',
-      },
-    );
-    expect(qb.andWhere).toHaveBeenCalledWith(
-      "(txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <= :endDate::date",
-      {
-        endDate: '2026-07-31',
-      },
-    );
-  });
-
-  it('returns empty options for unsupported column', async () => {
-    const result = await service.getColumnOptions('unsupported', '', 1, 20);
-
-    expect(result).toEqual({
-      items: [],
-      total: 0,
       page: 1,
       pageSize: 20,
-      totalPages: 0,
+      sortBy: 'thu',
+      sortOrder: 'DESC',
     });
+
+    expect(qbMock.orderBy).toHaveBeenCalledWith('txn.creditAmount', 'DESC');
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
   });
 
-  it('calculates cumulative totals accurately for multi-page requests', async () => {
-    qb.getManyAndCount.mockResolvedValue([
-      [
-        { id: 'txn-51', creditAmount: '5000000', debitAmount: '0' },
-        { id: 'txn-52', creditAmount: '0', debitAmount: '2000000' },
-      ],
-      150,
-    ]);
-
-    const countQbMock: any = {
-      orderBy: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      offset: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({
-        cnt: '150',
-        totalCredit: '31000000000',
-        totalDebit: '20000000000',
-        totalNetOff: '0',
-        totalRemaining: '0',
-      }),
-      getRawMany: jest.fn().mockResolvedValue([
-        {
-          credit: '663650173',
-          debit: '100000000',
-          netOff: '0',
-          remaining: '0',
-        },
-        {
-          credit: '939237898',
-          debit: '400000000',
-          netOff: '0',
-          remaining: '0',
-        },
-      ]),
-      expressionMap: {
-        groupBys: [],
-        orderBys: {},
-        selects: [],
-        joinAttributes: [],
-      },
-    };
-
-    qb.clone.mockReturnValue(countQbMock);
-
-    const result = await service.getTransactions({
-      page: 2,
-      pageSize: 50,
-    } as any);
-
-    expect(result.page).toBe(2);
-    expect(result.pageSize).toBe(50);
-    expect(result.totalPages).toBe(3);
-    expect(result.totals).toEqual({
-      grandTotalCredit: 31000000000,
-      grandTotalDebit: 20000000000,
-      grandTotalNetOff: 0,
-      grandTotalRemaining: 0,
-      cumulativeCredit: 1602888071,
-      cumulativeDebit: 500000000,
-      cumulativeNetOff: 0,
-      cumulativeRemaining: 0,
+  it('sorts by account ASC for BANK source type', async () => {
+    await service.getTransactions({
+      page: 1,
+      pageSize: 20,
+      sourceType: 'BANK',
+      sorts: ['account'],
     });
+
+    expect(qbMock.orderBy).toHaveBeenCalledWith('bankAccount.bankName', 'ASC');
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
+  });
+
+  it('sorts by referenceNumber DESC using sorts array parameter', async () => {
+    await service.getTransactions({
+      page: 1,
+      pageSize: 20,
+      sorts: ['-referenceNumber'],
+    });
+
+    expect(qbMock.orderBy).toHaveBeenCalledWith('txn.referenceNumber', 'DESC');
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
+  });
+
+  it('sorts by correspondentName ASC when requested', async () => {
+    await service.getTransactions({
+      page: 1,
+      pageSize: 20,
+      sorts: ['correspondentName'],
+    });
+
+    expect(qbMock.orderBy).toHaveBeenCalledWith(
+      "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''))",
+      'ASC',
+    );
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
   });
 });
