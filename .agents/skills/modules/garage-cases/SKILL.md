@@ -216,7 +216,8 @@ src/kgara-api-core/
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
-│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, Column Defs & buildGarageCaseExportFileName)
+│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, COMPLETED_CASES_COLUMNS, CASE_PNL_COLUMNS & buildGarageCaseExportFileName)
+│   ├── kgara-completed-cases-sheet.builder.ts # Sheet Builders cho file xuất Excel đa sheets (Sheet 1: Thu/Trả P1, Sheet 2: Theo dõi PnL, Sheet 3: Chi tiết DV/PT)
 │   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
 │   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
@@ -227,7 +228,9 @@ src/kgara-api-core/
 ├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
-    ├── kgara-case-export.service.ts        # Sub-Service chuyên trách xuất file Excel 2 Sheets bảng kê phiếu dịch vụ và chi tiết DV/PT
+    ├── kgara-case-export.service.ts        # Facade Service (< 50 LoC) điều phối xuất Excel theo chuẩn api-service-refactor
+    ├── kgara-completed-cases-export.service.ts # Sub-Service chuyên trách xuất file Excel 3 Sheets bảng kê phiếu kết thúc, theo dõi PnL và chi tiết DV/PT (< 300 LoC)
+    ├── kgara-case-services-export.service.ts # Sub-Service chuyên trách xuất riêng bảng kê chi tiết dịch vụ & phụ tùng (< 150 LoC)
     ├── kgara-case-list-query.service.ts    # Sub-Service chuyên trách tìm kiếm danh sách vụ việc, phân trang, lọc distinct options theo số chứng từ / biển số xe và báo cáo lãi gộp
     ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
     ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
@@ -253,7 +256,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
 | `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell |
-| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 2 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, hỗ trợ multi-tier loader tự động bóc tách và làm giàu dữ liệu dòng từ DB, rawData và live API |
+| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 3 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & công nợ hai chiều Thu/Trả, `Theo dõi PnL` phân tích lợi nhuận gộp/biên LN/đánh giá sinh lời, và `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, gắn công thức Excel động tự động tính cấn trừ Phải - Đã |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `caseCode` ghép Số chứng từ + Biển số xe, `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
@@ -490,24 +493,41 @@ Khi chỉnh sửa `kgara-api-core`:
 ## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
 
 ### 8.1. Cấu Trúc Facade & Sub-Services
-Module tuân thủ tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor:
-- **Facade (`KgaraCaseQueryService`)**: Service facade 164 dòng giữ nguyên 100% method signatures, delegate sang các Sub-services.
-- **Sub-Services**:
-  - `KgaraCaseExportService` (~580 dòng): Render file Excel 2 sheets với styling chuẩn hóa.
-  - `KgaraCaseServicesQueryService` (~500 dòng): Phân trang, tìm kiếm, subtotal/grand totals và filter options chi tiết DV & phụ tùng.
-  - `KgaraCaseSettlementCalcService` (~55 dòng): Tính toán và cập nhật công nợ/tổng thu vụ việc (`recalculateCaseSettlementSummary`).
-- **Pure Helpers (Pattern C)**:
+Module tuân thủ nghiêm ngặt tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor (1 signature duy nhất, không overload, không union type):
+- **Query Facade (`KgaraCaseQueryService`)**: Service facade giữ nguyên 100% method signatures, delegate sang các Sub-services.
+- **Export Facade (`KgaraCaseExportService` - 42 dòng)**: Service facade tinh gọn điều phối xuất Excel, delegate sang các Sub-services:
+  - `KgaraCompletedCasesExportService` (~250 dòng): Quản lý truy vấn dữ liệu vụ việc, sổ thanh toán thực tế (`kgara_case_settlements`), hóa đơn liên kết và dòng chi tiết để xây dựng workbook 3 sheets chuyên nghiệp.
+  - `KgaraCaseServicesExportService` (~140 dòng): Chuyên trách xuất bảng kê chi tiết dịch vụ & phụ tùng độc lập (`exportCaseServicesExcel`).
+- **Pure Helpers & Sheet Builders (Pattern C)**:
+  - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
+  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
   - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
-  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
 
-### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (SUM, SUBTOTAL & Header Style)
-Tất cả các hàm xuất Excel (`exportCompletedCasesExcel`, `exportCaseServicesExcel`) áp dụng cấu trúc:
-- **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu, nền `#F1F5F9`, chữ đậm `#0F172A`.
-- **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi người dùng lọc cột trong Excel, nền `#EFF6FF`, chữ xanh `#1E40AF`, border double bottom.
-- **Row 3**: Hàng trống phân cách (Height 10).
-- **Row 4**: Header cột bảng (Nền `#334155`, chữ trắng, căn giữa, bọc chữ tự động).
-- **Row 5+**: Dữ liệu chi tiết (Font Calibri, border mỏng `#E2E8F0`).
-- **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
+### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (3 Sheets & 6 Dải Màu Biên LN Tương Phản Cao)
+Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
+- **Sheet 1: `Bảng kê phiếu kết thúc` (23 cột - 2 Cột Ghi chú Thu & Trả riêng biệt & Phân tầng màu Biên LN)**:
+  - Cụm Phải thu: `Phải thu (VNĐ)` (J), `Đã thu (VNĐ)` (K), `Còn lại phải thu (VNĐ)` (L, formula `=J{r}-K{r}`).
+  - **Cột Ghi chú thu (M)**: Nằm ngay bên phải cột Còn lại phải thu, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ khách hàng (chờ bảo hiểm duyệt, đối soát...).
+  - Cụm Phải trả: `Phải trả (VNĐ)` (N), `Đã trả (VNĐ)` (O), `Còn lại phải trả (VNĐ)` (P, formula `=N{r}-O{r}`).
+  - **Cột Ghi chú trả (Q)**: Nằm ngay bên phải cột Còn lại phải trả, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ thợ/nhà cung cấp (chờ hóa đơn đầu vào, bảo hành...).
+  - Cụm P&L nhanh: `Doanh thu (VNĐ)` (R), `Chi phí / Giá vốn (VNĐ)` (S), `Lợi nhuận gộp (VNĐ)` (T, formula `=R{r}-S{r}`).
+  - **Biên LN (%) (U)**: Formula `=IF(R{r}>0, T{r}/R{r}, 0)`, tự động áp dụng hàm `styleMarginCell` đồng bộ 6 dải màu tương phản cao như Sheet 2.
+  - Tham chiếu: `Hóa đơn VAT liên kết` (V), `Chi nhánh` (W).
+- **Sheet 2: `Theo dõi lãi lỗ` (15 cột - Phân 6 Dải Màu Biên LN Tương Phản Cao)**:
+  - Bóc tách: Doanh thu Công DV (G), Doanh thu Phụ tùng (H), Tổng Doanh thu (I, formula `=G{r}+H{r}`), Giá vốn Phụ tùng (J), Chi phí thợ / Khác (K), Tổng Chi phí (L, formula `=J{r}+K{r}`), Lợi nhuận gộp (M, formula `=I{r}-L{r}`).
+  - **Biên LN (%) (N)**: Formula `=IF(I{r}>0, M{r}/I{r}, 0)`, tự động phân bổ 6 dải màu tương phản cao, triệt tiêu na ná màu:
+    1. Lỗ ($< 0\%$): Đỏ Red-200 (`#FECACA` / chữ đỏ đậm `#991B1B`).
+    2. Hòa vốn / Rất thấp ($0\% - 20\%$): Cam hổ phách Orange-200 (`#FED7AA` / chữ cam đất `#9A3412`).
+    3. Trung bình ($20\% - 40\%$): Xanh da trời tươi Sky-200 (`#BAE6FD` / chữ xanh dương `#0369A1`).
+    4. Khá / Tốt ($40\% - 60\%$): Xanh lá mạ Green-200 (`#BBF7D0` / chữ xanh lá đậm `#15803D`).
+    5. Rất cao ($60\% - 80\%$): Xanh mòng két Teal-200 (`#99F6E4` / chữ xanh đậm `#0F766E`).
+    6. Xuất sắc / Siêu LN ($\ge 80\%$): Tím phong lan Purple-200 (`#E9D5FF` / chữ tím đậm `#6B21A8`).
+  - Tham chiếu: `Chi nhánh` (O) - Đã loại bỏ cột O Đánh giá PnL riêng biệt.
+- **Sheet 3: `Chi tiết DV & Phụ tùng` (20 cột)**: Bảng kê chi tiết từng dòng công việc và phụ tùng theo vụ việc.
+- **Hàng Tổng**:
+  - **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu.
+  - **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi lọc cột trong Excel.
+  - **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
 
 ---
 

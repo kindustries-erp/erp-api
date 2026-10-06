@@ -39,6 +39,8 @@ import { KgaraCaseConfigService } from './services/kgara-case-config.service';
 import { KgaraCaseSettlementCalcService } from './services/kgara-case-settlement-calc.service';
 import { KgaraCaseServicesQueryService } from './services/kgara-case-services-query.service';
 import { KgaraCaseExportService } from './services/kgara-case-export.service';
+import { KgaraCompletedCasesExportService } from './services/kgara-completed-cases-export.service';
+import { KgaraCaseServicesExportService } from './services/kgara-case-services-export.service';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
@@ -102,6 +104,8 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     KgaraCaseSettlementCalcService,
     KgaraCaseServicesQueryService,
     KgaraCaseExportService,
+    KgaraCompletedCasesExportService,
+    KgaraCaseServicesExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
@@ -138,6 +142,8 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     KgaraCaseSettlementCalcService,
     KgaraCaseServicesQueryService,
     KgaraCaseExportService,
+    KgaraCompletedCasesExportService,
+    KgaraCaseServicesExportService,
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
