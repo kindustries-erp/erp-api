@@ -536,23 +536,30 @@ Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
 
 ## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
 
-### 9.1. Phân Tầng Tab Tài Chính & Khối 3 Bảng Chuẩn Hóa (`QuoteFinancialsTabContent`)
-Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của Sổ báo giá được di chuyển từ tab Chi tiết sang phía trên Master Domain Switcher trong Tab Tài chính (`GarageCaseFinancialsTab`), hiển thị theo thứ tự chuẩn hóa:
+### 9.1. Phân Tầng Tab Tài Chính & Khối Chuẩn Hóa (`QuoteFinancialsTabContent`)
+Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard và `/ui-atomic-refactor`:
 1. **Bảng Phải thu & Phân bổ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
    - Dữ liệu: `QuoteFinancialItem[]` (build từ `buildFinancialItems`).
    - Cột chuẩn: STT 40px, Thứ tự `#`, Nhóm nghiệp vụ (Doanh thu / Giảm trừ / Thanh toán / Hoa hồng / Lợi nhuận), Khoản mục tài chính, Tỷ lệ %, Số tiền (VND), Bên chịu phí (Khách hàng / Bảo hiểm / Garage).
-   - **2 Cột Thanh toán riêng biệt**:
-     - Cột **Khách hàng TT**: Kích hoạt cho các dòng Khách hàng thanh toán, click mở `CaseLinePaymentDrawer` với `payer = "KH"`.
-     - Cột **Bảo hiểm TT**: Kích hoạt độc quyền cho các dòng liên quan Bảo hiểm (`payer === "BH"`), click mở `CaseLinePaymentDrawer` với `payer = "BH"`. Các dòng không thuộc bảo hiểm hiển thị `---`.
+   - **2 Cột Thanh toán riêng biệt (Thu KH / Thu BH)**:
+     - Luôn hiển thị nút thu tiền trên giao diện.
+     - **Cơ chế kiểm soát an toàn**: Nút chỉ được kích hoạt (enable) khi đồng thời thỏa mãn:
+       1. Đang bật Chế độ chỉnh sửa vụ việc (`editMode === true`).
+       2. Có đủ 3 nhóm quyền cập nhật: Vụ việc Garage (`ErpResource.GARAGE`), Hóa đơn (`ErpResource.INVOICES`), Sao kê/Sổ quỹ (`ErpResource.BANK_STATEMENTS` / `CASH_STATEMENTS`).
+     - Khi chưa thỏa mãn điều kiện: Nút chuyển sang trạng thái **`disabled`** (mờ, không thể click) và bọc bởi **Tooltip** giải thích rõ lý do khi người dùng rê chuột vào.
    - Footer: Tổng cộng kiểm tra tính khớp nối giữa tổng doanh thu phải thu và các khoản thanh toán.
-2. **Bảng Chi tiết Vật tư & Phụ tùng (`QuotePartsTable`)** — Đứng thứ hai:
-   - Dữ liệu: Lọc các dòng `itemType === "PT"`.
-    - Cột: STT, Loại (badge Vật tư emerald), Mã PT, Tên phụ tùng, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, Bảo hiểm duyệt, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
-    - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
-3. **Bảng Chi tiết Nhân công & Dịch vụ (`QuoteServicesTable`)** — Đứng thứ ba:
-   - Dữ liệu: Lọc các dòng `itemType === "DV"`.
-   - Cột: STT, Loại (badge Dịch vụ amber), Mã DV, Tên dịch vụ, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
-   - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+2. **Khối Chi Phí Vụ Việc & Cấn Trừ (`QuoteCostSummarySection`)** — Thay thế Bảng Phụ tùng và Dịch vụ riêng rẽ:
+   - **Lý do kiến trúc (Pure Cashflow Standard)**: Trong thực tế xưởng garage, mỗi lần thanh toán chi phí cho nhà cung cấp/thợ là một số tiền khác nhau theo từng đợt công nợ, không khớp với giá vốn từng dòng vật tư/nhân công riêng lẻ. Do đó, hệ thống gom về 1 dòng tổng chi phí mục tiêu và quản lý danh sách các lần chi tiền thực tế.
+   - **1 Hàng Tổng Chi Phí (`QuoteCostSummaryRow` - Molecule L2)**:
+     - Hiển thị: Mục tiêu chi phí (`totalCostAmount`), Đã chi (`totalPaid`), Còn lại (`remainingAmount`).
+     - Nút **"Chi tiền"** (màu amber): Bắt buộc kiểm soát theo cùng cơ chế an toàn (`editMode === true` và đủ 3 quyền). Nếu không thỏa mãn sẽ bị **`disabled` kèm Tooltip giải thích**.
+     - Khi kích hoạt: Mở `CaseLinePaymentDrawer` (`direction = "COST"`, `lineId = "cost_total"`, `payer = "GARAGE"`).
+   - **Bảng Lịch Sử Chi Tiền Hợp Nhất (`QuoteCostSettlementsTable` - Organism L3)**:
+     - Hợp nhất tự động từ 2 nguồn:
+       1. Hóa đơn Mua vào / Đầu vào đã cấn trừ (`activeLinkedInvoices` với `linkType === 'IN'`): Hiển thị badge `🧾 HĐ Đầu vào #<số HĐ>`, người bán, số tiền hóa đơn.
+       2. Các khoản chi ngoài sổ / sao kê ngân hàng (`activeSettlements` với `settlementType === 'PAYMENT'`): Hiển thị badge `💵 Tiền mặt ngoài` / `🏦 CK cá nhân` / `Sao kê`, đối tác, số tiền đã chi.
+     - `totalPaid = sum(HĐ đầu vào) + sum(Chi ngoài sổ / sao kê)`.
+     - Tự động ẩn khi chưa phát sinh khoản chi nào.
 
 ### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
 - Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
@@ -560,11 +567,12 @@ Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của S�
   - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
   - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
     - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` bên trái với thứ tự đảo ngược ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`).
-    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách kèm lịch sử cấn trừ.
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách. **Nhận trực tiếp `activeSettlements` từ bên ngoài**, đảm bảo hiển thị đầy đủ bảng danh sách các khoản chi ngoài sổ đã ghi nhận (không bị rỗng danh sách).
   - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section:
     - Thông tin định danh khoản mục (Phân loại, Mã, Tên, Bên chịu phí / thanh toán).
     - KPI Bar tiến độ cấn trừ: Số tiền mục tiêu | Đã chọn cấn trừ | Còn thiếu kèm Progress Bar màu emerald.
   - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
+
 
 ### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
 - Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
