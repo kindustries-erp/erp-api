@@ -52,15 +52,23 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - **Cột Danh Mục**: Loại bỏ các badge % lẻ tẻ để giữ cột Danh mục thoáng đãng, thuần túy tên khoản mục; toàn bộ % DT được hiển thị chuẩn xác ở Hàng 2 của từng cột tháng tương ứng.
   - Tự động ghép nối và đối soát dòng con chi tiết giữa 3 tháng liên tiếp (`mergePnlItems`), hiển thị đầy đủ số tiền và tỷ lệ biến động (delta) giữa các kỳ tháng.
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
-  - Tổng hợp tự động 8 chỉ mục tài chính phân cấp (3 cấp số 1, 1.1, 1.1.1 và 4 cấp cho OJ):
-    1. `1. Doanh Thu` (Doanh thu dịch vụ đã hoàn thành)
-    2. `2. Chi phí (Giá vốn)` (Phụ tùng & gia công ngoài + Direct Costs nhập tay)
-    3. `3. Lợi nhuận gộp` (`Gross Profit = Revenue - COGS`, kèm % Biên LN gộp)
-    4. `4. Chi phí bán hàng` (Gồm Hoa hồng cho Sale 10% tính theo Tỷ lệ lãi gộp ký gửi)
-    5. `5. Chi phí vận hành` (Tổng hợp các khoản OPEX trong tháng)
-    6. `6. Lợi nhuận ròng` (`Net Profit = Gross Profit - Selling Expenses - OPEX`)
-    7. `7. Thưởng và Hoa hồng Dịch vụ` (Hoa hồng cho DV 10% tính trên 10% Lợi nhuận ròng)
-    8. `8. Lợi nhuận giữ lại của Garage (Sau hoa hồng DV)` (`Retained Profit = Net Profit - Service Commission`, kèm % Biên LN giữ lại)
+  - **Tổng hợp tự động 8 chỉ mục tài chính phân cấp (Số La Mã I → VIII)**:
+    - Toàn bộ 8 mục Numeric Level 1 sử dụng số La Mã (`text-sm font-bold tracking-tight text-foreground`) kèm icon biểu trưng nằm **ngay bên phải** nhãn chữ:
+      1. `I. Doanh Thu` (Icon `TrendingUp` bên phải)
+      2. `II. Chi phí (Giá vốn)` (Icon `Boxes` bên phải)
+      3. `III. Lợi nhuận gộp` (Icon `TrendingUp` bên phải, đã di dời từ phía trước ra phía sau text)
+      4. `IV. Chi phí bán hàng` (Icon `ShoppingBag` bên phải)
+      5. `V. Chi phí vận hành` (Icon `Building2` bên phải, kèm nút `Thêm CP`)
+      6. `VI. Lợi nhuận ròng` (Icon `Coins` bên phải)
+      7. `VII. Thưởng và Hoa hồng Dịch vụ` (Icon `Award` bên phải)
+      8. `VIII. Lợi nhuận giữ lại của Garage (Sau hoa hồng DV)` (Icon `ShieldCheck` bên phải)
+  - **Cơ chế Thu gọn / Mở rộng (Expand / Collapse)**:
+    - **Từng mục Level 1**: Tích hợp nút `ChevronDown` / `ChevronRight` tại `PnlLevel1HeaderCell`, click để ẩn / hiện các dòng con cấp 2 và cấp 3 của riêng mục đó.
+    - **Toàn cục (Global Toggle)**: Nút `ChevronsUpDown` trên Header cột Danh Mục cho phép 1-click **Thu gọn tất cả** (đưa bảng về 8 dòng số La Mã tổng quan) hoặc **Mở rộng tất cả** (bung toàn bộ chi tiết).
+  - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+    - `usePnlCollapseState.ts`: Hook quản lý map đóng/mở 8 sections.
+    - `PnlLevel1HeaderCell.tsx`: Molecule chuẩn hóa hiển thị chevron, tiêu đề La Mã và icon bên phải.
+    - `PnlOpexItemRow.tsx`: Molecule bóc tách từ `PnlOpexRows.tsx` để khống chế 100% files dưới 180 LoC.
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
