@@ -258,6 +258,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
+| `PATCH`| `/cases/:id/lines-cost` | `id`, Body: `{ lines: [{ detailId, giaVonPhuTung }] }` | Cập nhật giá vốn thủ công cho từng dòng phụ tùng của vụ việc (lưu vào `kgara_case_services` và `rawData`) |
 | `PATCH`| `/cases/:id/config` | `id`, Body: `UpdateCaseConfigDto` (`categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt`, `erpNotes`, `customAttributes`, `attributes`, `globalAttributes`) | Cập nhật phân loại danh mục Module Config, 2 cờ loại trừ (báo cáo, công nợ), ghi chú và thuộc tính động cho vụ việc |
 | `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc (Legacy alias) |
 | `GET` | `/cases/:id/services` | `id` (`hd_phieu_dich_vu_id`) | Lấy danh sách chi tiết các dòng công việc và phụ tùng của vụ việc |
@@ -546,4 +547,38 @@ Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của S�
 - Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
   - Loại bỏ hoàn toàn switch `Bảng dữ liệu` / `Bản in` khỏi tab Chi tiết (vì bảng dữ liệu đã chuyển sang Tab Tài chính).
   - Khối bảng in tài liệu (`QuoteDocumentTables`): Tự động phát hiện khi vụ việc có bảo hiểm (`hasInsuranceParts` / `hasInsuranceServices`), tự động bổ sung cột **BH duyệt** và hàng tổng kết **Tổng BH duyệt chi trả** riêng biệt cho từng khối phụ tùng và nhân công.
+
+### 9.4. Cơ Chế Làm Giàu Giá Vốn Phụ Tùng (Cost Enrichment) & Phân Rã Kiến Trúc Atomic Bảng Sổ Báo Giá
+
+#### 1. Thách thức kỹ thuật từ KGara API
+- Endpoint `/api/v1/gr/cases/detail` của KGara trả về `GiaVonPhuTung = 0` trên 100% dòng (ngay cả các ca đã kết thúc và phát sinh giá vốn lớn như `GR-PDV2609-0056` hay `GR-PDV2609-0074`).
+- Tuy nhiên, KGara lưu trữ chi tiết hạch toán giá vốn trong **Sổ nhật ký chi phí** (`/api/v1/gr/reports/gross-profit-detail/journal`).
+
+#### 2. Thuật toán làm giàu giá vốn 3 tầng (`KgaraCostEnricherHelper`)
+- Khi người dùng mở xem vụ việc trên ERP (`findCaseByCodeOrId`), nếu vụ việc đã hoàn tất hoặc có số liệu lãi gộp:
+  1. Hệ thống tự động fetch Sổ nhật ký chi phí (`journal items`) của vụ việc.
+  2. **Tầng 1 - Vốn Phụ tùng Xuất kho (`TK 1541 / TK 152`)**: Bóc tách từ các Phiếu xuất kho (`GR-PX...`). Tự động chuẩn hóa chuỗi tên (loại bỏ tag biển số xe `[51M80574] - [...]`), khớp tên và số lượng với từng dòng phụ tùng, tự động tính:
+     $$\text{GiaVonPhuTung} = \text{round}\left(\frac{\text{ChiPhi}}{\text{SoLuong}}\right), \quad \text{TongVon} = \text{ChiPhi}$$
+  3. **Tầng 2 - Vốn Gia công / Dịch vụ Mua ngoài (`TK 1542 / TK 331`)**: Gom vào `outsourceCost`.
+  4. **Tầng 3 - Hoa hồng Môi giới / Chi phí khác (`TK 1543 / TK 335`)**: Gom vào `commissionCost`.
+  5. Tự động cập nhật `giaVonPhuTung` vào `rawData.ListPhieuDichVuChiTiet` và lưu trữ trong bảng `kgara_case_services`.
+
+#### 3. Phân rã kiến trúc Atomic Bảng Sổ Báo Giá (`/ui-atomic-refactor`)
+Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue Mandate, 100% i18n, Co-located Vitest), file `QuoteDocumentTables.tsx` (trước đây 321 LoC) đã được phân rã thành:
+1. **`QuotePartsDocumentTable`** (`quote-parts-document-table/`):
+   - Kích thước: ~136 LoC.
+   - Hiển thị đầy đủ cột **ĐG vốn** và **Tổng vốn**. Nếu có giá vốn xuất kho: hiển thị `formatNumber(row.unitCost)`; nếu chưa phân bổ (do mua ngoài gộp): hiển thị `---`.
+   - Footer: Dòng cộng tổng tiền bán, tổng vốn phụ tùng, và dòng **Lãi gộp phụ tùng** ($\text{Doanh thu PT} - \text{Vốn PT}$) kèm biên lợi nhuận %.
+2. **`QuoteServicesDocumentTable`** (`quote-services-document-table/`):
+   - Kích thước: ~104 LoC.
+   - Hiển thị bảng công thợ / dịch vụ kèm kỹ thuật viên phụ trách và tổng cộng.
+3. **`QuoteDocumentCostSummary`** (`quote-document-cost-summary/`):
+   - Kích thước: ~60 LoC.
+   - Hiển thị khối đối soát 3 tầng chi phí minh bạch đối ứng với Sổ chi phí KGara:
+     - 1. Phụ tùng kho (1541)
+     - 2. Mua ngoài/DV (1542)
+     - 3. Hoa hồng/Khác (1543)
+     - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
+4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
+
 

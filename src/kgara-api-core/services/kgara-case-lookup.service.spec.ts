@@ -19,6 +19,9 @@ describe('KgaraCaseLookupService', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     };
+    const caseServiceRepoMock = {
+      update: jest.fn().mockResolvedValue(undefined),
+    };
     settlementRepoMock = {
       find: jest.fn().mockResolvedValue([]),
     };
@@ -27,11 +30,13 @@ describe('KgaraCaseLookupService', () => {
     };
     clientMock = {
       getCaseDetail: jest.fn(),
+      getGrossProfitJournal: jest.fn(),
     };
     dataSourceMock = {};
 
     service = new KgaraCaseLookupService(
       caseRepoMock,
+      caseServiceRepoMock as any,
       settlementRepoMock,
       grossProfitRepoMock,
       clientMock,
@@ -142,6 +147,81 @@ describe('KgaraCaseLookupService', () => {
       expect(result.ChiPhi).toBe(3000000);
       expect(result.LoiNhuan).toBe(2000000);
       expect(result.BienLoiNhuan).toBe(40);
+    });
+  });
+
+  describe('enrichCostForCase and updateCaseLinesCost', () => {
+    it('should enrich line cost when journal items are retrieved', async () => {
+      const mockCase = {
+        id: 'case-1',
+        soChungTu: 'GR-PDV2609-0056',
+        hdPhieuDichVuId: 'ext-56',
+        branchExternalId: 'branch-1',
+        rawData: {
+          ListPhieuDichVuChiTiet: [
+            {
+              HdPhieuDichVuChiTietID: 'line-1',
+              LoaiSanPhamCode: 'PT',
+              SanPhamName: 'Nhớt động cơ 5W-30',
+              SoLuongHoaDon: 2,
+              GiaVonPhuTung: 0,
+            },
+          ],
+        } as any,
+      };
+
+      grossProfitRepoMock.findOne.mockResolvedValue({
+        rawData: {
+          journal_items: [
+            {
+              TaiKhoanNoCode: '1541',
+              GiaTriTien: 380000,
+              ChiPhi: 380000,
+              NoiDung: '[51M80574] - [Nhớt động cơ 5W-30]',
+            },
+          ],
+        },
+      });
+
+      await service.enrichCostForCase(mockCase as any);
+
+      expect(mockCase.rawData.ListPhieuDichVuChiTiet[0].GiaVonPhuTung).toBe(
+        190000,
+      );
+      expect(mockCase.rawData.ListPhieuDichVuChiTiet[0].TongVon).toBe(380000);
+      expect(mockCase.rawData.costEnriched).toBe(true);
+      expect(caseRepoMock.save).toHaveBeenCalledWith(mockCase);
+    });
+
+    it('should allow manual updating of line costs on ERP', async () => {
+      const mockCase = {
+        id: 'case-1',
+        soChungTu: 'GR-PDV2609-0074',
+        hdPhieuDichVuId: 'ext-74',
+        rawData: {
+          ListPhieuDichVuChiTiet: [
+            {
+              HdPhieuDichVuChiTietID: 'line-piston',
+              LoaiSanPhamCode: 'PT',
+              SanPhamName: 'PISTON',
+              SoLuongHoaDon: 4,
+              GiaVonPhuTung: 0,
+            },
+          ],
+        } as any,
+      };
+
+      caseRepoMock.findOne.mockResolvedValue(mockCase);
+
+      const updated = await service.updateCaseLinesCost('case-1', [
+        { detailId: 'line-piston', giaVonPhuTung: 1500000 },
+      ]);
+
+      expect(updated.rawData.ListPhieuDichVuChiTiet[0].GiaVonPhuTung).toBe(
+        1500000,
+      );
+      expect(updated.rawData.ListPhieuDichVuChiTiet[0].TongVon).toBe(6000000);
+      expect(caseRepoMock.save).toHaveBeenCalled();
     });
   });
 });

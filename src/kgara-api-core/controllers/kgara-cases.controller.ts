@@ -298,4 +298,16 @@ export class KgaraCasesController {
   ) {
     return this.caseConfigService.updateCaseConfig(id, body);
   }
+
+  @Patch('cases/:id/lines-cost')
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.UPDATE,
+  })
+  async updateCaseLinesCost(
+    @Param('id') id: string,
+    @Body() body: { lines: Array<{ detailId: string; giaVonPhuTung: number }> },
+  ) {
+    return this.caseLookupService.updateCaseLinesCost(id, body.lines || []);
+  }
 }
