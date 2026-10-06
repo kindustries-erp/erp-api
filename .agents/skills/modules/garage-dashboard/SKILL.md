@@ -38,6 +38,13 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
+  - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
+    - Bố trí trực tiếp trên Card Header của `GaragePnlSection`, nằm giữa bộ chọn kỳ tháng và nút Xuất Excel.
+    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/ui-atomic-refactor`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
+    - Hai chế độ hiển thị:
+      - **Toàn bộ** (`isOjOnly = false`, mặc định): Xem kết quả kinh doanh chung toàn xưởng; hiển thị các hàng phân cấp con `Trong đó: Phát sinh liên quan OJ` (1.1.1, 2.1.1, 3.1, 5.1.1, 6.1, 7.1.1, 8.1) để đối soát đóng góp của mảng OJ.
+      - **Riêng OJ** (`isOjOnly = true`): Chỉ hiển thị kết quả kinh doanh của riêng mảng OJ. Hàng chính bind trực tiếp từ `report.oj`, `prevReport.oj`, `prev2Report.oj`. Tự động ẩn toàn bộ các dòng con `Trong đó: Phát sinh liên quan OJ`, lọc danh sách chi phí vận hành (OPEX) và chi phí trực tiếp nhập tay chỉ giữ lại các mục có phát sinh OJ (`ojAmount > 0`), có fallback hint thân thiện nếu kỳ chưa có chi phí phân bổ cho OJ.
+    - Phân tách cấu trúc 100% files < 180 LoC: bóc tách `PnlDvCommissionRow.tsx` và `PnlKyGuiCommissionDetailRows.tsx` độc lập, đồng thời 100% từ điển i18n (`vi.ts` & `en.ts`).
   - Bố cục **4 cột chuẩn hóa**: `Danh Mục` | `Tháng T` (Kỳ chọn - font-bold) | `Tháng T-1` | `Tháng T-2` (Loại bỏ cột riêng OJ, phát sinh liên quan OJ được hiển thị chi tiết dưới dạng dòng phụ `Trong đó: Phát sinh liên quan OJ` xuyên suốt cả 3 tháng).
   - Thiết kế **Ô Tài Chính 2 Tầng (Two-Tier Financial Cell - `PnlAmountCell`)**:
     - **Hàng 1 (Main Amount)**: Số tiền chính căn phải, font mono, `whitespace-nowrap` (tuyệt đối không bị rớt dòng đơn vị `đ`).
