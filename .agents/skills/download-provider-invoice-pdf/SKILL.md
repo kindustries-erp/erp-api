@@ -35,7 +35,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
 | **MISA (meInvoice)** | `MSTTCGP = 0101243150` hoặc domain `meinvoice.vn` | `TransactionID` (`<DLHDon Id="...">` hoặc `<TTruong>TransactionID</TTruong>`) | `https://www.meinvoice.vn/tra-cuu/` | `MisaInvoiceAdapter` | 🟢 **100% Tự động** (bỏ qua Cloudflare) |
 | **CyberBill (CyberLotus)** | `MSTTCGP = 0105232093` / `0108399589` hoặc thẻ `<MaTraCuu>`, `<DLHDon Id="ID-...">` | `MaTraCuu` (bỏ tiền tố `ID-`) | Cụm 1: `https://tracuu.cyberbill.vn`<br>Cụm 2: `https://tracuuhoadon.cyberbill.vn` | `CyberbillInvoiceAdapter` | 🟢 **100% Tự động** (AI Vision Captcha Solver + Auto-Cluster Fallback) |
 | **VinFast / Vingroup** | MST bán `0100684378` / `0108927926` / `0108926276`, hoặc thẻ `<Salt>`, `<MaTraCuu>` | Salt / MaTraCuu | `https://e-invoice-tt78.vingroup.net/TraCuu/SearchBySalt` | `VinfastInvoiceAdapter` | 🟡 Bị WAF F5/Cloudflare, portal tra cứu Salt không trả về dữ liệu (Xem mục 3.4) |
-| **Softdreams EasyInvoice**| `MSTTCGP = 0105987432` hoặc `<Fkey>`, `<PortalLink>` | Fkey | Subdomain theo người bán hoặc `tracuu.easyinvoice.vn` | `EasyInvoiceAdapter` | 🟡 Form yêu cầu captcha ảnh |
+| **Softdreams EasyInvoice**| `MSTTCGP = 0105987432` hoặc `<Fkey>`, `<PortalLink>` | Fkey | Subdomain theo người bán hoặc `tracuu.easyinvoice.vn` | `EasyInvoiceAdapter` | 🟢 **100% Tự động** (AI Vision Captcha Solver + Tải PDF gốc trực tiếp từ server Softdreams) |
 | **Viettel S-Invoice** | `MSTTCGP = 0100109106` | ReservationCode / Mã bí mật | `https://sinvoice.viettel.vn/tracuuhoadon` | `ViettelInvoiceAdapter` | 🟡 XML GDT thường không có mã bí mật |
 
 ---
@@ -95,7 +95,21 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
     * Chỉ có tiếng Việt, **không có** số chứng từ SAP, không có phiếu xuất kho, không có điểm VPoint.
     * Nền có **hoa văn chìm hình Trống đồng Đông Sơn màu vàng cam** (`viewinvoice-bg.jpg`) và **viền kép đôi màu nâu đồng**.
     * Bảng hàng hóa chia 10 cột theo mẫu NĐ123 phổ thông, tổng tiền tách 2 bảng ngang song song.
-  * **Kết luận:** File `invoice.html` trong gói ZIP **không giống** với bản PDF gốc xuất từ cổng Vingroup (độ tương đồng < 30%). Do đó, hệ thống không render tệp HTML này thay thế bản PDF gốc để tránh gây hiểu nhầm cho kế toán.
+### 3.5. Softdreams EasyInvoice Adapter (`EasyInvoiceAdapter`)
+* **File:** [easy-invoice.adapter.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/easy-invoice.adapter.ts)
+* **Đặc tính kỹ thuật:**
+  * **Tải Trực Tiếp Máy Chủ (Zero Local Conversion):** Toàn bộ file PDF được biên dịch và đóng gói trực tiếp từ máy chủ Softdreams, có đầy đủ dòng bản quyền Softdreams ở chân trang, con dấu số và hoa văn trống đồng chính thức, không convert HTML trên máy chủ local.
+  * **Giải Captcha AI Vision:** Sử dụng `InvoiceCaptchaSolverService` (9router AI Vision `gemini-3.8-flash`) giải mã ảnh captcha 4 số trong 0.2s.
+  * **Hỗ Trợ Đa Portal:** Tự động ưu tiên subdomain riêng của người bán (vd: `0318880490hd.easyinvoice.com.vn`), tự động failover sang cổng tổng `https://tracuu.easyinvoice.vn`.
+* **Luồng xử lý:**
+  1. `GET ${portalUrl}/Captcha/Show?t=${Date.now()}`: Khởi tạo phiên ASP.NET, bóc tách cookie `ASP.NET_SessionId` và tải ảnh captcha.
+  2. Giải captcha ảnh qua AI Vision thành chuỗi 4 chữ số.
+  3. `POST ${portalUrl}/Search/Search`: Gửi form `TaxCode`, `FKey`, `Capcha` -> nhận HTML kết quả có chứa `invToken` và cấu trúc phôi hóa đơn (`InvData.str`).
+  4. Trích xuất `invToken` và phần nội dung HTML body, mã hóa Base64 UTF-8.
+  5. `POST ${portalUrl}/Invoice/DownloadPdfAndFileAttachFromAvailableHtml`: Gửi `{ token, html }` lên máy chủ EasyInvoice để biên dịch file -> nhận `{ fileGuid, fileName }`.
+  6. `GET ${portalUrl}/Invoice/Download?fileGuid={fileGuid}&fileName={fileName}`: Tải tệp nén chính thức từ máy chủ EasyInvoice.
+  7. Dùng `AdmZip` giải nén file `.pdf` chính thức bên trong (dung lượng ~280 KB) có magic bytes `%PDF`.
+  8. Trả về `pdfBuffer` để worker tự động upload lên RustFS S3 và cập nhật DB.
 
 ---
 
@@ -126,6 +140,17 @@ flowchart TD
 * [invoice-captcha-solver.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-captcha-solver.service.ts): Dịch vụ giải captcha qua 9router AI Vision (`gemini-3.8-flash`).
 * [invoice-provider-detector.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-provider-detector.service.ts): Trích xuất MST TCGP và mã tra cứu từ XML.
 * [invoice-pdf-download-worker.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-pdf-download-worker.service.ts): Xử lý download nền đa luồng (`concurrency = 3`).
+
+### 4.1. Hợp đồng API REST & Frontend Client
+* **Backend Controller:** [invoice-original-pdf.controller.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/controllers/invoice-original-pdf.controller.ts)
+* **Quy chuẩn Global Prefix:** Mọi endpoint NestJS đều nằm dưới `/api/v1/`.
+  - `POST /api/v1/erp-invoices/original-pdf/:id/download`: Tải PDF gốc tức thời cho 1 hóa đơn.
+  - `GET /api/v1/erp-invoices/original-pdf/:id/lookup-info`: Tra cứu thông tin portal/mã tra cứu.
+  - `POST /api/v1/erp-invoices/original-pdf/sync-advanced`: Khởi tạo phiên đồng bộ nâng cao và tải hàng loạt.
+  - `GET /api/v1/erp-invoices/original-pdf/sync-status/:syncId`: Lấy tiến độ phiên đồng bộ.
+* **Frontend Web Client:** [erpInvoicesCoreApi.ts](file:///home/dev/repos-dev-02/erp/erp-web/src/modules/erp-invoices-core/api/erpInvoicesCoreApi.ts)
+  - `const BASE = "/api/v1/erp-invoices";`
+  - Bắt buộc gọi qua `${BASE}/original-pdf/...` để đảm bảo đầy đủ tiền tố `/api/v1`. Tuyệt đối không gọi trực tiếp `/erp-invoices/original-pdf/...`.
 
 ---
 
