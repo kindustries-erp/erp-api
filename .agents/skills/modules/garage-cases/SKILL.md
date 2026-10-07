@@ -662,5 +662,40 @@ Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất gi�
      - `QuoteCostTable.tsx` (87 LoC) & `QuoteCostSummarySection.tsx` (66 LoC).
    - 100% file < 160 LoC (đảm bảo khống chế < 180 LoC), 0 vi phạm No Blue Mandate, 100% i18n qua `t()`, 100% unit tests pass.
 
+### 9.6. Chuẩn Hóa Cột Bảng Phiếu Dịch Vụ: Tách Cột Phải Thu KH / BH & Sắp Xếp Nhóm Tài Chính (`GarageCasesTable`)
+
+Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế toán và phân tách nguồn tiền thanh toán giữa Khách hàng và Đơn vị Bảo hiểm:
+1. **Tách 2 Cột Phải Thu Riêng Biệt (`phaiThuKhachHang` & `phaiThuBaoHiem`)**:
+   - **Phải thu Khách hàng (`phaiThuKhachHang`)**: Tiền dịch vụ/phụ tùng khách hàng chịu trách nhiệm thanh toán (`TienThanhToanKH`). Nếu xe không làm bảo hiểm (`XeLamBaoHiem = false`), toàn bộ tiền có thuế (`tienCoThue`) được tính cho khách hàng. Nếu xe làm bảo hiểm (`XeLamBaoHiem = true`), số tiền = $\max(0, \text{tienCoThue} - \text{bh})$.
+   - **Phải thu Bảo hiểm (`phaiThuBaoHiem`)**: Tiền do công ty bảo hiểm duyệt chi trả (`TienThanhToanBH` hoặc fallback `TienBaoHiemDuyet`). Nếu xe không làm bảo hiểm, mặc định bằng 0.
+   - Hỗ trợ đầy đủ: Định dạng tiền tệ `money(...)`, lọc giá trị distinct options server-side, sắp xếp sort 2 chiều và dòng cộng tổng kết trang/lũy kế (`SubtotalSummaryCell`).
+2. **Cấu Hình Preset & Tách Cột Mặc Định Cả 2 View**:
+   - Cả hai chế độ xem **Tổng quan** (`overview`) và **Đối soát** (`audit`) đều mặc định hiển thị 2 cột tách biệt `phaiThuKhachHang: true` và `phaiThuBaoHiem: true`, đồng thời ẩn cột gộp `collectionProgress: false`. Người dùng vẫn có thể chủ động bật lại cột gộp trong Drawer *Tùy chỉnh cột* khi cần xem thanh tiến độ tổng.
+3. **Thứ Tự Cột Động Theo Chế Độ Xem (Dynamic Column Order)**:
+   - **View Tổng quan (`overview`)**: Nhóm kết quả kinh doanh (**Doanh thu**, **Chi phí**, **Lợi nhuận**, **Biên LN**) được ưu tiên hiển thị **PHÍA TRƯỚC** các cột phải thu/phải trả:
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN}$$
+     $$\rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
+   - **View Đối soát (`audit`) (và các view khác)**: Khối tiến độ thu/trả được ưu tiên hiển thị **TRƯỚC**, các cột kết quả kinh doanh nằm phía sau cột Còn phải trả (`tienConPhaiChi`):
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả}$$
+     $$\rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
 
 
+
+
+4. **Bật Cột Ngày Tiếp Nhận & Ngày Kết Thúc trong View Đối Soát (`audit`)**:
+   - Mặc định bật `caseDate: true` và `ngayHoanThanhCongViec: true` trong `AUDIT_GARAGE_CASE_COLUMN_VISIBILITY` tại `garageCaseViewPresets.ts`. Hiển thị ở đầu bảng ngay sau cột STT `#`.
+5. **Chuẩn Hóa Kích Thước Cột (`Column Sizes`) & App Tooltip Chống Tràn Chữ**:
+   - `caseDate` (Ngày tiếp nhận): `130px`.
+   - `ngayHoanThanhCongViec` (Ngày kết thúc): `130px`.
+   - `caseCode` (Số chứng từ): `180px`.
+   - `customer` (Khách hàng): `200px`.
+   - `kgaraClassification` (Phân loại KGara): `150px` (bọc `Tooltip` chống tràn nội dung).
+   - `classification` (Phân loại nghiệp vụ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `exclusionRules` (Quy tắc loại trừ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `statusName` (Trạng thái dịch vụ): `130px`.
+   - Các cột số tiền (`doanhThu`, `chiPhi`, `loiNhuan`, `collectionProgress`, `phaiThuKhachHang`, `phaiThuBaoHiem`, `tienConPhaiThanhToan`, `costProgress`, `tienConPhaiChi`): đồng bộ `140px`.
+6. **Di Chuyển Icon Liên Kết Hóa Đơn (`Link2`) sang Cột HĐ VAT (`hasInvoice`)**:
+   - Gỡ bỏ icon `Link2` khỏi `GarageCaseCodeCell` để ô số chứng từ hiển thị gọn gàng, không bị nghẽn thông tin.
+   - Đưa vào cột `hasInvoice` (`100px`): Khi `totalLinked > 0`, render button `Link2` kèm Tooltip chi tiết (`x HĐ bán ra, y HĐ mua vào`) và click mở Drawer đối soát HĐ (`onOpenFinancials`). Khi có cờ VAT, hiển thị song song cả `FileCheck` và `Link2`.
+7. **Tuân Thủ Tuyệt Đối `/ui-atomic-refactor`**:
+   - 100% files liên quan kiểm soát chặt chẽ dưới ngưỡng **< 180 LoC** (`GarageCaseCodeCell`: 98 LoC, `financial-columns`: 172 LoC, `general-columns`: 175 LoC, `date-columns`: 62 LoC, `progress-columns`: 158 LoC, `classification-dropdown`: 176 LoC, `exclusion-dropdown`: 166 LoC). 100% i18n, No Blue Mandate và 56/56 test files phân hệ Garage đạt PASS.

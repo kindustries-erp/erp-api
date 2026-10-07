@@ -163,6 +163,10 @@ export class KgaraCaseListQueryService {
           col === 'totalReceivable'
         )
           targetCol = 'case.tienCoThue';
+        else if (col === 'phaiThuKhachHang' || col === 'phaiThuKH')
+          targetCol = `(${getCaseColumnSelectExpr('phaiThuKhachHang')})`;
+        else if (col === 'phaiThuBaoHiem' || col === 'phaiThuBH')
+          targetCol = `(${getCaseColumnSelectExpr('phaiThuBaoHiem')})`;
         else if (col === 'tienDaThanhToan' || col === 'paidAmount')
           targetCol = 'case.tienDaThanhToan';
         else if (
@@ -284,6 +288,38 @@ export class KgaraCaseListQueryService {
       const paidCost = hasSettlement ? setInfo.payments : 0;
       const linkInfo = linkedInvoiceCounts[item.id];
 
+      const raw = item.rawData;
+      const phaiThuBaoHiem = (() => {
+        if (
+          raw?.TienThanhToanBH != null &&
+          !isNaN(Number(raw.TienThanhToanBH))
+        ) {
+          return Number(raw.TienThanhToanBH);
+        }
+        if (
+          raw?.XeLamBaoHiem === true &&
+          raw?.TienBaoHiemDuyet != null &&
+          !isNaN(Number(raw.TienBaoHiemDuyet)) &&
+          Number(raw.TienBaoHiemDuyet) > 0
+        ) {
+          return Number(raw.TienBaoHiemDuyet);
+        }
+        return 0;
+      })();
+
+      const phaiThuKhachHang = (() => {
+        if (
+          raw?.TienThanhToanKH != null &&
+          !isNaN(Number(raw.TienThanhToanKH))
+        ) {
+          return Number(raw.TienThanhToanKH);
+        }
+        if (!raw?.XeLamBaoHiem) {
+          return targetRev;
+        }
+        return Math.max(0, targetRev - phaiThuBaoHiem);
+      })();
+
       return {
         ...item,
         doanhThu,
@@ -293,6 +329,8 @@ export class KgaraCaseListQueryService {
         tienCoThue: targetRev,
         tienDaThanhToan: totalPaid,
         tienConPhaiThanhToan: remainingBal,
+        phaiThuKhachHang,
+        phaiThuBaoHiem,
         tienDaChi: paidCost,
         linkedInvoiceCount: linkInfo?.total || 0,
         linkedInvoiceOutCount: linkInfo?.outCount || 0,
@@ -307,6 +345,8 @@ export class KgaraCaseListQueryService {
     let grandTotalCost = 0;
     let grandTotalProfit = 0;
     let grandTotalReceivable = 0;
+    let grandTotalPhaiThuKhachHang = 0;
+    let grandTotalPhaiThuBaoHiem = 0;
     let grandTotalPaid = 0;
     let grandTotalBalance = 0;
     let grandTotalPaidCost = 0;
@@ -316,6 +356,8 @@ export class KgaraCaseListQueryService {
     let cumulativeCost = 0;
     let cumulativeProfit = 0;
     let cumulativeReceivable = 0;
+    let cumulativePhaiThuKhachHang = 0;
+    let cumulativePhaiThuBaoHiem = 0;
     let cumulativePaid = 0;
     let cumulativeBalance = 0;
     let cumulativePaidCost = 0;
@@ -356,6 +398,14 @@ export class KgaraCaseListQueryService {
         .addSelect(
           'COALESCE(SUM(COALESCE("case"."tien_con_phai_thanh_toan", 0)), 0)',
           'totalBalance',
+        )
+        .addSelect(
+          `COALESCE(SUM(${getCaseColumnSelectExpr('phaiThuKhachHang')}), 0)`,
+          'totalPhaiThuKhachHang',
+        )
+        .addSelect(
+          `COALESCE(SUM(${getCaseColumnSelectExpr('phaiThuBaoHiem')}), 0)`,
+          'totalPhaiThuBaoHiem',
         );
 
       const totalsRaw = await totalsQb.getRawOne();
@@ -363,6 +413,10 @@ export class KgaraCaseListQueryService {
       grandTotalCost = parseFloat(totalsRaw?.totalCost || '0') || 0;
       grandTotalProfit = parseFloat(totalsRaw?.totalProfit || '0') || 0;
       grandTotalReceivable = parseFloat(totalsRaw?.totalReceivable || '0') || 0;
+      grandTotalPhaiThuKhachHang =
+        parseFloat(totalsRaw?.totalPhaiThuKhachHang || '0') || 0;
+      grandTotalPhaiThuBaoHiem =
+        parseFloat(totalsRaw?.totalPhaiThuBaoHiem || '0') || 0;
       grandTotalPaid = parseFloat(totalsRaw?.totalPaid || '0') || 0;
       grandTotalBalance = parseFloat(totalsRaw?.totalBalance || '0') || 0;
       grandTotalRemainingPayable = Math.max(
@@ -387,6 +441,14 @@ export class KgaraCaseListQueryService {
           (acc, curr) => acc + (Number(curr.tienCoThue) || 0),
           0,
         );
+        cumulativePhaiThuKhachHang = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.phaiThuKhachHang) || 0),
+          0,
+        );
+        cumulativePhaiThuBaoHiem = enrichedData.reduce(
+          (acc, curr) => acc + (Number(curr.phaiThuBaoHiem) || 0),
+          0,
+        );
         cumulativePaid = enrichedData.reduce(
           (acc, curr) => acc + (Number(curr.tienDaThanhToan) || 0),
           0,
@@ -408,6 +470,8 @@ export class KgaraCaseListQueryService {
         cumulativeCost = grandTotalCost;
         cumulativeProfit = grandTotalProfit;
         cumulativeReceivable = grandTotalReceivable;
+        cumulativePhaiThuKhachHang = grandTotalPhaiThuKhachHang;
+        cumulativePhaiThuBaoHiem = grandTotalPhaiThuBaoHiem;
         cumulativePaid = grandTotalPaid;
         cumulativeBalance = grandTotalBalance;
         cumulativePaidCost = grandTotalPaidCost;
@@ -425,6 +489,14 @@ export class KgaraCaseListQueryService {
             'profit',
           )
           .addSelect('COALESCE("case"."tien_co_thue", 0)', 'receivable')
+          .addSelect(
+            getCaseColumnSelectExpr('phaiThuKhachHang') || '0',
+            'phaiThuKhachHang',
+          )
+          .addSelect(
+            getCaseColumnSelectExpr('phaiThuBaoHiem') || '0',
+            'phaiThuBaoHiem',
+          )
           .addSelect('COALESCE("case"."tien_da_thanh_toan", 0)', 'paid')
           .addSelect(
             'COALESCE("case"."tien_con_phai_thanh_toan", 0)',
@@ -441,6 +513,8 @@ export class KgaraCaseListQueryService {
           cumulativeCost += Number(r.cost || 0);
           cumulativeProfit += Number(r.profit || 0);
           cumulativeReceivable += Number(r.receivable || 0);
+          cumulativePhaiThuKhachHang += Number(r.phaiThuKhachHang || 0);
+          cumulativePhaiThuBaoHiem += Number(r.phaiThuBaoHiem || 0);
           cumulativePaid += Number(r.paid || 0);
           cumulativeBalance += Number(r.balance || 0);
         }
@@ -471,6 +545,8 @@ export class KgaraCaseListQueryService {
         grandTotalCost,
         grandTotalProfit,
         grandTotalReceivable,
+        grandTotalPhaiThuKhachHang,
+        grandTotalPhaiThuBaoHiem,
         grandTotalPaid,
         grandTotalBalance,
         grandTotalRemainingPayable,
@@ -478,6 +554,8 @@ export class KgaraCaseListQueryService {
         cumulativeCost,
         cumulativeProfit,
         cumulativeReceivable,
+        cumulativePhaiThuKhachHang,
+        cumulativePhaiThuBaoHiem,
         cumulativePaid,
         cumulativeBalance,
         cumulativeRemainingPayable,
