@@ -70,6 +70,8 @@ import { VinfastInvoiceAdapter } from './services/adapters/vinfast-invoice.adapt
 import { EasyInvoiceAdapter } from './services/adapters/easy-invoice.adapter';
 import { MisaInvoiceAdapter } from './services/adapters/misa-invoice.adapter';
 import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapter';
+import { HiloInvoiceAdapter } from './services/adapters/hilo-invoice.adapter';
+import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.adapter';
 
 @Module({
   imports: [
@@ -138,6 +140,8 @@ import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapt
     EasyInvoiceAdapter,
     MisaInvoiceAdapter,
     ViettelInvoiceAdapter,
+    HiloInvoiceAdapter,
+    CyberbillInvoiceAdapter,
     InvoicePdfDownloadWorkerService,
     InvoiceOriginalPdfFacade,
     ErpInvoicesCoreService,

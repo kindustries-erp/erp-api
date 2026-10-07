@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import AdmZip from 'adm-zip';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpEInvoiceSync } from '../../entities/erp_einvoice_sync.entity';
 import { ProviderAdapterRegistry } from '../adapters/provider-adapter.registry';
@@ -36,18 +37,38 @@ export class InvoicePdfDownloadWorkerService {
         invoice.xmlFileKey
       ) {
         try {
-          const xmlBuffer = await this.r2Service.downloadBuffer(
+          const fileBuffer = await this.r2Service.downloadBuffer(
             invoice.xmlFileKey,
           );
-          const xmlContent = xmlBuffer.toString('utf-8');
-          const detected = this.detectorService.detectFromXml(
-            xmlContent,
-            invoice.sellerTaxCode,
-          );
-          invoice.providerCode = detected.providerCode;
-          invoice.lookupCode = detected.lookupCode;
-          invoice.lookupUrl = detected.lookupUrl;
-          if (detected.msttcgp) invoice.msttcgp = detected.msttcgp;
+          let xmlContent = '';
+          const isZip =
+            invoice.xmlFileKey.toLowerCase().endsWith('.zip') ||
+            (fileBuffer.length >= 4 &&
+              fileBuffer[0] === 0x50 &&
+              fileBuffer[1] === 0x4b);
+
+          if (isZip) {
+            const zip = new AdmZip(fileBuffer);
+            const xmlEntry = zip
+              .getEntries()
+              .find((e) => e.entryName.toLowerCase().endsWith('.xml'));
+            if (xmlEntry) {
+              xmlContent = xmlEntry.getData().toString('utf-8');
+            }
+          } else {
+            xmlContent = fileBuffer.toString('utf-8');
+          }
+
+          if (xmlContent) {
+            const detected = this.detectorService.detectFromXml(
+              xmlContent,
+              invoice.sellerTaxCode,
+            );
+            invoice.providerCode = detected.providerCode;
+            invoice.lookupCode = detected.lookupCode;
+            invoice.lookupUrl = detected.lookupUrl;
+            if (detected.msttcgp) invoice.msttcgp = detected.msttcgp;
+          }
         } catch (xmlErr: any) {
           this.logger.warn(
             `Could not extract from XML for invoice ${invoice.id}: ${xmlErr.message}`,

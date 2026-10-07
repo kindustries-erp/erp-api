@@ -49,6 +49,11 @@ const KNOWN_MSTTCGP: Record<
     name: 'CyberBill',
     url: 'https://tracuu.cyberbill.vn',
   },
+  '0105232093': {
+    code: 'CYBERBILL',
+    name: 'CyberBill (CyberLotus)',
+    url: 'https://tracuu.cyberbill.vn',
+  },
   '0101261330': {
     code: 'FPT',
     name: 'FPT.eInvoice',
@@ -94,6 +99,14 @@ export class InvoiceProviderDetectorService {
         'reservationCode',
       );
       const maTraCuu = this.extractTag(doc, 'MaTraCuu', 'matracuu');
+
+      const dlhdonEl = doc.getElementsByTagName
+        ? doc.getElementsByTagName('DLHDon')?.[0]
+        : null;
+      const dlhdonId =
+        dlhdonEl?.getAttribute?.('Id') ||
+        dlhdonEl?.getAttribute?.('id') ||
+        null;
 
       const extraTtins = this.extractTTKhac(doc);
 
@@ -150,6 +163,33 @@ export class InvoiceProviderDetectorService {
         };
       }
 
+      // 2.5. HILO / GSM (Taxi Xanh SM) Detection
+      const isGsmSeller = sellerTaxCode
+        ? sellerTaxCode.startsWith('0110269067')
+        : false;
+      const hiloKey =
+        extraTtins['hilo-searchkey'] ||
+        xmlContent
+          .match(
+            /<TTruong>Hilo-SearchKey<\/TTruong>\s*<KDLieu>[^<]*<\/KDLieu>\s*<DLieu>([^<]+)<\/DLieu>/i,
+          )?.[1]
+          ?.trim() ||
+        null;
+      if (
+        isGsmSeller ||
+        hiloKey ||
+        xmlContent.includes('gsm-einvoice.hilo.com.vn')
+      ) {
+        return {
+          providerCode: 'HILO',
+          providerName: 'HILO E-Invoice (GSM Xanh SM)',
+          msttcgp: msttcgp || null,
+          lookupCode: hiloKey,
+          lookupUrl: 'https://gsm-einvoice.hilo.com.vn/',
+          extraInfo: { searchKey: hiloKey || '' },
+        };
+      }
+
       // 3. Known MSTTCGP (MISA, Viettel, VNPT, etc.)
       if (msttcgp && KNOWN_MSTTCGP[msttcgp]) {
         const known = KNOWN_MSTTCGP[msttcgp];
@@ -166,6 +206,15 @@ export class InvoiceProviderDetectorService {
             reservationCode ||
             extraTtins['reservationcode'] ||
             extraTtins['mã số bí mật'] ||
+            null;
+        } else if (known.code === 'CYBERBILL') {
+          const rawId = dlhdonId ? dlhdonId.replace(/^ID-/i, '') : null;
+          lookupCode =
+            rawId ||
+            extraTtins['masobimat'] ||
+            extraTtins['mã số bí mật'] ||
+            maTraCuu ||
+            extraTtins['matracuu'] ||
             null;
         } else {
           lookupCode = fkey || maTraCuu || extraTtins['matracuu'] || null;

@@ -50,6 +50,14 @@ export function getCaseColumnSelectExpr(column: string): string | null {
     tienCoThue: '"case"."tien_co_thue"',
     tongPhaiThu: '"case"."tien_co_thue"',
     totalReceivable: '"case"."tien_co_thue"',
+    phaiThuBaoHiem:
+      'CASE WHEN ("case"."raw_data" ->> \'TienThanhToanBH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanBH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanBH\')::numeric WHEN COALESCE(("case"."raw_data" ->> \'XeLamBaoHiem\')::boolean, false) IS TRUE AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') IS NOT NULL AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\')::numeric ELSE 0 END',
+    phaiThuBH:
+      'CASE WHEN ("case"."raw_data" ->> \'TienThanhToanBH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanBH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanBH\')::numeric WHEN COALESCE(("case"."raw_data" ->> \'XeLamBaoHiem\')::boolean, false) IS TRUE AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') IS NOT NULL AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\')::numeric ELSE 0 END',
+    phaiThuKhachHang:
+      'CASE WHEN ("case"."raw_data" ->> \'TienThanhToanKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanKH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanKH\')::numeric WHEN COALESCE(("case"."raw_data" ->> \'XeLamBaoHiem\')::boolean, false) IS FALSE THEN COALESCE("case"."tien_co_thue", 0) ELSE GREATEST(0, COALESCE("case"."tien_co_thue", 0) - CASE WHEN ("case"."raw_data" ->> \'TienThanhToanBH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanBH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanBH\')::numeric WHEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\') IS NOT NULL AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\')::numeric ELSE 0 END) END',
+    phaiThuKH:
+      'CASE WHEN ("case"."raw_data" ->> \'TienThanhToanKH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanKH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanKH\')::numeric WHEN COALESCE(("case"."raw_data" ->> \'XeLamBaoHiem\')::boolean, false) IS FALSE THEN COALESCE("case"."tien_co_thue", 0) ELSE GREATEST(0, COALESCE("case"."tien_co_thue", 0) - CASE WHEN ("case"."raw_data" ->> \'TienThanhToanBH\') IS NOT NULL AND ("case"."raw_data" ->> \'TienThanhToanBH\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienThanhToanBH\')::numeric WHEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\') IS NOT NULL AND ("case"."raw_data" ->> \'TienBaoHiemDuyet\') ~ \'^[0-9.]+$\' THEN ("case"."raw_data" ->> \'TienBaoHiemDuyet\')::numeric ELSE 0 END) END',
     paidAmount: '"case"."tien_da_thanh_toan"',
     tienDaThanhToan: '"case"."tien_da_thanh_toan"',
     balanceAmount: '"case"."tien_con_phai_thanh_toan"',

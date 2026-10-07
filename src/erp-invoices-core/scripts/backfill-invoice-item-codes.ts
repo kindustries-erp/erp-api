@@ -26,27 +26,33 @@ import {
 } from '../helpers/vinfast-part-code.helper';
 
 // Load môi trường
+dotenv.config();
 const envFileArg = process.argv.slice(2).find((a) => a.startsWith('.env'));
 let loadedEnvConfig: Record<string, string> = {};
 if (envFileArg && fs.existsSync(envFileArg)) {
   loadedEnvConfig = dotenv.parse(fs.readFileSync(envFileArg));
-} else if (fs.existsSync('.env.greenway-production')) {
-  loadedEnvConfig = dotenv.parse(fs.readFileSync('.env.greenway-production'));
+} else if (fs.existsSync('.env')) {
+  loadedEnvConfig = dotenv.parse(fs.readFileSync('.env'));
 }
 
-const dbUrl =
-  loadedEnvConfig.DATABASE_URL ||
-  process.env.DATABASE_URL ||
-  'postgresql://erp_greenway_production_admin:Cg4b6wqHAH3kWVP2pbCismcari9Tz-4ueB4YH_Pd@db-dev.liouni.com:5433/erp_greenway_production?sslmode=disable';
+const dbUrl: string =
+  loadedEnvConfig.DATABASE_URL || process.env.DATABASE_URL || '';
+if (!dbUrl) {
+  throw new Error('❌ Thiếu biến DATABASE_URL trong môi trường hoặc file .env');
+}
 
 const AI_ROUTER_BASE_URL =
   loadedEnvConfig.NINE_ROUTER_BASE_URL ||
   process.env.NINE_ROUTER_BASE_URL ||
   'https://9router.liouni.com/v1';
 const AI_ROUTER_API_KEY =
-  loadedEnvConfig.NINE_ROUTER_API_KEY ||
-  process.env.NINE_ROUTER_API_KEY ||
-  'sk-8cacf887edb2816b-plx0ba-b0f99291';
+  loadedEnvConfig.NINE_ROUTER_API_KEY || process.env.NINE_ROUTER_API_KEY;
+if (!AI_ROUTER_API_KEY) {
+  console.error(
+    '❌ Thiếu biến NINE_ROUTER_API_KEY trong môi trường hoặc file .env',
+  );
+  process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
