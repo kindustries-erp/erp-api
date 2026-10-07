@@ -583,13 +583,25 @@ Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn 
 ### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
 - Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
   - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
-  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị:
+    - Badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+    - Nút **"Đang chọn" (`CaseLinePaymentSelectedButton`)**: Tách biệt khỏi PillTabs, hiển thị ngay trên header cùng hàng bên phải tiêu đề khi `selectedCount > 0` (ẩn khi = 0 theo Phương án A). Hỗ trợ click toggle kích hoạt bộ lọc xem các mục đang chọn.
   - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
-    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` hiển thị phẳng, clean & seamless (không bọc wrapper card `bg-slate-50 border`). Thứ tự ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`). Nút "Bỏ chọn" / selection badge được tinh gọn loại bỏ vì giao dịch cấn trừ từng dòng chỉ thao tác với số lượng ít hóa đơn, tương tác trực tiếp trên bảng dữ liệu trực quan hơn.
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` (`CaseLinePaymentPresetBar`) với 3 tabs thuần túy phân loại nguồn dữ liệu: `Đã cấn trừ` (`linked`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`). Thứ tự ưu tiên auto-active tự động chọn tab đầu tiên có dữ liệu.
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ" (`ManualCashflowTabContent`)**: Cho phép ghi nhận thu/chi tiền mặt hoặc ngoài sổ trực tiếp.
   - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
     - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán / chịu phí, và **Số tiền cần cấn trừ**.
     - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng / Dòng xe, Trạng thái, Ngày phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) dùng `DrawerSection` (collapsible, icon `FileSpreadsheet`).
-  - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
+  - **Cơ chế Draft-First Frontend Save Flow**:
+    - Khi người dùng chọn HĐ cấn trừ hoặc nhập thu/chi ngoài sổ và bấm "Lưu cấn trừ" / "Ghi nhận", hệ thống **CHỈ LƯU VÀO STATE Ở FRONTEND** (`useGarageCaseEditForm` thông qua callbacks `onAddInvoice`, `onRemoveInvoice`, `onAddSettlement`, `onRemoveSettlement`), đóng drawer con mà **không gọi API và không invalidate queries**.
+    - Chỉ khi người dùng bấm **"Lưu thay đổi"** tại Drawer Sổ báo giá (`GarageCaseStandaloneDrawer`), toàn bộ thay đổi mới được gọi API batch save xuống cơ sở dữ liệu.
+  - **Phân rã Atomic Kiến trúc (< 180 LoC per file)**:
+    - `CaseLinePaymentDrawer.tsx` (112 LoC)
+    - `useCaseLinePaymentTabs.tsx` (118 LoC)
+    - `useCaseLinePaymentActions.ts` (75 LoC)
+    - `CaseLinePaymentSelectedButton.tsx` (55 LoC)
+    - `CaseLinePaymentPresetBar.tsx` (67 LoC)
+    - 100% co-located Vitest tests pass và No Blue Mandate.
 
 
 ### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
@@ -629,5 +641,32 @@ Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue 
      - 3. Hoa hồng/Khác (1543)
      - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
 4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
+
+### 9.5. Kiến Trúc Cây Phân Cấp (Tree Table) Cho Bảng Phải Thu & Bảng Chi Phí Vụ Việc (`/ui-atomic-refactor`)
+
+Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất giữa thu và chi theo luồng Draft-First:
+1. **Thống Nhất Mô Hình 1 Dòng Cha Mục Tiêu (Unified Parent Target Row)**:
+   - **Bảng Phải Thu (`QuoteReceivablesTable`)**: Thay vì hiển thị tách 2 dòng độc lập, bảng hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng phải thu vụ việc` (`tienCoThue`).
+     - Khi vụ việc có bảo hiểm (`tienThanhToanBh > 0`): Dòng cha hiển thị subtitle tag phân bổ `(KH: ... ₫ • BH: ... ₫)` và cung cấp 2 nút thanh toán `[Thu KH]` và `[Thu BH]`.
+     - Khi vụ việc không có bảo hiểm: Hiển thị nút thanh toán duy nhất `[+ Thu tiền]`.
+   - **Bảng Chi Phí (`QuoteCostTable` / `QuoteCostSummarySection`)**: Hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng chi phí vụ việc` (`totalCost`), hiển thị tiến độ Đã chi vs Còn lại, cùng nút hành động `[+ Chi tiền]`.
+2. **Các Dòng Con Thụt Lề Cấn Trừ (Indented Child Rows `↳`)**:
+   - Khi có hóa đơn liên kết hoặc phiếu thanh toán/sao kê đã cấn trừ, các dòng con sẽ tự động hiển thị bên dưới dòng cha với icon cong `↳` (`CornerDownRight`).
+   - Cột `% Tổng` trực quan: Thể hiện tỷ lệ phần trăm từng dòng cấn trừ so với số tiền mục tiêu của dòng cha.
+   - Icon nhận diện loại chứng từ: Hóa đơn điện tử (🧾), Tiền mặt (💵), Chuyển khoản sao kê (🏦).
+   - Tag trạng thái `Chờ lưu` cho các khoản vừa gán nháp ở client.
+   - Nút Thùng rác đỏ xóa/gỡ cấn trừ trực tiếp trên từng dòng con khi ở chế độ chỉnh sửa.
+3. **Phân Rã Atomic & Tuân Thủ Chuẩn Mực (`/ui-atomic-refactor`)**:
+   - Tầng Molecules dùng chung trong `components/tables/financial-tree-rows/`:
+     - `FinancialTreeParentRow.tsx` (159 LoC) & `FinancialTreeParentRow.test.tsx` (112 LoC).
+     - `FinancialTreeChildRow.tsx` (108 LoC) & `FinancialTreeChildRow.test.tsx` (57 LoC).
+   - Tầng Business Helpers:
+     - `FinancialTreeReceivables.helper.ts` (121 LoC) & tests (147 LoC).
+     - `FinancialTreeCost.helper.ts` (96 LoC).
+   - Tầng Organisms & Sections:
+     - `QuoteReceivablesTable.tsx` (123 LoC) & tests (171 LoC).
+     - `QuoteCostTable.tsx` (87 LoC) & `QuoteCostSummarySection.tsx` (66 LoC).
+   - 100% file < 160 LoC (đảm bảo khống chế < 180 LoC), 0 vi phạm No Blue Mandate, 100% i18n qua `t()`, 100% unit tests pass.
+
 
 
