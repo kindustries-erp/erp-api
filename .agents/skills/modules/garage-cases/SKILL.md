@@ -379,14 +379,10 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
     - **Ưu tiên 2 (`suggestions`)**: Nếu chưa có cấn trừ nhưng có hóa đơn gợi ý khớp (`suggestionsCount > 0`) ➔ Mở tab **"Gợi ý khớp"** (`suggestions`).
     - **Ưu tiên 3 (`all`)**: Chỉ khi không có cấn trừ và không có gợi ý (`linkedCount === 0 && suggestionsCount === 0`) ➔ Mới mở tab **"Tất cả"** (`all`).
     - **Lưu lựa chọn người dùng**: Khi người dùng tự tay click chọn preset tab khác (`setViewPreset`), trạng thái được ghi nhớ qua `userSelectedPresetRef` và không bị ghi đè bởi auto router.
-- **Tiêu đề Động & Logic Tiến Độ Thu / Chi trên Right Panel (`CaseLinePaymentRightPanel`)**:
-  - Tiêu đề section: Phân biệt theo chiều nghiệp vụ:
-    - Thu tiền: **"Tiến độ thu tiền"** (`paymentKpi`), nhãn "Đã thu (sao kê)", "Còn phải thu".
-    - Chi tiền: **"Tiến độ chi tiền"** (`paymentCostKpi`), nhãn "Đã chi (sao kê)", "Còn phải chi".
-  - **Quy tắc tính Tiến độ % (Progress Bar)**:
-    - **Chỉ tăng tiến độ khi hóa đơn đã có cấn trừ với sao kê ngân hàng / tiền mặt thực tế** (`hasBankNetOff === true` hoặc `bankSettledAmount > 0` hoặc có settlement thực tế trong vụ việc).
-    - Nếu người dùng chọn các hóa đơn chưa cấn trừ sao kê, số tiền thực tế `realSettledAmount = 0` và tiến độ giữ nguyên **0%**.
-    - Phân tách rõ ràng giữa dòng "HĐ đã chọn cấn trừ" (danh nghĩa) và "Đã thu/chi (sao kê)" (thực tế).
+- **Right Panel Cấn Trừ (`CaseLinePaymentRightPanel`)**:
+  - Gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán, và **Số tiền cần cấn trừ** (`targetAmount`).
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng/Dòng xe, Trạng thái, Ngày tiếp nhận/phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) kế thừa trực tiếp từ `caseData`.
 - **Theo dõi 2 chiều dòng tiền thực tế thuần túy trên ERP (Pure Cashflow Standard)**:
   - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
   - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
@@ -589,11 +585,10 @@ Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn 
   - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
   - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
   - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
-    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` bên trái với thứ tự đảo ngược ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`).
-    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách. **Nhận trực tiếp `activeSettlements` từ bên ngoài**, đảm bảo hiển thị đầy đủ bảng danh sách các khoản chi ngoài sổ đã ghi nhận (không bị rỗng danh sách).
-  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section:
-    - Thông tin định danh khoản mục (Phân loại, Mã, Tên, Bên chịu phí / thanh toán).
-    - KPI Bar tiến độ cấn trừ: Số tiền mục tiêu | Đã chọn cấn trừ | Còn thiếu kèm Progress Bar màu emerald.
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` hiển thị phẳng, clean & seamless (không bọc wrapper card `bg-slate-50 border`). Thứ tự ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`). Nút "Bỏ chọn" / selection badge được tinh gọn loại bỏ vì giao dịch cấn trừ từng dòng chỉ thao tác với số lượng ít hóa đơn, tương tác trực tiếp trên bảng dữ liệu trực quan hơn.
+  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán / chịu phí, và **Số tiền cần cấn trừ**.
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng / Dòng xe, Trạng thái, Ngày phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) dùng `DrawerSection` (collapsible, icon `FileSpreadsheet`).
   - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
 
 
