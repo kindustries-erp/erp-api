@@ -553,32 +553,26 @@ Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
 ## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
 
 ### 9.1. Phân Tầng Tab Tài Chính & Khối Chuẩn Hóa (`QuoteFinancialsTabContent` & Right Panel)
-Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, `/standardize-table` và `/ui-atomic-refactor`:
+Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, Unified Financial Tree, `/standardize-table` và `/ui-atomic-refactor`:
 
-1. **Bảng 1: Phải thu & Phân bổ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
-   - Dữ liệu: 2 dòng Khách hàng & Bảo hiểm, tính toán tự động qua `computeQuoteReceivableRows` từ `caseData` và `activeSettlements`.
-   - **3 Cột số liệu tài chính rõ ràng**:
-     - `Số tiền (VND)`: Tổng mục tiêu phải thu của KH / BH.
-     - `Đã thu`: Tổng các khoản thu thực tế đã ghi nhận (màu xanh lá `text-emerald-600`).
-     - `Còn lại`: Số tiền công nợ còn phải thu (`Math.max(0, amount - collectedAmount)` - màu cam/hồng khi còn nợ, xanh lá khi đã thu đủ).
-   - **Thao tác Thu KH / Thu BH**: Tự động gợi ý số tiền còn lại (`remainingAmount > 0 ? remainingAmount : amount`) khi mở `CaseLinePaymentDrawer`. Kiểm soát an toàn (`editMode === true` và đủ 3 quyền Garage, Hóa đơn, Sao kê).
-   - **Dòng Tổng cộng (`summaryRow`)**: Tính tổng 3 cột Số tiền, Đã thu, Còn lại qua `<SubtotalSummaryCell>`.
+1. **Bảng 1: Phải thu & Cấn trừ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `1. Bảng Phải thu & Cấn trừ` (icon `Landmark`, text-primary).
+   - **Kiến trúc Unified Financial Tree**: Dùng chung các component nguyên tử với Bảng 2 (`FinancialTreeParentRow`, `FinancialTreeChildRow` từ `financial-tree-rows`).
+   - Dòng cha mục tiêu: Hiển thị Tổng phải thu vụ việc, số tiền đã thu, còn lại và nút `[Thu tiền]` (hoặc tách `[Thu KH]` / `[Thu BH]` nếu có bảo hiểm duyệt).
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu ra (OUT) và phiếu thu tiền / sao kê ngân hàng.
+   - **Kiểm soát nút Xóa theo Edit Mode**: Nút Xóa (thùng rác) chỉ active khi ở Chế độ chỉnh sửa (`editMode === true` và có đủ quyền). Khi ở chế độ xem, nút Xóa bị **Inactive / Disabled** (`opacity-30 cursor-not-allowed`) kèm tooltip *"Cần bật Chế độ chỉnh sửa để thao tác."*.
 
-2. **Bảng 2: Chi Phí Vụ Việc & Cấn Trừ (`QuoteCostTable` & `QuoteCostSettlementsTable`)**:
-   - **Bảng Tổng Hợp Chi Phí (`QuoteCostTable` - Organism Level 3)**:
-     - Thay thế hoàn toàn card tùy biến cũ bằng cấu trúc bảng `StandardTable` (`variant="spreadsheet"`) chia cột đồng bộ 100% với Bảng 1 theo `/standardize-table`:
-       `STT` (40px) | `Đối tượng` (Badge *NCC & Thợ*) | `Khoản mục chi phí` (*Tổng chi phí vụ việc - Giá vốn & Nhân công*) | **`Số tiền (VND)`** | **`Đã chi`** (xanh lá) | **`Còn lại`** (cam/xanh) | `Thao tác` (*Nút Chi tiền*).
-     - Nút **"Chi tiền"** (màu amber): Gợi ý số tiền còn lại `remainingAmount` khi mở `CaseLinePaymentDrawer` (`direction="COST"`, `payer="GARAGE"`).
-     - Dòng `summaryRow` tính tổng chi phí với `<SubtotalSummaryCell>`.
-   - **Bảng Lịch Sử Chi Tiền Hợp Nhất (`QuoteCostSettlementsTable`)**:
-     - Hiển thị ngay bên dưới khi có phát sinh chi tiền (`settlements.length > 0`), hợp nhất hóa đơn đầu vào Mua vào (`IN`) và các khoản chi ngoài sổ / sao kê ngân hàng (`PAYMENT`).
+2. **Bảng 2: Phải trả & Cấn trừ (`QuoteCostTable` / `QuoteCostSummarySection`)**:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `2. Bảng Phải trả & Cấn trừ` (icon `Wallet`, text-amber-600).
+   - **Trích xuất giá trị trường Chi phí mục tiêu**: Lấy trực tiếp từ field `ChiPhi` (`caseData?.chiPhi ?? caseData?.rawData?.ChiPhi ?? grossProfit?.ChiPhi ?? 0`), **tuyệt đối không cộng dồn giá vốn phụ tùng + nhân công**.
+   - Dòng cha mục tiêu: Tiêu đề chuẩn hóa `Tổng phải trả vụ việc`, hiển thị số tiền mục tiêu, số tiền đã chi, còn lại và nút `[Chi tiền]`.
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu vào (IN) và phiếu chi tiền / sao kê ngân hàng.
+   - Nút Xóa ở các dòng con cấn trừ đồng bộ hành vi: chỉ active khi ở Chế độ chỉnh sửa (`editMode === true`).
 
-3. **Cột Phải Drawer Tinh Giản (`GarageCaseFinancialsRightPanel`)**:
-   - **Loại bỏ Section 2 "Công nợ & Đối soát dòng tiền (Doanh thu)"** (`hideDebtCashflowSection={true}`) vì các chỉ số thu/chi đã được 2 bảng bên trái phản ánh trực quan, tránh trùng lặp.
-   - Cột phải chỉ giữ lại:
-     - Section 1: **Thông tin chung vụ việc** (Số chứng từ, Biển số xe, Khách hàng, Trạng thái, Ngày phát sinh, Ghi chú liên kết).
-     - Section 2: **Hiệu quả lợi nhuận gộp** (Doanh thu mục tiêu, Chi phí mục tiêu, Lợi nhuận gộp mục tiêu vs Thực tế).
-   - Tuân thủ **No Blue Mandate**: Thay thế toàn bộ class `blue-*` bằng `primary` / `slate`.
+3. **Cột Phải Drawer Tinh Giản & Đồng Bộ Hoàn Hảo (`GarageCaseFinancialsRightPanel`)**:
+   - **Section 1: Thông tin chung**: Bổ sung icon chuẩn trung tính `<Info className="w-3.5 h-3.5 text-muted-foreground" />` (không màu mè, đồng bộ ở cả `ReconciliationRightPanel` và `GarageCaseGeneralInfoSection`).
+   - **Section 2: Hiệu quả kinh doanh & Lợi nhuận (`GarageCaseBusinessPerformanceSection`)**: Thay thế hoàn toàn section "Hiệu quả lợi nhuận gộp" cũ bằng `GarageCaseBusinessPerformanceSection` (kế thừa trực tiếp cấu trúc từ tab Chi tiết, nhận `caseData` và `grossProfit`). Header bổ sung icon `<TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />` không màu mè. Hiển thị đầy đủ Doanh thu (chưa thuế), Tổng chi phí vụ việc (kèm breakdown giá vốn, gia công, hoa hồng nếu có), Lợi nhuận gộp và Biên lợi nhuận.
+   - Tuân thủ **No Blue Mandate**: Toàn bộ UI tuân thủ hệ màu chuẩn `primary`, `slate`, `amber`, `emerald` và `rose`.
 
 ### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
 - Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
