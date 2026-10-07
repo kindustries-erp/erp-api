@@ -29,7 +29,19 @@ Các nghiệp vụ trọng tâm:
     - `ErpInvoicesCoreController`: Thin Controller quản lý CRUD, sync GDT, R2 files, hạch toán Post/Unpost.
     - `InvoiceDebtsController`: Sub-controller chuyên trách Báo cáo & Chi tiết công nợ đối tác (`/api/v1/erp-invoices/debts`).
     - `InvoiceDashboardController`: Sub-controller chuyên trách Dashboard, KPI & Phân tích chân trời tài chính (`/api/v1/erp-invoices/dashboard`).
+    - `InvoiceOriginalPdfController`: Sub-controller chuyên trách Đồng bộ Nâng cao & Tải PDF Gốc Nhà Cung Cấp (`/api/v1/erp-invoices/original-pdf`).
   - **Sub-Services & Facades (Pattern B)**:
+    - `InvoiceOriginalPdfFacade` (Facade ~147 dòng) điều phối:
+      - `InvoiceProviderDetectorService`: Nhận diện NCC & bóc tách mã tra cứu từ XML chuẩn TT78 (VinFast, EasyInvoice, MISA, Viettel, VNPT, BKAV, Thái Sơn, CyberBill, FPT, M-Invoice...).
+      - `InvoiceCaptchaSolverService`: Giải mã captcha tự động qua 9router Vision AI (`ag/gemini-3.8-flash`).
+      - `ProviderAdapterRegistry`: Đăng ký & điều phối các adapter tải PDF theo NCC có rate limiting.
+      - `HiloInvoiceAdapter`: Tải PDF gốc HILO / GSM Xanh SM trực tiếp qua session token và SearchKey.
+      - `MisaInvoiceAdapter`: Tải PDF gốc MISA meInvoice qua ASP.NET session và TransactionID.
+      - `CyberbillInvoiceAdapter`: Tải PDF gốc CyberBill (CyberLotus) qua AI Vision Captcha Solver, hỗ trợ đa cluster (bill1app / bill2app) và tự động fallback.
+      - `VinfastInvoiceAdapter`: Crawl PDF gốc Vingroup/VinFast qua cookie session + captcha solver + WAF detection.
+      - `EasyInvoiceAdapter`: Tải PDF gốc Softdreams EasyInvoice trực tiếp qua Fkey candidate URL.
+      - `ViettelInvoiceAdapter`: Tải PDF gốc Viettel S-Invoice qua mã bí mật.
+      - `InvoicePdfDownloadWorkerService`: Worker tải đa luồng nền có concurrency pool (mặc định 3 luồng), lưu trữ S3 RustFS / Cloudflare R2, tạo erp_attachments chính quy và cập nhật tiến trình vào bảng `erp_einvoice_syncs`.
     - `InvoiceQueryService` (Facade ~150 dòng) điều phối:
       - `InvoiceListQueryService`: Phân trang, lọc đa chiều, tính grand & cumulative totals.
       - `InvoiceItemsQueryService`: Chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
@@ -101,7 +113,15 @@ Các nghiệp vụ trọng tâm:
 | `created_by` | `uuid` | YES | `NULL` | ID người tạo / import |
 | `license_plate` | `varchar(50)` | YES | `NULL` | Biển số xe được trích xuất tự động |
 | `settlement_order` | `varchar(100)` | YES | `NULL` | Số quyết toán / số lệnh sửa chữa trích xuất tự động |
-| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file PDF chính |
+| `sync_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_einvoice_syncs.id` |
+| `msttcgp` | `varchar(20)` | YES | `NULL` | Mã số thuế nhà cung cấp giải pháp HĐĐT (MISA, Viettel...) |
+| `provider_code` | `varchar(50)` | YES | `NULL` | Mã định danh NCC: `VINFAST`, `EASYINVOICE`, `MISA`, `VIETTEL`, `VNPT`, `BKAV`, `THAISON`, `CYBERBILL`, `FPT`, `MINVOICE` |
+| `lookup_url` | `text` | YES | `NULL` | Đường dẫn cổng tra cứu chính thức của bên bán |
+| `lookup_code` | `varchar(255)` | YES | `NULL` | Mã tra cứu / Fkey / Mã bí mật / Salt của hóa đơn |
+| `pdf_path` | `text` | YES | `NULL` | Đường dẫn lưu trữ tệp trên disk máy chủ cục bộ |
+| `pdf_source` | `varchar(30)` | YES | `NULL` | Nguồn gốc tệp PDF: `provider_original` (PDF gốc chính thức), `manual_upload`, `failed` |
+| `pdf_error` | `text` | YES | `NULL` | Thông tin chi tiết lỗi nếu tải PDF gốc từ NCC thất bại |
+| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2/S3 file PDF chính |
 | `pdf_files` | `jsonb` | YES | `NULL` | Danh sách các file PDF đính kèm: `[{ fileKey, originalName, fileSize, uploadedAt, documentType, ... }]` |
 | `xml_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file XML gốc |
 | `xml_import_id` | `uuid` | YES | `NULL` | Mã batch XML import nếu có |
@@ -112,6 +132,24 @@ Các nghiệp vụ trọng tâm:
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.2. Bảng `erp_einvoice_syncs` (Quản Lý Tiến Trình Đồng Bộ & Tải PDF Gốc Hóa Đơn)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `company_tax_code` | `varchar(20)` | NO | — | Mã số thuế của doanh nghiệp được đồng bộ |
+| `sync_type` | `varchar(20)` | NO | — | Chiều đồng bộ: `purchase` (mua vào) hoặc `sold` (bán ra) |
+| `query_type` | `varchar(20)` | NO | — | Loại tra cứu: `query` (HĐ thông thường), `sco-query` (máy tính tiền), `all` |
+| `from_date` | `timestamptz` | NO | — | Thời điểm bắt đầu khoảng ngày tra cứu |
+| `to_date` | `timestamptz` | NO | — | Thời điểm kết thúc khoảng ngày tra cứu |
+| `total_found` | `int` | NO | `0` | Tổng số lượng hóa đơn tìm thấy từ GDT |
+| `total_pdf_success` | `int` | NO | `0` | Số lượng hóa đơn đã tải thành công PDF gốc từ NCC |
+| `total_pdf_failed` | `int` | NO | `0` | Số lượng hóa đơn thất bại khi tải PDF gốc |
+| `status` | `varchar(30)` | NO | `'in_progress'` | Trạng thái tiến trình: `in_progress`, `completed`, `failed` |
+| `error_message` | `text` | YES | `NULL` | Thông điệp lỗi tổng quan nếu tác vụ thất bại |
+| `created_by` | `uuid` | YES | `NULL` | ID người dùng kích hoạt tiến trình |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm khởi tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
 ### 2.2. Bảng `erp_invoice_items` (Chi Tiết Mặt Hàng Hóa Đơn)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
@@ -688,6 +726,30 @@ Toàn bộ chi tiết từng dòng mặt hàng hóa đơn đầu vào (`erp_invo
 7. **Hành Chính & VPP (`HC-*`)**:
    - `HC-NUOC`: Nước uống tiếp khách/thợ (Biwase, Viva, Lavie, Aquafina, Ion Life).
    - `HC-VPP`: Giấy in A4, bìa còng, giấy in bill.
+
+### 8.9. Cơ Chế Quản Lý, Bóc Tách Metadata & Tải PDF Gốc Từ Nhà Cung Cấp (Original Provider PDF Pipeline)
+Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và tải tệp PDF gốc trực tiếp từ cổng nhà cung ứng:
+1. **Bóc Tách Metadata Tra Cứu Từ XML GDT (`extractInvoiceMetadataFromXml`)**:
+   - Khi XML được tải từ GDT hoặc người dùng import, hệ thống phân tích XML chuẩn TT78 để trích xuất `provider_code`, `lookup_code`, `lookup_url`, `msttcgp`, `seller_tax_code`.
+   - **HILO / GSM (Taxi Xanh SM)**: Bóc tách mã tra cứu từ thẻ `<TTruong>Hilo-SearchKey</TTruong>` trong `<TTKhac>`, nhận diện cổng tra cứu `https://gsm-einvoice.hilo.com.vn/`.
+   - **VinFast / Vingroup**: Trích xuất chuỗi mã Salt tra cứu từ metadata/chữ ký mở rộng.
+   - **MISA meInvoice**: Trích xuất `transactionId`.
+   - **EasyInvoice**: Trích xuất `fkey` và cổng tra cứu của bên bán.
+   - **Viettel S-Invoice**: Trích xuất cổng tra cứu `https://sinvoice.viettel.vn/tracuuhoadon`.
+2. **Cơ Chế Adapter Tải Trực Tiếp Từ Cổng Nhà Cung Cấp (`IProviderAdapter`)**:
+   - Hệ thống không sử dụng cơ chế convert máy nội bộ mà kết nối trực tiếp tới API/cổng tra cứu chính thức của từng NCC (`HiloInvoiceAdapter`, `MisaInvoiceAdapter`, `VinfastInvoiceAdapter`, `ViettelInvoiceAdapter`, `EasyInvoiceAdapter`).
+   - Chi tiết kỹ thuật & kịch bản vận hành CLI tham khảo skill: 👉 [download-provider-invoice-pdf](file:///home/dev/repos-dev-02/erp/erp-api/.agents/skills/download-provider-invoice-pdf/SKILL.md).
+   - **Đã hỗ trợ tự động 100%**:
+     - **HILO (GSM Xanh SM)**: Tra cứu và tải tự động qua API `GET /Inv/GetPdf?ID={hiloInvId}`.
+     - **MISA meInvoice**: Khởi tạo session ASP.NET, gọi `POST /tra-cuu/GetInvoiceDataByTransactionID` lấy token `customData`, sau đó tải PDF gốc có chữ ký điện tử qua `GET /tra-cuu/DownloadHandler.ashx`.
+     - **CyberBill (CyberLotus)**: Tự động điều hướng Cluster 1 / Cluster 2 (`bill1app.xcyber.vn` / `bill2app.xcyber.vn`), giải captcha AI Vision bằng `InvoiceCaptchaSolverService`, tra cứu và tải PDF gốc.
+   - Tệp PDF gốc tải về được lưu trữ tại S3 RustFS `invoices/pdf/{id}.pdf`, tự động tạo bản ghi trong `erp_attachments` và liên kết vào `erp_invoice_attachments`.
+3. **Thực Tế Rào Cản Bảo Mật Từ Các Cổng NCC Khác & Giải Pháp 1-Chạm Trên UI**:
+   - **Rào cản WAF/Bot Blocking & Cổng VinFast**: Cổng portal Vingroup (`e-invoice-tt78.vingroup.net`) không hỗ trợ tra cứu hóa đơn trực tiếp chỉ bằng chuỗi Salt trích xuất từ XML của Tổng cục Thuế. File `invoice.html` trong gói ZIP của VinFast là template đại trà của CyberLotus (nền trống đồng, không có logo VinFast cánh chim, không có mã chứng từ SAP), không thay thế được bản PDF gốc từ Vingroup. Người dùng sử dụng giải pháp mở cổng 1-chạm hoặc tải file thủ công.
+   - **Giải Pháp 1-Chạm Trực Quan (`ProviderLookupInfoCard`)**:
+     - Nằm tại sidebar Drawer chi tiết hóa đơn, hiển thị tên NCC, mã tra cứu.
+     - Tích hợp nút **"Chép mã"** (1-click copy) và **"Mở Cổng Tra Cứu"**: Khi người dùng nhấn nút, trình duyệt mở thẳng portal chính thức của bên bán với thông tin điền sẵn, giúp kế toán tra cứu và tải PDF gốc trực tiếp trên trình duyệt cá nhân mà không bị WAF của NCC chặn.
+
 
 
 

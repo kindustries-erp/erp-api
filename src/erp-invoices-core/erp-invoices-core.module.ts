@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ErpInvoice } from './entities/erp_invoice.entity';
+import { ErpEInvoiceSync } from './entities/erp_einvoice_sync.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
 import { ErpInvoiceAdjustmentNetOff } from './entities/erp_invoice_adjustment_netoff.entity';
@@ -59,10 +60,24 @@ import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-
 import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
 import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
 
+import { InvoiceOriginalPdfController } from './controllers/invoice-original-pdf.controller';
+import { InvoiceOriginalPdfFacade } from './services/original-pdf/invoice-original-pdf.facade';
+import { InvoiceProviderDetectorService } from './services/original-pdf/invoice-provider-detector.service';
+import { InvoiceCaptchaSolverService } from './services/original-pdf/invoice-captcha-solver.service';
+import { InvoicePdfDownloadWorkerService } from './services/original-pdf/invoice-pdf-download-worker.service';
+import { ProviderAdapterRegistry } from './services/adapters/provider-adapter.registry';
+import { VinfastInvoiceAdapter } from './services/adapters/vinfast-invoice.adapter';
+import { EasyInvoiceAdapter } from './services/adapters/easy-invoice.adapter';
+import { MisaInvoiceAdapter } from './services/adapters/misa-invoice.adapter';
+import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapter';
+import { HiloInvoiceAdapter } from './services/adapters/hilo-invoice.adapter';
+import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.adapter';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       ErpInvoice,
+      ErpEInvoiceSync,
       ErpInvoiceItem,
       ErpInvoiceVoucherNetOff,
       ErpInvoiceAdjustmentNetOff,
@@ -89,6 +104,7 @@ import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjust
   controllers: [
     InvoiceDebtsController,
     InvoiceDashboardController,
+    InvoiceOriginalPdfController,
     ErpInvoicesCoreController,
   ],
   providers: [
@@ -117,6 +133,17 @@ import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjust
     InvoiceCategoryAutopostService,
     InvoiceItemCodeResolverService,
     InvoiceAdjustmentService,
+    InvoiceProviderDetectorService,
+    InvoiceCaptchaSolverService,
+    ProviderAdapterRegistry,
+    VinfastInvoiceAdapter,
+    EasyInvoiceAdapter,
+    MisaInvoiceAdapter,
+    ViettelInvoiceAdapter,
+    HiloInvoiceAdapter,
+    CyberbillInvoiceAdapter,
+    InvoicePdfDownloadWorkerService,
+    InvoiceOriginalPdfFacade,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -131,6 +158,8 @@ import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjust
     InvoiceCategoryAutopostService,
     InvoiceItemCodeResolverService,
     InvoiceAdjustmentService,
+    InvoiceOriginalPdfFacade,
+    InvoiceProviderDetectorService,
   ],
 })
 export class ErpInvoicesCoreModule {}

@@ -361,12 +361,28 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.7. Đối Soát & Kiểm Tra Hóa Đơn Thuế Gắn Kèm (`kgara_case_linked_invoice`)
 - Phân loại 2 chiều:
-  - `linkType = 'IN'`: Hóa đơn mua phụ tùng, dầu nhớt, vật tư tiêu hao đầu vào cấu thành nên chi phí vụ việc.
-  - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng tương ứng với doanh thu dịch vụ.
+  - `linkType = 'IN'`: Hóa đơn mua phụ tùng, dầu nhớt, vật tư tiêu hao đầu vào cấu thành nên chi phí vụ việc (gắn với Bảng Chi Phí Vụ Việc).
+  - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng hoặc bên bảo hiểm tương ứng với doanh thu dịch vụ (gắn với Bảng Phải Thu & Phân Bổ).
+- **Cột "HĐ đã cấn trừ" trên 2 Bảng Tài Chính**:
+  - `QuoteReceivablesTable` (Phải thu KH & BH) và `QuoteCostTable` (Chi phí NCC & Thợ) đều hiển thị cột **"HĐ đã cấn trừ"** (`linkedInvoices`).
+  - Mỗi badge hóa đơn hiển thị số HĐ kèm dot trạng thái:
+    - 🟢 **Xanh lá (`Đã khớp sao kê`)**: Khi hóa đơn đã có cấn trừ dòng tiền thực tế qua sao kê ngân hàng / tiền mặt (`hasBankNetOff === true` hoặc `bankSettledAmount > 0`).
+    - 🟡 **Vàng hổ phách (`Chưa khớp sao kê`)**: Hóa đơn đã gắn với vụ việc nhưng bản thân hóa đơn chưa được cấn trừ với giao dịch sao kê nào.
+  - Khi chưa có HĐ nào cấn trừ: hiển thị dấu gạch ngang mờ (`—`).
 - Ràng buộc toàn vẹn: Khi bản ghi `kgara_gross_profit` hoặc `kgara_cases` bị xóa, các dòng liên kết hóa đơn tương ứng sẽ tự động bị xóa theo (`onDelete: 'CASCADE'`), đảm bảo không để lại bản ghi mồ côi.
 
 ### 5.8. Quy tắc Quản lý Dòng tiền & Công nợ 100% trên ERP (`kgara_case_settlements` & `bank_transactions`)
 - **Nguyên tắc nghiệp vụ dòng tiền**: Không sử dụng các trường thanh toán cũ trên máy chủ KGara để theo dõi thu/chi, vì trên thực tế KGara không quản lý tài khoản thu/chi thực tế của doanh nghiệp.
+- **Preset Tab Priority Router khi Mở Drawer Thu/Chi Tiền (`CaseLinePaymentDrawer`)**:
+  - Khi người dùng click nút Thu tiền hoặc Chi tiền trên từng dòng vụ việc:
+    - **Ưu tiên 1 (`linked`)**: Nếu đã có hóa đơn cấn trừ cho dòng này (`linkedCount > 0`) ➔ Mở ngay tab **"Đã cấn trừ"** (`linked`).
+    - **Ưu tiên 2 (`suggestions`)**: Nếu chưa có cấn trừ nhưng có hóa đơn gợi ý khớp (`suggestionsCount > 0`) ➔ Mở tab **"Gợi ý khớp"** (`suggestions`).
+    - **Ưu tiên 3 (`all`)**: Chỉ khi không có cấn trừ và không có gợi ý (`linkedCount === 0 && suggestionsCount === 0`) ➔ Mới mở tab **"Tất cả"** (`all`).
+    - **Lưu lựa chọn người dùng**: Khi người dùng tự tay click chọn preset tab khác (`setViewPreset`), trạng thái được ghi nhớ qua `userSelectedPresetRef` và không bị ghi đè bởi auto router.
+- **Right Panel Cấn Trừ (`CaseLinePaymentRightPanel`)**:
+  - Gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán, và **Số tiền cần cấn trừ** (`targetAmount`).
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng/Dòng xe, Trạng thái, Ngày tiếp nhận/phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) kế thừa trực tiếp từ `caseData`.
 - **Theo dõi 2 chiều dòng tiền thực tế thuần túy trên ERP (Pure Cashflow Standard)**:
   - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
   - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
@@ -536,35 +552,51 @@ Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
 
 ## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
 
-### 9.1. Phân Tầng Tab Tài Chính & Khối 3 Bảng Chuẩn Hóa (`QuoteFinancialsTabContent`)
-Toàn bộ chi tiết vật tư, dịch vụ và phân bổ tài chính của Sổ báo giá được di chuyển từ tab Chi tiết sang phía trên Master Domain Switcher trong Tab Tài chính (`GarageCaseFinancialsTab`), hiển thị theo thứ tự chuẩn hóa:
-1. **Bảng Phải thu & Phân bổ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
-   - Dữ liệu: `QuoteFinancialItem[]` (build từ `buildFinancialItems`).
-   - Cột chuẩn: STT 40px, Thứ tự `#`, Nhóm nghiệp vụ (Doanh thu / Giảm trừ / Thanh toán / Hoa hồng / Lợi nhuận), Khoản mục tài chính, Tỷ lệ %, Số tiền (VND), Bên chịu phí (Khách hàng / Bảo hiểm / Garage).
-   - **2 Cột Thanh toán riêng biệt**:
-     - Cột **Khách hàng TT**: Kích hoạt cho các dòng Khách hàng thanh toán, click mở `CaseLinePaymentDrawer` với `payer = "KH"`.
-     - Cột **Bảo hiểm TT**: Kích hoạt độc quyền cho các dòng liên quan Bảo hiểm (`payer === "BH"`), click mở `CaseLinePaymentDrawer` với `payer = "BH"`. Các dòng không thuộc bảo hiểm hiển thị `---`.
-   - Footer: Tổng cộng kiểm tra tính khớp nối giữa tổng doanh thu phải thu và các khoản thanh toán.
-2. **Bảng Chi tiết Vật tư & Phụ tùng (`QuotePartsTable`)** — Đứng thứ hai:
-   - Dữ liệu: Lọc các dòng `itemType === "PT"`.
-    - Cột: STT, Loại (badge Vật tư emerald), Mã PT, Tên phụ tùng, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, Bảo hiểm duyệt, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
-    - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
-3. **Bảng Chi tiết Nhân công & Dịch vụ (`QuoteServicesTable`)** — Đứng thứ ba:
-   - Dữ liệu: Lọc các dòng `itemType === "DV"`.
-   - Cột: STT, Loại (badge Dịch vụ amber), Mã DV, Tên dịch vụ, SL, Đơn giá, %GG, Thành tiền, Thuế, ĐG vốn, Tổng vốn, Kỹ thuật viên, và cột **Cấn trừ chi** (Nút "Chi tiền" màu amber).
-   - Click nút Chi tiền → Mở `CaseLinePaymentDrawer` cấn trừ Hóa đơn mua vào (`IN`) hoặc Chi ngoài sổ (`PAYMENT`).
+### 9.1. Phân Tầng Tab Tài Chính & Khối Chuẩn Hóa (`QuoteFinancialsTabContent` & Right Panel)
+Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, Unified Financial Tree, `/standardize-table` và `/ui-atomic-refactor`:
+
+1. **Bảng 1: Phải thu & Cấn trừ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `1. Bảng Phải thu & Cấn trừ` (icon `Landmark`, text-primary).
+   - **Kiến trúc Unified Financial Tree**: Dùng chung các component nguyên tử với Bảng 2 (`FinancialTreeParentRow`, `FinancialTreeChildRow` từ `financial-tree-rows`).
+   - Dòng cha mục tiêu: Hiển thị Tổng phải thu vụ việc, số tiền đã thu, còn lại và nút `[Thu tiền]` (hoặc tách `[Thu KH]` / `[Thu BH]` nếu có bảo hiểm duyệt).
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu ra (OUT) và phiếu thu tiền / sao kê ngân hàng.
+   - **Kiểm soát nút Xóa theo Edit Mode**: Nút Xóa (thùng rác) chỉ active khi ở Chế độ chỉnh sửa (`editMode === true` và có đủ quyền). Khi ở chế độ xem, nút Xóa bị **Inactive / Disabled** (`opacity-30 cursor-not-allowed`) kèm tooltip *"Cần bật Chế độ chỉnh sửa để thao tác."*.
+
+2. **Bảng 2: Phải trả & Cấn trừ (`QuoteCostTable` / `QuoteCostSummarySection`)**:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `2. Bảng Phải trả & Cấn trừ` (icon `Wallet`, text-amber-600).
+   - **Trích xuất giá trị trường Chi phí mục tiêu**: Lấy trực tiếp từ field `ChiPhi` (`caseData?.chiPhi ?? caseData?.rawData?.ChiPhi ?? grossProfit?.ChiPhi ?? 0`), **tuyệt đối không cộng dồn giá vốn phụ tùng + nhân công**.
+   - Dòng cha mục tiêu: Tiêu đề chuẩn hóa `Tổng phải trả vụ việc`, hiển thị số tiền mục tiêu, số tiền đã chi, còn lại và nút `[Chi tiền]`.
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu vào (IN) và phiếu chi tiền / sao kê ngân hàng.
+   - Nút Xóa ở các dòng con cấn trừ đồng bộ hành vi: chỉ active khi ở Chế độ chỉnh sửa (`editMode === true`).
+
+3. **Cột Phải Drawer Tinh Giản & Đồng Bộ Hoàn Hảo (`GarageCaseFinancialsRightPanel`)**:
+   - **Section 1: Thông tin chung**: Bổ sung icon chuẩn trung tính `<Info className="w-3.5 h-3.5 text-muted-foreground" />` (không màu mè, đồng bộ ở cả `ReconciliationRightPanel` và `GarageCaseGeneralInfoSection`).
+   - **Section 2: Hiệu quả kinh doanh & Lợi nhuận (`GarageCaseBusinessPerformanceSection`)**: Thay thế hoàn toàn section "Hiệu quả lợi nhuận gộp" cũ bằng `GarageCaseBusinessPerformanceSection` (kế thừa trực tiếp cấu trúc từ tab Chi tiết, nhận `caseData` và `grossProfit`). Header bổ sung icon `<TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />` không màu mè. Hiển thị đầy đủ Doanh thu (chưa thuế), Tổng chi phí vụ việc (kèm breakdown giá vốn, gia công, hoa hồng nếu có), Lợi nhuận gộp và Biên lợi nhuận.
+   - Tuân thủ **No Blue Mandate**: Toàn bộ UI tuân thủ hệ màu chuẩn `primary`, `slate`, `amber`, `emerald` và `rose`.
 
 ### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
 - Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
   - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
-  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị:
+    - Badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+    - Nút **"Đang chọn" (`CaseLinePaymentSelectedButton`)**: Tách biệt khỏi PillTabs, hiển thị ngay trên header cùng hàng bên phải tiêu đề khi `selectedCount > 0` (ẩn khi = 0 theo Phương án A). Hỗ trợ click toggle kích hoạt bộ lọc xem các mục đang chọn.
   - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
-    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` bên trái với thứ tự đảo ngược ưu tiên: `Đã cấn trừ` (`linked`) ➔ `Đang chọn` (`selected`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`).
-    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ"**: Tích hợp `ManualCashflowTabContent` ghi nhận dòng tiền thực tế ngoài sổ sách kèm lịch sử cấn trừ.
-  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section:
-    - Thông tin định danh khoản mục (Phân loại, Mã, Tên, Bên chịu phí / thanh toán).
-    - KPI Bar tiến độ cấn trừ: Số tiền mục tiêu | Đã chọn cấn trừ | Còn thiếu kèm Progress Bar màu emerald.
-  - Actions: Nút footer biến đổi theo tab — khi ở tab HĐ hiển thị "Lưu cấn trừ (X HĐ)", khi ở tab Thu/Chi ngoài sổ sách hiển thị "Ghi nhận thu ngoài sổ" / "Ghi nhận chi ngoài sổ" (kích hoạt `handleSubmitBankAndCash`, kết nối đầy đủ `handleAddManualToDraft` và `activeSettlements`).
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` (`CaseLinePaymentPresetBar`) với 3 tabs thuần túy phân loại nguồn dữ liệu: `Đã cấn trừ` (`linked`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`). Thứ tự ưu tiên auto-active tự động chọn tab đầu tiên có dữ liệu.
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ" (`ManualCashflowTabContent`)**: Cho phép ghi nhận thu/chi tiền mặt hoặc ngoài sổ trực tiếp.
+  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán / chịu phí, và **Số tiền cần cấn trừ**.
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng / Dòng xe, Trạng thái, Ngày phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) dùng `DrawerSection` (collapsible, icon `FileSpreadsheet`).
+  - **Cơ chế Draft-First Frontend Save Flow**:
+    - Khi người dùng chọn HĐ cấn trừ hoặc nhập thu/chi ngoài sổ và bấm "Lưu cấn trừ" / "Ghi nhận", hệ thống **CHỈ LƯU VÀO STATE Ở FRONTEND** (`useGarageCaseEditForm` thông qua callbacks `onAddInvoice`, `onRemoveInvoice`, `onAddSettlement`, `onRemoveSettlement`), đóng drawer con mà **không gọi API và không invalidate queries**.
+    - Chỉ khi người dùng bấm **"Lưu thay đổi"** tại Drawer Sổ báo giá (`GarageCaseStandaloneDrawer`), toàn bộ thay đổi mới được gọi API batch save xuống cơ sở dữ liệu.
+  - **Phân rã Atomic Kiến trúc (< 180 LoC per file)**:
+    - `CaseLinePaymentDrawer.tsx` (112 LoC)
+    - `useCaseLinePaymentTabs.tsx` (118 LoC)
+    - `useCaseLinePaymentActions.ts` (75 LoC)
+    - `CaseLinePaymentSelectedButton.tsx` (55 LoC)
+    - `CaseLinePaymentPresetBar.tsx` (67 LoC)
+    - 100% co-located Vitest tests pass và No Blue Mandate.
+
 
 ### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
 - Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
@@ -604,4 +636,66 @@ Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue 
      - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
 4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
 
+### 9.5. Kiến Trúc Cây Phân Cấp (Tree Table) Cho Bảng Phải Thu & Bảng Chi Phí Vụ Việc (`/ui-atomic-refactor`)
 
+Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất giữa thu và chi theo luồng Draft-First:
+1. **Thống Nhất Mô Hình 1 Dòng Cha Mục Tiêu (Unified Parent Target Row)**:
+   - **Bảng Phải Thu (`QuoteReceivablesTable`)**: Thay vì hiển thị tách 2 dòng độc lập, bảng hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng phải thu vụ việc` (`tienCoThue`).
+     - Khi vụ việc có bảo hiểm (`tienThanhToanBh > 0`): Dòng cha hiển thị subtitle tag phân bổ `(KH: ... ₫ • BH: ... ₫)` và cung cấp 2 nút thanh toán `[Thu KH]` và `[Thu BH]`.
+     - Khi vụ việc không có bảo hiểm: Hiển thị nút thanh toán duy nhất `[+ Thu tiền]`.
+   - **Bảng Chi Phí (`QuoteCostTable` / `QuoteCostSummarySection`)**: Hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng chi phí vụ việc` (`totalCost`), hiển thị tiến độ Đã chi vs Còn lại, cùng nút hành động `[+ Chi tiền]`.
+2. **Các Dòng Con Thụt Lề Cấn Trừ (Indented Child Rows `↳`)**:
+   - Khi có hóa đơn liên kết hoặc phiếu thanh toán/sao kê đã cấn trừ, các dòng con sẽ tự động hiển thị bên dưới dòng cha với icon cong `↳` (`CornerDownRight`).
+   - Cột `% Tổng` trực quan: Thể hiện tỷ lệ phần trăm từng dòng cấn trừ so với số tiền mục tiêu của dòng cha.
+   - Icon nhận diện loại chứng từ: Hóa đơn điện tử (🧾), Tiền mặt (💵), Chuyển khoản sao kê (🏦).
+   - Tag trạng thái `Chờ lưu` cho các khoản vừa gán nháp ở client.
+   - Nút Thùng rác đỏ xóa/gỡ cấn trừ trực tiếp trên từng dòng con khi ở chế độ chỉnh sửa.
+3. **Phân Rã Atomic & Tuân Thủ Chuẩn Mực (`/ui-atomic-refactor`)**:
+   - Tầng Molecules dùng chung trong `components/tables/financial-tree-rows/`:
+     - `FinancialTreeParentRow.tsx` (159 LoC) & `FinancialTreeParentRow.test.tsx` (112 LoC).
+     - `FinancialTreeChildRow.tsx` (108 LoC) & `FinancialTreeChildRow.test.tsx` (57 LoC).
+   - Tầng Business Helpers:
+     - `FinancialTreeReceivables.helper.ts` (121 LoC) & tests (147 LoC).
+     - `FinancialTreeCost.helper.ts` (96 LoC).
+   - Tầng Organisms & Sections:
+     - `QuoteReceivablesTable.tsx` (123 LoC) & tests (171 LoC).
+     - `QuoteCostTable.tsx` (87 LoC) & `QuoteCostSummarySection.tsx` (66 LoC).
+   - 100% file < 160 LoC (đảm bảo khống chế < 180 LoC), 0 vi phạm No Blue Mandate, 100% i18n qua `t()`, 100% unit tests pass.
+
+### 9.6. Chuẩn Hóa Cột Bảng Phiếu Dịch Vụ: Tách Cột Phải Thu KH / BH & Sắp Xếp Nhóm Tài Chính (`GarageCasesTable`)
+
+Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế toán và phân tách nguồn tiền thanh toán giữa Khách hàng và Đơn vị Bảo hiểm:
+1. **Tách 2 Cột Phải Thu Riêng Biệt (`phaiThuKhachHang` & `phaiThuBaoHiem`)**:
+   - **Phải thu Khách hàng (`phaiThuKhachHang`)**: Tiền dịch vụ/phụ tùng khách hàng chịu trách nhiệm thanh toán (`TienThanhToanKH`). Nếu xe không làm bảo hiểm (`XeLamBaoHiem = false`), toàn bộ tiền có thuế (`tienCoThue`) được tính cho khách hàng. Nếu xe làm bảo hiểm (`XeLamBaoHiem = true`), số tiền = $\max(0, \text{tienCoThue} - \text{bh})$.
+   - **Phải thu Bảo hiểm (`phaiThuBaoHiem`)**: Tiền do công ty bảo hiểm duyệt chi trả (`TienThanhToanBH` hoặc fallback `TienBaoHiemDuyet`). Nếu xe không làm bảo hiểm, mặc định bằng 0.
+   - Hỗ trợ đầy đủ: Định dạng tiền tệ `money(...)`, lọc giá trị distinct options server-side, sắp xếp sort 2 chiều và dòng cộng tổng kết trang/lũy kế (`SubtotalSummaryCell`).
+2. **Cấu Hình Preset & Tách Cột Mặc Định Cả 2 View**:
+   - Cả hai chế độ xem **Tổng quan** (`overview`) và **Đối soát** (`audit`) đều mặc định hiển thị 2 cột tách biệt `phaiThuKhachHang: true` và `phaiThuBaoHiem: true`, đồng thời ẩn cột gộp `collectionProgress: false`. Người dùng vẫn có thể chủ động bật lại cột gộp trong Drawer *Tùy chỉnh cột* khi cần xem thanh tiến độ tổng.
+3. **Thứ Tự Cột Động Theo Chế Độ Xem (Dynamic Column Order)**:
+   - **View Tổng quan (`overview`)**: Nhóm kết quả kinh doanh (**Doanh thu**, **Chi phí**, **Lợi nhuận**, **Biên LN**) được ưu tiên hiển thị **PHÍA TRƯỚC** các cột phải thu/phải trả:
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN}$$
+     $$\rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
+   - **View Đối soát (`audit`) (và các view khác)**: Khối tiến độ thu/trả được ưu tiên hiển thị **TRƯỚC**, các cột kết quả kinh doanh nằm phía sau cột Còn phải trả (`tienConPhaiChi`):
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả}$$
+     $$\rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
+
+
+
+
+4. **Bật Cột Ngày Tiếp Nhận & Ngày Kết Thúc trong View Đối Soát (`audit`)**:
+   - Mặc định bật `caseDate: true` và `ngayHoanThanhCongViec: true` trong `AUDIT_GARAGE_CASE_COLUMN_VISIBILITY` tại `garageCaseViewPresets.ts`. Hiển thị ở đầu bảng ngay sau cột STT `#`.
+5. **Chuẩn Hóa Kích Thước Cột (`Column Sizes`) & App Tooltip Chống Tràn Chữ**:
+   - `caseDate` (Ngày tiếp nhận): `130px`.
+   - `ngayHoanThanhCongViec` (Ngày kết thúc): `130px`.
+   - `caseCode` (Số chứng từ): `180px`.
+   - `customer` (Khách hàng): `200px`.
+   - `kgaraClassification` (Phân loại KGara): `150px` (bọc `Tooltip` chống tràn nội dung).
+   - `classification` (Phân loại nghiệp vụ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `exclusionRules` (Quy tắc loại trừ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `statusName` (Trạng thái dịch vụ): `130px`.
+   - Các cột số tiền (`doanhThu`, `chiPhi`, `loiNhuan`, `collectionProgress`, `phaiThuKhachHang`, `phaiThuBaoHiem`, `tienConPhaiThanhToan`, `costProgress`, `tienConPhaiChi`): đồng bộ `140px`.
+6. **Di Chuyển Icon Liên Kết Hóa Đơn (`Link2`) sang Cột HĐ VAT (`hasInvoice`)**:
+   - Gỡ bỏ icon `Link2` khỏi `GarageCaseCodeCell` để ô số chứng từ hiển thị gọn gàng, không bị nghẽn thông tin.
+   - Đưa vào cột `hasInvoice` (`100px`): Khi `totalLinked > 0`, render button `Link2` kèm Tooltip chi tiết (`x HĐ bán ra, y HĐ mua vào`) và click mở Drawer đối soát HĐ (`onOpenFinancials`). Khi có cờ VAT, hiển thị song song cả `FileCheck` và `Link2`.
+7. **Tuân Thủ Tuyệt Đối `/ui-atomic-refactor`**:
+   - 100% files liên quan kiểm soát chặt chẽ dưới ngưỡng **< 180 LoC** (`GarageCaseCodeCell`: 98 LoC, `financial-columns`: 172 LoC, `general-columns`: 175 LoC, `date-columns`: 62 LoC, `progress-columns`: 158 LoC, `classification-dropdown`: 176 LoC, `exclusion-dropdown`: 166 LoC). 100% i18n, No Blue Mandate và 56/56 test files phân hệ Garage đạt PASS.

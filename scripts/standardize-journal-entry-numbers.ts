@@ -3,13 +3,12 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 // Load env
-const envPath = path.resolve(__dirname, '../.env.greenway-production');
-dotenv.config({ path: envPath });
-dotenv.config(); // fallback
+dotenv.config();
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://erp_greenway_production_admin:Cg4b6wqHAH3kWVP2pbCismcari9Tz-4ueB4YH_Pd@db-dev.liouni.com:5433/erp_greenway_production?sslmode=disable';
+const DATABASE_URL: string = process.env.DATABASE_URL || '';
+if (!DATABASE_URL) {
+  throw new Error('❌ Thiếu biến DATABASE_URL trong môi trường hoặc file .env');
+}
 
 const isExecute = process.argv.includes('--execute');
 
@@ -29,9 +28,13 @@ function formatYyyyMmDd(dateInput: Date | string | null): string {
 
 async function main() {
   console.log('='.repeat(80));
-  console.log('🚀 STANDARDIZE JOURNAL ENTRY NUMBERS (OPTION 3: 4-DIGIT SEQUENTIAL)');
+  console.log(
+    '🚀 STANDARDIZE JOURNAL ENTRY NUMBERS (OPTION 3: 4-DIGIT SEQUENTIAL)',
+  );
   console.log(`Target DB: ${DATABASE_URL.split('@')[1] || DATABASE_URL}`);
-  console.log(`Mode: ${isExecute ? '⚡ EXECUTE (APPLYING CHANGES)' : '🔍 DRY-RUN (SIMULATION ONLY)'}`);
+  console.log(
+    `Mode: ${isExecute ? '⚡ EXECUTE (APPLYING CHANGES)' : '🔍 DRY-RUN (SIMULATION ONLY)'}`,
+  );
   console.log('='.repeat(80));
 
   await ds.initialize();
@@ -40,7 +43,9 @@ async function main() {
 
   try {
     // 1. Tạo bảng erp_document_sequences nếu chưa có
-    console.log('\n📦 Ensuring erp_document_sequences table and indexes exist...');
+    console.log(
+      '\n📦 Ensuring erp_document_sequences table and indexes exist...',
+    );
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS erp_document_sequences (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,8 +82,19 @@ async function main() {
     console.log(`\n📊 Total journal entries in DB: ${rows.length}`);
 
     // 3. Gom nhóm theo (prefix, period, branchId) để đánh số tuần tự 0001, 0002...
-    const groups = new Map<string, Array<{ id: string; oldEntryNo: string | null; createdAt: string }>>();
-    const groupMaxSeq = new Map<string, { prefix: string; period: string; branchId: string | null; maxSeq: number }>();
+    const groups = new Map<
+      string,
+      Array<{ id: string; oldEntryNo: string | null; createdAt: string }>
+    >();
+    const groupMaxSeq = new Map<
+      string,
+      {
+        prefix: string;
+        period: string;
+        branchId: string | null;
+        maxSeq: number;
+      }
+    >();
 
     for (const row of rows) {
       const oldNo = row.entry_no || '';
@@ -94,7 +110,9 @@ async function main() {
         else if (row.source_type === 'BANK') prefix = 'UNC';
         else if (row.source_type === 'CASH') prefix = 'PC';
         else prefix = 'CT';
-        yyyymmdd = formatYyyyMmDd(row.date || row.document_date || row.created_at);
+        yyyymmdd = formatYyyyMmDd(
+          row.date || row.document_date || row.created_at,
+        );
       }
 
       const branchKey = row.branch_id || 'DEFAULT';
@@ -117,7 +135,11 @@ async function main() {
       });
     }
 
-    const updates: Array<{ id: string; oldEntryNo: string | null; newEntryNo: string }> = [];
+    const updates: Array<{
+      id: string;
+      oldEntryNo: string | null;
+      newEntryNo: string;
+    }> = [];
 
     for (const [groupKey, items] of groups.entries()) {
       const meta = groupMaxSeq.get(groupKey)!;
@@ -135,7 +157,9 @@ async function main() {
       meta.maxSeq = seq - 1;
     }
 
-    console.log(`\n📋 Group summary: Processed ${groups.size} daily sequence groups.`);
+    console.log(
+      `\n📋 Group summary: Processed ${groups.size} daily sequence groups.`,
+    );
     console.log(`\n📋 Preview first 20 migrations:`);
     console.table(
       updates.slice(0, 20).map((u, i) => ({
@@ -151,8 +175,12 @@ async function main() {
     }
 
     if (!isExecute) {
-      console.log('\n⚠️ DRY-RUN COMPLETE. No changes were committed to the database.');
-      console.log('To apply these changes, re-run with: bunx ts-node scripts/standardize-journal-entry-numbers.ts --execute');
+      console.log(
+        '\n⚠️ DRY-RUN COMPLETE. No changes were committed to the database.',
+      );
+      console.log(
+        'To apply these changes, re-run with: bunx ts-node scripts/standardize-journal-entry-numbers.ts --execute',
+      );
       return;
     }
 
@@ -184,7 +212,9 @@ async function main() {
     }
 
     await queryRunner.commitTransaction();
-    console.log(`\n🎉 Successfully updated ${count} journal entries to 4-digit sequential format!`);
+    console.log(
+      `\n🎉 Successfully updated ${count} journal entries to 4-digit sequential format!`,
+    );
 
     // Kiểm tra lại sau khi cập nhật
     const finalStats = await queryRunner.query(`

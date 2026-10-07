@@ -67,7 +67,17 @@ export class KgaraCaseFinancialController {
               i.total_amount as "totalAmount",
               i.pre_vat_amount as "preVatAmount",
               i.vat_amount as "vatAmount",
-              i.description as "description"
+              i.description as "description",
+              COALESCE((
+                SELECT SUM(no.net_off_amount) 
+                FROM erp_invoice_voucher_netoff no 
+                WHERE no.invoice_id = l."invoiceId"
+              ), 0)::numeric as "bankSettledAmount",
+              EXISTS(
+                SELECT 1 
+                FROM erp_invoice_voucher_netoff no 
+                WHERE no.invoice_id = l."invoiceId"
+              ) as "hasBankNetOff"
        FROM kgara_case_linked_invoice l
        LEFT JOIN erp_invoices i ON l."invoiceId" = i.id
        WHERE l."caseDbId"::text = $1

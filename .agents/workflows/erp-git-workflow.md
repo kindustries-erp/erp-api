@@ -15,9 +15,9 @@ Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho 
    - Tuyệt đối **NGHIÊM CẤM** sửa code trực tiếp hoặc commit trực tiếp trên các nhánh môi trường/khách hàng (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-production`, `erp-klotus-staging`) mà không xuất phát từ `erp-master`.
 2. **Sử dụng đường dẫn tương đối — Tuyệt đối KHÔNG chạy Git ở root workspace**:
    - Luôn `cd` vào repo con: `./erp-api` (Backend) hoặc `./erp-web` (Frontend).
-3. **🛡️ Test-First Guard**:
-   - **`erp-api`**: **BẮT BUỘC** chạy `bunx jest --forceExit` (hoặc `bun run test`) và `bun run check:ci` pass 100% tests trước khi commit & trước khi push.
-   - **`erp-web`**: **BẮT BUỘC** chạy `bun run test` và `bun run check:ci` pass 100% tests trước khi commit & trước khi push.
+3. **🛡️ Test-First Guard (Kiểm Thử Phân Tầng & Chống Chạy Lặp)**:
+   - **Khi Commit**: Husky `pre-commit` tự động chạy `lint-staged` (< 2s). Chỉ test scoped các file thay đổi (`--findRelatedTests`), TUYỆT ĐỐI KHÔNG chạy full test suite cho mỗi commit nhỏ.
+   - **Khi Push `erp-master`**: BẮT BUỘC chạy `bun run check:ci` và full test pass 100% trước khi push. Khi push, dùng `--no-verify` để Husky không lặp lại test lần 2.
 4. **🛡️ Module Knowledge Sync Guard**:
    - Khi có thay đổi DB Schema, DTOs, API Endpoints, Permissions hoặc Business Logic của module, **BẮT BUỘC** rà soát và cập nhật file `.agents/skills/modules/<module-name>/SKILL.md` trước khi commit.
 5. **Không bao giờ ghi đè / làm mất code (No Override)**:
@@ -58,11 +58,11 @@ git diff
 # Bước 4: Rà soát & cập nhật SKILL.md module tương ứng (nếu có đổi DB/API/Logic)
 # file: .agents/skills/modules/<module-name>/SKILL.md
 
-# Bước 5: Chạy Unit Test (BẮT BUỘC PASS 100%)
+# Bước 5: Test nhanh các file thay đổi (Husky pre-commit đã tự động chạy lint-staged < 2s)
 # Backend:
-bunx jest --forceExit
+bunx jest --findRelatedTests <file>
 # Frontend:
-bun run test
+bunx vitest related <file> --run
 
 # Bước 6: Stage files & Commit chuẩn Conventional Commits
 git add <danh_sach_file>
@@ -146,8 +146,8 @@ else
   bun run test
 fi
 
-# 5. Push lên remote erp-master
-git push $REMOTE_NAME erp-master
+# 5. Push lên remote erp-master (Dùng --no-verify vì đã pass full QC ở trên, tránh Husky chạy lặp lần 2)
+git push $REMOTE_NAME erp-master --no-verify
 ```
 
 ---
