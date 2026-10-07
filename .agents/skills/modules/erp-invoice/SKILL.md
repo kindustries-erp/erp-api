@@ -29,7 +29,17 @@ Các nghiệp vụ trọng tâm:
     - `ErpInvoicesCoreController`: Thin Controller quản lý CRUD, sync GDT, R2 files, hạch toán Post/Unpost.
     - `InvoiceDebtsController`: Sub-controller chuyên trách Báo cáo & Chi tiết công nợ đối tác (`/api/v1/erp-invoices/debts`).
     - `InvoiceDashboardController`: Sub-controller chuyên trách Dashboard, KPI & Phân tích chân trời tài chính (`/api/v1/erp-invoices/dashboard`).
+    - `InvoiceOriginalPdfController`: Sub-controller chuyên trách Đồng bộ Nâng cao & Tải PDF Gốc Nhà Cung Cấp (`/api/v1/erp-invoices/original-pdf`).
   - **Sub-Services & Facades (Pattern B)**:
+    - `InvoiceOriginalPdfFacade` (Facade ~147 dòng) điều phối:
+      - `InvoiceProviderDetectorService`: Nhận diện NCC & bóc tách mã tra cứu từ XML chuẩn TT78 (VinFast, EasyInvoice, MISA, Viettel, VNPT, BKAV, Thái Sơn, CyberBill, FPT, M-Invoice...).
+      - `InvoiceCaptchaSolverService`: Giải mã captcha tự động qua 9router Vision AI (`ag/gemini-3.8-flash`).
+      - `ProviderAdapterRegistry`: Đăng ký & điều phối các adapter tải PDF theo NCC có rate limiting.
+      - `VinfastInvoiceAdapter`: Crawl PDF gốc Vingroup/VinFast qua cookie session + captcha solver + WAF detection.
+      - `EasyInvoiceAdapter`: Tải PDF gốc Softdreams EasyInvoice trực tiếp qua Fkey candidate URL.
+      - `MisaInvoiceAdapter`: Tải PDF gốc MISA meInvoice qua TransactionID.
+      - `ViettelInvoiceAdapter`: Tải PDF gốc Viettel S-Invoice qua mã bí mật.
+      - `InvoicePdfDownloadWorkerService`: Worker tải đa luồng nền có concurrency pool (mặc định 3 luồng), lưu trữ S3/R2 và local disk, cập nhật tiến trình vào bảng `erp_einvoice_syncs`.
     - `InvoiceQueryService` (Facade ~150 dòng) điều phối:
       - `InvoiceListQueryService`: Phân trang, lọc đa chiều, tính grand & cumulative totals.
       - `InvoiceItemsQueryService`: Chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
@@ -101,7 +111,15 @@ Các nghiệp vụ trọng tâm:
 | `created_by` | `uuid` | YES | `NULL` | ID người tạo / import |
 | `license_plate` | `varchar(50)` | YES | `NULL` | Biển số xe được trích xuất tự động |
 | `settlement_order` | `varchar(100)` | YES | `NULL` | Số quyết toán / số lệnh sửa chữa trích xuất tự động |
-| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file PDF chính |
+| `sync_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_einvoice_syncs.id` |
+| `msttcgp` | `varchar(20)` | YES | `NULL` | Mã số thuế nhà cung cấp giải pháp HĐĐT (MISA, Viettel...) |
+| `provider_code` | `varchar(50)` | YES | `NULL` | Mã định danh NCC: `VINFAST`, `EASYINVOICE`, `MISA`, `VIETTEL`, `VNPT`, `BKAV`, `THAISON`, `CYBERBILL`, `FPT`, `MINVOICE` |
+| `lookup_url` | `text` | YES | `NULL` | Đường dẫn cổng tra cứu chính thức của bên bán |
+| `lookup_code` | `varchar(255)` | YES | `NULL` | Mã tra cứu / Fkey / Mã bí mật / Salt của hóa đơn |
+| `pdf_path` | `text` | YES | `NULL` | Đường dẫn lưu trữ tệp trên disk máy chủ cục bộ |
+| `pdf_source` | `varchar(30)` | YES | `NULL` | Nguồn gốc tệp PDF: `provider_original` (PDF gốc chính thức), `manual_upload`, `failed` |
+| `pdf_error` | `text` | YES | `NULL` | Thông tin chi tiết lỗi nếu tải PDF gốc từ NCC thất bại |
+| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2/S3 file PDF chính |
 | `pdf_files` | `jsonb` | YES | `NULL` | Danh sách các file PDF đính kèm: `[{ fileKey, originalName, fileSize, uploadedAt, documentType, ... }]` |
 | `xml_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file XML gốc |
 | `xml_import_id` | `uuid` | YES | `NULL` | Mã batch XML import nếu có |
@@ -112,6 +130,24 @@ Các nghiệp vụ trọng tâm:
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.2. Bảng `erp_einvoice_syncs` (Quản Lý Tiến Trình Đồng Bộ & Tải PDF Gốc Hóa Đơn)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `company_tax_code` | `varchar(20)` | NO | — | Mã số thuế của doanh nghiệp được đồng bộ |
+| `sync_type` | `varchar(20)` | NO | — | Chiều đồng bộ: `purchase` (mua vào) hoặc `sold` (bán ra) |
+| `query_type` | `varchar(20)` | NO | — | Loại tra cứu: `query` (HĐ thông thường), `sco-query` (máy tính tiền), `all` |
+| `from_date` | `timestamptz` | NO | — | Thời điểm bắt đầu khoảng ngày tra cứu |
+| `to_date` | `timestamptz` | NO | — | Thời điểm kết thúc khoảng ngày tra cứu |
+| `total_found` | `int` | NO | `0` | Tổng số lượng hóa đơn tìm thấy từ GDT |
+| `total_pdf_success` | `int` | NO | `0` | Số lượng hóa đơn đã tải thành công PDF gốc từ NCC |
+| `total_pdf_failed` | `int` | NO | `0` | Số lượng hóa đơn thất bại khi tải PDF gốc |
+| `status` | `varchar(30)` | NO | `'in_progress'` | Trạng thái tiến trình: `in_progress`, `completed`, `failed` |
+| `error_message` | `text` | YES | `NULL` | Thông điệp lỗi tổng quan nếu tác vụ thất bại |
+| `created_by` | `uuid` | YES | `NULL` | ID người dùng kích hoạt tiến trình |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm khởi tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
 ### 2.2. Bảng `erp_invoice_items` (Chi Tiết Mặt Hàng Hóa Đơn)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |

@@ -20,7 +20,7 @@ graph LR
 
 1. **Plan-First (Zero-Assumption)**: Không sửa code khi chưa có Plan được duyệt. Luôn đối chiếu code thực tế.
 2. **Strict Sequence**: `Database (Schema/Migration)` ➔ `API (DTO/Service/Controller/RBAC)` ➔ `QC & Jest Tests`.
-3. **Atomic Task & Concrete DoD**: Mỗi task (1–2 files), có mã lệnh kiểm thử (**Verification Command**) chạy ngay.
+3. **Atomic Task & Scoped DoD Verification**: Mỗi task (1–2 files), có mã lệnh kiểm thử thu hẹp (**Scoped Verification Command** < 10s: `bunx jest <spec>`, `bunx jest --findRelatedTests <file>`, `bunx tsc --noEmit`). **TUYỆT ĐỐI CẤM** chạy full test suite (`bunx jest`, `bun run check:ci`) ở từng task nhỏ để tránh nghẽn CPU và mất thời gian vô lý.
 4. **Brain Artifacts**: Lưu trữ qua `implementation_plan.md` (kế hoạch) và `walkthrough.md` (nghiệm thu).
 5. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
 
@@ -48,7 +48,7 @@ Phân chia task theo thứ tự: `Phase 1: DB & Migration` ➔ `Phase 2: API & L
     - **Phân hệ**: `Backend API` | **Ưu tiên**: `[P0 / P1 / P2]`
     - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](file:///absolute/path/to/file)
     - **DoD**: Code sạch TypeScript, validation chặt chẽ, unit test pass 100%.
-    - **Verification**: `bunx jest src/modules/.../service.spec.ts` hoặc `bun run check:ci`.
+    - **Verification**: `bunx jest src/modules/.../service.spec.ts` hoặc `bunx jest --findRelatedTests src/modules/.../service.ts` (Dưới 5s, KHÔNG chạy full test hay check:ci ở đây).
   ```
 - **Trạng thái**: `[ ] Pending` ➔ `[/] In Progress` ➔ `[x] Completed & Verified` ➔ `[-] Skipped`.
 
@@ -58,9 +58,9 @@ Phân chia task theo thứ tự: `Phase 1: DB & Migration` ➔ `Phase 2: API & L
 - **DỪNG LẠI** chờ User phê duyệt trước khi viết code.
 
 ### 🔹 GIAI ĐOẠN 5: Execution, Test-First & Walkthrough (Thực Thi & Nghiệm Thu)
-- Thực thi tuần tự, chuyển `[/]`, chạy Verification Command đạt 100% trước khi tick `[x]`.
+- Thực thi tuần tự, chuyển `[/]`, chạy Scoped Verification Command đạt 100% trước khi tick `[x]`.
 - **Knowledge-Sync on Task Completion**: Nếu task làm thay đổi Schema, DTO hay API Endpoint, cập nhật ngay vào Module Skill liên quan trước khi kết thúc task.
-- Chạy Pre-commit check (`bun run check:ci && bun run test`).
+- **Nghiệm thu cuối cùng (Final Gate)**: Chạy full check DUY NHẤT một lần ở cuối toàn bộ kế hoạch: `bun run check:ci && bunx jest --forceExit`.
 - **Nghiệm thu & Đồng bộ Tri thức**: Cập nhật Module Skill (`.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
 - Tạo báo cáo nghiệm thu `walkthrough.md` đính kèm test logs và trạng thái đồng bộ skill.
 

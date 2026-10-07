@@ -29,6 +29,7 @@ import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
+import { ErpEInvoiceSync } from '../erp-invoices-core/entities/erp_einvoice_sync.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from '../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { ErpInvoiceAdjustmentNetOff } from '../erp-invoices-core/entities/erp_invoice_adjustment_netoff.entity';
@@ -116,6 +117,7 @@ const entities = [
   ErpProductionOrder,
   ErpProductionOrderMaterial,
   ErpInvoice,
+  ErpEInvoiceSync,
   ErpInvoiceItem,
   ErpInvoiceVoucherNetOff,
   ErpInvoiceAdjustmentNetOff,
