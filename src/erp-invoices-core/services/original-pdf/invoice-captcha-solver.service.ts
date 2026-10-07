@@ -41,20 +41,26 @@ export class InvoiceCaptchaSolverService {
       );
     }
 
+    const cleanBase64 = base64Data.replace(
+      /^data:image\/[a-zA-Z]+;base64,/,
+      '',
+    );
+
     const payload = {
       model: this.model,
+      stream: false,
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Look at this captcha image carefully. Return ONLY the exact alphanumeric characters with NO extra spaces, NO formatting, NO markdown, NO explanations.',
+              text: 'Look at this captcha image carefully. It contains 4-6 alphanumeric characters. Return ONLY the exact text/characters with NO spaces, NO punctuation, NO formatting, NO markdown, NO explanations.',
             },
             {
               type: 'image_url',
               image_url: {
-                url: `data:${mimeType};base64,${base64Data}`,
+                url: `data:${mimeType};base64,${cleanBase64}`,
               },
             },
           ],
@@ -65,14 +71,26 @@ export class InvoiceCaptchaSolverService {
     };
 
     const cleanBaseUrl = this.baseUrl.replace(/\/$/, '');
-    const res = await fetch(`${cleanBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    const executeRequest = async () => {
+      return fetch(`${cleanBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    };
+
+    let res: Response;
+    try {
+      res = await executeRequest();
+    } catch (networkErr: any) {
+      this.logger.warn(
+        `9router network error on first try: ${networkErr.message}. Retrying once...`,
+      );
+      res = await executeRequest();
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -80,7 +98,16 @@ export class InvoiceCaptchaSolverService {
       throw new Error(`9router captcha error (${res.status}): ${errText}`);
     }
 
-    const data: any = await res.json();
+    const rawText = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error(
+        `Failed to parse 9router JSON response: ${rawText.slice(0, 100)}`,
+      );
+    }
+
     const rawAnswer = data.choices?.[0]?.message?.content?.trim() || '';
     const cleaned = rawAnswer.replace(/[^a-zA-Z0-9]/g, '');
     this.logger.debug(`Solved captcha: "${rawAnswer}" -> "${cleaned}"`);

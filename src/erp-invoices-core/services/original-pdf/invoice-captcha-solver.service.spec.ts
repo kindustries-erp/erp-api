@@ -26,17 +26,18 @@ describe('InvoiceCaptchaSolverService', () => {
   });
 
   it('should solve captcha successfully from base64', async () => {
+    const mockData = {
+      choices: [
+        {
+          message: {
+            content: ' 6898\n',
+          },
+        },
+      ],
+    };
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        choices: [
-          {
-            message: {
-              content: ' 6898\n',
-            },
-          },
-        ],
-      }),
+      text: jest.fn().mockResolvedValue(JSON.stringify(mockData)),
     } as any);
 
     const result = await service.solveCaptchaBase64('dummyBase64Data');
@@ -53,17 +54,18 @@ describe('InvoiceCaptchaSolverService', () => {
   });
 
   it('should solve captcha from buffer', async () => {
+    const mockData = {
+      choices: [
+        {
+          message: {
+            content: 'kL89',
+          },
+        },
+      ],
+    };
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({
-        choices: [
-          {
-            message: {
-              content: 'kL89',
-            },
-          },
-        ],
-      }),
+      text: jest.fn().mockResolvedValue(JSON.stringify(mockData)),
     } as any);
 
     const buffer = Buffer.from('image-binary-data');
