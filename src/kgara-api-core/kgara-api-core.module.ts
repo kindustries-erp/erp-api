@@ -21,8 +21,6 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
-import { GarageCashflowService } from './services/garage-cashflow.service';
-import { GarageCashflowController } from './controllers/garage-cashflow.controller';
 
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
@@ -95,7 +93,6 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraSyncService,
     KgaraSyncScheduler,
     GarageSmartSettlementService,
-    GarageCashflowService,
     GarageOpexService,
     GarageDashboardService,
     GarageDashboardStatsService,
@@ -124,7 +121,6 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraApiCoreController,
     GarageDashboardController,
     GarageDebtsAnalyticsController,
-    GarageCashflowController,
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
@@ -137,7 +133,6 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraSyncService,
     KgaraClientService,
     GarageSmartSettlementService,
-    GarageCashflowService,
     GarageOpexService,
     GarageDashboardService,
     GarageDashboardStatsService,
