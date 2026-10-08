@@ -311,6 +311,16 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/payables` | `@BranchId()` | Lấy danh sách công nợ phải trả đã đồng bộ |
 | `GET` | `/dashboard` | `@BranchId()`, `from`, `to` | Lấy dữ liệu tổng quan dashboard vụ việc trực tiếp từ KGara |
 
+### 4.4. Nhóm Sổ Thu Chi Xưởng (Garage Cashflow)
+Base Route: `/api/v1/greenway/cashflow`
+| Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Query: `page`, `pageSize`, `search`, `statusTab` (`all`, `receipt`, `payment`, `with_bank`, `no_bank`), `filtersStr`, `sorts`, `dateFrom`, `dateTo` | Lấy danh sách giao dịch thu/chi phát sinh thực tế tại xưởng kèm liên kết số phiếu dịch vụ và sao kê ngân hàng, tính stats (totalReceipts, totalPayments, netCashflow) |
+| `GET` | `/column-options` | Query: `column`, `search`, `page`, `pageSize`, `filtersStr`, `statusTab` | Lấy danh sách distinct options phân trang cho popover lọc từng cột của bảng hoặc static master options |
+| `POST`| `/` | Body: `CreateGarageCashflowDto` | Ghi nhận giao dịch thu/chi mới, tự động chuẩn hóa kênh nguồn `ON_SYSTEM` / `OFF_SYSTEM_MANUAL`, cập nhật tổng hợp vụ việc nếu có `caseId` |
+| `PATCH`| `/:id` | `id`, Body: `UpdateGarageCashflowDto` | Cập nhật khoản thu/chi, tự động tính lại tổng thanh toán vụ việc cũ và mới |
+| `DELETE`| `/:id` | `id` | Xóa giao dịch thu/chi và tính lại tổng thanh toán vụ việc |
+
 ---
 
 ## 5. Logic Nghiệp vụ Trọng tâm
@@ -448,6 +458,34 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
     - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View (`initialEditMode: false`, `quote_details`).
     - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
     - ⚖️ **Đối soát** (`Scale` icon trong Context Menu dòng bảng `GarageCasesTable`, `GarageCasePartnerTab`, `GarageCaseServicesSection`) $\rightarrow$ Mở Drawer chuyển thẳng vào tab **Tài chính (`financials`)** và kích hoạt sẵn chế độ chỉnh sửa (`editMode: true`), cho phép đối soát cấn trừ hóa đơn và dòng tiền tức thời.
+
+### 5.12. Phân Hệ Thu Chi Xưởng Garage (Garage Cashflow Page & Drawer 2 Cột Chuẩn Hóa)
+- **Kiến trúc Phân tách Mối quan tâm (Separation of Concerns)**:
+  - Dòng tiền Thu/Chi thực tế tại xưởng được quản lý tập trung và độc lập tại **Page Thu Chi Xưởng** (`/garage-cashflow`), xây dựng theo chuẩn `SpreadsheetPageTemplate`, `/standardize-table`, và `/standardize-drawer`.
+  - **Cơ chế Cấn trừ Trực tiếp (Direct Case Settlement)**: Mỗi dòng thu tiền khách/bảo hiểm (`RECEIPT`) hoặc chi tiền gia công/vật tư (`PAYMENT`) được cấn trừ trực tiếp cho 1 Số Phiếu Dịch Vụ (`so_chung_tu`), lập tức trừ giảm công nợ `tien_con_phai_thanh_toan` mà không bắt buộc phải chờ hóa đơn thuế hay sao kê ngân hàng đã nạp lên ERP.
+  - **Sao kê Ngân hàng đóng vai trò THAM CHIẾU (Audit Reference)**: Cho phép gắn liên kết với dòng sao kê (`bank_transaction_id`) để đối soát kiểm toán, nhưng không trói buộc quy trình dòng tiền vào sao kê.
+  - **Hóa đơn VAT quản lý độc lập**: Tránh nguy cơ logic cấn trừ 3 bên (HĐ $\leftrightarrow$ Sao kê $\leftrightarrow$ Phiếu dịch vụ) bị rối loạn khi có một khâu bị gỡ hay điều chỉnh.
+- **Drawer 2 Cột Chuẩn Hóa (`GarageCashflowFormDrawer`)**:
+  - Tuân thủ nghiêm ngặt `/standardize-drawer` (layout="2-columns", size="xl"):
+    - **Cột trái (`GarageCashflowLeftForm`)**: Chọn loại giao dịch (Thu / Chi), Số tiền, Phương thức thanh toán (Chuyển khoản, Tiền mặt, POS, Khác), Ngày phát sinh, Người nộp/nhận, Mã biên lai/UNC, Chọn Phiếu dịch vụ cấn trừ, Chọn Sao kê tham chiếu, Ghi chú.
+    - **Cột phải (`GarageCashflowRightSummary`)**: Tóm tắt thông tin Phiếu dịch vụ (Doanh thu, Đã thanh toán, Còn nợ hiện tại, Còn nợ dự kiến sau khi thu), Tóm tắt Sao kê tham chiếu, và các lưu ý nghiệp vụ.
+- **Tích Hợp Thao Tác Nhanh trên Drawer Báo Giá (`QuoteFinancialsTabContent`)**:
+  - Tại bảng Phải thu & Phải trả trong Drawer Báo giá: Bổ sung 2 nút thao tác nhanh `+ Thu tiền` (màu xanh emerald) và `+ Chi tiền` (màu hổ phách amber).
+  - Khi click: Mở ngay `GarageCashflowFormDrawer` với các trường được điền sẵn (`fixedCaseId`, `fixedCaseCode`, `suggestedAmount`, `defaultType`), hoàn tất thu/chi trong 2 giây.
+- **Backend Architecture & API Endpoints (`kgara-api-core`)**:
+  - **Pattern A Sub-Controller**: `GarageCashflowController` (`/api/v1/kgara-api-core/cashflow`).
+  - **Pattern B Sub-Service**: `GarageCashflowService`.
+  - **Pattern C Pure Calc Engine**: `GarageCashflowCalcEngine` (tính toán KPI thống kê Tổng thu, Tổng chi, Net cashflow, và tái tính toán số dư công nợ).
+  - Endpoints:
+    - `GET /cashflow`: Danh sách phân trang, tìm kiếm đa từ khóa, bộ lọc theo ngày, theo loại, theo phương thức và trả về `stats: { totalReceipts, totalPayments, netCashflow, totalTransactions, linkedCasesCount }`.
+    - `GET /cashflow/column-options`: Bộ lọc distinct options.
+    - `POST /cashflow`: Tạo mới bản ghi thu/chi và tự động cập nhật công nợ phiếu dịch vụ.
+    - `PATCH /cashflow/:id`: Chỉnh sửa bản ghi thu/chi và tái tính toán công nợ.
+    - `DELETE /cashflow/:id`: Xóa giao dịch và hoàn nợ cho phiếu dịch vụ.
+- **Database Entity Updates (`kgara_case_settlements`)**:
+  - Bổ sung các cột: `payment_method`, `receipt_number`, `payer_type`.
+  - Chuyển `case_id` thành nullable để hỗ trợ ghi nhận chi phí chung của xưởng không gắn với phiếu cụ thể.
+  - Bổ sung composite indexes: `idx_kgara_settlements_trans_date`, `idx_kgara_settlements_payment_method`.
     - 🔗 **Liên kết hóa đơn trong Mã CT** (`Link2` icon trong `GarageCaseCodeCell`) $\rightarrow$ Mở tab Tài chính ở chế độ xem (`editMode: false`) để tra cứu.
     - 🔄 **Đồng bộ từ KGara** (`RefreshCw` icon) $\rightarrow$ Kích hoạt đồng bộ chi tiết vụ việc trực tiếp từ KGara.
     - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.

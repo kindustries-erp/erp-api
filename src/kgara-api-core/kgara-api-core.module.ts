@@ -15,11 +15,14 @@ import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
 
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
+import { GarageCashflowService } from './services/garage-cashflow.service';
+import { GarageCashflowController } from './controllers/garage-cashflow.controller';
 
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
@@ -76,6 +79,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
       KgaraGrossProfit,
       KgaraCaseSettlement,
       KgaraOperatingExpense,
+      ErpBankTransaction,
       ErpModuleCategory,
       CoreUser,
       CorePermission,
@@ -91,6 +95,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraSyncService,
     KgaraSyncScheduler,
     GarageSmartSettlementService,
+    GarageCashflowService,
     GarageOpexService,
     GarageDashboardService,
     GarageDashboardStatsService,
@@ -119,6 +124,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraApiCoreController,
     GarageDashboardController,
     GarageDebtsAnalyticsController,
+    GarageCashflowController,
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
@@ -131,6 +137,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraSyncService,
     KgaraClientService,
     GarageSmartSettlementService,
+    GarageCashflowService,
     GarageOpexService,
     GarageDashboardService,
     GarageDashboardStatsService,
