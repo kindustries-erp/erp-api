@@ -1,4 +1,9 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { GarageDebtsAnalyticsService } from './garage-debts-analytics.service';
+import { KgaraCase } from '../entities/kgara_case.entity';
+import { KgaraPayable } from '../entities/kgara_payable.entity';
+import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 
 describe('GarageDebtsAnalyticsService', () => {
   let service: GarageDebtsAnalyticsService;
@@ -6,7 +11,7 @@ describe('GarageDebtsAnalyticsService', () => {
   let mockPayableRepo: any;
   let mockSettlementRepo: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockCaseRepo = {
       manager: {
         query: jest.fn(),
@@ -18,15 +23,26 @@ describe('GarageDebtsAnalyticsService', () => {
       },
     };
     mockSettlementRepo = {
-      manager: {
-        query: jest.fn(),
-      },
+      find: jest.fn(),
     };
 
-    service = new GarageDebtsAnalyticsService(
-      mockCaseRepo,
-      mockPayableRepo,
-      mockSettlementRepo,
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        GarageDebtsAnalyticsService,
+        { provide: getRepositoryToken(KgaraCase), useValue: mockCaseRepo },
+        {
+          provide: getRepositoryToken(KgaraPayable),
+          useValue: mockPayableRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraCaseSettlement),
+          useValue: mockSettlementRepo,
+        },
+      ],
+    }).compile();
+
+    service = module.get<GarageDebtsAnalyticsService>(
+      GarageDebtsAnalyticsService,
     );
   });
 
@@ -35,7 +51,7 @@ describe('GarageDebtsAnalyticsService', () => {
   });
 
   it('should return aggregated debts analytics correctly', async () => {
-    // 1. Case aggregates
+    // 1. Case aggregates (Receivables)
     mockCaseRepo.manager.query
       .mockResolvedValueOnce([
         {
@@ -49,26 +65,7 @@ describe('GarageDebtsAnalyticsService', () => {
           dueNextWeek: '10000000',
         },
       ])
-      // 2. Monthly trend
-      .mockResolvedValueOnce([
-        { month: '2026-07', cashIn: '30000000', cashOut: '15000000' },
-        { month: '2026-08', cashIn: '30000000', cashOut: '20000000' },
-      ])
-      // 3. Top customers
-      .mockResolvedValueOnce([
-        {
-          partnerCode: 'KH-01',
-          partnerName: 'Khách A',
-          totalAmount: '50000000',
-          balanceAmount: '20000000',
-          overdueAmount: '10000000',
-          maxAgingDays: 45,
-          caseCount: 2,
-        },
-      ]);
-
-    // Payables query
-    mockPayableRepo.manager.query
+      // 2. Payables query (Từ chi phí sổ báo giá)
       .mockResolvedValueOnce([
         {
           totalPayable: '50000000',
@@ -81,11 +78,28 @@ describe('GarageDebtsAnalyticsService', () => {
           dueNextWeek: '5000000',
         },
       ])
-      // Top suppliers
+      // 3. Monthly trend
+      .mockResolvedValueOnce([
+        { month: '2026-07', cashIn: '30000000', cashOut: '15000000' },
+        { month: '2026-08', cashIn: '30000000', cashOut: '20000000' },
+      ])
+      // 4. Top customers
       .mockResolvedValueOnce([
         {
-          partnerCode: 'NCC-01',
-          partnerName: 'NCC Phụ Tùng',
+          partnerCode: 'KH-01',
+          partnerName: 'Khách A',
+          totalAmount: '50000000',
+          balanceAmount: '20000000',
+          overdueAmount: '10000000',
+          maxAgingDays: 45,
+          caseCount: 2,
+        },
+      ])
+      // 5. Top suppliers / top cost cases
+      .mockResolvedValueOnce([
+        {
+          partnerCode: 'GR-PDV2608-0074',
+          partnerName: 'Khách B',
           totalAmount: '30000000',
           balanceAmount: '15000000',
           overdueAmount: '5000000',
@@ -101,67 +115,61 @@ describe('GarageDebtsAnalyticsService', () => {
     expect(res.summary.paidReceivable).toBe(60000000);
     expect(res.summary.remainingReceivable).toBe(40000000);
     expect(res.summary.totalPayable).toBe(50000000);
-    expect(res.summary.netBalance).toBe(20000000);
-    expect(res.summary.collectionRate).toBe(60);
+    expect(res.summary.paidPayable).toBe(30000000);
+    expect(res.summary.remainingPayable).toBe(20000000);
+    expect(res.summary.netBalance).toBe(20000000); // 40M - 20M
+
     expect(res.agingComparison).toHaveLength(4);
-    expect(res.timeHorizons.nextMonthDue.receivable).toBe(20000000);
-    expect(res.forecastHorizons).toBeDefined();
+    expect(res.agingComparison[0].receivableAmount).toBe(20000000);
+    expect(res.agingComparison[0].payableAmount).toBe(10000000);
+
+    expect(res.timeHorizons.nextWeekDue.receivable).toBe(10000000);
+    expect(res.timeHorizons.nextWeekDue.payable).toBe(5000000);
+
+    expect(res.cashTrend).toHaveLength(2);
     expect(res.topReceivableCustomers).toHaveLength(1);
     expect(res.topPayableSuppliers).toHaveLength(1);
   });
 
   it('should return time horizon cases correctly for drawer', async () => {
-    // 1. Count query
     mockCaseRepo.manager.query
       .mockResolvedValueOnce([{ total: 1 }])
-      // 2. Data rows query
       .mockResolvedValueOnce([
         {
-          id: 'case-uuid-1',
-          caseId: 'HD-001',
-          soChungTu: 'PDV-2026-001',
-          bienSoXe: '51A-12345',
-          customerCode: 'KH-001',
-          customerName: 'Anh Nam',
-          totalAmount: '10000000',
-          paidAmount: '0',
-          balanceAmount: '10000000',
-          completionDate: '2026-07-20T10:00:00',
-          agingDays: 15,
-          branchExternalId: 'BR-01',
-          status: 'Hoàn tất',
-          description: 'Sửa chữa chung',
+          id: 'case-1',
+          caseId: 'case-1',
+          soChungTu: 'GR-001',
+          customerName: 'Khách A',
+          direction: 'OUT',
+          totalAmount: 1000000,
+          paidAmount: 500000,
+          balanceAmount: 500000,
+          completionDate: '2026-07-15T00:00:00',
+          agingDays: 10,
         },
       ])
-      // 3. Summary query
       .mockResolvedValueOnce([
         {
-          totalAmount: '10000000',
-          paidAmount: '0',
-          balanceAmount: '10000000',
+          totalAmount: 1000000,
+          paidAmount: 500000,
+          balanceAmount: 500000,
           count: 1,
         },
       ])
-      // 4. Top partners query
       .mockResolvedValueOnce([
         {
-          partnerCode: 'KH-001',
-          partnerName: 'Anh Nam',
-          balanceAmount: '10000000',
+          partnerCode: 'KH-01',
+          partnerName: 'Khách A',
+          balanceAmount: 500000,
           caseCount: 1,
         },
       ]);
 
-    const res = await service.getTimeHorizonCases('nextMonthDue', {
-      page: 1,
-      pageSize: 20,
-    });
+    const res = await service.getTimeHorizonCases('overdue30To90');
 
-    expect(res).toBeDefined();
     expect(res.total).toBe(1);
     expect(res.items).toHaveLength(1);
-    expect(res.items[0].customerName).toBe('Anh Nam');
-    expect(res.summary.receivableAmount).toBe(10000000);
+    expect(res.summary.receivableAmount).toBe(500000);
     expect(res.summary.topPartners).toHaveLength(1);
   });
 });
