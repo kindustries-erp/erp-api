@@ -60,6 +60,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
 
 import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.service';
 import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
+import { KgaraSuppliersService } from './services/kgara-suppliers.service';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     SyncDebtService,
     SyncCaseService,
     KgaraCaseLookupService,
+    KgaraSuppliersService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -150,6 +152,7 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
     SyncDebtService,
     SyncCaseService,
     KgaraCaseLookupService,
+    KgaraSuppliersService,
   ],
 })
 export class KgaraApiCoreModule {}
