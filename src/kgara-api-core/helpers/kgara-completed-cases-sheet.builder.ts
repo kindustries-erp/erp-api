@@ -115,20 +115,26 @@ export function buildSheet1CompletedCases(
   branchNameMap: Record<string, string>,
   linkedInvoiceSummaryMap: Record<string, string>,
   settlementsMap: Record<string, { receipts: number; payments: number }>,
+  serviceLinesMap?: Map<string, any[]>,
 ): void {
   const sheet = workbook.addWorksheet('Bảng kê phiếu kết thúc');
   initSheetStructure(sheet, COMPLETED_CASES_COLUMNS);
 
   const sums: Record<string, number> = {
+    phaiThuBaoHiem: 0,
+    phaiThuKhachHang: 0,
     phaiThu: 0,
     daThu: 0,
     conPhaiThu: 0,
+    chiPhiNhanCong: 0,
+    chiPhiPhuTung: 0,
     phaiTra: 0,
     daTra: 0,
     conPhaiTra: 0,
     doanhThu: 0,
     chiPhi: 0,
     loiNhuan: 0,
+    margin: 0,
   };
 
   cases.forEach((c: any, idx: number) => {
@@ -154,19 +160,73 @@ export function buildSheet1CompletedCases(
       : Number(c.tienDaThanhToan) || 0;
     const conPhaiThu = phaiThu - daThu;
 
+    const raw = c.rawData;
+    const phaiThuBaoHiem = (() => {
+      if (raw?.TienThanhToanBH != null && !isNaN(Number(raw.TienThanhToanBH))) {
+        return Number(raw.TienThanhToanBH);
+      }
+      if (
+        raw?.XeLamBaoHiem === true &&
+        raw?.TienBaoHiemDuyet != null &&
+        !isNaN(Number(raw.TienBaoHiemDuyet)) &&
+        Number(raw.TienBaoHiemDuyet) > 0
+      ) {
+        return Number(raw.TienBaoHiemDuyet);
+      }
+      return 0;
+    })();
+
+    const phaiThuKhachHang = (() => {
+      if (raw?.TienThanhToanKH != null && !isNaN(Number(raw.TienThanhToanKH))) {
+        return Number(raw.TienThanhToanKH);
+      }
+      if (!raw?.XeLamBaoHiem) {
+        return phaiThu;
+      }
+      return Math.max(0, phaiThu - phaiThuBaoHiem);
+    })();
+
     const phaiTra = cost;
     const daTra = hasSettlement
       ? setInfo.payments
       : Number(c.tienDaChi ?? c.rawData?.TienDaChi ?? 0);
     const conPhaiTra = phaiTra - daTra;
 
+    const lines = c.hdPhieuDichVuId
+      ? serviceLinesMap?.get(c.hdPhieuDichVuId) || []
+      : [];
+    let gvPt = 0;
+    for (const line of lines) {
+      const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';
+      const loaiChiTiet = line.loaiChiTiet ?? line.LoaiChiTiet;
+      const nhomIn = (line.nhomInName || line.NhomInName || '').toLowerCase();
+      const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
+      const gv = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0);
+      const isPt =
+        loaiCode === 'PT' ||
+        loaiChiTiet === 1 ||
+        loaiChiTiet === 4 ||
+        nhomIn.includes('phụ tùng') ||
+        nhomIn.includes('vật tư') ||
+        pt > 0;
+      if (isPt) {
+        gvPt += gv;
+      }
+    }
+    const chiPhiPhuTung = gvPt;
+    const chiPhiNhanCong = Math.max(0, phaiTra - gvPt);
+
     const ghiChu = c.ghiChu || c.rawData?.GhiChu || '';
     const ghiChuThu = c.ghiChuThu || ghiChu;
     const ghiChuTra = c.ghiChuTra || '';
 
+    sums.phaiThuBaoHiem += phaiThuBaoHiem;
+    sums.phaiThuKhachHang += phaiThuKhachHang;
     sums.phaiThu += phaiThu;
     sums.daThu += daThu;
     sums.conPhaiThu += conPhaiThu;
+    sums.chiPhiNhanCong += chiPhiNhanCong;
+    sums.chiPhiPhuTung += chiPhiPhuTung;
     sums.phaiTra += phaiTra;
     sums.daTra += daTra;
     sums.conPhaiTra += conPhaiTra;
@@ -190,19 +250,23 @@ export function buildSheet1CompletedCases(
       classification: classLabel,
       ngayTiepNhan: formatDisplayDate(c.ngayTiepNhan || c.ngayPhatSinh),
       ngayHoanThanhCongViec: formatDisplayDate(c.ngayHoanThanhCongViec),
-      phaiThu,
+      phaiThuBaoHiem,
+      phaiThuKhachHang,
+      phaiThu: { formula: `SUM(J${rowIdx}:K${rowIdx})`, result: phaiThu },
       daThu,
-      conPhaiThu: { formula: `J${rowIdx}-K${rowIdx}`, result: conPhaiThu },
+      conPhaiThu: { formula: `L${rowIdx}-M${rowIdx}`, result: conPhaiThu },
       ghiChuThu,
-      phaiTra,
+      chiPhiNhanCong,
+      chiPhiPhuTung,
+      phaiTra: { formula: `SUM(P${rowIdx}:Q${rowIdx})`, result: phaiTra },
       daTra,
-      conPhaiTra: { formula: `N${rowIdx}-O${rowIdx}`, result: conPhaiTra },
+      conPhaiTra: { formula: `R${rowIdx}-S${rowIdx}`, result: conPhaiTra },
       ghiChuTra,
       doanhThu: rev,
       chiPhi: cost,
-      loiNhuan: { formula: `R${rowIdx}-S${rowIdx}`, result: profit },
+      loiNhuan: { formula: `V${rowIdx}-W${rowIdx}`, result: profit },
       margin: {
-        formula: `IF(R${rowIdx}>0, T${rowIdx}/R${rowIdx}, 0)`,
+        formula: `IF(V${rowIdx}>0, X${rowIdx}/V${rowIdx}, 0)`,
         result: margin / 100,
       },
       linkedInvoices: linkedInvoiceSummaryMap[c.id] || '—',
@@ -256,9 +320,11 @@ export function buildSheet1CompletedCases(
     styleMarginCell(row.getCell('margin'), margin);
   });
 
+  sums.margin = sums.doanhThu > 0 ? sums.loiNhuan / sums.doanhThu : 0;
+
   applyStandardExcelReportLayout(sheet, COMPLETED_CASES_COLUMNS, 5, sums, {
-    sumRow: { margin: 'IF(R1>0, (T1/R1), 0)' },
-    subtotalRow: { margin: 'IF(R2>0, (T2/R2), 0)' },
+    sumRow: { margin: 'IF(V1>0, (X1/V1), 0)' },
+    subtotalRow: { margin: 'IF(V2>0, (X2/V2), 0)' },
   });
 }
 

@@ -699,3 +699,62 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
    - Đưa vào cột `hasInvoice` (`100px`): Khi `totalLinked > 0`, render button `Link2` kèm Tooltip chi tiết (`x HĐ bán ra, y HĐ mua vào`) và click mở Drawer đối soát HĐ (`onOpenFinancials`). Khi có cờ VAT, hiển thị song song cả `FileCheck` và `Link2`.
 7. **Tuân Thủ Tuyệt Đối `/ui-atomic-refactor`**:
    - 100% files liên quan kiểm soát chặt chẽ dưới ngưỡng **< 180 LoC** (`GarageCaseCodeCell`: 98 LoC, `financial-columns`: 172 LoC, `general-columns`: 175 LoC, `date-columns`: 62 LoC, `progress-columns`: 158 LoC, `classification-dropdown`: 176 LoC, `exclusion-dropdown`: 166 LoC). 100% i18n, No Blue Mandate và 56/56 test files phân hệ Garage đạt PASS.
+
+### 9.7. Chuẩn Hóa Hiển Thị Tài Chính Mới: Pro Data 2 Hàng (Tổng Thu/Trả), Ngày Kết Thúc KGara, Cột Thuế GTGT & 6 Dải Màu Biên LN
+
+1. **Hiển Thị Pro Data 2 Hàng (`GarageCaseProgressCell`)**:
+   - Loại bỏ hoàn toàn thanh thước ngang progress bar cũ trên cả 2 cột **Tổng phải thu** (`collectionProgress`) và **Tổng phải trả** (`costProgress`).
+   - **Hàng 1 (Hàng trên - Thực thu / Thực chi)**: Số tiền đã thanh toán (`paid`) kèm tỷ lệ `%` hoàn thành (`text-xs font-semibold tabular-nums font-mono`). Màu sắc phân cấp rõ nét: `emerald` (khi hoàn thành 100% hoặc đã thu), `amber` (cho chi phí vật tư/phụ tùng), `muted-foreground` (khi 0%).
+   - **Hàng 2 (Hàng dưới - Mục tiêu tổng)**: Số tiền tổng phát sinh (`total`) định dạng font-mono phụ trợ (`text-[11px] font-mono tabular-nums text-muted-foreground leading-tight`).
+   - Giữ trọn vẹn Tooltip chi tiết khi hover chuột (hiển thị Đã thu/trả, Còn phải thu/trả, và Tổng).
+2. **Quy Tắc Ngày Kết Thúc 100% Dựa Vào KGara (`ngayHoanThanhCongViec`)**:
+   - Cột **Ngày kết thúc** (`completionDate` / `ngayHoanThanhCongViec`) chỉ lấy dữ liệu hoàn thành công việc từ KGara (`item.ngayHoanThanhCongViec` / `item.rawData?.NgayHoanThanhCongViec`).
+   - **Tuyệt đối KHÔNG fallback sang ngày tiếp nhận** (`ngayTiepNhan`) hay ngày phát sinh (`ngayPhatSinh`). Phiếu chưa hoàn tất trên xưởng sẽ hiển thị placeholder `—`.
+3. **Đổi Tên Cột "HĐ VAT" Thành "Thuế GTGT"**:
+   - Cột `hasInvoice` đổi nhãn header và hiển thị thành **"Thuế GTGT"** (i18n VI: `"Thuế GTGT"`, EN: `"VAT"`).
+4. **Atom `GarageMarginBadge` Phân 6 Dải Màu Chuẩn Xuất Excel**:
+   - Cột **Biên LN** (`margin`) tích hợp Atom `GarageMarginBadge` phân chia trực quan theo 6 dải màu chuẩn mực:
+     - Dải 1 (`< 0%` - Âm): Rose nhạt (`bg-rose-100 text-rose-800 border-rose-200/60 dark:bg-rose-950/60 dark:text-rose-300`).
+     - Dải 2 (`0% - < 20%` - Thấp): Amber nhạt (`bg-amber-100 text-amber-800 border-amber-200/60 dark:bg-amber-950/60 dark:text-amber-300`).
+     - Dải 3 (`20% - < 40%` - Trung bình): Sky nhạt (`bg-sky-100 text-sky-800 border-sky-200/60 dark:bg-sky-950/60 dark:text-sky-300`).
+     - Dải 4 (`40% - < 60%` - Khá): Emerald nhạt (`bg-emerald-100 text-emerald-800 border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-300`).
+     - Dải 5 (`60% - < 80%` - Tốt): Teal nhạt (`bg-teal-100 text-teal-800 border-teal-200/60 dark:bg-teal-950/60 dark:text-teal-300`).
+     - Dải 6 (`>= 80%` - Xuất sắc): Purple nhạt (`bg-purple-100 text-purple-800 border-purple-200/60 dark:bg-purple-950/60 dark:text-purple-300`).
+     - Khi chưa có doanh thu hoặc `doanhThu <= 0`: Hiển thị `—`.
+5. **Kiểm Soát Kiến Trúc `/ui-atomic-refactor` & `/api-service-refactor`**:
+   - 100% UI files kiểm soát dưới **< 180 LoC** (`GarageMarginBadge`: 77 LoC, `GarageCaseProgressCell`: 82 LoC, `progress-columns`: 163 LoC, `financial-columns`: 141 LoC, `date-columns`: 73 LoC, `general-columns`: 176 LoC).
+   - Co-located tests 100% pass, No Blue Mandate bảo toàn, 100% i18n.
+
+### 9.8. Tinh Chỉnh UI Pro Data Nâng Cao, Thứ Tự Cột Trạng Thái & Bóc Tách 4 Cột Excel Sheet 1
+
+1. **Vị Trí Cột Trạng Thái (`statusName`)**:
+   - Trong cả 2 chế độ xem **Tổng quan** (`overview`) và **Đối soát** (`audit`), cột **Trạng thái** (`statusName`) được di chuyển sang nằm **ngay bên phải cột Khách hàng** (`customer`).
+   - Thứ tự logic chuẩn: `# -> Ngày tiếp nhận -> Ngày kết thúc -> Số chứng từ -> Khách hàng -> Trạng thái -> ...`.
+   - Đồng bộ trong cả `GarageCasesTable.general-columns.tsx`, `DEFAULT_GARAGE_CASE_COLUMN_VISIBILITY`, `AUDIT_GARAGE_CASE_COLUMN_VISIBILITY` và `GARAGE_CASE_COLUMN_GROUPS`.
+
+2. **Tinh Chỉnh UI Pro Data (`GarageCaseProgressCell`)**:
+   - **Micro-labels**:
+     - Hàng 1: Hiển thị nhãn `Đã thu:` (cho receivable) hoặc `Đã trả:` (cho payable) bằng `text-[10px] text-muted-foreground` bên cạnh số tiền đã thanh toán.
+     - Hàng 2: Hiển thị nhãn `Tổng:` bằng `text-[10px] text-muted-foreground/70` bên cạnh số tiền tổng phát sinh.
+   - **Mini Badge Pill `{rate}%`**:
+     - Thay thế định dạng text trong ngoặc đơn cũ bằng mini badge pill có viền:
+       - 100% (Hoàn thành): `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20`.
+       - 0% (Chưa thu/trả): `bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700`.
+       - Đang thực hiện: `bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20` (payable) hoặc `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20` (receivable).
+   - **Độ rộng cột**: Nâng từ `140px` lên `155px` cho cả 2 cột `collectionProgress` và `costProgress` để bảo đảm số tiền hàng trăm triệu và nhãn không bị tràn.
+
+3. **Bóc Tách 4 Cột Thu/Chi Mới trong Sheet 1 Xuất Excel Bảng Kê Phiếu Kết Thúc (`COMPLETED_CASES_COLUMNS`)**:
+   - Mở rộng Sheet 1 từ 23 lên 27 cột:
+     - **Cột 10 (J)**: `Phải thu BH (VNĐ)` (`phaiThuBaoHiem`) - lấy từ `TienThanhToanBH` hoặc `TienBaoHiemDuyet`.
+     - **Cột 11 (K)**: `Phải thu KH (VNĐ)` (`phaiThuKhachHang`) - lấy từ `TienThanhToanKH` hoặc `phaiThu - phaiThuBaoHiem`.
+     - **Cột 12 (L)**: `Phải thu (VNĐ)` (`phaiThu`) - sử dụng công thức động Excel: `=SUM(J{row}:K{row})`.
+     - **Cột 16 (P)**: `Chi phí nhân công (VNĐ)` (`chiPhiNhanCong`) - lấy từ `Math.max(0, phaiTra - gvPt)`.
+     - **Cột 17 (Q)**: `Chi phí phụ tùng (VNĐ)` (`chiPhiPhuTung`) - lấy từ giá vốn phụ tùng `gvPt` của các dòng chi tiết `serviceLinesMap`.
+     - **Cột 18 (R)**: `Phải trả (VNĐ)` (`phaiTra`) - sử dụng công thức động Excel: `=SUM(P{row}:Q{row})`.
+   - Cập nhật toàn bộ các công thức phụ thuộc:
+     - `Còn lại phải thu`: `=L{row}-M{row}`
+     - `Còn lại phải trả`: `=R{row}-S{row}`
+     - `Lợi nhuận gộp`: `=V{row}-W{row}`
+     - `Biên LN (%)`: `=IF(V{row}>0, X{row}/V{row}, 0)`
+     - Dòng `SUM` và `SUBTOTAL` cập nhật margin tham chiếu cột `V` (Doanh thu) và `X` (Lợi nhuận).
+
