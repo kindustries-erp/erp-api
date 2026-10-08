@@ -89,32 +89,46 @@ export class GarageDebtsAnalyticsService {
     const rOver90 = Number(caseAgg.agingOver90) || 0;
     const rDueWeek = Number(caseAgg.dueNextWeek) || 0;
 
-    // 1.2 Tổng hợp Phải trả Nhà cung cấp (Payables)
+    // 1.2 Tổng hợp Phải trả Nhà cung cấp / Chi phí sổ báo giá (Payables)
     const payableParams: any[] = [effectiveFrom];
-    let payableWhere = `COALESCE("p"."period_to", "p"."period_from", "p"."created_at"::date) >= $1`;
+    const dateExpr =
+      'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
+    const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
+
+    let payableWhere = `
+      ("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)
+      AND ("c"."id" IS NULL OR "c"."exclude_from_reports" IS NOT TRUE)
+      AND ("c"."id" IS NULL OR "c"."exclude_from_debt" IS NOT TRUE)
+      AND ${costExpr} > 0
+      AND ${dateExpr} >= $1
+    `;
     if (branchId) {
       payableParams.push(branchId);
-      payableWhere += ` AND "p"."branch_external_id" = $${payableParams.length}`;
+      payableWhere += ` AND (COALESCE("c"."branch_external_id", "gp"."branch_external_id") = $${payableParams.length})`;
     }
     if (dateTo) {
-      payableParams.push(dateTo);
-      payableWhere += ` AND COALESCE("p"."period_from", "p"."period_to") <= $${payableParams.length}`;
+      const effTo = dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
+      payableParams.push(effTo);
+      payableWhere += ` AND ${dateExpr} <= $${payableParams.length}`;
     }
+
+    const agingDaysExpr = `(CURRENT_DATE - DATE(${dateExpr}))`;
 
     const payableAggSql = `
       SELECT
-        COALESCE(SUM("p"."ck_co"), SUM("p"."ps_co"), 0)::numeric as "totalPayable",
-        COALESCE(SUM("p"."ck_no"), SUM("p"."ps_no"), 0)::numeric as "paidPayable",
-        COALESCE(SUM(GREATEST(0, COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0))), 0)::numeric as "remainingPayable",
-        COALESCE(SUM(CASE WHEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0 AND (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) <= 30 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "aging0To30",
-        COALESCE(SUM(CASE WHEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0 AND (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) BETWEEN 31 AND 60 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "aging31To60",
-        COALESCE(SUM(CASE WHEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0 AND (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) BETWEEN 61 AND 90 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "aging61To90",
-        COALESCE(SUM(CASE WHEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0 AND (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) > 90 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "agingOver90",
-        COALESCE(SUM(CASE WHEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0 AND (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) <= 7 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "dueNextWeek"
-      FROM "kgara_payables" "p"
+        COALESCE(SUM(${costExpr}), 0)::numeric as "totalPayable",
+        0::numeric as "paidPayable",
+        COALESCE(SUM(${costExpr}), 0)::numeric as "remainingPayable",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging0To30",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging31To60",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging61To90",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${costExpr} ELSE 0 END), 0)::numeric as "agingOver90",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 7 THEN ${costExpr} ELSE 0 END), 0)::numeric as "dueNextWeek"
+      FROM "kgara_cases" "c"
+      FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
       WHERE ${payableWhere}
     `;
-    const payableAggRows = await this.payableRepo.manager.query(
+    const payableAggRows = await this.caseRepo.manager.query(
       payableAggSql,
       payableParams,
     );
@@ -134,8 +148,9 @@ export class GarageDebtsAnalyticsService {
       SELECT
         TO_CHAR("c"."ngay_hoan_thanh_cong_viec", 'YYYY-MM') as "month",
         COALESCE(SUM("c"."tien_da_thanh_toan"), 0)::numeric as "cashIn",
-        COALESCE(SUM("c"."chi_phi"), 0)::numeric as "cashOut"
+        COALESCE(SUM(COALESCE("gp"."chi_phi", "c"."chi_phi", 0)), 0)::numeric as "cashOut"
       FROM "kgara_cases" "c"
+      LEFT JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
       WHERE ${caseWhere}
       GROUP BY TO_CHAR("c"."ngay_hoan_thanh_cong_viec", 'YYYY-MM')
       ORDER BY "month" ASC
@@ -184,23 +199,24 @@ export class GarageDebtsAnalyticsService {
       }),
     );
 
-    // 1.5 Top 5 Nhà cung cấp nợ lớn nhất
+    // 1.5 Top 5 Khách hàng có chi phí lớn nhất (Phải trả)
     const topSuppSql = `
       SELECT
-        COALESCE("p"."ma_so_doi_tac", "p"."doi_tac_id") as "partnerCode",
-        MAX(COALESCE("p"."ten_doi_tac", 'Nhà cung cấp')) as "partnerName",
-        COALESCE(SUM("p"."ck_co"), SUM("p"."ps_co"), 0)::numeric as "totalAmount",
-        COALESCE(SUM(GREATEST(0, COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0))), 0)::numeric as "balanceAmount",
-        COALESCE(SUM(CASE WHEN (CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))) > 30 THEN (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) ELSE 0 END), 0)::numeric as "overdueAmount",
-        COALESCE(MAX(CURRENT_DATE - DATE(COALESCE("p"."period_to", "p"."period_from", now()))), 0)::int as "maxAgingDays",
-        COUNT(DISTINCT "p"."ma_so_vu_viec")::int as "caseCount"
-      FROM "kgara_payables" "p"
-      WHERE ${payableWhere} AND (COALESCE("p"."ck_co", 0) - COALESCE("p"."ck_no", 0)) > 0
-      GROUP BY COALESCE("p"."ma_so_doi_tac", "p"."doi_tac_id")
+        COALESCE("c"."khach_hang_code", "gp"."raw_data"->>'MaKhachHang', "gp"."ten_khach_hang", 'UNKNOWN') as "partnerCode",
+        COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang", 'Chưa xác định') as "partnerName",
+        COALESCE(SUM(${costExpr}), 0)::numeric as "totalAmount",
+        COALESCE(SUM(${costExpr}), 0)::numeric as "balanceAmount",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 30 THEN ${costExpr} ELSE 0 END), 0)::numeric as "overdueAmount",
+        COALESCE(MAX(${agingDaysExpr}), 0)::int as "maxAgingDays",
+        COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code"))::int as "caseCount"
+      FROM "kgara_cases" "c"
+      FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      WHERE ${payableWhere}
+      GROUP BY COALESCE("c"."khach_hang_code", "gp"."raw_data"->>'MaKhachHang', "gp"."ten_khach_hang", 'UNKNOWN'), COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang", 'Chưa xác định')
       ORDER BY "balanceAmount" DESC
       LIMIT 5
     `;
-    const topSuppRows = await this.payableRepo.manager.query(
+    const topSuppRows = await this.caseRepo.manager.query(
       topSuppSql,
       payableParams,
     );
@@ -289,17 +305,18 @@ export class GarageDebtsAnalyticsService {
    */
   async getTimeHorizonCases(
     horizon: string,
-    query: GetGarageTimeHorizonCasesQueryDto,
+    query: GetGarageTimeHorizonCasesQueryDto = {} as any,
   ): Promise<GarageTimeHorizonCasesResponse> {
-    const effectiveDateFrom = query.date_from || query.dateFrom;
-    const effectiveDateTo = query.date_to || query.dateTo;
-    const effectiveBranchId = query.branch_id || query.branchId;
-    const direction = query.direction || 'ALL';
-    const search = query.search;
-    const page = query.page || 1;
-    const pageSize = query.pageSize || 20;
-    const sortBy = query.sortBy || 'agingDays';
-    const sortOrder = query.sortOrder || 'DESC';
+    const q = query || ({} as any);
+    const effectiveDateFrom = q.date_from || q.dateFrom;
+    const effectiveDateTo = q.date_to || q.dateTo;
+    const effectiveBranchId = q.branch_id || q.branchId;
+    const direction = q.direction || 'ALL';
+    const search = q.search;
+    const page = q.page || 1;
+    const pageSize = q.pageSize || 20;
+    const sortBy = q.sortBy || 'agingDays';
+    const sortOrder = q.sortOrder || 'DESC';
 
     const baseline = '2026-07-01';
     const effectiveFrom =

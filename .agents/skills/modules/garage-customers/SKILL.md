@@ -275,5 +275,66 @@ Khi chỉnh sửa phân hệ `garage-customers`:
    ```
 3. **Kiểm tra Type-check Frontend**:
    ```bash
-   cd /home/dev/repos/erp/erp-web && bun run build
+   cd /home/dev/repos/erp/erp-web && bun run type:check
    ```
+
+---
+
+## 8. Quản Lý Công Nợ Phải Trả Dịch Vụ Garage (Garage Payables & Customer Grouping Standard)
+
+Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụng cấu trúc 3 Tabs chuẩn hóa:
+1. **Tab 1. Tổng quan (`overview`)**: Dashboard KPIs, Horizon Grid, Aging Matrix và Analytics Charts. Đồng bộ 100% số liệu Phải thu & Phải trả.
+2. **Tab 2. Phải thu (`receivables`)**: Quản lý công nợ khách hàng và tuổi nợ thu hồi theo ngày hoàn tất phiếu (`GarageDebtsTable`).
+3. **Tab 3. Phải trả (`payables`)**: Quản lý công nợ chi phí được **gom nhóm theo từng Khách Hàng** (`GaragePayablesTable`), tương tự cấu trúc tab Phải thu.
+
+### 8.1. Nguồn Dữ Liệu & Quy Tắc Gom Nhóm Theo Khách Hàng
+- **Nguồn Chi Phí**: Truy vấn từ `kgara_cases` kết hợp `kgara_gross_profit` (liên kết qua `c.so_chung_tu = gp.vu_viec_code`), lọc các phiếu có `chi_phi > 0` và hoàn thành (`c.tinh_trang_dich_vu = 3` hoặc `c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
+- **Gom Nhóm (Group By)**: Nhóm theo mã khách hàng `COALESCE(c.khach_hang_code, gp.raw_data->>'MaKhachHang', gp.ten_khach_hang, 'UNKNOWN')`.
+- **Các Chỉ Số Cốt Lõi**:
+  - **Tên khách hàng (`customerName`)**: Tên đầy đủ của khách hàng, nhấp vào để mở ngay `GarageCustomerDetailDrawer`.
+  - **Mã KH (`customerCode`)**: Mã khách hàng KGara / ERP (copyable).
+  - **SL Phiếu DV (`caseCount`)**: Tổng số phiếu dịch vụ đã hoàn thành có phát sinh chi phí của khách hàng đó.
+  - **Chi phí báo giá (`costAmount`)**: Tổng chi phí sổ báo giá `SUM(chi_phi)`.
+  - **Còn phải chi (`balanceAmount`)**: Dư nợ chi phí còn phải chi trả.
+- **Mốc Tính Tuổi Nợ**: Tương tự như tab Phải thu, tuổi nợ phải chi được tính dựa trên khoảng cách giữa **ngày kết thúc/hoàn thành** của các phiếu và ngày hiện tại:
+  $$\text{agingDays} = \text{CURRENT\_DATE} - \text{DATE(COALESCE(c.ngay\_hoan\_thanh\_cong\_viec, (gp.raw\_data\text{->>}'NgayKetThuc')::timestamp, c.ngay\_phat\_sinh))}$$
+- **Phân Tầng 4 Nhóm Tuổi Nợ Chuẩn**:
+  1. `0-30` ngày: Trong hạn.
+  2. `31-60` ngày: Cần theo dõi.
+  3. `61-90` ngày: Quá hạn.
+  4. `>90` ngày: Quá hạn sâu.
+  - `maxAgingDays`: Tuổi nợ tối đa tính theo phiếu hoàn tất xa nhất của khách hàng.
+
+### 8.2. Đồng Bộ Số Liệu Garage Debts Dashboard (Tab Tổng Quan)
+- `GarageDebtsAnalyticsService` (`src/kgara-api-core/services/garage-debts-analytics.service.ts`):
+  - Khối Payables trên Dashboard đồng bộ cùng nguồn dữ liệu `kgara_cases` + `kgara_gross_profit` với Tab Phải trả.
+  - **KPI Cards**: `totalPayable` (Tổng chi phí báo giá), `remainingPayable` (Còn phải chi), `netBalance` = Còn phải thu - Còn phải chi.
+  - **Top Payables**: Khối `topPayableSuppliers` xếp hạng Top Khách Hàng có chi phí sổ báo giá cao nhất kèm số lượng phiếu.
+  - **Aging Comparison & Cash Trend**: Doanh thu đối chiếu song song với Chi phí theo tháng hoàn tất vụ việc.
+
+### 8.3. Kiến Trúc Backend (`/api-service-refactor`)
+- **`KgaraSuppliersService`** (`src/kgara-api-core/services/kgara-suppliers.service.ts` - 420 LoC < 500 LoC):
+  - Truy vấn danh sách công nợ chi phí gom nhóm theo khách hàng.
+  - Hỗ trợ đầy đủ bộ lọc chuẩn `/standardize-table`: Exact search (`exact:` hoặc `""`), Multi search (dấu phẩy `,` hoặc chấm phẩy `;`), Blank search (`__BLANK__` hoặc `(Trống)`), và server column search.
+  - Phân trang distinct options (`getSuppliersDebtColumnOptions`).
+- **`KgaraSuppliersController`** (`src/kgara-api-core/controllers/kgara-suppliers.controller.ts` - 70 LoC < 300 LoC):
+  - Clean DI Constructor, endpoints:
+    - `GET /greenway/payables/suppliers-debt`
+    - `GET /greenway/payables/suppliers-debt/column-options`
+    - `GET /greenway/payables/by-supplier/:supplierId/cases`
+
+### 8.4. Kiến Trúc Frontend (`/ui-atomic-refactor` & `/standardize-table`)
+- **Organism `garage-payables-table`** (`src/modules/garage/components/organisms/garage-payables-table/`):
+  - Toàn bộ files tuân thủ nghiêm ngặt **< 180 LoC/file**:
+    - `GaragePayablesTable.tsx` (127 LoC): View chính với `SpreadsheetPageTemplate`, toolbar, status badges, row action xem chi tiết mở Drawer.
+    - `GaragePayablesTable.baseColumns.tsx` (160 LoC): Cột STT (`40px`, center `{idx}`, CẤM `{idx + 1}`), Tên khách hàng (mở Drawer), Mã KH, SL Phiếu DV (badge), Chi phí báo giá, Còn phải chi.
+    - `GaragePayablesTable.agingColumns.tsx` (148 LoC): 4 cột phân tầng tuổi nợ (0-30d, 31-60d, 61-90d, >90d) và Tuổi nợ & Rủi ro.
+    - `GaragePayablesTable.cells.tsx` (116 LoC): Cells hiển thị tiến độ thanh toán và nhãn cảnh báo (No Blue Mandate - chỉ dùng Slate, Emerald, Amber, Rose, Violet).
+    - `GaragePayablesTable.summary.tsx` (155 LoC): Hàng tổng kết `<SubtotalSummaryCell>` truyền đủ `cumulativeCount`, `cumulativeAmount` cho Khách hàng, SL Phiếu DV, Chi phí báo giá và Còn phải chi.
+    - `GaragePayablesTable.export.ts` (55 LoC): Quick CSV export theo danh sách khách hàng và chi phí.
+    - `GaragePayablesTable.test.tsx` (75 LoC): Co-located Vitest test suite pass 100%.
+- **Tích Hợp Drawer**:
+  - Nhấp vào Khách hàng hoặc SL Phiếu DV trên Tab Phải trả mở trực tiếp `GarageCustomerDetailDrawer` để xem toàn bộ danh sách vụ việc của khách hàng.
+
+
+

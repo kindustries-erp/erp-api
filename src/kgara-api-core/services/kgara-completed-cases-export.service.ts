@@ -77,6 +77,7 @@ export class KgaraCompletedCasesExportService {
       branchNameMap,
       linkedInvoiceSummaryMap,
       settlementsMap,
+      serviceLinesMap,
     );
 
     buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);

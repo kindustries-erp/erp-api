@@ -177,50 +177,62 @@ describe('KgaraCompletedCasesExportService', () => {
     const sheet1 = workbook.getWorksheet('Bảng kê phiếu kết thúc');
     expect(sheet1).toBeDefined();
 
-    // Headers & Columns count (23 columns)
-    expect(sheet1?.getRow(4).getCell(10).value).toBe('Phải thu (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(11).value).toBe('Đã thu (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(12).value).toBe('Còn lại phải thu (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(13).value).toBe('Ghi chú thu');
-    expect(sheet1?.getRow(4).getCell(14).value).toBe('Phải trả (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(15).value).toBe('Đã trả (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(16).value).toBe('Còn lại phải trả (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(17).value).toBe('Ghi chú trả');
-    expect(sheet1?.getRow(4).getCell(18).value).toBe('Doanh thu (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(19).value).toBe('Chi phí / Giá vốn (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(20).value).toBe('Lợi nhuận gộp (VNĐ)');
-    expect(sheet1?.getRow(4).getCell(21).value).toBe('Biên LN (%)');
+    // Headers & Columns count (27 columns)
+    expect(sheet1?.getRow(4).getCell(10).value).toBe('Phải thu BH (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(11).value).toBe('Phải thu KH (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(12).value).toBe('Phải thu (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(13).value).toBe('Đã thu (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(14).value).toBe('Còn lại phải thu (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(15).value).toBe('Ghi chú thu');
+    expect(sheet1?.getRow(4).getCell(16).value).toBe('Chi phí nhân công (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(17).value).toBe('Chi phí phụ tùng (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(18).value).toBe('Phải trả (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(19).value).toBe('Đã trả (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(20).value).toBe('Còn lại phải trả (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(21).value).toBe('Ghi chú trả');
+    expect(sheet1?.getRow(4).getCell(22).value).toBe('Doanh thu (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(23).value).toBe('Chi phí / Giá vốn (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(24).value).toBe('Lợi nhuận gộp (VNĐ)');
+    expect(sheet1?.getRow(4).getCell(25).value).toBe('Biên LN (%)');
 
     // Row 5 Data & Formulas:
     const s1Row5 = sheet1?.getRow(5);
-    expect(s1Row5?.getCell(10).value).toBe(20000000); // Phải thu
-    expect(s1Row5?.getCell(11).value).toBe(15000000); // Đã thu (RECEIPT)
+    expect(s1Row5?.getCell(10).value).toBe(0); // Phải thu BH
+    expect(s1Row5?.getCell(11).value).toBe(20000000); // Phải thu KH
     expect(s1Row5?.getCell(12).value).toEqual(
-      expect.objectContaining({ formula: 'J5-K5', result: 5000000 }),
+      expect.objectContaining({ formula: 'SUM(J5:K5)', result: 20000000 }),
+    ); // Phải thu
+    expect(s1Row5?.getCell(13).value).toBe(15000000); // Đã thu (RECEIPT)
+    expect(s1Row5?.getCell(14).value).toEqual(
+      expect.objectContaining({ formula: 'L5-M5', result: 5000000 }),
     );
     // Ô Ghi chú thu có background màu pastel nhạt FFFFFBEB
-    expect((s1Row5?.getCell(13).fill as any)?.fgColor?.argb).toBe('FFFFFBEB');
+    expect((s1Row5?.getCell(15).fill as any)?.fgColor?.argb).toBe('FFFFFBEB');
 
-    expect(s1Row5?.getCell(14).value).toBe(12000000); // Phải trả
-    expect(s1Row5?.getCell(15).value).toBe(10000000); // Đã trả (PAYMENT)
-    expect(s1Row5?.getCell(16).value).toEqual(
-      expect.objectContaining({ formula: 'N5-O5', result: 2000000 }),
+    expect(s1Row5?.getCell(16).value).toBe(9000000); // Chi phí nhân công (12M - 3M phụ tùng)
+    expect(s1Row5?.getCell(17).value).toBe(3000000); // Chi phí phụ tùng (gvPt)
+    expect(s1Row5?.getCell(18).value).toEqual(
+      expect.objectContaining({ formula: 'SUM(P5:Q5)', result: 12000000 }),
+    ); // Phải trả
+    expect(s1Row5?.getCell(19).value).toBe(10000000); // Đã trả (PAYMENT)
+    expect(s1Row5?.getCell(20).value).toEqual(
+      expect.objectContaining({ formula: 'R5-S5', result: 2000000 }),
     );
     // Ô Ghi chú trả có background màu pastel nhạt FFFFFBEB
-    expect((s1Row5?.getCell(17).fill as any)?.fgColor?.argb).toBe('FFFFFBEB');
+    expect((s1Row5?.getCell(21).fill as any)?.fgColor?.argb).toBe('FFFFFBEB');
 
-    expect(s1Row5?.getCell(20).value).toEqual(
-      expect.objectContaining({ formula: 'R5-S5', result: 8000000 }),
+    expect(s1Row5?.getCell(24).value).toEqual(
+      expect.objectContaining({ formula: 'V5-W5', result: 8000000 }),
     );
-    expect(s1Row5?.getCell(21).value).toEqual(
+    expect(s1Row5?.getCell(25).value).toEqual(
       expect.objectContaining({
-        formula: 'IF(R5>0, T5/R5, 0)',
+        formula: 'IF(V5>0, X5/V5, 0)',
         result: 0.4,
       }),
     );
-    // Sheet 1 Cột 21 (Biên LN): 40% thuộc Dải 4 (Khá / Tốt: 40% - 60%): màu xanh lá Green-200 FFBBF7D0
-    expect((s1Row5?.getCell(21).fill as any)?.fgColor?.argb).toBe('FFBBF7D0');
-    expect((s1Row5?.getCell(21).font as any)?.color?.argb).toBe('FF15803D');
+    // Sheet 1 Cột 25 (Biên LN): 40% thuộc Dải 4 (Khá / Tốt: 40% - 60%): màu xanh lá Green-200 FFBBF7D0
+    expect((s1Row5?.getCell(25).fill as any)?.fgColor?.argb).toBe('FFBBF7D0');
+    expect((s1Row5?.getCell(25).font as any)?.color?.argb).toBe('FF15803D');
 
     // 2. Kiểm tra Sheet 2: Theo dõi lãi lỗ (Rename từ Theo dõi PnL)
     const sheet2 = workbook.getWorksheet('Theo dõi lãi lỗ');
