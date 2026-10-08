@@ -311,6 +311,16 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/payables` | `@BranchId()` | Lấy danh sách công nợ phải trả đã đồng bộ |
 | `GET` | `/dashboard` | `@BranchId()`, `from`, `to` | Lấy dữ liệu tổng quan dashboard vụ việc trực tiếp từ KGara |
 
+### 4.4. Nhóm Sổ Thu Chi Xưởng (Garage Cashflow)
+Base Route: `/api/v1/greenway/cashflow`
+| Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Query: `page`, `pageSize`, `search`, `statusTab` (`all`, `receipt`, `payment`, `with_bank`, `no_bank`), `filtersStr`, `sorts`, `dateFrom`, `dateTo` | Lấy danh sách giao dịch thu/chi phát sinh thực tế tại xưởng kèm liên kết số phiếu dịch vụ và sao kê ngân hàng, tính stats (totalReceipts, totalPayments, netCashflow) |
+| `GET` | `/column-options` | Query: `column`, `search`, `page`, `pageSize`, `filtersStr`, `statusTab` | Lấy danh sách distinct options phân trang cho popover lọc từng cột của bảng hoặc static master options |
+| `POST`| `/` | Body: `CreateGarageCashflowDto` | Ghi nhận giao dịch thu/chi mới, tự động chuẩn hóa kênh nguồn `ON_SYSTEM` / `OFF_SYSTEM_MANUAL`, cập nhật tổng hợp vụ việc nếu có `caseId` |
+| `PATCH`| `/:id` | `id`, Body: `UpdateGarageCashflowDto` | Cập nhật khoản thu/chi, tự động tính lại tổng thanh toán vụ việc cũ và mới |
+| `DELETE`| `/:id` | `id` | Xóa giao dịch thu/chi và tính lại tổng thanh toán vụ việc |
+
 ---
 
 ## 5. Logic Nghiệp vụ Trọng tâm

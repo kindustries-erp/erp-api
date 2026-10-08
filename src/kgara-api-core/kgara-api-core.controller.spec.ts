@@ -19,6 +19,7 @@ describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () 
   let linkedInvoiceRepo: any;
   let settlementRepo: any;
   let grossProfitRepo: any;
+  let caseQueryService: any;
 
   beforeEach(async () => {
     const mockRepo = () => ({
@@ -86,6 +87,7 @@ describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () 
       KgaraCaseFinancialController,
     );
     rootController = module.get<KgaraApiCoreController>(KgaraApiCoreController);
+    caseQueryService = module.get<KgaraCaseQueryService>(KgaraCaseQueryService);
   });
 
   it('should be defined', () => {
@@ -144,14 +146,7 @@ describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () 
   });
 
   describe('addCaseSettlement', () => {
-    it('should auto-sync ON_SYSTEM settlement into erp_invoice_voucher_netoff for linked invoices', async () => {
-      linkedInvoiceRepo.query.mockResolvedValue([
-        { id: 'inv-1', totalAmount: '6300000' },
-      ]);
-      settlementRepo.manager.query
-        .mockResolvedValueOnce([]) // no existing net-off
-        .mockResolvedValueOnce([]); // insert success
-
+    it('should create decoupled settlement and recalculate case summary without touching invoice netoff', async () => {
       const res = await controller.addCaseSettlement('case-1', {
         bankTransactionId: 'txn-1',
         settlementType: 'PAYMENT',
@@ -160,29 +155,35 @@ describe('KgaraCaseFinancialController (Bidirectional Netoff & Financials)', () 
       });
 
       expect(res.id).toBe('saved-id');
-      expect(settlementRepo.manager.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO erp_invoice_voucher_netoff'),
-        expect.arrayContaining(['inv-1', 'txn-1', 6300000]),
+      expect(settlementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caseId: 'case-1',
+          bankTransactionId: 'txn-1',
+          settlementType: 'PAYMENT',
+          sourceChannel: 'ON_SYSTEM',
+          amount: 6300000,
+        }),
       );
+      expect(settlementRepo.save).toHaveBeenCalled();
+      expect(
+        caseQueryService.recalculateCaseSettlementSummary,
+      ).toHaveBeenCalledWith('case-1');
+      expect(settlementRepo.manager.query).not.toHaveBeenCalled();
     });
   });
 
   describe('removeCaseSettlement', () => {
-    it('should auto-clean invoice netoff when ON_SYSTEM settlement is removed', async () => {
-      settlementRepo.findOne.mockResolvedValue({
-        id: 'set-1',
-        caseId: 'case-1',
-        bankTransactionId: 'txn-1',
-      });
-      linkedInvoiceRepo.query.mockResolvedValue([{ id: 'inv-1' }]);
-      settlementRepo.manager.query.mockResolvedValue([]);
-
+    it('should remove settlement and recalculate case summary without touching invoice netoff', async () => {
       const res = await controller.removeCaseSettlement('case-1', 'set-1');
       expect(res.success).toBe(true);
-      expect(settlementRepo.manager.query).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM erp_invoice_voucher_netoff'),
-        ['txn-1', ['inv-1']],
-      );
+      expect(settlementRepo.delete).toHaveBeenCalledWith({
+        id: 'set-1',
+        caseId: 'case-1',
+      });
+      expect(
+        caseQueryService.recalculateCaseSettlementSummary,
+      ).toHaveBeenCalledWith('case-1');
+      expect(settlementRepo.manager.query).not.toHaveBeenCalled();
     });
 
     it('should safely ignore temporary settlement IDs without querying DB', async () => {

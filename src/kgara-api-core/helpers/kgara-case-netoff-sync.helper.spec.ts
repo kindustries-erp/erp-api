@@ -58,16 +58,19 @@ describe('KgaraCaseNetoffSyncHelper (Pattern C Engine)', () => {
     // 5. Insert settlement
     mockManager.query.mockResolvedValueOnce([]);
 
-    // 6. Delete orphaned settlements
-    mockManager.query.mockResolvedValueOnce([]);
-
-    // 7. Sum receipts
+    // 6. Sum receipts
     mockManager.query.mockResolvedValueOnce([{ total_receipts: '6210000' }]);
 
-    // 8. Update case
+    // 7. Update case
     mockManager.query.mockResolvedValueOnce([]);
 
     await syncInvoiceNetOffToCaseSettlements(mockManager, 'inv-1489');
+
+    // Verify delete is never called on settlements
+    expect(mockManager.query).not.toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM kgara_case_settlements'),
+      expect.anything(),
+    );
 
     // Verify insert settlement called with target values
     expect(mockManager.query).toHaveBeenCalledWith(
@@ -117,19 +120,21 @@ describe('KgaraCaseNetoffSyncHelper (Pattern C Engine)', () => {
     // 4. Update settlement
     mockManager.query.mockResolvedValueOnce([]);
 
-    // 5. Delete orphaned settlements
-    mockManager.query.mockResolvedValueOnce([]);
-
-    // 6. Sum receipts
+    // 5. Sum receipts
     mockManager.query.mockResolvedValueOnce([{ total_receipts: '3000000' }]);
 
-    // 7. Update case
+    // 6. Update case
     mockManager.query.mockResolvedValueOnce([]);
 
     await syncSingleCaseSettlementsFromInvoiceNetOffs(
       mockManager,
       'case-1',
       'GR-PDV2608-0044',
+    );
+
+    expect(mockManager.query).not.toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM kgara_case_settlements'),
+      expect.anything(),
     );
 
     expect(mockManager.query).toHaveBeenCalledWith(

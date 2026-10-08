@@ -15,6 +15,7 @@ import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
 
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -76,6 +77,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
       KgaraGrossProfit,
       KgaraCaseSettlement,
       KgaraOperatingExpense,
+      ErpBankTransaction,
       ErpModuleCategory,
       CoreUser,
       CorePermission,

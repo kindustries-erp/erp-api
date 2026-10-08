@@ -148,31 +148,8 @@ export async function syncSingleCaseSettlementsFromInvoiceNetOffs(
       }
     }
 
-    // 4. Dọn dẹp các settlements ON_SYSTEM kế thừa từ HĐ mà giao dịch sao kê không còn nữa
-    const inheritCondition = `(
-      category = 'AUTO_NETOFF_INVOICE'
-      OR note LIKE '%hóa đơn liên kết%'
-      OR note LIKE '%Cấn trừ tự động từ HĐ%'
-    )`;
-
-    if (activeTxnIds.length > 0) {
-      await manager.query(
-        `DELETE FROM kgara_case_settlements
-         WHERE case_id = $1 
-           AND source_channel = 'ON_SYSTEM'
-           AND ${inheritCondition}
-           AND (bank_transaction_id IS NULL OR NOT (bank_transaction_id = ANY($2::uuid[])))`,
-        [caseId, activeTxnIds],
-      );
-    } else {
-      await manager.query(
-        `DELETE FROM kgara_case_settlements
-         WHERE case_id = $1 
-           AND source_channel = 'ON_SYSTEM'
-           AND ${inheritCondition}`,
-        [caseId],
-      );
-    }
+    // 4. Bảo toàn nguyên vẹn 100% các dòng kgara_case_settlements (Không bao giờ xóa ngầm dòng thu/chi)
+    // Liên kết với sao kê hay hóa đơn chỉ để tham chiếu đối soát (Reference-only).
 
     // 5. Cập nhật lại số dư công nợ của Vụ việc theo chuẩn Pure Cashflow
     const settlementSums = await manager.query(

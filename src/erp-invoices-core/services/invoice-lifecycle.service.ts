@@ -27,7 +27,6 @@ import {
   extractVinfastItemCode,
   extractStandardItemCode,
 } from '../helpers/vinfast-part-code.helper';
-import { syncInvoiceNetOffToCaseSettlements } from '../../kgara-api-core/helpers/kgara-case-netoff-sync.helper';
 
 @Injectable()
 export class InvoiceLifecycleService {
@@ -562,8 +561,6 @@ export class InvoiceLifecycleService {
       await this.repository.manager.delete(ErpInvoiceVoucherNetOff, {
         invoiceId: id,
       });
-      // Bi-directional sync: Dọn dẹp cấn trừ ở Phiếu dịch vụ Garage liên kết
-      await syncInvoiceNetOffToCaseSettlements(this.repository.manager, id);
     }
 
     invoice.postingStatus = 'UNPOSTED';
@@ -788,12 +785,6 @@ export class InvoiceLifecycleService {
       }
     }
 
-    // Bi-directional sync: Đồng bộ cấn trừ sang Phiếu dịch vụ Garage liên kết
-    await syncInvoiceNetOffToCaseSettlements(
-      this.repository.manager,
-      invoiceId,
-    );
-
     return { message: 'Đã liên kết phiếu thành công' };
   }
 
@@ -802,12 +793,6 @@ export class InvoiceLifecycleService {
       invoiceId,
       bankTransactionId: voucherId,
     });
-
-    // Bi-directional sync: Đồng bộ cấn trừ sang Phiếu dịch vụ Garage liên kết
-    await syncInvoiceNetOffToCaseSettlements(
-      this.repository.manager,
-      invoiceId,
-    );
 
     try {
       await this.transactionAccountingService.refreshJournalEntriesForBankTransaction(
