@@ -57,7 +57,7 @@ export class GarageCashflowTransactionService {
         voucherCode: generatedCode,
         voucherType: dto.voucherType,
         amount: dto.amount,
-        transDate: dto.transDate,
+        transDate: dto.transDate || now.toISOString().slice(0, 10),
         caseId: dto.caseId || undefined,
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
@@ -67,18 +67,29 @@ export class GarageCashflowTransactionService {
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
       if (dto.caseId) {
+        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+        if (dto.paymentMethod === 'Chuyển khoản')
+          paymentMethod = 'BANK_TRANSFER';
+        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
+        else if (
+          dto.paymentMethod === 'Quẹt thẻ' ||
+          dto.paymentMethod === 'Thẻ'
+        )
+          paymentMethod = 'POS';
+        else if (dto.paymentMethod) paymentMethod = 'OTHER';
+
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: dto.caseId || undefined,
           settlementType: dto.voucherType,
           amount: dto.amount,
-          transDate: dto.transDate || undefined,
+          transDate: dto.transDate || now.toISOString().slice(0, 10),
           bankTransactionId: dto.erpBankTransactionId || undefined,
           cashflowVoucherId: savedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod: 'CASH',
+          paymentMethod,
           payerType: 'KH',
           note: dto.note || undefined,
-          partnerName: caseRef?.khachHangName || undefined,
+          partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
         await queryRunner.manager.save(newSettlement);
       }
@@ -141,6 +152,22 @@ export class GarageCashflowTransactionService {
           if (dto.note !== undefined) existingSettlement.note = dto.note;
           if (dto.erpBankTransactionId !== undefined)
             existingSettlement.bankTransactionId = dto.erpBankTransactionId;
+
+          if (dto.paymentMethod !== undefined) {
+            let pm: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+            if (dto.paymentMethod === 'Chuyển khoản') pm = 'BANK_TRANSFER';
+            else if (dto.paymentMethod === 'Tiền mặt') pm = 'CASH';
+            else if (
+              dto.paymentMethod === 'Quẹt thẻ' ||
+              dto.paymentMethod === 'Thẻ'
+            )
+              pm = 'POS';
+            else if (dto.paymentMethod) pm = 'OTHER';
+            existingSettlement.paymentMethod = pm;
+          }
+          if (dto.partnerName !== undefined) {
+            existingSettlement.partnerName = dto.partnerName;
+          }
           await queryRunner.manager.save(existingSettlement);
         }
       } else if (newCaseId) {
@@ -150,6 +177,17 @@ export class GarageCashflowTransactionService {
         });
         if (kCase) partnerName = kCase.khachHangName || undefined;
 
+        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+        if (dto.paymentMethod === 'Chuyển khoản')
+          paymentMethod = 'BANK_TRANSFER';
+        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
+        else if (
+          dto.paymentMethod === 'Quẹt thẻ' ||
+          dto.paymentMethod === 'Thẻ'
+        )
+          paymentMethod = 'POS';
+        else if (dto.paymentMethod) paymentMethod = 'OTHER';
+
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: newCaseId,
           settlementType: newType,
@@ -158,10 +196,10 @@ export class GarageCashflowTransactionService {
           bankTransactionId: updatedVoucher.erpBankTransactionId || undefined,
           cashflowVoucherId: updatedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod: 'CASH',
+          paymentMethod,
           payerType: 'KH',
           note: updatedVoucher.note || undefined,
-          partnerName,
+          partnerName: dto.partnerName || partnerName,
         });
         await queryRunner.manager.save(newSettlement);
       }
