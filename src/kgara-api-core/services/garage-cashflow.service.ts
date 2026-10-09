@@ -238,25 +238,32 @@ export class GarageCashflowService {
         `SUM(CASE WHEN v.voucher_type = 'PAYMENT' THEN v.amount ELSE 0 END)`,
         'totalOut',
       )
-      .where('v.deleted_at IS NULL')
       .getRawOne();
 
     const breakdownIn = await this.voucherRepo
       .createQueryBuilder('v')
-      .select('v.payment_method', 'method')
+      .select(
+        `CASE WHEN v.erp_bank_transaction_id IS NOT NULL THEN 'Chuyển khoản' ELSE 'Tiền mặt' END`,
+        'method',
+      )
       .addSelect('SUM(v.amount)', 'amount')
       .where("v.voucher_type = 'RECEIPT'")
-      .andWhere('v.deleted_at IS NULL')
-      .groupBy('v.payment_method')
+      .groupBy(
+        `CASE WHEN v.erp_bank_transaction_id IS NOT NULL THEN 'Chuyển khoản' ELSE 'Tiền mặt' END`,
+      )
       .getRawMany();
 
     const breakdownOut = await this.voucherRepo
       .createQueryBuilder('v')
-      .select('v.payment_method', 'method')
+      .select(
+        `CASE WHEN v.erp_bank_transaction_id IS NOT NULL THEN 'Chuyển khoản' ELSE 'Tiền mặt' END`,
+        'method',
+      )
       .addSelect('SUM(v.amount)', 'amount')
       .where("v.voucher_type = 'PAYMENT'")
-      .andWhere('v.deleted_at IS NULL')
-      .groupBy('v.payment_method')
+      .groupBy(
+        `CASE WHEN v.erp_bank_transaction_id IS NOT NULL THEN 'Chuyển khoản' ELSE 'Tiền mặt' END`,
+      )
       .getRawMany();
 
     const trend = await this.voucherRepo
@@ -270,7 +277,6 @@ export class GarageCashflowService {
         `SUM(CASE WHEN v.voucher_type = 'PAYMENT' THEN v.amount ELSE 0 END)`,
         'out_amount',
       )
-      .where('v.deleted_at IS NULL')
       .groupBy(`TO_CHAR(v.trans_date, 'YYYY-MM')`)
       .orderBy(`TO_CHAR(v.trans_date, 'YYYY-MM')`, 'DESC')
       .limit(6)
@@ -278,9 +284,11 @@ export class GarageCashflowService {
 
     return {
       kpi: {
-        totalIn: Number(kpi?.totalin || 0),
-        totalOut: Number(kpi?.totalout || 0),
-        net: Number(kpi?.totalin || 0) - Number(kpi?.totalout || 0),
+        totalIn: Number(kpi?.totalIn ?? kpi?.totalin ?? 0),
+        totalOut: Number(kpi?.totalOut ?? kpi?.totalout ?? 0),
+        net:
+          Number(kpi?.totalIn ?? kpi?.totalin ?? 0) -
+          Number(kpi?.totalOut ?? kpi?.totalout ?? 0),
       },
       breakdown: {
         in: breakdownIn.map((b) => ({
