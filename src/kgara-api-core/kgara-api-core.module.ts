@@ -13,6 +13,7 @@ import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.ent
 import { KgaraGrossProfit } from './entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from './entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from './entities/kgara_cashflow_voucher.entity';
 
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
 import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
@@ -28,6 +29,7 @@ import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { GarageOpexService } from './services/garage-opex.service';
+import { GarageCashflowService } from './services/garage-cashflow.service';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
@@ -55,6 +57,7 @@ import { KgaraCasesController } from './controllers/kgara-cases.controller';
 import { KgaraCustomersController } from './controllers/kgara-customers.controller';
 import { KgaraSuppliersController } from './controllers/kgara-suppliers.controller';
 import { KgaraGrossProfitController } from './controllers/kgara-gross-profit.controller';
+import { GarageCashflowController } from './controllers/garage-cashflow.controller';
 import { KgaraSyncController } from './controllers/kgara-sync.controller';
 import { KgaraReportsController } from './controllers/kgara-reports.controller';
 import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
@@ -77,6 +80,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
       KgaraGrossProfit,
       KgaraCaseSettlement,
       KgaraOperatingExpense,
+      KgaraCashflowVoucher,
       ErpBankTransaction,
       ErpModuleCategory,
       CoreUser,
@@ -94,6 +98,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraSyncScheduler,
     GarageSmartSettlementService,
     GarageOpexService,
+    GarageCashflowService,
     GarageDashboardService,
     GarageDashboardStatsService,
     GarageDebtsAnalyticsService,
@@ -124,6 +129,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraCustomersController,
     KgaraSuppliersController,
     KgaraGrossProfitController,
+    GarageCashflowController,
     KgaraReportsController,
     KgaraSyncController,
     KgaraCaseFinancialController,
@@ -134,6 +140,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     KgaraClientService,
     GarageSmartSettlementService,
     GarageOpexService,
+    GarageCashflowService,
     GarageDashboardService,
     GarageDashboardStatsService,
     GarageCheckpointService,
