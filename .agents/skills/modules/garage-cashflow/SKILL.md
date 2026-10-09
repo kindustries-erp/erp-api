@@ -42,7 +42,10 @@ src/kgara-api-core/
 ├── controllers/
 │   └── garage-cashflow.controller.ts (Base path: /api/v1/greenway/cashflow-vouchers)
 └── services/
-    └── garage-cashflow.service.ts (Logic xử lý giao dịch, dashboard stats)
+    ├── garage-cashflow.service.ts (Facade Service Pattern, Clean DI Constructor)
+    ├── garage-cashflow-transaction.service.ts (Sub-Service quản lý tạo, sửa, xóa, cấn trừ, transaction lock)
+    └── engines/
+        └── garage-cashflow-query.engine.ts (Sub-Service query, get list, columns options, filter)
 ```
 
 ## 4. Danh sách API Endpoints & RBAC Contract
@@ -81,9 +84,11 @@ src/modules/garage/components/organisms/
 ├── garage-cashflow-table/          (Thư mục Organism cho Data Table chuẩn)
 │   ├── index.ts
 │   ├── GarageCashflowTable.tsx     (Main component, quản lý giao diện Data Table)
-│   ├── GarageCashflowTable.columns.tsx (Cấu hình TableText, Badge, Right-align cho số)
-│   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, quản lý state sorts, filters, pagination)
-│   └── GarageCashflowTable.type.ts
+│   ├── GarageCashflowTable.columns.tsx (Cấu hình TableText, Badge, Right-align, < 180 LoC)
+│   ├── GarageCashflowTable.helper.tsx (Tách các hàm render cell phức tạp để giảm tải file columns)
+│   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu query params, options, filters)
+│   ├── GarageCashflowTable.type.ts
+│   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
 ├── garage-cashflow-drawer/
 │   └── GarageCashflowDrawer.tsx    (Sử dụng StandardFormDrawer, layout 1 cột, hiển thị mã liên kết)
 └── garage-cashflow-list/
