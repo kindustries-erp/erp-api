@@ -14,6 +14,7 @@ import {
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
 } from '../dto/garage-cashflow.dto';
+import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
 
 @Injectable()
 export class GarageCashflowService {
@@ -301,10 +302,92 @@ export class GarageCashflowService {
     };
   }
 
+  async getColumnOptions(
+    column: string,
+    search: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filtersStr?: string,
+  ) {
+    const qb = this.voucherRepo.createQueryBuilder('voucher');
+    qb.leftJoin('voucher.case', 'case');
+
+    let selectField = '';
+    if (column === 'voucherCode') selectField = 'voucher.voucher_code';
+    else if (column === 'partnerName') selectField = 'case.khachHangName';
+    else if (column === 'note') selectField = 'voucher.note';
+    else if (column === 'caseCode') selectField = 'case.soChungTu';
+    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    qb.select(`DISTINCT ${selectField}`, 'value');
+    qb.andWhere(`${selectField} IS NOT NULL`);
+    qb.andWhere(`CAST(${selectField} AS TEXT) != ''`);
+
+    if (filtersStr) {
+      try {
+        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+        for (const [col, vals] of Object.entries(filters)) {
+          if (!vals || vals.length === 0 || col === column) continue;
+          if (col === 'voucherType') {
+            qb.andWhere('voucher.voucher_type IN (:...vtypes)', {
+              vtypes: vals,
+            });
+          } else if (col === 'createdAt') {
+            // Basic date range handler for createdAt
+            const range = vals[0].split('..');
+            if (range[0])
+              qb.andWhere('voucher.created_at >= :cdFrom', {
+                cdFrom: range[0],
+              });
+            if (range[1])
+              qb.andWhere('voucher.created_at <= :cdTo', {
+                cdTo: range[1] + ' 23:59:59',
+              });
+          }
+        }
+      } catch {}
+    }
+
+    if (search) {
+      applyMultiKeywordFilter(
+        qb,
+        `CAST(${selectField} AS TEXT)`,
+        search,
+        'search',
+      );
+    }
+
+    qb.orderBy('value', 'ASC');
+
+    const countQb = qb.clone();
+    if (countQb.expressionMap) {
+      countQb.expressionMap.groupBys = [];
+      countQb.expressionMap.selects = [];
+      countQb.expressionMap.orderBys = {};
+    }
+    const totalRaw = await countQb
+      .select(`COUNT(DISTINCT ${selectField})`, 'cnt')
+      .getRawOne();
+    const total = parseInt(totalRaw?.cnt || '0', 10);
+
+    qb.offset((page - 1) * pageSize).limit(pageSize);
+    const results = await qb.getRawMany();
+
+    return {
+      items: results.map((r) => String(r.value)).filter(Boolean),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
   async listVouchers(
     query: ListKgaraCashflowVoucherQueryDto,
   ): Promise<{ data: KgaraCashflowVoucher[]; total: number }> {
     const qb = this.voucherRepo.createQueryBuilder('voucher');
+    qb.leftJoinAndSelect('voucher.case', 'case');
+    qb.leftJoinAndSelect('voucher.erpBankTransaction', 'erpBankTransaction');
 
     if (query.date_from) {
       qb.andWhere('voucher.transDate >= :date_from', {
@@ -323,11 +406,103 @@ export class GarageCashflowService {
       qb.andWhere('voucher.caseId = :case_id', { case_id: query.case_id });
     }
 
+    if (query.column_filters) {
+      try {
+        const filters = JSON.parse(query.column_filters);
+        Object.entries(filters).forEach(([col, vals]) => {
+          const arr = vals as string[];
+          if (!arr || arr.length === 0) return;
+          if (col === 'voucherType') {
+            qb.andWhere('voucher.voucher_type IN (:...ftypes)', {
+              ftypes: arr,
+            });
+          } else if (col === 'createdAt') {
+            const range = arr[0].split('..');
+            if (range[0])
+              qb.andWhere('voucher.created_at >= :cFrom', { cFrom: range[0] });
+            if (range[1])
+              qb.andWhere('voucher.created_at <= :cTo', {
+                cTo: range[1] + ' 23:59:59',
+              });
+          }
+        });
+      } catch {}
+    }
+
+    if (query.column_search) {
+      try {
+        const searches = JSON.parse(query.column_search);
+        Object.entries(searches).forEach(([col, val]) => {
+          const searchStr = val as string;
+          if (!searchStr) return;
+          if (col === 'voucherCode')
+            applyMultiKeywordFilter(
+              qb,
+              'voucher.voucher_code',
+              searchStr,
+              'svoucherCode',
+            );
+          if (col === 'partnerName')
+            applyMultiKeywordFilter(
+              qb,
+              'case.khachHangName',
+              searchStr,
+              'spartnerName',
+            );
+          if (col === 'note')
+            applyMultiKeywordFilter(qb, 'voucher.note', searchStr, 'snote');
+          if (col === 'caseCode')
+            applyMultiKeywordFilter(
+              qb,
+              'case.soChungTu',
+              searchStr,
+              'scaseCode',
+            );
+        });
+      } catch {}
+    }
+
     const page = query.page || 1;
     const pageSize = query.pageSize || 20;
     const skip = (page - 1) * pageSize;
 
-    qb.orderBy('voucher.createdAt', 'DESC');
+    if (query.sorts) {
+      const sortsArr = Array.isArray(query.sorts)
+        ? query.sorts
+        : query.sorts.split(',');
+
+      // Keep track if we added any valid sort to fallback
+      let hasSort = false;
+      sortsArr.forEach((s) => {
+        if (!s) return;
+        let direction: 'ASC' | 'DESC' = 'ASC';
+        let field = s;
+        if (s.startsWith('-')) {
+          direction = 'DESC';
+          field = s.substring(1);
+        }
+
+        let dbField = '';
+        if (field === 'voucherCode') dbField = 'voucher.voucherCode';
+        else if (field === 'createdAt') dbField = 'voucher.createdAt';
+        else if (field === 'amount') dbField = 'voucher.amount';
+        else if (field === 'caseCode') dbField = 'case.soChungTu';
+        else if (field === 'transDate') dbField = 'voucher.transDate';
+        else if (field === 'voucherType') dbField = 'voucher.voucherType';
+        else if (field === 'partnerName') dbField = 'case.khachHangName';
+
+        if (dbField) {
+          qb.addOrderBy(dbField, direction);
+          hasSort = true;
+        }
+      });
+      if (!hasSort) {
+        qb.orderBy('voucher.createdAt', 'DESC');
+      }
+    } else {
+      qb.orderBy('voucher.createdAt', 'DESC');
+    }
+
     qb.skip(skip).take(pageSize);
 
     const [data, total] = await qb.getManyAndCount();

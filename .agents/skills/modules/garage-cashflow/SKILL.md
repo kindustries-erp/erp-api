@@ -53,7 +53,8 @@ src/kgara-api-core/
 
 | HTTP Method | Endpoint | Quyền (Action) | Mô tả |
 |-------------|----------|----------------|-------|
-| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (có phân trang, filter theo date, type, case_id). |
+| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Hỗ trợ multi-search qua `column_filters`, `column_search` và mảng sort `sorts`. |
+| `GET` | `/column-options` | `READ` | Lấy danh sách giá trị option phân trang cho bộ lọc cột (dynamic column filters). |
 | `GET` | `/dashboard` | `READ` | Thống kê KPI (tổng thu, chi, net), breakdown theo loại và trend 6 tháng gần nhất. |
 | `POST` | `/` | `CREATE` | Tạo phiếu mới. Nếu có `case_id`, tự động tạo record cấn trừ trong `kgara_case_settlements`. |
 | `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. |
@@ -66,14 +67,34 @@ src/kgara-api-core/
   - Khi **cập nhật** Voucher (thay đổi `amount`, `date`, `caseId`), hệ thống dò tìm `KgaraCaseSettlement` qua `cashflowVoucherId` để cập nhật đồng bộ, hoặc xóa đi (nếu `caseId` bị gỡ), hoặc tạo mới (nếu `caseId` mới được thêm vào).
   - Khi **xóa** Voucher, hệ thống tự động kiểm tra và xóa `KgaraCaseSettlement` tương ứng nếu có.
 - **Mã tự động**: `voucherCode` nếu client không truyền lên sẽ tự sinh theo format: `PT-GARA-YYMMDD-XXX` hoặc `PC-GARA-YYMMDD-XXX`.
+- **Sorting & Filtering Động**: Hỗ trợ sort nhiều field (parse từ `sorts` query param CSV) mapping chuẩn xác với entity TypeORM. Sử dụng `applyMultiKeywordFilter` cho tìm kiếm đa từ khóa.
 
 ## 6. Tích hợp Liên Module
-- **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát).
+- **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát). Khi get list hoặc view detail, queryBuilder `leftJoinAndSelect` để lấy `transactionCode` thay vì chỉ dùng UUID.
 - **erp-cash-vouchers**: Lưu tham chiếu qua trường `erpCashVoucherId`.
-- **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`.
+- **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua join.
 
-## 7. Quy tắc Kiểm thử & Báo cáo Chất lượng
+## 7. Cấu trúc Source Code Frontend (Web)
+Tuân thủ nghiêm ngặt **Atomic UI** (5 files Organism) cho cấu trúc Data Table theo `/standardize-table`:
+```text
+src/modules/garage/components/organisms/
+├── garage-cashflow-table/          (Thư mục Organism cho Data Table chuẩn)
+│   ├── index.ts
+│   ├── GarageCashflowTable.tsx     (Main component, quản lý giao diện Data Table)
+│   ├── GarageCashflowTable.columns.tsx (Cấu hình TableText, Badge, Right-align cho số)
+│   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, quản lý state sorts, filters, pagination)
+│   └── GarageCashflowTable.type.ts
+├── garage-cashflow-drawer/
+│   └── GarageCashflowDrawer.tsx    (Sử dụng StandardFormDrawer, layout 1 cột, hiển thị mã liên kết)
+└── garage-cashflow-list/
+    └── GarageCashflowList.tsx      (Wrapper component, kết nối Table và Drawer, không chứa logic UI sâu)
+```
+- **Sort format**: Gửi lên API dưới dạng chuỗi ngăn cách dấu phẩy (vd: `sorts=createdAt,-amount`) thay vì truyền dạng array object `sorts[]=...` để tránh lỗi Class-Validator của NestJS.
+- **Display**: Sử dụng `TableText` component có enableCopy và `onDetailClick`. Các tham chiếu hiển thị bằng Name/Code (`soChungTu`, `transactionCode`) thay vì UUID.
+
+## 8. Quy tắc Kiểm thử & Báo cáo Chất lượng
 Khi có thay đổi logic trong module này, bắt buộc phải:
-1. Kiểm tra typing: `bun run type:check`
-2. Chạy CI local: `bun run check:ci`
-3. Chạy unit tests: `bunx jest src/kgara-api-core/services/garage-cashflow.service.ts`
+1. Kiểm tra typing API: `bun run type:check` (trong thư mục API)
+2. Chạy CI local: `bun run check:ci` (trong thư mục API)
+3. Chạy unit tests API: `bunx jest src/kgara-api-core/services/garage-cashflow.service.ts`
+4. Kiểm tra typing Web: `bunx tsc --noEmit` (trong thư mục Web)

@@ -40,6 +40,24 @@ export class GarageCashflowController {
     return this.cashflowService.getDashboardStats();
   }
 
+  @Get('column-options')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  async getColumnOptions(
+    @Query('column') column: string,
+    @Query('search') search: string,
+    @Query('page') page: number,
+    @Query('pageSize') pageSize: number,
+    @Query('column_filters') column_filters: string,
+  ) {
+    return this.cashflowService.getColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      column_filters,
+    );
+  }
+
   @Post()
   @RequirePermissions({
     resource: ErpResource.GARAGE,
