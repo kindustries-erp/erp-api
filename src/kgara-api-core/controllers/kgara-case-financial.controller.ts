@@ -23,7 +23,6 @@ import { DocumentTraceabilityService } from '../../common/services/document-trac
 import { GarageSmartSettlementService } from '../services/garage-smart-settlement.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
 import { extractNetPayableAmount } from '../kgara-sync.service';
-import { syncSingleCaseSettlementsFromInvoiceNetOffs } from '../helpers/kgara-case-netoff-sync.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import {
@@ -135,47 +134,6 @@ export class KgaraCaseFinancialController {
       if (link) {
         results.push(link);
       }
-
-      // Auto-sync 2 chiều khi liên kết Hóa đơn <-> Phiếu dịch vụ:
-      try {
-        const isOut = item.linkType === 'OUT';
-        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-
-        // 1. Chiều Case -> Invoice: Nếu Case đã có sao kê ON_SYSTEM, cấn trừ sang Hóa đơn
-        const settlements = await this.settlementRepo.find({
-          where: {
-            caseId: id,
-            sourceChannel: 'ON_SYSTEM',
-            settlementType: targetSettlementType,
-          },
-        });
-
-        for (const s of settlements) {
-          if (s.bankTransactionId) {
-            const netOff = await this.settlementRepo.manager.query(
-              `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-              [item.invoiceId, s.bankTransactionId],
-            );
-            if (!netOff || netOff.length === 0) {
-              await this.settlementRepo.manager.query(
-                `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-                 VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-                [item.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
-              );
-            }
-          }
-        }
-
-        // 2. Chiều Invoice -> Case: Đồng bộ toàn bộ cấn trừ sao kê của Hóa đơn sang Phiếu dịch vụ
-        await syncSingleCaseSettlementsFromInvoiceNetOffs(
-          this.settlementRepo.manager,
-          id,
-        );
-      } catch (syncErr) {
-        this.logger.warn(
-          `Could not sync bi-directional settlements and netoff: ${syncErr}`,
-        );
-      }
     }
 
     return Array.isArray(body) || (body as any)?.items ? results : results[0];
@@ -223,28 +181,8 @@ export class KgaraCaseFinancialController {
       where: { id: linkedId, caseDbId: id },
     });
     if (link) {
-      try {
-        const settlements = await this.settlementRepo.find({
-          where: { caseId: id, sourceChannel: 'ON_SYSTEM' },
-        });
-        const txnIds = settlements
-          .map((s) => s.bankTransactionId)
-          .filter((tid): tid is string => !!tid);
-        if (txnIds.length > 0) {
-          await this.linkedInvoiceRepo.manager.query(
-            `DELETE FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = ANY($2::uuid[])`,
-            [link.invoiceId, txnIds],
-          );
-        }
-      } catch (delSyncErr) {
-        this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
-      }
+      // Chỉ gỡ liên kết tham chiếu (Reference-only), không xóa settlement và không can thiệp net-off
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
-      // Bi-directional sync: Đồng bộ & tính lại settlements cho vụ việc sau khi gỡ hóa đơn
-      await syncSingleCaseSettlementsFromInvoiceNetOffs(
-        this.linkedInvoiceRepo.manager,
-        id,
-      );
     }
     return { success: true };
   }
@@ -460,42 +398,6 @@ export class KgaraCaseFinancialController {
     });
     const saved = await this.settlementRepo.save(settlement);
 
-    // Auto-cấn trừ 2 chiều: Nếu giao dịch là ON_SYSTEM (Sao kê ngân hàng / Sổ quỹ)
-    // Tự động tìm hóa đơn liên kết của vụ việc có hướng tương ứng và cấn trừ vào Hóa đơn
-    if (sourceChannel === 'ON_SYSTEM' && body.bankTransactionId) {
-      try {
-        const isOut = body.settlementType === 'RECEIPT';
-        const targetDirection = isOut ? 'OUT' : 'IN';
-        const linkedInvoices = await this.linkedInvoiceRepo.query(
-          `SELECT DISTINCT i.id, i.total_amount as "totalAmount"
-           FROM erp_invoices i
-           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
-           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
-             AND (i.direction = $2 OR l."linkType" = $2)
-             AND i.is_deleted = false`,
-          [id, targetDirection],
-        );
-
-        for (const inv of linkedInvoices) {
-          const netOff = await this.settlementRepo.manager.query(
-            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-            [inv.id, body.bankTransactionId],
-          );
-          if (!netOff || netOff.length === 0) {
-            await this.settlementRepo.manager.query(
-              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-              [inv.id, body.bankTransactionId, Number(body.amount || 0)],
-            );
-          }
-        }
-      } catch (syncErr) {
-        this.logger.warn(
-          `Could not sync case settlement to invoice netoff: ${syncErr}`,
-        );
-      }
-    }
-
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
     return saved;
   }
@@ -522,34 +424,6 @@ export class KgaraCaseFinancialController {
         (!uuidRegex.test(settlementId) || !uuidRegex.test(id)))
     ) {
       return { success: true, message: 'Ignored non-persisted temporary ID' };
-    }
-
-    const settlement = await this.settlementRepo.findOne({
-      where: { id: settlementId, caseId: id },
-    });
-
-    if (settlement && settlement.bankTransactionId) {
-      try {
-        const linkedInvoices = await this.linkedInvoiceRepo.query(
-          `SELECT DISTINCT i.id
-           FROM erp_invoices i
-           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
-           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
-             AND i.is_deleted = false`,
-          [id],
-        );
-        const invIds = linkedInvoices.map((i: any) => i.id).filter(Boolean);
-        if (invIds.length > 0) {
-          await this.settlementRepo.manager.query(
-            `DELETE FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = $1 AND invoice_id = ANY($2::uuid[])`,
-            [settlement.bankTransactionId, invIds],
-          );
-        }
-      } catch (delSyncErr) {
-        this.logger.warn(
-          `Could not clean up invoice netoff on settlement delete: ${delSyncErr}`,
-        );
-      }
     }
 
     await this.settlementRepo.delete({ id: settlementId, caseId: id });

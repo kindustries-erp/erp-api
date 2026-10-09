@@ -10,7 +10,6 @@ import { PostBankTransactionDto } from '../dto/post-bank-transaction.dto';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
-import { syncInvoiceNetOffToCaseSettlements } from '../../kgara-api-core/helpers/kgara-case-netoff-sync.helper';
 
 @Injectable()
 export class TransactionAccountingService {
@@ -506,16 +505,6 @@ export class TransactionAccountingService {
       );
     }
 
-    // Bi-directional sync: Đồng bộ cấn trừ sang các Phiếu dịch vụ Garage đang liên kết với Hóa đơn này
-    try {
-      await syncInvoiceNetOffToCaseSettlements(
-        this.dataSource.manager,
-        payload.invoiceId,
-      );
-    } catch (caseSyncErr) {
-      // Non-blocking
-    }
-
     // Refresh journal entries if needed
     try {
       await this.refreshJournalEntriesForBankTransaction(txnId);
@@ -551,19 +540,6 @@ export class TransactionAccountingService {
        WHERE bank_transaction_id = $1 AND (invoice_id = $2 OR id = $2)`,
       [txnId, invoiceIdOrNetOffId],
     );
-
-    // 3. Bi-directional cascade delete: Tự động cập nhật cấn trừ sao kê ở các Phiếu dịch vụ kết nối
-    try {
-      for (const invId of affectedInvoiceIds) {
-        if (!invId) continue;
-        await syncInvoiceNetOffToCaseSettlements(
-          this.dataSource.manager,
-          invId,
-        );
-      }
-    } catch (caseDelSyncErr) {
-      // Non-blocking
-    }
 
     // Refresh journal entries if needed
     try {
