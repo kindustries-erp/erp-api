@@ -11,6 +11,7 @@ import {
 import { KgaraCase } from './kgara_case.entity';
 import { KgaraGrossProfit } from './kgara_gross_profit.entity';
 import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_bank_transaction.entity';
+import { KgaraCashflowVoucher } from './kgara_cashflow_voucher.entity';
 
 @Entity('kgara_case_settlements')
 @Index('IDX_case_settlements_case_id', ['caseId'])
@@ -101,4 +102,14 @@ export class KgaraCaseSettlement {
   @ManyToOne(() => ErpBankTransaction, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'bank_transaction_id' })
   bankTransaction?: ErpBankTransaction;
+
+  @Column({ type: 'uuid', name: 'cashflow_voucher_id', nullable: true })
+  cashflowVoucherId?: string;
+
+  @ManyToOne(() => KgaraCashflowVoucher, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'cashflow_voucher_id' })
+  cashflowVoucher?: KgaraCashflowVoucher;
 }
