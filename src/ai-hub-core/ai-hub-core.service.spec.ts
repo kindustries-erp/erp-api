@@ -120,5 +120,15 @@ describe('AiHubCoreService', () => {
     const health = await service.healthCheck();
     expect(health.ok).toBe(true);
     expect(health.modelsCount).toBe(20);
+    expect(mockNineRouterClient.healthCheck).toHaveBeenLastCalledWith({
+      deep: false,
+    });
+  });
+
+  it('forwards deep=true to the client health check', async () => {
+    await service.healthCheck(true);
+    expect(mockNineRouterClient.healthCheck).toHaveBeenLastCalledWith({
+      deep: true,
+    });
   });
 });

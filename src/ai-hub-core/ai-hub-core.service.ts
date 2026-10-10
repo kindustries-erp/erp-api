@@ -253,8 +253,8 @@ export class AiHubCoreService {
   /**
    * Check connection to 9router
    */
-  async healthCheck(): Promise<any> {
-    return this.nineRouterClient.healthCheck();
+  async healthCheck(deep = false): Promise<any> {
+    return this.nineRouterClient.healthCheck({ deep });
   }
 
   private async recordLog(data: Partial<ErpAiLog>): Promise<ErpAiLog> {

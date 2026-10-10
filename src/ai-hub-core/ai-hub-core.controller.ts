@@ -71,8 +71,11 @@ export class AiHubCoreController {
   }
 
   @Get('health-check')
-  @ApiOperation({ summary: 'Kiểm tra trạng thái kết nối tới 9router gateway' })
-  async healthCheck() {
-    return this.aiHubCoreService.healthCheck();
+  @ApiOperation({
+    summary:
+      'Kiểm tra trạng thái kết nối tới 9router gateway (deep=true: gọi thử từng tier)',
+  })
+  async healthCheck(@Query('deep') deep?: string) {
+    return this.aiHubCoreService.healthCheck(deep === 'true');
   }
 }

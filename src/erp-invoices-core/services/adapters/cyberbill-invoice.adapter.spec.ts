@@ -1,6 +1,9 @@
 import { CyberbillInvoiceAdapter } from './cyberbill-invoice.adapter';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
-import { InvoiceCaptchaSolverService } from '../original-pdf/invoice-captcha-solver.service';
+import {
+  CaptchaSolverConfigError,
+  InvoiceCaptchaSolverService,
+} from '../original-pdf/invoice-captcha-solver.service';
 
 describe('CyberbillInvoiceAdapter', () => {
   let adapter: CyberbillInvoiceAdapter;
@@ -246,5 +249,27 @@ describe('CyberbillInvoiceAdapter', () => {
 
     expect(res.success).toBe(true);
     expect(mockCaptchaSolver.solveCaptchaBase64).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops immediately on a captcha solver config error without retrying', async () => {
+    (mockCaptchaSolver.solveCaptchaBase64 as jest.Mock).mockRejectedValue(
+      new CaptchaSolverConfigError('NINE_ROUTER_API_KEY is not configured'),
+    );
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        result: { key: 'k', image: 'data:image/jpeg;base64,abc' },
+      }),
+    } as any);
+
+    const res = await adapter.downloadOriginalPdf({
+      invoiceNo: '1',
+      lookupCode: 'SECRET',
+      sellerTaxCode: '0101234567',
+    } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('NINE_ROUTER_API_KEY is not configured');
+    expect(mockCaptchaSolver.solveCaptchaBase64).toHaveBeenCalledTimes(1);
   });
 });
