@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCase } from '../entities/kgara_case.entity';
@@ -8,6 +12,7 @@ import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
 } from '../dto/garage-cashflow.dto';
+import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -92,6 +97,8 @@ export class GarageCashflowTransactionService {
           partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
         await queryRunner.manager.save(newSettlement);
+
+        await this._recalculateCaseDebt(queryRunner, dto.caseId);
       }
 
       await queryRunner.commitTransaction();
@@ -204,6 +211,13 @@ export class GarageCashflowTransactionService {
         await queryRunner.manager.save(newSettlement);
       }
 
+      if (oldCaseId && oldCaseId !== newCaseId) {
+        await this._recalculateCaseDebt(queryRunner, oldCaseId);
+      }
+      if (newCaseId) {
+        await this._recalculateCaseDebt(queryRunner, newCaseId);
+      }
+
       await queryRunner.commitTransaction();
       return updatedVoucher;
     } catch (error) {
@@ -228,6 +242,15 @@ export class GarageCashflowTransactionService {
         throw new NotFoundException(`Voucher ${id} not found`);
       }
 
+      if (
+        existingVoucher.erpBankTransactionId ||
+        existingVoucher.erpCashVoucherId
+      ) {
+        throw new BadRequestException(
+          'Không thể xóa phiếu thu/chi đã được đồng bộ với sao kê ngân hàng hoặc sổ quỹ ERP. Vui lòng gỡ liên kết trước.',
+        );
+      }
+
       const existingSettlement = await queryRunner.manager.findOne(
         KgaraCaseSettlement,
         {
@@ -235,11 +258,17 @@ export class GarageCashflowTransactionService {
         },
       );
 
+      let relatedCaseId: string | undefined;
       if (existingSettlement) {
+        relatedCaseId = existingSettlement.caseId;
         await queryRunner.manager.remove(existingSettlement);
       }
 
       await queryRunner.manager.remove(existingVoucher);
+
+      if (relatedCaseId) {
+        await this._recalculateCaseDebt(queryRunner, relatedCaseId);
+      }
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -248,5 +277,33 @@ export class GarageCashflowTransactionService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  private async _recalculateCaseDebt(
+    queryRunner: QueryRunner,
+    caseId: string,
+  ): Promise<void> {
+    const kCase = await queryRunner.manager.findOne(KgaraCase, {
+      where: { id: caseId },
+    });
+    if (!kCase) return;
+
+    const settlements = await queryRunner.manager.find(KgaraCaseSettlement, {
+      where: { caseId },
+    });
+    const netPayable = extractNetPayableAmount(kCase);
+
+    if (settlements.length > 0) {
+      const totalReceipts = settlements
+        .filter((s) => s.settlementType === 'RECEIPT')
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+      kCase.tienDaThanhToan = totalReceipts;
+      kCase.tienConPhaiThanhToan = Math.max(0, netPayable - totalReceipts);
+    } else {
+      const rawPaid = Number(kCase.rawData?.TienDaThanhToan || 0);
+      kCase.tienDaThanhToan = rawPaid;
+      kCase.tienConPhaiThanhToan = Math.max(0, netPayable - rawPaid);
+    }
+    await queryRunner.manager.save(KgaraCase, kCase);
   }
 }
