@@ -169,7 +169,7 @@ graph TD
 ### Lệnh Kiểm tra Code & Chạy Test
 ```bash
 # Type check toàn diện backend
-cd /home/dev/repos-dev/erp/erp-api && bun run type:check
+cd erp/erp-api && bun run type:check
 
 # Chạy unit tests cho module chi phí vận hành
 bun test src/operating-expenses-core/operating-expenses-core.service.spec.ts
@@ -181,7 +181,7 @@ bun test src/erp-invoices-core/services/invoice-lifecycle.service.spec.ts
 ```
 
 ### Script Hạch toán Hàng loạt Dữ liệu Lịch sử (2025 - Nay)
-- Script: [`scripts/batch-post-historical.ts`](file:///home/dev/repos-dev/erp/erp-api/scripts/batch-post-historical.ts)
+- Script: [`scripts/batch-post-historical.ts`](erp/erp-api/scripts/batch-post-historical.ts)
 - **Chế độ Dry-Run (Kiểm toán, không ghi DB)**:
   ```bash
   bun scripts/batch-post-historical.ts --dry-run

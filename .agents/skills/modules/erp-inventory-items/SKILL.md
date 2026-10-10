@@ -120,7 +120,7 @@ Khi triển khai trên database mới hoặc cập nhật môi trường staging
 
 1. **Chạy TypeORM Migration Runner**:
    ```bash
-   cd /home/dev/repos/erp/erp-api
+   cd erp/erp-api
    bun run migration:run
    ```
 2. **File Migration Chính**: `src/migrations/1788900000000-MigrateInventoryItemAttributesToModuleConfig.ts`.
@@ -149,10 +149,10 @@ Khi triển khai trên database mới hoặc cập nhật môi trường staging
 
 1. **Backend Tests & CI Check**:
    ```bash
-   cd /home/dev/repos/erp/erp-api && bun test src/inventory-core
-   cd /home/dev/repos/erp/erp-api && bun run check:ci
+   cd erp/erp-api && bun test src/inventory-core
+   cd erp/erp-api && bun run check:ci
    ```
 2. **Frontend Type Check**:
    ```bash
-   cd /home/dev/repos/erp/erp-web && bun run type:check
+   cd erp/erp-web && bun run type:check
    ```

@@ -41,7 +41,7 @@ description: Trợ lý giúp Agent/Developer chia tách các NestJS Controller (
 Để kiểm tra nhanh danh sách các file vượt ngưỡng trong toàn bộ `src/`:
 
 ```bash
-bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
+bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts   # thêm --path=<thư mục> | --json | --strict | --no-scripts
 ```
 
 Script sẽ phân loại theo mức độ 🔴 `CRITICAL` / 🟡 `WARN`, đếm số dòng và gợi ý pattern xử lý phù hợp.
@@ -93,7 +93,7 @@ export class KgaraCustomersController {
 
 *Áp dụng cho:* Service phình to (> 500 dòng) do ôm nhiều nghiệp vụ hoặc gom nhiều báo cáo/tính năng độc lập (ví dụ: `reports-core.service.ts`, `production-core.service.ts`).
 
-*Mô hình tham chiếu xuất sắc đã triển khai:* Thư mục [`src/erp-invoices-core/services/`](file:///home/dev/repos-dev/erp/erp-api/src/erp-invoices-core/services).
+*Mô hình tham chiếu xuất sắc đã triển khai:* Thư mục [`src/erp-invoices-core/services/`](erp/erp-api/src/erp-invoices-core/services).
 
 #### Cấu trúc thư mục mục tiêu:
 ```

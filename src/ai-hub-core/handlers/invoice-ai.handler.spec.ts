@@ -212,6 +212,7 @@ describe('InvoiceAiHandler', () => {
 
       expect(result.categoryCode).toBeNull();
       expect(result.confidence).toBe(0.55);
+      expect(result.fallbackReason).toBe('LOW_CONFIDENCE');
     });
 
     it('should fallback to null when AI throws an error', async () => {
@@ -228,6 +229,7 @@ describe('InvoiceAiHandler', () => {
       expect(result.categoryCode).toBeNull();
       expect(result.confidence).toBe(0);
       expect(result.reason).toContain('AI Failure');
+      expect(result.fallbackReason).toBe('AI_ERROR');
     });
   });
 

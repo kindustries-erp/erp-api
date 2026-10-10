@@ -10,7 +10,7 @@ description: Module tri thức AI Hub Core & 9router Gateway Integration trong e
 Module `ai-hub-core` là cổng trung tâm (Central Gateway & Orchestrator) chịu trách nhiệm kết nối, điều phối và phân bổ các tác vụ trí tuệ nhân tạo (AI) trong toàn bộ hệ thống ERP:
 
 Các nghiệp vụ trọng tâm:
-- **Cổng kết nối AI tập trung (`NineRouterClient`)**: Kết nối tới gateway nội bộ `https://9router.liouni.com/v1` (tương thích chuẩn OpenAI API), hỗ trợ timeout tự động, exponential backoff retry, và xử lý streaming/JSON mượt mà.
+- **Cổng kết nối AI tập trung (`NineRouterClient`)**: Kết nối tới gateway nội bộ `https://9router.liouni.com/v1` (tương thích chuẩn OpenAI API), hỗ trợ timeout tự động, exponential backoff retry (kèm jitter, tôn trọng `Retry-After`), và xử lý streaming/JSON mượt mà. Chỉ retry lỗi tạm thời (network, timeout, 408/425/429/5xx); các lỗi 4xx khác ném `NineRouterError` ngay. Timeout/retries cấu hình qua `NINE_ROUTER_TIMEOUT_MS` (mặc định 30000) và `NINE_ROUTER_MAX_RETRIES` (mặc định 2). `InvoiceCaptchaSolverService` (erp-invoices-core) cũng gọi qua client này (model `NINE_ROUTER_VISION_MODEL`, mặc định `ag/gemini-3.8-flash`); `ChatMessage.content` hỗ trợ `string | ContentPart[]` (text + image_url). Các script backfill hóa đơn (`scripts/backfill-invoice-categories-autopost.ts`, `src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts`) gọi qua `InvoiceAiHandler`/`NineRouterClient` và nạp env bằng `src/common/scripts/load-script-env.ts`. Cảnh báo vận hành: nếu tier `low/medium/high/ultra` trả 503 "No active credentials for provider" thì đó là cấu hình phía 9router. Cách xử lý không cần sửa code: đặt env `NINE_ROUTER_TIER_MODELS` (JSON, vd `{"low":"ag/gemini-3.8-flash-low","medium":"ag/gemini-3.8-flash-medium","high":"ag/gemini-3.8-flash-high"}`) — `NineRouterClient` thay tên tier bằng model cụ thể cho mọi caller (model cụ thể giữ nguyên, JSON hỏng thì cảnh báo và bỏ qua); hoặc dùng `--model=`/`modelOverride`. Phát hiện sớm bằng `GET /ai-hub/health-check?deep=true` (gọi thử 1 request nhỏ cho từng tier low/medium/high, trả `tiers` và `ok=false` kèm tên tier lỗi); health mặc định chỉ gọi `/models` nên không thấy lỗi này. Model `ag/gemini-3.7-flash-*` hiện bị upstream trả 404.
 - **Phân bổ Tier linh hoạt (`Tier Selection`)**: Phân bổ mô hình AI thông minh theo 4 cấp độ:
   - `Tier low` *(Gemini 3.7 Flash Low)*: Tác vụ phân loại nhanh, trích xuất ngắn, chuẩn hóa dữ liệu.
   - `Tier medium` *(Gemini 3.7 Flash Medium)*: Đọc hiểu chứng từ, gợi ý định khoản kế toán, đối chiếu báo giá.
@@ -92,7 +92,8 @@ src/ai-hub-core/
 ├── ai-hub-core.service.spec.ts        # Unit test cho AiHubCoreService
 ├── clients/
 │   ├── nine-router.client.ts          # HTTP/SSE Client kết nối 9router gateway (Clean DI: constructor(configService))
-│   ├── nine-router.types.ts           # Định nghĩa Types & Interfaces chuẩn OpenAI/9router
+│   ├── nine-router.types.ts           # Định nghĩa Types & Interfaces chuẩn OpenAI/9router (ContentPart, ChatMessage)
+│   ├── nine-router.error.ts           # NineRouterError (status, retryable, bodySnippet ≤500, retryAfterMs) + isRetryableStatus
 │   └── nine-router.client.spec.ts     # Unit test cho NineRouterClient
 ├── helpers/
 │   ├── json-to-toon.helper.ts         # Universal TOON (Token-Oriented Object Notation) Serializer (-50% tokens)
@@ -107,7 +108,8 @@ src/ai-hub-core/
 │   ├── update-ai-config.dto.ts        # DTO cập nhật cấu hình phân hệ AI
 │   └── create-prompt-template.dto.ts  # DTO tạo/cập nhật prompt template
 └── handlers/
-    ├── invoice-ai.handler.ts          # Handler Hóa đơn & OCR (hỗ trợ extractInvoiceData, extractLicensePlate với TOON, và classifyInvoiceCategory phân loại 14 nhóm Thông tư 99 với VinFast whitelist & fallback T0003)
+    ├── invoice/                        # Module thuần (không DI) tách từ handler: *.prompt.ts, invoice-ai.parsers.ts (+spec), invoice-ai.constants.ts (VINFAST_TAX_CODES, 14 mã danh mục), invoice-ai.types.ts
+    ├── invoice-ai.handler.ts          # Handler (facade, constructor chỉ nhận NineRouterClient; re-export types/hằng số). Kết quả phân loại có thêm `fallbackReason` (AI_ERROR | LOW_CONFIDENCE | INVALID_CODE) và `fromMemory`. Handler Hóa đơn & OCR (hỗ trợ extractInvoiceData, extractLicensePlate với TOON, và classifyInvoiceCategory phân loại 14 nhóm Thông tư 99 với VinFast whitelist & fallback T0003)
     ├── invoice-ai.handler.spec.ts     # Unit test cho InvoiceAiHandler
     ├── accounting-ai.handler.ts       # Handler phân hệ Kế toán & Định khoản tự động
     ├── purchasing-ai.handler.ts       # Handler phân hệ Mua hàng & Báo giá NCC
@@ -132,7 +134,7 @@ Controller Base Route: `/api/ai-hub` (Bảo vệ bởi `JwtAuthGuard`)
 | `GET` | `/api/ai-hub/configs/:moduleCode` | Params: `moduleCode` | Xem chi tiết cấu hình của một phân hệ |
 | `PATCH` | `/api/ai-hub/configs/:moduleCode` | `UpdateAiConfigDto` | Cập nhật Tier, Model Override, nhiệt độ hoặc bật/tắt phân hệ |
 | `GET` | `/api/ai-hub/logs` | Query: `limit` | Xem lịch sử gọi AI và token usage |
-| `GET` | `/api/ai-hub/health-check` | — | Kiểm tra kết nối và độ trễ tới 9router gateway |
+| `GET` | `/api/ai-hub/health-check` | — | Kiểm tra kết nối và độ trễ tới 9router gateway (trả `ok`, `latencyMs`, `modelsCount`, `hasApiKey`, `message?`) |
 
 ---
 

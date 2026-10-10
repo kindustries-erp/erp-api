@@ -24,8 +24,24 @@ export class CreateKgaraCashflowVoucherDto {
   amount: number;
 
   @IsString()
-  @IsNotEmpty()
-  transDate: string;
+  @IsOptional()
+  transDate?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  partnerName?: string;
+
+  @IsString()
+  @IsOptional()
+  partnerPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  referenceNumber?: string;
 
   @IsUUID()
   @IsOptional()
@@ -74,6 +90,22 @@ export class UpdateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  partnerName?: string;
+
+  @IsString()
+  @IsOptional()
+  partnerPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  referenceNumber?: string;
 }
 
 export class ListKgaraCashflowVoucherQueryDto {

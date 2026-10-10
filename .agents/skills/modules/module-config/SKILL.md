@@ -188,7 +188,7 @@ Base URL: `/api/v1/module-config` (Hỗ trợ alias `/api/v1/bom-config`, yêu c
 
 ## 6. Shared Helper: `EntityCustomFieldsHelper`
 
-Mọi module backend chỉ cần sử dụng [EntityCustomFieldsHelper](file:///home/dev/repos/erp/erp-api/src/module-config/helpers/entity-custom-fields.helper.ts) để lưu và đọc dữ liệu:
+Mọi module backend chỉ cần sử dụng [EntityCustomFieldsHelper](erp/erp-api/src/module-config/helpers/entity-custom-fields.helper.ts) để lưu và đọc dữ liệu:
 
 ### 6.1. Lưu dữ liệu trong Transaction (`saveInTx`)
 ```typescript
@@ -302,12 +302,12 @@ Trang quản lý Master Data các trường tùy chỉnh và danh mục động:
 
 ```bash
 # 1. Backend tests
-cd /home/dev/repos/erp/erp-api && bun test src/module-config
+cd erp/erp-api && bun test src/module-config
 
 # 2. Backend CI checks (Type, Lint, Prettier)
-cd /home/dev/repos/erp/erp-api && bun run check:ci
+cd erp/erp-api && bun run check:ci
 
 # 3. Frontend Type check & Tests
-cd /home/dev/repos/erp/erp-web && bun run type:check && bun run test
+cd erp/erp-web && bun run type:check && bun run test
 ```
 

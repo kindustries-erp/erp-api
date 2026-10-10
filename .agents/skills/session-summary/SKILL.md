@@ -41,7 +41,7 @@ git log -n 2 --oneline
 
 ### Bước 2: Tổng hợp phạm vi công việc & Tệp thay đổi
 * Liệt kê rõ ràng tính năng/lỗi đã xử lý.
-* Tạo clickable markdown link (`file:///...`) cho các file quan trọng vừa tạo/sửa.
+* Tạo markdown link với đường dẫn tương đối từ workspace root (bắt đầu bằng `erp/...` hoặc `klotus/...`, không dùng `file:///` hay `/home/...`) cho các file quan trọng vừa tạo/sửa.
 
 ### Bước 3: Rà soát kết quả QC
 * Ghi lại số lượng unit test đã pass, trạng thái typecheck, lintcheck và build.
@@ -69,13 +69,13 @@ Agent xuất bản tóm tắt theo định dạng Markdown 5 phần dưới đâ
 * **[Tên Repo 1 (e.g. Backend `erp-api`)]** — Commit: `<commit-hash>` (Branch: `<branch-name>`)
   * *Commit message*: `<message>`
   * *Tệp chính*:
-    * `[NEW/MODIFY] [TênFile](file:///đường_dẫn_tuyệt_đối)`: Vai trò ngắn gọn.
+    * `[NEW/MODIFY] [TênFile](erp/erp-api/đường_dẫn_tương_đối)`: Vai trò ngắn gọn.
   * *QC*: `<Số lượng test pass>`, typecheck & lint status, build status.
 
 * **[Tên Repo 2 (e.g. Frontend `erp-web`)]** — Commit: `<commit-hash>` (Branch: `<branch-name>`)
   * *Commit message*: `<message>`
   * *Tệp chính*:
-    * `[NEW/MODIFY] [TênFile](file:///đường_dẫn_tuyệt_đối)`: Vai trò ngắn gọn.
+    * `[NEW/MODIFY] [TênFile](erp/erp-api/đường_dẫn_tương_đối)`: Vai trò ngắn gọn.
   * *QC*: `<Số lượng test pass>`, typecheck & lint status, build status.
 
 ---
@@ -98,5 +98,5 @@ Agent xuất bản tóm tắt theo định dạng Markdown 5 phần dưới đâ
 
 - [ ] **Chính xác tuyệt đối**: Commit hash và tên file phải lấy từ `git log` / `git status` thực tế, không bịa đặt.
 - [ ] **Cô đọng & Đủ ý**: Tập trung vào những gì người lập trình ở phiên mới cần biết để tiếp tục code ngay lập tức.
-- [ ] **Clickable Links**: Mọi đường dẫn tệp quan trọng đều dùng định dạng link markdown `[File](file:///path/to/file)`.
+- [ ] **Relative Links**: Mọi đường dẫn tệp quan trọng đều dùng link markdown với đường dẫn tương đối từ workspace root: `[File](erp/erp-api/path/to/file)`.
 - [ ] **Sẵn sàng chuyển giao**: Bản tóm tắt phải được thiết kế để copy-paste trực tiếp làm prompt mở đầu cho phiên chat mới.

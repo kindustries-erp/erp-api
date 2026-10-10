@@ -17,6 +17,8 @@ export interface DownloadPdfResult {
   source: 'provider_original' | 'manual_upload' | 'failed';
   error?: string;
   contentType?: string;
+  /** true khi lỗi không thể khắc phục bằng cách thử lại/đổi cổng (vd: thiếu/sai API key bộ giải captcha). */
+  fatal?: boolean;
 }
 
 export interface IProviderAdapter {

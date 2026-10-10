@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCase } from '../entities/kgara_case.entity';
@@ -8,6 +12,7 @@ import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
 } from '../dto/garage-cashflow.dto';
+import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -57,7 +62,7 @@ export class GarageCashflowTransactionService {
         voucherCode: generatedCode,
         voucherType: dto.voucherType,
         amount: dto.amount,
-        transDate: dto.transDate,
+        transDate: dto.transDate || now.toISOString().slice(0, 10),
         caseId: dto.caseId || undefined,
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
@@ -67,20 +72,33 @@ export class GarageCashflowTransactionService {
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
       if (dto.caseId) {
+        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+        if (dto.paymentMethod === 'Chuyển khoản')
+          paymentMethod = 'BANK_TRANSFER';
+        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
+        else if (
+          dto.paymentMethod === 'Quẹt thẻ' ||
+          dto.paymentMethod === 'Thẻ'
+        )
+          paymentMethod = 'POS';
+        else if (dto.paymentMethod) paymentMethod = 'OTHER';
+
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: dto.caseId || undefined,
           settlementType: dto.voucherType,
           amount: dto.amount,
-          transDate: dto.transDate || undefined,
+          transDate: dto.transDate || now.toISOString().slice(0, 10),
           bankTransactionId: dto.erpBankTransactionId || undefined,
           cashflowVoucherId: savedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod: 'CASH',
+          paymentMethod,
           payerType: 'KH',
           note: dto.note || undefined,
-          partnerName: caseRef?.khachHangName || undefined,
+          partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
         await queryRunner.manager.save(newSettlement);
+
+        await this._recalculateCaseDebt(queryRunner, dto.caseId);
       }
 
       await queryRunner.commitTransaction();
@@ -141,6 +159,22 @@ export class GarageCashflowTransactionService {
           if (dto.note !== undefined) existingSettlement.note = dto.note;
           if (dto.erpBankTransactionId !== undefined)
             existingSettlement.bankTransactionId = dto.erpBankTransactionId;
+
+          if (dto.paymentMethod !== undefined) {
+            let pm: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+            if (dto.paymentMethod === 'Chuyển khoản') pm = 'BANK_TRANSFER';
+            else if (dto.paymentMethod === 'Tiền mặt') pm = 'CASH';
+            else if (
+              dto.paymentMethod === 'Quẹt thẻ' ||
+              dto.paymentMethod === 'Thẻ'
+            )
+              pm = 'POS';
+            else if (dto.paymentMethod) pm = 'OTHER';
+            existingSettlement.paymentMethod = pm;
+          }
+          if (dto.partnerName !== undefined) {
+            existingSettlement.partnerName = dto.partnerName;
+          }
           await queryRunner.manager.save(existingSettlement);
         }
       } else if (newCaseId) {
@@ -150,6 +184,17 @@ export class GarageCashflowTransactionService {
         });
         if (kCase) partnerName = kCase.khachHangName || undefined;
 
+        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
+        if (dto.paymentMethod === 'Chuyển khoản')
+          paymentMethod = 'BANK_TRANSFER';
+        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
+        else if (
+          dto.paymentMethod === 'Quẹt thẻ' ||
+          dto.paymentMethod === 'Thẻ'
+        )
+          paymentMethod = 'POS';
+        else if (dto.paymentMethod) paymentMethod = 'OTHER';
+
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: newCaseId,
           settlementType: newType,
@@ -158,12 +203,19 @@ export class GarageCashflowTransactionService {
           bankTransactionId: updatedVoucher.erpBankTransactionId || undefined,
           cashflowVoucherId: updatedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod: 'CASH',
+          paymentMethod,
           payerType: 'KH',
           note: updatedVoucher.note || undefined,
-          partnerName,
+          partnerName: dto.partnerName || partnerName,
         });
         await queryRunner.manager.save(newSettlement);
+      }
+
+      if (oldCaseId && oldCaseId !== newCaseId) {
+        await this._recalculateCaseDebt(queryRunner, oldCaseId);
+      }
+      if (newCaseId) {
+        await this._recalculateCaseDebt(queryRunner, newCaseId);
       }
 
       await queryRunner.commitTransaction();
@@ -190,6 +242,15 @@ export class GarageCashflowTransactionService {
         throw new NotFoundException(`Voucher ${id} not found`);
       }
 
+      if (
+        existingVoucher.erpBankTransactionId ||
+        existingVoucher.erpCashVoucherId
+      ) {
+        throw new BadRequestException(
+          'Không thể xóa phiếu thu/chi đã được đồng bộ với sao kê ngân hàng hoặc sổ quỹ ERP. Vui lòng gỡ liên kết trước.',
+        );
+      }
+
       const existingSettlement = await queryRunner.manager.findOne(
         KgaraCaseSettlement,
         {
@@ -197,11 +258,17 @@ export class GarageCashflowTransactionService {
         },
       );
 
+      let relatedCaseId: string | undefined;
       if (existingSettlement) {
+        relatedCaseId = existingSettlement.caseId;
         await queryRunner.manager.remove(existingSettlement);
       }
 
       await queryRunner.manager.remove(existingVoucher);
+
+      if (relatedCaseId) {
+        await this._recalculateCaseDebt(queryRunner, relatedCaseId);
+      }
 
       await queryRunner.commitTransaction();
     } catch (error) {
@@ -210,5 +277,33 @@ export class GarageCashflowTransactionService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  private async _recalculateCaseDebt(
+    queryRunner: QueryRunner,
+    caseId: string,
+  ): Promise<void> {
+    const kCase = await queryRunner.manager.findOne(KgaraCase, {
+      where: { id: caseId },
+    });
+    if (!kCase) return;
+
+    const settlements = await queryRunner.manager.find(KgaraCaseSettlement, {
+      where: { caseId },
+    });
+    const netPayable = extractNetPayableAmount(kCase);
+
+    if (settlements.length > 0) {
+      const totalReceipts = settlements
+        .filter((s) => s.settlementType === 'RECEIPT')
+        .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+      kCase.tienDaThanhToan = totalReceipts;
+      kCase.tienConPhaiThanhToan = Math.max(0, netPayable - totalReceipts);
+    } else {
+      const rawPaid = Number(kCase.rawData?.TienDaThanhToan || 0);
+      kCase.tienDaThanhToan = rawPaid;
+      kCase.tienConPhaiThanhToan = Math.max(0, netPayable - rawPaid);
+    }
+    await queryRunner.manager.save(KgaraCase, kCase);
   }
 }

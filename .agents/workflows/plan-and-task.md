@@ -84,7 +84,7 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 ```markdown
 - [ ] **Task X.Y.Z: [Tên Task súc tích, rõ hành động]**
   - **Phân hệ**: `Backend API` | **Ưu tiên**: `[P0 / P1 / P2]`
-  - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](file:///absolute/path/to/file)
+  - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](erp/erp-api/path/to/file)
   - **DoD**: Tiêu chí hoàn thành cụ thể (TypeScript pass, validation chặt chẽ, spec pass 100%).
   - **Verification**: `[Lệnh kiểm thử scoped cụ thể: bunx jest <spec> hoặc bunx tsc --noEmit]`
 ```
@@ -177,14 +177,14 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 #### 1.1 Entities & Table Schema
 - [ ] **Task 1.1.1: Tạo Entity & Enum cho bảng mới**
   - **Phân hệ**: `DB` | **Ưu tiên**: `P0`
-  - **Files**: `[NEW]` [src/database/entities/custom.entity.ts](file:///home/dev/repos/erp/erp-api/src/database/entities/custom.entity.ts)
+  - **Files**: `[NEW]` [src/database/entities/custom.entity.ts](erp/erp-api/src/database/entities/custom.entity.ts)
   - **DoD**: Khai báo đủ decorator TypeORM, relations và indexes.
   - **Verification**: `bunx tsc --noEmit`
 
 #### 1.2 Migrations
 - [ ] **Task 1.2.1: Tạo file Migration TypeORM**
   - **Phân hệ**: `DB` | **Ưu tiên**: `P0`
-  - **Files**: `[NEW]` [src/migrations/1780000000000-CreateCustomTable.ts](file:///home/dev/repos/erp/erp-api/src/migrations/1780000000000-CreateCustomTable.ts)
+  - **Files**: `[NEW]` [src/migrations/1780000000000-CreateCustomTable.ts](erp/erp-api/src/migrations/1780000000000-CreateCustomTable.ts)
   - **DoD**: Có cả `up()` và `down()`.
   - **Verification**: `bun run typeorm migration:run`
 
@@ -220,7 +220,7 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 #### 3.2 Knowledge & Skill Sync
 - [ ] **Task 3.2.1: Cập nhật Module Skill & Current-Truth**
   - **Phân hệ**: `Docs/Skill` | **Ưu tiên**: `P1`
-  - **Files**: `[MODIFY]` / `[NEW]` [path/to/SKILL.md](file:///absolute/path/to/SKILL.md) (hoặc chạy `/scan-module-knowledge`)
+  - **Files**: `[MODIFY]` / `[NEW]` [path/to/SKILL.md](erp/erp-api/.agents/skills/modules/<module>/SKILL.md) (hoặc chạy `/scan-module-knowledge`)
   - **DoD**: Bổ sung chính xác schema, API contracts mới vào Module Skill.
   - **Verification**: `view_file` kiểm tra nội dung skill chuẩn xác, không còn thông tin cũ/sai lệch.
 

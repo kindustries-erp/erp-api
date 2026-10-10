@@ -26,7 +26,7 @@ yarn-error.log*
 !/scripts/sync-db.sh
 !/scripts/backfill-out-invoices.ts
 !/scripts/backfill-invoice-license-plates.ts
-!/scripts/backfill-unclassified-invoices.ts
+!/scripts/backfill-invoice-categories-autopost.ts
 !/scripts/standardize-journal-entry-numbers.ts
 !/scripts/sync-invoice-netoffs-to-case-settlements.ts
 backups/

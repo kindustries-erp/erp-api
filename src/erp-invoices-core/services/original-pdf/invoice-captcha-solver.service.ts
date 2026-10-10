@@ -1,18 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { NineRouterClient } from '../../../ai-hub-core/clients/nine-router.client';
+import { NineRouterError } from '../../../ai-hub-core/clients/nine-router.error';
+
+/**
+ * Lỗi cấu hình bộ giải captcha (thiếu NINE_ROUTER_API_KEY hoặc key bị 9router từ chối: 401/403).
+ * Thử lại không giải quyết được -> adapter phải dừng ngay, không lặp vòng retry và không tải thêm captcha.
+ */
+export class CaptchaSolverConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CaptchaSolverConfigError';
+  }
+}
+
 @Injectable()
 export class InvoiceCaptchaSolverService {
   private readonly logger = new Logger(InvoiceCaptchaSolverService.name);
-  private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly model: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.baseUrl =
-      this.configService.get<string>('NINE_ROUTER_BASE_URL') ||
-      process.env.NINE_ROUTER_BASE_URL ||
-      'https://9router.liouni.com/v1';
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly nineRouterClient: NineRouterClient,
+  ) {
     this.apiKey =
       this.configService.get<string>('NINE_ROUTER_API_KEY') ||
       process.env.NINE_ROUTER_API_KEY ||
@@ -36,7 +48,7 @@ export class InvoiceCaptchaSolverService {
     mimeType: string = 'image/png',
   ): Promise<string> {
     if (!this.apiKey) {
-      throw new Error(
+      throw new CaptchaSolverConfigError(
         'NINE_ROUTER_API_KEY is not configured for captcha solver',
       );
     }
@@ -46,66 +58,43 @@ export class InvoiceCaptchaSolverService {
       '',
     );
 
-    const payload = {
-      model: this.model,
-      stream: false,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Look at this captcha image carefully. It contains 4-6 alphanumeric characters. Return ONLY the exact text/characters with NO spaces, NO punctuation, NO formatting, NO markdown, NO explanations.',
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${cleanBase64}`,
+    let data;
+    try {
+      data = await this.nineRouterClient.complete({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Look at this captcha image carefully. It contains 4-6 alphanumeric characters. Return ONLY the exact text/characters with NO spaces, NO punctuation, NO formatting, NO markdown, NO explanations.',
               },
-            },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 20,
-    };
-
-    const cleanBaseUrl = this.baseUrl.replace(/\/$/, '');
-    const executeRequest = async () => {
-      return fetch(`${cleanBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify(payload),
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${cleanBase64}` },
+              },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 20,
       });
-    };
-
-    let res: Response;
-    try {
-      res = await executeRequest();
-    } catch (networkErr: any) {
-      this.logger.warn(
-        `9router network error on first try: ${networkErr.message}. Retrying once...`,
-      );
-      res = await executeRequest();
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      this.logger.error(`9router captcha error (${res.status}): ${errText}`);
-      throw new Error(`9router captcha error (${res.status}): ${errText}`);
-    }
-
-    const rawText = await res.text();
-    let data: any;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      throw new Error(
-        `Failed to parse 9router JSON response: ${rawText.slice(0, 100)}`,
-      );
+    } catch (err: any) {
+      if (
+        err instanceof NineRouterError &&
+        (err.status === 401 || err.status === 403)
+      ) {
+        throw new CaptchaSolverConfigError(
+          `9router captcha error (${err.status}): API key không hợp lệ hoặc không có quyền`,
+        );
+      }
+      const detail =
+        err instanceof NineRouterError && err.status
+          ? ` (${err.status}): ${err.bodySnippet ?? err.message}`
+          : `: ${err.message}`;
+      this.logger.error(`9router captcha error${detail}`);
+      throw new Error(`9router captcha error${detail}`);
     }
 
     const rawAnswer = data.choices?.[0]?.message?.content?.trim() || '';
