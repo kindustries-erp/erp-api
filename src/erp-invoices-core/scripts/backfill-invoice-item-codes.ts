@@ -11,51 +11,34 @@
  * - Bulk Update DB theo lô (500 dòng/lệnh SQL)
  * - Đồng bộ tức thời Catalog & Sổ cái VinFast Ledger (direction IN/OUT)
  *
- * Cách chạy:
- *   bun run src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts [.env.file] [--direction=IN|OUT|ALL] [--dry-run] [--force-all] [--concurrency=6] [--batch-size=30]
+ * Env: theo loader chuẩn (src/common/scripts/load-script-env.ts), KHÔNG có file mặc định:
+ *   <.env.xxx> (tham số vị trí) | --env=<file> | --target=<tenant>-<stage> | ENV_FILE | .env
+ * Mặc định là DRY-RUN (không ghi DB). Ghi DB cần --apply (DB production cần thêm --confirm=<tên DB>).
+ * AI lỗi cả batch -> KHÔNG ghi mã cho các dòng đó (giữ nguyên để chạy lại), thay vì ghi PT-CHUNG sai.
+ *
+ * Cách chạy (trong thư mục erp-api):
+ *   bun src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts .env.local --direction=IN --limit=200
+ *   bun src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts --target=greenway-staging --apply
+ *   Tham số: [--direction=IN|OUT|ALL] [--force-all] [--concurrency=6] [--batch-size=30] [--model=<model 9router>] [--limit=N] [--apply] [--confirm=<db>]
+ *   (--dry-run vẫn được chấp nhận để tương thích, nhưng đã là mặc định)
  */
 
 import { Client } from 'pg';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
-import * as fs from 'fs';
+import { NineRouterClient } from '../../ai-hub-core/clients/nine-router.client';
+import { InvoiceAiHandler } from '../../ai-hub-core/handlers/invoice-ai.handler';
+import {
+  describeScriptEnv,
+  getWriteGuard,
+  resolveScriptEnv,
+  ScriptEnvError,
+} from '../../common/scripts/load-script-env';
 import {
   extractStandardItemCode,
   extractVinfastItemCode,
   normalizePrefix,
 } from '../helpers/vinfast-part-code.helper';
 
-// Load môi trường
-dotenv.config();
-const envFileArg = process.argv.slice(2).find((a) => a.startsWith('.env'));
-let loadedEnvConfig: Record<string, string> = {};
-if (envFileArg && fs.existsSync(envFileArg)) {
-  loadedEnvConfig = dotenv.parse(fs.readFileSync(envFileArg));
-} else if (fs.existsSync('.env')) {
-  loadedEnvConfig = dotenv.parse(fs.readFileSync('.env'));
-}
-
-const dbUrl: string =
-  loadedEnvConfig.DATABASE_URL || process.env.DATABASE_URL || '';
-if (!dbUrl) {
-  throw new Error('❌ Thiếu biến DATABASE_URL trong môi trường hoặc file .env');
-}
-
-const AI_ROUTER_BASE_URL =
-  loadedEnvConfig.NINE_ROUTER_BASE_URL ||
-  process.env.NINE_ROUTER_BASE_URL ||
-  'https://9router.liouni.com/v1';
-const AI_ROUTER_API_KEY =
-  loadedEnvConfig.NINE_ROUTER_API_KEY || process.env.NINE_ROUTER_API_KEY;
-if (!AI_ROUTER_API_KEY) {
-  console.error(
-    '❌ Thiếu biến NINE_ROUTER_API_KEY trong môi trường hoặc file .env',
-  );
-  process.exit(1);
-}
-
 const args = process.argv.slice(2);
-const isDryRun = args.includes('--dry-run');
 const forceAll = args.includes('--force-all');
 const limitArg = args.find((a) => a.startsWith('--limit='));
 const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : null;
@@ -65,6 +48,10 @@ const concurrencyArg = args.find((a) => a.startsWith('--concurrency='));
 const concurrency = concurrencyArg
   ? parseInt(concurrencyArg.split('=')[1], 10)
   : 6;
+const modelArg = args.find((a) => a.startsWith('--model='));
+const modelOverride = modelArg ? modelArg.split('=')[1] : undefined;
+/** Ngưỡng confidence tối thiểu để nhận mã do AI gán (khớp InvoiceItemCodeResolver). */
+const MIN_AI_CONFIDENCE = 0.7;
 
 const dirArg = args.find((a) => a.startsWith('--direction='));
 const targetDirection: 'IN' | 'OUT' | 'ALL' = dirArg
@@ -91,158 +78,6 @@ interface DbItemRow {
   license_plate: string | null;
   invoice_type: string | number | null;
   tax_invoice_status: number | null;
-}
-
-interface AiClassificationItem {
-  lineIndex: number;
-  itemCode: string;
-  itemType: 'PARTS' | 'SERVICE' | 'MATERIAL' | 'DISCOUNT' | 'OTHER';
-  isDiscountDeduction: boolean;
-  confidence: number;
-  reason?: string;
-}
-
-function parseAiResponseContent(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{')) return trimmed;
-
-  const lines = trimmed.split('\n');
-  let aggregated = '';
-  for (const line of lines) {
-    const lineTrim = line.trim();
-    if (!lineTrim.startsWith('data:') || lineTrim.includes('[DONE]')) continue;
-    try {
-      const json = JSON.parse(lineTrim.slice(5).trim());
-      const delta = json.choices?.[0]?.delta?.content;
-      if (delta) aggregated += delta;
-      const direct = json.choices?.[0]?.message?.content;
-      if (direct) aggregated += direct;
-    } catch {
-      // ignore
-    }
-  }
-  return aggregated || trimmed;
-}
-
-async function call9RouterAiBatch(
-  items: {
-    lineIndex: number;
-    description: string;
-    unit?: string;
-    sellerName?: string;
-    sellerTaxCode?: string;
-    preVatAmount?: number;
-    discountAmount?: number;
-  }[],
-): Promise<Map<number, AiClassificationItem>> {
-  const map = new Map<number, AiClassificationItem>();
-  if (items.length === 0) return map;
-
-  const serialized = items
-    .map(
-      (it) =>
-        `[#${it.lineIndex}] Seller: "${it.sellerName || 'N/A'}" (MST: ${it.sellerTaxCode || 'N/A'}) | Desc: "${it.description}" | Unit: "${it.unit || 'N/A'}" | PreVat: ${it.preVatAmount ?? 0} | Discount: ${it.discountAmount ?? 0}`,
-    )
-    .join('\n');
-
-  const systemPrompt = `Bạn là Trợ lý AI Kế toán ERP & Master Data chuyên sâu, phụ trách phân loại và gán MÃ HÀNG HÓA/DỊCH VỤ (item_code) cho các dòng HÓA ĐƠN ĐIỆN TỬ theo HỆ THỐNG TIỀN TỐ (Prefix Taxonomy) quy chuẩn sau:
-
-1. PHỤ TÙNG XE (PARTS):
-   - Phụ tùng VinFast (VinFast Trading & Production MST 0108926276 / 0318334886): Bắt buộc dùng tiền tố 'VF-' kèm Part Number.
-     VD: "BEX20001151 Cụm tấm ốp" -> itemCode: "VF-BEX20001151"
-     VD: "VF5_HV_BATTERY_PACK_38_KWH" -> itemCode: "VF-EEP73110011AP"
-     VD: "BAT21001011 HV BATTERY" -> itemCode: "VF-BAT21001011"
-     VD: "55406501 Thay dây điện ắc quy" -> itemCode: "VF-55406501"
-     VD: "9990084 Cập nhật phần mềm" -> itemCode: "VF-9990084"
-   - Phụ tùng OEM / Các hãng xe khác (Toyota, Hyundai, Ford, Kia, Michelin...): Bắt buộc dùng tiền tố 'PT-'.
-     VD: "0K95K15909 Dây curoa" -> itemCode: "PT-0K95K15909"
-     VD: "Lốp Michelin 205/55R16" -> itemCode: "PT-205/55R16"
-     VD: "Bugi động cơ / Gạt mưa" -> itemCode: "PT-CHUNG"
-
-2. VẬT TƯ XƯỞNG (MATERIAL):
-   - 'VT-SON': Sơn, dầu bóng 2K, chất đóng rắn, bột trét matit, phụ gia sơn
-   - 'VT-GAS': Gas lạnh điều hòa (R134a, R1234yf)
-   - 'VT-DAU-NHOT': Dầu nhớt động cơ, dầu hộp số (8HP, ATF), mỡ bôi trơn
-   - 'VT-KEO': Keo silicon, keo dán kính, keo chống rỉ
-   - 'VT-HOACHAT': Nước làm mát, dung dịch tẩy rửa, chai đánh bóng 3M
-   - 'VT-TIEU-HAO': Vật tư tiêu hao phụ xưởng: giấy nhám, băng dính giấy 3M, giẻ lau, phễu lọc sơn, lon pha, bạt che xe, bọc ghế, bao tay bảo hộ, que hàn, đá cắt, điện nước xưởng.
-
-3. DỊCH VỤ & THẦU PHỤ (SERVICE):
-   - 'DV-CUUHO': Toàn bộ dịch vụ cứu hộ, kéo xe, chở xe
-   - 'DV-VANCHUYEN': Cước phí vận chuyển GrabExpress, ViettelPost, giao nhận hàng
-   - 'DV-GIACONG': Gia công cơ khí ngoài (mâm, phay, tiện, hàn, kéo nắn, thước lái)
-   - 'DV-SUACHUA': Chi phí sửa xe, tiền công đồng sơn ngoài, tiền công kỹ thuật, tháo lắp
-   - 'DV-BAOVE': Thuê dịch vụ bảo vệ an ninh
-   - 'DV-VESINH': Dịch vụ vệ sinh công nghiệp xưởng/văn phòng
-   - 'DV-IT': Dịch vụ phần mềm, chữ ký số, hóa đơn điện tử, đường truyền internet, máy photocopy
-   - 'DV-INAN': In ấn danh thiếp, bạt quảng cáo, catalogue
-
-4. CHIẾT KHẤU & GIẢM TRỪ (DISCOUNT):
-   - 'CK-GSM': Chiết khấu Xanh SM / GSM
-   - 'CK-GRAB': Chiết khấu đối tác Grab
-   - 'CK-THUONGMAI': Chiết khấu thương mại, giảm giá bán
-
-5. CÔNG CỤ DỤNG CỤ (MATERIAL / TOOLS):
-   - 'CCDC-XUONG': Dụng cụ xưởng (súng phun sơn, cuộn rulo, súng bulong, kìm, kích nâng, đồng hồ đo áp)
-   - 'CCDC-VP': Thiết bị văn phòng (máy tính, màn hình LCD, case, chuột, switch mạng, camera quan sát, máy in)
-
-6. HÀNH CHÍNH & VĂN PHÒNG PHẨM (OTHER / ADMIN):
-   - 'HC-NUOC': Nước uống văn phòng (Lavie, Aquafina, nước bình 19L)
-   - 'HC-VPP': Văn phòng phẩm (giấy in A4, bìa còng, bút viết, tiếp khách, bánh trái, xôi, cafe, khăn giấy, sáp thơm)
-
-TRẢ VỀ DUY NHẤT ĐỊNH DẠNG JSON (không giải thích thêm markdown ngoài JSON block):
-{
-  "classifications": [
-    {
-      "lineIndex": 0,
-      "itemCode": "VF-BIN20050001",
-      "itemType": "PARTS",
-      "isDiscountDeduction": false,
-      "confidence": 0.98,
-      "reason": "Phụ tùng lọc khí VinFast"
-    }
-  ]
-}`;
-
-  try {
-    const response = await fetch(`${AI_ROUTER_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${AI_ROUTER_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'ag/gemini-3.7-flash-low',
-        tier: 'low',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Hãy phân loại danh sách các dòng hóa đơn sau theo đúng JSON schema:\n\n${serialized}`,
-          },
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-      }),
-    });
-
-    if (response.ok) {
-      const data: any = await response.json();
-      const rawText = data?.choices?.[0]?.message?.content || '';
-      const parsedText = parseAiResponseContent(rawText);
-      const json = JSON.parse(parsedText);
-      const list = json?.classifications || [];
-      for (const item of list) {
-        if (typeof item.lineIndex === 'number') {
-          map.set(item.lineIndex, item);
-        }
-      }
-    }
-  } catch (err) {
-    // fallback
-  }
-
-  return map;
 }
 
 // Helper chạy mảng async với concurrency giới hạn
@@ -276,9 +111,19 @@ async function main() {
   console.log(
     '================================================================',
   );
-  console.log(`Database: ${dbUrl.replace(/:[^:@]+@/, ':***@')}`);
+  const scriptEnv = resolveScriptEnv({ argv: args });
+  const guard = getWriteGuard(scriptEnv, args);
+  console.log(describeScriptEnv(scriptEnv, guard));
+  if (!scriptEnv.explicit && scriptEnv.isProduction) {
+    throw new ScriptEnvError(
+      `Env mặc định đang trỏ DB production (${scriptEnv.dbLabel}). Hãy chỉ định env tường minh (vd --target=... hoặc .env.xxx).`,
+    );
+  }
+  if (guard.apply && !guard.allowed) throw new ScriptEnvError(guard.message);
+  const aiHandler = new InvoiceAiHandler(
+    new NineRouterClient({ get: (k: string) => process.env[k] } as any),
+  );
   console.log(`Direction: ${targetDirection}`);
-  console.log(`Dry Run: ${isDryRun}`);
   console.log(`Force All: ${forceAll}`);
   console.log(`Batch Size: ${batchSize}`);
   console.log(`AI Concurrency: ${concurrency}`);
@@ -287,7 +132,10 @@ async function main() {
     '----------------------------------------------------------------\n',
   );
 
-  const client = new Client({ connectionString: dbUrl });
+  const client = new Client({
+    connectionString: scriptEnv.databaseUrl,
+    ssl: scriptEnv.ssl,
+  });
   await client.connect();
 
   try {
@@ -376,6 +224,8 @@ async function main() {
     }
 
     const resolvedItems: ResolvedItem[] = [];
+    let aiFailedItems = 0;
+    let aiFailedBatches = 0;
     const ambiguousItems: { row: DbItemRow; originalIndex: number }[] = [];
 
     let vfRuleCount = 0;
@@ -433,7 +283,7 @@ async function main() {
     // 2. AI BATCH PROCESSING SONG SONG
     if (ambiguousItems.length > 0) {
       console.log(
-        `🤖 Bước 2: Gọi AI Gateway 9Router (Gemini 3.7 Flash) song song (Concurrency = ${concurrency})...`,
+        `🤖 Bước 2: Gọi AI Gateway 9Router song song (Concurrency = ${concurrency})...`,
       );
 
       // Chia ambiguousItems thành các chunks có kích thước batchSize
@@ -459,16 +309,31 @@ async function main() {
             : 0,
         }));
 
-        const aiResultMap = await call9RouterAiBatch(payload);
+        const aiResults = await aiHandler.classifyInvoiceLineItemsWithAi(
+          payload,
+          'low',
+          modelOverride,
+        );
+        // Handler trả [] khi AI lỗi/không parse được -> coi cả batch là lỗi, không ghi mã.
+        const batchFailed = aiResults.length === 0;
+        const aiResultMap = new Map(aiResults.map((r) => [r.lineIndex, r]));
+        if (batchFailed) {
+          aiFailedItems += chunk.length;
+          aiFailedBatches++;
+        }
 
-        for (let idx = 0; idx < chunk.length; idx++) {
+        for (let idx = 0; idx < chunk.length && !batchFailed; idx++) {
           const item = chunk[idx];
           const aiRes = aiResultMap.get(idx);
 
           let code = 'PT-CHUNG';
           let src = 'FALLBACK';
 
-          if (aiRes && aiRes.itemCode) {
+          if (
+            aiRes &&
+            aiRes.itemCode &&
+            aiRes.confidence >= MIN_AI_CONFIDENCE
+          ) {
             code = normalizePrefix(aiRes.itemCode, aiRes.itemType);
             src = 'AI';
           }
@@ -514,7 +379,7 @@ async function main() {
     }
 
     // 3. BULK UPDATE DATABASE THEO LÔ (500 DÒNG/LỆNH)
-    if (!isDryRun && resolvedItems.length > 0) {
+    if (guard.allowed && resolvedItems.length > 0) {
       console.log(
         `\n💾 Bước 3: Cập nhật dữ liệu hàng loạt vào Database (${resolvedItems.length} dòng)...`,
       );
@@ -556,6 +421,11 @@ async function main() {
     );
     console.log(`- Đã giải quyết bằng AI 9Router: ${ambiguousItems.length}`);
     console.log(`- Tổng số dòng cập nhật: ${resolvedItems.length}`);
+    if (aiFailedItems > 0) {
+      console.log(
+        `- ⚠️ AI lỗi (${aiFailedBatches} batch, ${aiFailedItems} dòng): KHÔNG ghi mã, chạy lại script để xử lý tiếp.`,
+      );
+    }
     console.log('\n📊 Phân bổ theo nhóm Prefix:');
     console.table(
       Object.entries(prefixStats).map(([prefix, count]) => ({
@@ -566,7 +436,7 @@ async function main() {
     );
 
     // 4. ĐỒNG BỘ CATALOG & SỔ CÁI VINFAST LEDGER
-    if (!isDryRun) {
+    if (guard.allowed) {
       console.log(
         '\n🔄 Bước 4: Đồng bộ Danh mục Catalog và Sổ cái VinFast Ledger...',
       );
@@ -623,8 +493,10 @@ async function main() {
       console.log('✅ Đã đồng bộ hoàn tất Catalog & Sổ cái VinFast Ledger!');
     }
 
-    if (isDryRun) {
-      console.log('\n⚠️ Đang ở chế độ DRY-RUN (Chưa ghi vào database)');
+    if (!guard.allowed) {
+      console.log(
+        '\n⚠️ Đang ở chế độ DRY-RUN (Chưa ghi vào database). Thêm --apply để ghi.',
+      );
     } else {
       console.log('\n✅ Hoàn tất 100% quá trình chuẩn hóa!');
     }
@@ -634,6 +506,10 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('❌ Lỗi thực thi backfill:', err);
+  if (err instanceof ScriptEnvError) {
+    console.error(`❌ ${err.message}`);
+  } else {
+    console.error('❌ Lỗi thực thi backfill:', err);
+  }
   process.exit(1);
 });
