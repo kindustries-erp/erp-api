@@ -14,8 +14,19 @@ import { ErpChartOfAccount } from '../../../accounting-core/entities/erp_chart_o
 import { ErpJournalEntry } from '../../../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../../../accounting-core/entities/erp_journal_entry_line.entity';
 import { AccountingCoreService } from '../../../accounting-core/services/accounting-core.service';
-import { InvoiceAiHandler } from '../../../ai-hub-core/handlers/invoice-ai.handler';
 import {
+  ClassifyInvoiceCategoryResult,
+  InvoiceAiHandler,
+} from '../../../ai-hub-core/handlers/invoice-ai.handler';
+import { InvoiceCategoryMemoryService } from './invoice-category-memory.service';
+import { buildInvoiceJournalLines } from '../../helpers/invoice-journal-lines.helper';
+import { buildClassifyInvoiceInput } from '../../helpers/invoice-classify-input.helper';
+import {
+  stripFallbackMarker,
+  withFallbackMarker,
+} from '../../helpers/invoice-fallback-marker.helper';
+import {
+  findOverrideAccountCodeFromAttrDefs,
   resolveInvoiceAccountsByCategory,
   FALLBACK_PURCHASE_DEBIT_ACCOUNT,
 } from '../../helpers/invoice-category-account-mapping.helper';
@@ -39,6 +50,7 @@ export class InvoiceCategoryAutopostService {
     private readonly journalEntryLineRepo: Repository<ErpJournalEntryLine>,
     private readonly accountingCoreService: AccountingCoreService,
     private readonly invoiceAiHandler: InvoiceAiHandler,
+    private readonly categoryMemory: InvoiceCategoryMemoryService,
   ) {}
 
   /**
@@ -47,6 +59,7 @@ export class InvoiceCategoryAutopostService {
   async autoPostInvoiceByCategory(
     invoiceId: string,
     categoryCode?: string | null,
+    options?: { fallbackReason?: string | null },
   ): Promise<ErpInvoice> {
     const invoice = await this.invoiceRepo.findOne({
       where: { id: invoiceId, isDeleted: false },
@@ -74,27 +87,10 @@ export class InvoiceCategoryAutopostService {
             isDeleted: false,
           },
         });
-        for (const def of categoryAttrDefs) {
-          if (Array.isArray(def.options)) {
-            const matchedOpt = def.options.find(
-              (opt) => opt.value === activeCategoryCode,
-            );
-            if (matchedOpt?.accountCode && matchedOpt.accountCode.trim()) {
-              overrideDebitAccountCode = matchedOpt.accountCode.trim();
-              break;
-            }
-            const rawText =
-              matchedOpt?.label ||
-              (matchedOpt as any)?.labels?.vi ||
-              (matchedOpt as any)?.labels?.en ||
-              '';
-            const match = rawText.match(/\[(?:TK\s*)?([0-9A-Z]+)\]/i);
-            if (match && match[1]) {
-              overrideDebitAccountCode = match[1].trim();
-              break;
-            }
-          }
-        }
+        overrideDebitAccountCode = findOverrideAccountCodeFromAttrDefs(
+          categoryAttrDefs,
+          activeCategoryCode,
+        );
       } catch (err: any) {
         this.logger.warn(
           `Failed to lookup ErpModuleAttributeDef for category ${activeCategoryCode}: ${err?.message}`,
@@ -216,6 +212,15 @@ export class InvoiceCategoryAutopostService {
           );
         }
 
+        // Đã phân loại được -> gỡ marker T0003 cũ khỏi mô tả bút toán
+        const cleanedDesc = stripFallbackMarker(je.description);
+        if (
+          !resolution.isFallback &&
+          cleanedDesc !== (je.description ?? null)
+        ) {
+          updatePayload.description = cleanedDesc;
+        }
+
         if (Object.keys(updatePayload).length > 0) {
           await this.journalEntryRepo.update(je.id, updatePayload);
         }
@@ -260,53 +265,16 @@ export class InvoiceCategoryAutopostService {
       invoice.description || `Hạch toán hóa đơn ${invoice.invoiceNo}`;
     const entryNoPrefix = invoice.direction === 'IN' ? 'HĐM' : 'HĐB';
 
-    const lines: {
-      accountId: string;
-      debit: number;
-      credit: number;
-      description?: string;
-    }[] = [];
-
-    // Nếu bóc tách được Tiền hàng + Thuế VAT (và tổng khớp)
-    if (
-      preVat > 0 &&
-      vat > 0 &&
-      Math.abs(preVat + vat - total) <= 1.0 &&
-      vatAccountId
-    ) {
-      lines.push({
-        accountId: debitAccountId,
-        debit: preVat,
-        credit: 0,
-        description: `${invoiceRef}_${defaultDesc}`,
-      });
-      lines.push({
-        accountId: vatAccountId,
-        debit: vat,
-        credit: 0,
-        description: `${invoiceRef}_Thuế GTGT đầu vào`,
-      });
-      lines.push({
-        accountId: apAccountId,
-        debit: 0,
-        credit: total,
-        description: `${invoiceRef}_Phải trả người bán`,
-      });
-    } else {
-      // Hạch toán gộp toàn bộ vào TK Nợ đích
-      lines.push({
-        accountId: debitAccountId,
-        debit: total,
-        credit: 0,
-        description: `${invoiceRef}_${defaultDesc}`,
-      });
-      lines.push({
-        accountId: apAccountId,
-        debit: 0,
-        credit: total,
-        description: `${invoiceRef}_Phải trả người bán`,
-      });
-    }
+    const lines = buildInvoiceJournalLines({
+      debitAccountId,
+      vatAccountId,
+      apAccountId,
+      preVat,
+      vat,
+      total,
+      invoiceRef,
+      defaultDesc,
+    });
 
     const postingDate = invoice.invoiceDate
       ? new Date(invoice.invoiceDate)
@@ -317,7 +285,11 @@ export class InvoiceCategoryAutopostService {
       date: postingDate,
       documentDate: postingDate,
       reference: invoiceRef,
-      description: `${invoiceRef}_${defaultDesc}`,
+      description: withFallbackMarker(
+        `${invoiceRef}_${defaultDesc}`,
+        resolution.isFallback,
+        options?.fallbackReason,
+      ),
       subjectName: invoice.sellerName || undefined,
       sourceType: 'INVOICE',
       sourceId: invoice.id,
@@ -400,14 +372,51 @@ export class InvoiceCategoryAutopostService {
   }
 
   /**
-   * Gọi AI 9router tự động phân loại hóa đơn đầu vào và tự động hạch toán (kèm Fallback an toàn).
+   * Chỉ phân loại bằng AI (không ghi DB). Dùng cho batch muốn chạy AI song song rồi truyền kết quả
+   * vào `classifyAndAutoPost(id, preClassified)` để hạch toán tuần tự.
    */
-  async classifyAndAutoPost(invoiceId: string): Promise<{
+  async classifyInvoiceOnly(
+    invoiceId: string,
+    modelOverride?: string,
+  ): Promise<ClassifyInvoiceCategoryResult> {
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: invoiceId, isDeleted: false },
+      relations: ['items'],
+    });
+    if (!invoice) {
+      throw new NotFoundException(`Invoice ${invoiceId} không tìm thấy`);
+    }
+    return this.classifyWithMemory(invoice, modelOverride);
+  }
+
+  /** Ưu tiên danh mục theo lịch sử người bán (không tốn AI); không có thì hỏi AI. */
+  private async classifyWithMemory(
+    invoice: ErpInvoice,
+    modelOverride?: string,
+  ): Promise<ClassifyInvoiceCategoryResult> {
+    const remembered = await this.categoryMemory.recall(invoice.sellerTaxCode);
+    if (remembered) return remembered;
+    return this.invoiceAiHandler.classifyInvoiceCategory(
+      buildClassifyInvoiceInput(invoice),
+      'low',
+      modelOverride,
+    );
+  }
+
+  /**
+   * Gọi AI 9router tự động phân loại hóa đơn đầu vào và tự động hạch toán (kèm Fallback an toàn).
+   * Nếu truyền `preClassified` thì dùng kết quả đó, không gọi AI nữa.
+   */
+  async classifyAndAutoPost(
+    invoiceId: string,
+    preClassified?: ClassifyInvoiceCategoryResult,
+  ): Promise<{
     invoice: ErpInvoice;
     categoryCode: string | null;
     confidence: number;
     reason: string;
     isFallback: boolean;
+    fallbackReason: string | null;
   }> {
     const invoice = await this.invoiceRepo.findOne({
       where: { id: invoiceId, isDeleted: false },
@@ -422,30 +431,18 @@ export class InvoiceCategoryAutopostService {
     let categoryCode = invoice.category?.code || null;
     let confidence = 1.0;
     let reason = 'Đã có phân loại thủ công';
+    let fallbackReason: string | null = null;
 
     if (!categoryCode) {
-      const aiResult = await this.invoiceAiHandler.classifyInvoiceCategory({
-        invoiceNo: invoice.invoiceNo ?? undefined,
-        serialNo: invoice.serialNo ?? undefined,
-        sellerName: invoice.sellerName ?? undefined,
-        sellerTaxCode: invoice.sellerTaxCode ?? undefined,
-        buyerName: invoice.buyerName ?? undefined,
-        buyerTaxCode: invoice.buyerTaxCode ?? undefined,
-        description: invoice.description ?? undefined,
-        notes: invoice.notes ?? undefined,
-        totalAmount: Number(invoice.totalAmount || 0),
-        items: (invoice.items || []).map((it) => ({
-          itemCode: it.itemCode ?? undefined,
-          description: it.description ?? undefined,
-          quantity: Number(it.quantity || 1),
-          unitPrice: Number(it.unitPrice || 0),
-          totalAmount: Number(it.totalAmount || 0),
-        })),
-      });
+      const aiResult =
+        preClassified ?? (await this.classifyWithMemory(invoice));
 
       categoryCode = aiResult.categoryCode;
       confidence = aiResult.confidence;
       reason = aiResult.reason;
+      fallbackReason = aiResult.categoryCode
+        ? null
+        : (aiResult.fallbackReason ?? null);
 
       // Nếu AI phân loại thành công -> gán categoryId vào invoice
       if (categoryCode) {
@@ -463,6 +460,7 @@ export class InvoiceCategoryAutopostService {
     const updatedInvoice = await this.autoPostInvoiceByCategory(
       invoiceId,
       categoryCode,
+      { fallbackReason },
     );
     const isFallback = !categoryCode;
 
@@ -472,6 +470,7 @@ export class InvoiceCategoryAutopostService {
       confidence,
       reason,
       isFallback,
+      fallbackReason,
     };
   }
 }
