@@ -267,15 +267,15 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
 Khi chỉnh sửa phân hệ `garage-customers`:
 1. **Kiểm tra Type-check Backend**:
    ```bash
-   cd /home/dev/repos/erp/erp-api && bun run check:ci
+   cd erp/erp-api && bun run check:ci
    ```
 2. **Chạy Unit Test Backend**:
    ```bash
-   cd /home/dev/repos/erp/erp-api && bunx jest src/kgara-api-core/ --forceExit
+   cd erp/erp-api && bunx jest src/kgara-api-core/ --forceExit
    ```
 3. **Kiểm tra Type-check Frontend**:
    ```bash
-   cd /home/dev/repos/erp/erp-web && bun run type:check
+   cd erp/erp-web && bun run type:check
    ```
 
 ---

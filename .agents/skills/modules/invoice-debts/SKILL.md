@@ -184,12 +184,12 @@ Hàm `buildKeywordSqlClause` hỗ trợ cú pháp tìm kiếm chuẩn hóa:
 
 ### Unit Test Backend
 ```bash
-cd /home/dev/repos-dev/erp/erp-api
+cd erp/erp-api
 bunx jest src/erp-invoices-core/services/invoice-debts.service.spec.ts --forceExit
 ```
 
 ### TypeScript & Production Build Frontend
 ```bash
-cd /home/dev/repos-dev/erp/erp-web
+cd erp/erp-web
 bun run build
 ```

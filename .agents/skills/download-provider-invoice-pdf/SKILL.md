@@ -15,7 +15,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
    - Cơ chế giả lập PDF từ XML/HTML cũ đã bị loại bỏ hoàn toàn khỏi hệ thống vì không có giá trị pháp lý và làm sai lệch biểu mẫu hóa đơn của nhà cung cấp.
    - Chỉ lưu trữ và hiển thị **PDF gốc chuẩn từ cổng nhà cung cấp** (`pdf_source = 'provider_original'`) hoặc file do người dùng upload trực tiếp (`pdf_source = 'manual_upload'`).
 2. **Ưu tiên cấu hình môi trường DB & RustFS:**
-   - Toàn bộ script và dịch vụ backend đọc cấu hình từ [erp/erp-api/.env](file:///home/dev/repos-dev-02/erp/erp-api/.env) (`erp_greenway_production` port `5433`, S3 endpoint `https://s3.liouni.com/`, bucket `erp-greenway-production`).
+   - Toàn bộ script và dịch vụ backend đọc cấu hình từ [erp/erp-api/.env](erp/erp-api/.env) (`erp_greenway_production` port `5433`, S3 endpoint `https://s3.liouni.com/`, bucket `erp-greenway-production`).
    - Bỏ qua các file môi trường cục bộ `.env.local` nếu có xung đột cấu hình.
 3. **Quy chuẩn liên kết kép (Unified Attachments & Legacy Compatibility):**
    - File PDF sau khi lưu vào RustFS phải được:
@@ -43,7 +43,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
 ## 3. Chi Tiết Kỹ Thuật Từng Adapter Tự Động
 
 ### 3.1. HILO Invoice Adapter (`HiloInvoiceAdapter`)
-* **File:** [hilo-invoice.adapter.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/hilo-invoice.adapter.ts)
+* **File:** [hilo-invoice.adapter.ts](erp/erp-api/src/erp-invoices-core/services/adapters/hilo-invoice.adapter.ts)
 * **Luồng xử lý:**
   1. `GET https://gsm-einvoice.hilo.com.vn/`: Trích xuất session cookie và token ẩn `__RequestVerificationToken`.
   2. `POST https://gsm-einvoice.hilo.com.vn/`: Form `Filter.SearchKey={searchKey}` kèm verification token.
@@ -52,7 +52,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
   5. Kiểm tra tính hợp lệ bằng magic bytes `%PDF` và dung lượng tối thiểu (> 500 bytes).
 
 ### 3.2. MISA meInvoice Adapter (`MisaInvoiceAdapter`)
-* **File:** [misa-invoice.adapter.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/misa-invoice.adapter.ts)
+* **File:** [misa-invoice.adapter.ts](erp/erp-api/src/erp-invoices-core/services/adapters/misa-invoice.adapter.ts)
 * **Luồng xử lý:**
   1. `GET https://www.meinvoice.vn/tra-cuu/`: Khởi tạo session ASP.NET và lưu trữ các cookie (`_msid`, `TS01c1f2f5`).
   2. `POST https://www.meinvoice.vn/tra-cuu/GetInvoiceDataByTransactionID`:
@@ -64,11 +64,11 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
      * Phản hồi: Tệp PDF gốc hoàn chỉnh (~500 KB - 1 MB) có đầy đủ chữ ký điện tử.
 
 ### 3.3. CyberBill Adapter (`CyberbillInvoiceAdapter`)
-* **File:** [cyberbill-invoice.adapter.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/cyberbill-invoice.adapter.ts)
+* **File:** [cyberbill-invoice.adapter.ts](erp/erp-api/src/erp-invoices-core/services/adapters/cyberbill-invoice.adapter.ts)
 * **Đặc tính kỹ thuật:**
   * **Hỗ trợ Đa Cluster:** Tự động điều hướng giữa **Cluster 1** (`https://bill1app.xcyber.vn`, portal `https://tracuu.cyberbill.vn`) và **Cluster 2** (`https://bill2app.xcyber.vn`, portal `https://tracuuhoadon.cyberbill.vn`).
   * **Tự động chuyển cụm khi `status: 4`:** Nếu Cluster 1 trả về `status: 4` (không tìm thấy trên hệ thống mới, yêu cầu tra cứu trên link dự phòng), adapter tự động chuyển sang Cluster 2 mà không gián đoạn luồng.
-  * **Giải Captcha AI Vision:** Gọi [invoice-captcha-solver.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-captcha-solver.service.ts) qua Gateway 9router (`ag/gemini-3.8-flash` với `stream: false`).
+  * **Giải Captcha AI Vision:** Gọi [invoice-captcha-solver.service.ts](erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-captcha-solver.service.ts) qua Gateway 9router (`ag/gemini-3.8-flash` với `stream: false`).
 * **Luồng xử lý:**
   1. `POST /api/services/hddt/TraCuuHoaDon/RefreshCaptcha`: Lấy `key` phiên và ảnh JPEG captcha Base64.
   2. Giải captcha ảnh qua AI Vision thành chuỗi 5 chữ số.
@@ -96,7 +96,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
     * Nền có **hoa văn chìm hình Trống đồng Đông Sơn màu vàng cam** (`viewinvoice-bg.jpg`) và **viền kép đôi màu nâu đồng**.
     * Bảng hàng hóa chia 10 cột theo mẫu NĐ123 phổ thông, tổng tiền tách 2 bảng ngang song song.
 ### 3.5. Softdreams EasyInvoice Adapter (`EasyInvoiceAdapter`)
-* **File:** [easy-invoice.adapter.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/easy-invoice.adapter.ts)
+* **File:** [easy-invoice.adapter.ts](erp/erp-api/src/erp-invoices-core/services/adapters/easy-invoice.adapter.ts)
 * **Đặc tính kỹ thuật:**
   * **Tải Trực Tiếp Máy Chủ (Zero Local Conversion):** Toàn bộ file PDF được biên dịch và đóng gói trực tiếp từ máy chủ Softdreams, có đầy đủ dòng bản quyền Softdreams ở chân trang, con dấu số và hoa văn trống đồng chính thức, không convert HTML trên máy chủ local.
   * **Giải Captcha AI Vision:** Sử dụng `InvoiceCaptchaSolverService` (9router AI Vision `gemini-3.8-flash`) giải mã ảnh captcha 4 số trong 0.2s.
@@ -135,20 +135,20 @@ flowchart TD
 ```
 
 ### Các lớp dịch vụ trọng yếu:
-* [provider-adapter.interface.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/provider-adapter.interface.ts): Định nghĩa contract `IProviderAdapter` (`canHandle`, `downloadOriginalPdf`).
-* [provider-adapter.registry.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/adapters/provider-adapter.registry.ts): Đăng ký và lựa chọn adapter động theo `providerCode`.
-* [invoice-captcha-solver.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-captcha-solver.service.ts): Dịch vụ giải captcha qua 9router AI Vision (`gemini-3.8-flash`).
-* [invoice-provider-detector.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-provider-detector.service.ts): Trích xuất MST TCGP và mã tra cứu từ XML.
-* [invoice-pdf-download-worker.service.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-pdf-download-worker.service.ts): Xử lý download nền đa luồng (`concurrency = 3`).
+* [provider-adapter.interface.ts](erp/erp-api/src/erp-invoices-core/services/adapters/provider-adapter.interface.ts): Định nghĩa contract `IProviderAdapter` (`canHandle`, `downloadOriginalPdf`).
+* [provider-adapter.registry.ts](erp/erp-api/src/erp-invoices-core/services/adapters/provider-adapter.registry.ts): Đăng ký và lựa chọn adapter động theo `providerCode`.
+* [invoice-captcha-solver.service.ts](erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-captcha-solver.service.ts): Dịch vụ giải captcha qua 9router AI Vision (`gemini-3.8-flash`).
+* [invoice-provider-detector.service.ts](erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-provider-detector.service.ts): Trích xuất MST TCGP và mã tra cứu từ XML.
+* [invoice-pdf-download-worker.service.ts](erp/erp-api/src/erp-invoices-core/services/original-pdf/invoice-pdf-download-worker.service.ts): Xử lý download nền đa luồng (`concurrency = 3`).
 
 ### 4.1. Hợp đồng API REST & Frontend Client
-* **Backend Controller:** [invoice-original-pdf.controller.ts](file:///home/dev/repos-dev-02/erp/erp-api/src/erp-invoices-core/controllers/invoice-original-pdf.controller.ts)
+* **Backend Controller:** [invoice-original-pdf.controller.ts](erp/erp-api/src/erp-invoices-core/controllers/invoice-original-pdf.controller.ts)
 * **Quy chuẩn Global Prefix:** Mọi endpoint NestJS đều nằm dưới `/api/v1/`.
   - `POST /api/v1/erp-invoices/original-pdf/:id/download`: Tải PDF gốc tức thời cho 1 hóa đơn.
   - `GET /api/v1/erp-invoices/original-pdf/:id/lookup-info`: Tra cứu thông tin portal/mã tra cứu.
   - `POST /api/v1/erp-invoices/original-pdf/sync-advanced`: Khởi tạo phiên đồng bộ nâng cao và tải hàng loạt.
   - `GET /api/v1/erp-invoices/original-pdf/sync-status/:syncId`: Lấy tiến độ phiên đồng bộ.
-* **Frontend Web Client:** [erpInvoicesCoreApi.ts](file:///home/dev/repos-dev-02/erp/erp-web/src/modules/erp-invoices-core/api/erpInvoicesCoreApi.ts)
+* **Frontend Web Client:** [erpInvoicesCoreApi.ts](erp/erp-web/src/modules/erp-invoices-core/api/erpInvoicesCoreApi.ts)
   - `const BASE = "/api/v1/erp-invoices";`
   - Bắt buộc gọi qua `${BASE}/original-pdf/...` để đảm bảo đầy đủ tiền tố `/api/v1`. Tuyệt đối không gọi trực tiếp `/erp-invoices/original-pdf/...`.
 
@@ -157,7 +157,7 @@ flowchart TD
 ## 5. Kịch Bản Tải Hàng Loạt Qua CLI Script (Executable Runner)
 
 Script thực thi chính thức được đặt tại:
-👉 [scripts/download-provider-pdf.ts](file:///home/dev/repos-dev-02/erp/erp-api/.agents/skills/download-provider-invoice-pdf/scripts/download-provider-pdf.ts)
+👉 [scripts/download-provider-pdf.ts](erp/erp-api/.agents/skills/download-provider-invoice-pdf/scripts/download-provider-pdf.ts)
 
 ### Cách chạy:
 
@@ -200,8 +200,8 @@ Trước khi commit code hoặc kết thúc phiên làm việc:
    *Yêu cầu:* 100% tests PASS (Hilo, Misa, Cyberbill, Vinfast, Viettel, EasyInvoice).
 2. **Kiểm tra TypeScript Backend & Frontend:**
    ```bash
-   cd /home/dev/repos-dev-02/erp/erp-api && bunx tsc --noEmit
-   cd /home/dev/repos-dev-02/erp/erp-web && bunx tsc --noEmit
+   cd erp/erp-api && bunx tsc --noEmit
+   cd erp/erp-web && bunx tsc --noEmit
    ```
    *Yêu cầu:* 0 lỗi type errors.
 3. **Kiểm tra tính toàn vẹn file PDF tải về:**

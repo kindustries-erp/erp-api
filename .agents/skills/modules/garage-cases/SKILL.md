@@ -431,7 +431,7 @@ Base Route: `/api/v1/greenway/cashflow`
   - Tự động `LEFT JOIN` kiểm tra `already_settled` để sao kê đã là cấn trừ của vụ việc hiện tại luôn xuất hiện trong gợi ý (kèm cờ `alreadySettledForThisCase = true`, badge `ĐÃ CẤN TRỪ` và nút `Chọn lại cấn trừ`).
 
 ### 5.10. Quy tắc Gỡ liên kết Chứng từ trên Giao diện (Client-side Staging & Batch Save)
-- Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](file:///home/dev/repos/erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
+- Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
   - Hành động gỡ được ghi nhận vào trạng thái pending trên client (`pendingDeletedInvoiceIds`, `pendingDeletedSettlementIds`).
   - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
   - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.

@@ -12,7 +12,7 @@ Module `invoice-dashboard` (được triển khai tại `src/erp-invoices-core/i
 > [!IMPORTANT]
 > **Phân định Ranh giới Kiến trúc & Đồng bộ Hệ Thống**:
 > - **Backend (`erp-api`)**: Skill này tập trung 100% vào nghiệp vụ xử lý API, Facade & 5 Sub-services tính toán tài chính (`invoice-dashboard.service.ts`).
-> - **Frontend (`erp-web`)**: Dashboard này đã được cấu trúc thành **Organism (Tầng L3)** nằm trong **Tab 0 ("Tổng quan" - `?tab=overview`)** của trang trung tâm `/erp-invoices` (Page L5). Toàn bộ đặc tả giao diện được quản lý thống nhất tại [`erp-invoice-web`](file:///home/dev/repos-dev/erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md) nhằm tránh phân mảnh tri thức. Không tồn tại sự trùng lặp (duplicate) giữa hai skills.
+> - **Frontend (`erp-web`)**: Dashboard này đã được cấu trúc thành **Organism (Tầng L3)** nằm trong **Tab 0 ("Tổng quan" - `?tab=overview`)** của trang trung tâm `/erp-invoices` (Page L5). Toàn bộ đặc tả giao diện được quản lý thống nhất tại [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md) nhằm tránh phân mảnh tri thức. Không tồn tại sự trùng lặp (duplicate) giữa hai skills.
 > - **Vị trí điều hướng**: Nằm trong Menu Nhóm **"Hóa đơn"** (`InvoiceNavGroup`) > Sub-menu **"Hóa đơn"** (`/erp-invoices?tab=overview`).
 
 ### 1.1. Các tính năng cốt lõi:
@@ -166,7 +166,7 @@ Sử dụng thư viện `ExcelJS` dựng workbook với định dạng bảng ch
     - **Component gốc**: `src/pages/InvoiceDashboard.tsx` (nhúng nội bộ vào `ErpInvoicesTab`, điều khiển qua `currentTabKey === 'dashboard'`).
     - **Legacy Route Wire**: Trong `App.tsx`, route `"invoice-dashboard": () => <ErpInvoicesPage initialTab="dashboard" />`.
   - **Biểu đồ & Atomic Components**: `BranchVatChart.tsx`, `BranchInvoiceChart.tsx`, `InvoiceStatsCards.tsx`, `PartnerInvoiceDrawer.tsx`.
-  - **Skill Frontend tham chiếu**: [`erp-invoice-web`](file:///home/dev/repos-dev/erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md).
+  - **Skill Frontend tham chiếu**: [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md).
 
 ---
 

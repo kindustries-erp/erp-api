@@ -23,7 +23,12 @@ graph LR
    | :--- | :---: | :---: | :--- |
    | **Controller** (`*.controller.ts`) | **> 300 dòng** | **>= 1,000 dòng** | **Pattern A** (Sub-Controllers) |
    | **Service** (`*.service.ts`) | **> 500 dòng** | **>= 1,000 dòng** | **Pattern B** (Sub-Services & Facade) |
+   | **Handler** (`*.handler.ts`, vd `ai-hub-core`) | **> 400 dòng** | **>= 1,000 dòng** | **Pattern E/C**: tách prompt, parser, hằng số thành module thuần; giữ nguyên constructor |
    | **Logic / Helper / Engine** | **> 800 dòng** | **>= 1,000 dòng** | **Pattern C** (Pure Engine / Query Builder) |
+   | **Script** (`scripts/`, `src/**/scripts/`) | **> 800 dòng** | **>= 1,000 dòng** | Gọi lại service/handler của app, không nhân đôi logic (xem mục *Script độc lập*) |
+
+   > File dữ liệu thuần (`*.data.ts`), `*.spec.ts`, `*.d.ts` **không** tính vào ngưỡng.
+   > Prompt AI dài hơn ~80 dòng phải nằm trong file `*.prompt.ts` riêng (hằng số thuần), không nằm trong handler/service.
 
 2. **Bảo Toàn REST Contract & Backward Compatibility**:
    - Tuyệt đối **KHÔNG** làm thay đổi endpoint route path (`@Get`, `@Post`), query parameters, HTTP status, headers hoặc cấu trúc DTO response.
@@ -38,6 +43,8 @@ graph LR
    - Unit test `.spec.ts` nằm ngay cạnh file được test (co-located).
    - Controller chỉ trả về DTOs đã qua sanitize/mapping, tuyệt đối không trả TypeORM Entities trực tiếp ra client.
 
+5. **Script độc lập (backfill, seed, netoff...) phải theo cùng chuẩn với app** — chi tiết ở mục *Script độc lập* bên dưới: dùng lại service/handler, env qua loader chuẩn, mặc định dry-run, không đường dẫn tuyệt đối.
+
 ---
 
 ## 🧭 Quy Trình 5 Giai Đoạn Chuẩn (5-Phase SOP)
@@ -45,10 +52,15 @@ graph LR
 ### 🔹 GIAI ĐOẠN 1: Quét Ngưỡng & Phân Tích Hiện Trạng (Scan & Audit)
 
 Trước khi can thiệp mã nguồn:
-1. Chạy script quét toàn bộ hệ thống để nắm danh sách file cần refactor:
+1. Chạy script quét (read-only, chạy trong `erp-api`) để nắm file vượt ngưỡng, vi phạm Clean DI và script chưa theo chuẩn:
    ```bash
-   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
+   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts                 # toàn repo (src + scripts)
+   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --path=src/ai-hub-core
+   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --json          # cho CI/agent
+   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --strict        # exit 1 nếu vi phạm Clean DI
    ```
+   Báo cáo gồm 3 phần: file vượt ngưỡng · vi phạm constructor (overload/union, kể cả khi viết nhiều dòng) · vệ sinh script.
+   **Chỉ refactor file thuộc phạm vi task**; danh sách tồn đọng của cả repo chỉ để tham khảo, không tự ý mở rộng phạm vi.
 2. Đọc file mục tiêu, liệt kê:
    - Danh sách các public methods và private helpers.
    - Danh sách các dependency được inject vào constructor hiện tại (`DataSource`, repositories, other services).
@@ -72,8 +84,15 @@ File cần refactor là gì?
 ├── 4. Controller/Service trả thẳng TypeORM Entity?
 │   └── 👉 Pattern D: Chuẩn hóa Response DTOs & Mapping Engine (Zero-Entity Leaking)
 │
-└── 5. Module Gateway tích hợp đa phân hệ (AI Hub, Integrations)?
-    └── 👉 Pattern E: Phân rã theo Domain Handlers trong `handlers/` + Clients trong `clients/`
+├── 5. Module Gateway tích hợp đa phân hệ (AI Hub, Integrations)?
+│   └── 👉 Pattern E: Phân rã theo Domain Handlers trong `handlers/` + Clients trong `clients/`
+│       Handler lớn: giữ `InvoiceAiHandler` làm facade (constructor KHÔNG đổi, để script/spec cũ không gãy)
+│       và tách phần thuần ra `handlers/<domain>/` (`*.prompt.ts`, `*.parsers.ts`, `*.constants.ts`, `*.types.ts`).
+│       Ví dụ chuẩn: `src/ai-hub-core/handlers/invoice/`.
+│
+└── 6. Service gần ngưỡng (> 80% = 400 dòng) cần thêm logic mới?
+    └── 👉 KHÔNG thêm vào file đó. Tạo sub-service/helper thuần mới (vd `InvoiceCategoryMemoryService`,
+        `invoice-journal-lines.helper.ts`) và inject bằng Clean DI constructor.
 ```
 
 ---
@@ -228,6 +247,10 @@ describe('ReportsCoreService (Facade)', () => {
 
 ### 🔹 GIAI ĐOẠN 5: Zero-Regression Quality Gate & Verification
 
+> **Khi chạy cùng `/plan-and-task`**: các lệnh *full* dưới đây (`build`, `bunx jest --forceExit`, `check:ci`) chỉ chạy **một lần ở Final Gate (Task 4.x.1)**.
+> Ở từng task nhỏ chỉ dùng lệnh scoped: `bunx tsc --noEmit`, `bunx jest <spec>` hoặc `bunx jest --findRelatedTests <file>`.
+> Khi chạy riêng lẻ (không qua plan) thì chạy đầy đủ như sau.
+
 ```bash
 # 1. Build Verification (đảm bảo TypeScript và metadata DI hợp lệ)
 bun run build
@@ -244,6 +267,51 @@ bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
 
 ---
 
+## 🧰 Script độc lập (`scripts/`, `src/**/scripts/`)
+
+Script chạy tay (backfill, seed, netoff...) vẫn phải theo chuẩn của app — đã từng xảy ra script tự gọi AI, tự đánh số chứng từ và tự map tài khoản **lệch** với app (6/14 danh mục khác tài khoản).
+
+1. **Dùng lại service/handler của app**, không nhân đôi logic nghiệp vụ. Không cần khởi động Nest: dựng service bằng constructor từ một `DataSource`
+   (mẫu: `scripts/backfill-invoice-categories-autopost.ts`). Không dùng `NestFactory` với `AppModule` (sẽ kích hoạt cron).
+2. **Gọi AI qua `NineRouterClient`/handler**, không `fetch` thẳng tới 9router (mất retry/timeout/`NineRouterError`).
+3. **Env qua loader chuẩn** `src/common/scripts/load-script-env.ts` — tên file khớp pipeline (`erp-<tenant>-<stage>` ↔ `.env.<tenant>-<stage>` ↔ secret `<TENANT>_<STAGE>_API_ENV`). Thứ tự chọn nguồn:
+   tham số vị trí `.env*` → `--env=<file>` → `--target=<tenant>-<stage>` → `ENV_FILE` → `.env` → `process.env` (container).
+   - **Hermetic**: đã chọn file thì chỉ dùng file đó; biến Bun tự nạp từ `.env`/`.env.local` mà file chọn không có sẽ bị gỡ (tránh lẫn tenant).
+   - File chỉ định không tồn tại ⇒ báo lỗi, **không** tự đổi file. **Không** hard-code tên file env mặc định.
+   - Mặc định **dry-run**; ghi DB cần `--apply`; DB production (tên DB/tên file chứa `production`) cần thêm `--confirm=<tên DB>`.
+   - Nếu env rơi về `.env` mặc định mà DB là production ⇒ script từ chối, buộc chỉ định env tường minh.
+   - Luôn in `ENV`/`DB host:port/tên` (che user/password) trước khi chạy. SSL dùng `resolvePgSsl`, không hard-code `ssl:false`.
+   - **Ma trận cờ ghi** (`getWriteGuard`): ghi khi có `--apply` (bí danh cũ `--execute`); `--dry-run` hoặc `DRY_RUN=true|1` luôn ép dry-run, kể cả khi có `--apply`; DB production cần thêm `--confirm=<tên DB>`.
+   - **Dry-run bằng rollback** (`src/common/scripts/script-db.ts`): script `pg` dùng `connectPg`/`withPgSession`, script TypeORM chỉ dùng `ds.query` dùng `createScriptDataSource(...).begin()`. Mọi lệnh chạy trong một transaction, cuối cùng COMMIT nếu `guard.allowed` còn lại ROLLBACK nên số dòng báo cáo khớp lần ghi thật.
+     Không dùng cho script đã tự quản `BEGIN/COMMIT` (transaction lồng) hay có tác dụng ngoài DB (R2, gọi API, `nextval`): các lời gọi đó phải tự gate bằng `guard.allowed`.
+     Kiểm chứng "dry-run không để lại dấu vết" bằng `countRows`/`diffCounts` (`dry-run-probe.helper.ts`) trên `erp_local`.
+4. **Không đường dẫn tuyệt đối** (`/home/dev/...`): tính từ `__dirname`/`import.meta.url` hoặc `process.cwd()`. Package ESM (`"type":"module"`) dùng `fileURLToPath(import.meta.url)`.
+5. **AI lỗi ≠ kết quả**: lỗi AI phải được phân biệt (`fallbackReason: AI_ERROR`) để chạy lại được; không ghi mã/danh mục sai âm thầm.
+   Riêng hóa đơn mua vào không phân loại được thì hạch toán TK tạm `T0003` (chủ ý của kế toán để dò tay), kèm marker `[T0003_FALLBACK:<lý do>]` trong mô tả bút toán.
+6. **Kiểm tra script ghi dữ liệu**: chỉ kiểm tra tĩnh (`bunx tsc`, `bun build --no-bundle`, `node --check`) và chạy **dry-run** trên `.env.local`.
+   Tuyệt đối không chạy thử script `execute-*`, `commit-*`, upload R2... để "xem thử".
+
+## 🔎 Lệnh audit nhanh (portable)
+
+```bash
+# Quét tổng hợp (khuyến nghị): kích thước + Clean DI + vệ sinh script
+bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --strict
+
+# Đếm service/controller vượt ngưỡng (không phụ thuộc globstar của shell)
+find src -name '*.service.ts' ! -name '*.spec.ts' -exec wc -l {} + | awk '$1>500 && $2!="total"' | sort -nr | head -20
+find src -name '*.controller.ts' ! -name '*.spec.ts' -exec wc -l {} + | awk '$1>300 && $2!="total"' | sort -nr | head -20
+
+# Controller trả thẳng Entity
+/usr/bin/grep -rn "Promise<.*Entity>" src --include='*.controller.ts'
+
+# Đường dẫn tuyệt đối còn sót (trừ cấu hình quyền cục bộ và dump dữ liệu)
+/usr/bin/grep -rIn "/home/dev/" src scripts --include='*.ts' --include='*.js' --include='*.sh'
+```
+
+> ⚠️ **Cảnh báo công cụ**: trong môi trường agent, lệnh `grep` có thể là hàm bọc **tôn trọng `.gitignore`** — nó âm thầm bỏ qua các file bị ignore
+> (vd phần lớn `erp-api/scripts/*`, `backups/`). Với kiểm tra "không còn sót" hãy dùng `/usr/bin/grep` hoặc script scan ở trên.
+> `grep "constructor(.*|.*)"` chỉ khớp constructor viết trên **một dòng**; constructor đã xuống dòng (Prettier) sẽ bị bỏ sót — dùng `--strict` của script scan.
+
 ## 📋 Checklist Kiểm Tra Hoàn Thành (Backend Refactor DoD)
 
 - [ ] **Bảo toàn REST Contract**: 100% routes, query params, DTOs không bị thay đổi.
@@ -253,4 +321,7 @@ bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
 - [ ] **Zero-Entity Leaking**: Controller chỉ trả về DTOs.
 - [ ] **Module Registration**: Đã khai báo đầy đủ providers, controllers và exports trong NestJS Module.
 - [ ] **Co-located Tests**: Mọi Sub-Service đều có file `.spec.ts` đi kèm và test Facade delegate pass 100%.
+- [ ] **Không nhân đôi logic**: script/handler mới gọi lại service, helper, hằng số sẵn có (VD: `VINFAST_TAX_CODES`, `CATEGORY_TO_DEBIT_ACCOUNT_MAP`), không tự định nghĩa lại.
+- [ ] **Script đạt chuẩn**: env qua loader, dry-run mặc định, không đường dẫn tuyệt đối, đã kiểm tra tĩnh (không chạy script ghi dữ liệu).
+- [ ] **Không đẩy service qua ngưỡng**: file sửa xong vẫn ≤ ngưỡng của loại (đo bằng `wc -l`).
 - [ ] **Build & Test Pass**: `bun run build`, `bunx jest --forceExit`, `bun run check:ci` hoàn toàn không có lỗi.

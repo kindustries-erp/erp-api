@@ -246,14 +246,14 @@ Mỗi khi chỉnh sửa module `journal-entry` hoặc `accounting-core`, bắt b
 
 ```bash
 # 1. Chạy Unit Tests Backend (erp-api)
-cd /home/dev/repos/erp/erp-api
+cd erp/erp-api
 bun test src/accounting-core
 
 # 2. Kiểm tra Type Backend
 bun run type:check
 
 # 3. Chạy Unit Tests Frontend (erp-web)
-cd /home/dev/repos/erp/erp-web
+cd erp/erp-web
 bun run test src/pages/finance/__tests__/GeneralJournalPage.test.tsx
 
 # 4. Kiểm tra Type Frontend

@@ -90,7 +90,7 @@ flowchart TD
 
 ## 5. Cơ Chế Đồng Bộ 2 Chiều (Bidirectional Net-Off & Settlement Sync)
 
-Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](file:///home/dev/repos/erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-service-refactor` Pattern C).
+Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-service-refactor` Pattern C).
 
 1. **Nhận diện liên kết linh hoạt (Dual Linkage)**:
    * Hỗ trợ cả 2 cơ chế liên kết đồng thời bằng phép `UNION`:
@@ -119,7 +119,7 @@ Mỗi khi phát sinh kỳ quyết toán mới hoặc sau khi cấn trừ sao kê
 ### Bước 1: Trích xuất danh sách khớp 100%
 Chạy script đối soát đa chiều:
 ```bash
-bun /home/dev/repos/erp/erp-api/scripts/reconcile-cases-invoices.ts
+bun erp/erp-api/scripts/reconcile-cases-invoices.ts
 ```
 
 ### Bước 2: Kiểm tra Pre-flight
@@ -128,7 +128,7 @@ bun /home/dev/repos/erp/erp-api/scripts/reconcile-cases-invoices.ts
 
 ### Bước 3: Thực thi Transaction liên kết & đồng bộ
 ```bash
-bun /home/dev/repos/erp/erp-api/scripts/execute-case-invoice-links.ts
+bun erp/erp-api/scripts/execute-case-invoice-links.ts
 ```
 
 ### Bước 4: Kiểm toán số dư sau thực thi
