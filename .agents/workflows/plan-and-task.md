@@ -19,7 +19,7 @@ graph LR
     E --> F["6. Knowledge-Sync"]
 ```
 
-1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local; dừng kiểm tra `.env.local` và không dùng Cloud/Neon).
+1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local; không dùngkhông dùng Cloud/Neon; dừng kiểm tra `.env.local`).
 2. **Delivery Sequence Bắt Buộc**: `Database (Phase 1)` ➔ `API Backend (Phase 2)` ➔ `QC & Security (Phase 3)`.
 3. **Task Breakdown 3 Cấp (`X.Y.Z`) & Scoped DoD Verification**: Đánh số `Phase.Group.Task` (ví dụ `1.1.1`, `2.2.1`, `3.1.2`). Mỗi task nhỏ gọn (1–2 files), bắt buộc có **Definition of Done (DoD)** và **Verification Command thu hẹp (Scoped Test < 10s)**:
    - *Quy tắc Lập Plan (Zero Execution)*: Mã lệnh trong mục `Verification` chỉ là **ĐẶC TẢ VĂN BẢN (Text Specification)** để cam kết tiêu chí hoàn thành, **TUYỆT ĐỐI KHÔNG ĐƯỢC CHẠY** trong lúc lập Plan. Lệnh này CHỈ ĐƯỢC CHẠY ở Phase 5 sau khi User đã duyệt Plan.

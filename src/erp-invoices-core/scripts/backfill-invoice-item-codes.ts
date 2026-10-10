@@ -17,7 +17,7 @@
  * AI lỗi cả batch -> KHÔNG ghi mã cho các dòng đó (giữ nguyên để chạy lại), thay vì ghi PT-CHUNG sai.
  *
  * Cách chạy (trong thư mục erp-api):
- *   bun src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts .env.local --direction=IN --limit=200
+ *   bun src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts .env --direction=IN --limit=200
  *   bun src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts --target=greenway-staging --apply
  *   Tham số: [--direction=IN|OUT|ALL] [--force-all] [--concurrency=6] [--batch-size=30] [--model=<model 9router>] [--limit=N] [--apply] [--confirm=<db>]
  *   (--dry-run vẫn được chấp nhận để tương thích, nhưng đã là mặc định)

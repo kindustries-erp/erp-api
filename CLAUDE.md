@@ -14,7 +14,7 @@ Rule chung của ERP nằm ở `../CLAUDE.md` (Claude Code tự nạp).
 
 ## Script & env (backfill, seed, netoff...)
 
-- Env theo nhánh deploy: `erp-<tenant>-<stage>` ↔ file `.env.<tenant>-<stage>` ↔ secret GitHub `<TENANT>_<STAGE>_API_ENV`. DB master = `DATABASE_URL` trong `.env.local` (`erp_local`).
+- Env theo nhánh deploy: `erp-<tenant>-<stage>` ↔ file `.env.<tenant>-<stage>` ↔ secret GitHub `<TENANT>_<STAGE>_API_ENV`. DB master = `DATABASE_URL` trong `.env` (`erp_local`).
 - Script nạp env bằng `src/common/scripts/load-script-env.ts`: tham số vị trí `.env.xxx` | `--env=` | `--target=<tenant>-<stage>` | `ENV_FILE` | `.env`. Không hard-code file env mặc định; file chỉ định thiếu thì báo lỗi.
 - Mặc định dry-run; ghi DB cần `--apply`; DB production cần thêm `--confirm=<tên DB>`. Bare `.env` có thể đang trỏ DB production nên script từ chối nếu không chỉ định env tường minh.
 - Script gọi lại service/handler của app, AI qua `NineRouterClient`; không đường dẫn tuyệt đối. Chi tiết: `.agents/workflows/api-service-refactor.md` (mục *Script độc lập*).

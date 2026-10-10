@@ -15,7 +15,7 @@
  *   unposted        đã có danh mục nhưng chưa hạch toán -> hạch toán theo danh mục (không gọi AI)
  *
  * Ví dụ (chạy trong thư mục erp-api):
- *   bun scripts/backfill-invoice-categories-autopost.ts .env.local --limit=10
+ *   bun scripts/backfill-invoice-categories-autopost.ts .env --limit=10
  *   bun scripts/backfill-invoice-categories-autopost.ts --target=greenway-staging --mode=retry-fallback
  *   bun scripts/backfill-invoice-categories-autopost.ts .env.greenway-production --apply --confirm=erp_greenway_production
  *
