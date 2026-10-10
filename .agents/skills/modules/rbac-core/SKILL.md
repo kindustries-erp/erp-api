@@ -193,11 +193,11 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
 
 - **Unit Test Backend**:
   ```bash
-  cd /home/dev/repos/erp/erp-api
+  cd erp/erp-api
   bunx jest src/rbac-core/rbac-core.service.spec.ts
   ```
 - **CI / Type Check Frontend**:
   ```bash
-  cd /home/dev/repos/erp/erp-web
+  cd erp/erp-web
   bun run check:ci
   ```

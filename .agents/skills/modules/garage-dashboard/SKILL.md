@@ -219,18 +219,18 @@ Resource RBAC: `garage`
 - **Backend Module**: `src/kgara-api-core/`
 - **Frontend (`erp-web`)**:
   - API Client:
-    - [`garageDashboardApi.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/api/garageDashboardApi.ts)
-    - [`garageOpexApi.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
+    - [`garageDashboardApi.ts`](erp/erp-web/src/modules/garage/api/garageDashboardApi.ts)
+    - [`garageOpexApi.ts`](erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
-    - [`useGarageOpexList.ts`](file:///home/dev/repos-dev-1/erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
+    - [`useGarageOpexList.ts`](erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
   - Pages & Components (Chuẩn `/ui-atomic-refactor`):
-    - [`pages/GarageDashboard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
-    - [`components/GarageStatsCards/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
-    - [`components/GarageConversionFunnelCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
-    - [`components/GaragePnlSection/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 7 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
-    - [`components/GaragePaymentProgressCard/`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GaragePaymentProgressCard/) (Tiến độ thu/chi & công nợ dịch vụ theo tháng)
-    - [`GarageOpex.tsx`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
-    - [`GarageOpexDrawer.tsx`](file:///home/dev/repos-dev/erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
+    - [`pages/GarageDashboard/`](erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
+    - [`components/GarageStatsCards/`](erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
+    - [`components/GarageConversionFunnelCard/`](erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
+    - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 7 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+    - [`components/GaragePaymentProgressCard/`](erp/erp-web/src/modules/garage/components/GaragePaymentProgressCard/) (Tiến độ thu/chi & công nợ dịch vụ theo tháng)
+    - [`GarageOpex.tsx`](erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
+    - [`GarageOpexDrawer.tsx`](erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
 
 ---
 

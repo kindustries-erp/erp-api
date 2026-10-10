@@ -601,7 +601,7 @@ bun run check:ci
 
 > [!NOTE]
 > Đặc tả chi tiết đầy đủ về giao diện, route, components và tương tác UX của phân hệ Hóa đơn được tài liệu hóa chuyên sâu tại skill:
-> 👉 [`erp-invoice-web`](file:///home/dev/repos-dev/erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md)
+> 👉 [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md)
 
 ### 8.1. Trang Hợp Nhất 6 Tabs (`/erp-invoices`)
 Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route trung tâm duy nhất:
@@ -698,9 +698,15 @@ Phân hệ Hóa đơn tích hợp engine AI 9router và tự động hạch toá
    - `OPEX_LEGAL_CONSULTING` $\to$ **TK `6427`** (Tư vấn luật Wellspring, kế toán BCTC W&A).
    - `OPEX_IT_SOFTWARE` $\to$ **TK `6427`** (Bản quyền KGARA, email doanh nghiệp, internet cáp quang, 4G).
    - `OPEX_MARKETING` $\to$ **TK `6428`** (Tiếp thị, video khai trương Hydra, quà tặng tri ân).
-2. **Cơ chế Fallback An Toàn vào TK Tạm `T0003`**:
+2. **Cơ chế Fallback An Toàn vào TK Tạm `T0003`** (chủ ý của kế toán: không phân loại được thì đẩy vào T0003, sau đó dò tay và hạch toán lại):
    - Khi 9router AI timeout, lỗi mạng, hoặc confidence < 0.7 $\to$ Hạch toán tạm vào `Nợ T0003 / Nợ 1331 / Có 331`.
+   - Mô tả bút toán được gắn marker `[T0003_FALLBACK:<lý do>]` với lý do `AI_ERROR` (AI lỗi/không parse được), `LOW_CONFIDENCE`, `INVALID_CODE` (helper `invoice-fallback-marker.helper.ts`). Khi hóa đơn được phân loại lại thì marker bị gỡ.
    - Khi người dùng chọn lại phân loại trên UI, hệ thống tự động cập nhật *in-place* dòng Nợ của bút toán sang tài khoản đích.
+3. **Tra tài khoản Nợ 3 tầng** (`autoPostInvoiceByCategory`): (1) cấu hình trong DB (`ErpModuleAttributeDef` option `accountCode`, rồi `category.defaultDebitAccount`) → (2) bảng tĩnh `CATEGORY_TO_DEBIT_ACCOUNT_MAP` → (3) `T0003`.
+4. **Bộ nhớ theo người bán** (`InvoiceCategoryMemoryService`): MST đã có ≥ 3 hóa đơn đã phân loại và ≥ 90% cùng một danh mục thì dùng lại danh mục đó, không gọi AI (`fromMemory`). Tắt bằng `INVOICE_CATEGORY_MEMORY=off` hoặc cờ `--no-memory` của script. Lưu ý: dữ liệu học gồm cả phân loại cũ do AI, nên cần soát khi một người bán bị gán sai nhiều lần.
+5. **Số chứng từ nguyên tử** (`AccountingCoreService.generateEntryNo`): bộ đếm theo `(prefix, period=YYYYMMDD, branch_id)` trong bảng `erp_document_sequences`, upsert một câu `ON CONFLICT (prefix, period, COALESCE(branch_id, '000…'::uuid))` nên **bắt buộc** có unique index theo biểu thức `uq_erp_document_sequences_prefix_period_branch`. Migration `CreateDocumentSequences20261010150000` tạo bảng + index và seed bộ đếm từ số chuẩn `PREFIX-YYYYMMDD-0001` đã cấp; idempotent: DB có sẵn bảng (greenway-staging/production) thì chỉ bảo đảm index, không seed lại; nếu có index trùng tên khác định nghĩa thì dừng và báo. Số chứng từ chỉ duy nhất theo từng chi nhánh (nhiều chi nhánh có thể cùng `HĐM-20260925-0001`). Nếu bảng thiếu, service rơi về `MAX+1` (không nguyên tử).
+6. **Script backfill chuẩn**: `scripts/backfill-invoice-categories-autopost.ts` (`bun run backfill:categories -- .env.local --limit=10`) dựng thẳng `InvoiceCategoryAutopostService`. Chế độ `--mode=new` (mặc định) | `retry-fallback` (chỉ HĐ chưa danh mục, bút toán còn nằm hoàn toàn ở T0003/1331 — HĐ đã sửa tay sang tài khoản khác không bị chọn) | `unposted`. Mặc định dry-run, `--apply` để ghi, DB production cần `--confirm=<tên DB>`; `--model=` chọn model 9router. Script cũ `backfill-unclassified-invoices.ts` đã xóa (lệch bảng tài khoản và cách đánh số chứng từ so với app).
+   - Script `src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts` (mã hàng dòng hóa đơn) cũng dùng loader env + `classifyInvoiceLineItemsWithAi`; AI lỗi cả batch thì không ghi mã (chạy lại để xử lý tiếp).
 ### 8.8. Chuẩn Hóa Mã Hàng Dòng Hóa Đơn Đầu Vào Theo Hệ Thống Tiền Tố (Prefix Taxonomy)
 Toàn bộ chi tiết từng dòng mặt hàng hóa đơn đầu vào (`erp_invoice_items` với `direction = 'IN'`) được phân giải và gán mã chuẩn hóa có tiền tố phân cấp rõ ràng:
 1. **Phụ Tùng VinFast (`VF-<PART_NO>`)**: Trích xuất Part Number chính hãng kèm tiền tố `VF-` (VD: `VF-BEX20001151`, `VF-BAT21001011`, `VF-PWT73011010AC`, `VF-106206`).
@@ -738,7 +744,7 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
    - **Viettel S-Invoice**: Trích xuất cổng tra cứu `https://sinvoice.viettel.vn/tracuuhoadon`.
 2. **Cơ Chế Adapter Tải Trực Tiếp Từ Cổng Nhà Cung Cấp (`IProviderAdapter`)**:
    - Hệ thống không sử dụng cơ chế convert máy nội bộ mà kết nối trực tiếp tới API/cổng tra cứu chính thức của từng NCC (`HiloInvoiceAdapter`, `MisaInvoiceAdapter`, `VinfastInvoiceAdapter`, `ViettelInvoiceAdapter`, `EasyInvoiceAdapter`).
-   - Chi tiết kỹ thuật & kịch bản vận hành CLI tham khảo skill: 👉 [download-provider-invoice-pdf](file:///home/dev/repos-dev-02/erp/erp-api/.agents/skills/download-provider-invoice-pdf/SKILL.md).
+   - Chi tiết kỹ thuật & kịch bản vận hành CLI tham khảo skill: 👉 [download-provider-invoice-pdf](erp/erp-api/.agents/skills/download-provider-invoice-pdf/SKILL.md).
    - **Đã hỗ trợ tự động 100%**:
      - **HILO (GSM Xanh SM)**: Tra cứu và tải tự động qua API `GET /Inv/GetPdf?ID={hiloInvId}`.
      - **MISA meInvoice**: Khởi tạo session ASP.NET, gọi `POST /tra-cuu/GetInvoiceDataByTransactionID` lấy token `customData`, sau đó tải PDF gốc có chữ ký điện tử qua `GET /tra-cuu/DownloadHandler.ashx`.

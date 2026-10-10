@@ -1,5 +1,6 @@
 import {
   CATEGORY_TO_DEBIT_ACCOUNT_MAP,
+  findOverrideAccountCodeFromAttrDefs,
   FALLBACK_PURCHASE_DEBIT_ACCOUNT,
   resolveInvoiceAccountsByCategory,
   STANDARD_AP_CREDIT_ACCOUNT,
@@ -127,6 +128,39 @@ describe('InvoiceCategoryAccountMappingHelper', () => {
       expect(res.debitAccountCode).toBe('6422');
       expect(res.categoryCode).toBeNull();
       expect(res.isFallback).toBe(false);
+    });
+  });
+
+  describe('findOverrideAccountCodeFromAttrDefs', () => {
+    it('prefers accountCode on the matching option', () => {
+      const defs = [
+        { options: [{ value: 'X', accountCode: ' 6427 ', label: '[TK 111]' }] },
+      ];
+      expect(findOverrideAccountCodeFromAttrDefs(defs, 'X')).toBe('6427');
+    });
+
+    it('parses the account from the label, e.g. [TK 6422]', () => {
+      const defs = [
+        { options: [{ value: 'X', label: 'Hành chính [TK 6422]' }] },
+      ];
+      expect(findOverrideAccountCodeFromAttrDefs(defs, 'X')).toBe('6422');
+    });
+
+    it('reads localized labels', () => {
+      const defs = [{ options: [{ value: 'X', labels: { vi: 'VPP [635]' } }] }];
+      expect(findOverrideAccountCodeFromAttrDefs(defs, 'X')).toBe('635');
+    });
+
+    it('returns null when nothing matches or options are missing', () => {
+      expect(
+        findOverrideAccountCodeFromAttrDefs([{ options: null }], 'X'),
+      ).toBeNull();
+      expect(
+        findOverrideAccountCodeFromAttrDefs(
+          [{ options: [{ value: 'Y' }] }],
+          'X',
+        ),
+      ).toBeNull();
     });
   });
 });

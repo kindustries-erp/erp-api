@@ -11,7 +11,7 @@ Skill này giúp AI Agent và Developer tự động sinh boilerplate code chu�
 
 ## 🌐 1. ERP Web Generators (`erp-web/`)
 
-Chạy từ thư mục `/home/dev/repos/erp/erp-web`:
+Chạy từ thư mục `erp/erp-web`:
 
 ### 📄 Generator 1: `table-page` (Toàn bộ module Table Page + API + Hook + Drawer + Locales)
 
@@ -88,7 +88,7 @@ bun plop table-section goods-issues-core IssueLineItems IssueLineItem
 
 ## ⚙️ 2. ERP API Generators (`erp-api/`)
 
-Chạy từ thư mục `/home/dev/repos/erp/erp-api`:
+Chạy từ thư mục `erp/erp-api`:
 
 ### 🚀 Generator 1: `api-module` (Full NestJS Module chuẩn)
 

@@ -189,13 +189,13 @@ bash .agents/skills/db-migrate/scripts/typeorm-runner.sh run .env.production
 
 #### Bước 2: Kiểm tra danh sách Pending Migrations
 ```bash
-cd /home/dev/repos/erp/erp-api && bun run migration:show
+cd erp/erp-api && bun run migration:show
 ```
 Xác nhận có 3 migrations trên đang ở trạng thái `[ ]` (chưa chạy).
 
 #### Bước 3: Áp dụng Migration vào Production
 ```bash
-cd /home/dev/repos/erp/erp-api && bun run migration:run
+cd erp/erp-api && bun run migration:run
 ```
 
 ---

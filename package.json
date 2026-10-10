@@ -15,6 +15,8 @@
     "backfill:out-invoices:dry": "DRY_RUN=true bun run scripts/backfill-out-invoices.ts",
     "backfill:plates": "bun scripts/backfill-invoice-license-plates.ts",
     "backfill:plates:dry": "bun scripts/backfill-invoice-license-plates.ts --dry-run",
+    "backfill:categories": "bun scripts/backfill-invoice-categories-autopost.ts",
+    "backfill:categories:retry": "bun scripts/backfill-invoice-categories-autopost.ts --mode=retry-fallback",
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/db/data-source.cli.ts",
     "gw:cases:classify": "bun src/kgara-api-core/scripts/update-cases-classification.ts .env.greenway-production",
     "gw:opex:seed": "bun src/kgara-api-core/scripts/seed-garage-opex.ts .env.greenway-production",

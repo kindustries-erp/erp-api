@@ -71,3 +71,30 @@ export function resolveInvoiceAccountsByCategory(
     isFallback,
   };
 }
+
+/**
+ * Tìm mã TK Nợ ghi đè cho một danh mục từ cấu hình option của trường tùy chỉnh `category`
+ * (ErpModuleAttributeDef.options). Ưu tiên `accountCode`, sau đó tách mã trong nhãn dạng `[TK 6427]`.
+ */
+export function findOverrideAccountCodeFromAttrDefs(
+  attrDefs: ReadonlyArray<{ options?: unknown }>,
+  categoryCode: string,
+): string | null {
+  for (const def of attrDefs) {
+    if (!Array.isArray(def.options)) continue;
+    const matchedOpt = (def.options as any[]).find(
+      (opt) => opt?.value === categoryCode,
+    );
+    if (matchedOpt?.accountCode && String(matchedOpt.accountCode).trim()) {
+      return String(matchedOpt.accountCode).trim();
+    }
+    const rawText: string =
+      matchedOpt?.label ||
+      matchedOpt?.labels?.vi ||
+      matchedOpt?.labels?.en ||
+      '';
+    const match = rawText.match(/\[(?:TK\s*)?([0-9A-Z]+)\]/i);
+    if (match && match[1]) return match[1].trim();
+  }
+  return null;
+}

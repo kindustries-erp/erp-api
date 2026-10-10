@@ -108,12 +108,23 @@ export class KgaraCaseListQueryService {
     }
 
     if (q) {
+      const qClean = q.replace(/[,.]/g, '');
+      const qNumber = Number(qClean);
+      const isNumeric = !isNaN(qNumber) && qNumber > 0 && qClean.length > 0;
+
       query.andWhere(
         new Brackets((qb) => {
           qb.where('case.soChungTu ILIKE :q', { q: `%${q}%` })
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` });
+
+          if (isNumeric) {
+            qb.orWhere('case.tienCoThue = :qNum', { qNum: qNumber }).orWhere(
+              'case.chiPhi = :qNum',
+              { qNum: qNumber },
+            );
+          }
         }),
       );
     }

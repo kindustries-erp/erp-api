@@ -57,6 +57,7 @@ import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.e
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
 import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoiceCategoryMemoryService } from './services/sub-services/invoice-category-memory.service';
 import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
 import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
 
@@ -131,6 +132,7 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
     InvoiceDashboardAnalyticsService,
     InvoiceDashboardHorizonService,
     InvoiceCategoryAutopostService,
+    InvoiceCategoryMemoryService,
     InvoiceItemCodeResolverService,
     InvoiceAdjustmentService,
     InvoiceProviderDetectorService,

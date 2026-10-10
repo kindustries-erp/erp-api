@@ -1,6 +1,9 @@
 import AdmZip from 'adm-zip';
 import { EasyInvoiceAdapter } from './easy-invoice.adapter';
-import { InvoiceCaptchaSolverService } from '../original-pdf/invoice-captcha-solver.service';
+import {
+  CaptchaSolverConfigError,
+  InvoiceCaptchaSolverService,
+} from '../original-pdf/invoice-captcha-solver.service';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
 
 describe('EasyInvoiceAdapter', () => {
@@ -170,5 +173,45 @@ describe('EasyInvoiceAdapter', () => {
     expect(res.error).toContain(
       'Không thể tải tệp PDF gốc từ cổng EasyInvoice',
     );
+  });
+
+  it('stops immediately (no retry, no extra captcha download) on a captcha solver config error', async () => {
+    const fakeCaptchaImg = Buffer.alloc(300, 1);
+    (mockCaptchaSolver.solveCaptchaImage as jest.Mock).mockRejectedValue(
+      new CaptchaSolverConfigError('NINE_ROUTER_API_KEY is not configured'),
+    );
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/Captcha/Show')) {
+        return Promise.resolve({
+          ok: true,
+          headers: {
+            getSetCookie: () => ['ASP.NET_SessionId=s; path=/'],
+            get: () => 'ASP.NET_SessionId=s; path=/',
+          },
+          arrayBuffer: () =>
+            Promise.resolve(
+              fakeCaptchaImg.buffer.slice(
+                fakeCaptchaImg.byteOffset,
+                fakeCaptchaImg.byteOffset + fakeCaptchaImg.byteLength,
+              ),
+            ),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 500 });
+    });
+
+    const res = await adapter.downloadOriginalPdf({
+      invoiceNo: '12345',
+      lookupCode: 'fkey',
+      lookupUrl: 'https://tracuu.easyinvoice.vn',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('NINE_ROUTER_API_KEY is not configured');
+    expect(mockCaptchaSolver.solveCaptchaImage).toHaveBeenCalledTimes(1);
+    const captchaDownloads = (global.fetch as jest.Mock).mock.calls.filter(
+      ([u]: [string]) => u.includes('/Captcha/Show'),
+    );
+    expect(captchaDownloads).toHaveLength(1);
   });
 });

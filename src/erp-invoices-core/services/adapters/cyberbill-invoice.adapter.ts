@@ -5,7 +5,10 @@ import {
   IProviderAdapter,
 } from './provider-adapter.interface';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
-import { InvoiceCaptchaSolverService } from '../original-pdf/invoice-captcha-solver.service';
+import {
+  CaptchaSolverConfigError,
+  InvoiceCaptchaSolverService,
+} from '../original-pdf/invoice-captcha-solver.service';
 
 interface CyberbillCluster {
   apiUrl: string;
@@ -79,7 +82,7 @@ export class CyberbillInvoiceAdapter implements IProviderAdapter, OnModuleInit {
         params.invoiceNo,
       );
 
-      if (result.success) {
+      if (result.success || result.fatal) {
         return result;
       }
 
@@ -154,11 +157,16 @@ export class CyberbillInvoiceAdapter implements IProviderAdapter, OnModuleInit {
           );
         } catch (solveErr: any) {
           this.logger.warn(`[CyberBill] Lỗi giải captcha: ${solveErr.message}`);
-          if (attempt === maxRetries) {
+          // Lỗi cấu hình (thiếu/sai API key): thử lại vô ích -> dừng ngay, không tải thêm captcha
+          if (
+            solveErr instanceof CaptchaSolverConfigError ||
+            attempt === maxRetries
+          ) {
             return {
               success: false,
               source: 'failed',
               error: `Lỗi kết nối bộ giải Captcha AI: ${solveErr.message}`,
+              fatal: solveErr instanceof CaptchaSolverConfigError,
             };
           }
           continue;
