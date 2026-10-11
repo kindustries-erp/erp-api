@@ -52,7 +52,7 @@ src/kgara-api-core/
 
 **Controller**: `GarageCashflowController`
 **Base Route**: `/api/v1/greenway/cashflow-vouchers`
-**Yêu cầu quyền**: Resource `GARAGE` (thuộc hệ thống Role-Based Access Control).
+**Yêu cầu quyền**: Resource `GARAGE_CASHFLOW` (`garage_cashflow`) (thuộc hệ thống Role-Based Access Control, tách riêng độc lập khỏi `GARAGE`).
 
 | HTTP Method | Endpoint | Quyền (Action) | Mô tả |
 |-------------|----------|----------------|-------|
@@ -78,22 +78,33 @@ src/kgara-api-core/
 - **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua join.
 
 ## 7. Cấu trúc Source Code Frontend (Web)
-Tuân thủ nghiêm ngặt **Atomic UI** (5 files Organism) cho cấu trúc Data Table theo `/standardize-table`:
+Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/ui-atomic-refactor`:
 ```text
 src/modules/garage/components/organisms/
 ├── garage-cashflow-table/          (Thư mục Organism cho Data Table chuẩn)
 │   ├── index.ts
 │   ├── GarageCashflowTable.tsx     (Main component, quản lý giao diện Data Table)
 │   ├── GarageCashflowTable.columns.tsx (Cấu hình TableText, Badge, Right-align, < 180 LoC)
-│   ├── GarageCashflowTable.helper.tsx (Tách các hàm render cell phức tạp để giảm tải file columns)
+│   ├── GarageCashflowTable.helper.tsx (Tách các hàm render cell phức tạp để giảm tải file columns, < 100 LoC)
 │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu query params, options, filters)
 │   ├── GarageCashflowTable.type.ts
 │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
-├── garage-cashflow-drawer/
-│   └── GarageCashflowDrawer.tsx    (Sử dụng StandardFormDrawer, layout 1 cột, hiển thị mã liên kết)
+├── garage-cashflow-drawer/         (Thư mục Organism cho Drawer chuẩn Atomic bóc tách < 180 LoC)
+│   ├── index.ts
+│   ├── GarageCashflowDrawer.tsx    (Khung StandardFormDrawer, điều phối sub-sections, < 80 LoC)
+│   ├── GarageCashflowDrawer.hook.ts (Hook form state, validation, mutations, RBAC canCreate/canUpdate, < 130 LoC)
+│   ├── GarageCashflowDrawer.type.ts (Props interface, DTO mappings, < 30 LoC)
+│   ├── GarageCashflowDrawerGeneralSection.tsx (Sub-section Thông tin chung, < 180 LoC)
+│   ├── GarageCashflowDrawerSettlementSection.tsx (Sub-section Thông tin đối soát, < 90 LoC)
+│   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
 └── garage-cashflow-list/
-    └── GarageCashflowList.tsx      (Wrapper component, kết nối Table và Drawer, không chứa logic UI sâu)
+    ├── GarageCashflowList.tsx      (Wrapper component, kết nối Table và Drawer, tích hợp canCreate/canUpdate/canDelete từ GARAGE_CASHFLOW)
+    └── GarageCashflowList.test.tsx (Co-located Unit Test)
 ```
+- **Phân quyền Context Menu & Action Menu (Row Actions)**:
+  - Chỉ hiển thị mục "Xóa phiếu" khi người dùng có quyền `ErpResource.GARAGE_CASHFLOW, ErpAction.DELETE` (`canDelete === true` và `onDelete` được định nghĩa). Người không có quyền xóa sẽ bị ẩn hoàn toàn cả nhóm "Khác" và item xóa trong cả Context Menu (chuột phải) lẫn Action Menu (`...`).
+  - Text label "Xóa phiếu" hiển thị màu chữ chuẩn hệ thống (`text-foreground`, tương đồng với "Xem chi tiết", "Chỉnh sửa"), không dùng `variant: "danger"` để tránh bị tô đỏ toàn bộ nhãn.
+  - Icon thùng rác `<Trash2 />` được tô đỏ trực tiếp bằng class `text-red-500` (`<Trash2 className="w-4 h-4 text-red-500" />`) để đảm bảo trực quan nhận diện hành động xóa.
 - **Sort format**: Gửi lên API dưới dạng chuỗi ngăn cách dấu phẩy (vd: `sorts=createdAt,-amount`) thay vì truyền dạng array object `sorts[]=...` để tránh lỗi Class-Validator của NestJS.
 - **Display**: Sử dụng `TableText` component có enableCopy và `onDetailClick`. Các tham chiếu hiển thị bằng Name/Code (`soChungTu`, `transactionCode`) thay vì UUID.
 
@@ -101,5 +112,11 @@ src/modules/garage/components/organisms/
 Khi có thay đổi logic trong module này, bắt buộc phải:
 1. Kiểm tra typing API: `bun run type:check` (trong thư mục API)
 2. Chạy CI local: `bun run check:ci` (trong thư mục API)
-3. Chạy unit tests API: `bunx jest src/kgara-api-core/services/garage-cashflow.service.ts`
+3. Chạy unit tests Controller & Facade Service API:
+   - `bunx jest src/kgara-api-core/controllers/garage-cashflow.controller.spec.ts`
+   - `bunx jest src/kgara-api-core/services/garage-cashflow.service.spec.ts`
 4. Kiểm tra typing Web: `bunx tsc --noEmit` (trong thư mục Web)
+5. Chạy unit tests Web:
+   - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-table/GarageCashflowTable.test.tsx`
+   - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-drawer/GarageCashflowDrawer.test.tsx`
+   - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-list/GarageCashflowList.test.tsx`

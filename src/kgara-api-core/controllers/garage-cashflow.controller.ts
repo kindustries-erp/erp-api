@@ -29,19 +29,28 @@ export class GarageCashflowController {
   constructor(private readonly cashflowService: GarageCashflowService) {}
 
   @Get()
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_CASHFLOW,
+    action: ErpAction.READ,
+  })
   async listVouchers(@Query() query: ListKgaraCashflowVoucherQueryDto) {
     return this.cashflowService.listVouchers(query);
   }
 
   @Get('dashboard')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_CASHFLOW,
+    action: ErpAction.READ,
+  })
   async getDashboard() {
     return this.cashflowService.getDashboardStats();
   }
 
   @Get('column-options')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_CASHFLOW,
+    action: ErpAction.READ,
+  })
   async getColumnOptions(
     @Query('column') column: string,
     @Query('search') search: string,
@@ -60,7 +69,7 @@ export class GarageCashflowController {
 
   @Post()
   @RequirePermissions({
-    resource: ErpResource.GARAGE,
+    resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.CREATE,
   })
   async createVoucher(@Body() dto: CreateKgaraCashflowVoucherDto) {
@@ -69,7 +78,7 @@ export class GarageCashflowController {
 
   @Put(':id')
   @RequirePermissions({
-    resource: ErpResource.GARAGE,
+    resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.UPDATE,
   })
   async updateVoucher(
@@ -81,7 +90,7 @@ export class GarageCashflowController {
 
   @Delete(':id')
   @RequirePermissions({
-    resource: ErpResource.GARAGE,
+    resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.DELETE,
   })
   async deleteVoucher(@Param('id') id: string) {
