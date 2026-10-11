@@ -50,7 +50,10 @@ export async function fetchWithRetry(
           gdtLogger.warn(
             `GDT API rate limit or server error (${res.status}) on ${url}, retrying ${i + 1}/${retries}...`,
           );
-          const delay = res.status === 429 ? 5000 * (i + 1) : 1000 * (i + 1);
+          const delay =
+            res.status === 429
+              ? 5000 * (i + 1)
+              : 2000 * (i + 1) ** 2 + Math.round(Math.random() * 1000);
           await sleep(delay);
           continue;
         }

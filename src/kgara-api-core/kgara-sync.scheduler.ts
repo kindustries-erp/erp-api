@@ -87,7 +87,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Đồng bộ vụ việc dịch vụ KGara tại 5 mốc cố định: 09:15, 15:15, 16:15, 17:15, 21:15 (Asia/Ho_Chi_Minh)
+   * Đồng bộ vụ việc dịch vụ KGara mỗi giờ vào phút :15 từ 09:15 đến 21:15 (Asia/Ho_Chi_Minh)
    * Decorator @Cron đóng vai trò lớp dự phòng song song.
    */
   @Cron('0 15 9,15,16,17,21 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
