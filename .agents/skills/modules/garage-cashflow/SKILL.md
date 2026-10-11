@@ -101,12 +101,17 @@ src/modules/garage/components/organisms/
     ├── GarageCashflowList.tsx      (Wrapper component, kết nối Table và Drawer, tích hợp canCreate/canUpdate/canDelete từ GARAGE_CASHFLOW)
     └── GarageCashflowList.test.tsx (Co-located Unit Test)
 ```
-- **Phân quyền Context Menu & Action Menu (Row Actions)**:
-  - Chỉ hiển thị mục "Xóa phiếu" khi người dùng có quyền `ErpResource.GARAGE_CASHFLOW, ErpAction.DELETE` (`canDelete === true` và `onDelete` được định nghĩa). Người không có quyền xóa sẽ bị ẩn hoàn toàn cả nhóm "Khác" và item xóa trong cả Context Menu (chuột phải) lẫn Action Menu (`...`).
-  - Text label "Xóa phiếu" hiển thị màu chữ chuẩn hệ thống (`text-foreground`, tương đồng với "Xem chi tiết", "Chỉnh sửa"), không dùng `variant: "danger"` để tránh bị tô đỏ toàn bộ nhãn.
-  - Icon thùng rác `<Trash2 />` được tô đỏ trực tiếp bằng class `text-red-500` (`<Trash2 className="w-4 h-4 text-red-500" />`) để đảm bảo trực quan nhận diện hành động xóa.
-- **Sort format**: Gửi lên API dưới dạng chuỗi ngăn cách dấu phẩy (vd: `sorts=createdAt,-amount`) thay vì truyền dạng array object `sorts[]=...` để tránh lỗi Class-Validator của NestJS.
-- **Display**: Sử dụng `TableText` component có enableCopy và `onDetailClick`. Các tham chiếu hiển thị bằng Name/Code (`soChungTu`, `transactionCode`) thay vì UUID.
+- **Cấu trúc Điều hướng & Tích hợp Trang (`/garage-debts` & Sidebar)**:
+  - **Tích hợp Tab Thu Chi Xưởng vào Công nợ Garage (`GarageDebts`)**: Danh sách thu chi xưởng (`GarageCashflowList`) được tích hợp làm tab thứ 4 (tab cuối cùng: `Tổng quan` ➔ `Phải thu` ➔ `Phải trả` ➔ `Thu chi xưởng`) trong trang Công nợ Garage (`GarageDebts` - route `/garage-debts`).
+  - **Tab Visibility RBAC**: Tab "Thu chi xưởng" chỉ hiển thị khi người dùng có quyền `GARAGE_CASHFLOW:READ`. Truy cập trực tiếp qua URL `?tab=cashflow` khi thiếu quyền sẽ tự động fallback an toàn về tab `overview`.
+  - **Phân quyền Context Menu Xóa & Action Menu**: Chỉ người dùng có quyền `GARAGE_CASHFLOW:DELETE` (`canDelete === true` và `onDelete` được truyền vào) mới thấy mục "Xóa phiếu" trong chuột phải và nút ba chấm (`...`). Người không có quyền DELETE bị ẩn hoàn toàn 100% mục xóa (không render DOM item).
+  - **Dọn dẹp Dead Code**: Trang tổng quan `GarageCashflowDashboard` và file `GarageCashflowPage.tsx` đã được xóa bỏ hoàn toàn. Route alias `"garage-cashflow"` trong `App.tsx` tự động chuyển tiếp sang `() => <GaragePartners initialTab="cashflow" />`.
+  - **Sidebar GARAGE Rút Gọn**: Section GARAGE trên Sidebar chỉ còn:
+    - **Mục 1**: `Dịch vụ Garage` (`GarageNavGroup` | Icon: `Car`) - menu tổng dropdown gom 2 submenu:
+      - `Phiếu dịch vụ` (`garage-cases`)
+      - `Công nợ garage` (`garage-debts`)
+    - **Mục 2**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
+  - **Command Palette Search**: Item `garage-cashflow` độc lập đã được gỡ bỏ; các từ khóa "thu chi xưởng", "dòng tiền xưởng", "sổ quỹ", "garage cashflow" được tích hợp trực tiếp vào mục `garage-debts`.
 
 ## 8. Quy tắc Kiểm thử & Báo cáo Chất lượng
 Khi có thay đổi logic trong module này, bắt buộc phải:
