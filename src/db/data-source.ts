@@ -185,8 +185,8 @@ export default new DataSource(
         schema: 'public',
         entities,
         migrations: [
-          __dirname + '/migrations/**/*{.ts,.js}',
-          __dirname + '/../migrations/**/*{.ts,.js}',
+          __dirname + '/migrations/**/!(*.spec){.ts,.js}',
+          __dirname + '/../migrations/**/!(*.spec){.ts,.js}',
         ],
         synchronize: false,
         ssl: isSslDisabled ? false : { rejectUnauthorized: false },
@@ -202,8 +202,8 @@ export default new DataSource(
         schema: 'public',
         entities,
         migrations: [
-          __dirname + '/migrations/**/*{.ts,.js}',
-          __dirname + '/../migrations/**/*{.ts,.js}',
+          __dirname + '/migrations/**/!(*.spec){.ts,.js}',
+          __dirname + '/../migrations/**/!(*.spec){.ts,.js}',
         ],
         synchronize: false,
         ssl:

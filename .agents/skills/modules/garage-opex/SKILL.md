@@ -1,6 +1,6 @@
 ---
 name: garage-opex
-description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vốn nhập tay & Hoa hồng Garage trong erp-api (kgara-api-core). Chứa toàn bộ database schema (kgara_operating_expenses), categories chuẩn (NHAN_SU, THUE_MAT_BANG, VAT_TU_TIEU_HAO, BAO_TRI, KHAU_HAO, HOA_HONG_*), DTOs, API endpoints, logic phát sinh định kỳ (Recurrence Engine), tích hợp báo cáo P&L và kết nối frontend drawer/table.
+description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vốn nhập tay & Hoa hồng Garage trong erp-api (kgara-api-core). Chứa toàn bộ database schema (kgara_operating_expenses), categories chuẩn (NHAN_SU, THUE_MAT_BANG, DIEN_NUOC, BAO_TRI, KHAU_HAO, HOA_HONG_*), DTOs, API endpoints, logic phát sinh định kỳ (Recurrence Engine), tích hợp báo cáo P&L và kết nối frontend drawer/table.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Chi Phí Vận Hành Garage (Garage OPEX & Direct Costs) - Backend (`erp-api`)
@@ -11,7 +11,7 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 
 ### Các nghiệp vụ trọng tâm:
 - **3 Nhóm Chi Phí Cốt Lõi (`CostGroupType`)**:
-  1. **Chi phí Vận hành (`OPEX`)**: Các chi phí định phí và biến phí vận hành xưởng (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì thiết bị, Khấu hao tài sản, Khác).
+  1. **Chi phí Vận hành (`OPEX`)**: Các chi phí định phí và biến phí vận hành xưởng (Nhân sự, Thuê mặt bằng, Điện nước, Bảo trì thiết bị, Khấu hao tài sản, Khác).
   2. **Chi phí Giá vốn Nhập tay (`COGS`)**: Các chi phí giá vốn phát sinh ngoài phiếu dịch vụ hoặc chi phí đối tác trực tiếp (`HOA_HONG_TRUC_TIEP`, `CHI_PHI_TRUC_TIEP_KHAC`).
   3. **Hoa hồng Xưởng (`COMMISSION`)**: Các khoản trích thưởng hoa hồng kinh doanh và dịch vụ (`HOA_HONG_SALE`, `HOA_HONG_DV`, `HOA_HONG_KHAC`).
 - **Lưu trữ & Phân kỳ theo Tháng (`period_year`, `period_month`)**: Quản lý chi phí chi tiết theo từng tháng báo cáo tài chính.
@@ -66,7 +66,6 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 │ • NHAN_SU             │ • HOA_HONG_TRUC_TIEP     │ • HOA_HONG_SALE          │
 │ • THUE_MAT_BANG       │ • CHI_PHI_TRUC_TIEP_KHAC │ • HOA_HONG_DV            │
 │ • DIEN_NUOC           │                          │ • HOA_HONG_KHAC          │
-│ • VAT_TU_TIEU_HAO     │                          │                          │
 │ • BAO_TRI             │                          │                          │
 │ • KHAU_HAO            │                          │                          │
 │ • KHAC                │                          │                          │
@@ -80,7 +79,6 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 | **OPEX** | `NHAN_SU` | Nhân sự | Tiền lương, thưởng, phụ cấp thợ & kỹ thuật viên |
 | **OPEX** | `THUE_MAT_BANG` | Thuê mặt bằng & điện nước | Chi phí thuê xưởng, hạ tầng |
 | **OPEX** | `DIEN_NUOC` | Điện nước | Chi phí tiền điện, tiền nước vận hành |
-| **OPEX** | `VAT_TU_TIEU_HAO`| Vật tư tiêu hao | Giẻ lau, dầu bóng, băng keo, hóa chất phụ |
 | **OPEX** | `BAO_TRI` | Bảo trì | Bảo dưỡng cầu nâng, máy nén khí, phòng sơn |
 | **OPEX** | `KHAU_HAO` | Khấu hao máy móc & thiết bị | Khấu hao thiết bị sửa chữa xưởng |
 | **OPEX** | `KHAC` | Khác | Chi phí quản lý xưởng phát sinh khác |
@@ -100,10 +98,12 @@ src/kgara-api-core/
 │   └── kgara_operating_expense.entity.ts # Entity TypeORM bảng kgara_operating_expenses
 ├── dto/
 │   └── garage-opex.dto.ts                # CreateGarageOpexDto, UpdateGarageOpexDto, ApplyRecurringOpexDto, ListGarageOpexQueryDto
+├── helpers/
+│   └── garage-opex-query.builder.ts      # Pure Query Builder Engine (< 300 LoC) theo Pattern C (/api-service-refactor)
 ├── services/
-│   ├── garage-opex.service.ts            # Logic nghiệp vụ CRUD, lọc đa chiều, Recurrence engine, P&L aggregation
-│   └── garage-opex.service.spec.ts       # Bộ kiểm thử Unit test cho OPEX
-├── garage-dashboard.controller.ts        # Endpoints REST API (/greenway/dashboard/opex)
+│   ├── garage-opex.service.ts            # Logic nghiệp vụ CRUD, Recurrence engine, P&L aggregation (< 500 LoC)
+│   └── garage-opex.service.spec.ts       # Bộ kiểm thử Unit test cho OPEX (10 tests)
+├── garage-dashboard.controller.ts        # Endpoints REST API (/greenway/dashboard/opex) (< 300 LoC)
 └── scripts/
     └── seed-garage-opex.ts               # Script nạp dữ liệu chi phí vận hành từ bảng tính
 ```
@@ -126,7 +126,7 @@ src/kgara-api-core/
 
 ## 6. Logic Nghiệp Vụ Trọng Tâm & Frontend Integration
 
-### 6.0. Chuẩn Bảng Dữ Liệu Frontend (`GarageOpex.tsx`)
+### 6.0. Chuẩn Bảng Dữ Liệu Frontend (`GarageOpex.tsx`) & Atomic Drawer 5 Tầng
 - Tích hợp `<SpreadsheetPageTemplate>` với `tableId="garage-opex-table"`.
 - Toolbar `<PillTabs>` lọc nhanh 4 nhóm chi phí (`ALL`, `OPEX`, `COGS`, `COMMISSION`) qua query param `cost_group`, cách ly độc lập với column filters.
 - 100% tiêu đề cột căn giữa (`headerClassName: "text-center"`, `align: "center"`).
@@ -134,6 +134,16 @@ src/kgara-api-core/
 - Cột **Số tiền** có filter popover tự động format phân tách hàng nghìn `đ`.
 - Cột **Loại chi phí** gắn icon xem chi tiết Drawer (`TableText` with `onDetailClick`).
 - Bổ sung 2 cột: **Chu kỳ lặp** (`recurrenceType`) và **Hạn kết thúc** (`recurrenceUntil`).
+- **Chuẩn Hóa Drawer Form (`GarageOpexDrawer`) theo `/ui-atomic-refactor 5 tầng`**:
+  - Tách từ file nguyên khối cũ (888 LoC) thành thư mục Organism chuẩn `src/modules/garage/components/organisms/garage-opex-drawer/`:
+    - `GarageOpexDrawer.tsx` (Organism < 150 LoC): Container bọc `StandardFormDrawer`, footer buttons, trigger.
+    - `GarageOpexDrawerForm.tsx` (Molecule < 180 LoC): Các ô nhập liệu (Kỳ, Loại CP, Số tiền, Phân bổ OJ, Ghi chú, Chu kỳ lặp).
+    - `garage-opex-drawer.hook.ts` (< 180 LoC): Toàn bộ form state, mutation, prefill logic và validation.
+    - `garage-opex-drawer.constants.ts` (< 100 LoC): Category presets (đã loại bỏ hoàn toàn `VAT_TU_TIEU_HAO`).
+    - `garage-opex-drawer.helper.ts` (< 100 LoC): Hàm chuyển số tiền thành chữ tiếng Việt (`amountToVietnameseWords`) và định dạng số.
+    - `garage-opex-drawer.type.ts` (< 80 LoC): Types và Props interfaces.
+    - `GarageOpexDrawer.test.tsx`: Co-located Vitest unit test.
+  - Giữ shim re-export tại `src/modules/garage/components/GarageOpexDrawer.tsx` (8 LoC) đảm bảo tương thích ngược 100%.
 
 ---
 

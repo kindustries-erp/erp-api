@@ -98,8 +98,8 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
             amount: 30000000,
           },
           {
-            categoryKey: 'VAT_TU_TIEU_HAO',
-            categoryName: 'Vật tư tiêu hao',
+            categoryKey: 'DIEN_NUOC',
+            categoryName: 'Điện nước',
             amount: 15000000,
           },
           { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 10000000 },
