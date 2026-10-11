@@ -10,8 +10,10 @@ description: Module tri thức Quản lý Hồ sơ & Sổ Công nợ Khách Hàn
 Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-customers` thuộc `kgara-api-core` backend và `modules/garage` frontend) chịu trách nhiệm tổng hợp, theo dõi, phân tích và quản lý toàn bộ công nợ phải thu của khách hàng phát sinh từ các phiếu dịch vụ sửa chữa xe tại xưởng dịch vụ KGara (Greenway).
 
 ### Các Nghiệp vụ Trọng tâm:
-- **Tổng hợp Công nợ theo Khách Hàng (`GET /cases/customers-debt`)**:
-  - Nhóm dữ liệu phiếu dịch vụ từ bảng `kgara_cases` theo mã khách hàng (`khach_hang_code`).
+- **Tổng hợp Công nợ theo Biển Số Xe (`GET /cases/customers-debt`)**:
+  - Nhóm dữ liệu phiếu dịch vụ từ bảng `kgara_cases` theo Biển số xe (`COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS')`).
+  - Cột đầu tiên của bảng sau `#` là **Biển số xe** (`licensePlate`), các bản ghi chưa có BKS hiển thị `— (Chưa có BKS)`.
+  - Cột **Khách hàng** gom Tên KH (`MAX("case"."khach_hang_name")`) và Mã KH (`MAX("case"."khach_hang_code")`) về 1 cột hiển thị 2 dòng qua molecule `GarageCaseCustomerCell`, cho phép click tên KH mở `CustomerDetailDrawer`.
   - **Mốc thời gian theo dõi**: Áp dụng mốc lọc theo ngày hoàn thành (`ngay_hoan_thanh_cong_viec >= '2026-07-01'`).
   - **Chỉ tính Phiếu Hoàn tất**: Chỉ tổng hợp các phiếu dịch vụ đã hoàn thành (`ngay_hoan_thanh_cong_viec IS NOT NULL` và `tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu ILIKE '%kết thúc%' / '%hoàn tất%'`), tự động loại trừ các xe chưa hoàn thành.
   - **Xe chưa hoàn thành (In-Progress Pipeline)**: Không tính vào công nợ phải thu và không tính tuổi nợ (aging = 0).
@@ -22,7 +24,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
     2. `31-60` ngày: Cần theo dõi.
     3. `61-90` ngày: Quá hạn.
     4. `>90` ngày: Quá hạn sâu.
-  - Phản ánh chi tiết số tiền nợ còn lại trong từng bracket và xác định `maxAgingDays` cho từng khách hàng dựa trên ngày hoàn thành.
+  - Phản ánh chi tiết số tiền nợ còn lại trong từng bracket và xác định `maxAgingDays` cho từng phương tiện/khách hàng dựa trên ngày hoàn thành.
 - **Phân Loại Tiến Độ Thanh Toán (Payment Progress)**:
   - `PAID` (Đã thu đủ): `con_phai_thu <= 0 AND da_thanh_toan > 0`.
   - `PARTIAL` (Thu một phần): `da_thanh_toan > 0 AND con_phai_thu > 0`.
@@ -30,10 +32,12 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
 - **Chuẩn Quản Lý Dòng Tiền Thuần ERP (Pure Cashflow Standard)**:
   - Công nợ và số tiền thực thu **chỉ được ghi nhận và đối soát từ các giao dịch dòng tiền thực tế** trong bảng `kgara_case_settlements` (`ON_SYSTEM`: Sao kê ngân hàng, `OFF_SYSTEM_MANUAL`: Tiền mặt sổ quỹ).
   - Không cộng dồn số tiền trên hóa đơn VAT (`erp_invoices`) vào dòng tiền thực thu nếu không có giao dịch sao kê/tiền mặt đối soát kèm theo.
-- **Bộ Lọc Đa Chiều Nâng Cao & Cascading Options**:
-  - Hỗ trợ đầy đủ bộ lọc cột qua `TableColumnHeaderFilter`: tìm kiếm từ khóa con (`ILIKE`), tìm kiếm chính xác, tìm kiếm nhiều từ khóa cách nhau bởi dấu chấm phẩy (`;`).
-  - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm không sót trang) và `__BLANK__` (lọc khách hàng chưa có mã hoặc thông tin trống).
+- **Bộ Lọc Đa Chiều Nâng Cao & Chuẩn Hóa Bảng (`/standardize-table`)**:
+  - Hỗ trợ đầy đủ bộ lọc cột qua `TableColumnHeaderFilter`: tìm kiếm từ khóa con (`ILIKE`), tìm kiếm chính xác, tìm kiếm nhiều từ khóa cách nhau bởi khoảng trắng hoặc dấu chấm phẩy (`;`).
+  - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm khớp từ khóa không sót trang) và `__BLANK__` (lọc các xe chưa có BKS hoặc chưa có mã khách hàng).
   - Tích hợp endpoint `GET /cases/customers-debt/column-options` hỗ trợ cascading filter qua tham số `filtersStr`.
+  - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
+  - Phân rã kiến trúc Atomic Design 5 tầng, toàn bộ file component/organism khống chế nghiêm ngặt < 180 LoC.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
   - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/ui-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
   - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).

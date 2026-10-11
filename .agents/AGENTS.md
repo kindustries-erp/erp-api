@@ -65,7 +65,8 @@ Source of truth for this repo (`./erp-api`).
 - **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (pull -> build -> check:ci -> test -> commit -> push).
 - push this repo with `github-industries`
 - when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account: `admin@liouni.com` | `admiN@123`
-- by default, work on the `DATABASE_URL` in `.env.local` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly and never rely on a bare `.env` (it may point at a production DB)
+- by default, work on the `DATABASE_URL` in `.env` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
+- before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
@@ -113,7 +114,8 @@ Source of truth for this repo (`./erp-api`).
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010
-- by default, work on the `DATABASE_URL` in `.env.local` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly and never rely on a bare `.env` (it may point at a production DB)
+- by default, work on the `DATABASE_URL` in `.env` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
+- before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - follow DB -> API -> UI -> QC
 - inspect current state before edits
 - use evidence-first wording

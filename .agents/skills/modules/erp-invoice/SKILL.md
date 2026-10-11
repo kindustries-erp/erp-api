@@ -11,7 +11,7 @@ Phân hệ Quản lý Hóa đơn Điện tử (`erp-invoices-core`) là trung t�
 
 Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
-- **Tiến trình Đồng bộ Tự động Định kỳ (5-Slot Heartbeat Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **5 mốc thời gian cố định: 09:15, 15:15, 16:15, 17:15, 21:15 (Asia/Ho_Chi_Minh)** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
+- **Tiến trình Đồng bộ Tự động Định kỳ (Hourly Heartbeat Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **mỗi giờ vào phút :15 từ 09:15 đến 21:15, 13 mốc/ngày (Asia/Ho_Chi_Minh), dùng chung `SYNC_HOURS` với Sinvoice và KGara** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ.
 - **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu, và nhận diện đầy đủ họ tên người mua hàng cá nhân qua thẻ `<HVTNMHang>` (kèm script backfill tự động `backfill-personal-invoices.ts` cho toàn bộ hóa đơn cá nhân).
 - **Hạch toán Kế toán Kép & Tài khoản Treo Trung gian (Transit Accounts T0002 / T0003)**:
   - Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
@@ -267,7 +267,7 @@ src/erp-invoices-core/
 │   └── vietnam-invoice-xml.parser.ts          # Bộ phân tích XML hóa đơn Việt Nam độc lập
 ├── erp-invoices-core.controller.ts            # Thin REST Controller CRUD, sync GDT, files, hạch toán
 ├── erp-invoices-core.service.ts               # Master Facade Service điều phối lifecycle, portal, files
-├── erp-invoices-cron.service.ts               # Background 5-Slot Heartbeat Cron đồng bộ GDT định kỳ
+├── erp-invoices-cron.service.ts               # Background Hourly Heartbeat Cron (09:15-21:15) đồng bộ GDT định kỳ
 ├── erp-invoices-core.module.ts                # NestJS Module đăng ký DI sạch theo clean constructor
 ├── invoice-dashboard.controller.ts            # Sub-controller báo cáo thống kê Dashboard hóa đơn
 └── invoice-dashboard.service.ts               # FACADE: Tổng hợp số liệu Dashboard và báo cáo đối tác
@@ -543,6 +543,11 @@ src/erp-invoices-core/
       2. Gọi `qb.orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')`.
       3. Gọi `addOrderBy('inv.invoiceNo', orderDirection)` làm tiêu chí thứ cấp ổn định thứ tự các số hóa đơn có cùng phần số hoặc chuỗi ký tự thuần.
 
+### 5.x Xử lý lỗi 5xx của Cổng thuế khi `syncFromPortal`
+- `fetchWithRetry` retry 5xx tối đa 3 lần với backoff `2s·n² + jitter` (429: `5s·n`).
+- Nếu một segment (endpoint × ngày × trang) vẫn trả non-OK: ghi vào `failedSegments` (`<endpoint> (ttxly=N) ngày dd/mm/yyyy trang N: HTTP <status>`), bỏ qua segment đó, tiếp tục segment còn lại.
+- Cuối tiến trình, nếu có `failedSegments`: trả về trong kết quả + gửi notification `WARNING` "Đồng bộ hóa đơn chưa đầy đủ". Nếu mọi request đều lỗi (không request nào OK): throw `BadRequestException` kèm segment lỗi đầu tiên → notification `ERROR`.
+
 ---
 
 ## 6. Tích hợp Liên Module
@@ -705,7 +710,7 @@ Phân hệ Hóa đơn tích hợp engine AI 9router và tự động hạch toá
 3. **Tra tài khoản Nợ 3 tầng** (`autoPostInvoiceByCategory`): (1) cấu hình trong DB (`ErpModuleAttributeDef` option `accountCode`, rồi `category.defaultDebitAccount`) → (2) bảng tĩnh `CATEGORY_TO_DEBIT_ACCOUNT_MAP` → (3) `T0003`.
 4. **Bộ nhớ theo người bán** (`InvoiceCategoryMemoryService`): MST đã có ≥ 3 hóa đơn đã phân loại và ≥ 90% cùng một danh mục thì dùng lại danh mục đó, không gọi AI (`fromMemory`). Tắt bằng `INVOICE_CATEGORY_MEMORY=off` hoặc cờ `--no-memory` của script. Lưu ý: dữ liệu học gồm cả phân loại cũ do AI, nên cần soát khi một người bán bị gán sai nhiều lần.
 5. **Số chứng từ nguyên tử** (`AccountingCoreService.generateEntryNo`): bộ đếm theo `(prefix, period=YYYYMMDD, branch_id)` trong bảng `erp_document_sequences`, upsert một câu `ON CONFLICT (prefix, period, COALESCE(branch_id, '000…'::uuid))` nên **bắt buộc** có unique index theo biểu thức `uq_erp_document_sequences_prefix_period_branch`. Migration `CreateDocumentSequences20261010150000` tạo bảng + index và seed bộ đếm từ số chuẩn `PREFIX-YYYYMMDD-0001` đã cấp; idempotent: DB có sẵn bảng (greenway-staging/production) thì chỉ bảo đảm index, không seed lại; nếu có index trùng tên khác định nghĩa thì dừng và báo. Số chứng từ chỉ duy nhất theo từng chi nhánh (nhiều chi nhánh có thể cùng `HĐM-20260925-0001`). Nếu bảng thiếu, service rơi về `MAX+1` (không nguyên tử).
-6. **Script backfill chuẩn**: `scripts/backfill-invoice-categories-autopost.ts` (`bun run backfill:categories -- .env.local --limit=10`) dựng thẳng `InvoiceCategoryAutopostService`. Chế độ `--mode=new` (mặc định) | `retry-fallback` (chỉ HĐ chưa danh mục, bút toán còn nằm hoàn toàn ở T0003/1331 — HĐ đã sửa tay sang tài khoản khác không bị chọn) | `unposted`. Mặc định dry-run, `--apply` để ghi, DB production cần `--confirm=<tên DB>`; `--model=` chọn model 9router. Script cũ `backfill-unclassified-invoices.ts` đã xóa (lệch bảng tài khoản và cách đánh số chứng từ so với app).
+6. **Script backfill chuẩn**: `scripts/backfill-invoice-categories-autopost.ts` (`bun run backfill:categories -- .env --limit=10`) dựng thẳng `InvoiceCategoryAutopostService`. Chế độ `--mode=new` (mặc định) | `retry-fallback` (chỉ HĐ chưa danh mục, bút toán còn nằm hoàn toàn ở T0003/1331 — HĐ đã sửa tay sang tài khoản khác không bị chọn) | `unposted`. Mặc định dry-run, `--apply` để ghi, DB production cần `--confirm=<tên DB>`; `--model=` chọn model 9router. Script cũ `backfill-unclassified-invoices.ts` đã xóa (lệch bảng tài khoản và cách đánh số chứng từ so với app).
    - Script `src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts` (mã hàng dòng hóa đơn) cũng dùng loader env + `classifyInvoiceLineItemsWithAi`; AI lỗi cả batch thì không ghi mã (chạy lại để xử lý tiếp).
 ### 8.8. Chuẩn Hóa Mã Hàng Dòng Hóa Đơn Đầu Vào Theo Hệ Thống Tiền Tố (Prefix Taxonomy)
 Toàn bộ chi tiết từng dòng mặt hàng hóa đơn đầu vào (`erp_invoice_items` với `direction = 'IN'`) được phân giải và gán mã chuẩn hóa có tiền tố phân cấp rõ ràng:

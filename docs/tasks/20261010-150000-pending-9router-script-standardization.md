@@ -27,7 +27,7 @@ Tiện ích đã sẵn: `getWriteGuard` (ma trận cờ), `connectPg`/`withPgSes
 - [ ] **B2 (rủi ro cao)**: `bulk-upload-invoice-pdfs` (đang ép `erp-api/.env` = production, ghi R2, không dry-run), `realign-old-invoice-journal-entries` (có xóa bút toán trùng; **giữ**, không thay thế được bằng script phân loại mới), `standardize-journal-entry-numbers` (`--execute`).
 - [ ] **B3**: `sync-invoice-netoffs-to-case-settlements`, `backfill-personal-invoices`, `run-backfill-xml-relations`, `backfill-related-invoices` (xác nhận phần `fetch`/S3 chỉ đọc).
 - [ ] **B4**: `seed-chart-of-accounts-tt99`, `seed-chart-of-accounts-tt200`, `seed-invoice-categories`, `sync-module-config-invoice-categories`, `backfill-kgara-classification`, `import-omoda-cases`, `replicate-opex`.
-- Kiểm chứng mỗi script: `bunx tsc --noEmit` + dry-run trên `.env.local` + `countRows`/`diffCounts` trước/sau (không đổi).
+- Kiểm chứng mỗi script: `bunx tsc --noEmit` + dry-run trên `.env` + `countRows`/`diffCounts` trước/sau (không đổi).
 - Đích cuối: `bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --strict` báo script hygiene = 0.
 
 ## 3. CẦN QUYẾT ĐỊNH

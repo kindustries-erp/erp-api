@@ -60,6 +60,7 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
 
       const mockData = [
         {
+          bien_so_xe: '51A-123.45',
           khach_hang_code: 'KH001',
           khach_hang_name: 'Nguyen Van A',
           branch_external_id: 'BRANCH_01',
@@ -92,8 +93,11 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
 
       expect(caseRepo.manager.query).toHaveBeenCalledTimes(2);
 
-      // Verify SQL contains ngay_hoan_thanh_cong_viec for aging
+      // Verify SQL contains GROUP BY bien_so_xe
       const summaryQuery = caseRepo.manager.query.mock.calls[0][0];
+      expect(summaryQuery).toContain(
+        'COALESCE(NULLIF(TRIM("case"."bien_so_xe"), \'\'), \'CHUA_CO_BKS\')',
+      );
       expect(summaryQuery).toContain(
         '"case"."ngay_hoan_thanh_cong_viec" IS NOT NULL',
       );
@@ -103,6 +107,9 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
 
       const dataQuery = caseRepo.manager.query.mock.calls[1][0];
       expect(dataQuery).toContain(
+        'COALESCE(NULLIF(TRIM("case"."bien_so_xe"), \'\'), \'CHUA_CO_BKS\')',
+      );
+      expect(dataQuery).toContain(
         '"case"."ngay_hoan_thanh_cong_viec" IS NOT NULL',
       );
       expect(dataQuery).toContain(
@@ -110,10 +117,105 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
       );
 
       expect(result.data).toHaveLength(1);
+      expect(result.data[0].licensePlate).toBe('51A-123.45');
       expect(result.data[0].customerCode).toBe('KH001');
       expect(result.data[0].maxAgingDays).toBe(5);
       expect(result.data[0].aging0_30).toBe(5000000);
       expect(result.summary.totalAging0_30).toBe(5000000);
+    });
+
+    it('should handle __BLANK__ and __ALL_MATCHING__ filters for licensePlate', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([
+          {
+            total_customers: '0',
+            total_revenue: '0',
+            total_paid: '0',
+            total_balance: '0',
+            total_aging_0_30: '0',
+            total_aging_31_60: '0',
+            total_aging_61_90: '0',
+            total_aging_over_90: '0',
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await controller.getCustomersDebt(
+        'BRANCH_01',
+        '1',
+        '20',
+        '',
+        '',
+        '',
+        'all',
+        JSON.stringify({ licensePlate: ['__BLANK__'] }),
+      );
+
+      const blankQuery = caseRepo.manager.query.mock.calls[0][0];
+      expect(blankQuery).toContain('"case"."bien_so_xe" IS NULL');
+
+      caseRepo.manager.query
+        .mockResolvedValueOnce([
+          {
+            total_customers: '0',
+            total_revenue: '0',
+            total_paid: '0',
+            total_balance: '0',
+            total_aging_0_30: '0',
+            total_aging_31_60: '0',
+            total_aging_61_90: '0',
+            total_aging_over_90: '0',
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await controller.getCustomersDebt(
+        'BRANCH_01',
+        '1',
+        '20',
+        '',
+        '',
+        '',
+        'all',
+        JSON.stringify({ licensePlate: ['__ALL_MATCHING__', '51A'] }),
+      );
+
+      const allMatchingQuery = caseRepo.manager.query.mock.calls[2][0];
+      expect(allMatchingQuery).toContain('"case"."bien_so_xe" ILIKE');
+    });
+
+    it('should return column options for licensePlate and customer', async () => {
+      const mockQb = {
+        select: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        clone: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '2' }),
+        getRawMany: jest
+          .fn()
+          .mockResolvedValue([
+            { value: '51A-123.45' },
+            { value: '51B-678.90' },
+          ]),
+      };
+      caseRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+      const res = await controller.getCustomersDebtColumnOptions(
+        'BRANCH_01',
+        'licensePlate',
+        '',
+        '1',
+        '20',
+        '',
+      );
+
+      expect(res.items).toEqual(['51A-123.45', '51B-678.90']);
+      expect(mockQb.select).toHaveBeenCalledWith(
+        'DISTINCT "case"."bien_so_xe"',
+        'value',
+      );
     });
   });
 

@@ -288,7 +288,7 @@ Script chạy tay (backfill, seed, netoff...) vẫn phải theo chuẩn của ap
 4. **Không đường dẫn tuyệt đối** (`/home/dev/...`): tính từ `__dirname`/`import.meta.url` hoặc `process.cwd()`. Package ESM (`"type":"module"`) dùng `fileURLToPath(import.meta.url)`.
 5. **AI lỗi ≠ kết quả**: lỗi AI phải được phân biệt (`fallbackReason: AI_ERROR`) để chạy lại được; không ghi mã/danh mục sai âm thầm.
    Riêng hóa đơn mua vào không phân loại được thì hạch toán TK tạm `T0003` (chủ ý của kế toán để dò tay), kèm marker `[T0003_FALLBACK:<lý do>]` trong mô tả bút toán.
-6. **Kiểm tra script ghi dữ liệu**: chỉ kiểm tra tĩnh (`bunx tsc`, `bun build --no-bundle`, `node --check`) và chạy **dry-run** trên `.env.local`.
+6. **Kiểm tra script ghi dữ liệu**: chỉ kiểm tra tĩnh (`bunx tsc`, `bun build --no-bundle`, `node --check`) và chạy **dry-run** trên `.env`.
    Tuyệt đối không chạy thử script `execute-*`, `commit-*`, upload R2... để "xem thử".
 
 ## 🔎 Lệnh audit nhanh (portable)

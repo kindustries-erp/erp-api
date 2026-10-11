@@ -102,6 +102,16 @@ export class KgaraCustomersController {
                 `"case"."khach_hang_name" ILIKE $${queryParams.length + 1}`,
               );
               queryParams.push(`%${searchVal}%`);
+            } else if (col === 'customer') {
+              whereConditions.push(
+                `("case"."khach_hang_name" ILIKE $${queryParams.length + 1} OR "case"."khach_hang_code" ILIKE $${queryParams.length + 1})`,
+              );
+              queryParams.push(`%${searchVal}%`);
+            } else if (col === 'licensePlate' || col === 'bienSoXe') {
+              whereConditions.push(
+                `"case"."bien_so_xe" ILIKE $${queryParams.length + 1}`,
+              );
+              queryParams.push(`%${searchVal}%`);
             } else if (col === 'branchName' || col === 'branchExternalId') {
               whereConditions.push(
                 `"case"."branch_external_id" ILIKE $${queryParams.length + 1}`,
@@ -115,7 +125,39 @@ export class KgaraCustomersController {
           const hasBlank = values.includes('__BLANK__');
           const realVals = values.filter((v) => v !== '__BLANK__');
 
-          if (col === 'customerCode') {
+          if (col === 'licensePlate' || col === 'bienSoXe') {
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."bien_so_xe" IS NULL OR "case"."bien_so_xe" = '' OR TRIM("case"."bien_so_xe") = '' OR "case"."bien_so_xe" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."bien_so_xe" IS NULL OR "case"."bien_so_xe" = '' OR TRIM("case"."bien_so_xe") = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `"case"."bien_so_xe" = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
+          } else if (col === 'customer') {
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '' OR "case"."khach_hang_name" = ANY($${queryParams.length + 1}) OR "case"."khach_hang_code" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(
+                `("case"."khach_hang_name" IS NULL OR "case"."khach_hang_name" = '')`,
+              );
+            } else {
+              whereConditions.push(
+                `("case"."khach_hang_name" = ANY($${queryParams.length + 1}) OR "case"."khach_hang_code" = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            }
+          } else if (col === 'customerCode') {
             if (hasBlank && realVals.length > 0) {
               whereConditions.push(
                 `("case"."khach_hang_code" IS NULL OR "case"."khach_hang_code" = '' OR "case"."khach_hang_code" = ANY($${queryParams.length + 1}))`,
@@ -245,7 +287,17 @@ export class KgaraCustomersController {
         >;
         for (const [col, val] of Object.entries(searchObj)) {
           if (!val || !val.trim()) continue;
-          if (col === 'customerCode') {
+          if (col === 'licensePlate' || col === 'bienSoXe') {
+            whereConditions.push(
+              `"case"."bien_so_xe" ILIKE $${queryParams.length + 1}`,
+            );
+            queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'customer') {
+            whereConditions.push(
+              `("case"."khach_hang_name" ILIKE $${queryParams.length + 1} OR "case"."khach_hang_code" ILIKE $${queryParams.length + 1})`,
+            );
+            queryParams.push(`%${val.trim()}%`);
+          } else if (col === 'customerCode') {
             whereConditions.push(
               `"case"."khach_hang_code" ILIKE $${queryParams.length + 1}`,
             );
@@ -292,7 +344,7 @@ export class KgaraCustomersController {
 
     let summarySql = `
       SELECT
-        COUNT(DISTINCT COALESCE("case"."khach_hang_code", 'UNKNOWN'))::int AS total_customers,
+        COUNT(DISTINCT COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS'))::int AS total_customers,
         COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS total_revenue,
         COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS total_paid,
         COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS total_balance,
@@ -317,7 +369,7 @@ export class KgaraCustomersController {
           COALESCE(SUM(aging_over_90), 0)::numeric AS total_aging_over_90
         FROM (
           SELECT
-            COALESCE("case"."khach_hang_code", 'UNKNOWN') AS khach_hang_code,
+            COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS') AS bien_so_xe,
             COALESCE(SUM("case"."tien_co_thue"), 0)::numeric AS tong_doanh_thu,
             COALESCE(SUM("case"."tien_da_thanh_toan"), 0)::numeric AS da_thanh_toan,
             COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric AS con_phai_thu,
@@ -327,7 +379,7 @@ export class KgaraCustomersController {
             COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
           FROM "kgara_cases" "case"
           ${whereClause}
-          GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
+          GROUP BY COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS')
           ${havingClause}
         ) sub
       `;
@@ -347,9 +399,12 @@ export class KgaraCustomersController {
         const isDesc = s.startsWith('-');
         const col = isDesc ? s.substring(1) : s;
         const dir = isDesc ? 'DESC' : 'ASC';
-        if (col === 'customerCode') sortParts.push(`khach_hang_code ${dir}`);
-        else if (col === 'customerName')
+        if (col === 'licensePlate' || col === 'bienSoXe')
+          sortParts.push(`bien_so_xe ${dir}`);
+        else if (col === 'customer' || col === 'customerName')
           sortParts.push(`khach_hang_name ${dir}`);
+        else if (col === 'customerCode')
+          sortParts.push(`khach_hang_code ${dir}`);
         else if (col === 'branchName' || col === 'branchExternalId')
           sortParts.push(`branch_external_id ${dir}`);
         else if (col === 'totalAmount' || col === 'totalRevenue')
@@ -383,7 +438,8 @@ export class KgaraCustomersController {
 
     const dataSql = `
       SELECT
-        COALESCE("case"."khach_hang_code", 'UNKNOWN') AS khach_hang_code,
+        COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS') AS bien_so_xe,
+        MAX(COALESCE("case"."khach_hang_code", '')) AS khach_hang_code,
         MAX(COALESCE("case"."khach_hang_name", 'Chưa xác định')) AS khach_hang_name,
         MAX("case"."branch_external_id") AS branch_external_id,
         COUNT("case"."id")::int AS so_phieu,
@@ -399,7 +455,7 @@ export class KgaraCustomersController {
         COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) > 90 THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric AS aging_over_90
       FROM "kgara_cases" "case"
       ${whereClause}
-      GROUP BY COALESCE("case"."khach_hang_code", 'UNKNOWN')
+      GROUP BY COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS')
       ${havingClause}
       ${orderClause}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
@@ -408,6 +464,7 @@ export class KgaraCustomersController {
     const rawRows = await this.caseRepo.manager.query(dataSql, dataParams);
 
     const formattedData = rawRows.map((r: any) => ({
+      licensePlate: r.bien_so_xe === 'CHUA_CO_BKS' ? '' : r.bien_so_xe,
       customerCode: r.khach_hang_code,
       customerName: r.khach_hang_name,
       branchExternalId: r.branch_external_id,
@@ -497,7 +554,7 @@ export class KgaraCustomersController {
             AND "ngay_hoan_thanh_cong_viec" IS NOT NULL
             AND "ngay_hoan_thanh_cong_viec" >= '2026-07-01'
             ${branchCond}
-          GROUP BY COALESCE("khach_hang_code", 'UNKNOWN')
+          GROUP BY COALESCE(NULLIF(TRIM("bien_so_xe"), ''), 'CHUA_CO_BKS')
         ) sub
         GROUP BY so_phieu
         ORDER BY so_phieu ASC
@@ -536,7 +593,10 @@ export class KgaraCustomersController {
     }
 
     let selectExpr = '"case"."khach_hang_code"';
-    if (column === 'customerName') selectExpr = '"case"."khach_hang_name"';
+    if (column === 'licensePlate' || column === 'bienSoXe')
+      selectExpr = '"case"."bien_so_xe"';
+    else if (column === 'customer' || column === 'customerName')
+      selectExpr = '"case"."khach_hang_name"';
     else if (column === 'customerCode') selectExpr = '"case"."khach_hang_code"';
     else if (column === 'branchName' || column === 'branchExternalId')
       selectExpr = '"case"."branch_external_id"';
@@ -579,7 +639,16 @@ export class KgaraCustomersController {
           if (values[0] === '__ALL_MATCHING__') {
             const searchVal = (values[1] || '').trim();
             if (!searchVal) continue;
-            if (col === 'customerCode') {
+            if (col === 'licensePlate' || col === 'bienSoXe') {
+              query.andWhere('case.bienSoXe ILIKE :lpSearch', {
+                lpSearch: `%${searchVal}%`,
+              });
+            } else if (col === 'customer') {
+              query.andWhere(
+                '(case.khachHangName ILIKE :cSearch OR case.khachHangCode ILIKE :cSearch)',
+                { cSearch: `%${searchVal}%` },
+              );
+            } else if (col === 'customerCode') {
               query.andWhere('case.khachHangCode ILIKE :ccSearch', {
                 ccSearch: `%${searchVal}%`,
               });
@@ -598,7 +667,38 @@ export class KgaraCustomersController {
           const hasBlank = values.includes('__BLANK__');
           const realVals = values.filter((v) => v !== '__BLANK__');
 
-          if (col === 'customerCode') {
+          if (col === 'licensePlate' || col === 'bienSoXe') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.bienSoXe IS NULL OR case.bienSoXe = '' OR TRIM(case.bienSoXe) = '' OR case.bienSoXe IN (:...lpVals))",
+                { lpVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.bienSoXe IS NULL OR case.bienSoXe = '' OR TRIM(case.bienSoXe) = '')",
+              );
+            } else {
+              query.andWhere('case.bienSoXe IN (:...lpVals)', {
+                lpVals: realVals,
+              });
+            }
+          } else if (col === 'customer') {
+            if (hasBlank && realVals.length > 0) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '' OR case.khachHangName IN (:...custVals) OR case.khachHangCode IN (:...custVals))",
+                { custVals: realVals },
+              );
+            } else if (hasBlank) {
+              query.andWhere(
+                "(case.khachHangName IS NULL OR case.khachHangName = '')",
+              );
+            } else {
+              query.andWhere(
+                '(case.khachHangName IN (:...custVals) OR case.khachHangCode IN (:...custVals))',
+                { custVals: realVals },
+              );
+            }
+          } else if (col === 'customerCode') {
             if (hasBlank && realVals.length > 0) {
               query.andWhere(
                 "(case.khachHangCode IS NULL OR case.khachHangCode = '' OR case.khachHangCode IN (:...ccVals))",

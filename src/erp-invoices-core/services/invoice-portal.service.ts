@@ -526,6 +526,8 @@ export class InvoicePortalService implements OnModuleInit {
         let pagesFetched = 0;
         const maxPages = 50;
         let isFirstRequest = true;
+        const failedSegments: string[] = [];
+        let succeededRequests = 0;
 
         for (
           let d = new Date(startDate);
@@ -575,33 +577,46 @@ export class InvoicePortalService implements OnModuleInit {
                 };
                 if (cookies) fetchHeaders['Cookie'] = cookies;
 
-                let response = await fetchWithRetry(url, {
-                  headers: fetchHeaders,
-                });
-                if (
-                  !response.ok &&
-                  (response.status === 401 || response.status === 403)
-                ) {
-                  this.logger.warn(
-                    `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
-                  );
-                  const reAuth = await this.autoReloginWithRetry();
-                  if (reAuth) {
-                    token = reAuth.token;
-                    cookies = reAuth.cookies;
-                    fetchHeaders.Authorization = `Bearer ${token}`;
-                    if (cookies) fetchHeaders['Cookie'] = cookies;
-                    response = await fetchWithRetry(url, {
-                      headers: fetchHeaders,
-                    });
+                let response: Response | null = null;
+                let fetchError: string | null = null;
+                try {
+                  response = await fetchWithRetry(url, {
+                    headers: fetchHeaders,
+                  });
+                  if (
+                    !response.ok &&
+                    (response.status === 401 || response.status === 403)
+                  ) {
+                    this.logger.warn(
+                      `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
+                    );
+                    const reAuth = await this.autoReloginWithRetry();
+                    if (reAuth) {
+                      token = reAuth.token;
+                      cookies = reAuth.cookies;
+                      fetchHeaders.Authorization = `Bearer ${token}`;
+                      if (cookies) fetchHeaders['Cookie'] = cookies;
+                      response = await fetchWithRetry(url, {
+                        headers: fetchHeaders,
+                      });
+                    }
                   }
+                } catch (err: any) {
+                  if (err?.message === 'GDT_TOKEN_EXPIRED') throw err;
+                  fetchError =
+                    err?.name === 'AbortError'
+                      ? 'timeout (cổng thuế không phản hồi)'
+                      : String(err?.message ?? err);
                 }
-                if (!response.ok)
-                  throw new BadRequestException(
-                    `Portal request failed with status ${response.status}`,
-                  );
+                if (!response?.ok) {
+                  const segment = `${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}${currentTtxly !== null ? ` (ttxly=${currentTtxly})` : ''} ngày ${formattedDate} trang ${pathPagesFetched + 1}: ${fetchError ?? `HTTP ${response?.status}`}`;
+                  this.logger.warn(`Portal request failed - ${segment}`);
+                  failedSegments.push(segment);
+                  break;
+                }
+                succeededRequests++;
 
-                const payload = (await response.json()) as {
+                const payload = (await response!.json()) as {
                   datas?: any[];
                   total?: number;
                   state?: string;
@@ -626,6 +641,12 @@ export class InvoicePortalService implements OnModuleInit {
               } while (state && pathPagesFetched < maxPages);
             }
           }
+        }
+
+        if (failedSegments.length > 0 && succeededRequests === 0) {
+          throw new BadRequestException(
+            `Cổng thuế liên tục báo lỗi, không lấy được dữ liệu. Chi tiết: ${failedSegments[0]}`,
+          );
         }
 
         // Pre-scan DB branches before classification
@@ -804,6 +825,19 @@ export class InvoicePortalService implements OnModuleInit {
           );
         }
 
+        if (failedSegments.length > 0) {
+          this.logger.warn(
+            `Portal sync thiếu ${failedSegments.length} phần: ${failedSegments.slice(0, 5).join('; ')}`,
+          );
+          if (userId) {
+            await this.notificationsService.createForUser(userId, {
+              title: 'Đồng bộ hóa đơn chưa đầy đủ',
+              message: `Cổng thuế báo lỗi ở ${failedSegments.length} phần nên chưa lấy được. Vui lòng đồng bộ lại sau. Ví dụ: ${failedSegments[0]}`,
+              type: 'WARNING',
+            });
+          }
+        }
+
         return {
           totalItemsFetched: rawItems.length,
           totalFromPortal,
@@ -812,6 +846,7 @@ export class InvoicePortalService implements OnModuleInit {
           skipped,
           direction,
           errors,
+          failedSegments,
           xmlDownloadQueued: backgroundSyncIds.length,
         };
       } catch (err) {
