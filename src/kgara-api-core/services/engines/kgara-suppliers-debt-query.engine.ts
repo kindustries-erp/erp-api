@@ -182,13 +182,18 @@ export class KgaraSuppliersDebtQueryEngine {
           if (col === 'maxAgingDays') {
             const subConds: string[] = [];
             const maxAgingExpr = `COALESCE(MAX(CURRENT_DATE - DATE(${dateExpr})), 0)`;
-            if (values.includes('0-30'))
+            if (values.includes('0') || values.includes('0 ngày'))
+              subConds.push(`(${maxAgingExpr} = 0)`);
+            if (values.includes('1-30') || values.includes('1-30 ngày'))
+              subConds.push(`(${maxAgingExpr} BETWEEN 1 AND 30)`);
+            if (values.includes('0-30') || values.includes('0-30 ngày'))
               subConds.push(`(${maxAgingExpr} <= 30)`);
-            if (values.includes('31-60'))
+            if (values.includes('31-60') || values.includes('31-60 ngày'))
               subConds.push(`(${maxAgingExpr} BETWEEN 31 AND 60)`);
-            if (values.includes('61-90'))
+            if (values.includes('61-90') || values.includes('61-90 ngày'))
               subConds.push(`(${maxAgingExpr} BETWEEN 61 AND 90)`);
-            if (values.includes('>90')) subConds.push(`(${maxAgingExpr} > 90)`);
+            if (values.includes('>90') || values.includes('>90 ngày'))
+              subConds.push(`(${maxAgingExpr} > 90)`);
             if (subConds.length > 0)
               havingConditions.push(`(${subConds.join(' OR ')})`);
             continue;
@@ -622,7 +627,13 @@ export class KgaraSuppliersDebtQueryEngine {
     filtersStr?: string,
   ) {
     if (column === 'maxAgingDays') {
-      const options = ['0-30', '31-60', '61-90', '>90'];
+      const options = [
+        '0 ngày',
+        '1-30 ngày',
+        '31-60 ngày',
+        '61-90 ngày',
+        '>90 ngày',
+      ];
       const filtered = search
         ? options.filter((opt) =>
             opt.toLowerCase().includes(search.toLowerCase()),

@@ -52,15 +52,21 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
       'BR-01',
       'maxAgingDays',
     );
-    expect(res.items).toEqual(['0-30', '31-60', '61-90', '>90']);
-    expect(res.total).toBe(4);
+    expect(res.items).toEqual([
+      '0 ngày',
+      '1-30 ngày',
+      '31-60 ngày',
+      '61-90 ngày',
+      '>90 ngày',
+    ]);
+    expect(res.total).toBe(5);
 
     const filtered = await engine.getSuppliersDebtColumnOptions(
       'BR-01',
       'maxAgingDays',
       '60',
     );
-    expect(filtered.items).toEqual(['31-60']);
+    expect(filtered.items).toEqual(['31-60 ngày']);
     expect(filtered.total).toBe(1);
   });
 

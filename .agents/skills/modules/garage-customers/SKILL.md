@@ -36,7 +36,9 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ đầy đủ bộ lọc cột qua `TableColumnHeaderFilter`: tìm kiếm từ khóa con (`ILIKE`), tìm kiếm chính xác, tìm kiếm nhiều từ khóa cách nhau bởi khoảng trắng hoặc dấu chấm phẩy (`;`).
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm khớp từ khóa không sót trang) và `__BLANK__` (lọc các xe chưa có BKS hoặc chưa có mã khách hàng).
   - Tích hợp endpoint column-options (`GET /cases/customers-debt/column-options` & `GET /payables/suppliers-debt/column-options`):
-    - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về đầy đủ 4 bracket chuẩn `['0-30', '31-60', '61-90', '>90']` hỗ trợ tìm kiếm trong popover filter.
+    - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về 5 options chuẩn `['0 ngày', '1-30 ngày', '31-60 ngày', '61-90 ngày', '>90 ngày']`, tách riêng `0 ngày` (`maxAgingExpr = 0`) cho các xe đã tất toán/hoàn thành trong ngày, hỗ trợ tìm kiếm trong popover filter.
+    - Cột `licensePlate` (Biển số xe): Chuẩn hóa độ rộng `size: 150px` đồng bộ trên toàn bộ các bảng `garage-debts` (Phải thu, Phải trả, Thu chi xưởng).
+    - Dropdown `GarageCaseCombobox`: Đưa Biển số xe lên đầu và bỏ ngày (`${plate} - ${ref}`), tích hợp Rich Tooltip khi hover hiển thị đầy đủ Ngày phát sinh, Tiền thu BH (`phaiThuBaoHiem`), Tiền thu KH (`phaiThuKhachHang`), Phải chi (`chiPhi`).
     - Cột `caseCount` (SL Phiếu DV): Trả về mảng distinct số lượng phiếu dịch vụ.
     - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
   - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
