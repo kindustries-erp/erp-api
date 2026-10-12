@@ -19,6 +19,7 @@ import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
+  KgaraCashflowVoucherResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @ApiTags('greenway_cashflow')
@@ -33,7 +34,9 @@ export class GarageCashflowController {
     resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.READ,
   })
-  async listVouchers(@Query() query: ListKgaraCashflowVoucherQueryDto) {
+  async listVouchers(
+    @Query() query: ListKgaraCashflowVoucherQueryDto,
+  ): Promise<{ data: KgaraCashflowVoucherResponseDto[]; total: number }> {
     return this.cashflowService.listVouchers(query);
   }
 
@@ -72,7 +75,9 @@ export class GarageCashflowController {
     resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.CREATE,
   })
-  async createVoucher(@Body() dto: CreateKgaraCashflowVoucherDto) {
+  async createVoucher(
+    @Body() dto: CreateKgaraCashflowVoucherDto,
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     return this.cashflowService.createVoucher(dto);
   }
 
@@ -84,7 +89,7 @@ export class GarageCashflowController {
   async updateVoucher(
     @Param('id') id: string,
     @Body() dto: UpdateKgaraCashflowVoucherDto,
-  ) {
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     return this.cashflowService.updateVoucher(id, dto);
   }
 
@@ -93,7 +98,7 @@ export class GarageCashflowController {
     resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.DELETE,
   })
-  async deleteVoucher(@Param('id') id: string) {
+  async deleteVoucher(@Param('id') id: string): Promise<void> {
     return this.cashflowService.deleteVoucher(id);
   }
 }

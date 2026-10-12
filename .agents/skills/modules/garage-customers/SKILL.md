@@ -36,7 +36,9 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ đầy đủ bộ lọc cột qua `TableColumnHeaderFilter`: tìm kiếm từ khóa con (`ILIKE`), tìm kiếm chính xác, tìm kiếm nhiều từ khóa cách nhau bởi khoảng trắng hoặc dấu chấm phẩy (`;`).
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm khớp từ khóa không sót trang) và `__BLANK__` (lọc các xe chưa có BKS hoặc chưa có mã khách hàng).
   - Tích hợp endpoint column-options (`GET /cases/customers-debt/column-options` & `GET /payables/suppliers-debt/column-options`):
-    - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về đầy đủ 4 bracket chuẩn `['0-30', '31-60', '61-90', '>90']` hỗ trợ tìm kiếm trong popover filter.
+    - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về 5 options chuẩn `['0 ngày', '1-30 ngày', '31-60 ngày', '61-90 ngày', '>90 ngày']`, tách riêng `0 ngày` (`maxAgingExpr = 0`) cho các xe đã tất toán/hoàn thành trong ngày, hỗ trợ tìm kiếm trong popover filter.
+    - Cột `licensePlate` (Biển số xe): Chuẩn hóa độ rộng `size: 150px` đồng bộ trên toàn bộ các bảng `garage-debts` (Phải thu, Phải trả, Thu chi xưởng).
+    - Dropdown `GarageCaseCombobox`: Đưa Biển số xe lên đầu và bỏ ngày (`${plate} - ${ref}`), tích hợp Rich Tooltip khi hover hiển thị đầy đủ Ngày phát sinh, Tiền thu BH (`phaiThuBaoHiem`), Tiền thu KH (`phaiThuKhachHang`), Phải chi (`chiPhi`).
     - Cột `caseCount` (SL Phiếu DV): Trả về mảng distinct số lượng phiếu dịch vụ.
     - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
   - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
@@ -306,7 +308,8 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - Để hỗ trợ theo dõi chi phí chi tiết đến từng phương tiện (tương tự như tab Phải thu), tab Phải trả gom nhóm dữ liệu theo:
     `COALESCE(NULLIF(TRIM(COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from 'Biển số: ([^ ]+)'))), ''), 'CHUA_CO_BKS')`.
   - Cột đầu tiên sau `#` là **Biển số xe** (`licensePlate`), hiển thị qua Atom `LicensePlateCell` có icon `Car`, nút Copy nhanh BKS.
-  - Các cột tiếp theo: **Tên khách hàng** (`customerName`), **Mã KH** (`customerCode`), **SL Phiếu DV** (`caseCount`), **Chi phí báo giá** (`costAmount`), **Còn phải chi** (`balanceAmount`), và 4 phân tầng tuổi nợ.
+  - Các cột tiếp theo: **Tên khách hàng** (`customerName`), **Mã KH** (`customerCode`), **SL Phiếu DV** (`caseCount`), **Chi phí báo giá** (`costAmount`), **Đã chi** (`paidAmount`), **Còn phải chi** (`balanceAmount`, có thể âm), và 4 phân tầng tuổi nợ.
+- **Đã chi / Còn phải chi (cấn trừ PAYMENT)**: Đã chi = tổng `kgara_case_settlements` có `settlement_type = 'PAYMENT'` gộp theo `case_id` (join `LEFT JOIN ... "pay"` qua helper `src/kgara-api-core/helpers/garage-payable-settlement.helper.ts`: `PAYMENT_BY_CASE_JOIN`, `buildPayableExprs`). Còn phải chi = chi phí − đã chi, **không chặn trần** (trả vượt hoặc chi phí = 0 mà đã chi thì ra số âm). Dòng được giữ nếu `chi phí > 0 OR đã chi <> 0`. Aging, Top NCC, `totalBalance` đều tính trên số còn phải chi. Dòng chỉ có `kgara_gross_profit` (không có vụ việc) không có PAYMENT nên còn phải chi = chi phí. Sort `balanceAmount`→`balance_amount`, `paidAmount`→`paid_amount`.
 - **Mốc Tính Tuổi Nợ**: Tương tự như tab Phải thu, tuổi nợ phải chi được tính dựa trên khoảng cách giữa **ngày kết thúc/hoàn thành** của các phiếu và ngày hiện tại:
   $$\text{agingDays} = \text{CURRENT\_DATE} - \text{DATE(COALESCE(c.ngay\_hoan\_thanh\_cong\_viec, (gp.raw\_data\text{->>}'NgayKetThuc')::timestamp, c.ngay\_phat\_sinh))}$$
 - **Phân Tầng 4 Nhóm Tuổi Nợ Chuẩn**:
@@ -319,9 +322,9 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 ### 8.2. Đồng Bộ Số Liệu Garage Debts Dashboard (Tab Tổng Quan)
 - `GarageDebtsAnalyticsService` (`src/kgara-api-core/services/garage-debts-analytics.service.ts`):
   - Khối Payables trên Dashboard đồng bộ cùng nguồn dữ liệu `kgara_cases` + `kgara_gross_profit` với Tab Phải trả.
-  - **KPI Cards**: `totalPayable` (Tổng chi phí báo giá), `remainingPayable` (Còn phải chi), `netBalance` = Còn phải thu - Còn phải chi.
+  - **KPI Cards**: `totalPayable` (Tổng chi phí báo giá), `paidPayable` (Đã chi = tổng PAYMENT, hết hard-code 0), `remainingPayable` (Còn phải chi = chi phí − đã chi, có thể âm), `paymentRate`, `netBalance` = Còn phải thu - Còn phải chi.
   - **Top Payables**: Khối `topPayableSuppliers` xếp hạng Top Khách Hàng có chi phí sổ báo giá cao nhất kèm số lượng phiếu.
-  - **Aging Comparison & Cash Trend**: Doanh thu đối chiếu song song với Chi phí theo tháng hoàn tất vụ việc.
+  - **Aging Comparison & Cash Trend**: Aging payable tính trên số còn phải chi. `cashTrend` theo tháng hoàn tất vụ việc: `cashIn` = Đã thu (`tien_da_thanh_toan`), `cashOut` = Đã chi (tổng PAYMENT), `netCash = cashIn − cashOut`. Doanh thu/chi phí tổng hợp xem ở trang khác (dashboard garage). Biểu đồ web nhãn "Đã thu"/"Đã chi".
 
 ### 8.3. Kiến Trúc Backend (`/api-service-refactor`)
 - **`KgaraSuppliersDebtQueryEngine`** (`src/kgara-api-core/services/engines/kgara-suppliers-debt-query.engine.ts` - 587 LoC < 800 LoC, Pattern C):

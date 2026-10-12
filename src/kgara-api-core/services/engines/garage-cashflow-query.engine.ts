@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
-import { ListKgaraCashflowVoucherQueryDto } from '../../dto/garage-cashflow.dto';
+import {
+  ListKgaraCashflowVoucherQueryDto,
+  KgaraCashflowVoucherResponseDto,
+  toKgaraCashflowVoucherResponse,
+} from '../../dto/garage-cashflow.dto';
 import { applyMultiKeywordFilter } from '../../../common/utils/query-builder.util';
 
 @Injectable()
@@ -208,10 +212,22 @@ export class GarageCashflowQueryEngine {
 
   async listVouchers(
     query: ListKgaraCashflowVoucherQueryDto,
-  ): Promise<{ data: KgaraCashflowVoucher[]; total: number }> {
+  ): Promise<{ data: KgaraCashflowVoucherResponseDto[]; total: number }> {
     const qb = this.voucherRepo.createQueryBuilder('voucher');
-    qb.leftJoinAndSelect('voucher.case', 'case');
-    qb.leftJoinAndSelect('voucher.erpBankTransaction', 'erpBankTransaction');
+    qb.leftJoin('voucher.case', 'case');
+    qb.addSelect([
+      'case.id',
+      'case.soChungTu',
+      'case.bienSoXe',
+      'case.khachHangName',
+      'case.khachHangCode',
+    ]);
+    qb.leftJoin('voucher.erpBankTransaction', 'erpBankTransaction');
+    qb.addSelect([
+      'erpBankTransaction.id',
+      'erpBankTransaction.referenceNumber',
+      'erpBankTransaction.seqNo',
+    ]);
 
     if (query.date_from) {
       qb.andWhere('voucher.transDate >= :date_from', {
@@ -375,6 +391,9 @@ export class GarageCashflowQueryEngine {
     qb.skip(skip).take(pageSize);
 
     const [data, total] = await qb.getManyAndCount();
-    return { data, total };
+    return {
+      data: data.map(toKgaraCashflowVoucherResponse),
+      total,
+    };
   }
 }

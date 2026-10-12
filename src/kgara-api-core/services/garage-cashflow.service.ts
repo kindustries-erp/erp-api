@@ -5,6 +5,7 @@ import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
+  KgaraCashflowVoucherResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @Injectable()
@@ -16,11 +17,16 @@ export class GarageCashflowService {
     private readonly transactionService: GarageCashflowTransactionService,
   ) {}
 
-  async createVoucher(dto: CreateKgaraCashflowVoucherDto) {
+  async createVoucher(
+    dto: CreateKgaraCashflowVoucherDto,
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     return this.transactionService.createVoucher(dto);
   }
 
-  async updateVoucher(id: string, dto: UpdateKgaraCashflowVoucherDto) {
+  async updateVoucher(
+    id: string,
+    dto: UpdateKgaraCashflowVoucherDto,
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     return this.transactionService.updateVoucher(id, dto);
   }
 
@@ -48,7 +54,9 @@ export class GarageCashflowService {
     );
   }
 
-  async listVouchers(query: ListKgaraCashflowVoucherQueryDto) {
+  async listVouchers(
+    query: ListKgaraCashflowVoucherQueryDto,
+  ): Promise<{ data: KgaraCashflowVoucherResponseDto[]; total: number }> {
     return this.queryEngine.listVouchers(query);
   }
 }

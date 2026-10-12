@@ -11,6 +11,8 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
+  KgaraCashflowVoucherResponseDto,
+  toKgaraCashflowVoucherResponse,
 } from '../dto/garage-cashflow.dto';
 import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 
@@ -28,7 +30,7 @@ export class GarageCashflowTransactionService {
 
   async createVoucher(
     dto: CreateKgaraCashflowVoucherDto,
-  ): Promise<KgaraCashflowVoucher> {
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -105,7 +107,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
-      return savedVoucher;
+      return toKgaraCashflowVoucherResponse(savedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -117,7 +119,7 @@ export class GarageCashflowTransactionService {
   async updateVoucher(
     id: string,
     dto: UpdateKgaraCashflowVoucherDto,
-  ): Promise<KgaraCashflowVoucher> {
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -231,8 +233,22 @@ export class GarageCashflowTransactionService {
         await this._recalculateCaseDebt(queryRunner, newCaseId);
       }
 
+      if (updatedVoucher.caseId) {
+        const kCase = await queryRunner.manager.findOne(KgaraCase, {
+          where: { id: updatedVoucher.caseId },
+          select: [
+            'id',
+            'soChungTu',
+            'bienSoXe',
+            'khachHangName',
+            'khachHangCode',
+          ],
+        });
+        if (kCase) updatedVoucher.case = kCase;
+      }
+
       await queryRunner.commitTransaction();
-      return updatedVoucher;
+      return toKgaraCashflowVoucherResponse(updatedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;

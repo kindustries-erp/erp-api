@@ -131,6 +131,43 @@ describe('GarageDebtsAnalyticsService', () => {
     expect(res.topPayableSuppliers).toHaveLength(1);
   });
 
+  it('phải trả trừ cấn trừ PAYMENT: SQL có join PAYMENT, trend cashOut = đã chi, cho phép âm', async () => {
+    mockCaseRepo.manager.query
+      .mockResolvedValueOnce([
+        { totalReceivable: '0', remainingReceivable: '0' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          totalPayable: '1000000',
+          paidPayable: '1200000',
+          remainingPayable: '-200000',
+          aging0To30: '-200000',
+        },
+      ])
+      .mockResolvedValueOnce([
+        { month: '2026-07', cashIn: '500000', cashOut: '1200000' },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const res = await service.getDebtsAnalytics();
+
+    const calls = mockCaseRepo.manager.query.mock.calls.map(
+      (c: any[]) => c[0] as string,
+    );
+    const [, payableSql, trendSql, , suppSql] = calls;
+    for (const sql of [payableSql, trendSql, suppSql]) {
+      expect(sql).toContain(`"settlement_type" = 'PAYMENT'`);
+    }
+    expect(payableSql).toContain('<> 0');
+    expect(res.summary.paidPayable).toBe(1200000);
+    expect(res.summary.remainingPayable).toBe(-200000);
+    expect(res.summary.netBalance).toBe(200000);
+    expect(res.summary.paymentRate).toBe(120);
+    expect(res.cashTrend[0].cashOut).toBe(1200000);
+    expect(res.cashTrend[0].netCash).toBe(-700000);
+  });
+
   it('should return time horizon cases correctly for drawer', async () => {
     mockCaseRepo.manager.query
       .mockResolvedValueOnce([{ total: 1 }])

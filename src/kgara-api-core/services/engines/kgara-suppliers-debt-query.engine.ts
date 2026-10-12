@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  PAYMENT_BY_CASE_JOIN,
+  buildPayableExprs,
+} from '../../helpers/garage-payable-settlement.helper';
 import { KgaraCase } from '../../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../../entities/kgara_gross_profit.entity';
 
@@ -119,6 +123,8 @@ export class KgaraSuppliersDebtQueryEngine {
     const dateExpr =
       'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
     const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
+    const { paidExpr, balanceExpr, hasPayableCondition } =
+      buildPayableExprs(costExpr);
     const licensePlateExpr =
       'COALESCE(NULLIF(TRIM(COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from \'Biển số: ([^ ]+)\'))), \'\'), \'CHUA_CO_BKS\')';
 
@@ -126,7 +132,7 @@ export class KgaraSuppliersDebtQueryEngine {
       '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
       '("c"."id" IS NULL OR "c"."exclude_from_reports" IS NOT TRUE)',
       '("c"."id" IS NULL OR "c"."exclude_from_debt" IS NOT TRUE)',
-      `${costExpr} > 0`,
+      hasPayableCondition,
       `${dateExpr} >= $1`,
     ];
     const queryParams: any[] = [effectiveFrom];
@@ -182,13 +188,18 @@ export class KgaraSuppliersDebtQueryEngine {
           if (col === 'maxAgingDays') {
             const subConds: string[] = [];
             const maxAgingExpr = `COALESCE(MAX(CURRENT_DATE - DATE(${dateExpr})), 0)`;
-            if (values.includes('0-30'))
+            if (values.includes('0') || values.includes('0 ngày'))
+              subConds.push(`(${maxAgingExpr} = 0)`);
+            if (values.includes('1-30') || values.includes('1-30 ngày'))
+              subConds.push(`(${maxAgingExpr} BETWEEN 1 AND 30)`);
+            if (values.includes('0-30') || values.includes('0-30 ngày'))
               subConds.push(`(${maxAgingExpr} <= 30)`);
-            if (values.includes('31-60'))
+            if (values.includes('31-60') || values.includes('31-60 ngày'))
               subConds.push(`(${maxAgingExpr} BETWEEN 31 AND 60)`);
-            if (values.includes('61-90'))
+            if (values.includes('61-90') || values.includes('61-90 ngày'))
               subConds.push(`(${maxAgingExpr} BETWEEN 61 AND 90)`);
-            if (values.includes('>90')) subConds.push(`(${maxAgingExpr} > 90)`);
+            if (values.includes('>90') || values.includes('>90 ngày'))
+              subConds.push(`(${maxAgingExpr} > 90)`);
             if (subConds.length > 0)
               havingConditions.push(`(${subConds.join(' OR ')})`);
             continue;
@@ -411,14 +422,15 @@ export class KgaraSuppliersDebtQueryEngine {
         COUNT(DISTINCT ${licensePlateExpr})::int AS total_customers,
         COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code"))::int AS total_cases,
         COALESCE(SUM(${costExpr}), 0)::numeric AS total_cost,
-        0::numeric AS total_paid,
-        COALESCE(SUM(${costExpr}), 0)::numeric AS total_balance,
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${costExpr} ELSE 0 END), 0)::numeric AS total_aging_0_30,
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${costExpr} ELSE 0 END), 0)::numeric AS total_aging_31_60,
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS total_aging_61_90,
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS total_aging_over_90
+        COALESCE(SUM(${paidExpr}), 0)::numeric AS total_paid,
+        COALESCE(SUM(${balanceExpr}), 0)::numeric AS total_balance,
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS total_aging_0_30,
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS total_aging_31_60,
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS total_aging_61_90,
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS total_aging_over_90
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       ${whereClause}
     `;
 
@@ -428,7 +440,7 @@ export class KgaraSuppliersDebtQueryEngine {
           COUNT(*)::int AS total_customers,
           COALESCE(SUM(case_count), 0)::int AS total_cases,
           COALESCE(SUM(cost_amount), 0)::numeric AS total_cost,
-          0::numeric AS total_paid,
+          COALESCE(SUM(paid_amount), 0)::numeric AS total_paid,
           COALESCE(SUM(balance_amount), 0)::numeric AS total_balance,
           COALESCE(SUM(aging_0_30), 0)::numeric AS total_aging_0_30,
           COALESCE(SUM(aging_31_60), 0)::numeric AS total_aging_31_60,
@@ -439,13 +451,15 @@ export class KgaraSuppliersDebtQueryEngine {
             ${licensePlateExpr} AS license_plate,
             COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code"))::int AS case_count,
             COALESCE(SUM(${costExpr}), 0)::numeric AS cost_amount,
-            COALESCE(SUM(${costExpr}), 0)::numeric AS balance_amount,
-            COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${costExpr} ELSE 0 END), 0)::numeric AS aging_0_30,
-            COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${costExpr} ELSE 0 END), 0)::numeric AS aging_31_60,
-            COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS aging_61_90,
-            COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS aging_over_90
+            COALESCE(SUM(${paidExpr}), 0)::numeric AS paid_amount,
+            COALESCE(SUM(${balanceExpr}), 0)::numeric AS balance_amount,
+            COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS aging_0_30,
+            COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS aging_31_60,
+            COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS aging_61_90,
+            COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS aging_over_90
           FROM "kgara_cases" "c"
           FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+          ${PAYMENT_BY_CASE_JOIN}
           ${whereClause}
           GROUP BY ${licensePlateExpr}
           ${havingClause}
@@ -486,13 +500,11 @@ export class KgaraSuppliersDebtQueryEngine {
           sortParts.push(`"customer_name" ${dir}`);
         else if (col === 'caseCount' || col === 'soPhieu')
           sortParts.push(`"case_count" ${dir}`);
-        else if (
-          col === 'costAmount' ||
-          col === 'totalCost' ||
-          col === 'balanceAmount' ||
-          col === 'balance'
-        )
+        else if (col === 'costAmount' || col === 'totalCost')
           sortParts.push(`"cost_amount" ${dir}`);
+        else if (col === 'paidAmount') sortParts.push(`"paid_amount" ${dir}`);
+        else if (col === 'balanceAmount' || col === 'balance')
+          sortParts.push(`"balance_amount" ${dir}`);
         else if (col === 'latestDate' || col === 'completedDate')
           sortParts.push(`"latest_date" ${dir}`);
         else if (col === 'maxAgingDays' || col === 'aging')
@@ -521,17 +533,18 @@ export class KgaraSuppliersDebtQueryEngine {
         COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code"))::int AS "case_count",
         COUNT(DISTINCT COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from 'Biển số: ([^ ]+)')))::int AS "vehicle_count",
         COALESCE(SUM(${costExpr}), 0)::numeric AS "cost_amount",
-        0::numeric AS "paid_amount",
-        COALESCE(SUM(${costExpr}), 0)::numeric AS "balance_amount",
+        COALESCE(SUM(${paidExpr}), 0)::numeric AS "paid_amount",
+        COALESCE(SUM(${balanceExpr}), 0)::numeric AS "balance_amount",
         MAX(${dateExpr}) AS "latest_date",
         MIN(${dateExpr}) AS "oldest_date",
         COALESCE(MAX(${agingDaysExpr}), 0)::int AS "max_aging_days",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${costExpr} ELSE 0 END), 0)::numeric AS "aging_0_30",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${costExpr} ELSE 0 END), 0)::numeric AS "aging_31_60",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS "aging_61_90",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${costExpr} ELSE 0 END), 0)::numeric AS "aging_over_90"
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS "aging_0_30",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS "aging_31_60",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS "aging_61_90",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric AS "aging_over_90"
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       ${whereClause}
       GROUP BY ${licensePlateExpr}
       ${havingClause}
@@ -546,7 +559,7 @@ export class KgaraSuppliersDebtQueryEngine {
       const code = r.customer_code || 'UNKNOWN';
       const name = r.customer_name || 'Chưa xác định';
       const cost = Number(r.cost_amount) || 0;
-      const balance = Number(r.balance_amount) || cost;
+      const balance = Number(r.balance_amount) || 0;
       const maxAging = Number(r.max_aging_days) || 0;
       return {
         id: lp || `${code}_no_bks`,
@@ -599,7 +612,7 @@ export class KgaraSuppliersDebtQueryEngine {
         totalCustomers: total,
         totalCases,
         totalCost,
-        totalPaid: 0,
+        totalPaid: Number(summaryResult[0]?.total_paid) || 0,
         totalBalance,
         totalAging0_30: Number(summaryResult[0]?.total_aging_0_30) || 0,
         totalAging31_60: Number(summaryResult[0]?.total_aging_31_60) || 0,
@@ -622,7 +635,13 @@ export class KgaraSuppliersDebtQueryEngine {
     filtersStr?: string,
   ) {
     if (column === 'maxAgingDays') {
-      const options = ['0-30', '31-60', '61-90', '>90'];
+      const options = [
+        '0 ngày',
+        '1-30 ngày',
+        '31-60 ngày',
+        '61-90 ngày',
+        '>90 ngày',
+      ];
       const filtered = search
         ? options.filter((opt) =>
             opt.toLowerCase().includes(search.toLowerCase()),
@@ -640,13 +659,14 @@ export class KgaraSuppliersDebtQueryEngine {
     const dateExpr =
       'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
     const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
+    const { hasPayableCondition } = buildPayableExprs(costExpr);
     const licensePlateExpr =
       'COALESCE(NULLIF(TRIM(COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from \'Biển số: ([^ ]+)\'))), \'\'), \'CHUA_CO_BKS\')';
 
     if (column === 'caseCount') {
       const whereConditions: string[] = [
         '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
-        `${costExpr} > 0`,
+        hasPayableCondition,
         `${dateExpr} >= $1`,
       ];
       const queryParams: any[] = ['2026-07-01'];
@@ -662,6 +682,7 @@ export class KgaraSuppliersDebtQueryEngine {
           SELECT COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code")) AS cnt
           FROM "kgara_cases" "c"
           FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+          ${PAYMENT_BY_CASE_JOIN}
           WHERE ${whereConditions.join(' AND ')}
           GROUP BY ${licensePlateExpr}
         ) sub
@@ -697,7 +718,7 @@ export class KgaraSuppliersDebtQueryEngine {
 
       const whereConditions: string[] = [
         '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
-        `${costExpr} > 0`,
+        hasPayableCondition,
         `${dateExpr} >= $1`,
         `${nameCol} IS NOT NULL`,
         `CAST(${nameCol} AS TEXT) != ''`,
@@ -745,6 +766,7 @@ export class KgaraSuppliersDebtQueryEngine {
         SELECT COUNT(DISTINCT ${nameCol})::int AS total
         FROM "kgara_cases" "c"
         FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+        ${PAYMENT_BY_CASE_JOIN}
         ${whereClause}
       `;
       const countRes = await this.caseRepo.manager.query(countSql, queryParams);
@@ -761,6 +783,7 @@ export class KgaraSuppliersDebtQueryEngine {
           MAX(${codeCol}) AS extra
         FROM "kgara_cases" "c"
         FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+        ${PAYMENT_BY_CASE_JOIN}
         ${whereClause}
         GROUP BY ${nameCol}
         ORDER BY value ASC
@@ -798,7 +821,7 @@ export class KgaraSuppliersDebtQueryEngine {
 
     const whereConditions: string[] = [
       '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
-      `${costExpr} > 0`,
+      hasPayableCondition,
       `${dateExpr} >= $1`,
       `${dbCol} IS NOT NULL`,
       `CAST(${dbCol} AS TEXT) != ''`,
@@ -825,6 +848,7 @@ export class KgaraSuppliersDebtQueryEngine {
       SELECT COUNT(DISTINCT ${dbCol})::int AS total
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       ${whereClause}
     `;
     const countRes = await this.caseRepo.manager.query(countSql, queryParams);
@@ -839,6 +863,7 @@ export class KgaraSuppliersDebtQueryEngine {
       SELECT DISTINCT ${dbCol} AS value
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       ${whereClause}
       ORDER BY value ASC
       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}

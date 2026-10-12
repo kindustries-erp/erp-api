@@ -13,6 +13,10 @@ import { ErpInvoiceAttachment } from '../entities/erp_invoice_attachment.entity'
 import { R2Service } from '../../r2/r2.service';
 import { ErpAttachmentsCoreService } from '../../erp-attachments-core/erp-attachments-core.service';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
+import {
+  buildInvoiceFileName,
+  uniqueName,
+} from '../utils/invoice-file-name.util';
 
 @Injectable()
 export class InvoiceFilesService {
@@ -48,14 +52,7 @@ export class InvoiceFilesService {
       );
 
     const ext = key.split('.').pop() || fileType;
-    const dateStr = invoice.invoiceDate || 'unknown';
-    const mst =
-      invoice.direction === 'IN' ? invoice.sellerTaxCode : invoice.buyerTaxCode;
-    const safeTax = (mst ?? 'unknown').replace(/[^\w]/g, '');
-    const safeSerial = (invoice.serialNo ?? 'unknown').replace(/[^\w-]/g, '_');
-    const safeNo = invoice.invoiceNo.replace(/[^\w-]/g, '_');
-
-    const filename = `${dateStr}_${safeTax}_${safeSerial}_${safeNo}.${ext}`;
+    const filename = buildInvoiceFileName(invoice, ext);
     const url = await this.r2.getPresignedDownloadUrl(key, 3600, filename);
     const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
     return { url, expiresAt };
@@ -278,6 +275,7 @@ export class InvoiceFilesService {
   } {
     const tasks: Array<{ key: string; name: string; invoiceNo: string }> = [];
     const missing: string[] = [];
+    const usedNames = new Set<string>();
 
     for (const invoice of invoices) {
       const invoiceNo = invoice.invoiceNo || invoice.id;
@@ -293,7 +291,6 @@ export class InvoiceFilesService {
       ).substring(0, 50);
       const sanitizedTaxCode = this.sanitizeZipPart(taxCode, 'KhongMST');
       const folderName = `${sanitizedTaxCode} - ${sanitizedName}`;
-      const docNo = this.sanitizeZipPart(invoiceNo, invoice.id);
 
       if (types.includes('pdf')) {
         const pdfList: any[] =
@@ -302,7 +299,7 @@ export class InvoiceFilesService {
             filename: link.attachment.fileName,
           })) || [];
         if (pdfList.length === 0 && invoice.pdfFileKey) {
-          pdfList.push({ key: invoice.pdfFileKey, filename: `${docNo}.pdf` });
+          pdfList.push({ key: invoice.pdfFileKey, filename: 'document.pdf' });
         }
 
         if (pdfList.length === 0) {
@@ -311,13 +308,14 @@ export class InvoiceFilesService {
           for (let i = 0; i < pdfList.length; i++) {
             const file = pdfList[i];
             const ext = file.filename?.split('.').pop() || 'pdf';
-            const finalName =
-              pdfList.length > 1
-                ? `${docNo}_${i + 1}.${ext}`
-                : `${docNo}.${ext}`;
+            const finalName = buildInvoiceFileName(
+              invoice,
+              ext,
+              pdfList.length > 1 ? i + 1 : undefined,
+            );
             tasks.push({
               key: file.key,
-              name: `${folderName}/${finalName}`,
+              name: uniqueName(`${folderName}/${finalName}`, usedNames),
               invoiceNo,
             });
           }
@@ -330,7 +328,10 @@ export class InvoiceFilesService {
         } else {
           tasks.push({
             key: invoice.xmlFileKey,
-            name: `${folderName}/${docNo}.xml`,
+            name: uniqueName(
+              `${folderName}/${buildInvoiceFileName(invoice, 'xml')}`,
+              usedNames,
+            ),
             invoiceNo,
           });
         }

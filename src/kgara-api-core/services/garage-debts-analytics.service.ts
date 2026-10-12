@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  PAYMENT_BY_CASE_JOIN,
+  buildPayableExprs,
+} from '../helpers/garage-payable-settlement.helper';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraPayable } from '../entities/kgara_payable.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -94,12 +98,14 @@ export class GarageDebtsAnalyticsService {
     const dateExpr =
       'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
     const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
+    const { paidExpr, balanceExpr, hasPayableCondition } =
+      buildPayableExprs(costExpr);
 
     let payableWhere = `
       ("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)
       AND ("c"."id" IS NULL OR "c"."exclude_from_reports" IS NOT TRUE)
       AND ("c"."id" IS NULL OR "c"."exclude_from_debt" IS NOT TRUE)
-      AND ${costExpr} > 0
+      AND ${hasPayableCondition}
       AND ${dateExpr} >= $1
     `;
     if (branchId) {
@@ -117,15 +123,16 @@ export class GarageDebtsAnalyticsService {
     const payableAggSql = `
       SELECT
         COALESCE(SUM(${costExpr}), 0)::numeric as "totalPayable",
-        0::numeric as "paidPayable",
-        COALESCE(SUM(${costExpr}), 0)::numeric as "remainingPayable",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging0To30",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging31To60",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${costExpr} ELSE 0 END), 0)::numeric as "aging61To90",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${costExpr} ELSE 0 END), 0)::numeric as "agingOver90",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 7 THEN ${costExpr} ELSE 0 END), 0)::numeric as "dueNextWeek"
+        COALESCE(SUM(${paidExpr}), 0)::numeric as "paidPayable",
+        COALESCE(SUM(${balanceExpr}), 0)::numeric as "remainingPayable",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 30 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "aging0To30",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 31 AND 60 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "aging31To60",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} BETWEEN 61 AND 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "aging61To90",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 90 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "agingOver90",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} <= 7 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "dueNextWeek"
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       WHERE ${payableWhere}
     `;
     const payableAggRows = await this.caseRepo.manager.query(
@@ -143,14 +150,14 @@ export class GarageDebtsAnalyticsService {
     const pOver90 = Number(payableAgg.agingOver90) || 0;
     const pDueWeek = Number(payableAgg.dueNextWeek) || 0;
 
-    // 1.3 Monthly Trend (Tháng gần nhất)
+    // 1.3 Monthly Trend (Tháng gần nhất): Đã thu (RECEIPT) vs Đã chi (PAYMENT) theo tháng hoàn thành vụ việc
     const trendSql = `
       SELECT
         TO_CHAR("c"."ngay_hoan_thanh_cong_viec", 'YYYY-MM') as "month",
         COALESCE(SUM("c"."tien_da_thanh_toan"), 0)::numeric as "cashIn",
-        COALESCE(SUM(COALESCE("gp"."chi_phi", "c"."chi_phi", 0)), 0)::numeric as "cashOut"
+        COALESCE(SUM(${paidExpr}), 0)::numeric as "cashOut"
       FROM "kgara_cases" "c"
-      LEFT JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+      ${PAYMENT_BY_CASE_JOIN}
       WHERE ${caseWhere}
       GROUP BY TO_CHAR("c"."ngay_hoan_thanh_cong_viec", 'YYYY-MM')
       ORDER BY "month" ASC
@@ -205,12 +212,13 @@ export class GarageDebtsAnalyticsService {
         COALESCE("c"."khach_hang_code", "gp"."raw_data"->>'MaKhachHang', "gp"."ten_khach_hang", 'UNKNOWN') as "partnerCode",
         COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang", 'Chưa xác định') as "partnerName",
         COALESCE(SUM(${costExpr}), 0)::numeric as "totalAmount",
-        COALESCE(SUM(${costExpr}), 0)::numeric as "balanceAmount",
-        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 30 THEN ${costExpr} ELSE 0 END), 0)::numeric as "overdueAmount",
+        COALESCE(SUM(${balanceExpr}), 0)::numeric as "balanceAmount",
+        COALESCE(SUM(CASE WHEN ${agingDaysExpr} > 30 THEN ${balanceExpr} ELSE 0 END), 0)::numeric as "overdueAmount",
         COALESCE(MAX(${agingDaysExpr}), 0)::int as "maxAgingDays",
         COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code"))::int as "caseCount"
       FROM "kgara_cases" "c"
       FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+        ${PAYMENT_BY_CASE_JOIN}
       WHERE ${payableWhere}
       GROUP BY COALESCE("c"."khach_hang_code", "gp"."raw_data"->>'MaKhachHang', "gp"."ten_khach_hang", 'UNKNOWN'), COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang", 'Chưa xác định')
       ORDER BY "balanceAmount" DESC

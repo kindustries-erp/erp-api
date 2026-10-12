@@ -764,3 +764,7 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
 
 
 
+
+## Quy ước tên file PDF/XML khi xuất
+- Helper `src/erp-invoices-core/utils/invoice-file-name.util.ts`: `buildInvoiceFileName(invoice, ext, index?)` → `{YYYYMMDD}_{KyHieu}_{SoHD}_{SoTienVND}[_{index}].{ext}` (vd `20250315_C25TAA_0001234_12500000.pdf`); thiếu dữ liệu: `KhongNgay` / `KhongKyHieu` / số tiền `0`; sanitize ký tự cấm + `..`. `uniqueName` chống trùng trong ZIP (`_2`, `_3`).
+- Áp dụng: ZIP hàng loạt (`bulkDownloadFilesZip`), ZIP đã chọn (`bulkDownloadSelectedZip`) qua `buildDownloadTasks` (giữ thư mục `{MST} - {Tên đối tác}/`) và tải lẻ `getFileDownloadUrl` (không còn MST trong tên). Không đổi: PDF đính kèm (`getPdfDownloadUrl`, `downloadAllPdfsZip`) vẫn dùng tên gốc.
