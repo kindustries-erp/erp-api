@@ -170,6 +170,9 @@ describe('InvoiceFilesService', () => {
         {
           id: 'inv-1',
           invoiceNo: '0001',
+          invoiceDate: '2025-03-15',
+          serialNo: 'C25TAA',
+          totalAmount: '12500000.00',
           direction: 'IN',
           sellerName: 'Cty A',
           sellerTaxCode: '0101',
@@ -198,7 +201,7 @@ describe('InvoiceFilesService', () => {
       expect(repository.find).toHaveBeenCalled();
       expect(r2Service.downloadStream).toHaveBeenCalledWith('k1');
       expect(archiveMocks.append).toHaveBeenCalledWith('stream-data', {
-        name: expect.stringContaining('0001.pdf'),
+        name: '0101 - Cty A/20250315_C25TAA_0001_12500000.pdf',
       });
       expect(archiveMocks.append).toHaveBeenCalledWith(
         expect.stringContaining('không có file XML'),
