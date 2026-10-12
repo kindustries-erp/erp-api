@@ -41,6 +41,10 @@ export class CreateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
+  licensePlate?: string;
+
+  @IsString()
+  @IsOptional()
   referenceNumber?: string;
 
   @IsUUID()
@@ -102,6 +106,10 @@ export class UpdateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   partnerPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  licensePlate?: string;
 
   @IsString()
   @IsOptional()

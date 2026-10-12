@@ -107,7 +107,11 @@ export class GarageCashflowQueryEngine {
 
     let selectField = '';
     if (column === 'voucherCode') selectField = 'voucher.voucher_code';
-    else if (column === 'partnerName') selectField = 'case.khachHangName';
+    else if (column === 'partnerName')
+      selectField = 'COALESCE(voucher.partner_name, case.khachHangName)';
+    else if (column === 'licensePlate')
+      selectField = 'COALESCE(voucher.license_plate, case.bienSoXe)';
+    else if (column === 'paymentMethod') selectField = 'voucher.payment_method';
     else if (column === 'note') selectField = 'voucher.note';
     else if (column === 'caseCode') selectField = 'case.soChungTu';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
@@ -144,8 +148,22 @@ export class GarageCashflowQueryEngine {
               vvoucherCode: vals,
             });
           } else if (col === 'partnerName') {
-            qb.andWhere('case.khachHangName IN (:...vpartnerName)', {
-              vpartnerName: vals,
+            qb.andWhere(
+              '(voucher.partner_name IN (:...vpartnerName) OR case.khachHangName IN (:...vpartnerName))',
+              {
+                vpartnerName: vals,
+              },
+            );
+          } else if (col === 'licensePlate') {
+            qb.andWhere(
+              '(voucher.license_plate IN (:...vlicensePlate) OR case.bienSoXe IN (:...vlicensePlate))',
+              {
+                vlicensePlate: vals,
+              },
+            );
+          } else if (col === 'paymentMethod') {
+            qb.andWhere('voucher.payment_method IN (:...vpaymentMethod)', {
+              vpaymentMethod: vals,
             });
           } else if (col === 'note') {
             qb.andWhere('voucher.note IN (:...vnote)', { vnote: vals });
@@ -239,8 +257,22 @@ export class GarageCashflowQueryEngine {
               fvoucherCode: arr,
             });
           } else if (col === 'partnerName') {
-            qb.andWhere('case.khachHangName IN (:...fpartnerName)', {
-              fpartnerName: arr,
+            qb.andWhere(
+              '(voucher.partner_name IN (:...fpartnerName) OR case.khachHangName IN (:...fpartnerName))',
+              {
+                fpartnerName: arr,
+              },
+            );
+          } else if (col === 'licensePlate') {
+            qb.andWhere(
+              '(voucher.license_plate IN (:...flicensePlate) OR case.bienSoXe IN (:...flicensePlate))',
+              {
+                flicensePlate: arr,
+              },
+            );
+          } else if (col === 'paymentMethod') {
+            qb.andWhere('voucher.payment_method IN (:...fpaymentMethod)', {
+              fpaymentMethod: arr,
             });
           } else if (col === 'note') {
             qb.andWhere('voucher.note IN (:...fnote)', { fnote: arr });
@@ -265,9 +297,23 @@ export class GarageCashflowQueryEngine {
           if (col === 'partnerName')
             applyMultiKeywordFilter(
               qb,
-              'case.khachHangName',
+              'COALESCE(voucher.partner_name, case.khachHangName)',
               searchStr,
               'spartnerName',
+            );
+          if (col === 'licensePlate')
+            applyMultiKeywordFilter(
+              qb,
+              'COALESCE(voucher.license_plate, case.bienSoXe)',
+              searchStr,
+              'slicensePlate',
+            );
+          if (col === 'paymentMethod')
+            applyMultiKeywordFilter(
+              qb,
+              'voucher.payment_method',
+              searchStr,
+              'spaymentMethod',
             );
           if (col === 'note')
             applyMultiKeywordFilter(qb, 'voucher.note', searchStr, 'snote');
@@ -308,7 +354,11 @@ export class GarageCashflowQueryEngine {
         else if (field === 'caseCode') dbField = 'case.soChungTu';
         else if (field === 'transDate') dbField = 'voucher.transDate';
         else if (field === 'voucherType') dbField = 'voucher.voucherType';
-        else if (field === 'partnerName') dbField = 'case.khachHangName';
+        else if (field === 'partnerName')
+          dbField = 'COALESCE(voucher.partnerName, case.khachHangName)';
+        else if (field === 'licensePlate')
+          dbField = 'COALESCE(voucher.licensePlate, case.bienSoXe)';
+        else if (field === 'paymentMethod') dbField = 'voucher.paymentMethod';
 
         if (dbField) {
           qb.addOrderBy(dbField, direction);

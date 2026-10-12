@@ -750,10 +750,54 @@ export class KgaraCustomersController {
       }
     }
 
+    const isCustomerCol = column === 'customer' || column === 'customerName';
+
     if (search) {
-      query.andWhere(`CAST(${selectExpr} AS TEXT) ILIKE :search`, {
-        search: `%${search}%`,
-      });
+      if (isCustomerCol) {
+        query.andWhere(
+          '(case.khachHangName ILIKE :cSearch OR case.khachHangCode ILIKE :cSearch)',
+          { cSearch: `%${search}%` },
+        );
+      } else {
+        query.andWhere(`CAST(${selectExpr} AS TEXT) ILIKE :search`, {
+          search: `%${search}%`,
+        });
+      }
+    }
+
+    if (isCustomerCol) {
+      const totalRaw = await query
+        .clone()
+        .orderBy()
+        .select('COUNT(DISTINCT "case"."khach_hang_name")', 'cnt')
+        .getRawOne();
+      const total = parseInt(totalRaw?.cnt || '0', 10);
+
+      const raw = await query
+        .clone()
+        .select('"case"."khach_hang_name"', 'value')
+        .addSelect('MAX("case"."khach_hang_code")', 'extra')
+        .groupBy('"case"."khach_hang_name"')
+        .orderBy('value', 'ASC')
+        .offset((safePage - 1) * safePageSize)
+        .limit(safePageSize)
+        .getRawMany();
+
+      return {
+        items: raw
+          .map((r) => {
+            const val = String(r.value || '').trim();
+            const extra = String(r.extra || '').trim();
+            return {
+              label: extra && extra !== val ? `${val} (${extra})` : val,
+              value: val,
+            };
+          })
+          .filter((it) => it.value),
+        total,
+        page: safePage,
+        totalPages: Math.ceil(total / safePageSize),
+      };
     }
 
     query.orderBy('value', 'ASC');

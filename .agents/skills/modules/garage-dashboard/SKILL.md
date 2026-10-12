@@ -14,7 +14,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - **CHỈ tính** doanh thu, chi phí, lãi gộp và số vụ việc cho các phiếu dịch vụ **ĐÃ CÓ ngày hoàn thành công việc** (`c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
   - Bỏ qua các phiếu bị xóa trên KGara (`c.kgara_deleted_at IS NULL`) hoặc phiếu hủy (`c.tinh_trang_dich_vu != 9`).
 - **Quản lý Chi phí vận hành (OPEX), Giá vốn nhập tay & Hoa hồng**:
-  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, vật tư tiêu hao, bảo trì, khấu hao, khác), giá vốn trực tiếp (hoa hồng trực tiếp DV, chi phí trực tiếp khác) và hoa hồng (sale, dịch vụ).
+  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, bảo trì, khấu hao, khác), giá vốn trực tiếp (hoa hồng trực tiếp DV, chi phí trực tiếp khác) và hoa hồng (sale, dịch vụ).
   - Phân loại qua `category_key` theo 3 nhóm chi phí: `OPEX` (CP Vận hành), `COGS` (Giá vốn), `COMMISSION` (Hoa hồng), lưu trữ theo `(period_year, period_month)`.
   - Hỗ trợ phát sinh định kỳ lặp lại theo chu kỳ tháng (`monthly`) với cơ chế áp dụng linh hoạt chuẩn Google Calendar (`this` vs `this_and_future`).
   - Hỗ trợ xem danh sách bảng chuẩn `/greenway/dashboard/opex` theo đúng quy chuẩn `standardize-table-page` & `standardize-table`:
@@ -202,7 +202,7 @@ Resource RBAC: `garage`
      $$\text{Comm}_{sale} = \begin{cases} \text{round}((GP - OPEX) \times R_{kg} \times 10\%) & \text{khi } (GP - OPEX) > 0 \\ 0 & \text{ngược lại} \end{cases}$$
    - $SE = \text{Comm}_{sale} + \sum \text{Selling Expenses nhập tay}$
 5. **5. Chi phí vận hành ($OPEX$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì, Khấu hao, Chi phí khác).
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Bảo trì, Khấu hao, Chi phí khác).
 6. **6. Lợi nhuận ròng ($NP$)**:
    $$NP = GP - SE - OPEX$$
 7. **7. Thưởng và Hoa hồng Dịch vụ ($COMM_{dv}$)**:

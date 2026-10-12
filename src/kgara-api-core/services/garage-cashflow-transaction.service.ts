@@ -64,6 +64,9 @@ export class GarageCashflowTransactionService {
         amount: dto.amount,
         transDate: dto.transDate || now.toISOString().slice(0, 10),
         caseId: dto.caseId || undefined,
+        licensePlate: dto.licensePlate || caseRef?.bienSoXe || undefined,
+        paymentMethod: dto.paymentMethod || undefined,
+        partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
         note: dto.note || undefined,
@@ -139,6 +142,16 @@ export class GarageCashflowTransactionService {
       const newType = dto.voucherType !== undefined ? dto.voucherType : oldType;
 
       queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
+      if (
+        newCaseId &&
+        dto.licensePlate === undefined &&
+        (!existingVoucher.licensePlate || oldCaseId !== newCaseId)
+      ) {
+        const kCase = await queryRunner.manager.findOne(KgaraCase, {
+          where: { id: newCaseId },
+        });
+        if (kCase?.bienSoXe) existingVoucher.licensePlate = kCase.bienSoXe;
+      }
       const updatedVoucher = await queryRunner.manager.save(existingVoucher);
 
       const existingSettlement = await queryRunner.manager.findOne(

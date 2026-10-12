@@ -32,11 +32,6 @@ const JULY_OPEX_ITEMS: OpexItem[] = [
     categoryName: 'Thuê mặt bằng & điện nước',
     amount: 30_000_000,
   },
-  {
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
   { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 10_000_000 },
   {
     categoryKey: 'KHAU_HAO',

@@ -18,6 +18,9 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `amount` (numeric 18,2, default 0) - Số tiền
 - `trans_date` (date) - Ngày giao dịch
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
+- `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
+- `payment_method` (varchar 50, nullable) - Phương thức thanh toán (Tiền mặt, Chuyển khoản, Ứng trước, Thẻ tín dụng, Cấn trừ, Khác)
+- `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
 - `note` (text, nullable)
@@ -25,7 +28,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
-- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`.
+- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`.
 
 **Sự thay đổi ở** `kgara_case_settlements`:
 - Được thêm trường `cashflow_voucher_id` (uuid, FK -> `kgara_cashflow_vouchers.id`, `ON DELETE SET NULL`) để mapping tự động từ phiếu thu/chi sang phiếu cấn trừ.
@@ -80,29 +83,37 @@ src/kgara-api-core/
 ## 7. Cấu trúc Source Code Frontend (Web)
 Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/ui-atomic-refactor`:
 ```text
-src/modules/garage/components/organisms/
-├── garage-cashflow-table/          (Thư mục Organism cho Data Table chuẩn)
-│   ├── index.ts
-│   ├── GarageCashflowTable.tsx     (Main component, quản lý giao diện Data Table)
-│   ├── GarageCashflowTable.columns.tsx (Cấu hình TableText, Badge, Right-align, < 180 LoC)
-│   ├── GarageCashflowTable.helper.tsx (Tách các hàm render cell phức tạp để giảm tải file columns, < 100 LoC)
-│   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu query params, options, filters)
-│   ├── GarageCashflowTable.type.ts
-│   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
-├── garage-cashflow-drawer/         (Thư mục Organism cho Drawer chuẩn Atomic bóc tách < 180 LoC)
-│   ├── index.ts
-│   ├── GarageCashflowDrawer.tsx    (Khung StandardFormDrawer, điều phối sub-sections, < 80 LoC)
-│   ├── GarageCashflowDrawer.hook.ts (Hook form state, validation, mutations, RBAC canCreate/canUpdate, < 130 LoC)
-│   ├── GarageCashflowDrawer.type.ts (Props interface, DTO mappings, < 30 LoC)
-│   ├── GarageCashflowDrawerGeneralSection.tsx (Sub-section Thông tin chung, < 180 LoC)
-│   ├── GarageCashflowDrawerSettlementSection.tsx (Sub-section Thông tin đối soát, < 90 LoC)
-│   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
-└── garage-cashflow-list/
-    ├── GarageCashflowList.tsx      (Wrapper component, kết nối Table và Drawer, tích hợp canCreate/canUpdate/canDelete từ GARAGE_CASHFLOW)
-    └── GarageCashflowList.test.tsx (Co-located Unit Test)
+src/modules/garage/components/
+├── molecules/
+│   └── payment-method-combobox/     (Molecule dropdown chọn phương thức TT, có option "Ứng trước", < 40 LoC)
+└── organisms/
+    ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
+    │   ├── index.ts
+    │   ├── GarageCashflowTable.tsx  (Main component)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Biển số xe & Phương thức TT, < 140 LoC)
+    │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
+    │   ├── GarageCashflowTable.helper.tsx (Renderers: Biển số xe, Badge Phương thức TT, < 150 LoC)
+    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts)
+    │   ├── GarageCashflowTable.type.ts
+    │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
+    ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic bóc tách < 180 LoC)
+    │   ├── index.ts
+    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 80 LoC)
+    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 130 LoC)
+    │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
+    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Mã CT cạnh Ngày GD, thay SĐT bằng BKS, < 180 LoC)
+    │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
+    │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
+    └── garage-cashflow-list/
+        ├── GarageCashflowList.tsx   (Wrapper kết nối Table và Drawer)
+        └── GarageCashflowList.test.tsx (Co-located Unit Test)
 ```
 - **Cấu trúc Điều hướng & Tích hợp Trang (`/garage-debts` & Sidebar)**:
   - **Tích hợp Tab Thu Chi Xưởng vào Công nợ Garage (`GarageDebts`)**: Danh sách thu chi xưởng (`GarageCashflowList`) được tích hợp làm tab thứ 4 (tab cuối cùng: `Tổng quan` ➔ `Phải thu` ➔ `Phải trả` ➔ `Thu chi xưởng`) trong trang Công nợ Garage (`GarageDebts` - route `/garage-debts`).
+  - **Secondary Drawer Icon cho Cột Mã PDV (`caseCode`)**:
+    - Trong bảng `GarageCashflowTable`, tại cột **Mã PDV**, thành phần `TableText` được kích hoạt thuộc tính `onDrawerClick` (icon `PanelRightOpen`, tooltip `"Xem chi tiết phiếu dịch vụ"`).
+    - Callback `onOpenCaseDetail` được truyền từ `GarageCashflowList` xuống bảng `GarageCashflowTable` và hàm helper `renderCaseCodeCell`.
+    - Khi người dùng click icon Drawer trên dòng bất kỳ có liên kết Mã PDV, hệ thống tự động mở Drawer chi tiết phiếu dịch vụ (`GarageCaseStandaloneDrawer`) ngay tại trang mà không cần điều hướng.
   - **Tab Visibility RBAC**: Tab "Thu chi xưởng" chỉ hiển thị khi người dùng có quyền `GARAGE_CASHFLOW:READ`. Truy cập trực tiếp qua URL `?tab=cashflow` khi thiếu quyền sẽ tự động fallback an toàn về tab `overview`.
   - **Phân quyền Context Menu Xóa & Action Menu**: Chỉ người dùng có quyền `GARAGE_CASHFLOW:DELETE` (`canDelete === true` và `onDelete` được truyền vào) mới thấy mục "Xóa phiếu" trong chuột phải và nút ba chấm (`...`). Người không có quyền DELETE bị ẩn hoàn toàn 100% mục xóa (không render DOM item).
   - **Dọn dẹp Dead Code**: Trang tổng quan `GarageCashflowDashboard` và file `GarageCashflowPage.tsx` đã được xóa bỏ hoàn toàn. Route alias `"garage-cashflow"` trong `App.tsx` tự động chuyển tiếp sang `() => <GaragePartners initialTab="cashflow" />`.
