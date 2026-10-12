@@ -67,6 +67,7 @@ import { KgaraCaseFinancialController } from './controllers/kgara-case-financial
 import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.service';
 import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
 import { KgaraSuppliersService } from './services/kgara-suppliers.service';
+import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-suppliers-debt-query.engine';
 
 @Module({
   imports: [
@@ -124,6 +125,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     SyncDebtService,
     SyncCaseService,
     KgaraCaseLookupService,
+    KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
   ],
   controllers: [
@@ -167,6 +169,7 @@ import { KgaraSuppliersService } from './services/kgara-suppliers.service';
     SyncDebtService,
     SyncCaseService,
     KgaraCaseLookupService,
+    KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
   ],
 })
