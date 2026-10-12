@@ -175,4 +175,43 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(result.summary.totalCost).toBe(10000000);
     expect(result.summary.totalAging0_30).toBe(6000000);
   });
+  it('trừ cấn trừ PAYMENT: SQL join PAYMENT, paid/balance lấy từ DB, cho phép âm', async () => {
+    caseRepo.manager.query
+      .mockResolvedValueOnce([
+        {
+          total_customers: '1',
+          total_cost: '1000000',
+          total_paid: '1200000',
+          total_balance: '-200000',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          license_plate: '51K33130',
+          customer_code: 'KH1',
+          customer_name: 'A',
+          case_count: 1,
+          cost_amount: '1000000',
+          paid_amount: '1200000',
+          balance_amount: '-200000',
+          max_aging_days: 10,
+        },
+      ]);
+
+    const result = await engine.getSuppliersDebt({
+      branchId: 'BR-01',
+      page: 1,
+      pageSize: 20,
+    });
+
+    for (const [sql] of caseRepo.manager.query.mock.calls) {
+      expect(sql).toContain(`"settlement_type" = 'PAYMENT'`);
+      expect(sql).toContain('<> 0');
+    }
+    expect(result.data[0].paidAmount).toBe(1200000);
+    expect(result.data[0].balanceAmount).toBe(-200000);
+    expect(result.data[0].ckCo).toBe(-200000);
+    expect(result.summary.totalPaid).toBe(1200000);
+    expect(result.summary.totalBalance).toBe(-200000);
+  });
 });

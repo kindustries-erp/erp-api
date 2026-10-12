@@ -151,3 +151,6 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-table/GarageCashflowTable.test.tsx`
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-drawer/GarageCashflowDrawer.test.tsx`
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-list/GarageCashflowList.test.tsx`
+
+## Liên kết với Công nợ Garage (`garage-debts`)
+- Dòng `kgara_case_settlements.settlement_type = 'PAYMENT'` (sinh từ phiếu chi/cấn trừ phải trả) là nguồn "Đã chi" của tab Tổng quan và tab Phải trả ở `/garage-debts` (xem `garage-customers/SKILL.md` mục 8.1-8.2). Chỉ `RECEIPT` được cộng vào `kgara_cases.tien_da_thanh_toan`. `payer_type` của PAYMENT hiện đều là `KH`, không dùng để lọc.
