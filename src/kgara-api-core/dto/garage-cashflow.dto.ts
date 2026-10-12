@@ -153,3 +153,81 @@ export class ListKgaraCashflowVoucherQueryDto {
   @IsString()
   column_search?: string;
 }
+
+export class KgaraCashflowCaseResponseDto {
+  id: string;
+  khachHangName?: string | null;
+  khachHangCode?: string | null;
+  soChungTu?: string | null;
+  bienSoXe?: string | null;
+}
+
+export class KgaraCashflowVoucherResponseDto {
+  id: string;
+  voucherCode: string;
+  voucherType: 'RECEIPT' | 'PAYMENT';
+  amount: number;
+  transDate: string;
+  partnerName?: string | null;
+  partnerPhone?: string | null;
+  licensePlate?: string | null;
+  note?: string | null;
+  paymentMethod?: string | null;
+  referenceNumber?: string | null;
+  caseId?: string | null;
+  erpBankTransactionId?: string | null;
+  erpCashVoucherId?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  case?: KgaraCashflowCaseResponseDto | null;
+  erpBankTransaction?: {
+    id: string;
+    referenceNumber?: string | null;
+    seqNo?: string | null;
+  } | null;
+}
+
+export function toKgaraCashflowVoucherResponse(
+  entity: import('../entities/kgara_cashflow_voucher.entity').KgaraCashflowVoucher,
+): KgaraCashflowVoucherResponseDto {
+  return {
+    id: entity.id,
+    voucherCode: entity.voucherCode,
+    voucherType: entity.voucherType,
+    amount: Number(entity.amount) || 0,
+    transDate: entity.transDate,
+    partnerName: entity.partnerName ?? null,
+    licensePlate: entity.licensePlate ?? null,
+    note: entity.note ?? null,
+    paymentMethod: entity.paymentMethod ?? null,
+    caseId: entity.caseId ?? null,
+    erpBankTransactionId: entity.erpBankTransactionId ?? null,
+    erpCashVoucherId: entity.erpCashVoucherId ?? null,
+    createdBy: entity.createdBy ?? null,
+    createdAt:
+      entity.createdAt instanceof Date
+        ? entity.createdAt.toISOString()
+        : String(entity.createdAt),
+    updatedAt:
+      entity.updatedAt instanceof Date
+        ? entity.updatedAt.toISOString()
+        : String(entity.updatedAt),
+    case: entity.case
+      ? {
+          id: entity.case.id,
+          khachHangName: entity.case.khachHangName ?? null,
+          khachHangCode: entity.case.khachHangCode ?? null,
+          soChungTu: entity.case.soChungTu ?? null,
+          bienSoXe: entity.case.bienSoXe ?? null,
+        }
+      : null,
+    erpBankTransaction: entity.erpBankTransaction
+      ? {
+          id: entity.erpBankTransaction.id,
+          referenceNumber: entity.erpBankTransaction.referenceNumber ?? null,
+          seqNo: (entity.erpBankTransaction as any).seqNo ?? null,
+        }
+      : null,
+  };
+}

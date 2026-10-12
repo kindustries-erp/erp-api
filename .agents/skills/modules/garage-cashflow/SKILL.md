@@ -41,14 +41,14 @@ src/kgara-api-core/
 │   ├── kgara_cashflow_voucher.entity.ts
 │   └── kgara_case_settlement.entity.ts (cập nhật mapping cashflow_voucher_id)
 ├── dto/
-│   └── garage-cashflow.dto.ts (Create, Update, List Query)
+│   └── garage-cashflow.dto.ts (Create, Update, List Query, KgaraCashflowVoucherResponseDto & toKgaraCashflowVoucherResponse)
 ├── controllers/
-│   └── garage-cashflow.controller.ts (Base path: /api/v1/greenway/cashflow-vouchers)
+│   └── garage-cashflow.controller.ts (Base path: /api/v1/greenway/cashflow-vouchers, Return Zero-Entity Leaking DTO)
 └── services/
     ├── garage-cashflow.service.ts (Facade Service Pattern, Clean DI Constructor)
     ├── garage-cashflow-transaction.service.ts (Sub-Service quản lý tạo, sửa, xóa, cấn trừ, transaction lock)
     └── engines/
-        └── garage-cashflow-query.engine.ts (Sub-Service query, get list, columns options, filter)
+        └── garage-cashflow-query.engine.ts (Sub-Service query, get list, selective column projection, options, filter)
 ```
 
 ## 4. Danh sách API Endpoints & RBAC Contract
@@ -59,14 +59,25 @@ src/kgara-api-core/
 
 | HTTP Method | Endpoint | Quyền (Action) | Mô tả |
 |-------------|----------|----------------|-------|
-| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Hỗ trợ multi-search qua `column_filters`, `column_search` và mảng sort `sorts`. |
+| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Trả về `PaginatedResult<KgaraCashflowVoucherResponseDto>` (Zero-Entity Leaking). |
 | `GET` | `/column-options` | `READ` | Lấy danh sách giá trị option phân trang cho bộ lọc cột (dynamic column filters). |
 | `GET` | `/dashboard` | `READ` | Thống kê KPI (tổng thu, chi, net), breakdown theo loại và trend 6 tháng gần nhất. |
-| `POST` | `/` | `CREATE` | Tạo phiếu mới. Nếu có `case_id`, tự động tạo record cấn trừ trong `kgara_case_settlements`. |
-| `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. |
+| `POST` | `/` | `CREATE` | Tạo phiếu mới. Nếu có `case_id`, tự động tạo record cấn trừ trong `kgara_case_settlements`. Trả về `KgaraCashflowVoucherResponseDto`. |
+| `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. Trả về `KgaraCashflowVoucherResponseDto`. |
 | `DELETE` | `/:id` | `DELETE` | Xóa phiếu thu/chi, đồng thời xóa record cấn trừ liên kết. |
 
-## 5. Logic Nghiệp vụ Trọng tâm
+## 5. Logic Nghiệp vụ & Kiến trúc Chuẩn Hóa (/api-service-refactor)
+- **Zero-Entity Leaking Mandate (Pattern D)**:
+  - 100% Endpoints của `GarageCashflowController` không trả trực tiếp TypeORM Entity `KgaraCashflowVoucher` ra ngoài.
+  - Sử dụng hàm chuẩn hóa `toKgaraCashflowVoucherResponse(voucher: KgaraCashflowVoucher): KgaraCashflowVoucherResponseDto` để map dữ liệu an toàn.
+  - Quan hệ `case` và `erpBankTransaction` được bóc tách sang `KgaraCashflowCaseResponseDto` và `KgaraCashflowBankTransactionResponseDto`, triệt tiêu hoàn toàn rò rỉ các trường nhạy cảm hoặc cấu trúc entity nội bộ.
+- **Query Engine Selective Projection (Pattern C)**:
+  - Trong `GarageCashflowQueryEngine.listVouchers`, tuyệt đối KHÔNG sử dụng `leftJoinAndSelect('voucher.case', 'case')` vì `KgaraCase` chứa cột `raw_data` JSONB rất lớn (>100KB-500KB từ danh sách vật tư/công dịch vụ).
+  - Sử dụng `leftJoin` kết hợp `addSelect` chỉ chiếu đúng 5 trường cần thiết: `case.id`, `case.soChungTu`, `case.bienSoXe`, `case.khachHangName`, `case.khachHangCode`.
+  - Giúp tối ưu hóa tốc độ truy vấn database, tiết kiệm băng thông và giảm 99% kích thước bộ nhớ trả về.
+- **Express Body Parser & Exception Handling (10MB & HTTP 413)**:
+  - Cấu hình tại `erp-api/src/main.ts` nâng giới hạn `bodyParser` lên 10MB: `json({ limit: '10mb' })` và `urlencoded({ limit: '10mb', extended: true })`.
+  - `AllExceptionsFilter` (`src/common/filters/all-exceptions.filter.ts`) tự động bắt lỗi `PayloadTooLargeError` hoặc HTTP status 413 từ Express/Body-Parser để trả về mã chuẩn HTTP 413 Payload Too Large thay vì rơi vào 500 Internal Server Error.
 - **Transaction Safety**: Toàn bộ thao tác Create, Update, Delete đều sử dụng `queryRunner.startTransaction()` để đảm bảo tính nhất quán (ACID) giữa bảng `kgara_cashflow_vouchers` và `kgara_case_settlements`.
 - **Auto-Sync Settlements**:
   - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType = 'KH'`.
@@ -76,9 +87,9 @@ src/kgara-api-core/
 - **Sorting & Filtering Động**: Hỗ trợ sort nhiều field (parse từ `sorts` query param CSV) mapping chuẩn xác với entity TypeORM. Sử dụng `applyMultiKeywordFilter` cho tìm kiếm đa từ khóa.
 
 ## 6. Tích hợp Liên Module
-- **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát). Khi get list hoặc view detail, queryBuilder `leftJoinAndSelect` để lấy `transactionCode` thay vì chỉ dùng UUID.
+- **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát). Khi get list hoặc view detail, queryBuilder `leftJoin` chọn lọc `id`, `transactionCode`, `transDate`, `amount`.
 - **erp-cash-vouchers**: Lưu tham chiếu qua trường `erpCashVoucherId`.
-- **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua join.
+- **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua selective join.
 
 ## 7. Cấu trúc Source Code Frontend (Web)
 Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/ui-atomic-refactor`:
@@ -110,6 +121,9 @@ src/modules/garage/components/
 ```
 - **Cấu trúc Điều hướng & Tích hợp Trang (`/garage-debts` & Sidebar)**:
   - **Tích hợp Tab Thu Chi Xưởng vào Công nợ Garage (`GarageDebts`)**: Danh sách thu chi xưởng (`GarageCashflowList`) được tích hợp làm tab thứ 4 (tab cuối cùng: `Tổng quan` ➔ `Phải thu` ➔ `Phải trả` ➔ `Thu chi xưởng`) trong trang Công nợ Garage (`GarageDebts` - route `/garage-debts`).
+  - **Tối Ưu Hóa & Làm Sạch Form State Drawer (`GarageCashflowDrawer.hook.ts`)**:
+    - Khi mở drawer chỉnh sửa, form state được khởi tạo tường minh từng trường (không dùng `...voucher` spread) để ngăn chặn việc ngậm đối tượng `case` và các thuộc tính JSONB phức tạp.
+    - Trước khi gửi request `PUT /:id` hoặc `POST /`, payload được sanitize sạch sẽ, chỉ giữ lại đúng các trường hợp lệ của `UpdateGarageCashflowVoucherDto` / `CreateGarageCashflowVoucherDto` (loại bỏ `case`, `rawData`, `erpBankTransaction`, `createdAt`, v.v.), giảm kích thước request từ >100KB xuống dưới 500 bytes.
   - **Secondary Drawer Icon cho Cột Mã PDV (`caseCode`)**:
     - Trong bảng `GarageCashflowTable`, tại cột **Mã PDV**, thành phần `TableText` được kích hoạt thuộc tính `onDrawerClick` (icon `PanelRightOpen`, tooltip `"Xem chi tiết phiếu dịch vụ"`).
     - Callback `onOpenCaseDetail` được truyền từ `GarageCashflowList` xuống bảng `GarageCashflowTable` và hàm helper `renderCaseCodeCell`.
@@ -128,9 +142,10 @@ src/modules/garage/components/
 Khi có thay đổi logic trong module này, bắt buộc phải:
 1. Kiểm tra typing API: `bun run type:check` (trong thư mục API)
 2. Chạy CI local: `bun run check:ci` (trong thư mục API)
-3. Chạy unit tests Controller & Facade Service API:
+3. Chạy unit tests Controller, Facade Service & Exception Filter API:
    - `bunx jest src/kgara-api-core/controllers/garage-cashflow.controller.spec.ts`
    - `bunx jest src/kgara-api-core/services/garage-cashflow.service.spec.ts`
+   - `bunx jest src/common/filters/all-exceptions.filter.spec.ts`
 4. Kiểm tra typing Web: `bunx tsc --noEmit` (trong thư mục Web)
 5. Chạy unit tests Web:
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-table/GarageCashflowTable.test.tsx`
