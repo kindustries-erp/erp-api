@@ -131,11 +131,15 @@ src/modules/garage/components/
   - **Tab Visibility RBAC**: Tab "Thu chi xưởng" chỉ hiển thị khi người dùng có quyền `GARAGE_CASHFLOW:READ`. Truy cập trực tiếp qua URL `?tab=cashflow` khi thiếu quyền sẽ tự động fallback an toàn về tab `overview`.
   - **Phân quyền Context Menu Xóa & Action Menu**: Chỉ người dùng có quyền `GARAGE_CASHFLOW:DELETE` (`canDelete === true` và `onDelete` được truyền vào) mới thấy mục "Xóa phiếu" trong chuột phải và nút ba chấm (`...`). Người không có quyền DELETE bị ẩn hoàn toàn 100% mục xóa (không render DOM item).
   - **Dọn dẹp Dead Code**: Trang tổng quan `GarageCashflowDashboard` và file `GarageCashflowPage.tsx` đã được xóa bỏ hoàn toàn. Route alias `"garage-cashflow"` trong `App.tsx` tự động chuyển tiếp sang `() => <GaragePartners initialTab="cashflow" />`.
-  - **Sidebar GARAGE Rút Gọn**: Section GARAGE trên Sidebar chỉ còn:
-    - **Mục 1**: `Dịch vụ Garage` (`GarageNavGroup` | Icon: `Car`) - menu tổng dropdown gom 2 submenu:
-      - `Phiếu dịch vụ` (`garage-cases`)
-      - `Công nợ garage` (`garage-debts`)
-    - **Mục 2**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
+  - **Chuẩn Hóa Column Filter & Query Engine (`GarageCashflowQueryEngine`)**:
+    - Hỗ trợ lọc ngày độc lập `transDate` (`from..to`) và `createdAt`.
+    - Hỗ trợ lọc tiền vào (`thu`: `voucher_type = 'RECEIPT'`) và tiền ra (`chi`: `voucher_type = 'PAYMENT'`) theo khoảng tiền `min..max` hoặc danh sách số tiền chính xác.
+    - Hỗ trợ lọc rỗng `__BLANK__` cho các trường nullable (`caseCode`, `licensePlate`, `note`).
+    - Phía client: cột `paymentMethod` sử dụng Client Select Filter (`filterOptions`).
+  - **Sidebar GARAGE Phẳng Hóa**: Section GARAGE trên Sidebar đã được phẳng hóa thành 3 mục trực tiếp (không còn popup submenu trung gian):
+    - **Mục 1**: `Phiếu dịch vụ` (`garage-cases` | Icon: `FileSpreadsheet`)
+    - **Mục 2**: `Công nợ garage` (`garage-debts` | Icon: `Users`)
+    - **Mục 3**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
   - **Command Palette Search**: Item `garage-cashflow` độc lập đã được gỡ bỏ; các từ khóa "thu chi xưởng", "dòng tiền xưởng", "sổ quỹ", "garage cashflow" được tích hợp trực tiếp vào mục `garage-debts`.
 
 ## 8. Quy tắc Kiểm thử & Báo cáo Chất lượng
