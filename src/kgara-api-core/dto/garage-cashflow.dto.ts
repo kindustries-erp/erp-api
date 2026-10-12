@@ -5,6 +5,7 @@ import {
   IsString,
   IsIn,
   IsUUID,
+  IsPositive,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -230,4 +231,49 @@ export function toKgaraCashflowVoucherResponse(
         }
       : null,
   };
+}
+
+export class CheckKgaraCashflowDuplicateQueryDto {
+  @IsNumber()
+  @IsPositive()
+  @Type(() => Number)
+  amount: number;
+
+  @IsString()
+  @IsOptional()
+  transDate?: string;
+
+  @IsUUID()
+  @IsOptional()
+  caseId?: string;
+
+  @IsString()
+  @IsOptional()
+  licensePlate?: string;
+
+  @IsUUID()
+  @IsOptional()
+  excludeId?: string;
+}
+
+export class KgaraCashflowDuplicateItemDto {
+  id: string;
+  voucherCode: string;
+  voucherType: 'RECEIPT' | 'PAYMENT';
+  amount: number;
+  transDate: string;
+  licensePlate?: string | null;
+  caseCode?: string | null;
+  partnerName?: string | null;
+}
+
+export class KgaraCashflowDuplicateGroupDto {
+  items: KgaraCashflowDuplicateItemDto[];
+  total: number;
+}
+
+export class KgaraCashflowDuplicateResponseDto {
+  nearbyDate: KgaraCashflowDuplicateGroupDto;
+  sameCase: KgaraCashflowDuplicateGroupDto;
+  samePlate: KgaraCashflowDuplicateGroupDto;
 }

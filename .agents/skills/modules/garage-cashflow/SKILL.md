@@ -158,3 +158,16 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
 
 ## Liên kết với Công nợ Garage (`garage-debts`)
 - Dòng `kgara_case_settlements.settlement_type = 'PAYMENT'` (sinh từ phiếu chi/cấn trừ phải trả) là nguồn "Đã chi" của tab Tổng quan và tab Phải trả ở `/garage-debts` (xem `garage-customers/SKILL.md` mục 8.1-8.2). Chỉ `RECEIPT` được cộng vào `kgara_cases.tien_da_thanh_toan`. `payer_type` của PAYMENT hiện đều là `KH`, không dùng để lọc.
+
+## Cảnh báo phiếu trùng khi tạo/sửa phiếu thu chi (duplicate-check)
+- **API**: `GET /api/v1/greenway/cashflow-vouchers/duplicate-check?amount=&transDate=&caseId=&licensePlate=&excludeId=`, quyền `GARAGE_CASHFLOW:CREATE` **hoặc** `UPDATE` (`@RequireAnyPermissions`). Chỉ đọc, không ghi DB, không migration.
+- **Engine**: `services/engines/garage-cashflow-duplicate.engine.ts` (`GarageCashflowDuplicateEngine`), facade `GarageCashflowService.findPotentialDuplicates`. Provider khai báo trong `kgara-api-core.module.ts`.
+- **Quy tắc** (số tiền phải bằng đúng, không phân biệt Thu/Chi):
+  - `nearbyDate`: `trans_date` lệch ≤ 7 ngày so với ngày nhập.
+  - `sameCase`: cùng `case_id`, không giới hạn ngày (chỉ chạy khi có `caseId`).
+  - `samePlate`: cùng biển số (chuẩn hóa bỏ ký tự không phải chữ/số, in hoa; so với `COALESCE(license_plate, case.bienSoXe)`), không giới hạn ngày.
+  - Mỗi nhóm trả `{ items (tối đa 5, mới nhất trước), total }`. `excludeId` loại chính phiếu đang sửa.
+- **Web**: `useGarageCashflowDuplicateGuard` (trong `garage-cashflow-drawer/`) gọi check trước khi lưu. Có trùng thì mở `ConfirmModal` (`danger={false}`) với nội dung `GarageCashflowDuplicateWarning` (molecule). Không trùng hoặc check lỗi (fail-open) thì lưu ngay.
+  - Tạo mới: luôn check khi `amount > 0`. Sửa: chỉ check khi đổi `amount`, `transDate`, `caseId` hoặc biển số.
+  - i18n: namespace `garage:cashflowDuplicate.*` trong `modules/garage/locales/{vi,en}.ts`. `useT` không nội suy nên component tự `.replace("{{x}}")`.
+- **Test**: `garage-cashflow-duplicate.engine.spec.ts`, `GarageCashflowDuplicateWarning.test.tsx`, `useGarageCashflowDuplicateGuard.test.tsx`, nhóm "duplicate warning" trong `GarageCashflowDrawer.test.tsx`.

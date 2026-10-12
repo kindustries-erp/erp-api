@@ -1,5 +1,6 @@
 import { GarageCashflowService } from './garage-cashflow.service';
 import { GarageCashflowQueryEngine } from './engines/garage-cashflow-query.engine';
+import { GarageCashflowDuplicateEngine } from './engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './garage-cashflow-transaction.service';
 
 describe('GarageCashflowService (Facade)', () => {
@@ -8,6 +9,8 @@ describe('GarageCashflowService (Facade)', () => {
   let mockTransactionService: jest.Mocked<
     Partial<GarageCashflowTransactionService>
   >;
+
+  let mockDuplicateEngine: jest.Mocked<Partial<GarageCashflowDuplicateEngine>>;
 
   beforeEach(() => {
     mockQueryEngine = {
@@ -26,10 +29,22 @@ describe('GarageCashflowService (Facade)', () => {
       deleteVoucher: jest.fn().mockResolvedValue({ success: true } as any),
     };
 
+    mockDuplicateEngine = {
+      findPotentialDuplicates: jest.fn().mockResolvedValue({ ok: true } as any),
+    };
+
     service = new GarageCashflowService(
       mockQueryEngine as GarageCashflowQueryEngine,
       mockTransactionService as GarageCashflowTransactionService,
+      mockDuplicateEngine as GarageCashflowDuplicateEngine,
     );
+  });
+
+  it('delegates findPotentialDuplicates to duplicateEngine', async () => {
+    const q = { amount: 1000 } as any;
+    const res = await service.findPotentialDuplicates(q);
+    expect(mockDuplicateEngine.findPotentialDuplicates).toHaveBeenCalledWith(q);
+    expect(res).toEqual({ ok: true });
   });
 
   it('delegates createVoucher to transactionService', async () => {
