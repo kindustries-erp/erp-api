@@ -80,6 +80,7 @@ export class KgaraSuppliersDebtQueryEngine {
 
   mapColumnToDbField(col: string): string | null {
     if (
+      col === 'customer' ||
       col === 'customerName' ||
       col === 'khachHangName' ||
       col === 'supplierName' ||
@@ -193,6 +194,67 @@ export class KgaraSuppliersDebtQueryEngine {
             continue;
           }
 
+          if (col === 'customer') {
+            const nameCol =
+              'COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang")';
+            const codeCol =
+              'COALESCE("c"."khach_hang_code", "gp"."raw_data"->>\'MaKhachHang\', "gp"."ten_khach_hang")';
+            if (values[0] === '__ALL_MATCHING__') {
+              const searchVal = (values[1] || '').trim();
+              if (searchVal) {
+                whereConditions.push(
+                  `(${nameCol} ILIKE $${queryParams.length + 1} OR ${codeCol} ILIKE $${queryParams.length + 1})`,
+                );
+                queryParams.push(`%${searchVal}%`);
+              }
+              continue;
+            }
+
+            if (values[0] === '__EXACT__') {
+              const exactVal = (values[1] || '').trim();
+              if (exactVal) {
+                whereConditions.push(
+                  `(${nameCol} = $${queryParams.length + 1} OR ${codeCol} = $${queryParams.length + 1})`,
+                );
+                queryParams.push(exactVal);
+              }
+              continue;
+            }
+
+            const hasBlank = values.includes('__BLANK__');
+            const realVals = values.filter((v) => v !== '__BLANK__');
+            if (hasBlank && realVals.length > 0) {
+              whereConditions.push(
+                `(${nameCol} IS NULL OR ${nameCol} = '' OR ${nameCol} = ANY($${queryParams.length + 1}) OR ${codeCol} = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            } else if (hasBlank) {
+              whereConditions.push(`(${nameCol} IS NULL OR ${nameCol} = '')`);
+            } else if (
+              realVals.length === 1 &&
+              (realVals[0].includes(';') || realVals[0].includes(','))
+            ) {
+              const multiParts = realVals[0]
+                .split(/[;,]/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              if (multiParts.length > 0) {
+                const multiConds = multiParts.map(
+                  (_, i) =>
+                    `(${nameCol} ILIKE $${queryParams.length + 1 + i} OR ${codeCol} ILIKE $${queryParams.length + 1 + i})`,
+                );
+                whereConditions.push(`(${multiConds.join(' OR ')})`);
+                queryParams.push(...multiParts.map((p) => `%${p}%`));
+              }
+            } else if (realVals.length > 0) {
+              whereConditions.push(
+                `(${nameCol} = ANY($${queryParams.length + 1}) OR ${codeCol} = ANY($${queryParams.length + 1}))`,
+              );
+              queryParams.push(realVals);
+            }
+            continue;
+          }
+
           const dbCol = this.mapColumnToDbField(col);
           if (!dbCol) continue;
 
@@ -257,6 +319,48 @@ export class KgaraSuppliersDebtQueryEngine {
         >;
         for (const [col, rawVal] of Object.entries(searchObj)) {
           if (!rawVal || !rawVal.trim()) continue;
+
+          if (col === 'customer') {
+            const nameCol =
+              'COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang")';
+            const codeCol =
+              'COALESCE("c"."khach_hang_code", "gp"."raw_data"->>\'MaKhachHang\', "gp"."ten_khach_hang")';
+            const val = rawVal.trim();
+            if (val === '__BLANK__' || val === '(Trống)') {
+              whereConditions.push(`(${nameCol} IS NULL OR ${nameCol} = '')`);
+            } else if (
+              val.startsWith('exact:') ||
+              (val.startsWith('"') && val.endsWith('"') && val.length > 2)
+            ) {
+              const exactVal = val.startsWith('exact:')
+                ? val.slice(6).trim()
+                : val.slice(1, -1).trim();
+              whereConditions.push(
+                `(${nameCol} = $${queryParams.length + 1} OR ${codeCol} = $${queryParams.length + 1})`,
+              );
+              queryParams.push(exactVal);
+            } else if (val.includes(',') || val.includes(';')) {
+              const parts = val
+                .split(/[;,]/)
+                .map((p) => p.trim())
+                .filter(Boolean);
+              if (parts.length > 0) {
+                const conds = parts.map(
+                  (_, i) =>
+                    `(${nameCol} ILIKE $${queryParams.length + 1 + i} OR ${codeCol} ILIKE $${queryParams.length + 1 + i})`,
+                );
+                whereConditions.push(`(${conds.join(' OR ')})`);
+                queryParams.push(...parts.map((p) => `%${p}%`));
+              }
+            } else {
+              whereConditions.push(
+                `(${nameCol} ILIKE $${queryParams.length + 1} OR ${codeCol} ILIKE $${queryParams.length + 1})`,
+              );
+              queryParams.push(`%${val}%`);
+            }
+            continue;
+          }
+
           const dbCol = this.mapColumnToDbField(col);
           if (!dbCol) continue;
 
@@ -374,7 +478,11 @@ export class KgaraSuppliersDebtQueryEngine {
           sortParts.push(`"license_plate" ${dir}`);
         else if (col === 'customerCode' || col === 'supplierCode')
           sortParts.push(`"customer_code" ${dir}`);
-        else if (col === 'customerName' || col === 'supplierName')
+        else if (
+          col === 'customer' ||
+          col === 'customerName' ||
+          col === 'supplierName'
+        )
           sortParts.push(`"customer_name" ${dir}`);
         else if (col === 'caseCount' || col === 'soPhieu')
           sortParts.push(`"case_count" ${dir}`);
@@ -513,6 +621,170 @@ export class KgaraSuppliersDebtQueryEngine {
     pageSize: string | number = 20,
     filtersStr?: string,
   ) {
+    if (column === 'maxAgingDays') {
+      const options = ['0-30', '31-60', '61-90', '>90'];
+      const filtered = search
+        ? options.filter((opt) =>
+            opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
+    const dateExpr =
+      'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
+    const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
+    const licensePlateExpr =
+      'COALESCE(NULLIF(TRIM(COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from \'Biển số: ([^ ]+)\'))), \'\'), \'CHUA_CO_BKS\')';
+
+    if (column === 'caseCount') {
+      const whereConditions: string[] = [
+        '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
+        `${costExpr} > 0`,
+        `${dateExpr} >= $1`,
+      ];
+      const queryParams: any[] = ['2026-07-01'];
+      if (branchId) {
+        whereConditions.push(
+          `(COALESCE("c"."branch_external_id", "gp"."branch_external_id") = $${queryParams.length + 1})`,
+        );
+        queryParams.push(branchId);
+      }
+      const rawCounts = await this.caseRepo.manager.query(
+        `
+        SELECT cnt::text AS value FROM (
+          SELECT COUNT(DISTINCT COALESCE("c"."so_chung_tu", "gp"."vu_viec_code")) AS cnt
+          FROM "kgara_cases" "c"
+          FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+          WHERE ${whereConditions.join(' AND ')}
+          GROUP BY ${licensePlateExpr}
+        ) sub
+        GROUP BY cnt
+        ORDER BY cnt ASC
+      `,
+        queryParams,
+      );
+      const items = rawCounts.map((r: any) => String(r.value)).filter(Boolean);
+      const filtered = search
+        ? items.filter((it: string) => it.includes(search))
+        : items;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
+    const isCustomerCol = column === 'customer' || column === 'customerName';
+    if (isCustomerCol) {
+      const nameCol = 'COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang")';
+      const codeCol =
+        'COALESCE("c"."khach_hang_code", "gp"."raw_data"->>\'MaKhachHang\', "gp"."ten_khach_hang")';
+
+      const safePage = Math.max(parseInt(String(page || '1'), 10) || 1, 1);
+      const safePageSize = Math.max(
+        parseInt(String(pageSize || '20'), 10) || 20,
+        1,
+      );
+
+      const whereConditions: string[] = [
+        '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
+        `${costExpr} > 0`,
+        `${dateExpr} >= $1`,
+        `${nameCol} IS NOT NULL`,
+        `CAST(${nameCol} AS TEXT) != ''`,
+      ];
+      const queryParams: any[] = ['2026-07-01'];
+
+      if (branchId) {
+        whereConditions.push(
+          `(COALESCE("c"."branch_external_id", "gp"."branch_external_id") = $${queryParams.length + 1})`,
+        );
+        queryParams.push(branchId);
+      }
+
+      if (search) {
+        whereConditions.push(
+          `(${nameCol} ILIKE $${queryParams.length + 1} OR ${codeCol} ILIKE $${queryParams.length + 1})`,
+        );
+        queryParams.push(`%${search}%`);
+      }
+
+      if (filtersStr) {
+        try {
+          const filters = JSON.parse(filtersStr) as Record<string, string[]>;
+          for (const [col, values] of Object.entries(filters)) {
+            if (col === column) continue;
+            if (!values || values.length === 0) continue;
+            const filterDbCol = this.mapColumnToDbField(col);
+            if (!filterDbCol) continue;
+            const realVals = values.filter((v) => v !== '__BLANK__');
+            if (realVals.length > 0) {
+              whereConditions.push(
+                `${filterDbCol} = ANY($${queryParams.length + 1})`,
+              );
+              queryParams.push(realVals);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+      const countSql = `
+        SELECT COUNT(DISTINCT ${nameCol})::int AS total
+        FROM "kgara_cases" "c"
+        FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+        ${whereClause}
+      `;
+      const countRes = await this.caseRepo.manager.query(countSql, queryParams);
+      const total = parseInt(countRes[0]?.total || '0', 10);
+
+      const dataParams = [
+        ...queryParams,
+        safePageSize,
+        (safePage - 1) * safePageSize,
+      ];
+      const dataSql = `
+        SELECT
+          ${nameCol} AS value,
+          MAX(${codeCol}) AS extra
+        FROM "kgara_cases" "c"
+        FULL OUTER JOIN "kgara_gross_profit" "gp" ON "gp"."vu_viec_code" = "c"."so_chung_tu"
+        ${whereClause}
+        GROUP BY ${nameCol}
+        ORDER BY value ASC
+        LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}
+      `;
+      const rawRows = await this.caseRepo.manager.query(dataSql, dataParams);
+
+      return {
+        items: rawRows
+          .map((r: any) => {
+            const val = String(r.value || '').trim();
+            const extra = String(r.extra || '').trim();
+            return {
+              label: extra && extra !== val ? `${val} (${extra})` : val,
+              value: val,
+            };
+          })
+          .filter((it: any) => it.value),
+        total,
+        page: safePage,
+        totalPages: Math.ceil(total / safePageSize),
+      };
+    }
+
     const dbCol = this.mapColumnToDbField(column);
     if (!dbCol) {
       return { items: [], total: 0, page: 1, totalPages: 1 };
@@ -523,10 +795,6 @@ export class KgaraSuppliersDebtQueryEngine {
       parseInt(String(pageSize || '20'), 10) || 20,
       1,
     );
-
-    const dateExpr =
-      'COALESCE("c"."ngay_hoan_thanh_cong_viec", ("gp"."raw_data"->>\'NgayKetThuc\')::timestamp, "c"."ngay_phat_sinh")';
-    const costExpr = 'COALESCE("gp"."chi_phi", "c"."chi_phi", 0)::numeric';
 
     const whereConditions: string[] = [
       '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',

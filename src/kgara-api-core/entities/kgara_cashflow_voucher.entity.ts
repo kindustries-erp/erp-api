@@ -15,6 +15,8 @@ import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_ba
 @Index('IDX_gara_cashflow_code', ['voucherCode'])
 @Index('IDX_gara_cashflow_case', ['caseId'])
 @Index('IDX_gara_cashflow_trans_date', ['transDate'])
+@Index('IDX_gara_cashflow_license_plate', ['licensePlate'])
+@Index('IDX_gara_cashflow_payment_method', ['paymentMethod'])
 export class KgaraCashflowVoucher {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,6 +35,30 @@ export class KgaraCashflowVoucher {
 
   @Column({ type: 'uuid', name: 'case_id', nullable: true })
   caseId?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'license_plate',
+    nullable: true,
+  })
+  licensePlate?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'payment_method',
+    nullable: true,
+  })
+  paymentMethod?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'partner_name',
+    nullable: true,
+  })
+  partnerName?: string;
 
   @Column({ type: 'uuid', name: 'erp_bank_transaction_id', nullable: true })
   erpBankTransactionId?: string;

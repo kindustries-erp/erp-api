@@ -10,10 +10,10 @@ description: Module tri thức Quản lý Hồ sơ & Sổ Công nợ Khách Hàn
 Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-customers` thuộc `kgara-api-core` backend và `modules/garage` frontend) chịu trách nhiệm tổng hợp, theo dõi, phân tích và quản lý toàn bộ công nợ phải thu của khách hàng phát sinh từ các phiếu dịch vụ sửa chữa xe tại xưởng dịch vụ KGara (Greenway).
 
 ### Các Nghiệp vụ Trọng tâm:
-- **Tổng hợp Công nợ theo Biển Số Xe (`GET /cases/customers-debt`)**:
+- **Tổng hợp Công nợ theo Biển Số Xe (`GET /cases/customers-debt` & `GET /payables/suppliers-debt`)**:
   - Nhóm dữ liệu phiếu dịch vụ từ bảng `kgara_cases` theo Biển số xe (`COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS')`).
   - Cột đầu tiên của bảng sau `#` là **Biển số xe** (`licensePlate`), các bản ghi chưa có BKS hiển thị `— (Chưa có BKS)`.
-  - Cột **Khách hàng** gom Tên KH (`MAX("case"."khach_hang_name")`) và Mã KH (`MAX("case"."khach_hang_code")`) về 1 cột hiển thị 2 dòng qua molecule `GarageCaseCustomerCell`, cho phép click tên KH mở `CustomerDetailDrawer`.
+  - Cột **Khách hàng** (`customer`): Đồng bộ 100% trên cả 2 tab **Phải thu** (`GarageDebtsTable`) và **Phải trả** (`GaragePayablesTable`), gom Tên KH (`khach_hang_name`) và Mã KH (`khach_hang_code`) về 1 cột duy nhất hiển thị 2 dòng qua molecule `GarageCaseCustomerCell`, cho phép click tên KH mở Detail Drawer.
   - **Mốc thời gian theo dõi**: Áp dụng mốc lọc theo ngày hoàn thành (`ngay_hoan_thanh_cong_viec >= '2026-07-01'`).
   - **Chỉ tính Phiếu Hoàn tất**: Chỉ tổng hợp các phiếu dịch vụ đã hoàn thành (`ngay_hoan_thanh_cong_viec IS NOT NULL` và `tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu ILIKE '%kết thúc%' / '%hoàn tất%'`), tự động loại trừ các xe chưa hoàn thành.
   - **Xe chưa hoàn thành (In-Progress Pipeline)**: Không tính vào công nợ phải thu và không tính tuổi nợ (aging = 0).
@@ -35,7 +35,10 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
 - **Bộ Lọc Đa Chiều Nâng Cao & Chuẩn Hóa Bảng (`/standardize-table`)**:
   - Hỗ trợ đầy đủ bộ lọc cột qua `TableColumnHeaderFilter`: tìm kiếm từ khóa con (`ILIKE`), tìm kiếm chính xác, tìm kiếm nhiều từ khóa cách nhau bởi khoảng trắng hoặc dấu chấm phẩy (`;`).
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm khớp từ khóa không sót trang) và `__BLANK__` (lọc các xe chưa có BKS hoặc chưa có mã khách hàng).
-  - Tích hợp endpoint `GET /cases/customers-debt/column-options` hỗ trợ cascading filter qua tham số `filtersStr`.
+  - Tích hợp endpoint column-options (`GET /cases/customers-debt/column-options` & `GET /payables/suppliers-debt/column-options`):
+    - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về đầy đủ 4 bracket chuẩn `['0-30', '31-60', '61-90', '>90']` hỗ trợ tìm kiếm trong popover filter.
+    - Cột `caseCount` (SL Phiếu DV): Trả về mảng distinct số lượng phiếu dịch vụ.
+    - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
   - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
   - Phân rã kiến trúc Atomic Design 5 tầng, toàn bộ file component/organism khống chế nghiêm ngặt < 180 LoC.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
@@ -338,13 +341,16 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - `LicensePlateCell.type.ts` (4 LoC) & `LicensePlateCell.test.tsx` (16 LoC).
 - **Tầng 3 (Organisms `garage-payables-table`)**: `src/modules/garage/components/organisms/garage-payables-table/`:
   - Toàn bộ files tuân thủ nghiêm ngặt **< 180 LoC/file**:
-    - `GaragePayablesTable.tsx` (135 LoC): View chính với `SpreadsheetPageTemplate`, `getRowKey` duy nhất theo biển số xe (`${row.licensePlate || "no_bks"}_${row.customerCode}_${row.branchExternalId || "all"}`).
-    - `GaragePayablesTable.baseColumns.tsx` (172 LoC < 180 LoC): Cột STT (`40px`, center `{idx}`), Biển số xe (`LicensePlateCell`, Header Filter), Tên khách hàng (mở Drawer), Mã KH, SL Phiếu DV (badge), Chi phí báo giá, Còn phải chi.
-    - `GaragePayablesTable.agingColumns.tsx` (150 LoC): 4 cột phân tầng tuổi nợ và Tuổi nợ & Rủi ro.
-    - `GaragePayablesTable.cells.tsx` (127 LoC): Cells hiển thị tiến độ thanh toán và nhãn cảnh báo (No Blue Mandate).
+    - `GaragePayablesTable.tsx` (92 LoC): View chính với `SpreadsheetPageTemplate`, `getRowKey` duy nhất theo biển số xe (`${row.licensePlate || "no_bks"}_${row.customerCode}_${row.branchExternalId || "all"}`).
+    - `GaragePayablesTable.baseColumns.tsx` (147 LoC < 180 LoC): Cột STT (`40px`, center `{idx}`), Biển số xe (`LicensePlateCell`), Khách hàng (gom Tên KH & Mã KH về 1 cột qua `GarageCaseCustomerCell`, `size: 260`), SL Phiếu DV (pill bo tròn `rounded-full` chuẩn hóa `size: 120, minSize: 105`), Chi phí báo giá, Còn phải chi.
+    - `GaragePayablesTable.agingColumns.tsx` (151 LoC): 4 cột phân tầng tuổi nợ và Tuổi nợ & Rủi ro (`maxAgingDays`, `size: 210, minSize: 180`).
+    - `GaragePayablesTable.cells.tsx` (112 LoC): `SupplierCaseCountCell` (pill rounded-full + FileText icon + nhãn "phiếu" + tooltip + hover scale) và `SupplierAgingDaysCell` (tái sử dụng trực tiếp `AgingDaysCell` từ `GarageDebtsAgingCell` với thanh progress bar 4 màu, badge phân tầng và tooltip `GarageDebtsAgingTooltip`).
     - `GaragePayablesTable.summary.tsx` (157 LoC): Hàng tổng kết `<SubtotalSummaryCell>` truyền đủ `cumulativeCount`, `cumulativeAmount`.
     - `GaragePayablesTable.export.ts` (57 LoC): Quick CSV export xuất kèm cột Biển số xe.
-    - `GaragePayablesTable.test.tsx` (77 LoC): Co-located Vitest test suite pass 100%.
+    - `GaragePayablesTable.test.tsx` (82 LoC): Co-located Vitest test suite pass 100%.
+- **Tìm kiếm Khách hàng theo cả Mã KH và Tên KH (Cả 2 tab Phải thu & Phải trả)**:
+  - Cả 2 endpoints `GET /cases/customers-debt/column-options` và `GET /payables/suppliers-debt/column-options` khi truy vấn cột `customer` đều hỗ trợ tìm kiếm trên cả `khach_hang_name` và `khach_hang_code` (`(name ILIKE :search OR code ILIKE :search)`).
+  - Kết quả trả về options dạng `{ label: `${name} (${code})`, value: name }` giúp người dùng vừa thấy mã và tên, vừa lọc chính xác theo tên khách hàng trong query.
 - **Tích Hợp Drawer**:
   - Nhấp vào Khách hàng hoặc SL Phiếu DV trên Tab Phải trả mở trực tiếp `GarageCustomerDetailDrawer` để xem toàn bộ danh sách vụ việc của khách hàng.
 

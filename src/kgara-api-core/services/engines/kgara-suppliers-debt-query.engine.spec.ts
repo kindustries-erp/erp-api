@@ -36,6 +36,7 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
   });
 
   it('should map column names to db fields correctly', () => {
+    expect(engine.mapColumnToDbField('customer')).toContain('khach_hang_name');
     expect(engine.mapColumnToDbField('licensePlate')).toContain('bien_so_xe');
     expect(engine.mapColumnToDbField('bienSoXe')).toContain('bien_so_xe');
     expect(engine.mapColumnToDbField('customerName')).toContain(
@@ -44,6 +45,54 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(engine.mapColumnToDbField('customerCode')).toContain(
       'khach_hang_code',
     );
+  });
+
+  it('should return maxAgingDays options correctly', async () => {
+    const res = await engine.getSuppliersDebtColumnOptions(
+      'BR-01',
+      'maxAgingDays',
+    );
+    expect(res.items).toEqual(['0-30', '31-60', '61-90', '>90']);
+    expect(res.total).toBe(4);
+
+    const filtered = await engine.getSuppliersDebtColumnOptions(
+      'BR-01',
+      'maxAgingDays',
+      '60',
+    );
+    expect(filtered.items).toEqual(['31-60']);
+    expect(filtered.total).toBe(1);
+  });
+
+  it('should return caseCount options correctly', async () => {
+    caseRepo.manager.query.mockResolvedValueOnce([
+      { value: '1' },
+      { value: '2' },
+      { value: '5' },
+    ]);
+
+    const res = await engine.getSuppliersDebtColumnOptions(
+      'BR-01',
+      'caseCount',
+    );
+    expect(res.items).toEqual(['1', '2', '5']);
+    expect(res.total).toBe(3);
+  });
+
+  it('should return distinct customer options from db with label formatted', async () => {
+    caseRepo.manager.query
+      .mockResolvedValueOnce([{ total: '2' }])
+      .mockResolvedValueOnce([
+        { value: 'CÔNG TY A', extra: 'GR-KHA-001' },
+        { value: 'CÔNG TY B', extra: 'CÔNG TY B' },
+      ]);
+
+    const res = await engine.getSuppliersDebtColumnOptions('BR-01', 'customer');
+    expect(res.items).toEqual([
+      { label: 'CÔNG TY A (GR-KHA-001)', value: 'CÔNG TY A' },
+      { label: 'CÔNG TY B', value: 'CÔNG TY B' },
+    ]);
+    expect(res.total).toBe(2);
   });
 
   it('should query and return suppliers debt grouped by license plate', async () => {
