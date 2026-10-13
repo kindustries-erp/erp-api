@@ -22,20 +22,22 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Cột Kỳ báo cáo (`period`) tích hợp `<DateRangeColumnSlot>` lọc khoảng ngày/tháng và các quick presets.
     - Context Menu (Row Actions) 4 thao tác chuẩn hóa: **Xem chi tiết** (`Eye`), **Chỉnh sửa** (`Pencil`), **Nhân đôi** (`Copy` - prefill toàn bộ dữ liệu vào form tạo mới), **Xóa** (`Trash2`).
     - Xem/sửa/nhân đôi qua 1-column StandardFormDrawer (`GarageOpexDrawer.tsx`) tích hợp xem trước số tiền bằng chữ (Vietnamese Currency Words) và định dạng số.
-- **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx` & `GarageMonthDetailDrawer.tsx`)**:
+- **Tiến độ Dòng tiền & Công nợ Dịch vụ (`garage-payment-progress-card` & `GarageMonthDetailDrawer.tsx`)**:
+  - **Vị trí hiển thị**: Đã được di dời sang tab **Tổng quan Công nợ** (`/garage-debts?tab=overview`, bên trong `GarageDebtsDashboardTab.tsx`), đặt ngay bên dưới khối biểu đồ phân tích tuổi nợ và trên các drawer. Đồng thời, tab mặc định của màn hình phiếu dịch vụ xưởng (`/garage-cases`) được chuẩn hóa từ `?tab=dashboard` thành `?tab=overview`.
+  - **Kiến trúc Atomic 5 tầng (Organism L3)**: Nằm tại `src/modules/garage/components/organisms/garage-payment-progress-card/`, toàn bộ 100% files khống chế < 180 LoC, co-located vitest test `GaragePaymentProgressCard.test.tsx`, hỗ trợ self-fetching React Query tự động khi không truyền props.
   - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
   - Switch chuyển Tab pill bo tròn gọn gàng chuẩn Dashboard Tổng quan với 2 lựa chọn: **Phải Thu** & **Phải Trả**.
   - Tiêu đề cột tinh gọn & đồng bộ, độ rộng 200px cho toàn bộ các cột tiền tệ, bố cục chuẩn hóa:
-    - Tab **Phải Thu**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Doanh Thu` (200px) | `Tổng Phải Thu` (200px) | `Đã Thu` (200px) | `Còn Phải Thu` (200px, nền neutral) | `Còn Phải Thu Có HĐ` (200px) | `Còn Phải Thu Không HĐ` (200px).
-    - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (200px) | `Đã Trả` (200px) | `Còn Phải Trả` (200px, nền neutral) | `Còn Phải Trả Có HĐ` (200px) | `Còn Phải Trả Không HĐ` (200px).
-  - Hàng tổng cộng (`summaryRow`): Hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
+    - Tab **Phải Thu**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Doanh Thu` (180px) | `Tổng Phải Thu` (190px) | `Đã Thu` (180px) | `Còn Phải Thu` (180px, nền neutral) | `Còn Phải Thu Có HĐ` (170px) | `Còn Phải Thu Không HĐ` (170px) | `Không Theo Dõi Công Nợ` (170px).
+    - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (190px) | `Đã Trả` (180px) | `Còn Phải Trả` (180px, nền neutral) | `Còn Phải Trả Có HĐ` (170px) | `Còn Phải Trả Không HĐ` (170px) | `Không Theo Dõi Công Nợ` (170px).
+  - Hàng tổng cộng (`summaryRow`): Phân rã thành `receiptSummaryRow.tsx` và `paymentSummaryRow.tsx`, hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
   - Hỗ trợ Context Menu chuột phải trên từng dòng tháng mở **`GarageMonthDetailDrawer.tsx`** (2-column StandardFormDrawer layout):
     - **Cột Trái (Main Content)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) với 8 cột chuẩn hóa: `#` (40px), `Loại nghiệp vụ` (200px), `Tổng phát sinh` (140px), `Đã thu/chi` (150px kèm thanh tiến độ), `Còn phải thu/trả` (140px), `Còn phải thu/trả có HĐ` (150px), `Còn phải thu/trả không HĐ` (150px), `Tỷ trọng (%)` (90px) và dòng tổng cộng `Σ`. Bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`), loại bỏ outer wrapper div chống double-border và đồng nhất nút `Xóa bộ lọc (N)` nằm bên trái cạnh tiêu đề section.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng và từng nhóm Phân loại Nghiệp vụ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
-  - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
+  - Bố trí tại `GarageDashboard` (`garage-cases?tab=overview`) với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
   - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
