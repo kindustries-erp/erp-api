@@ -155,6 +155,9 @@ export class ListKgaraCashflowVoucherQueryDto {
   sorts?: string | string[];
 
   @IsOptional()
+  'sorts[]'?: string | string[];
+
+  @IsOptional()
   @IsString()
   column_filters?: string;
 

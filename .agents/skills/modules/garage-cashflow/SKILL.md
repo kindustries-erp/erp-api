@@ -85,7 +85,10 @@ src/kgara-api-core/
   - Khi **cập nhật** Voucher (thay đổi `amount`, `date`, `caseId`), hệ thống dò tìm `KgaraCaseSettlement` qua `cashflowVoucherId` để cập nhật đồng bộ, hoặc xóa đi (nếu `caseId` bị gỡ), hoặc tạo mới (nếu `caseId` mới được thêm vào).
   - Khi **xóa** Voucher, hệ thống tự động kiểm tra và xóa `KgaraCaseSettlement` tương ứng nếu có.
 - **Mã tự động**: `voucherCode` nếu client không truyền lên sẽ tự sinh theo format: `PT-GARA-YYMMDD-XXX` hoặc `PC-GARA-YYMMDD-XXX`.
-- **Sorting & Filtering Động**: Hỗ trợ sort nhiều field (parse từ `sorts` query param CSV) mapping chuẩn xác với entity TypeORM. Sử dụng `applyMultiKeywordFilter` cho tìm kiếm đa từ khóa.
+- **Sorting & Filtering Động**: Hỗ trợ sort nhiều field (parse từ `sorts` query param CSV).
+  - ⚠️ **Lưu ý sống còn về TypeORM QueryBuilder Sorting**: Khi sử dụng phân trang `skip/take` hoặc `getManyAndCount()`, TypeORM gọi hàm nội bộ `createOrderByCombinedWithSelectExpression` và dùng `alias.metadata.findColumnWithPropertyPath(propertyPath)` để map cột. Do đó, các trường truyền vào `orderBy()` và `addOrderBy()` **BẮT BUỘC phải là Entity Property Path (camelCase)**: `voucher.transDate`, `voucher.createdAt`, `voucher.voucherCode`, `voucher.amount`, `voucher.partnerName`, `voucher.licensePlate`, `case.soChungTu`. Tuyệt đối KHÔNG truyền trực tiếp tên cột DB dạng snake_case (`voucher.trans_date`), vì sẽ gây crash runtime: `TypeError: Cannot read properties of undefined (reading 'databaseName')`.
+  - **Thứ tự sắp xếp mặc định**: `voucher.transDate DESC, voucher.createdAt DESC, voucher.voucherCode DESC` (ưu tiên ngày chứng từ mới nhất lên đầu; nếu trùng ngày thì xếp theo thời điểm tạo mới nhất; tie-breaker theo mã phiếu để đảm bảo phân trang ổn định). Phía web khởi tạo state `sorts = ['-transDate']`.
+  - Đối với bộ lọc `applyMultiKeywordFilter` và `getColumnOptions`: tiếp tục dùng raw SQL với snake_case (`case.khach_hang_name`, `case.bien_so_xe`, `case.so_chung_tu`).
 
 ## 6. Tích hợp Liên Module
 - **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát). Khi get list hoặc view detail, queryBuilder `leftJoin` chọn lọc `id`, `transactionCode`, `transDate`, `amount`.
@@ -145,6 +148,16 @@ src/modules/garage/components/
     - **Mục 2**: `Công nợ garage` (`garage-debts` | Icon: `Users`)
     - **Mục 3**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
   - **Command Palette Search**: Item `garage-cashflow` độc lập đã được gỡ bỏ; các từ khóa "thu chi xưởng", "dòng tiền xưởng", "sổ quỹ", "garage cashflow" được tích hợp trực tiếp vào mục `garage-debts`.
+  - **Chuẩn Hóa Sắp Xếp (Sorting Architecture) & Chuẩn /standardize-table (`sorts` & `sorts[]`)**:
+    - **Server-Side Tự Động Sort Mặc Định**: Khi client không truyền tham số sort (vừa vào tab Thu chi xưởng), `GarageCashflowQueryEngine` luôn tự động áp dụng `voucher.transDate DESC, voucher.createdAt DESC, voucher.voucherCode DESC`. Dữ liệu trả về luôn sắp xếp theo ngày giao dịch mới nhất mà không cần client phải chủ động bấm sort.
+    - **TypeORM Entity Property Paths**: Toàn bộ biểu thức `orderBy` và `addOrderBy` trong `GarageCashflowQueryEngine` bắt buộc sử dụng camelCase Property Path của Entity (`voucher.transDate`, `voucher.createdAt`, `voucher.voucherCode`, `voucher.amount`, `case.soChungTu`, v.v.), tránh dùng snake_case cột DB để không kích hoạt lỗi TypeORM `databaseName` khi gọi `getManyAndCount()`.
+    - **Client-Side Chuẩn `/standardize-table`**:
+      - `GarageCashflowTable.hook` và `useGarageCashflowList` khởi tạo `sorts: []` (mặc định rỗng, tuyệt đối không hardcode client sort state).
+      - Khi `sorts.length === 0`, client truyền `sorts: undefined` (Axios không gửi param `sorts` lên URL).
+      - `GarageCashflowTable.hook` cung cấp `toggleSort(key)` chuẩn 3 chu kỳ (`none -> asc -> desc -> none`) và kết nối trực tiếp vào `onSort` của `SpreadsheetPageTemplate`/`DataTable`.
+    - **Hỗ Trợ Đa Dạng Client (`sorts` và `sorts[]`)**:
+      - `ListKgaraCashflowVoucherQueryDto` khai báo cả `@IsOptional() sorts?: string | string[];` và `@IsOptional() 'sorts[]'?: string | string[];` để vượt qua NestJS `ValidationPipe` ({ `whitelist: true`, `forbidNonWhitelisted: true` }).
+      - `GarageCashflowQueryEngine` đọc `rawSorts = query.sorts || query['sorts[]']`, hỗ trợ parse an toàn cả mảng (`['-transDate']`), chuỗi đơn (`'-transDate'`), hoặc chuỗi nhiều trường phân tách bằng dấu phẩy (`'-transDate,createdAt'`).
 
 ## 8. Quy tắc Kiểm thử & Báo cáo Chất lượng
 Khi có thay đổi logic trong module này, bắt buộc phải:

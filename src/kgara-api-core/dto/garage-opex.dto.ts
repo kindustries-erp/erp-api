@@ -193,6 +193,9 @@ export class ListGarageOpexQueryDto {
   sorts?: string | string[];
 
   @IsOptional()
+  'sorts[]'?: string | string[];
+
+  @IsOptional()
   @IsString()
   cost_group?: string;
 

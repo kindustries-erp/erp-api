@@ -17,7 +17,10 @@ import {
 export class GarageDebtsAnalyticsController {
   constructor(private readonly service: GarageDebtsAnalyticsService) {}
 
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   @Get('debts-analytics')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
@@ -30,7 +33,10 @@ export class GarageDebtsAnalyticsController {
     );
   }
 
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   @Get('time-horizons/:horizon/cases')
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
