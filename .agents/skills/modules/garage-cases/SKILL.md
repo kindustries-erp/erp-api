@@ -825,3 +825,9 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
      - 100% i18n VI/EN qua hook `useI18n`.
      - 15/15 test files (46/46 unit tests) phân hệ `garage-case-preview` pass 100%. Type-check TypeScript sạch 100%.
 
+## 9.10. RBAC Tách Công Nợ khỏi Vụ Việc
+
+- Resource `garage` bảo vệ màn hình/API vụ việc; resource `garage_debts` (`ErpResource.GARAGE_DEBTS`) bảo vệ analytics, danh sách phải thu/phải trả, column options và chi tiết đối tác công nợ.
+- Migration `20261013100000-SeparateGarageDebtsPermissions` backfill toàn bộ action hiện có từ `garage` sang `garage_debts` trên `erp_local`; `down()` là no-op để không xóa quyền debts được cấp độc lập.
+- Các endpoint financial dùng chung cho case drawer và debts detail dùng `RequireAnyPermissions` với `GARAGE`/`GARAGE_DEBTS` cùng các resource accounting hiện có; endpoint cập nhật cấu hình vụ việc vẫn yêu cầu `GARAGE`.
+- Khi thêm endpoint debts mới, dùng `GARAGE_DEBTS` trực tiếp và tạo controller spec co-located kiểm tra metadata RBAC.

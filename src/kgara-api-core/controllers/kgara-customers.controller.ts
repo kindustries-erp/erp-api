@@ -21,7 +21,10 @@ export class KgaraCustomersController {
   ) {}
 
   @Get('cases/customers-debt')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getCustomersDebt(
     @BranchId() branchId: string,
     @Query('page') page: string = '1',
@@ -506,7 +509,10 @@ export class KgaraCustomersController {
   }
 
   @Get('cases/customers-debt/column-options')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getCustomersDebtColumnOptions(
     @BranchId() branchId: string,
     @Query('column') column: string,
@@ -835,7 +841,10 @@ export class KgaraCustomersController {
   }
 
   @Get('cases/by-customer/:customerCode')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getCasesByCustomer(
     @BranchId() branchId: string,
     @Param('customerCode') customerCode: string,
