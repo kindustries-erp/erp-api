@@ -116,6 +116,8 @@ export class GarageCashflowQueryEngine {
     else if (column === 'licensePlate')
       selectField = 'COALESCE(voucher.license_plate, case.bienSoXe)';
     else if (column === 'paymentMethod') selectField = 'voucher.payment_method';
+    else if (column === 'paymentContent')
+      selectField = 'voucher.payment_content';
     else if (column === 'note') selectField = 'voucher.note';
     else if (column === 'caseCode') selectField = 'case.soChungTu';
     else if (column === 'transDate') selectField = 'voucher.trans_date';
@@ -257,6 +259,23 @@ export class GarageCashflowQueryEngine {
             qb.andWhere('voucher.payment_method IN (:...vpaymentMethod)', {
               vpaymentMethod: vals,
             });
+          } else if (col === 'paymentContent') {
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.payment_content IN (:...vpaymentContent) OR voucher.payment_content IS NULL OR voucher.payment_content = '')",
+                { vpaymentContent: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(voucher.payment_content IS NULL OR voucher.payment_content = '')",
+              );
+            } else {
+              qb.andWhere('voucher.payment_content IN (:...vpaymentContent)', {
+                vpaymentContent: vals,
+              });
+            }
           } else if (col === 'note') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -466,6 +485,23 @@ export class GarageCashflowQueryEngine {
             qb.andWhere('voucher.payment_method IN (:...fpaymentMethod)', {
               fpaymentMethod: arr,
             });
+          } else if (col === 'paymentContent') {
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.payment_content IN (:...fpaymentContent) OR voucher.payment_content IS NULL OR voucher.payment_content = '')",
+                { fpaymentContent: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(voucher.payment_content IS NULL OR voucher.payment_content = '')",
+              );
+            } else {
+              qb.andWhere('voucher.payment_content IN (:...fpaymentContent)', {
+                fpaymentContent: arr,
+              });
+            }
           } else if (col === 'note') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
@@ -518,6 +554,13 @@ export class GarageCashflowQueryEngine {
               searchStr,
               'spaymentMethod',
             );
+          if (col === 'paymentContent')
+            applyMultiKeywordFilter(
+              qb,
+              'voucher.payment_content',
+              searchStr,
+              'spaymentContent',
+            );
           if (col === 'note')
             applyMultiKeywordFilter(qb, 'voucher.note', searchStr, 'snote');
           if (col === 'caseCode')
@@ -562,6 +605,7 @@ export class GarageCashflowQueryEngine {
         else if (field === 'licensePlate')
           dbField = 'COALESCE(voucher.licensePlate, case.bienSoXe)';
         else if (field === 'paymentMethod') dbField = 'voucher.paymentMethod';
+        else if (field === 'paymentContent') dbField = 'voucher.paymentContent';
 
         if (dbField) {
           qb.addOrderBy(dbField, direction);

@@ -19,7 +19,8 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `trans_date` (date) - Ngày giao dịch
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
-- `payment_method` (varchar 50, nullable) - Phương thức thanh toán (Tiền mặt, Chuyển khoản, Ứng trước, Thẻ tín dụng, Cấn trừ, Khác)
+- `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi (KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, Mua phụ tùng, OPEX, v.v.)
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
@@ -28,7 +29,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
-- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`.
+- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`.
 
 **Sự thay đổi ở** `kgara_case_settlements`:
 - Được thêm trường `cashflow_voucher_id` (uuid, FK -> `kgara_cashflow_vouchers.id`, `ON DELETE SET NULL`) để mapping tự động từ phiếu thu/chi sang phiếu cấn trừ.
@@ -96,23 +97,26 @@ Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, 
 ```text
 src/modules/garage/components/
 ├── molecules/
-│   └── payment-method-combobox/     (Molecule dropdown chọn phương thức TT, có option "Ứng trước", < 40 LoC)
+│   ├── payment-method-combobox/     (Molecule dropdown chọn phương thức TT thuần túy: Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác, < 40 LoC)
+│   └── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, v.v., < 40 LoC)
 └── organisms/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
-    │   ├── GarageCashflowTable.tsx  (Main component)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Biển số xe & Phương thức TT, < 140 LoC)
+    │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT đặt cạnh nhau, < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.helper.tsx (Renderers: Biển số xe, Badge Phương thức TT, < 150 LoC)
-    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts)
-    │   ├── GarageCashflowTable.type.ts
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & Nội dung TT, < 70 LoC)
+    │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
+    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
+    │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
     │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
     ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic bóc tách < 180 LoC)
     │   ├── index.ts
-    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 80 LoC)
-    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 130 LoC)
+    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 120 LoC)
+    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 220 LoC)
     │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
-    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Mã CT cạnh Ngày GD, thay SĐT bằng BKS, < 180 LoC)
+    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Thêm field dropdown Nội dung TT cạnh Phương thức TT, < 170 LoC)
+    │   ├── GarageCashflowDrawerViewSection.tsx (Sub-section View Mode bóc tách < 70 LoC)
     │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
     │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
     └── garage-cashflow-list/

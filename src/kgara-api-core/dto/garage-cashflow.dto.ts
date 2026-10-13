@@ -34,6 +34,10 @@ export class CreateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
+  paymentContent?: string;
+
+  @IsString()
+  @IsOptional()
   partnerName?: string;
 
   @IsString()
@@ -99,6 +103,10 @@ export class UpdateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentContent?: string;
 
   @IsString()
   @IsOptional()
@@ -174,6 +182,7 @@ export class KgaraCashflowVoucherResponseDto {
   licensePlate?: string | null;
   note?: string | null;
   paymentMethod?: string | null;
+  paymentContent?: string | null;
   referenceNumber?: string | null;
   caseId?: string | null;
   erpBankTransactionId?: string | null;
@@ -202,6 +211,7 @@ export function toKgaraCashflowVoucherResponse(
     licensePlate: entity.licensePlate ?? null,
     note: entity.note ?? null,
     paymentMethod: entity.paymentMethod ?? null,
+    paymentContent: entity.paymentContent ?? null,
     caseId: entity.caseId ?? null,
     erpBankTransactionId: entity.erpBankTransactionId ?? null,
     erpCashVoucherId: entity.erpCashVoucherId ?? null,

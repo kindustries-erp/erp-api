@@ -68,6 +68,7 @@ export class GarageCashflowTransactionService {
         caseId: dto.caseId || undefined,
         licensePlate: dto.licensePlate || caseRef?.bienSoXe || undefined,
         paymentMethod: dto.paymentMethod || undefined,
+        paymentContent: dto.paymentContent || undefined,
         partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
