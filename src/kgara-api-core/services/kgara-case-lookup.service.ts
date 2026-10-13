@@ -9,6 +9,7 @@ import { KgaraClientService } from '../kgara-client.service';
 import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
+import { KgaraCaseFinancialParserHelper } from '../helpers/kgara-case-financial-parser.helper';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,6 +88,11 @@ export class KgaraCaseLookupService {
     );
 
     await this.enrichCostForCase(caseData);
+
+    if (caseData.rawData) {
+      caseData.rawData.financialSummary =
+        KgaraCaseFinancialParserHelper.parseFinancialSummary(caseData.rawData);
+    }
 
     return caseData;
   }
@@ -198,6 +204,14 @@ export class KgaraCaseLookupService {
           VuViecCode: targetCase.soChungTu || codeOrId,
           VuViecName: null,
           VuViecID: targetCase.hdPhieuDichVuId,
+          costBreakdown: {
+            warehousePartsCost: 0,
+            outsourceCost: 0,
+            commissionCost: 0,
+            discountCost: 0,
+            otherCost: 0,
+            totalCost: cost,
+          },
           ...(targetCase.rawData as object),
         };
       }
@@ -210,6 +224,14 @@ export class KgaraCaseLookupService {
         VuViecCode: codeOrId,
         VuViecName: null,
         VuViecID: null,
+        costBreakdown: {
+          warehousePartsCost: 0,
+          outsourceCost: 0,
+          commissionCost: 0,
+          discountCost: 0,
+          otherCost: 0,
+          totalCost: 0,
+        },
       };
     }
 
@@ -217,6 +239,10 @@ export class KgaraCaseLookupService {
     const cost = Number(grossProfit.chiPhi) || 0;
     const profit = Number(grossProfit.loiNhuan) || rev - cost;
     const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
+
+    const journalItems = (grossProfit.rawData as any)?.journal_items || [];
+    const costBreakdown =
+      KgaraCaseFinancialParserHelper.parseJournalCostBreakdown(journalItems);
 
     return {
       id: grossProfit.id,
@@ -230,6 +256,7 @@ export class KgaraCaseLookupService {
       VuViecName: grossProfit.vuViecName,
       TenKhachHang: grossProfit.tenKhachHang,
       VuViecID: grossProfit.hdPhieuDichVuId,
+      costBreakdown,
       ...(grossProfit.rawData as object),
     };
   }

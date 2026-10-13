@@ -1,6 +1,9 @@
 import { Reflector } from '@nestjs/core';
 import { GarageCashflowController } from './garage-cashflow.controller';
-import { RBAC_PERMISSIONS_KEY } from '../../auth/decorators/require-permissions.decorator';
+import {
+  RBAC_PERMISSIONS_KEY,
+  RBAC_ANY_PERMISSIONS_KEY,
+} from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 describe('GarageCashflowController RBAC Permissions', () => {
@@ -33,6 +36,16 @@ describe('GarageCashflowController RBAC Permissions', () => {
     expect(perms).toBeDefined();
     expect(perms).toEqual([
       { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.READ },
+    ]);
+  });
+
+  it('checkDuplicates requires GARAGE_CASHFLOW:CREATE or UPDATE', () => {
+    const handler = GarageCashflowController.prototype.checkDuplicates;
+    const perms = reflector.get(RBAC_ANY_PERMISSIONS_KEY, handler);
+
+    expect(perms).toEqual([
+      { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.CREATE },
+      { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.UPDATE },
     ]);
   });
 

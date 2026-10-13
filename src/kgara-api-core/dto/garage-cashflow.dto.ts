@@ -5,6 +5,7 @@ import {
   IsString,
   IsIn,
   IsUUID,
+  IsPositive,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -30,6 +31,10 @@ export class CreateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentContent?: string;
 
   @IsString()
   @IsOptional()
@@ -98,6 +103,10 @@ export class UpdateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentContent?: string;
 
   @IsString()
   @IsOptional()
@@ -173,6 +182,7 @@ export class KgaraCashflowVoucherResponseDto {
   licensePlate?: string | null;
   note?: string | null;
   paymentMethod?: string | null;
+  paymentContent?: string | null;
   referenceNumber?: string | null;
   caseId?: string | null;
   erpBankTransactionId?: string | null;
@@ -201,6 +211,7 @@ export function toKgaraCashflowVoucherResponse(
     licensePlate: entity.licensePlate ?? null,
     note: entity.note ?? null,
     paymentMethod: entity.paymentMethod ?? null,
+    paymentContent: entity.paymentContent ?? null,
     caseId: entity.caseId ?? null,
     erpBankTransactionId: entity.erpBankTransactionId ?? null,
     erpCashVoucherId: entity.erpCashVoucherId ?? null,
@@ -230,4 +241,49 @@ export function toKgaraCashflowVoucherResponse(
         }
       : null,
   };
+}
+
+export class CheckKgaraCashflowDuplicateQueryDto {
+  @IsNumber()
+  @IsPositive()
+  @Type(() => Number)
+  amount: number;
+
+  @IsString()
+  @IsOptional()
+  transDate?: string;
+
+  @IsUUID()
+  @IsOptional()
+  caseId?: string;
+
+  @IsString()
+  @IsOptional()
+  licensePlate?: string;
+
+  @IsUUID()
+  @IsOptional()
+  excludeId?: string;
+}
+
+export class KgaraCashflowDuplicateItemDto {
+  id: string;
+  voucherCode: string;
+  voucherType: 'RECEIPT' | 'PAYMENT';
+  amount: number;
+  transDate: string;
+  licensePlate?: string | null;
+  caseCode?: string | null;
+  partnerName?: string | null;
+}
+
+export class KgaraCashflowDuplicateGroupDto {
+  items: KgaraCashflowDuplicateItemDto[];
+  total: number;
+}
+
+export class KgaraCashflowDuplicateResponseDto {
+  nearbyDate: KgaraCashflowDuplicateGroupDto;
+  sameCase: KgaraCashflowDuplicateGroupDto;
+  samePlate: KgaraCashflowDuplicateGroupDto;
 }

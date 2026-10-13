@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GarageCashflowQueryEngine } from './engines/garage-cashflow-query.engine';
+import { GarageCashflowDuplicateEngine } from './engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './garage-cashflow-transaction.service';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
   KgaraCashflowVoucherResponseDto,
+  CheckKgaraCashflowDuplicateQueryDto,
+  KgaraCashflowDuplicateResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @Injectable()
@@ -15,7 +18,14 @@ export class GarageCashflowService {
   constructor(
     private readonly queryEngine: GarageCashflowQueryEngine,
     private readonly transactionService: GarageCashflowTransactionService,
+    private readonly duplicateEngine: GarageCashflowDuplicateEngine,
   ) {}
+
+  async findPotentialDuplicates(
+    query: CheckKgaraCashflowDuplicateQueryDto,
+  ): Promise<KgaraCashflowDuplicateResponseDto> {
+    return this.duplicateEngine.findPotentialDuplicates(query);
+  }
 
   async createVoucher(
     dto: CreateKgaraCashflowVoucherDto,

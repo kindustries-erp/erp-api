@@ -19,7 +19,8 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `trans_date` (date) - Ngày giao dịch
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
-- `payment_method` (varchar 50, nullable) - Phương thức thanh toán (Tiền mặt, Chuyển khoản, Ứng trước, Thẻ tín dụng, Cấn trừ, Khác)
+- `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi (KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, Mua phụ tùng, OPEX, v.v.)
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
@@ -28,7 +29,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
-- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`.
+- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`.
 
 **Sự thay đổi ở** `kgara_case_settlements`:
 - Được thêm trường `cashflow_voucher_id` (uuid, FK -> `kgara_cashflow_vouchers.id`, `ON DELETE SET NULL`) để mapping tự động từ phiếu thu/chi sang phiếu cấn trừ.
@@ -96,23 +97,26 @@ Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, 
 ```text
 src/modules/garage/components/
 ├── molecules/
-│   └── payment-method-combobox/     (Molecule dropdown chọn phương thức TT, có option "Ứng trước", < 40 LoC)
+│   ├── payment-method-combobox/     (Molecule dropdown chọn phương thức TT thuần túy: Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác, < 40 LoC)
+│   └── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, v.v., < 40 LoC)
 └── organisms/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
-    │   ├── GarageCashflowTable.tsx  (Main component)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Biển số xe & Phương thức TT, < 140 LoC)
+    │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT đặt cạnh nhau, < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.helper.tsx (Renderers: Biển số xe, Badge Phương thức TT, < 150 LoC)
-    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts)
-    │   ├── GarageCashflowTable.type.ts
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & Nội dung TT, < 70 LoC)
+    │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
+    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
+    │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
     │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
     ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic bóc tách < 180 LoC)
     │   ├── index.ts
-    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 80 LoC)
-    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 130 LoC)
+    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 120 LoC)
+    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 220 LoC)
     │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
-    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Mã CT cạnh Ngày GD, thay SĐT bằng BKS, < 180 LoC)
+    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Thêm field dropdown Nội dung TT cạnh Phương thức TT, < 170 LoC)
+    │   ├── GarageCashflowDrawerViewSection.tsx (Sub-section View Mode bóc tách < 70 LoC)
     │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
     │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
     └── garage-cashflow-list/
@@ -131,11 +135,15 @@ src/modules/garage/components/
   - **Tab Visibility RBAC**: Tab "Thu chi xưởng" chỉ hiển thị khi người dùng có quyền `GARAGE_CASHFLOW:READ`. Truy cập trực tiếp qua URL `?tab=cashflow` khi thiếu quyền sẽ tự động fallback an toàn về tab `overview`.
   - **Phân quyền Context Menu Xóa & Action Menu**: Chỉ người dùng có quyền `GARAGE_CASHFLOW:DELETE` (`canDelete === true` và `onDelete` được truyền vào) mới thấy mục "Xóa phiếu" trong chuột phải và nút ba chấm (`...`). Người không có quyền DELETE bị ẩn hoàn toàn 100% mục xóa (không render DOM item).
   - **Dọn dẹp Dead Code**: Trang tổng quan `GarageCashflowDashboard` và file `GarageCashflowPage.tsx` đã được xóa bỏ hoàn toàn. Route alias `"garage-cashflow"` trong `App.tsx` tự động chuyển tiếp sang `() => <GaragePartners initialTab="cashflow" />`.
-  - **Sidebar GARAGE Rút Gọn**: Section GARAGE trên Sidebar chỉ còn:
-    - **Mục 1**: `Dịch vụ Garage` (`GarageNavGroup` | Icon: `Car`) - menu tổng dropdown gom 2 submenu:
-      - `Phiếu dịch vụ` (`garage-cases`)
-      - `Công nợ garage` (`garage-debts`)
-    - **Mục 2**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
+  - **Chuẩn Hóa Column Filter & Query Engine (`GarageCashflowQueryEngine`)**:
+    - Hỗ trợ lọc ngày độc lập `transDate` (`from..to`) và `createdAt`.
+    - Hỗ trợ lọc tiền vào (`thu`: `voucher_type = 'RECEIPT'`) và tiền ra (`chi`: `voucher_type = 'PAYMENT'`) theo khoảng tiền `min..max` hoặc danh sách số tiền chính xác.
+    - Hỗ trợ lọc rỗng `__BLANK__` cho các trường nullable (`caseCode`, `licensePlate`, `note`).
+    - Phía client: cột `paymentMethod` sử dụng Client Select Filter (`filterOptions`).
+  - **Sidebar GARAGE Phẳng Hóa**: Section GARAGE trên Sidebar đã được phẳng hóa thành 3 mục trực tiếp (không còn popup submenu trung gian):
+    - **Mục 1**: `Phiếu dịch vụ` (`garage-cases` | Icon: `FileSpreadsheet`)
+    - **Mục 2**: `Công nợ garage` (`garage-debts` | Icon: `Users`)
+    - **Mục 3**: `Chi phí vận hành Garage` (`garage-opex` | Icon: `ReceiptText`)
   - **Command Palette Search**: Item `garage-cashflow` độc lập đã được gỡ bỏ; các từ khóa "thu chi xưởng", "dòng tiền xưởng", "sổ quỹ", "garage cashflow" được tích hợp trực tiếp vào mục `garage-debts`.
 
 ## 8. Quy tắc Kiểm thử & Báo cáo Chất lượng
@@ -154,3 +162,16 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
 
 ## Liên kết với Công nợ Garage (`garage-debts`)
 - Dòng `kgara_case_settlements.settlement_type = 'PAYMENT'` (sinh từ phiếu chi/cấn trừ phải trả) là nguồn "Đã chi" của tab Tổng quan và tab Phải trả ở `/garage-debts` (xem `garage-customers/SKILL.md` mục 8.1-8.2). Chỉ `RECEIPT` được cộng vào `kgara_cases.tien_da_thanh_toan`. `payer_type` của PAYMENT hiện đều là `KH`, không dùng để lọc.
+
+## Cảnh báo phiếu trùng khi tạo/sửa phiếu thu chi (duplicate-check)
+- **API**: `GET /api/v1/greenway/cashflow-vouchers/duplicate-check?amount=&transDate=&caseId=&licensePlate=&excludeId=`, quyền `GARAGE_CASHFLOW:CREATE` **hoặc** `UPDATE` (`@RequireAnyPermissions`). Chỉ đọc, không ghi DB, không migration.
+- **Engine**: `services/engines/garage-cashflow-duplicate.engine.ts` (`GarageCashflowDuplicateEngine`), facade `GarageCashflowService.findPotentialDuplicates`. Provider khai báo trong `kgara-api-core.module.ts`.
+- **Quy tắc** (số tiền phải bằng đúng, không phân biệt Thu/Chi):
+  - `nearbyDate`: `trans_date` lệch ≤ 7 ngày so với ngày nhập.
+  - `sameCase`: cùng `case_id`, không giới hạn ngày (chỉ chạy khi có `caseId`).
+  - `samePlate`: cùng biển số (chuẩn hóa bỏ ký tự không phải chữ/số, in hoa; so với `COALESCE(license_plate, case.bienSoXe)`), không giới hạn ngày.
+  - Mỗi nhóm trả `{ items (tối đa 5, mới nhất trước), total }`. `excludeId` loại chính phiếu đang sửa.
+- **Web**: `useGarageCashflowDuplicateGuard` (trong `garage-cashflow-drawer/`) gọi check trước khi lưu. Có trùng thì mở `ConfirmModal` (`danger={false}`) với nội dung `GarageCashflowDuplicateWarning` (molecule). Không trùng hoặc check lỗi (fail-open) thì lưu ngay.
+  - Tạo mới: luôn check khi `amount > 0`. Sửa: chỉ check khi đổi `amount`, `transDate`, `caseId` hoặc biển số.
+  - i18n: namespace `garage:cashflowDuplicate.*` trong `modules/garage/locales/{vi,en}.ts`. `useT` không nội suy nên component tự `.replace("{{x}}")`.
+- **Test**: `garage-cashflow-duplicate.engine.spec.ts`, `GarageCashflowDuplicateWarning.test.tsx`, `useGarageCashflowDuplicateGuard.test.tsx`, nhóm "duplicate warning" trong `GarageCashflowDrawer.test.tsx`.

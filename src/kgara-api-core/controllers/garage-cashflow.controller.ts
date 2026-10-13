@@ -12,7 +12,10 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
-import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { GarageCashflowService } from '../services/garage-cashflow.service';
 import {
@@ -20,6 +23,8 @@ import {
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
   KgaraCashflowVoucherResponseDto,
+  CheckKgaraCashflowDuplicateQueryDto,
+  KgaraCashflowDuplicateResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @ApiTags('greenway_cashflow')
@@ -68,6 +73,17 @@ export class GarageCashflowController {
       pageSize,
       column_filters,
     );
+  }
+
+  @Get('duplicate-check')
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.UPDATE },
+  )
+  async checkDuplicates(
+    @Query() query: CheckKgaraCashflowDuplicateQueryDto,
+  ): Promise<KgaraCashflowDuplicateResponseDto> {
+    return this.cashflowService.findPotentialDuplicates(query);
   }
 
   @Post()

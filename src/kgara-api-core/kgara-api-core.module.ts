@@ -31,6 +31,7 @@ import { GarageSmartSettlementService } from './services/garage-smart-settlement
 import { GarageOpexService } from './services/garage-opex.service';
 import { GarageCashflowService } from './services/garage-cashflow.service';
 import { GarageCashflowQueryEngine } from './services/engines/garage-cashflow-query.engine';
+import { GarageCashflowDuplicateEngine } from './services/engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './services/garage-cashflow-transaction.service';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
@@ -103,6 +104,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     GarageOpexService,
     GarageCashflowService,
     GarageCashflowQueryEngine,
+    GarageCashflowDuplicateEngine,
     GarageCashflowTransactionService,
     GarageDashboardService,
     GarageDashboardStatsService,

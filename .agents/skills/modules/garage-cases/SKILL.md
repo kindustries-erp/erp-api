@@ -489,7 +489,7 @@ Base Route: `/api/v1/greenway/cashflow`
   - Endpoint `GET /payables/suppliers-debt/column-options`: Phục vụ bộ lọc popover cho mã/tên nhà cung cấp và tài khoản.
   - Endpoint `GET /payables/by-supplier/:supplierId/cases`: Lấy chi tiết các bút toán phát sinh và tự động kết nối với các phiếu dịch vụ `kgara_cases` liên đới qua mã chứng từ `maSoVuViec = soChungTu`.
 
-### 5.13. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
+### 5.14. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
 - **Hàm tiện ích `parseSafeDate`**:
   - Nhận diện và chuyển đổi an toàn các định dạng ngày từ KGara (`ISO`, `DD/MM/YYYY`, `DD-MM-YYYY`, `number timestamp`).
   - Tự động bỏ qua các chuỗi không hợp lệ như `"0001-01-01T00:00:00"`, `"1900-01-01"`, `"0NaN"`, `"null"`, `"undefined"`, trả về `null` thay vì `Invalid Date` để chống lỗi `500 QueryFailedError (0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN)` khi TypeORM ghi xuống Postgres.
@@ -497,6 +497,28 @@ Base Route: `/api/v1/greenway/cashflow`
   - Mặc định ưu tiên sắp xếp:
     $$\text{case.ngayPhatSinh DESC (NULLS LAST)} \longrightarrow \text{case.ngayTiepNhan DESC (NULLS LAST)} \longrightarrow \text{case.soChungTu DESC} \longrightarrow \text{case.updatedAt DESC}$$
   - Hỗ trợ tham số query `sorts` linh hoạt đa cột (`+col` / `-col`).
+
+### 5.15. Chuẩn Hóa Bóc Tách Chỉ Số Tài Chính & Lợi Nhuận Dự Kiến Phiếu Dịch Vụ (`KgaraCaseFinancialParserHelper` & `GarageCasePreview`)
+- **Tập hợp 18 Chỉ số Tài chính bóc tách chuẩn xác từ `raw_data` JSONB**:
+  - `driverName` (`TenLaiXe`): Họ tên lái xe/người giao dịch đưa xe vào xưởng.
+  - `discountPercent` (`TyLeChietKhau`): Tỷ lệ chiết khấu thương mại chung của phiếu (%).
+  - `discountAmount` (`TienChietKhau`): Số tiền chiết khấu thương mại tương ứng.
+  - `deductibleAmount` (`TienKhauTru`): Số tiền khấu trừ bảo hiểm quy định (ví dụ 500,000 đ).
+  - `sanctionAmount` (`TienCheTai`): Số tiền chế tài bảo hiểm (nếu có).
+  - `afterSanctionAmount` (`TienSauCheTai`): Giá trị tiền sau chế tài (phần doanh thu trước thuế mà công ty bảo hiểm chịu).
+  - `vatRate` (`ThueSuat`): Thuế suất GTGT áp dụng cho phiếu dịch vụ (ví dụ 8% hoặc 10%).
+  - `customerPayAmount` (`TienKhachTra`): Số tiền Khách hàng thực tế phải thanh toán sau thuế và khấu trừ.
+  - `insurancePayAmount` (`TienBaoHiemTra`): Số tiền Công ty Bảo hiểm thực tế phải thanh toán sau thuế.
+  - `commissionGdv` (`TienHoaHongGDV`): Hoa hồng giám định viên bảo hiểm (không ẩn khi bằng 0).
+  - `commissionMg` (`TienHoaHongMG`): Hoa hồng môi giới khách hàng (không ẩn khi bằng 0).
+  - `outsourceCostGcn` (`GiaCongNgoai` / `GCN`): Chi phí gia công ngoài trích xuất từ cột dịch vụ hoặc header phiếu.
+  - `estimatedProfit` (`LaiTamTinh`): Lợi nhuận tạm tính trước thuế = Doanh thu sau chiết khấu - Hoa hồng GĐV - Hoa hồng MG - Chi phí giá vốn phụ tùng & gia công ngoài.
+  - `estimatedProfitAfterTax` (`LaiTamTinhCoThue`): Lợi nhuận tạm tính sau thuế = Lãi tạm tính + Tiền thuế VAT.
+- **Tiêu chuẩn Kiến trúc Phân tầng 5 Tầng UI (`/ui-atomic-refactor`) & Pattern C Clean DI (`/api-service-refactor`)**:
+  - `KgaraCaseFinancialParserHelper`: Pure Static Helper độc lập, 0 dependency TypeORM, Clean DI constructor giữ nguyên trong `KgaraCaseLookupService`.
+  - Phân rã `QuoteDocumentSummary` thành các Molecules con: `QuoteBillingBlock`, `QuoteCommissionBlock`, `QuoteProfitBlock` đều dưới 120 LoC (chuẩn < 180 LoC).
+  - Cột `GCN` (Gia công ngoài) hiển thị rõ ràng trên bảng hạng mục dịch vụ `QuoteServicesDocumentTable` và dòng tổng cộng.
+  - 100% bản dịch song ngữ `vi.ts` / `en.ts`, tuân thủ No Blue Mandate và Co-located Testing Vitest/Jest.
 
 ---
 
@@ -528,6 +550,7 @@ Module tuân thủ nghiêm ngặt tiêu chuẩn `api-service-refactor` (Pattern 
   - `KgaraCompletedCasesExportService` (~250 dòng): Quản lý truy vấn dữ liệu vụ việc, sổ thanh toán thực tế (`kgara_case_settlements`), hóa đơn liên kết và dòng chi tiết để xây dựng workbook 3 sheets chuyên nghiệp.
   - `KgaraCaseServicesExportService` (~140 dòng): Chuyên trách xuất bảng kê chi tiết dịch vụ & phụ tùng độc lập (`exportCaseServicesExcel`).
 - **Pure Helpers & Sheet Builders (Pattern C)**:
+  - `kgara-case-financial-parser.helper.ts`: Pure parser engine bóc tách 18 chỉ số tài chính, hoa hồng, bảo hiểm, khấu trừ, chế tài, GCN và lợi nhuận dự kiến từ raw_data JSONB của phiếu dịch vụ.
   - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
   - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
   - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
@@ -767,4 +790,38 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
      - `Lợi nhuận gộp`: `=V{row}-W{row}`
      - `Biên LN (%)`: `=IF(V{row}>0, X{row}/V{row}, 0)`
      - Dòng `SUM` và `SUBTOTAL` cập nhật margin tham chiếu cột `V` (Doanh thu) và `X` (Lợi nhuận).
+
+### 9.9. Chuẩn Hóa Bóc Tách Journal Items (1541, 1542, 1543, 521), Đồng Bộ Đối Soát Lợi Nhuận Gộp & Tái Cấu Trúc UI Atomic 5 Nhóm Sổ Báo Giá
+
+1. **Bóc Tách Chi Phí & Chiết Khấu Từ `journal_items` (Backend `erp-api`)**:
+   - **Vấn đề cốt lõi**: Trong KGara, một số khoản chi phí gia công ngoài (TK `1542`), hoa hồng (TK `1543`), và chiết khấu (TK `521`) không xuất hiện trên dòng dịch vụ đơn lẻ mà được hạch toán dưới dạng các bút toán trong `journal_items` của payload `kgara_gross_profit.raw_data`:
+     - TK `1541`: Chi phí nguyên vật liệu / phụ tùng xuất kho (`inventoryPartCost`).
+     - TK `1542`: Chi phí mua ngoài / gia công ngoài GCN (`outsourceCost`).
+     - TK `1543`: Chi phí hoa hồng giám định viên & môi giới (`commissionCost`).
+     - TK `521`: Chiết khấu thương mại giảm trừ doanh thu (`discountCost`).
+   - **Chuẩn hóa Helper `KgaraCaseFinancialParserHelper`** (Pattern C Pure Helper, < 200 LoC):
+     - `totalAmount` = Lấy chính xác Doanh thu trước chiết khấu (`TienChuaThue`).
+     - `subtotalAfterDiscount` = Doanh thu sau chiết khấu (`TongTienHang`).
+     - `parseJournalCostBreakdown(journalItems)`: Bóc tách chính xác từng nhóm tài khoản 1541, 1542, 1543, 521.
+     - `calculateEstimatedProfit()`:
+       $$\text{Lãi tạm tính (trước thuế)} = \text{Doanh thu sau CK} - \sum \text{Chi phí (1541 + 1542 + 1543)}$$
+       $$\text{Lãi có thuế} = \text{Lãi tạm tính} + \text{VAT}$$
+     - Kết quả đối soát: Khớp **100%** giữa Lợi nhuận gộp trên Thẻ bên phải, Thẻ trên cùng và Lãi tạm tính trong Sổ báo giá (ví dụ phiếu `GR-PDV2606-0025`: $1.275.000 - 200.000 - 220.000 = \mathbf{855.000\text{ đ}}$, Biên LN $= +57.0\%$, Lãi có thuế $= \mathbf{957.000\text{ đ}}$).
+   - Tích hợp trường `costBreakdown` vào response của `KgaraCaseLookupService.findGrossProfitByCodeOrId`.
+
+2. **Tái Cấu Trúc UI Atomic 5 Tầng Sổ Báo Giá (`QuoteDocumentSummary`)**:
+   - **Bố cục 2 cột đối xứng responsive (`grid-cols-1 lg:grid-cols-2 gap-3`) chia thành 5 Nhóm Nghiệp Vụ Riêng Biệt**:
+     - **Cột 1 (Doanh thu & Phân bổ)**:
+       - **Nhóm 1 (`QuoteRevenueSection`)**: Doanh thu trước CK $\rightarrow$ Chiết khấu $\rightarrow$ **Subtotal Doanh thu sau CK**.
+       - **Nhóm 2 (`QuoteSettlementSection`)**: Khấu trừ $\rightarrow$ Sau chế tài $\rightarrow$ Thuế VAT $\rightarrow$ Phân bổ 2 cột Khách hàng TT & Bảo hiểm TT $\rightarrow$ **Subtotal Tổng thanh toán sau VAT**.
+     - **Cột 2 (Chi phí & Lợi nhuận)**:
+       - **Nhóm 3 (`QuoteCommissionSection`)**: Hoa hồng GĐV $\rightarrow$ Hoa hồng MG $\rightarrow$ **Subtotal Tổng hoa hồng**.
+       - **Nhóm 4 (`QuoteDirectCostSection`)**: Chi phí phụ tùng $\rightarrow$ Gia công ngoài GCN $\rightarrow$ **Subtotal Tổng giá vốn**.
+       - **Nhóm 5 (`QuoteProfitHighlightSection`)**: Callout Card nổi bật thể hiện **Lãi tạm tính trước thuế** (Margin %) và **Lãi có thuế**.
+   - **Sổ Chi Phí 4 Ô (`QuoteDocumentCostSummary`)**: Hiển thị đồng bộ $1541: 0\text{ đ} + 1542: 220.000\text{ đ} + 1543: 200.000\text{ đ} + 521: 225.000\text{ đ} = 645.000\text{ đ}$, Lãi gộp $855.000\text{ đ}$ ($57.0\%$).
+   - **Tuân thủ Tuyệt đối `/ui-atomic-refactor` & `/api-service-refactor`**:
+     - 100% files mới hoặc sửa đổi `< 110 LoC` (vượt xa chuẩn < 180 LoC).
+     - 0 vi phạm No Blue Mandate (sử dụng `emerald`, `amber`, `muted-foreground`).
+     - 100% i18n VI/EN qua hook `useI18n`.
+     - 15/15 test files (46/46 unit tests) phân hệ `garage-case-preview` pass 100%. Type-check TypeScript sạch 100%.
 
