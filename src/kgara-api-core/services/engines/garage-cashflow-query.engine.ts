@@ -112,14 +112,14 @@ export class GarageCashflowQueryEngine {
     let selectField = '';
     if (column === 'voucherCode') selectField = 'voucher.voucher_code';
     else if (column === 'partnerName')
-      selectField = 'COALESCE(voucher.partner_name, case.khachHangName)';
+      selectField = 'COALESCE(voucher.partner_name, case.khach_hang_name)';
     else if (column === 'licensePlate')
-      selectField = 'COALESCE(voucher.license_plate, case.bienSoXe)';
+      selectField = 'COALESCE(voucher.license_plate, case.bien_so_xe)';
     else if (column === 'paymentMethod') selectField = 'voucher.payment_method';
     else if (column === 'paymentContent')
       selectField = 'voucher.payment_content';
     else if (column === 'note') selectField = 'voucher.note';
-    else if (column === 'caseCode') selectField = 'case.soChungTu';
+    else if (column === 'caseCode') selectField = 'case.so_chung_tu';
     else if (column === 'transDate') selectField = 'voucher.trans_date';
     else if (column === 'thu') {
       selectField = 'voucher.amount';
@@ -220,16 +220,16 @@ export class GarageCashflowQueryEngine {
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
             if (hasBlank && nonBlank.length > 0) {
               qb.andWhere(
-                "((voucher.partner_name IN (:...vpartnerName) OR case.khachHangName IN (:...vpartnerName)) OR (COALESCE(voucher.partner_name, case.khachHangName) IS NULL OR COALESCE(voucher.partner_name, case.khachHangName) = ''))",
+                "((voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
                 { vpartnerName: nonBlank },
               );
             } else if (hasBlank) {
               qb.andWhere(
-                "(COALESCE(voucher.partner_name, case.khachHangName) IS NULL OR COALESCE(voucher.partner_name, case.khachHangName) = '')",
+                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
               );
             } else {
               qb.andWhere(
-                '(voucher.partner_name IN (:...vpartnerName) OR case.khachHangName IN (:...vpartnerName))',
+                '(voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName))',
                 {
                   vpartnerName: vals,
                 },
@@ -240,16 +240,16 @@ export class GarageCashflowQueryEngine {
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
             if (hasBlank && nonBlank.length > 0) {
               qb.andWhere(
-                "((voucher.license_plate IN (:...vlicensePlate) OR case.bienSoXe IN (:...vlicensePlate)) OR (COALESCE(voucher.license_plate, case.bienSoXe) IS NULL OR COALESCE(voucher.license_plate, case.bienSoXe) = ''))",
+                "((voucher.license_plate IN (:...vlicensePlate) OR case.bien_so_xe IN (:...vlicensePlate)) OR (COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = ''))",
                 { vlicensePlate: nonBlank },
               );
             } else if (hasBlank) {
               qb.andWhere(
-                "(COALESCE(voucher.license_plate, case.bienSoXe) IS NULL OR COALESCE(voucher.license_plate, case.bienSoXe) = '')",
+                "(COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = '')",
               );
             } else {
               qb.andWhere(
-                '(voucher.license_plate IN (:...vlicensePlate) OR case.bienSoXe IN (:...vlicensePlate))',
+                '(voucher.license_plate IN (:...vlicensePlate) OR case.bien_so_xe IN (:...vlicensePlate))',
                 {
                   vlicensePlate: vals,
                 },
@@ -427,13 +427,15 @@ export class GarageCashflowQueryEngine {
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
             if (hasBlank && nonBlank.length > 0) {
               qb.andWhere(
-                "(case.soChungTu IN (:...fcaseCode) OR case.soChungTu IS NULL OR case.soChungTu = '')",
+                "(case.so_chung_tu IN (:...fcaseCode) OR case.so_chung_tu IS NULL OR case.so_chung_tu = '')",
                 { fcaseCode: nonBlank },
               );
             } else if (hasBlank) {
-              qb.andWhere("(case.soChungTu IS NULL OR case.soChungTu = '')");
+              qb.andWhere(
+                "(case.so_chung_tu IS NULL OR case.so_chung_tu = '')",
+              );
             } else {
-              qb.andWhere('case.soChungTu IN (:...fcaseCode)', {
+              qb.andWhere('case.so_chung_tu IN (:...fcaseCode)', {
                 fcaseCode: arr,
               });
             }
@@ -446,16 +448,16 @@ export class GarageCashflowQueryEngine {
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
             if (hasBlank && nonBlank.length > 0) {
               qb.andWhere(
-                "((voucher.partner_name IN (:...fpartnerName) OR case.khachHangName IN (:...fpartnerName)) OR (COALESCE(voucher.partner_name, case.khachHangName) IS NULL OR COALESCE(voucher.partner_name, case.khachHangName) = ''))",
+                "((voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
                 { fpartnerName: nonBlank },
               );
             } else if (hasBlank) {
               qb.andWhere(
-                "(COALESCE(voucher.partner_name, case.khachHangName) IS NULL OR COALESCE(voucher.partner_name, case.khachHangName) = '')",
+                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
               );
             } else {
               qb.andWhere(
-                '(voucher.partner_name IN (:...fpartnerName) OR case.khachHangName IN (:...fpartnerName))',
+                '(voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName))',
                 {
                   fpartnerName: arr,
                 },
@@ -466,16 +468,16 @@ export class GarageCashflowQueryEngine {
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
             if (hasBlank && nonBlank.length > 0) {
               qb.andWhere(
-                "((voucher.license_plate IN (:...flicensePlate) OR case.bienSoXe IN (:...flicensePlate)) OR (COALESCE(voucher.license_plate, case.bienSoXe) IS NULL OR COALESCE(voucher.license_plate, case.bienSoXe) = ''))",
+                "((voucher.license_plate IN (:...flicensePlate) OR case.bien_so_xe IN (:...flicensePlate)) OR (COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = ''))",
                 { flicensePlate: nonBlank },
               );
             } else if (hasBlank) {
               qb.andWhere(
-                "(COALESCE(voucher.license_plate, case.bienSoXe) IS NULL OR COALESCE(voucher.license_plate, case.bienSoXe) = '')",
+                "(COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = '')",
               );
             } else {
               qb.andWhere(
-                '(voucher.license_plate IN (:...flicensePlate) OR case.bienSoXe IN (:...flicensePlate))',
+                '(voucher.license_plate IN (:...flicensePlate) OR case.bien_so_xe IN (:...flicensePlate))',
                 {
                   flicensePlate: arr,
                 },
@@ -536,14 +538,14 @@ export class GarageCashflowQueryEngine {
           if (col === 'partnerName')
             applyMultiKeywordFilter(
               qb,
-              'COALESCE(voucher.partner_name, case.khachHangName)',
+              'COALESCE(voucher.partner_name, case.khach_hang_name)',
               searchStr,
               'spartnerName',
             );
           if (col === 'licensePlate')
             applyMultiKeywordFilter(
               qb,
-              'COALESCE(voucher.license_plate, case.bienSoXe)',
+              'COALESCE(voucher.license_plate, case.bien_so_xe)',
               searchStr,
               'slicensePlate',
             );
@@ -566,7 +568,7 @@ export class GarageCashflowQueryEngine {
           if (col === 'caseCode')
             applyMultiKeywordFilter(
               qb,
-              'case.soChungTu',
+              'case.so_chung_tu',
               searchStr,
               'scaseCode',
             );
@@ -578,19 +580,25 @@ export class GarageCashflowQueryEngine {
     const pageSize = query.pageSize || 20;
     const skip = (page - 1) * pageSize;
 
-    if (query.sorts) {
-      const sortsArr = Array.isArray(query.sorts)
-        ? query.sorts
-        : query.sorts.split(',');
+    const rawSorts = query.sorts || query['sorts[]'];
+
+    if (rawSorts) {
+      const sortsArr = Array.isArray(rawSorts)
+        ? rawSorts
+        : typeof rawSorts === 'string'
+          ? rawSorts.split(',')
+          : [];
 
       let hasSort = false;
       sortsArr.forEach((s) => {
-        if (!s) return;
+        if (!s || typeof s !== 'string') return;
+        const trimmed = s.trim();
+        if (!trimmed) return;
         let direction: 'ASC' | 'DESC' = 'ASC';
-        let field = s;
-        if (s.startsWith('-')) {
+        let field = trimmed;
+        if (trimmed.startsWith('-')) {
           direction = 'DESC';
-          field = s.substring(1);
+          field = trimmed.substring(1);
         }
 
         let dbField = '';
@@ -600,10 +608,8 @@ export class GarageCashflowQueryEngine {
         else if (field === 'caseCode') dbField = 'case.soChungTu';
         else if (field === 'transDate') dbField = 'voucher.transDate';
         else if (field === 'voucherType') dbField = 'voucher.voucherType';
-        else if (field === 'partnerName')
-          dbField = 'COALESCE(voucher.partnerName, case.khachHangName)';
-        else if (field === 'licensePlate')
-          dbField = 'COALESCE(voucher.licensePlate, case.bienSoXe)';
+        else if (field === 'partnerName') dbField = 'voucher.partnerName';
+        else if (field === 'licensePlate') dbField = 'voucher.licensePlate';
         else if (field === 'paymentMethod') dbField = 'voucher.paymentMethod';
         else if (field === 'paymentContent') dbField = 'voucher.paymentContent';
 
@@ -613,10 +619,19 @@ export class GarageCashflowQueryEngine {
         }
       });
       if (!hasSort) {
-        qb.orderBy('voucher.createdAt', 'DESC');
+        qb.orderBy('voucher.transDate', 'DESC')
+          .addOrderBy('voucher.createdAt', 'DESC')
+          .addOrderBy('voucher.voucherCode', 'DESC');
+      } else {
+        qb.addOrderBy('voucher.createdAt', 'DESC').addOrderBy(
+          'voucher.voucherCode',
+          'DESC',
+        );
       }
     } else {
-      qb.orderBy('voucher.createdAt', 'DESC');
+      qb.orderBy('voucher.transDate', 'DESC')
+        .addOrderBy('voucher.createdAt', 'DESC')
+        .addOrderBy('voucher.voucherCode', 'DESC');
     }
 
     qb.skip(skip).take(pageSize);
