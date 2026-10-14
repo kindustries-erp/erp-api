@@ -2,12 +2,14 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { AuditCoreService } from '../../audit-core/audit-core.service';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
@@ -26,10 +28,13 @@ export class GarageCashflowTransactionService {
     @InjectRepository(KgaraCase)
     private readonly caseRepo: Repository<KgaraCase>,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly auditCoreService?: AuditCoreService,
   ) {}
 
   async createVoucher(
     dto: CreateKgaraCashflowVoucherDto,
+    user?: { sub?: string; email?: string },
   ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -73,6 +78,7 @@ export class GarageCashflowTransactionService {
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
         note: dto.note || undefined,
+        createdBy: user?.email || user?.sub || 'Hệ thống',
       });
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
@@ -108,6 +114,20 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'CREATE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: savedVoucher.id,
+          message: `Khởi tạo ${savedVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${savedVoucher.voucherCode} (${Number(savedVoucher.amount).toLocaleString('vi-VN')} đ)`,
+          afterSnapshot: { ...savedVoucher },
+        });
+      }
+
       return toKgaraCashflowVoucherResponse(savedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -120,6 +140,7 @@ export class GarageCashflowTransactionService {
   async updateVoucher(
     id: string,
     dto: UpdateKgaraCashflowVoucherDto,
+    user?: { sub?: string; email?: string },
   ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -144,6 +165,7 @@ export class GarageCashflowTransactionService {
       const oldType = existingVoucher.voucherType;
       const newType = dto.voucherType !== undefined ? dto.voucherType : oldType;
 
+      const beforeSnapshot = { ...existingVoucher };
       queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
       if (
         newCaseId &&
@@ -249,6 +271,21 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'UPDATE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: updatedVoucher.id,
+          message: `Cập nhật ${updatedVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${updatedVoucher.voucherCode}`,
+          beforeSnapshot,
+          afterSnapshot: { ...updatedVoucher },
+        });
+      }
+
       return toKgaraCashflowVoucherResponse(updatedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -258,7 +295,10 @@ export class GarageCashflowTransactionService {
     }
   }
 
-  async deleteVoucher(id: string): Promise<void> {
+  async deleteVoucher(
+    id: string,
+    user?: { sub?: string; email?: string },
+  ): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -301,6 +341,19 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'DELETE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: id,
+          message: `Xóa ${existingVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${existingVoucher.voucherCode}`,
+          beforeSnapshot: { ...existingVoucher },
+        });
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;

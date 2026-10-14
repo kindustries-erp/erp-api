@@ -49,27 +49,37 @@ describe('GarageCashflowService (Facade)', () => {
 
   it('delegates createVoucher to transactionService', async () => {
     const dto = { voucherType: 'RECEIPT', amount: 1000 } as any;
-    const res = await service.createVoucher(dto);
+    const user = { sub: 'u-1', email: 'test@liouni.com' };
+    const res = await service.createVoucher(dto, user);
 
-    expect(mockTransactionService.createVoucher).toHaveBeenCalledWith(dto);
+    expect(mockTransactionService.createVoucher).toHaveBeenCalledWith(
+      dto,
+      user,
+    );
     expect(res).toEqual({ id: 'voucher-1' });
   });
 
   it('delegates updateVoucher to transactionService', async () => {
     const dto = { amount: 2000 } as any;
-    const res = await service.updateVoucher('v-1', dto);
+    const user = { sub: 'u-1', email: 'test@liouni.com' };
+    const res = await service.updateVoucher('v-1', dto, user);
 
     expect(mockTransactionService.updateVoucher).toHaveBeenCalledWith(
       'v-1',
       dto,
+      user,
     );
     expect(res).toEqual({ id: 'voucher-1' });
   });
 
   it('delegates deleteVoucher to transactionService', async () => {
-    const res = await service.deleteVoucher('v-1');
+    const user = { sub: 'u-1', email: 'test@liouni.com' };
+    const res = await service.deleteVoucher('v-1', user);
 
-    expect(mockTransactionService.deleteVoucher).toHaveBeenCalledWith('v-1');
+    expect(mockTransactionService.deleteVoucher).toHaveBeenCalledWith(
+      'v-1',
+      user,
+    );
     expect(res).toEqual({ success: true });
   });
 

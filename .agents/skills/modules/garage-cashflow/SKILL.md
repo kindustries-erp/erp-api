@@ -25,7 +25,8 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
 - `note` (text, nullable)
-- `created_by`, `created_at`, `updated_at`
+- `created_by` (varchar 255, nullable) - Lưu email/user id của người tạo phiếu (lấy động 100% từ `req.user.email` của phiên đăng nhập)
+- `created_at` (timestamptz), `updated_at` (timestamptz)
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
@@ -79,7 +80,13 @@ src/kgara-api-core/
 - **Express Body Parser & Exception Handling (10MB & HTTP 413)**:
   - Cấu hình tại `erp-api/src/main.ts` nâng giới hạn `bodyParser` lên 10MB: `json({ limit: '10mb' })` và `urlencoded({ limit: '10mb', extended: true })`.
   - `AllExceptionsFilter` (`src/common/filters/all-exceptions.filter.ts`) tự động bắt lỗi `PayloadTooLargeError` hoặc HTTP status 413 từ Express/Body-Parser để trả về mã chuẩn HTTP 413 Payload Too Large thay vì rơi vào 500 Internal Server Error.
-- **Transaction Safety**: Toàn bộ thao tác Create, Update, Delete đều sử dụng `queryRunner.startTransaction()` để đảm bảo tính nhất quán (ACID) giữa bảng `kgara_cashflow_vouchers` và `kgara_case_settlements`.
+- **Transaction Safety & Audit Trail (`/api-service-refactor`)**:
+  - Toàn bộ thao tác Create, Update, Delete đều sử dụng `queryRunner.startTransaction()` để đảm bảo tính nhất quán (ACID) giữa bảng `kgara_cashflow_vouchers` và `kgara_case_settlements`.
+  - Tích hợp `AuditCoreService` với Clean DI constructor (`@Optional() private readonly auditCoreService?: AuditCoreService`).
+  - Tự động ghi nhận `recordAction` vào `erp_audit_logs` khi tạo mới (`actionType: 'CREATE'`), cập nhật (`actionType: 'UPDATE'` kèm `beforeSnapshot` và `afterSnapshot`), và xóa (`actionType: 'DELETE'`).
+  - **Dynamic User Context Extraction**: Controller trích xuất `@Req() req: any`, truyền `req?.user` (`{ sub, email }`) xuống Service. Khi tạo phiếu, gán `newVoucher.createdBy = user?.email || user?.sub`. Khi ghi audit log, truyền tường minh `actorUserId: user?.sub`, `actorEmail: user?.email`.
+  - Phía Web (`GarageCashflowDrawer`) tự động lấy nhật ký kiểm toán từ API `/api/v1/audit-logs-core/garage_cashflow_voucher/:id/timeline` và kết hợp với baseline metadata qua `mergeAuditItems` để hiển thị trong Tab **"Lịch sử & Kiểm duyệt"** (`DrawerAuditTimeline`).
+  - **Timeline Smart Actor Rendering**: `DrawerAuditTimeline` hiển thị ưu tiên `actorEmail` (hoặc `{actorName} ({actorEmail})` nếu có tên riêng), fallback thông minh sang `currentUserEmail` từ `useAuthStore` cho các phiếu cũ chưa có `createdBy`.
 - **Auto-Sync Settlements**:
   - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType = 'KH'`.
   - Khi **cập nhật** Voucher (thay đổi `amount`, `date`, `caseId`), hệ thống dò tìm `KgaraCaseSettlement` qua `cashflowVoucherId` để cập nhật đồng bộ, hoặc xóa đi (nếu `caseId` bị gỡ), hoặc tạo mới (nếu `caseId` mới được thêm vào).
@@ -113,15 +120,17 @@ src/modules/garage/components/
     │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
     │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
     │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
-    ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic bóc tách < 180 LoC)
+    ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic & Top Tabs < 180 LoC)
     │   ├── index.ts
-    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer, < 120 LoC)
-    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, auto-sync BKS, < 220 LoC)
+    │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer với Top Navigation Tabs: "Chi tiết" & "Lịch sử & Kiểm duyệt", < 180 LoC)
+    │   ├── GarageCashflowDrawer.hook.ts (Form state, validation, mutations, remote audit timeline, < 180 LoC)
+    │   ├── GarageCashflowDrawer.state.ts (Initial state, DTO payloads, computeAuditDiffs, < 140 LoC)
+    │   ├── GarageCashflowDrawer.helper.ts (Baseline audit items, duplicate check helpers, < 160 LoC)
     │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
     │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Thêm field dropdown Nội dung TT cạnh Phương thức TT, < 170 LoC)
     │   ├── GarageCashflowDrawerViewSection.tsx (Sub-section View Mode bóc tách < 70 LoC)
     │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
-    │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test)
+    │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test bao phủ Tabs & Timeline)
     └── garage-cashflow-list/
         ├── GarageCashflowList.tsx   (Wrapper kết nối Table và Drawer)
         └── GarageCashflowList.test.tsx (Co-located Unit Test)

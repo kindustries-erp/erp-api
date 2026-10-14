@@ -78,7 +78,7 @@ export class KgaraCashflowVoucher {
   @Column({ type: 'text', nullable: true })
   note?: string;
 
-  @Column({ type: 'varchar', length: 50, name: 'created_by', nullable: true })
+  @Column({ type: 'varchar', length: 255, name: 'created_by', nullable: true })
   createdBy?: string;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
