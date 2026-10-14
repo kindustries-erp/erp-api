@@ -852,3 +852,19 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
    - **Chống Lọc Kép (Double-Filtering Prevention)**:
      - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
      - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
+
+---
+
+## 10. Thuộc tính Mặc định vs Tùy chỉnh (từ 2026-10-14)
+
+- **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi.
+- **Tùy chỉnh**: EAV qua `StrictCustomFieldsHelper` (xem skill `module-config` mục 10).
+- `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → tự bật `excludeFromDebt` nếu client không gửi.
+- `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`).
+- Response case thêm `builtin` + `custom.byCode` (giữ alias `customAttributes`/`attributes`/`attributeValues` 1 release).
+- `PUT /module-config/values/GARAGE_CASE/:id` bị từ chối (400); chỉ dùng `PATCH /cases/:id/config` (`GARAGE:UPDATE`).
+
+### 10.1. Bỏ phân loại & backfill (2026-10-14)
+- `updateCaseConfig`: gửi `categoryId` falsy + `classification` null/rỗng ("Chưa phân loại") → xóa **cả** `category_id` lẫn `classification` (trước đây `classification` bị giữ lại, UI vẫn hiện phân loại cũ).
+- Migration `20261014150000` backfill `category_id` cho phiếu có `classification` mà `category_id` NULL (70 phiếu trên greenway-production). Invariant: phiếu có `classification` thì phải có `category_id` tương ứng.
+- **Khóa sync (phương án B)**: cột `kgara_cases.classification_manually_cleared` (migration `20261014160000`). `updateCaseConfig` bật `true` khi người dùng chủ động bỏ phân loại, gỡ về `false` khi chọn lại phân loại. `SyncCaseService` (sync hàng loạt và `syncCaseDetail`) chỉ tự gán `classification`/`category_id` từ KGara khi `classification` NULL **và** cờ này `false`. Test sync mới chỉ phủ đường `syncCaseDetail`.

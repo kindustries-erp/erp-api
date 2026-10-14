@@ -14,6 +14,7 @@ import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -149,10 +150,13 @@ export class SyncCaseService {
       const categoryMap = new Map<string, string>();
       for (const cat of categories) {
         categoryMap.set(cat.code, cat.id);
-        if (cat.code === 'OJ_NGOAI') {
+        // OJ nhận diện theo semanticKey (code admin sửa được); giữ alias code cũ để tương thích
+        if (
+          cat.semanticKey === GARAGE_CASE_SEMANTIC.OJ ||
+          cat.code === 'OJ_NGOAI' ||
+          cat.code === 'OJ'
+        ) {
           categoryMap.set('OJ', cat.id);
-        }
-        if (cat.code === 'OJ') {
           categoryMap.set('OJ_NGOAI', cat.id);
         }
       }
@@ -291,8 +295,9 @@ export class SyncCaseService {
             gwCase.kgaraClassification = kgaraClassification;
             gwCase.kgaraClassificationCode = kgaraClassificationCode;
             if (
-              gwCase.classification === null ||
-              gwCase.classification === undefined
+              (gwCase.classification === null ||
+                gwCase.classification === undefined) &&
+              !gwCase.classificationManuallyCleared
             ) {
               gwCase.classification = mapKgaraClassificationToErp(
                 kgaraClassificationCode,
@@ -606,8 +611,9 @@ export class SyncCaseService {
         gwCase.kgaraClassification = detailClassification;
         gwCase.kgaraClassificationCode = detailClassificationCode;
         if (
-          gwCase.classification === null ||
-          gwCase.classification === undefined
+          (gwCase.classification === null ||
+            gwCase.classification === undefined) &&
+          !gwCase.classificationManuallyCleared
         ) {
           gwCase.classification = mapKgaraClassificationToErp(
             detailClassificationCode,
@@ -618,6 +624,14 @@ export class SyncCaseService {
               typeof this.caseRepo.manager?.findOne === 'function'
                 ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
                     where: [
+                      ...(gwCase.classification === 'OJ'
+                        ? [
+                            {
+                              moduleKey: 'GARAGE_CASE',
+                              semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                            },
+                          ]
+                        : []),
                       { moduleKey: 'GARAGE_CASE', code: gwCase.classification },
                       {
                         moduleKey: 'GARAGE_CASE',
@@ -645,6 +659,10 @@ export class SyncCaseService {
             typeof this.caseRepo.manager?.findOne === 'function'
               ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
                   where: [
+                    {
+                      moduleKey: 'GARAGE_CASE',
+                      semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                    },
                     { moduleKey: 'GARAGE_CASE', code: 'OJ' },
                     { moduleKey: 'GARAGE_CASE', code: 'OJ_NGOAI' },
                   ],

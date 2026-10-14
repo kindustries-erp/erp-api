@@ -311,3 +311,29 @@ cd erp/erp-api && bun run check:ci
 cd erp/erp-web && bun run type:check && bun run test
 ```
 
+
+---
+
+## 10. Built-in vs Custom (Registry) & Checklist Module Mới có "Mặc định + Tùy chỉnh"
+
+**Nguyên tắc (áp dụng từ 2026-10-14, pilot `GARAGE_CASE`):**
+- **Built-in (mặc định)** = field do code sở hữu, lưu **cột typed** trên bảng thực thể (nguồn sự thật duy nhất), khai báo trong `src/module-config/registry/module-field-registry.ts` (`MODULE_FIELD_REGISTRY`). KHÔNG ghi vào EAV.
+- **Custom (tùy chỉnh)** = EAV `erp_entity_attribute_values`, chỉ def `is_system = false`. Ghi bằng `StrictCustomFieldsHelper.saveInTx` (`helpers/strict-custom-fields.helper.ts`): validate theo `field_type` (NUMBER/DATE/CHECKBOX/SELECT), key lạ → 400, upsert theo def (rỗng → xóa riêng def đó, def không có trong payload giữ nguyên), bỏ qua key built-in/legacy.
+- `EntityCustomFieldsHelper.saveInTx` (cũ, xóa-rồi-chèn) vẫn dùng cho các module chưa có registry.
+- `enrichOne`/`enrichMany`: module có registry được thêm `builtin` (từ cột) và `custom.byCode` (EAV tùy chỉnh) bên cạnh alias cũ `customAttributes`/`attributes`/`attributeValues`. **TODO dọn alias** khi mọi module chuyển xong (đã chốt giữ alias 1 release).
+- `PUT /module-config/values/:entityType/:id` với module có registry → 400; ghi qua endpoint riêng của module (vd `PATCH /cases/:id/config`).
+
+**Category `semantic_key`** (cột `erp_module_categories.semantic_key`, migration `20261014120000`): khóa nghiệp vụ do code sở hữu (GARAGE_CASE: `GENERAL`, `INTERNAL`, `OJ`, `OTHER`, hằng `GARAGE_CASE_SEMANTIC`). Logic nghiệp vụ dựa vào `semantic_key`, KHÔNG dựa vào `code` (admin sửa tự do). Category có `semantic_key` hoặc đang được `kgara_cases` dùng → `deleteCategory` trả 409 (chỉ cho ngừng hoạt động).
+
+**Unique def global**: partial unique index `uq_erp_module_attribute_defs_global_code (module_key_global, code) WHERE category_id IS NULL AND is_global` (migration `20261014121000`).
+
+**RBAC** (`module-config.controller.ts`): GET giữ `JwtAuthGuard` (form các module cần dropdown); ghi category/attribute-def cần `custom_fields:manage` (resource `ErpResource.CUSTOM_FIELDS`, cấp cho role có `accounting_configs`, migration `20261014140000`); `PUT values` qua `EntityValuesPermissionGuard` (map `entityType` → resource, cần `update`; entityType lạ → `custom_fields:manage`). Ghi định nghĩa gắn `@AuditLog({ module: 'module-config', entityType: 'module_category' | 'module_attribute_def' })`.
+
+### Checklist thêm module mới có "mặc định + tùy chỉnh"
+1. Đặt field mặc định thành **cột typed** trên bảng thực thể (migration có `up()`/`down()`), không tạo def `is_system` ghi đôi vào EAV.
+2. Đăng ký module trong `MODULE_FIELD_REGISTRY` (builtin + `legacySystemCodes` nếu có).
+3. Nếu nghiệp vụ phân nhánh theo category: thêm `semantic_key` + backfill, so sánh theo `semantic_key`.
+4. Service ghi: cột built-in + `StrictCustomFieldsHelper.saveInTx` trong CÙNG transaction.
+5. Thêm `entityType → resource` vào `ENTITY_TYPE_RESOURCE` (`guards/entity-values-permission.guard.ts`).
+6. FE đọc `builtin` / `custom.byCode`, không đọc alias cũ.
+7. Cập nhật SKILL của module + mục này.

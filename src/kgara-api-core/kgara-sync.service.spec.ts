@@ -562,6 +562,37 @@ describe('KgaraSyncService', () => {
       );
     });
 
+    it('should NOT auto-map classification when the user manually cleared it', async () => {
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-cleared-1',
+          SoChungTu: 'SC-CLEARED',
+          NguonGocKhachHangCode: 'NBPQ',
+          NguonGocKhachHangName: 'Nội Bộ PQ',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 1000000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue({
+        id: 'case-cleared',
+        hdPhieuDichVuId: 'c-cleared-1',
+        classification: null,
+        categoryId: null,
+        classificationManuallyCleared: true,
+      });
+
+      await service.syncCaseDetail('br-1', 'c-cleared-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kgaraClassificationCode: 'NBPQ',
+          classification: null,
+          categoryId: null,
+        }),
+      );
+    });
+
     it('should auto-map Sales tặng to KHAC and store kgara_classification when classification is NULL', async () => {
       clientService.getCaseDetail.mockResolvedValue({
         data: {

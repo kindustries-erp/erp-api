@@ -224,6 +224,14 @@ export class KgaraCase {
   })
   classification: string | null;
 
+  /** Người dùng chủ động chọn "Chưa phân loại": sync KGara không được tự gán lại phân loại. */
+  @Column({
+    type: 'boolean',
+    name: 'classification_manually_cleared',
+    default: false,
+  })
+  classificationManuallyCleared: boolean;
+
   @Column({ type: 'varchar', name: 'erp_notes', nullable: true })
   erpNotes: string | null;
 

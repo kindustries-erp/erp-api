@@ -4,6 +4,8 @@ import { DataSource, Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
+import { StrictCustomFieldsHelper } from '../../module-config/helpers/strict-custom-fields.helper';
+import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';
 
 /**
@@ -64,15 +66,23 @@ export class KgaraCaseConfigService {
         if (cat) {
           caseData.categoryId = cat.id;
           caseData.category = cat;
-          caseData.classification = cat.code === 'OJ_NGOAI' ? 'OJ' : cat.code;
+          // Nhận diện OJ theo semanticKey (code admin sửa được); giữ giá trị classification cũ cho báo cáo
+          caseData.classification =
+            cat.semanticKey === GARAGE_CASE_SEMANTIC.OJ ||
+            cat.code === 'OJ_NGOAI'
+              ? 'OJ'
+              : cat.code;
         } else {
           caseData.categoryId = resolvedCategoryId;
         }
       } else {
         caseData.categoryId = null;
         caseData.category = null as any;
-        if (resolvedClassification === undefined) {
+        // Bỏ phân loại: client gửi classification null/rỗng (hoặc không gửi) → xóa cả hai, tránh UI vẫn hiện theo classification cũ
+        if (!resolvedClassification) {
           caseData.classification = null;
+          // Chủ động bỏ phân loại: chặn sync KGara tự gán lại
+          caseData.classificationManuallyCleared = true;
         }
       }
     } else if (resolvedClassification !== undefined) {
@@ -81,6 +91,14 @@ export class KgaraCaseConfigService {
           resolvedClassification === 'OJ_NGOAI' ? 'OJ' : resolvedClassification;
         const cat = await this.categoryRepo.findOne({
           where: [
+            ...(normalizedClass === 'OJ'
+              ? [
+                  {
+                    semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                    moduleKey: 'GARAGE_CASE',
+                  },
+                ]
+              : []),
             { code: normalizedClass, moduleKey: 'GARAGE_CASE' },
             {
               code: normalizedClass === 'OJ' ? 'OJ_NGOAI' : normalizedClass,
@@ -95,7 +113,13 @@ export class KgaraCaseConfigService {
       } else {
         caseData.classification = null;
         caseData.categoryId = null;
+        caseData.classificationManuallyCleared = true;
       }
+    }
+
+    // Đã có phân loại (do người dùng chọn lại) thì gỡ cờ khóa sync
+    if (caseData.classification) {
+      caseData.classificationManuallyCleared = false;
     }
 
     if (caseData.classification === 'OJ_NGOAI') {
@@ -118,25 +142,19 @@ export class KgaraCaseConfigService {
       caseData.erpNotes = dto.erpNotes;
     }
 
-    // 4. Chuẩn bị customAttributes (Đồng bộ cả 2 cờ loại trừ vào customAttributes payload)
+    // 4. Chỉ thuộc tính TÙY CHỈNH đi qua EAV; cờ loại trừ/category là built-in (cột kgara_cases, nguồn duy nhất)
     const customAttrsToSave: Record<string, any> = {
       ...(dto.globalAttributes || {}),
       ...(dto.attributes || {}),
       ...(dto.customAttributes || {}),
     };
-    if (dto.excludeFromReports !== undefined) {
-      customAttrsToSave['exclude_from_reports'] = dto.excludeFromReports;
-    }
-    if (dto.excludeFromDebt !== undefined || caseData.classification === 'OJ') {
-      customAttrsToSave['exclude_from_debt'] = caseData.excludeFromDebt;
-    }
 
     // 5. Lưu dữ liệu trong Transaction an toàn
     await this.dataSource.transaction(async (manager) => {
       await manager.save(KgaraCase, caseData);
 
       if (Object.keys(customAttrsToSave).length > 0) {
-        await EntityCustomFieldsHelper.saveInTx(
+        await StrictCustomFieldsHelper.saveInTx(
           manager,
           'GARAGE_CASE',
           caseData.id,

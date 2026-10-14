@@ -1,6 +1,10 @@
 import { DataSource, EntityManager, In } from 'typeorm';
 import { ErpModuleAttributeDef } from '../entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from '../entities/erp_entity_attribute_value.entity';
+import {
+  getModuleFieldRegistry,
+  isBuiltinOrLegacyCode,
+} from '../registry/module-field-registry';
 
 export interface AttributeValueDetail {
   id: string;
@@ -282,6 +286,7 @@ export class EntityCustomFieldsHelper {
             (item as any).attributes = {};
           }
         }
+        this.attachRegistryView(upperType, item);
       }
     } catch (err) {
       // Fallback an toàn nếu xảy ra lỗi truy vấn
@@ -293,9 +298,35 @@ export class EntityCustomFieldsHelper {
             (item as any).attributes = {};
           }
         }
+        this.attachRegistryView(upperType, item);
       }
     }
 
     return entities;
+  }
+
+  /**
+   * Contract thống nhất cho module có registry: `builtin` (cột typed, nguồn duy nhất) + `custom.byCode` (EAV tùy chỉnh).
+   * Thêm bên cạnh alias cũ (customAttributes/attributes/attributeValues), không thay thế.
+   */
+  private static attachRegistryView(upperType: string, item: any): void {
+    const registry = getModuleFieldRegistry(upperType);
+    if (!registry) return;
+
+    const builtin: Record<string, unknown> = {};
+    for (const f of registry.builtin) {
+      builtin[f.key] = item[f.key] ?? null;
+    }
+
+    const byCode: Record<string, unknown> = {};
+    for (const av of (item.attributeValues || []) as AttributeValueDetail[]) {
+      if (!av.attrCode || av.isSystem) continue;
+      if (isBuiltinOrLegacyCode(upperType, av.attrCode)) continue;
+      const parsed = item.customAttributes?.[av.attrCode];
+      byCode[av.attrCode] = parsed !== undefined ? parsed : av.valueText;
+    }
+
+    item.builtin = builtin;
+    item.custom = { byCode };
   }
 }
