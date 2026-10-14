@@ -71,6 +71,7 @@ import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.s
 import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
 import { KgaraSuppliersService } from './services/kgara-suppliers.service';
 import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-suppliers-debt-query.engine';
+import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases-detail.service';
 
 @Module({
   imports: [
@@ -133,6 +134,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
+    KgaraCustomerCasesDetailService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -178,6 +180,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
+    KgaraCustomerCasesDetailService,
   ],
 })
 export class KgaraApiCoreModule {}

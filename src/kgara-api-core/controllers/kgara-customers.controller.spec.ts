@@ -5,11 +5,13 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
+import { KgaraCustomerCasesDetailService } from '../services/kgara-customer-cases-detail.service';
 
 describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
   let controller: KgaraCustomersController;
   let caseRepo: any;
   let settlementRepo: any;
+  let customerCasesDetailService: any;
 
   beforeEach(async () => {
     const mockRepo = () => ({
@@ -23,6 +25,9 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
 
     caseRepo = mockRepo();
     settlementRepo = mockRepo();
+    customerCasesDetailService = {
+      getCasesByCustomer: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [KgaraCustomersController],
@@ -31,6 +36,10 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         {
           provide: getRepositoryToken(KgaraCaseSettlement),
           useValue: settlementRepo,
+        },
+        {
+          provide: KgaraCustomerCasesDetailService,
+          useValue: customerCasesDetailService,
         },
       ],
     })
@@ -220,68 +229,18 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
   });
 
   describe('getCasesByCustomer', () => {
-    it('should calculate agingDays only for completed cases and set agingDays=0 for in-progress vehicles', async () => {
-      const mockQb = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        addOrderBy: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
-          {
-            id: 'case-1',
-            khachHangCode: 'KH001',
-            soChungTu: 'PDV-001',
-            tinhTrangDichVu: 3,
-            tenTinhTrangDichVu: 'Kết thúc',
-            ngayHoanThanhCongViec: new Date(
-              Date.now() - 10 * 24 * 60 * 60 * 1000,
-            ), // 10 days ago
-            ngayPhatSinh: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-            tienCoThue: 5000000,
-            tienDaThanhToan: 0,
-            tienConPhaiThanhToan: 5000000,
-          },
-          {
-            id: 'case-2',
-            khachHangCode: 'KH001',
-            soChungTu: 'PDV-002',
-            tinhTrangDichVu: 1, // In progress
-            tenTinhTrangDichVu: 'Đang sửa chữa',
-            ngayHoanThanhCongViec: null, // NOT finished
-            ngayPhatSinh: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-            tienCoThue: 3000000,
-            tienDaThanhToan: 0,
-            tienConPhaiThanhToan: 3000000,
-          },
-        ]),
-      };
-
-      caseRepo.createQueryBuilder.mockReturnValue(mockQb);
-
-      const mockSettlementQb = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        addGroupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-      settlementRepo.createQueryBuilder.mockReturnValue(mockSettlementQb);
+    it('should delegate getCasesByCustomer to customerCasesDetailService', async () => {
+      const mockResult = [{ id: 'case-1', isCompleted: true }] as any;
+      customerCasesDetailService.getCasesByCustomer.mockResolvedValue(
+        mockResult,
+      );
 
       const cases = await controller.getCasesByCustomer('BRANCH_01', 'KH001');
 
-      expect(cases).toHaveLength(2);
-
-      // Completed case should have isCompleted=true and agingDays ~ 10
-      expect(cases[0].id).toBe('case-1');
-      expect(cases[0].isCompleted).toBe(true);
-      expect(cases[0].agingDays).toBeGreaterThanOrEqual(9);
-      expect(cases[0].agingDays).toBeLessThanOrEqual(11);
-
-      // In-progress case should have isCompleted=false and agingDays = 0
-      expect(cases[1].id).toBe('case-2');
-      expect(cases[1].isCompleted).toBe(false);
-      expect(cases[1].agingDays).toBe(0);
+      expect(
+        customerCasesDetailService.getCasesByCustomer,
+      ).toHaveBeenCalledWith('BRANCH_01', 'KH001');
+      expect(cases).toBe(mockResult);
     });
   });
 });
