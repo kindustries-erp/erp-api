@@ -840,3 +840,15 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
 - Migration `20261013100000-SeparateGarageDebtsPermissions` backfill toàn bộ action hiện có từ `garage` sang `garage_debts` trên `erp_local`; `down()` là no-op để không xóa quyền debts được cấp độc lập.
 - Các endpoint financial dùng chung cho case drawer và debts detail dùng `RequireAnyPermissions` với `GARAGE`/`GARAGE_DEBTS` cùng các resource accounting hiện có; endpoint cập nhật cấu hình vụ việc vẫn yêu cầu `GARAGE`.
 - Khi thêm endpoint debts mới, dùng `GARAGE_DEBTS` trực tiếp và tạo controller spec co-located kiểm tra metadata RBAC.
+
+## 9.11. Chuẩn Hóa Bộ Lọc Cột (Header Filter) & Bảo Toàn Checked Options Khi Searchbox Active
+
+1. **Chuẩn Hóa Cấu Hình Bảng `GarageCasesTable` Theo `/standardize-table`**:
+   - Cột STT: Cấu hình chuẩn `size: 40`, `headerClassName: "text-center w-[40px] min-w-[40px]"`, `className: "text-center w-[40px] min-w-[40px] font-mono text-xs text-muted-foreground"`, hiển thị `{idx}`.
+   - Cô lập Cache Query Key: Gắn kèm `branchId` (`garage-case-column-options-${branchId || "all"}`) vào `commonOptionProps` trong `GarageCasesTable.columns.tsx` để tránh dùng nhầm cache options giữa các chi nhánh khác nhau.
+
+2. **Cơ Chế Bảo Toàn Options Đã Checked Khi Searchbox Active (Header Filter & FilterPanel)**:
+   - **Ghim Checked Options Lên Đầu**: Trong `TableColumnHeaderFilter.tsx` và `ColumnOptionList.tsx`, khi ô searchbox có từ khóa tìm kiếm, toàn bộ options đang được tick chọn (`pendingFilters`) được ghim lên đầu danh sách `finalOptions` cho cả Server Mode (`fetchOptions`) và Client Mode (`filterOptions`), kèm nhãn hiển thị đầy đủ thông qua cache nhãn `knownLabelsRef`.
+   - **Chống Lọc Kép (Double-Filtering Prevention)**:
+     - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
+     - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
