@@ -40,6 +40,7 @@ import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
+import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
 import { KgaraCaseListQueryService } from './services/kgara-case-list-query.service';
 import { KgaraCaseConfigService } from './services/kgara-case-config.service';
@@ -115,6 +116,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,
@@ -159,6 +161,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,

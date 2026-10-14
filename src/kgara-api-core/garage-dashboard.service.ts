@@ -4,6 +4,7 @@ import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
+import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { ListGarageOpexQueryDto } from './dto/garage-opex.dto';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class GarageDashboardService {
     private readonly customerStatsService: GarageCustomerStatsService,
     private readonly exportService: GarageDashboardExportService,
     private readonly pnlService: GaragePnlService,
+    private readonly monthlyReceivablesBreakdownService: GarageMonthlyReceivablesBreakdownService,
   ) {}
 
   /**
@@ -119,5 +121,15 @@ export class GarageDashboardService {
    */
   exportPnlExcel(year?: number, month?: number): Promise<Buffer> {
     return this.pnlService.exportPnlExcel(year, month);
+  }
+
+  /**
+   * 8. Lấy chi tiết phân rã Phải thu & Đã thu theo tháng (Thu KH, Thu BH, Từng Công ty Bảo hiểm & Cảnh báo VAT)
+   */
+  getMonthlyReceivablesBreakdown(month: string, branchId?: string) {
+    return this.monthlyReceivablesBreakdownService.getMonthlyReceivablesBreakdown(
+      month,
+      branchId,
+    );
   }
 }

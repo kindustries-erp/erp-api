@@ -5,6 +5,7 @@ import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
+import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 
 describe('GarageDashboardService (Facade)', () => {
   let service: GarageDashboardService;
@@ -13,6 +14,7 @@ describe('GarageDashboardService (Facade)', () => {
   let mockCustomerStatsService: any;
   let mockExportService: any;
   let mockPnlService: any;
+  let mockMonthlyBreakdownService: any;
 
   beforeEach(async () => {
     mockStatsService = {
@@ -39,6 +41,12 @@ describe('GarageDashboardService (Facade)', () => {
       exportPnlExcel: jest.fn().mockResolvedValue(Buffer.from('pnl-excel')),
     };
 
+    mockMonthlyBreakdownService = {
+      getMonthlyReceivablesBreakdown: jest
+        .fn()
+        .mockResolvedValue({ month: '2026-10' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GarageDashboardService,
@@ -53,6 +61,10 @@ describe('GarageDashboardService (Facade)', () => {
           useValue: mockExportService,
         },
         { provide: GaragePnlService, useValue: mockPnlService },
+        {
+          provide: GarageMonthlyReceivablesBreakdownService,
+          useValue: mockMonthlyBreakdownService,
+        },
       ],
     }).compile();
 
@@ -153,5 +165,13 @@ describe('GarageDashboardService (Facade)', () => {
     const res = await service.exportPnlExcel(2026, 7);
     expect(mockPnlService.exportPnlExcel).toHaveBeenCalledWith(2026, 7);
     expect(res).toBeDefined();
+  });
+
+  it('delegates getMonthlyReceivablesBreakdown to monthlyReceivablesBreakdownService', async () => {
+    const res = await service.getMonthlyReceivablesBreakdown('2026-10', 'BR01');
+    expect(
+      mockMonthlyBreakdownService.getMonthlyReceivablesBreakdown,
+    ).toHaveBeenCalledWith('2026-10', 'BR01');
+    expect(res).toEqual({ month: '2026-10' });
   });
 });

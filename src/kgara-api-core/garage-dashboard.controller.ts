@@ -54,6 +54,25 @@ export class GarageDashboardController {
   }
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @Get('monthly-receivables-breakdown')
+  @ApiQuery({
+    name: 'month',
+    required: true,
+    description: 'Định dạng YYYY-MM hoặc MM/YYYY',
+  })
+  @ApiQuery({
+    name: 'branch_id',
+    required: false,
+    description: 'ID chi nhánh garage',
+  })
+  getMonthlyReceivablesBreakdown(
+    @Query('month') month: string,
+    @Query('branch_id') branchId?: string,
+  ) {
+    return this.service.getMonthlyReceivablesBreakdown(month, branchId);
+  }
+
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('checkpoint-cases')
   @ApiQuery({ name: 'date_from', required: true })
   @ApiQuery({ name: 'date_to', required: true })
