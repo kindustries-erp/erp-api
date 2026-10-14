@@ -7,6 +7,14 @@ import {
 } from '../../helpers/garage-payable-settlement.helper';
 import { KgaraCase } from '../../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../../entities/kgara_gross_profit.entity';
+import { KGARA_STATUS_COMPLETED } from '../../helpers/kgara-completion-date.helper';
+
+/** Công nợ phải trả chỉ tính phiếu ERP đã Kết thúc (3), không lấy dòng lãi gộp chưa có phiếu. */
+const COMPLETED_CASE_CONDITIONS = [
+  '"c"."id" IS NOT NULL',
+  `"c"."tinh_trang_dich_vu" = ${KGARA_STATUS_COMPLETED}`,
+  '"c"."kgara_deleted_at" IS NULL',
+];
 
 export interface GetSuppliersDebtParams {
   branchId?: string;
@@ -129,9 +137,9 @@ export class KgaraSuppliersDebtQueryEngine {
       'COALESCE(NULLIF(TRIM(COALESCE("c"."bien_so_xe", substring("gp"."vu_viec_name" from \'Biển số: ([^ ]+)\'))), \'\'), \'CHUA_CO_BKS\')';
 
     const whereConditions: string[] = [
-      '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
-      '("c"."id" IS NULL OR "c"."exclude_from_reports" IS NOT TRUE)',
-      '("c"."id" IS NULL OR "c"."exclude_from_debt" IS NOT TRUE)',
+      ...COMPLETED_CASE_CONDITIONS,
+      '"c"."exclude_from_reports" IS NOT TRUE',
+      '"c"."exclude_from_debt" IS NOT TRUE',
       hasPayableCondition,
       `${dateExpr} >= $1`,
     ];
@@ -665,7 +673,7 @@ export class KgaraSuppliersDebtQueryEngine {
 
     if (column === 'caseCount') {
       const whereConditions: string[] = [
-        '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
+        ...COMPLETED_CASE_CONDITIONS,
         hasPayableCondition,
         `${dateExpr} >= $1`,
       ];
@@ -717,7 +725,7 @@ export class KgaraSuppliersDebtQueryEngine {
       );
 
       const whereConditions: string[] = [
-        '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
+        ...COMPLETED_CASE_CONDITIONS,
         hasPayableCondition,
         `${dateExpr} >= $1`,
         `${nameCol} IS NOT NULL`,
@@ -820,7 +828,7 @@ export class KgaraSuppliersDebtQueryEngine {
     );
 
     const whereConditions: string[] = [
-      '("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)',
+      ...COMPLETED_CASE_CONDITIONS,
       hasPayableCondition,
       `${dateExpr} >= $1`,
       `${dbCol} IS NOT NULL`,

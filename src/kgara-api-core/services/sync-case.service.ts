@@ -12,6 +12,7 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import {
   parseSafeDate,
@@ -261,7 +262,10 @@ export class SyncCaseService {
           gwCase.ngayPhatSinh =
             parseSafeDate(c.NgayPhatSinhFull) || parseSafeDate(c.NgayPhatSinh);
           gwCase.ngayTiepNhan = parseSafeDate(c.NgayTiepNhan);
-          gwCase.ngayHoanThanhCongViec = parseSafeDate(c.NgayHoanThanhCongViec);
+          gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+            newStatus,
+            parseSafeDate(c.NgayHoanThanhCongViec),
+          );
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           gwCase.soKhung = c.SoKhung;
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
@@ -584,8 +588,9 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayPhatSinhFull) ||
         parseSafeDate(caseData.NgayPhatSinh);
       gwCase.ngayTiepNhan = parseSafeDate(caseData.NgayTiepNhan);
-      gwCase.ngayHoanThanhCongViec = parseSafeDate(
-        caseData.NgayHoanThanhCongViec,
+      gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+        newStatus,
+        parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
       gwCase.soKhung = caseData.SoKhung;

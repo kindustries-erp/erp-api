@@ -214,4 +214,50 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(result.summary.totalPaid).toBe(1200000);
     expect(result.summary.totalBalance).toBe(-200000);
   });
+
+  describe('chỉ tính phiếu hoàn thành (tình trạng 3)', () => {
+    const STATUS_CONDITION = '"c"."tinh_trang_dich_vu" = 3';
+
+    const expectCompletedOnly = () => {
+      const calls = caseRepo.manager.query.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      for (const [sql] of calls) {
+        expect(sql).toContain(STATUS_CONDITION);
+        expect(sql).toContain('"c"."id" IS NOT NULL');
+        expect(sql).not.toContain('"c"."id" IS NULL OR');
+      }
+    };
+
+    it('danh sách phải trả theo biển số lọc tình trạng = 3', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([]);
+
+      await engine.getSuppliersDebt({
+        branchId: 'BR-01',
+        page: 1,
+        pageSize: 20,
+      });
+
+      expectCompletedOnly();
+    });
+
+    it('options caseCount lọc tình trạng = 3', async () => {
+      caseRepo.manager.query.mockResolvedValueOnce([]);
+
+      await engine.getSuppliersDebtColumnOptions('BR-01', 'caseCount');
+
+      expectCompletedOnly();
+    });
+
+    it('options khách hàng lọc tình trạng = 3', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{ total: '0' }])
+        .mockResolvedValueOnce([]);
+
+      await engine.getSuppliersDebtColumnOptions('BR-01', 'customer');
+
+      expectCompletedOnly();
+    });
+  });
 });
