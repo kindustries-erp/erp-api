@@ -386,3 +386,20 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - Khống chế cứng toàn bộ các file trong organism `< 180 LoC/file`.
   - Table trong Drawer dùng `<StandardTable variant="spreadsheet" />`.
   - Tuân thủ nghiêm ngặt 100% **No Blue Mandate** và 100% đa ngôn ngữ qua `useTranslation`.
+
+### 8.6. Drawer Chi Tiết Từng Tháng Của Từng Đối Tượng (GaragePartnerMonthDetailDrawer) & Drill-down Đa Chiều
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX Alignment)**:
+  - Cho phép người dùng drill-down xem sâu số liệu doanh thu, chi phí, công nợ và danh sách phiếu dịch vụ của **một đối tượng cụ thể trong một tháng xác định**.
+  - **Đồng bộ UI với Drawer Tổng Quát (`GarageMonthDetailDrawer`)**: Kế thừa chuẩn bố cục `StandardFormDrawer` layout `2-columns` (`size="full"`):
+    - Cột trái: Bộ 4 KPI Cards tương phản theo tiến độ (Phát sinh, Đã thu/chi, Còn lại, VAT cảnh báo), thanh Sub-Tabs chuyển đổi giữa `Bảng phân loại nghiệp vụ` (`PartnerMonthClassificationTable`) và `Danh sách vụ việc trong tháng` (`PartnerMonthCasesTable`).
+    - Cột phải: `PartnerMonthSidebarSummary` tổng hợp nhanh tỷ trọng phân loại, tiến độ hoàn tất, cảnh báo hóa đơn VAT chưa xuất và thông tin đối tượng.
+  - **Nút Chuyển Đổi [ ↙ Phải Thu | ↗ Phải Trả ] Ngay Trên Header Drawer**:
+    - Tái sử dụng molecule `CustomerDetailDebtSwitch` ở dạng button-group nhỏ gọn trên header / thanh điều hướng, cho phép kế toán viên đối chiếu tức thì công nợ phải thu và chi phí phải trả của đối tượng trong tháng mà không cần đóng mở drawer.
+- **Điểm Kích Hoạt (Entry Points)**:
+  1. **Từ Drawer Tổng Quát (`GarageMonthDetailDrawer`)**: Khi nhấp vào nút Xem chi tiết hoặc tên đối tượng trong bảng `MonthInvoicePartnerTable`.
+  2. **Từ Drawer Hồ Sơ Khách Hàng (`GarageCustomerDetailDrawer`)**: Bảng thống kê biến động theo tháng trong tab Phân tích tuổi nợ (`CustomerDebtAgingChartTab`), cho phép click xem chi tiết bất kỳ tháng phát sinh nào.
+- **Kiến Trúc Atomic Design (`/ui-atomic-refactor`)**:
+  - Toàn bộ component đặt tại `src/modules/garage/components/organisms/garage-partner-month-detail-drawer/`.
+  - Mọi file đều khống chế nghiêm ngặt **< 180 LoC/file** (tách riêng helper phân loại `PartnerMonthClassification.helper.ts` và columns `PartnerMonthCasesTable.columns.tsx`).
+  - 100% **No Blue Mandate** (sử dụng token Tailwind emerald, amber, rose, slate/neutral/muted).
+  - Co-located unit test `GaragePartnerMonthDetailDrawer.test.tsx` pass 100%.
