@@ -8,6 +8,7 @@ import {
   Param,
   Body,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -93,8 +94,9 @@ export class GarageCashflowController {
   })
   async createVoucher(
     @Body() dto: CreateKgaraCashflowVoucherDto,
+    @Req() req?: any,
   ): Promise<KgaraCashflowVoucherResponseDto> {
-    return this.cashflowService.createVoucher(dto);
+    return this.cashflowService.createVoucher(dto, req?.user);
   }
 
   @Put(':id')
@@ -105,8 +107,9 @@ export class GarageCashflowController {
   async updateVoucher(
     @Param('id') id: string,
     @Body() dto: UpdateKgaraCashflowVoucherDto,
+    @Req() req?: any,
   ): Promise<KgaraCashflowVoucherResponseDto> {
-    return this.cashflowService.updateVoucher(id, dto);
+    return this.cashflowService.updateVoucher(id, dto, req?.user);
   }
 
   @Delete(':id')
@@ -114,7 +117,10 @@ export class GarageCashflowController {
     resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.DELETE,
   })
-  async deleteVoucher(@Param('id') id: string): Promise<void> {
-    return this.cashflowService.deleteVoucher(id);
+  async deleteVoucher(
+    @Param('id') id: string,
+    @Req() req?: any,
+  ): Promise<void> {
+    return this.cashflowService.deleteVoucher(id, req?.user);
   }
 }

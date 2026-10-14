@@ -22,6 +22,7 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CommonModule } from '../common/common.module';
+import { AuditCoreModule } from '../audit-core/audit-core.module';
 
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
@@ -94,6 +95,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     ConfigModule,
     NotificationsModule,
     CommonModule,
+    AuditCoreModule,
   ],
   providers: [
     KgaraAuthService,
