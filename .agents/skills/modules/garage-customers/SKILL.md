@@ -322,6 +322,7 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 ### 8.2. Đồng Bộ Số Liệu Garage Debts Dashboard (Tab Tổng Quan)
 - `GarageDebtsAnalyticsService` (`src/kgara-api-core/services/garage-debts-analytics.service.ts`):
   - Khối Payables trên Dashboard đồng bộ cùng nguồn dữ liệu `kgara_cases` + `kgara_gross_profit` với Tab Phải trả.
+  - **Chỉ tính phiếu Kết thúc (`tinh_trang_dich_vu = 3`)** cho cả Phải thu và Phải trả; dòng lãi gộp không ghép được phiếu ERP bị loại. Chi tiết xem `garage-cases` mục 5.16.
   - **KPI Cards**: `totalPayable` (Tổng chi phí báo giá), `paidPayable` (Đã chi = tổng PAYMENT, hết hard-code 0), `remainingPayable` (Còn phải chi = chi phí − đã chi, có thể âm), `paymentRate`, `netBalance` = Còn phải thu - Còn phải chi.
   - **Top Payables**: Khối `topPayableSuppliers` xếp hạng Top Khách Hàng có chi phí sổ báo giá cao nhất kèm số lượng phiếu.
   - **Aging Comparison & Cash Trend**: Aging payable tính trên số còn phải chi. `cashTrend` theo tháng hoàn tất vụ việc: `cashIn` = Đã thu (`tien_da_thanh_toan`), `cashOut` = Đã chi (tổng PAYMENT), `netCash = cashIn − cashOut`. Doanh thu/chi phí tổng hợp xem ở trang khác (dashboard garage). Biểu đồ web nhãn "Đã thu"/"Đã chi".

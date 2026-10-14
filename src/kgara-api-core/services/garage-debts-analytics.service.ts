@@ -7,6 +7,7 @@ import {
 } from '../helpers/garage-payable-settlement.helper';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraPayable } from '../entities/kgara_payable.entity';
+import { KGARA_STATUS_COMPLETED } from '../helpers/kgara-completion-date.helper';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import {
   GarageDebtsAnalyticsResponse,
@@ -49,6 +50,7 @@ export class GarageDebtsAnalyticsService {
     const caseParams: any[] = [effectiveFrom];
     let caseWhere = `
       "c"."kgara_deleted_at" IS NULL
+      AND "c"."tinh_trang_dich_vu" = ${KGARA_STATUS_COMPLETED}
       AND ("c"."exclude_from_reports" IS NOT TRUE)
       AND ("c"."exclude_from_debt" IS NOT TRUE)
       AND "c"."ngay_hoan_thanh_cong_viec" IS NOT NULL
@@ -102,9 +104,11 @@ export class GarageDebtsAnalyticsService {
       buildPayableExprs(costExpr);
 
     let payableWhere = `
-      ("c"."id" IS NULL OR "c"."kgara_deleted_at" IS NULL)
-      AND ("c"."id" IS NULL OR "c"."exclude_from_reports" IS NOT TRUE)
-      AND ("c"."id" IS NULL OR "c"."exclude_from_debt" IS NOT TRUE)
+      "c"."id" IS NOT NULL
+      AND "c"."tinh_trang_dich_vu" = ${KGARA_STATUS_COMPLETED}
+      AND "c"."kgara_deleted_at" IS NULL
+      AND ("c"."exclude_from_reports" IS NOT TRUE)
+      AND ("c"."exclude_from_debt" IS NOT TRUE)
       AND ${hasPayableCondition}
       AND ${dateExpr} >= $1
     `;
@@ -338,6 +342,7 @@ export class GarageDebtsAnalyticsService {
     const queryParams: any[] = [effectiveFrom];
     let whereSql = `
       "c"."kgara_deleted_at" IS NULL
+      AND "c"."tinh_trang_dich_vu" = ${KGARA_STATUS_COMPLETED}
       AND ("c"."exclude_from_reports" IS NOT TRUE)
       AND ("c"."exclude_from_debt" IS NOT TRUE)
       AND "c"."ngay_hoan_thanh_cong_viec" IS NOT NULL

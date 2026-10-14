@@ -522,6 +522,15 @@ Base Route: `/api/v1/greenway/cashflow`
 
 ---
 
+### 5.16. Quy tắc Ngày Hoàn Thành & Công nợ Chỉ Tính Phiếu Kết Thúc (`resolveCompletionDate`)
+- **Ngày hoàn thành chỉ hợp lệ khi tình trạng = 3**: Kgara vẫn trả `NgayHoanThanhCongViec` khi phiếu quay về Báo giá/Đang làm/Hủy (đã xác minh trên GR-PDV2610-0022). `SyncCaseService` (`syncCasesForBranch` và `syncCaseDetail`) gọi `resolveCompletionDate(status, date)` trong `helpers/kgara-completion-date.helper.ts`, trả `null` nếu tình trạng khác 3. `raw_data` vẫn giữ nguyên payload gốc của Kgara.
+- **Công nợ chỉ tính phiếu Kết thúc (`tinh_trang_dich_vu = 3`)** ở mọi màn hình `garage-debts`:
+  - Tổng quan và danh sách theo mốc (`GarageDebtsAnalyticsService.getDebtsAnalytics`, `getTimeHorizonCases`): phải thu, trend, top khách hàng.
+  - Phải trả (analytics và `KgaraSuppliersDebtQueryEngine`): dòng `kgara_gross_profit` chỉ được tính khi ghép được phiếu ERP có tình trạng 3. Dòng lãi gộp không có phiếu ERP bị loại (trước đây đi qua `c.id IS NULL`). Báo cáo lãi gộp của Kgara vẫn có thể trả dòng cho phiếu chưa kết thúc, nên điều kiện này nằm ở truy vấn.
+  - Tab Phải thu (`/cases/customers-debt`) đã lọc tình trạng 3 từ trước.
+- **Phải trả không có chi phí nhân công**: `kgara_gross_profit.chi_phi` = `ChiPhiVon` (giá vốn), `ChiPhiKhac` = 0. Phải thu `tien_co_thue` đã gồm tiền công (dòng `DV`).
+- Test: `kgara-completion-date.helper.spec.ts`, `kgara-sync.service.spec.ts` (mục *completion date rule*), `garage-debts-analytics.service.spec.ts`, `kgara-suppliers-debt-query.engine.spec.ts`.
+
 ## 6. Tích hợp Liên Module
 
 - **`erp-invoices-core`**:
