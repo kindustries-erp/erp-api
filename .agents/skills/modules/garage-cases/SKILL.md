@@ -853,6 +853,20 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
      - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
      - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
 
+### 9.10. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải nghiệm người dùng với các module Hóa đơn và Sao kê:
+1. **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
+   - Gỡ bỏ `GarageCaseStatusTabs` dạng viên nhộng nổi và vách ngăn thừa ngoài thanh toolbar của `GarageCasesTable`.
+   - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
+     - **Nhóm 1 (Trên - Lọc dữ liệu)**: `TRẠNG THÁI PHIẾU` (`Tất cả`, `Báo giá`, `Đang làm`, `Kết thúc`).
+     - **Vách ngăn (Giữa)**: Divider nét mờ.
+     - **Nhóm 2 (Dưới - Chế độ xem cột)**: `CHẾ ĐỘ XEM` (`Tổng quan`, `Tiến độ tài chính`, `Kiểm toán`, `Tất cả cột`...), kèm nút `+ Tạo chế độ xem mới`.
+   - Nút trigger ngoài hiển thị thông minh: `[ 🎛️ {Tên View Mode} • {Trạng thái} v ]` (tự ẩn phần trạng thái nếu đang ở `Tất cả`).
+2. **Cấu Trúc Thư Mục Chuẩn Atomic (L2 Molecule)**:
+   - Thư mục: `src/modules/garage/components/molecules/garage-case-view-mode-combobox/`.
+   - Đầy đủ các file vệ tinh: `GarageCaseViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
+   - Giới hạn cứng: 100% file < 180 LoC, No Blue Mandate, 100% i18n qua `useTranslation`.
+
 ---
 
 ## 10. Thuộc tính Mặc định vs Tùy chỉnh (từ 2026-10-14)

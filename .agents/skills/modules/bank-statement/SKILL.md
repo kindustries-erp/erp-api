@@ -386,5 +386,19 @@ src/modules/bank-statements/components/BankStatementsTab/
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 
+### 8.7. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+- **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
+  - Gỡ bỏ `PillTabs` thu/chi nổi và vách ngăn thừa ngoài thanh toolbar của `BankStatementSection`.
+  - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
+    - **Nhóm 1 (Trên - Lọc dữ liệu)**: `LOẠI GIAO DỊCH` (`Tất cả`, `Thu (IN)`, `Chi (OUT)`).
+    - **Vách ngăn (Giữa)**: Divider nét mờ.
+    - **Nhóm 2 (Dưới - Chế độ xem cột)**: `CHẾ ĐỘ XEM` (`Tổng quan`, `Kiểm toán / Đối soát`, `View Kế Toán Quỹ`...), kèm nút `+ Tạo chế độ xem mới`.
+  - Nút trigger ngoài hiển thị thông minh: `[ 🎛️ {Tên View Mode} • {Thu/Chi} v ]` (tự ẩn phần loại phát sinh nếu đang ở `Tất cả`).
+- **Cấu Trúc Thư Mục Chuẩn Atomic (L2 Molecule)**:
+  - Thư mục: `src/modules/bank-statements/components/molecules/bank-statement-view-mode-combobox/`.
+  - Đầy đủ các file vệ tinh: `BankStatementViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
+  - Giới hạn cứng: 100% file < 180 LoC, No Blue Mandate, 100% i18n qua `useTranslation`.
+
+
 
 
