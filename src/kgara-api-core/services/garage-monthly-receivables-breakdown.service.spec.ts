@@ -186,5 +186,106 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
     expect(case2Cust).toBeDefined();
     expect(case2Cust?.vatWarning).toBe(true);
     expect(case2Cust?.hasInvoice).toBe(false);
+
+    // Kiểm tra categorized groups (Bảo hiểm, Doanh nghiệp, Cá nhân)
+    expect(result.categorized).toBeDefined();
+    expect(result.categorized?.insurance.all).toHaveLength(1);
+    expect(result.categorized?.insurance.all[0].partnerCategory).toBe(
+      'INSURANCE',
+    );
+    expect(result.categorized?.insurance.all[0].invoiceCategory).toBe(
+      'WITH_INVOICE',
+    );
+    expect(result.categorized?.insurance.withInvoice).toHaveLength(1);
+    expect(result.categorized?.insurance.pendingInvoice).toHaveLength(0);
+
+    expect(result.categorized?.enterprise.all).toHaveLength(1);
+    expect(result.categorized?.enterprise.all[0].title).toBe(
+      'Công ty Cổ Phần X',
+    );
+    expect(result.categorized?.enterprise.all[0].partnerCategory).toBe(
+      'ENTERPRISE',
+    );
+    expect(result.categorized?.enterprise.all[0].invoiceCategory).toBe(
+      'PENDING_INVOICE',
+    );
+    expect(result.categorized?.enterprise.pendingInvoice).toHaveLength(1);
+
+    expect(result.categorized?.individual.all).toHaveLength(1);
+    expect(result.categorized?.individual.all[0].title).toBe('Nguyễn Văn A');
+    expect(result.categorized?.individual.all[0].partnerCategory).toBe(
+      'INDIVIDUAL',
+    );
+    expect(result.categorized?.individual.all[0].invoiceCategory).toBe(
+      'PENDING_INVOICE',
+    );
+    expect(result.categorized?.individual.pendingInvoice).toHaveLength(1);
+  });
+
+  it('should categorize correctly for non-VAT individual customers (NO_INVOICE)', async () => {
+    const caseNoVat: any = {
+      id: 'case-3',
+      soChungTu: 'GR-PDV2610-0003',
+      bienSoXe: '51C-99999',
+      khachHangName: 'Trần Văn B (Khách lẻ)',
+      tienCoThue: '2000000',
+      tienDaThanhToan: '2000000',
+      rawData: {
+        TienThanhToanKH: '2000000',
+        TienThanhToanBH: '0',
+        TienThue: '0',
+        TienThueKH: '0',
+        TienThueBH: '0',
+        XeLamBaoHiem: false,
+      },
+    };
+
+    const caseQb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([caseNoVat]),
+    };
+    mockCaseRepo.createQueryBuilder.mockReturnValue(caseQb);
+
+    const setQb: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          caseId: 'case-3',
+          amount: '2000000',
+          payerType: 'KH',
+          settlementType: 'RECEIPT',
+        },
+      ]),
+    };
+    mockSettlementRepo.createQueryBuilder.mockReturnValue(setQb);
+
+    const invQb: any = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    mockLinkedInvoiceRepo.createQueryBuilder.mockReturnValue(invQb);
+
+    const result = await service.getMonthlyReceivablesBreakdown('2026-10');
+
+    expect(result.categorized?.individual.noInvoice).toHaveLength(1);
+    expect(result.categorized?.individual.noInvoice[0].partnerCategory).toBe(
+      'INDIVIDUAL',
+    );
+    expect(result.categorized?.individual.noInvoice[0].invoiceCategory).toBe(
+      'NO_INVOICE',
+    );
+    expect(result.categorized?.individual.noInvoice[0].hasInvoice).toBe(false);
+    expect(result.categorized?.individual.noInvoice[0].hasVat).toBe(false);
+    expect(result.categorized?.individual.noInvoice[0].vatWarning).toBe(false);
+    expect(result.categorized?.individual.totals.billed).toBe(2000000);
+    expect(result.categorized?.individual.totals.paid).toBe(2000000);
+    expect(result.categorized?.individual.totals.remaining).toBe(0);
   });
 });

@@ -9,6 +9,9 @@ import type {
   MonthlyReceivablesBreakdownResponse,
   MonthlyReceivablesGroupItem,
   MonthlyReceivablesCaseItem,
+  MonthlyReceivablesGroupCategorized,
+  ReceivablesInvoiceCategory,
+  ReceivablesPartnerCategory,
 } from '../dto/garage-monthly-receivables-breakdown.dto';
 
 @Injectable()
@@ -75,11 +78,57 @@ export class GarageMonthlyReceivablesBreakdownService {
     );
   }
 
+  private isEnterprisePartner(
+    taxCode?: string | null,
+    buyerName?: string | null,
+    customerName?: string | null,
+  ): boolean {
+    if (taxCode && taxCode.trim().length >= 8) return true;
+    const name = `${buyerName || ''} ${customerName || ''}`.toLowerCase();
+    return (
+      name.includes('công ty') ||
+      name.includes('cong ty') ||
+      name.includes('cty') ||
+      name.includes('cổ phần') ||
+      name.includes('co phan') ||
+      name.includes('cp') ||
+      name.includes('tnhh') ||
+      name.includes('doanh nghiệp') ||
+      name.includes('doanh nghiep') ||
+      name.includes('dntn') ||
+      name.includes('chi nhánh') ||
+      name.includes('chi nhanh') ||
+      name.includes('hợp tác xã') ||
+      name.includes('hop tac xa') ||
+      name.includes('htx') ||
+      name.includes('ban quản lý') ||
+      name.includes('ban quan ly') ||
+      name.includes('tập đoàn') ||
+      name.includes('tap doan') ||
+      name.includes('viện') ||
+      name.includes('trung tâm')
+    );
+  }
+
   async getMonthlyReceivablesBreakdown(
     month: string,
     branchId?: string,
   ): Promise<MonthlyReceivablesBreakdownResponse> {
     const { dateFrom, dateTo, monthKey, monthLabel } = this.parseMonth(month);
+
+    const emptyCategorized = (): MonthlyReceivablesGroupCategorized => ({
+      all: [],
+      withInvoice: [],
+      pendingInvoice: [],
+      noInvoice: [],
+      totals: {
+        billed: 0,
+        paid: 0,
+        remaining: 0,
+        caseCount: 0,
+        partnerCount: 0,
+      },
+    });
 
     // 1. Query các vụ việc hoàn thành trong tháng
     const qb = this.caseRepo
@@ -143,6 +192,11 @@ export class GarageMonthlyReceivablesBreakdownService {
         insuranceCompanies: [],
         customerPartners: [],
         allGroups: [],
+        categorized: {
+          insurance: emptyCategorized(),
+          enterprise: emptyCategorized(),
+          individual: emptyCategorized(),
+        },
       };
     }
 
@@ -247,40 +301,31 @@ export class GarageMonthlyReceivablesBreakdownService {
 
     const warnCaseIds = new Set<string>();
 
-    const insGroupMap = new Map<
-      string,
-      {
-        companyName: string;
-        taxCode: string;
-        hasInvoice: boolean;
-        invoiceNos: Set<string>;
-        hasVat: boolean;
-        vatAmount: number;
-        vatWarning: boolean;
-        billed: number;
-        paid: number;
-        remaining: number;
-        cases: MonthlyReceivablesCaseItem[];
-      }
-    >();
+    interface RawGroupItem {
+      key: string;
+      payerType: 'KH' | 'BH';
+      partnerCategory: ReceivablesPartnerCategory;
+      invoiceCategory: ReceivablesInvoiceCategory;
+      title: string;
+      subLabel?: string;
+      buyerName: string;
+      companyName?: string;
+      customerName?: string;
+      taxCode: string;
+      hasInvoice: boolean;
+      invoiceNos: Set<string>;
+      hasVat: boolean;
+      vatAmount: number;
+      vatWarning: boolean;
+      billed: number;
+      paid: number;
+      remaining: number;
+      cases: MonthlyReceivablesCaseItem[];
+    }
 
-    const custGroupMap = new Map<
-      string,
-      {
-        customerName: string;
-        buyerName: string;
-        taxCode: string;
-        hasInvoice: boolean;
-        invoiceNos: Set<string>;
-        hasVat: boolean;
-        vatAmount: number;
-        vatWarning: boolean;
-        billed: number;
-        paid: number;
-        remaining: number;
-        cases: MonthlyReceivablesCaseItem[];
-      }
-    >();
+    const insGroupMap = new Map<string, RawGroupItem>();
+    const enterpriseGroupMap = new Map<string, RawGroupItem>();
+    const individualGroupMap = new Map<string, RawGroupItem>();
 
     for (const c of cases) {
       const raw = c.rawData || {};
@@ -377,17 +422,34 @@ export class GarageMonthlyReceivablesBreakdownService {
           warnCaseIds.add(c.id);
         }
 
+        const invoiceCategory: ReceivablesInvoiceCategory = hasInvoice
+          ? 'WITH_INVOICE'
+          : vatWarning
+            ? 'PENDING_INVOICE'
+            : 'NO_INVOICE';
+        const partnerCategory: ReceivablesPartnerCategory = 'INSURANCE';
+
         const compName =
           bhInvoice?.buyerName ||
           (vatWarning
             ? 'Bảo hiểm chưa xuất / chưa đính kèm HĐ'
             : 'Bảo hiểm chưa có HĐ');
         const key = bhInvoice?.buyerName
-          ? `INS_${bhInvoice.buyerName}`
-          : 'INS__NO_INVOICE__';
+          ? `INS_${invoiceCategory}_${bhInvoice.buyerName}`
+          : `INS_${invoiceCategory}__NO_INVOICE__`;
 
         const existing = insGroupMap.get(key) || {
+          key,
+          payerType: 'BH',
+          partnerCategory,
+          invoiceCategory,
+          title: compName,
+          subLabel: bhInvoice?.buyerTaxCode
+            ? `MST: ${bhInvoice.buyerTaxCode}`
+            : undefined,
           companyName: compName,
+          buyerName: compName,
+          customerName: undefined,
           taxCode: bhInvoice?.buyerTaxCode || '',
           hasInvoice,
           invoiceNos: new Set<string>(),
@@ -443,19 +505,53 @@ export class GarageMonthlyReceivablesBreakdownService {
           warnCaseIds.add(c.id);
         }
 
+        const invoiceCategory: ReceivablesInvoiceCategory = hasInvoice
+          ? 'WITH_INVOICE'
+          : vatWarning
+            ? 'PENDING_INVOICE'
+            : 'NO_INVOICE';
+
+        const isEnterprise = this.isEnterprisePartner(
+          khInvoice?.buyerTaxCode,
+          khInvoice?.buyerName,
+          c.khachHangName,
+        );
+        const partnerCategory: ReceivablesPartnerCategory = isEnterprise
+          ? 'ENTERPRISE'
+          : 'INDIVIDUAL';
+
         const buyerTitle =
           khInvoice?.buyerName ||
           c.khachHangName ||
           (vatWarning
             ? 'Khách hàng chưa xuất / chưa đính kèm HĐ'
             : 'Khách hàng chưa có HĐ');
-        const key = khInvoice?.buyerName
-          ? `CUST_${khInvoice.buyerName}`
-          : `CUST_${c.khachHangName || 'UNKNOWN'}`;
 
-        const existing = custGroupMap.get(key) || {
+        const subLabel = isEnterprise
+          ? khInvoice?.buyerTaxCode
+            ? `MST: ${khInvoice.buyerTaxCode}`
+            : c.khachHangName && c.khachHangName !== buyerTitle
+              ? c.khachHangName
+              : undefined
+          : c.khachHangCode
+            ? `Mã KH: ${c.khachHangCode}`
+            : undefined;
+
+        const key = `${partnerCategory}_${invoiceCategory}_${khInvoice?.buyerTaxCode || khInvoice?.buyerName || c.khachHangName || 'UNKNOWN'}`;
+        const targetMap = isEnterprise
+          ? enterpriseGroupMap
+          : individualGroupMap;
+
+        const existing = targetMap.get(key) || {
+          key,
+          payerType: 'KH',
+          partnerCategory,
+          invoiceCategory,
+          title: buyerTitle,
+          subLabel,
           customerName: c.khachHangName || 'Khách lẻ',
           buyerName: buyerTitle,
+          companyName: isEnterprise ? buyerTitle : undefined,
           taxCode: khInvoice?.buyerTaxCode || '',
           hasInvoice,
           invoiceNos: new Set<string>(),
@@ -491,78 +587,89 @@ export class GarageMonthlyReceivablesBreakdownService {
           vatWarning,
         });
 
-        custGroupMap.set(key, existing);
+        targetMap.set(key, existing);
       }
     }
 
-    // 5. Chuẩn hóa groups sang Array
-    const insuranceCompanies: MonthlyReceivablesGroupItem[] = Array.from(
-      insGroupMap.entries(),
-    ).map(([key, item]) => {
-      const rate =
-        item.billed > 0
-          ? Math.min(100, Math.round((item.paid / item.billed) * 1000) / 10)
-          : 0;
-      const shareRate =
-        totalBilled > 0
-          ? Math.round((item.billed / totalBilled) * 1000) / 10
-          : 0;
-      return {
-        key,
-        payerType: 'BH',
-        title: item.companyName,
-        subLabel: item.taxCode ? `MST: ${item.taxCode}` : undefined,
-        buyerName: item.companyName,
-        companyName: item.companyName,
-        taxCode: item.taxCode || null,
-        hasInvoice: item.hasInvoice,
-        invoiceNos: Array.from(item.invoiceNos),
-        hasVat: item.hasVat,
-        vatAmount: item.vatAmount,
-        vatWarning: item.vatWarning,
-        caseCount: item.cases.length,
-        billed: item.billed,
-        paid: item.paid,
-        remaining: item.remaining,
-        rate,
-        shareRate,
-        cases: item.cases,
-      };
-    });
+    // 5. Chuẩn hóa groups sang Array và tính toán categorized
+    const buildCategorizedGroup = (
+      map: Map<string, RawGroupItem>,
+    ): MonthlyReceivablesGroupCategorized => {
+      const items: MonthlyReceivablesGroupItem[] = Array.from(map.values()).map(
+        (item) => {
+          const rate =
+            item.billed > 0
+              ? Math.min(100, Math.round((item.paid / item.billed) * 1000) / 10)
+              : 0;
+          const shareRate =
+            totalBilled > 0
+              ? Math.round((item.billed / totalBilled) * 1000) / 10
+              : 0;
+          return {
+            key: item.key,
+            payerType: item.payerType,
+            partnerCategory: item.partnerCategory,
+            invoiceCategory: item.invoiceCategory,
+            title: item.title,
+            subLabel: item.subLabel,
+            buyerName: item.buyerName,
+            companyName: item.companyName,
+            customerName: item.customerName,
+            taxCode: item.taxCode || null,
+            hasInvoice: item.hasInvoice,
+            invoiceNos: Array.from(item.invoiceNos),
+            hasVat: item.hasVat,
+            vatAmount: item.vatAmount,
+            vatWarning: item.vatWarning,
+            caseCount: item.cases.length,
+            billed: item.billed,
+            paid: item.paid,
+            remaining: item.remaining,
+            rate,
+            shareRate,
+            cases: item.cases,
+          };
+        },
+      );
 
-    const customerPartners: MonthlyReceivablesGroupItem[] = Array.from(
-      custGroupMap.entries(),
-    ).map(([key, item]) => {
-      const rate =
-        item.billed > 0
-          ? Math.min(100, Math.round((item.paid / item.billed) * 1000) / 10)
-          : 0;
-      const shareRate =
-        totalBilled > 0
-          ? Math.round((item.billed / totalBilled) * 1000) / 10
-          : 0;
+      const all = items.sort((a, b) => b.billed - a.billed);
+      const withInvoice = all.filter(
+        (i) => i.invoiceCategory === 'WITH_INVOICE',
+      );
+      const pendingInvoice = all.filter(
+        (i) => i.invoiceCategory === 'PENDING_INVOICE',
+      );
+      const noInvoice = all.filter((i) => i.invoiceCategory === 'NO_INVOICE');
+
+      const totals = all.reduce(
+        (acc, cur) => ({
+          billed: acc.billed + cur.billed,
+          paid: acc.paid + cur.paid,
+          remaining: acc.remaining + cur.remaining,
+          caseCount: acc.caseCount + cur.caseCount,
+          partnerCount: acc.partnerCount + 1,
+        }),
+        { billed: 0, paid: 0, remaining: 0, caseCount: 0, partnerCount: 0 },
+      );
+
       return {
-        key,
-        payerType: 'KH',
-        title: item.buyerName,
-        subLabel: item.taxCode ? `MST: ${item.taxCode}` : item.customerName,
-        buyerName: item.buyerName,
-        customerName: item.customerName,
-        taxCode: item.taxCode || null,
-        hasInvoice: item.hasInvoice,
-        invoiceNos: Array.from(item.invoiceNos),
-        hasVat: item.hasVat,
-        vatAmount: item.vatAmount,
-        vatWarning: item.vatWarning,
-        caseCount: item.cases.length,
-        billed: item.billed,
-        paid: item.paid,
-        remaining: item.remaining,
-        rate,
-        shareRate,
-        cases: item.cases,
+        all,
+        withInvoice,
+        pendingInvoice,
+        noInvoice,
+        totals,
       };
-    });
+    };
+
+    const insuranceCategorized = buildCategorizedGroup(insGroupMap);
+    const enterpriseCategorized = buildCategorizedGroup(enterpriseGroupMap);
+    const individualCategorized = buildCategorizedGroup(individualGroupMap);
+
+    const insuranceCompanies = insuranceCategorized.all;
+    const customerPartners = [
+      ...enterpriseCategorized.all,
+      ...individualCategorized.all,
+    ].sort((a, b) => b.billed - a.billed);
 
     const allGroups = [...insuranceCompanies, ...customerPartners].sort(
       (a, b) => b.billed - a.billed,
@@ -623,6 +730,11 @@ export class GarageMonthlyReceivablesBreakdownService {
       insuranceCompanies,
       customerPartners,
       allGroups,
+      categorized: {
+        insurance: insuranceCategorized,
+        enterprise: enterpriseCategorized,
+        individual: individualCategorized,
+      },
     };
   }
 }

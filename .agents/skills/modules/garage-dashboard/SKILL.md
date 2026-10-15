@@ -34,10 +34,21 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Hỗ trợ Context Menu chuột phải trên từng dòng tháng mở **`GarageMonthDetailDrawer.tsx`** (2-column StandardFormDrawer layout):
     - **Cột Trái (Main Content)**: Xếp chồng dọc 2 `DrawerSection` độc lập (`collapsible={true}`):
       - **Section 1 (Nằm TRÊN)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) với 8 cột chuẩn hóa: `#` (40px), `Loại nghiệp vụ` (200px), `Tổng phát sinh` (140px), `Đã thu/chi` (150px kèm thanh tiến độ), `Còn phải thu/trả` (140px), `Còn phải thu/trả có HĐ` (150px), `Còn phải thu/trả không HĐ` (150px), `Tỷ trọng (%)` (90px) và dòng tổng cộng `Σ`. Bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`).
-      - **Section 2 (Nằm DƯỚI)**: Bảng chi tiết phân rã **Thu Khách Hàng (Thu KH)** & **Thu Bảo Hiểm (Thu BH)** theo **Đối tượng Hóa đơn**:
+      - **Section 2 (Nằm DƯỚI)**: Bảng chi tiết phân rã đối tượng theo **Ma trận 3x3 (3 Nhóm Đối Tượng × 3 Trạng Thái Hóa Đơn)**:
+        - **Phân tách 3 Nhóm Đối Tượng Độc Lập**:
+          1. 🏢 **Khách hàng Doanh nghiệp / Tổ chức** (`ENTERPRISE`): Nhận diện qua MST (`taxCode`) hoặc tên pháp nhân (`CÔNG TY CP`, `TNHH`, `DNTN`, `Chi nhánh`, `HTX`...).
+          2. 👤 **Khách hàng Cá nhân** (`INDIVIDUAL`): Khách lẻ, chủ xe cá nhân không có MST.
+          3. 🛡️ **Bảo hiểm** (`INSURANCE`): Các công ty bảo hiểm xe cơ giới duyệt bồi thường (Bảo Long, Bảo Việt, MIC, PTI, AAA, PVI, VBI...).
+        - **Phân rã 3 Trạng Thái Hóa Đơn trong từng nhóm (`MonthPartnerCategorizedSection`)**:
+          - 🟢 **Đã xuất hóa đơn** (`WITH_INVOICE`): Đã có hóa đơn điện tử OUT hợp lệ liên kết.
+          - 🟠 **Chưa xuất hóa đơn - Có VAT** (`PENDING_INVOICE`): Vụ việc có tính thuế VAT nhưng chưa xuất / chưa đính kèm HĐ điện tử (highlight badge hổ phách cảnh báo cần xử lý xuất HĐ).
+          - ⚪ **Không xuất hóa đơn** (`NO_INVOICE`): Sửa chữa thông thường không tính thuế VAT và không lấy hóa đơn.
+        - **Thanh Điều Khiển PillTabs Kép**:
+          - **Toolbar Cấp 1**: Lọc nhanh nhóm đối tượng (`Tất cả đối tượng` | `KH Doanh nghiệp` | `KH Cá nhân` | `Bảo hiểm`).
+          - **Toolbar Cấp 2**: Lọc nhanh trạng thái HĐ trong từng khối (`Tất cả` | `Đã xuất HĐ` | `Chưa xuất HĐ` | `Không xuất HĐ`).
         - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
         - **2 Thẻ KPI Tương phản (`MonthPayerKpiGrid`)**: Phân tách rõ rệt nguồn thu từ Khách hàng và từng khoản duyệt bồi thường từ Bảo hiểm.
-        - **Bảng gom nhóm Từng Công ty Bảo hiểm & Khách hàng (`MonthInvoicePartnerTable`)**: Liệt kê chi tiết từng công ty bảo hiểm (VIETINBANK An Phú, Bảo Việt, PVI, PJICO...), từng khách hàng, số vụ việc, phát sinh, đã thu, còn nợ, tỷ trọng, badge trạng thái HĐ / Cảnh báo VAT và nút tra cứu vụ việc liên quan.
+        - **Bảng gom nhóm Chuẩn hóa (`MonthInvoicePartnerTable`)**: Liệt kê chi tiết từng đối tượng, số vụ việc, phát sinh, đã thu, còn nợ, tỷ trọng, badge trạng thái HĐ / Cảnh báo VAT và nút tra cứu vụ việc liên quan.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Cơ cấu Thu KH vs Thu BH, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
