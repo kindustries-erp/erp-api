@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { ErpInvoice } from '../../erp-invoices-core/entities/erp_invoice.entity';
 import type {
   MonthlyReceivablesBreakdownResponse,
@@ -27,6 +28,8 @@ export class GarageMonthlyReceivablesBreakdownService {
     private readonly settlementRepo: Repository<KgaraCaseSettlement>,
     @InjectRepository(KgaraCaseLinkedInvoice)
     private readonly linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
+    @InjectRepository(KgaraGrossProfit)
+    private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
   ) {}
 
   private parseMonth(month: string) {
@@ -201,35 +204,108 @@ export class GarageMonthlyReceivablesBreakdownService {
     }
 
     const caseIds = cases.map((c) => c.id);
+    const caseHdIds = cases.map((c) => c.hdPhieuDichVuId).filter(Boolean);
+    const caseCodes = cases.map((c) => c.soChungTu).filter(Boolean);
 
-    // 2. Query settlements (Thu tiền) theo caseId
-    const settlements = await this.settlementRepo
+    // 2. Query gross profit để lấy chi_phi thực tế (bảng kgara_cases.chi_phi thường là null)
+    const gpCostByCaseId = new Map<string, number>();
+    const caseIdByGpId = new Map<string, string>();
+    const gpIds: string[] = [];
+
+    const caseIdByHdId = new Map<string, string>();
+    const caseIdByCode = new Map<string, string>();
+    for (const c of cases) {
+      if (c.hdPhieuDichVuId) caseIdByHdId.set(c.hdPhieuDichVuId, c.id);
+      if (c.soChungTu) caseIdByCode.set(c.soChungTu, c.id);
+    }
+
+    if (caseHdIds.length > 0 || caseCodes.length > 0) {
+      const gpQb = this.grossProfitRepo
+        .createQueryBuilder('gp')
+        .select([
+          'gp.id AS "id"',
+          'gp.hd_phieu_dich_vu_id AS "hdPhieuDichVuId"',
+          'gp.vu_viec_code AS "vuViecCode"',
+          'gp.chi_phi AS "chiPhi"',
+        ]);
+
+      const orConds: string[] = [];
+      const orParams: Record<string, any> = {};
+      if (caseHdIds.length > 0) {
+        orConds.push('gp.hd_phieu_dich_vu_id IN (:...caseHdIds)');
+        orParams.caseHdIds = caseHdIds;
+      }
+      if (caseCodes.length > 0) {
+        orConds.push('gp.vu_viec_code IN (:...caseCodes)');
+        orParams.caseCodes = caseCodes;
+      }
+
+      const gpRecords = await gpQb
+        .where(`(${orConds.join(' OR ')})`, orParams)
+        .getRawMany();
+
+      for (const gp of gpRecords) {
+        if (gp.id) gpIds.push(gp.id);
+        const matchedCaseId =
+          (gp.hdPhieuDichVuId && caseIdByHdId.get(gp.hdPhieuDichVuId)) ||
+          (gp.vuViecCode && caseIdByCode.get(gp.vuViecCode));
+        if (matchedCaseId) {
+          gpCostByCaseId.set(matchedCaseId, Number(gp.chiPhi) || 0);
+          if (gp.id) caseIdByGpId.set(gp.id, matchedCaseId);
+        }
+      }
+    }
+
+    // 3. Query settlements (Thu tiền RECEIPT & Chi tiền PAYMENT) theo caseId và grossProfitId
+    const settlementQb = this.settlementRepo
       .createQueryBuilder('s')
       .select([
         's.case_id AS "caseId"',
+        's.gross_profit_id AS "grossProfitId"',
         's.amount AS "amount"',
         's.payer_type AS "payerType"',
         's.settlement_type AS "settlementType"',
       ])
-      .where('s.case_id IN (:...caseIds)', { caseIds })
-      .andWhere("s.settlement_type = 'RECEIPT'")
-      .getRawMany();
+      .where("s.settlement_type IN ('RECEIPT', 'PAYMENT')");
+
+    if (gpIds.length > 0) {
+      settlementQb.andWhere(
+        '(s.case_id IN (:...caseIds) OR s.gross_profit_id IN (:...gpIds))',
+        { caseIds, gpIds },
+      );
+    } else {
+      settlementQb.andWhere('s.case_id IN (:...caseIds)', { caseIds });
+    }
+
+    const settlements = await settlementQb.getRawMany();
 
     const settlementsMap = new Map<
       string,
-      { kh: number; bh: number; total: number }
+      { kh: number; bh: number; total: number; paidCost: number }
     >();
     for (const s of settlements) {
-      if (!s.caseId) continue;
-      const cur = settlementsMap.get(s.caseId) || { kh: 0, bh: 0, total: 0 };
+      const cId =
+        s.caseId ||
+        (s.grossProfitId ? caseIdByGpId.get(s.grossProfitId) : null);
+      if (!cId) continue;
+      const cur = settlementsMap.get(cId) || {
+        kh: 0,
+        bh: 0,
+        total: 0,
+        paidCost: 0,
+      };
       const amt = Number(s.amount) || 0;
-      cur.total += amt;
-      if (s.payerType === 'BH') {
-        cur.bh += amt;
+      if (s.settlementType === 'PAYMENT') {
+        cur.paidCost += amt;
       } else {
-        cur.kh += amt;
+        cur.total += amt;
+        if (s.payerType === 'BH') {
+          cur.bh += amt;
+        } else {
+          cur.kh += amt;
+        }
       }
-      settlementsMap.set(s.caseId, cur);
+      settlementsMap.set(cId, cur);
     }
 
     // 3. Query linked OUT invoices
@@ -320,6 +396,9 @@ export class GarageMonthlyReceivablesBreakdownService {
       billed: number;
       paid: number;
       remaining: number;
+      cost: number;
+      paidCost: number;
+      remainingCost: number;
       cases: MonthlyReceivablesCaseItem[];
     }
 
@@ -459,8 +538,18 @@ export class GarageMonthlyReceivablesBreakdownService {
           billed: 0,
           paid: 0,
           remaining: 0,
+          cost: 0,
+          paidCost: 0,
+          remainingCost: 0,
           cases: [],
         };
+
+        const gpCost = gpCostByCaseId.get(c.id);
+        const caseCost = Number(
+          gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0,
+        );
+        const casePaidCost = setInfo?.paidCost || 0;
+        const caseRemainingCost = Math.max(0, caseCost - casePaidCost);
 
         if (bhInvoice?.invoiceNo) existing.invoiceNos.add(bhInvoice.invoiceNo);
         if (vatWarning) existing.vatWarning = true;
@@ -469,6 +558,9 @@ export class GarageMonthlyReceivablesBreakdownService {
         existing.billed += phaiThuBH;
         existing.paid += daThuBH;
         existing.remaining += conPhaiThuBH;
+        existing.cost += caseCost;
+        existing.paidCost += casePaidCost;
+        existing.remainingCost += caseRemainingCost;
         existing.cases.push({
           id: c.id,
           soChungTu: c.soChungTu || '',
@@ -478,6 +570,9 @@ export class GarageMonthlyReceivablesBreakdownService {
           amount: phaiThuBH,
           paid: daThuBH,
           remaining: conPhaiThuBH,
+          cost: caseCost,
+          paidCost: casePaidCost,
+          remainingCost: caseRemainingCost,
           vatAmount: vatBH,
           invoiceNo: bhInvoice?.invoiceNo,
           invoiceId: bhInvoice?.invoiceId,
@@ -561,8 +656,18 @@ export class GarageMonthlyReceivablesBreakdownService {
           billed: 0,
           paid: 0,
           remaining: 0,
+          cost: 0,
+          paidCost: 0,
+          remainingCost: 0,
           cases: [],
         };
+
+        const gpCost = gpCostByCaseId.get(c.id);
+        const caseCost = Number(
+          gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0,
+        );
+        const casePaidCost = setInfo?.paidCost || 0;
+        const caseRemainingCost = Math.max(0, caseCost - casePaidCost);
 
         if (khInvoice?.invoiceNo) existing.invoiceNos.add(khInvoice.invoiceNo);
         if (vatWarning) existing.vatWarning = true;
@@ -571,6 +676,9 @@ export class GarageMonthlyReceivablesBreakdownService {
         existing.billed += phaiThuKH;
         existing.paid += daThuKH;
         existing.remaining += conPhaiThuKH;
+        existing.cost += caseCost;
+        existing.paidCost += casePaidCost;
+        existing.remainingCost += caseRemainingCost;
         existing.cases.push({
           id: c.id,
           soChungTu: c.soChungTu || '',
@@ -580,6 +688,9 @@ export class GarageMonthlyReceivablesBreakdownService {
           amount: phaiThuKH,
           paid: daThuKH,
           remaining: conPhaiThuKH,
+          cost: caseCost,
+          paidCost: casePaidCost,
+          remainingCost: caseRemainingCost,
           vatAmount: vatKH,
           invoiceNo: khInvoice?.invoiceNo,
           invoiceId: khInvoice?.invoiceId,
@@ -625,6 +736,9 @@ export class GarageMonthlyReceivablesBreakdownService {
             billed: item.billed,
             paid: item.paid,
             remaining: item.remaining,
+            cost: item.cost,
+            paidCost: item.paidCost,
+            remainingCost: item.remainingCost,
             rate,
             shareRate,
             cases: item.cases,
@@ -646,10 +760,22 @@ export class GarageMonthlyReceivablesBreakdownService {
           billed: acc.billed + cur.billed,
           paid: acc.paid + cur.paid,
           remaining: acc.remaining + cur.remaining,
+          cost: acc.cost + (cur.cost || 0),
+          paidCost: acc.paidCost + (cur.paidCost || 0),
+          remainingCost: acc.remainingCost + (cur.remainingCost || 0),
           caseCount: acc.caseCount + cur.caseCount,
           partnerCount: acc.partnerCount + 1,
         }),
-        { billed: 0, paid: 0, remaining: 0, caseCount: 0, partnerCount: 0 },
+        {
+          billed: 0,
+          paid: 0,
+          remaining: 0,
+          cost: 0,
+          paidCost: 0,
+          remainingCost: 0,
+          caseCount: 0,
+          partnerCount: 0,
+        },
       );
 
       return {

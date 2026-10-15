@@ -4,12 +4,14 @@ import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-recei
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 
 describe('GarageMonthlyReceivablesBreakdownService', () => {
   let service: GarageMonthlyReceivablesBreakdownService;
   let mockCaseRepo: any;
   let mockSettlementRepo: any;
   let mockLinkedInvoiceRepo: any;
+  let mockGrossProfitRepo: any;
 
   beforeEach(async () => {
     mockCaseRepo = {
@@ -19,6 +21,9 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
       createQueryBuilder: jest.fn(),
     };
     mockLinkedInvoiceRepo = {
+      createQueryBuilder: jest.fn(),
+    };
+    mockGrossProfitRepo = {
       createQueryBuilder: jest.fn(),
     };
 
@@ -36,6 +41,10 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
         {
           provide: getRepositoryToken(KgaraCaseLinkedInvoice),
           useValue: mockLinkedInvoiceRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraGrossProfit),
+          useValue: mockGrossProfitRepo,
         },
       ],
     }).compile();
@@ -108,7 +117,21 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
     };
     mockCaseRepo.createQueryBuilder.mockReturnValue(caseQb);
 
-    // 2. Mock settlements: Case 1 có 2M thu từ KH
+    // 2. Mock gross profit: Case 1 có chi phí 6.5M
+    const gpQb: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          id: 'gp-1',
+          vuViecCode: 'GR-PDV2610-0001',
+          chiPhi: '6500000',
+        },
+      ]),
+    };
+    mockGrossProfitRepo.createQueryBuilder.mockReturnValue(gpQb);
+
+    // 3. Mock settlements: Case 1 có 2M thu từ KH
     const setQb: any = {
       select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -219,7 +242,8 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
     expect(result.categorized?.individual.all[0].invoiceCategory).toBe(
       'PENDING_INVOICE',
     );
-    expect(result.categorized?.individual.pendingInvoice).toHaveLength(1);
+    expect(result.categorized?.individual.all[0].cases[0].cost).toBe(6500000);
+    expect(result.categorized?.individual.all[0].cost).toBe(6500000);
   });
 
   it('should categorize correctly for non-VAT individual customers (NO_INVOICE)', async () => {
@@ -247,6 +271,13 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
       getMany: jest.fn().mockResolvedValue([caseNoVat]),
     };
     mockCaseRepo.createQueryBuilder.mockReturnValue(caseQb);
+
+    const gpQb: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    mockGrossProfitRepo.createQueryBuilder.mockReturnValue(gpQb);
 
     const setQb: any = {
       select: jest.fn().mockReturnThis(),
