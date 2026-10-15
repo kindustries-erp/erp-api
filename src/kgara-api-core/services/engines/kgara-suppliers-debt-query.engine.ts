@@ -513,6 +513,11 @@ export class KgaraSuppliersDebtQueryEngine {
         else if (col === 'paidAmount') sortParts.push(`"paid_amount" ${dir}`);
         else if (col === 'balanceAmount' || col === 'balance')
           sortParts.push(`"balance_amount" ${dir}`);
+        else if (col === 'aging0_30') sortParts.push(`"aging_0_30" ${dir}`);
+        else if (col === 'aging31_60') sortParts.push(`"aging_31_60" ${dir}`);
+        else if (col === 'aging61_90') sortParts.push(`"aging_61_90" ${dir}`);
+        else if (col === 'agingOver90')
+          sortParts.push(`"aging_over_90" ${dir}`);
         else if (col === 'latestDate' || col === 'completedDate')
           sortParts.push(`"latest_date" ${dir}`);
         else if (col === 'maxAgingDays' || col === 'aging')

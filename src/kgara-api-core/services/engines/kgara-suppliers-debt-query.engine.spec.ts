@@ -175,6 +175,25 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(result.summary.totalCost).toBe(10000000);
     expect(result.summary.totalAging0_30).toBe(6000000);
   });
+
+  it('should sort by all aging buckets with the requested directions', async () => {
+    caseRepo.manager.query
+      .mockResolvedValueOnce([{ total_customers: '0' }])
+      .mockResolvedValueOnce([]);
+
+    await engine.getSuppliersDebt({
+      branchId: 'BR-01',
+      page: 1,
+      pageSize: 20,
+      sorts: ['aging0_30', '-aging31_60', 'aging61_90', '-agingOver90'],
+    });
+
+    const dataQuery = caseRepo.manager.query.mock.calls[1][0];
+    expect(dataQuery).toContain(
+      'ORDER BY "aging_0_30" ASC, "aging_31_60" DESC, "aging_61_90" ASC, "aging_over_90" DESC',
+    );
+  });
+
   it('trừ cấn trừ PAYMENT: SQL join PAYMENT, paid/balance lấy từ DB, cho phép âm', async () => {
     caseRepo.manager.query
       .mockResolvedValueOnce([

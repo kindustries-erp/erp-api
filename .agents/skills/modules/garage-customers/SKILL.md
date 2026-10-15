@@ -144,7 +144,7 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
   - `q`: Từ khóa tìm kiếm đa trường (mã KH, tên KH, biển số xe, số chứng từ).
   - `from`: Ngày bắt đầu (mặc định không được nhỏ hơn baseline `2026-07-01`).
   - `to`: Ngày kết thúc.
-  - `sorts`: Danh sách sắp xếp đa cột (vd: `["-balanceAmount", "customerName"]`).
+  - `sorts`: Danh sách sắp xếp đa cột (vd: `["-balanceAmount", "customerName"]`). Các key aging `aging0_30`, `aging31_60`, `aging61_90`, `agingOver90` được map lần lượt sang các alias SQL `aging_0_30`, `aging_31_60`, `aging_61_90`, `aging_over_90`, hỗ trợ cả ASC và DESC.
   - `filtersStr` / `column_filters`: JSON string chứa bộ lọc các cột (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`).
   - `column_search`: JSON string tìm kiếm nhanh theo từng cột.
 

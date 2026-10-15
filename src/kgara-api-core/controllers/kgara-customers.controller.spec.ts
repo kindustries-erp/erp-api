@@ -226,6 +226,27 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         'value',
       );
     });
+
+    it('should sort by all aging buckets with the requested directions', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{ total_customers: '0' }])
+        .mockResolvedValueOnce([]);
+
+      await controller.getCustomersDebt(
+        'BRANCH_01',
+        '1',
+        '20',
+        '',
+        undefined,
+        undefined,
+        ['aging0_30', '-aging31_60', 'aging61_90', '-agingOver90'],
+      );
+
+      const dataQuery = caseRepo.manager.query.mock.calls[1][0];
+      expect(dataQuery).toContain(
+        'ORDER BY aging_0_30 ASC, aging_31_60 DESC, aging_61_90 ASC, aging_over_90 DESC',
+      );
+    });
   });
 
   describe('getCasesByCustomer', () => {

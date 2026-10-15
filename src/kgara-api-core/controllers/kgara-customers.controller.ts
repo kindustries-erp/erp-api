@@ -425,6 +425,10 @@ export class KgaraCustomersController {
           sortParts.push(`con_phai_thu ${dir}`);
         else if (col === 'caseCount' || col === 'soPhieu')
           sortParts.push(`so_phieu ${dir}`);
+        else if (col === 'aging0_30') sortParts.push(`aging_0_30 ${dir}`);
+        else if (col === 'aging31_60') sortParts.push(`aging_31_60 ${dir}`);
+        else if (col === 'aging61_90') sortParts.push(`aging_61_90 ${dir}`);
+        else if (col === 'agingOver90') sortParts.push(`aging_over_90 ${dir}`);
         else if (col === 'maxAgingDays' || col === 'aging')
           sortParts.push(`max_aging_days ${dir}`);
         else if (
