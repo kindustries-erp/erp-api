@@ -13,7 +13,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
 - **Tổng hợp Công nợ theo Biển Số Xe (`GET /cases/customers-debt` & `GET /payables/suppliers-debt`)**:
   - Nhóm dữ liệu phiếu dịch vụ từ bảng `kgara_cases` theo Biển số xe (`COALESCE(NULLIF(TRIM("case"."bien_so_xe"), ''), 'CHUA_CO_BKS')`).
   - Cột đầu tiên của bảng sau `#` là **Biển số xe** (`licensePlate`), các bản ghi chưa có BKS hiển thị `— (Chưa có BKS)`.
-  - Cột **Khách hàng** (`customer`): Đồng bộ 100% trên cả 2 tab **Phải thu** (`GarageDebtsTable`) và **Phải trả** (`GaragePayablesTable`), gom Tên KH (`khach_hang_name`) và Mã KH (`khach_hang_code`) về 1 cột duy nhất hiển thị 2 dòng qua molecule `GarageCaseCustomerCell`, cho phép click tên KH mở Detail Drawer.
+  - Cột **Khách hàng** (`customer`): Hiển thị trên tab **Phải thu** (`GarageDebtsTable`), gom Tên KH (`khach_hang_name`) và Mã KH (`khach_hang_code`) về 1 cột duy nhất hiển thị 2 dòng qua molecule `GarageCaseCustomerCell`, cho phép click tên KH mở Detail Drawer. Đối với tab **Phải trả** (`GaragePayablesTable`), cột Khách hàng được lược bỏ để tránh làm rối người dùng (vì đây là công nợ phải trả theo biển số xe/nhà cung cấp), nhãn `Tổng cộng:` hiển thị ở cột Biển số xe.
   - **Mốc thời gian theo dõi**: Áp dụng mốc lọc theo ngày hoàn thành (`ngay_hoan_thanh_cong_viec >= '2026-07-01'`).
   - **Chỉ tính Phiếu Hoàn tất**: Chỉ tổng hợp các phiếu dịch vụ đã hoàn thành (`ngay_hoan_thanh_cong_viec IS NOT NULL` và `tinh_trang_dich_vu = 3` hoặc `ten_tinh_trang_dich_vu ILIKE '%kết thúc%' / '%hoàn tất%'`), tự động loại trừ các xe chưa hoàn thành.
   - **Xe chưa hoàn thành (In-Progress Pipeline)**: Không tính vào công nợ phải thu và không tính tuổi nợ (aging = 0).
@@ -37,7 +37,8 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Hỗ trợ `__ALL_MATCHING__` (chọn tất cả kết quả tìm kiếm khớp từ khóa không sót trang) và `__BLANK__` (lọc các xe chưa có BKS hoặc chưa có mã khách hàng).
   - Tích hợp endpoint column-options (`GET /cases/customers-debt/column-options` & `GET /payables/suppliers-debt/column-options`):
     - Cột `maxAgingDays` (Tuổi nợ & Rủi ro): Trả về 5 options chuẩn `['0 ngày', '1-30 ngày', '31-60 ngày', '61-90 ngày', '>90 ngày']`, tách riêng `0 ngày` (`maxAgingExpr = 0`) cho các xe đã tất toán/hoàn thành trong ngày, hỗ trợ tìm kiếm trong popover filter.
-    - Cột `licensePlate` (Biển số xe): Chuẩn hóa độ rộng `size: 150px` đồng bộ trên toàn bộ các bảng `garage-debts` (Phải thu, Phải trả, Thu chi xưởng).
+    - Cột `licensePlate` (Biển số xe): Chuẩn hóa độ rộng `size: 130px` đồng bộ trên toàn bộ các bảng `garage-debts` (Phải thu, Phải trả, Thu chi xưởng).
+    - Cột `latestDate` (Ngày hoàn thành gần nhất) & `branchName` (Chi nhánh): Lược bỏ khỏi bảng chính `GarageDebtsTable` để tối ưu không gian hiển thị, bộ lọc chi nhánh quản lý tập trung qua thanh công cụ / store.
     - Dropdown `GarageCaseCombobox`: Đưa Biển số xe lên đầu và bỏ ngày (`${plate} - ${ref}`), tích hợp Rich Tooltip khi hover hiển thị đầy đủ Ngày phát sinh, Tiền thu BH (`phaiThuBaoHiem`), Tiền thu KH (`phaiThuKhachHang`), Phải chi (`chiPhi`).
     - Cột `caseCount` (SL Phiếu DV): Trả về mảng distinct số lượng phiếu dịch vụ.
     - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
