@@ -85,7 +85,13 @@ ERP workflows in `./erp/.agents/workflows/`:
 
 - `erp-branch-sync-workflow.md` — sync `erp-master` to downstream branches.
 
-Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`) are listed in each repo's own router.
+Klotus workflows in `./klotus/.agents/workflows/`:
+
+- `routing.md` — routing theo family và repo.
+- `delivery-workflow.md` — bàn giao DB/API/Web/QC.
+- `clean-brain.md` — bảo trì workspace.
+
+Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`, `klotus/landing-page-api/.agents/workflows/klotus-git-workflow.md`) are listed in each repo's own router.
 
 ---
 
@@ -151,7 +157,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 
 ## 🔗 Canonical Routers
 
-- **Workspace canonical router**: [`./.agents/AGENTS.md`](./.agents/AGENTS.md)
+- **Workspace canonical router**: [`./AGENTS.md`](./AGENTS.md) (`.agents/AGENTS.md` chỉ là stub tương thích)
 - **ERP Family**: [`./erp/AGENTS.md`](./erp/AGENTS.md)
 - **Klotus Family**: [`./klotus/AGENTS.md`](./klotus/AGENTS.md)
 - **Validate agent system**: `bash ./.agents/scripts/validate-agent-system.sh`
@@ -294,7 +300,7 @@ Source of truth for this repo (`./erp-api`).
 - before commit/push, `cd` into the repo root (`./erp-api`)
 - **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (pull -> build -> check:ci -> test -> commit -> push).
 - push this repo with `github-industries`
-- when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account: `admin@liouni.com` | `admiN@123`
+- when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account `admin@liouni.com` (mật khẩu lấy từ kênh bảo mật của team, không ghi vào repo)
 - by default, work on the `DATABASE_URL` in `.env` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first

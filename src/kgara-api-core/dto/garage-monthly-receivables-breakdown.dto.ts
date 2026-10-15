@@ -64,6 +64,9 @@ export interface MonthlyReceivablesCaseItem {
   amount: number;
   paid: number;
   remaining: number;
+  cost?: number;
+  paidCost?: number;
+  remainingCost?: number;
   vatAmount: number;
   invoiceNo?: string;
   invoiceId?: string;
@@ -101,6 +104,9 @@ export interface MonthlyReceivablesGroupItem {
   billed: number;
   paid: number;
   remaining: number;
+  cost?: number;
+  paidCost?: number;
+  remainingCost?: number;
   rate: number;
   shareRate: number;
   cases: MonthlyReceivablesCaseItem[];
@@ -110,6 +116,9 @@ export interface MonthlyReceivablesCategorizedTotals {
   billed: number;
   paid: number;
   remaining: number;
+  cost?: number;
+  paidCost?: number;
+  remainingCost?: number;
   caseCount: number;
   partnerCount: number;
 }

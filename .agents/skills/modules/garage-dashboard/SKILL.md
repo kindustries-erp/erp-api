@@ -39,16 +39,25 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
           1. 🏢 **Khách hàng Doanh nghiệp / Tổ chức** (`ENTERPRISE`): Nhận diện qua MST (`taxCode`) hoặc tên pháp nhân (`CÔNG TY CP`, `TNHH`, `DNTN`, `Chi nhánh`, `HTX`...).
           2. 👤 **Khách hàng Cá nhân** (`INDIVIDUAL`): Khách lẻ, chủ xe cá nhân không có MST.
           3. 🛡️ **Bảo hiểm** (`INSURANCE`): Các công ty bảo hiểm xe cơ giới duyệt bồi thường (Bảo Long, Bảo Việt, MIC, PTI, AAA, PVI, VBI...).
-        - **Phân rã 3 Trạng Thái Hóa Đơn trong từng nhóm (`MonthPartnerCategorizedSection`)**:
-          - 🟢 **Đã xuất hóa đơn** (`WITH_INVOICE`): Đã có hóa đơn điện tử OUT hợp lệ liên kết.
-          - 🟠 **Chưa xuất hóa đơn - Có VAT** (`PENDING_INVOICE`): Vụ việc có tính thuế VAT nhưng chưa xuất / chưa đính kèm HĐ điện tử (highlight badge hổ phách cảnh báo cần xử lý xuất HĐ).
-          - ⚪ **Không xuất hóa đơn** (`NO_INVOICE`): Sửa chữa thông thường không tính thuế VAT và không lấy hóa đơn.
-        - **Thanh Điều Khiển PillTabs Kép**:
-          - **Toolbar Cấp 1**: Lọc nhanh nhóm đối tượng (`Tất cả đối tượng` | `KH Doanh nghiệp` | `KH Cá nhân` | `Bảo hiểm`).
-          - **Toolbar Cấp 2**: Lọc nhanh trạng thái HĐ trong từng khối (`Tất cả` | `Đã xuất HĐ` | `Chưa xuất HĐ` | `Không xuất HĐ`).
+        - **Phân rã theo Đối Tượng & Từng Phiếu/Xe (`MonthPartnerCategorizedSection` & `MonthInvoicePartnerTable`)**:
+          - **Tách chi tiết theo từng phiếu & từng xe**: Bảng hiển thị dạng phẳng (`MonthInvoiceCaseRow[]`) từ mảng `cases` của API backend, mỗi dòng đại diện cho 1 phiếu dịch vụ và 1 xe cụ thể.
+          - **Cột Số chứng từ chuẩn hóa 2 dòng (`GarageCaseCodeCell`)**:
+            - Dòng 1: Icon con mắt (click mở trực tiếp `GarageCaseStandaloneDrawer`) + Mã phiếu (`soChungTu`, text xanh đậm `text-primary`, click mở chi tiết) + Nút Copy.
+            - Dòng 2: Icon xe hơi (`Car`) + Biển số xe (`bienSoXe`, font mono) + Nút Copy biển số.
+          - **Quy tắc bố cục theo Toolbar Filter & Switch Phải thu / Phải trả**:
+            - **Cụm nút Phải thu / Phải trả (`CustomerDetailDebtSwitch`)**: Nằm trực tiếp trong prop `rightExtra` của thanh `PillTabs` bộ lọc đối tượng, căn phải tự nhiên, đảm bảo vừa khít 100% container và không sinh ra bất kỳ thanh cuộn ngang (scrollbar) nào.
+            - **Chuyển đổi thông số Chi phí & Phải trả khi chọn "Phải trả" (`debtType = "payables"`)**:
+              - Backend truy vấn cả `settlement_type IN ('RECEIPT', 'PAYMENT')` hỗ trợ cả `s.case_id` và `s.gross_profit_id`.
+              - Giá vốn thực tế (`cost`) được bóc tách từ bảng **`kgara_gross_profit.chi_phi`** (qua `hd_phieu_dich_vu_id` hoặc `vu_viec_code`, thay vì phụ thuộc `kgara_cases.chi_phi` vốn là NULL trong KGara), tính toán `paidCost` (đã thanh toán chi phí từ settlements PAYMENT) và `remainingCost` (`Math.max(0, cost - paidCost)`).
+              - Các cột bảng tự động cập nhật tiêu đề tài chính: `CHI PHÍ` (thay vì `PHÁT SINH`), `ĐÃ CHI` (thay vì `ĐÃ THU`), `CÒN PHẢI CHI` (thay vì `CÒN PHẢI THU`), `LOẠI CHI` (thay vì `LOẠI THU`), tỷ trọng (%) tính theo tổng chi phí.
+            - **Badge Cột Hóa đơn & VAT**: Các phiếu không có hóa đơn và không phát sinh thuế GTGT hiển thị badge chuẩn hóa **`"Không VAT"`** (thay vì `"Chưa xuất HĐ (K.Thuế)"`), phong cách outline slate/neutral.
+            - Khi ở Tab **Tất cả đối tượng** (`all`): Mỗi nhóm (Doanh nghiệp, Cá nhân, Bảo hiểm) chỉ chứa **1 TABLE TỔNG HỢP DUY NHẤT** (`categorized.all`), không chia nhỏ thành các sub-section hóa đơn.
+            - Khi ở **3 Tab con** (`enterprise`, `individual`, `insurance`): Chia thành **3 DRAWER SECTION ĐỘC LẬP** riêng biệt (`Đã xuất hóa đơn`, `Chưa xuất hóa đơn - Có VAT`, `Không xuất hóa đơn`).
+          - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+            - `MonthInvoiceCaseRow.type.ts` (< 80 LoC), `MonthInvoiceCaseRow.helper.ts` (< 150 LoC kèm co-located test), `MonthInvoiceCaseTable.cells.tsx` (< 80 LoC), `MonthInvoiceCaseTable.columns.tsx` (< 165 LoC), `MonthInvoicePartnerTable.tsx` (< 170 LoC), `MonthPartnerCategorizedSection.tsx` (< 150 LoC).
+            - Tuân thủ 100% No Blue Mandate và giới hạn cứng < 180 LoC.
         - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
         - **2 Thẻ KPI Tương phản (`MonthPayerKpiGrid`)**: Phân tách rõ rệt nguồn thu từ Khách hàng và từng khoản duyệt bồi thường từ Bảo hiểm.
-        - **Bảng gom nhóm Chuẩn hóa (`MonthInvoicePartnerTable`)**: Liệt kê chi tiết từng đối tượng, số vụ việc, phát sinh, đã thu, còn nợ, tỷ trọng, badge trạng thái HĐ / Cảnh báo VAT và nút tra cứu vụ việc liên quan.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Cơ cấu Thu KH vs Thu BH, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
