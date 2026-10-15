@@ -358,6 +358,48 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 - **Tích Hợp Drawer**:
   - Nhấp vào Khách hàng hoặc SL Phiếu DV trên Tab Phải trả mở trực tiếp `GarageCustomerDetailDrawer` để xem toàn bộ danh sách vụ việc của khách hàng.
 
+### 8.5. Tích Hợp Dual-Mode [Phải Thu | Phải Trả] & Chuẩn Hóa Bố Cục Trong GarageCustomerDetailDrawer
+- **Nghiệp vụ Dual-Mode & Bộ Chuyển Đổi Button-Group**:
+  - Khi mở từ tab **Phải trả** (`GaragePayablesTable`), Drawer tự động nhận `debtType="payables"`.
+  - Bộ chuyển chế độ `CustomerDetailDebtSwitch` được bố trí **ngang hàng với thanh Sub-Tabs (PillTabs)** trên đỉnh cột trái (`leftContent`), sử dụng style **button-group** (`<PillTabs size="sm" variant="button-group">`) với icon `ArrowDownLeft` (*Phải thu*) và `ArrowUpRight` (*Phải trả*) — đồng bộ với kiểu dáng button-group trong `erp-invoice` detail drawer.
+  - Header Drawer (`CustomerDetailHeader`) được tinh giản tối đa, chỉ giữ lại Title, Badges, Subtitle và nút Làm mới.
+  - Phản ánh chính xác các trường dữ liệu theo mode:
+    - **Phải thu (`receivables`)**: Doanh thu hoàn thành (`tienCoThue`), Đã thu thực tế (`tienDaThanhToan`), Còn nợ (`tienConPhaiThanhToan`).
+    - **Phải trả (`payables`)**: Chi phí báo giá (`chiPhi = COALESCE(gp.chi_phi, c.chi_phi, 0)`), Đã chi thực tế (`tienDaChi` từ `settlementsMap.payments`), Còn phải chi (`tienConPhaiChi = chiPhi - tienDaChi`).
+  - Các thẻ chỉ số (`CustomerKpiSummaryCards`), Sidebar (`CustomerSidebarSummary`), Ma trận theo xe (`CustomerVehicleDebtTab`) và Bảng vụ việc (`CustomerCasesTableTab`) đều tự động đảo ngữ nghĩa và nhãn hiển thị tương ứng.
+- **Chuẩn Hóa Bảng Phiếu Dịch Vụ (`CustomerCasesTableTab`)**:
+  - **STT Chuẩn từ 1**: Cột `#` render bằng `{idx}` (không dùng `idx + 1` vì `DataTable` đã tự tính toán `(page - 1) * pageSize + row.index + 1`). Toàn bộ 3 bảng trong Drawer (`CustomerCasesTableTab`, `CustomerPipelineTab`, `CustomerVehicleDebtTab`) đều bắt đầu chuẩn xác từ 1 trên mọi trang.
+  - **Không Cột Action Tĩnh**: Thiết lập `hideLegacyActionColumn={true}`, loại bỏ hoàn toàn nút `...` ở cuối bảng. Thao tác dòng (Xem chi tiết, Sửa, Cấn trừ, Ghép hóa đơn VAT, Đồng bộ) được kích hoạt linh hoạt qua **Thanh Action Nổi (Floated Action Menu)** khi hover và **Menu Ngữ Cảnh (Context Menu)** khi click chuột phải (`enableRowHoverActions={true}`, `enableRowContextMenu={true}`).
+  - **Các Cột Theo Tuổi Nợ**: Bổ sung qua `CustomerCasesTable.agingColumns.tsx` gồm 4 cột phân tầng (`0-30 ngày`, `31-60 ngày`, `61-90 ngày`, `>90 ngày`) và cột `Tuổi nợ & Rủi ro` tích hợp `AgingDaysCell` (progress bar 4 màu + badge số ngày) đồng bộ nhận diện với bảng `garage-debts`.
+  - **Hàng Tổng Kết (Subtotal Row)**: Hook `useCustomerCasesSummaryRow.tsx` tích hợp `<SubtotalSummaryCell>` tính toán cả Subtotal (trang hiện tại) và Grand Total (toàn bộ phiếu) cho Chi phí/Doanh thu, Đã chi/Đã thu, Còn phải chi/Còn nợ, và 4 khoảng tuổi nợ.
+- **Chuẩn Hóa Cột Phải Theo Kiến Trúc 2 Tầng DrawerSection (`/standardize-drawer`)**:
+  - **Section 1: THÔNG TIN KHÁCH HÀNG**: Tiêu đề kèm icon `Building2`, `collapsible={true}`, `defaultCollapsed={false}`, hiển thị các hàng `DrawerRow` (Mã KH, Tên KH, SL phiếu hoàn thành, Số lượng xe).
+  - **Section 2: CHỈ SỐ CÔNG NỢ & THU HỒI** (`CustomerKpiSummaryCards`): Tiêu đề kèm icon `Scale`, `collapsible={true}`, `defaultCollapsed={false}`, hiển thị 4 mini cards dạng compact grid 2x2 (Tổng DT/Chi phí, Đã thu/Đã chi & Tỷ lệ thu hồi, Còn nợ/Còn phải chi, Tuổi nợ max).
+  - Di chuyển khối KPI sang cột phải giúp giải phóng 100% không gian dọc cho bảng dữ liệu chính (`StandardTable`) ở cột trái.
+- **Kiến trúc Backend (`/api-service-refactor`)**:
+  - **`KgaraCustomerCasesDetailService`** (`src/kgara-api-core/services/kgara-customer-cases-detail.service.ts` < 150 LoC, Pattern B Sub-Service Facade):
+    - Clean DI Constructor, query `kgara_cases` kết hợp `kgara_gross_profit` và nhóm `kgara_case_settlements` (`RECEIPT` / `PAYMENT`) qua map in-memory.
+    - Đảm bảo Zero-Entity Leaking, trả về DTO đồng nhất cho cả 2 luồng Phải thu và Phải trả.
+    - Co-located unit test `kgara-customer-cases-detail.service.spec.ts` pass 100%.
+  - **`KgaraCustomersController`** (`src/kgara-api-core/controllers/kgara-customers.controller.ts` < 200 LoC): Delegate method `getCasesByCustomer` qua Sub-Service.
+- **Kiến trúc Frontend (`/ui-atomic-refactor` & `/standardize-table`)**:
+  - Khống chế cứng toàn bộ các file trong organism `< 180 LoC/file`.
+  - Table trong Drawer dùng `<StandardTable variant="spreadsheet" />`.
+  - Tuân thủ nghiêm ngặt 100% **No Blue Mandate** và 100% đa ngôn ngữ qua `useTranslation`.
 
-
-
+### 8.6. Drawer Chi Tiết Từng Tháng Của Từng Đối Tượng (GaragePartnerMonthDetailDrawer) & Drill-down Đa Chiều
+- **Mục Tiêu & Trải Nghiệm Người Dùng (UX Alignment)**:
+  - Cho phép người dùng drill-down xem sâu số liệu doanh thu, chi phí, công nợ và danh sách phiếu dịch vụ của **một đối tượng cụ thể trong một tháng xác định**.
+  - **Đồng bộ UI với Drawer Tổng Quát (`GarageMonthDetailDrawer`)**: Kế thừa chuẩn bố cục `StandardFormDrawer` layout `2-columns` (`size="full"`):
+    - Cột trái: Bộ 4 KPI Cards tương phản theo tiến độ (Phát sinh, Đã thu/chi, Còn lại, VAT cảnh báo), thanh Sub-Tabs chuyển đổi giữa `Bảng phân loại nghiệp vụ` (`PartnerMonthClassificationTable`) và `Danh sách vụ việc trong tháng` (`PartnerMonthCasesTable`).
+    - Cột phải: `PartnerMonthSidebarSummary` tổng hợp nhanh tỷ trọng phân loại, tiến độ hoàn tất, cảnh báo hóa đơn VAT chưa xuất và thông tin đối tượng.
+  - **Nút Chuyển Đổi [ ↙ Phải Thu | ↗ Phải Trả ] Ngay Trên Header Drawer**:
+    - Tái sử dụng molecule `CustomerDetailDebtSwitch` ở dạng button-group nhỏ gọn trên header / thanh điều hướng, cho phép kế toán viên đối chiếu tức thì công nợ phải thu và chi phí phải trả của đối tượng trong tháng mà không cần đóng mở drawer.
+- **Điểm Kích Hoạt (Entry Points)**:
+  1. **Từ Drawer Tổng Quát (`GarageMonthDetailDrawer`)**: Khi nhấp vào nút Xem chi tiết hoặc tên đối tượng trong bảng `MonthInvoicePartnerTable`.
+  2. **Từ Drawer Hồ Sơ Khách Hàng (`GarageCustomerDetailDrawer`)**: Bảng thống kê biến động theo tháng trong tab Phân tích tuổi nợ (`CustomerDebtAgingChartTab`), cho phép click xem chi tiết bất kỳ tháng phát sinh nào.
+- **Kiến Trúc Atomic Design (`/ui-atomic-refactor`)**:
+  - Toàn bộ component đặt tại `src/modules/garage/components/organisms/garage-partner-month-detail-drawer/`.
+  - Mọi file đều khống chế nghiêm ngặt **< 180 LoC/file** (tách riêng helper phân loại `PartnerMonthClassification.helper.ts` và columns `PartnerMonthCasesTable.columns.tsx`).
+  - 100% **No Blue Mandate** (sử dụng token Tailwind emerald, amber, rose, slate/neutral/muted).
+  - Co-located unit test `GaragePartnerMonthDetailDrawer.test.tsx` pass 100%.

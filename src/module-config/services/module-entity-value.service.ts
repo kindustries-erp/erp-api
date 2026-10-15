@@ -9,6 +9,7 @@ import { ErpEntityAttributeValue } from '../entities/erp_entity_attribute_value.
 import { ErpModuleCategory } from '../entities/erp_module_category.entity';
 import { ErpModuleAttributeDef } from '../entities/erp_module_attribute_def.entity';
 import { SaveEntityValuesDto } from '../dto/save-entity-values.dto';
+import { getModuleFieldRegistry } from '../registry/module-field-registry';
 
 @Injectable()
 export class ModuleEntityValueService {
@@ -232,6 +233,13 @@ export class ModuleEntityValueService {
           : rawUpperType === 'ADJUSTMENT'
             ? 'INVENTORY_ADJUSTMENT'
             : rawUpperType;
+
+    // Module có registry: cột built-in là nguồn duy nhất, chỉ ghi qua endpoint của module (vd PATCH /cases/:id/config)
+    if (getModuleFieldRegistry(upperType)) {
+      throw new BadRequestException(
+        `Module ${upperType} lưu cấu hình qua endpoint riêng của module, không qua module-config/values`,
+      );
+    }
 
     const { categoryId, attributes = {}, globalAttributes = {} } = dto;
 

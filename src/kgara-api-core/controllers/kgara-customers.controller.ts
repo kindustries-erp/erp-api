@@ -9,6 +9,7 @@ import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
+import { KgaraCustomerCasesDetailService } from '../services/kgara-customer-cases-detail.service';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -18,6 +19,7 @@ export class KgaraCustomersController {
     private readonly caseRepo: Repository<KgaraCase>,
     @InjectRepository(KgaraCaseSettlement)
     private readonly settlementRepo: Repository<KgaraCaseSettlement>,
+    private readonly customerCasesDetailService: KgaraCustomerCasesDetailService,
   ) {}
 
   @Get('cases/customers-debt')
@@ -849,97 +851,9 @@ export class KgaraCustomersController {
     @BranchId() branchId: string,
     @Param('customerCode') customerCode: string,
   ) {
-    const query = this.caseRepo
-      .createQueryBuilder('case')
-      .where('case.kgaraDeletedAt IS NULL')
-      .andWhere('case.excludeFromReports IS NOT TRUE')
-      .andWhere('case.excludeFromDebt IS NOT TRUE')
-      .andWhere(
-        '(case.ngayHoanThanhCongViec >= :baselineDate OR case.ngayPhatSinh >= :baselineDate OR case.createdAt >= :baselineDate)',
-        { baselineDate: '2026-07-01' },
-      );
-
-    if (customerCode === 'UNKNOWN' || customerCode === 'NO_CODE') {
-      query.andWhere('case.khachHangCode IS NULL');
-    } else {
-      query.andWhere('case.khachHangCode = :customerCode', { customerCode });
-    }
-
-    if (branchId) {
-      query.andWhere('case.branchExternalId = :branchId', { branchId });
-    }
-
-    query.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST');
-    query.addOrderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST');
-
-    const cases = await query.getMany();
-
-    const caseIds = cases.map((item) => item.id).filter(Boolean);
-    const settlementsMap: Record<
-      string,
-      { receipts: number; payments: number }
-    > = {};
-
-    if (caseIds.length > 0) {
-      const settlementRows = await this.settlementRepo
-        .createQueryBuilder('s')
-        .select('s.caseId', 'caseId')
-        .addSelect('s.settlementType', 'settlementType')
-        .addSelect('SUM(s.amount)', 'totalAmount')
-        .where('s.caseId IN (:...caseIds)', { caseIds })
-        .groupBy('s.caseId')
-        .addGroupBy('s.settlementType')
-        .getRawMany();
-
-      for (const row of settlementRows) {
-        if (!settlementsMap[row.caseId]) {
-          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
-        }
-        if (row.settlementType === 'RECEIPT') {
-          settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
-        } else if (row.settlementType === 'PAYMENT') {
-          settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
-        }
-      }
-    }
-
-    const today = new Date();
-
-    const enriched = cases.map((c) => {
-      const isCompleted =
-        Boolean(c.ngayHoanThanhCongViec) &&
-        (c.tinhTrangDichVu === 3 ||
-          c.tenTinhTrangDichVu === 'Kết thúc' ||
-          (c.tenTinhTrangDichVu &&
-            c.tenTinhTrangDichVu.toLowerCase().includes('kết thúc')) ||
-          (c.tenTinhTrangDichVu &&
-            c.tenTinhTrangDichVu.toLowerCase().includes('hoàn tất')));
-
-      let agingDays = 0;
-      if (isCompleted && c.ngayHoanThanhCongViec) {
-        const cDate = new Date(c.ngayHoanThanhCongViec);
-        const diffTime = Math.abs(today.getTime() - cDate.getTime());
-        agingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      }
-
-      const setInfo = settlementsMap[c.id];
-      const hasSettlement = setInfo !== undefined;
-      const targetRev = extractNetPayableAmount(c);
-      const totalPaid = hasSettlement
-        ? setInfo.receipts
-        : Number(c.tienDaThanhToan) || 0;
-      const remainingBal = Math.max(0, targetRev - totalPaid);
-
-      return {
-        ...c,
-        isCompleted,
-        agingDays,
-        tienCoThue: targetRev,
-        tienDaThanhToan: totalPaid,
-        tienConPhaiThanhToan: remainingBal,
-      };
-    });
-
-    return enriched;
+    return this.customerCasesDetailService.getCasesByCustomer(
+      branchId,
+      customerCode,
+    );
   }
 }

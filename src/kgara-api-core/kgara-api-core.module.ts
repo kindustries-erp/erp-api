@@ -40,6 +40,7 @@ import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
 import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
+import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
 import { KgaraCaseListQueryService } from './services/kgara-case-list-query.service';
 import { KgaraCaseConfigService } from './services/kgara-case-config.service';
@@ -70,6 +71,7 @@ import { GarageDebtsAnalyticsService } from './services/garage-debts-analytics.s
 import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analytics.controller';
 import { KgaraSuppliersService } from './services/kgara-suppliers.service';
 import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-suppliers-debt-query.engine';
+import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases-detail.service';
 
 @Module({
   imports: [
@@ -115,6 +117,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,
@@ -131,6 +134,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
+    KgaraCustomerCasesDetailService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -159,6 +163,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     GarageCustomerStatsService,
     GarageDashboardExportService,
     GaragePnlService,
+    GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
     KgaraCaseQueryService,
     KgaraCaseConfigService,
@@ -175,6 +180,7 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
+    KgaraCustomerCasesDetailService,
   ],
 })
 export class KgaraApiCoreModule {}

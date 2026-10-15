@@ -31,4 +31,5 @@ export enum ErpResource {
   VINFAST = 'vinfast',
   DASHBOARD = 'dashboard',
   ATTACHMENTS = 'attachments',
+  CUSTOM_FIELDS = 'custom_fields',
 }

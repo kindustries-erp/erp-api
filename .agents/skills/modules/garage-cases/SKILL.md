@@ -840,3 +840,31 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
 - Migration `20261013100000-SeparateGarageDebtsPermissions` backfill toàn bộ action hiện có từ `garage` sang `garage_debts` trên `erp_local`; `down()` là no-op để không xóa quyền debts được cấp độc lập.
 - Các endpoint financial dùng chung cho case drawer và debts detail dùng `RequireAnyPermissions` với `GARAGE`/`GARAGE_DEBTS` cùng các resource accounting hiện có; endpoint cập nhật cấu hình vụ việc vẫn yêu cầu `GARAGE`.
 - Khi thêm endpoint debts mới, dùng `GARAGE_DEBTS` trực tiếp và tạo controller spec co-located kiểm tra metadata RBAC.
+
+## 9.11. Chuẩn Hóa Bộ Lọc Cột (Header Filter) & Bảo Toàn Checked Options Khi Searchbox Active
+
+1. **Chuẩn Hóa Cấu Hình Bảng `GarageCasesTable` Theo `/standardize-table`**:
+   - Cột STT: Cấu hình chuẩn `size: 40`, `headerClassName: "text-center w-[40px] min-w-[40px]"`, `className: "text-center w-[40px] min-w-[40px] font-mono text-xs text-muted-foreground"`, hiển thị `{idx}`.
+   - Cô lập Cache Query Key: Gắn kèm `branchId` (`garage-case-column-options-${branchId || "all"}`) vào `commonOptionProps` trong `GarageCasesTable.columns.tsx` để tránh dùng nhầm cache options giữa các chi nhánh khác nhau.
+
+2. **Cơ Chế Bảo Toàn Options Đã Checked Khi Searchbox Active (Header Filter & FilterPanel)**:
+   - **Ghim Checked Options Lên Đầu**: Trong `TableColumnHeaderFilter.tsx` và `ColumnOptionList.tsx`, khi ô searchbox có từ khóa tìm kiếm, toàn bộ options đang được tick chọn (`pendingFilters`) được ghim lên đầu danh sách `finalOptions` cho cả Server Mode (`fetchOptions`) và Client Mode (`filterOptions`), kèm nhãn hiển thị đầy đủ thông qua cache nhãn `knownLabelsRef`.
+   - **Chống Lọc Kép (Double-Filtering Prevention)**:
+     - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
+     - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
+
+---
+
+## 10. Thuộc tính Mặc định vs Tùy chỉnh (từ 2026-10-14)
+
+- **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi.
+- **Tùy chỉnh**: EAV qua `StrictCustomFieldsHelper` (xem skill `module-config` mục 10).
+- `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → tự bật `excludeFromDebt` nếu client không gửi.
+- `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`).
+- Response case thêm `builtin` + `custom.byCode` (giữ alias `customAttributes`/`attributes`/`attributeValues` 1 release).
+- `PUT /module-config/values/GARAGE_CASE/:id` bị từ chối (400); chỉ dùng `PATCH /cases/:id/config` (`GARAGE:UPDATE`).
+
+### 10.1. Bỏ phân loại & backfill (2026-10-14)
+- `updateCaseConfig`: gửi `categoryId` falsy + `classification` null/rỗng ("Chưa phân loại") → xóa **cả** `category_id` lẫn `classification` (trước đây `classification` bị giữ lại, UI vẫn hiện phân loại cũ).
+- Migration `20261014150000` backfill `category_id` cho phiếu có `classification` mà `category_id` NULL (70 phiếu trên greenway-production). Invariant: phiếu có `classification` thì phải có `category_id` tương ứng.
+- **Khóa sync (phương án B)**: cột `kgara_cases.classification_manually_cleared` (migration `20261014160000`). `updateCaseConfig` bật `true` khi người dùng chủ động bỏ phân loại, gỡ về `false` khi chọn lại phân loại. `SyncCaseService` (sync hàng loạt và `syncCaseDetail`) chỉ tự gán `classification`/`category_id` từ KGara khi `classification` NULL **và** cờ này `false`. Test sync mới chỉ phủ đường `syncCaseDetail`.
