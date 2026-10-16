@@ -178,9 +178,15 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
    - `bunx jest src/common/filters/all-exceptions.filter.spec.ts`
 4. Kiểm tra typing Web: `bunx tsc --noEmit` (trong thư mục Web)
 5. Chạy unit tests Web:
+   - `bunx vitest run src/modules/garage/pages/__tests__/GarageCashflowPage.test.tsx`
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-table/GarageCashflowTable.test.tsx`
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-drawer/GarageCashflowDrawer.test.tsx`
    - `bunx vitest run src/modules/garage/components/organisms/garage-cashflow-list/GarageCashflowList.test.tsx`
+
+## Frontend Architecture & Routing (`/garage-cashflow`)
+- Trang **Thu chi garage** (`GarageCashflowPage`) là một trang độc lập (`/garage-cashflow`), được bảo vệ bằng RBAC `useHasPermission(ErpResource.GARAGE_CASHFLOW, ErpAction.READ)` (nếu không có quyền sẽ hiển thị `<Forbidden />`).
+- Trong thanh menu điều hướng (Sidebar Nav & `useNavItems`), menu **"Thu chi garage"** (icon `Wallet`) được đặt **nằm phía trên "Phiếu dịch vụ"** (`garage-cases`).
+- Tab "Thu chi xưởng" trong `GarageDebts` (`/garage-debts`) đã được gỡ bỏ hoàn toàn; `GarageDebts` chỉ còn 3 tab: `Tổng quan`, `Phải thu`, `Phải trả`.
 
 ## Liên kết với Công nợ Garage (`garage-debts`)
 - Dòng `kgara_case_settlements.settlement_type = 'PAYMENT'` (sinh từ phiếu chi/cấn trừ phải trả) là nguồn "Đã chi" của tab Tổng quan và tab Phải trả ở `/garage-debts` (xem `garage-customers/SKILL.md` mục 8.1-8.2). Chỉ `RECEIPT` được cộng vào `kgara_cases.tien_da_thanh_toan`. `payer_type` của PAYMENT hiện đều là `KH`, không dùng để lọc.
