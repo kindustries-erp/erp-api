@@ -386,6 +386,39 @@ export class InvoiceExportBackgroundService implements OnModuleDestroy {
   }
 
   private buildQueryFingerprint(query: ErpInvoiceQuery) {
+    let selectedColumnsNormalized: string[] = [];
+    if (Array.isArray(query.selected_columns)) {
+      selectedColumnsNormalized = query.selected_columns
+        .map((c) => String(c).trim())
+        .filter(Boolean)
+        .sort();
+    } else if (
+      typeof query.selected_columns === 'string' &&
+      query.selected_columns.trim()
+    ) {
+      try {
+        const parsed = JSON.parse(query.selected_columns);
+        if (Array.isArray(parsed)) {
+          selectedColumnsNormalized = parsed
+            .map((c) => String(c).trim())
+            .filter(Boolean)
+            .sort();
+        } else {
+          selectedColumnsNormalized = query.selected_columns
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean)
+            .sort();
+        }
+      } catch {
+        selectedColumnsNormalized = query.selected_columns
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean)
+          .sort();
+      }
+    }
+
     const normalized = {
       direction: query.direction || '',
       search: (query.search || '').trim(),
@@ -399,6 +432,7 @@ export class InvoiceExportBackgroundService implements OnModuleDestroy {
       is_valid: (query.is_valid || '').trim(),
       column_search: this.normalizeJsonString(query.column_search),
       column_filters: this.normalizeJsonString(query.column_filters),
+      selected_columns: selectedColumnsNormalized,
     };
 
     return this.stableStringify(normalized);

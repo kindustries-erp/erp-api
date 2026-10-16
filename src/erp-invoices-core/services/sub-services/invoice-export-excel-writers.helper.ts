@@ -13,6 +13,7 @@ import {
   overviewColumns,
   debtColumns,
   finalizeSheetLayout,
+  InvoiceExcelColumnDef,
 } from './invoice-export-excel-columns.helper';
 
 export * from './invoice-export-excel-columns.helper';
@@ -22,6 +23,7 @@ export const writeSummaryRows = (
   invoiceList: any[],
   direction?: string,
   branchMap: Record<string, string> = {},
+  activeColumns: InvoiceExcelColumnDef[] = summaryColumns,
 ) => {
   let sumDiscount = 0;
   let sumPreVat = 0;
@@ -61,7 +63,7 @@ export const writeSummaryRows = (
       .filter(Boolean)
       .join(' | ');
 
-    const row = sheet.addRow({
+    const rowData: Record<string, any> = {
       invoiceDate: inv.invoiceDate,
       serialNo: inv.serialNo,
       invoiceNo: inv.invoiceNo,
@@ -84,76 +86,32 @@ export const writeSummaryRows = (
       netOffRefAmount: Number((inv as any).netOffRefAmount) || 0,
       netOffAmount: invNetOff,
       remainingAmount,
-    });
+    };
 
+    const row = sheet.addRow(rowData);
     row.height = 20;
     row.font = { name: 'Calibri', size: 10 };
 
-    row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(4).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(6).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(7).numFmt = '#,##0.00';
-    row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(8).numFmt = '#,##0.00';
-    row.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(10).numFmt = '#,##0.00';
-    row.getCell(11).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(11).numFmt = '#,##0.00';
-    row.getCell(12).alignment = {
-      horizontal: 'center',
-      vertical: 'middle',
-    };
-    row.getCell(13).alignment = {
-      horizontal: 'center',
-      vertical: 'middle',
-    };
-    row.getCell(14).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(15).alignment = {
-      horizontal: 'center',
-      vertical: 'middle',
-    };
-    row.getCell(16).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(17).alignment = {
-      horizontal: 'center',
-      vertical: 'middle',
-    };
-    row.getCell(18).alignment = {
-      horizontal: 'center',
-      vertical: 'middle',
-    };
-    row.getCell(19).alignment = { horizontal: 'left', vertical: 'middle' };
-    row.getCell(20).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(20).numFmt = '#,##0.00';
-    row.getCell(21).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(21).numFmt = '#,##0.00';
-    row.getCell(22).alignment = { horizontal: 'right', vertical: 'middle' };
-    row.getCell(22).numFmt = '#,##0.00';
-
-    for (let c = 1; c <= 22; c++) {
-      row.getCell(c).border = borderThin;
+    const totalCols = activeColumns.length;
+    for (let c = 1; c <= totalCols; c++) {
+      const colDef = activeColumns[c - 1];
+      const cell = row.getCell(c);
+      cell.border = borderThin;
+      if (colDef.alignment) {
+        cell.alignment = colDef.alignment;
+      }
+      if (colDef.style?.numFmt) {
+        cell.numFmt = colDef.style.numFmt;
+      }
+      if (colDef.fill) {
+        cell.fill = colDef.fill;
+      }
     }
-    for (let c = 17; c <= 21; c++) {
-      row.getCell(c).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF0F9FF' },
-      };
-    }
-    row.getCell(22).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFEFCE8' },
-    };
   }
 
   finalizeSheetLayout(
     sheet,
-    summaryColumns,
+    activeColumns,
     {
       headerDiscountAmount: sumDiscount,
       preVat: sumPreVat,
