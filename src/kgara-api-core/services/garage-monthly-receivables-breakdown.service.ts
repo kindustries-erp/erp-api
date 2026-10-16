@@ -142,8 +142,12 @@ export class GarageMonthlyReceivablesBreakdownService {
       }
     } else {
       const parsed = this.parseMonth(month || '');
-      dateFrom = parsed.dateFrom;
-      dateTo = parsed.dateTo;
+      dateFrom = customDateFrom || parsed.dateFrom;
+      dateTo = customDateTo
+        ? customDateTo.length === 10
+          ? `${customDateTo} 23:59:59.999`
+          : customDateTo
+        : parsed.dateTo;
       monthKey = parsed.monthKey;
       monthLabel = parsed.monthLabel;
     }
@@ -622,6 +626,7 @@ export class GarageMonthlyReceivablesBreakdownService {
           invoiceId: bhInvoice?.invoiceId,
           buyerName: bhInvoice?.buyerName,
           vatWarning,
+          ngayHoanThanh: c.ngayHoanThanhCongViec,
         });
 
         insGroupMap.set(key, existing);
@@ -740,6 +745,7 @@ export class GarageMonthlyReceivablesBreakdownService {
           invoiceId: khInvoice?.invoiceId,
           buyerName: khInvoice?.buyerName,
           vatWarning,
+          ngayHoanThanh: c.ngayHoanThanhCongViec,
         });
 
         targetMap.set(key, existing);

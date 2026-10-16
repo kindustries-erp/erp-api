@@ -95,6 +95,7 @@ export interface MonthlyReceivablesCaseItem {
   invoiceId?: string;
   buyerName?: string;
   vatWarning: boolean;
+  ngayHoanThanh?: Date | string | null;
 }
 
 export type ReceivablesPartnerCategory =

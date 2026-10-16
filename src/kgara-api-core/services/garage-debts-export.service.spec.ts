@@ -273,4 +273,136 @@ describe('GarageDebtsExportService', () => {
       'Chi nhánh: CN9',
     );
   });
+
+  it('xuất file phân nhóm: tách mỗi group thành 1 sheet riêng, không bị double sum, Dashboard có 8 KPI và 4 chart', async () => {
+    const mockBreakdownService = {
+      getMonthlyReceivablesBreakdown: jest.fn().mockResolvedValue({
+        summary: { totalBilled: 15000000 },
+        categorized: {
+          enterprise: {
+            totals: {
+              billed: 10000000,
+              paid: 6000000,
+              remaining: 4000000,
+              caseCount: 2,
+            },
+            all: [
+              {
+                buyerName: 'Công ty ABC',
+                cases: [
+                  {
+                    id: 'c1',
+                    soChungTu: 'PDV-001',
+                    bienSoXe: '30A-111.11',
+                    amount: 6000000,
+                    paid: 4000000,
+                    remaining: 2000000,
+                    ngayHoanThanh: '2026-07-01',
+                  },
+                  {
+                    id: 'c2',
+                    soChungTu: 'PDV-002',
+                    bienSoXe: '30A-222.22',
+                    amount: 4000000,
+                    paid: 2000000,
+                    remaining: 2000000,
+                    ngayHoanThanh: '2026-06-15',
+                  },
+                ],
+              },
+            ],
+          },
+          individual: {
+            totals: {
+              billed: 5000000,
+              paid: 5000000,
+              remaining: 0,
+              caseCount: 1,
+            },
+            all: [
+              {
+                title: 'Nguyễn Văn B',
+                cases: [
+                  {
+                    id: 'c3',
+                    soChungTu: 'PDV-003',
+                    bienSoXe: '51F-333.33',
+                    amount: 5000000,
+                    paid: 5000000,
+                    remaining: 0,
+                    ngayHoanThanh: '2026-07-10',
+                  },
+                ],
+              },
+            ],
+          },
+          insurance: {
+            totals: { billed: 0, paid: 0, remaining: 0, caseCount: 0 },
+            all: [],
+            cases: [],
+          },
+        },
+      }),
+    };
+
+    const groupedService = new GarageDebtsExportService(
+      customersQuery as any,
+      suppliers as any,
+      branchRepo as any,
+      mockBreakdownService as any,
+    );
+
+    const buffer = await groupedService.exportExcel('all', 'CN1', {
+      mode: 'by-period',
+      from: '2026-07-01',
+      to: '2026-07-31',
+    });
+    const wb = await loadWorkbook(buffer);
+
+    // 1. Tách mỗi group thành một sheet riêng độc lập + sheet Công nợ phải trả
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Dashboard',
+      'Thu Khách hàng Doanh nghiệp',
+      'Thu Khách hàng Cá nhân',
+      'Công nợ phải trả',
+    ]);
+
+    // 2. Kiểm tra sheet Thu Khách hàng Doanh nghiệp không có dòng tổng phụ xen kẽ (Triệt tiêu double sum)
+    const entSheet = wb.getWorksheet('Thu Khách hàng Doanh nghiệp')!;
+    expect(entSheet.rowCount).toBe(6); // Row 1 (SUM), Row 2 (SUBTOTAL), Row 3 (Header), Row 4 (STT), Row 5 (Case 1), Row 6 (Case 2)
+    expect(entSheet.getRow(1).getCell(6).value).toEqual({
+      formula: 'SUM(F5:F6)',
+      result: 10000000,
+    });
+    expect(entSheet.getRow(2).getCell(6).value).toEqual({
+      formula: 'SUBTOTAL(9,F5:F6)',
+      result: 10000000,
+    });
+    // Không có dòng "TỔNG CỘNG" xen kẽ nào trong sheet dữ liệu
+    for (let r = 5; r <= entSheet.rowCount; r++) {
+      const cellVal = entSheet.getRow(r).getCell(1).value;
+      const textVal =
+        typeof cellVal === 'string'
+          ? cellVal
+          : typeof cellVal === 'number'
+            ? `${cellVal}`
+            : '';
+      expect(textVal).not.toContain('TỔNG CỘNG');
+    }
+
+    // 3. Sheet Dashboard có 8 thẻ KPI
+    const dbSheet = wb.getWorksheet('Dashboard')!;
+    expect(dbSheet.getCell('A6').value).toBe('TỔNG PHÁT SINH (KHÁCH HÀNG)');
+    expect(dbSheet.getCell('E6').value).toBe('ĐÃ THU (KHÁCH HÀNG)');
+    expect(dbSheet.getCell('I6').value).toBe('CÒN PHẢI THU (KHÁCH HÀNG)');
+    expect(dbSheet.getCell('M6').value).toBe('TỶ LỆ THU HỒI CÔNG NỢ KH');
+    expect(dbSheet.getCell('A9').value).toBe('THU KH DOANH NGHIỆP');
+    expect(dbSheet.getCell('E9').value).toBe('THU KH CÁ NHÂN');
+    expect(dbSheet.getCell('I9').value).toBe('THU BẢO HIỂM');
+    expect(dbSheet.getCell('M9').value).toBe('CÒN PHẢI TRẢ (NCC)');
+
+    // 4. Có 4 biểu đồ trong file Excel
+    const charts = await chartParts(buffer);
+    expect(charts.length).toBeGreaterThanOrEqual(4);
+  });
 });

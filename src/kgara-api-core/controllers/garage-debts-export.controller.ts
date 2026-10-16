@@ -157,4 +157,50 @@ export class GarageDebtsExportController {
       req.user?.sub,
     );
   }
+
+  // ===== Công nợ tổng hợp (cả khách hàng và nhà cung cấp) =====
+
+  @Post('debts/all/export/background')
+  @RequirePermissions(DEBTS_READ)
+  startAll(
+    @Body() dto: GarageDebtsExportDto,
+    @BranchId() branchId: string,
+    @Request() req: any,
+  ) {
+    return this.start('all', dto, branchId, req);
+  }
+
+  @Get('debts/all/export/background/history')
+  @RequirePermissions(DEBTS_READ)
+  allHistory(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.history('all', req, page, pageSize);
+  }
+
+  @Get('debts/all/export/background/:jobId/download')
+  @RequirePermissions(DEBTS_READ)
+  downloadAll(
+    @Param('jobId') jobId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    sendReadyExportFile(
+      this.exportJobs.debtsRunner('all'),
+      jobId,
+      req.user?.sub,
+      res,
+    );
+  }
+
+  @Sse('debts/all/export/progress/stream')
+  @RequirePermissions(DEBTS_READ)
+  allProgressStream(@Request() req: any) {
+    return exportProgressStream(
+      this.exportJobs.debtsRunner('all'),
+      req.user?.sub,
+    );
+  }
 }

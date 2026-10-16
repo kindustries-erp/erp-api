@@ -7,11 +7,17 @@ import type { GarageDebtsExportDto } from '../dto/garage-export.dto';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import {
   buildGarageDebtReport,
+  buildGarageAllDebtsReport,
+  convertReceivablesBreakdownToExportSections,
+  convertReceivablesBreakdownToGroupSummary,
   type GarageDebtExportKind,
   type GarageDebtExportRow,
+  type GarageDebtGroupExportSection,
+  type GarageDebtGroupSummaryItem,
 } from '../helpers/garage-debts-export.helper';
 import { KgaraCustomersDebtQueryService } from './kgara-customers-debt-query.service';
 import { KgaraSuppliersService } from './kgara-suppliers.service';
+import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-receivables-breakdown.service';
 
 /** Lấy toàn bộ tập lọc, không phân trang (engine NCC không giới hạn pageSize). */
 const ALL_ROWS_PAGE_SIZE = '1000000';
@@ -26,6 +32,8 @@ export class GarageDebtsExportService {
     @Optional()
     @InjectRepository(KgaraBranch)
     private readonly branchRepo?: Repository<KgaraBranch>,
+    @Optional()
+    private readonly receivablesBreakdownService?: GarageMonthlyReceivablesBreakdownService,
   ) {}
 
   /**
@@ -47,6 +55,106 @@ export class GarageDebtsExportService {
     const filters = this.normalizeFilters(dto);
 
     onProgress(5, total, 'Đang truy vấn công nợ...');
+
+    // Nạp dữ liệu phân loại nhóm và danh sách từng phiếu dịch vụ nếu có breakdown service
+    let customerSections: GarageDebtGroupExportSection[] | undefined;
+    let customerGroupsSummary: GarageDebtGroupSummaryItem[] | undefined;
+
+    if (
+      (kind === 'customers' || kind === 'all') &&
+      this.receivablesBreakdownService
+    ) {
+      try {
+        const breakdown =
+          await this.receivablesBreakdownService.getMonthlyReceivablesBreakdown(
+            undefined,
+            branchId,
+            undefined,
+            filters.from,
+            filters.to,
+          );
+        customerSections =
+          convertReceivablesBreakdownToExportSections(breakdown);
+        customerGroupsSummary =
+          convertReceivablesBreakdownToGroupSummary(breakdown);
+      } catch {
+        // Fallback an toàn nếu phân tách breakdown gặp lỗi
+      }
+    }
+
+    if (kind === 'all') {
+      const [customerRows, supplierRows] = await Promise.all([
+        this.loadCustomerRows(branchId, filters),
+        this.loadSupplierRows(branchId, filters),
+      ]);
+
+      const payableGroupsSummary: GarageDebtGroupSummaryItem[] =
+        supplierRows.length > 0
+          ? [
+              {
+                groupName: 'Chi phí dịch vụ & Phụ tùng / NCC',
+                partnerCount: supplierRows.length,
+                caseCount: supplierRows.reduce(
+                  (acc, r) => acc + (r.caseCount || 0),
+                  0,
+                ),
+                billed: supplierRows.reduce(
+                  (acc, r) => acc + (r.totalAmount || 0),
+                  0,
+                ),
+                paid: supplierRows.reduce(
+                  (acc, r) => acc + (r.paidAmount || 0),
+                  0,
+                ),
+                remaining: supplierRows.reduce(
+                  (acc, r) => acc + (r.balanceAmount || 0),
+                  0,
+                ),
+                rate:
+                  supplierRows.reduce(
+                    (acc, r) => acc + (r.totalAmount || 0),
+                    0,
+                  ) > 0
+                    ? supplierRows.reduce(
+                        (acc, r) => acc + (r.paidAmount || 0),
+                        0,
+                      ) /
+                      supplierRows.reduce(
+                        (acc, r) => acc + (r.totalAmount || 0),
+                        0,
+                      )
+                    : 0,
+              },
+            ]
+          : [];
+
+      onProgress(
+        55,
+        total,
+        `Đang tạo Dashboard và file Excel (${customerRows.length + supplierRows.length} đối tác)...`,
+      );
+      const branchLabel = await this.resolveBranchLabel(branchId);
+      const buffer = await buildGarageAllDebtsReport(
+        customerRows,
+        supplierRows,
+        {
+          dateFrom: filters.from,
+          dateTo: filters.to,
+          branchLabel,
+          modeLabel:
+            dto.mode === 'by-current-filter'
+              ? 'Theo filter hiện tại của bảng'
+              : 'Theo kỳ',
+          customerGroupsSummary,
+          payableGroupsSummary,
+        },
+        customerSections,
+      );
+
+      onProgress(100, total, 'Hoàn tất.');
+      return buffer;
+    }
+
     const rows =
       kind === 'customers'
         ? await this.loadCustomerRows(branchId, filters)
@@ -55,18 +163,25 @@ export class GarageDebtsExportService {
     onProgress(
       55,
       total,
-      `Đang tạo Dashboard và file Excel (${rows.length} dòng)...`,
+      `Đang tạo Dashboard và file Excel (${rows.length} đối tác)...`,
     );
     const branchLabel = await this.resolveBranchLabel(branchId);
-    const buffer = await buildGarageDebtReport(kind, rows, {
-      dateFrom: filters.from,
-      dateTo: filters.to,
-      branchLabel,
-      modeLabel:
-        dto.mode === 'by-current-filter'
-          ? 'Theo filter hiện tại của bảng'
-          : 'Theo kỳ',
-    });
+    const buffer = await buildGarageDebtReport(
+      kind,
+      rows,
+      {
+        dateFrom: filters.from,
+        dateTo: filters.to,
+        branchLabel,
+        modeLabel:
+          dto.mode === 'by-current-filter'
+            ? 'Theo filter hiện tại của bảng'
+            : 'Theo kỳ',
+        customerGroupsSummary:
+          kind === 'customers' ? customerGroupsSummary : undefined,
+      },
+      kind === 'customers' ? customerSections : undefined,
+    );
 
     onProgress(100, total, 'Hoàn tất.');
     return buffer;

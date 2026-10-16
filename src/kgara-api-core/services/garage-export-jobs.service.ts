@@ -27,6 +27,7 @@ export const GARAGE_DEBTS_EXPORT_PROCESS_IDS: Record<
   GarageDebtExportKind,
   string
 > = {
+  all: 'garage-all-debts-xlsx-export',
   customers: 'garage-customers-debt-xlsx-export',
   suppliers: 'garage-suppliers-debt-xlsx-export',
 };
@@ -45,6 +46,10 @@ export class GarageExportJobsService implements OnModuleDestroy {
 
   private readonly debtRunners: Record<GarageDebtExportKind, ExportJobRunner> =
     {
+      all: new ExportJobRunner({
+        processId: GARAGE_DEBTS_EXPORT_PROCESS_IDS.all,
+        reuseWindowMs: REUSE_WINDOW_MS,
+      }),
       customers: new ExportJobRunner({
         processId: GARAGE_DEBTS_EXPORT_PROCESS_IDS.customers,
         reuseWindowMs: REUSE_WINDOW_MS,
