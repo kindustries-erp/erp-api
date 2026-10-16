@@ -13,4 +13,4 @@
 - Reuse existing modules, services, DTOs and helpers before creating new ones.
 - Follow gate order: DB -> API -> UI -> QC.
 - Kiểm tra schema PostgreSQL thật trước khi viết DTO hoặc service.
-- Before push: `bun run build` -> `bun run check:ci` -> `bunx jest --forceExit` -> `git push`, chạy trong `erp-api` và push lên `github-industries erp-master`.
+- Before push: chạy `bun run verify:final` một lần trên commit cuối, sau đó push theo ERP Git workflow.

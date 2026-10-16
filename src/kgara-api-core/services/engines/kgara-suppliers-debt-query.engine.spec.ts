@@ -175,6 +175,25 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(result.summary.totalCost).toBe(10000000);
     expect(result.summary.totalAging0_30).toBe(6000000);
   });
+
+  it('should sort by all aging buckets with the requested directions', async () => {
+    caseRepo.manager.query
+      .mockResolvedValueOnce([{ total_customers: '0' }])
+      .mockResolvedValueOnce([]);
+
+    await engine.getSuppliersDebt({
+      branchId: 'BR-01',
+      page: 1,
+      pageSize: 20,
+      sorts: ['aging0_30', '-aging31_60', 'aging61_90', '-agingOver90'],
+    });
+
+    const dataQuery = caseRepo.manager.query.mock.calls[1][0];
+    expect(dataQuery).toContain(
+      'ORDER BY "aging_0_30" ASC, "aging_31_60" DESC, "aging_61_90" ASC, "aging_over_90" DESC',
+    );
+  });
+
   it('trừ cấn trừ PAYMENT: SQL join PAYMENT, paid/balance lấy từ DB, cho phép âm', async () => {
     caseRepo.manager.query
       .mockResolvedValueOnce([
@@ -258,6 +277,109 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
       await engine.getSuppliersDebtColumnOptions('BR-01', 'customer');
 
       expectCompletedOnly();
+    });
+  });
+
+  describe('bộ lọc phân khoảng balanceAmount và paidAmount', () => {
+    it('trả về đúng danh sách options phân khoảng tiền tệ cho balanceAmount', async () => {
+      const res = await engine.getSuppliersDebtColumnOptions(
+        'BR-01',
+        'balanceAmount',
+      );
+      expect(res.items).toHaveLength(5);
+      expect(res.items[0]).toEqual({
+        label: '0 đ (Đã thanh toán hết)',
+        value: '0',
+      });
+      expect(res.items[1]).toEqual({
+        label: '< 10.000.000 đ',
+        value: '0-10m',
+      });
+      expect(res.items[4]).toEqual({
+        label: '> 50.000.000 đ',
+        value: '>50m',
+      });
+
+      const filtered = await engine.getSuppliersDebtColumnOptions(
+        'BR-01',
+        'balanceAmount',
+        '50',
+      );
+      expect(filtered.items).toHaveLength(2);
+      expect(filtered.items.map((i: any) => i.value)).toEqual([
+        '20m-50m',
+        '>50m',
+      ]);
+    });
+
+    it('trả về đúng danh sách options phân khoảng tiền tệ cho paidAmount', async () => {
+      const res = await engine.getSuppliersDebtColumnOptions(
+        'BR-01',
+        'paidAmount',
+      );
+      expect(res.items).toHaveLength(5);
+      expect(res.items[0]).toEqual({
+        label: '0 đ (Chưa chi)',
+        value: '0',
+      });
+      expect(res.items[1]).toEqual({
+        label: '< 10.000.000 đ',
+        value: '0-10m',
+      });
+
+      const filtered = await engine.getSuppliersDebtColumnOptions(
+        'BR-01',
+        'paidAmount',
+        'chưa chi',
+      );
+      expect(filtered.items).toHaveLength(1);
+      expect(filtered.items[0].value).toBe('0');
+    });
+
+    it('áp dụng điều kiện HAVING chính xác khi lọc column_filters cho balanceAmount và paidAmount', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([]);
+
+      await engine.getSuppliersDebt({
+        branchId: 'BR-01',
+        page: 1,
+        pageSize: 20,
+        column_filters: JSON.stringify({
+          balanceAmount: ['0-10m', '>50m'],
+          paidAmount: ['0'],
+        }),
+      });
+
+      const calls = caseRepo.manager.query.mock.calls;
+      for (const [sql] of calls) {
+        expect(sql).toContain('HAVING');
+        expect(sql).toContain('10000000');
+        expect(sql).toContain('50000000');
+      }
+    });
+
+    it('áp dụng điều kiện HAVING chính xác khi lọc column_search cho balanceAmount và paidAmount', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([]);
+
+      await engine.getSuppliersDebt({
+        branchId: 'BR-01',
+        page: 1,
+        pageSize: 20,
+        column_search: JSON.stringify({
+          balanceAmount: '5000000',
+          paidAmount: '2000000',
+        }),
+      });
+
+      const calls = caseRepo.manager.query.mock.calls;
+      for (const [sql, params] of calls) {
+        expect(sql).toContain('HAVING');
+        expect(params).toContain(5000000);
+        expect(params).toContain(2000000);
+      }
     });
   });
 });

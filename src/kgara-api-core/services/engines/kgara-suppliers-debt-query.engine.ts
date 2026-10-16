@@ -213,6 +213,64 @@ export class KgaraSuppliersDebtQueryEngine {
             continue;
           }
 
+          if (col === 'balanceAmount' || col === 'balance') {
+            const subConds: string[] = [];
+            const sumBalExpr = `COALESCE(SUM(${balanceExpr}), 0)`;
+            if (
+              values.includes('0') ||
+              values.includes('0 đ') ||
+              values.includes('zero')
+            ) {
+              subConds.push(`(${sumBalExpr} <= 0)`);
+            }
+            if (values.includes('0-10m') || values.includes('<10m')) {
+              subConds.push(`(${sumBalExpr} > 0 AND ${sumBalExpr} < 10000000)`);
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${sumBalExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${sumBalExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${sumBalExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
+            continue;
+          }
+
+          if (col === 'paidAmount' || col === 'paid') {
+            const subConds: string[] = [];
+            const sumPaidExpr = `COALESCE(SUM(${paidExpr}), 0)`;
+            if (
+              values.includes('0') ||
+              values.includes('0 đ') ||
+              values.includes('zero')
+            ) {
+              subConds.push(`(${sumPaidExpr} <= 0)`);
+            }
+            if (values.includes('0-10m') || values.includes('<10m')) {
+              subConds.push(
+                `(${sumPaidExpr} > 0 AND ${sumPaidExpr} < 10000000)`,
+              );
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${sumPaidExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${sumPaidExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${sumPaidExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
+            continue;
+          }
+
           if (col === 'customer') {
             const nameCol =
               'COALESCE("c"."khach_hang_name", "gp"."ten_khach_hang")';
@@ -338,6 +396,30 @@ export class KgaraSuppliersDebtQueryEngine {
         >;
         for (const [col, rawVal] of Object.entries(searchObj)) {
           if (!rawVal || !rawVal.trim()) continue;
+
+          if (col === 'balanceAmount' || col === 'balance') {
+            const cleaned = rawVal.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM(${balanceExpr}), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+            continue;
+          }
+
+          if (col === 'paidAmount' || col === 'paid') {
+            const cleaned = rawVal.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM(${paidExpr}), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+            continue;
+          }
 
           if (col === 'customer') {
             const nameCol =
@@ -513,6 +595,11 @@ export class KgaraSuppliersDebtQueryEngine {
         else if (col === 'paidAmount') sortParts.push(`"paid_amount" ${dir}`);
         else if (col === 'balanceAmount' || col === 'balance')
           sortParts.push(`"balance_amount" ${dir}`);
+        else if (col === 'aging0_30') sortParts.push(`"aging_0_30" ${dir}`);
+        else if (col === 'aging31_60') sortParts.push(`"aging_31_60" ${dir}`);
+        else if (col === 'aging61_90') sortParts.push(`"aging_61_90" ${dir}`);
+        else if (col === 'agingOver90')
+          sortParts.push(`"aging_over_90" ${dir}`);
         else if (col === 'latestDate' || col === 'completedDate')
           sortParts.push(`"latest_date" ${dir}`);
         else if (col === 'maxAgingDays' || col === 'aging')
@@ -653,6 +740,54 @@ export class KgaraSuppliersDebtQueryEngine {
       const filtered = search
         ? options.filter((opt) =>
             opt.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
+    if (column === 'balanceAmount' || column === 'balance') {
+      const options = [
+        { label: '0 đ (Đã thanh toán hết)', value: '0' },
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter(
+            (opt) =>
+              opt.label.toLowerCase().includes(search.toLowerCase()) ||
+              opt.value.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
+    if (column === 'paidAmount' || column === 'paid') {
+      const options = [
+        { label: '0 đ (Chưa chi)', value: '0' },
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter(
+            (opt) =>
+              opt.label.toLowerCase().includes(search.toLowerCase()) ||
+              opt.value.toLowerCase().includes(search.toLowerCase()),
           )
         : options;
       return {
