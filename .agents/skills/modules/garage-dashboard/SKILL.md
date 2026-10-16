@@ -59,6 +59,13 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
         - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
         - **2 Thẻ KPI Tương phản (`MonthPayerKpiGrid`)**: Phân tách rõ rệt nguồn thu từ Khách hàng và từng khoản duyệt bồi thường từ Bảo hiểm.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Cơ cấu Thu KH vs Thu BH, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
+  - **Đồng bộ hóa Giao diện & Kiến trúc Drawer Chi tiết Mốc Thời Gian Tuổi Nợ (`GarageTimeHorizonDetailDrawer.tsx`)**:
+    - **Áp dụng toàn bộ UI & Layout của Tháng (`GarageMonthDetailDrawer`)**: Drawer chi tiết của các card tuổi nợ (`criticalOverdue90Plus`, `overdue30To90`, `currentMonth`, `futureReceivable`) sử dụng chuẩn 2-columns `StandardFormDrawer` với 3 tabs:
+      1. Tab 1: **Phân loại Nghiệp vụ** (`TimeHorizonClassificationTab.tsx`): Bảng tổng hợp nhóm nghiệp vụ (Sửa chữa chung, Ký gửi / Nội bộ, OJ Ngoài, Khác).
+      2. Tab 2: **Phân loại theo đối tượng** (`TimeHorizonPartnerTab.tsx`): Ma trận 3 nhóm đối tượng (Doanh nghiệp, Cá nhân, Bảo hiểm) tích hợp công tắc Phải thu / Phải trả, click drilldown vào `GaragePartnerMonthDetailDrawer`.
+      3. Tab 3: **Danh sách vụ việc** (`TimeHorizonCasesTab.tsx`): Bảng danh sách phiếu dịch vụ chi tiết với STT chuẩn 1-based, pagination server-side và mở chi tiết `GarageCaseStandaloneDrawer`.
+    - **Cột phải (`TimeHorizonRightPanel.tsx`)**: Tích hợp cảnh báo hóa đơn VAT chưa xuất (`ReceivablesVatWarningSummary`), cơ cấu Thu KH vs Thu BH (`MonthPayerKpiGrid`), chi phí phát sinh & phải trả (`MonthCostPayableKpiCard`), và đánh giá rủi ro mốc thời gian.
+    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/api-service-refactor` (`garage-receivables-classification.helper.ts`).
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:

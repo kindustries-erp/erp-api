@@ -57,19 +57,44 @@ export class GarageDashboardController {
   @Get('monthly-receivables-breakdown')
   @ApiQuery({
     name: 'month',
-    required: true,
+    required: false,
     description: 'Định dạng YYYY-MM hoặc MM/YYYY',
+  })
+  @ApiQuery({
+    name: 'horizon',
+    required: false,
+    description:
+      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue30To90, criticalOverdue90Plus...)',
   })
   @ApiQuery({
     name: 'branch_id',
     required: false,
     description: 'ID chi nhánh garage',
   })
+  @ApiQuery({
+    name: 'date_from',
+    required: false,
+    description: 'Ngày bắt đầu (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'date_to',
+    required: false,
+    description: 'Ngày kết thúc (YYYY-MM-DD)',
+  })
   getMonthlyReceivablesBreakdown(
-    @Query('month') month: string,
+    @Query('month') month?: string,
     @Query('branch_id') branchId?: string,
+    @Query('horizon') horizon?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
   ) {
-    return this.service.getMonthlyReceivablesBreakdown(month, branchId);
+    return this.service.getMonthlyReceivablesBreakdown(
+      month,
+      branchId,
+      horizon,
+      dateFrom,
+      dateTo,
+    );
   }
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })

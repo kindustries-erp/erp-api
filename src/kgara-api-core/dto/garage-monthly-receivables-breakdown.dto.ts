@@ -2,14 +2,23 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetGarageMonthlyReceivablesBreakdownQueryDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
       'Tháng cần tra cứu (định dạng YYYY-MM hoặc MM/YYYY, ví dụ 2026-10)',
     example: '2026-10',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  month: string;
+  month?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue30To90, criticalOverdue90Plus)',
+    example: 'criticalOverdue90Plus',
+  })
+  @IsOptional()
+  @IsString()
+  horizon?: string;
 
   @ApiPropertyOptional({
     description: 'Mã chi nhánh (branch_id hoặc external branch ID)',
@@ -24,6 +33,20 @@ export class GetGarageMonthlyReceivablesBreakdownQueryDto {
   @IsOptional()
   @IsString()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ngày bắt đầu (YYYY-MM-DD)',
+  })
+  @IsOptional()
+  @IsString()
+  date_from?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ngày kết thúc (YYYY-MM-DD)',
+  })
+  @IsOptional()
+  @IsString()
+  date_to?: string;
 }
 
 export interface ReceivablesPayerSummary {
@@ -134,6 +157,8 @@ export interface MonthlyReceivablesGroupCategorized {
 export interface MonthlyReceivablesBreakdownResponse {
   month: string;
   monthLabel: string;
+  horizon?: string;
+  trendItem?: any;
   summary: MonthlyReceivablesSummary;
   insuranceCompanies: MonthlyReceivablesGroupItem[];
   customerPartners: MonthlyReceivablesGroupItem[];

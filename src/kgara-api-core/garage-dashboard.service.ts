@@ -126,7 +126,22 @@ export class GarageDashboardService {
   /**
    * 8. Lấy chi tiết phân rã Phải thu & Đã thu theo tháng (Thu KH, Thu BH, Từng Công ty Bảo hiểm & Cảnh báo VAT)
    */
-  getMonthlyReceivablesBreakdown(month: string, branchId?: string) {
+  getMonthlyReceivablesBreakdown(
+    month?: string,
+    branchId?: string,
+    horizon?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
+    if (horizon || dateFrom || dateTo) {
+      return this.monthlyReceivablesBreakdownService.getMonthlyReceivablesBreakdown(
+        month,
+        branchId,
+        horizon,
+        dateFrom,
+        dateTo,
+      );
+    }
     return this.monthlyReceivablesBreakdownService.getMonthlyReceivablesBreakdown(
       month,
       branchId,
