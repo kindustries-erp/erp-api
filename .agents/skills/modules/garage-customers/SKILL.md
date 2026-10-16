@@ -213,13 +213,26 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
 
 ### 4.3. `GET /cases/by-customer/:customerCode` (Danh Sách Phiếu DV của Khách Hàng)
 
-- **Mô tả**: Lấy toàn bộ danh sách phiếu dịch vụ hoàn tất của một khách hàng cụ thể để hiển thị trong Drawer Hồ sơ công nợ.
+- **Mô tả**: Lấy danh sách phiếu dịch vụ hoàn tất của một khách hàng cụ thể để hiển thị trong Drawer Hồ sơ công nợ.
 - **Path Parameter**: `customerCode` (mã khách hàng, hoặc `'UNKNOWN'` / `'NO_CODE'` nếu không có mã).
+- **Query Parameter (Mới)**: `licensePlate?: string` (tùy chọn: lọc các phiếu gắn với đúng biển số xe, bỏ qua hoặc truyền `'ALL'` để lấy toàn bộ).
 - **Header**: `x-kgara-branch-id` (tùy chọn theo chi nhánh).
 - **Xử lý Làm giàu Dữ liệu**:
   - Tự động map với bảng `kgara_case_settlements` để tính chính xác số tiền thực thu (`receipts`), thực chi (`payments`), dư nợ còn lại và số ngày tuổi nợ của từng phiếu.
+  - Lọc theo `case.bienSoXe = :licensePlate` nếu có truyền tham số biển số xe.
 
----
+### 4.4. Cơ Chế Lọc Theo Biển Số Xe Trên Drawer (`GarageCustomerDetailDrawer`)
+
+- **Truyền ngữ cảnh Biển số xe từ Bảng Chính**: Khi người dùng click vào dòng dữ liệu (biển số xe, tên khách hàng, số lượng phiếu hoặc action "Xem chi tiết công nợ") tại `GarageDebtsTable` hoặc `GaragePayablesTable`, BKS (`licensePlate`) được truyền nguyên vẹn vào Drawer qua `props.licensePlate`.
+- **Bộ Lọc Xe Nhanh (`CustomerVehicleSelector`)**:
+  - Tích hợp trực tiếp tại thanh công cụ phía trên Drawer (cạnh switch Công nợ).
+  - Hiển thị chip trạng thái `Lọc theo xe: <BKS> (số phiếu) [✕]` khi đang áp dụng lọc, cho phép 1-click hủy lọc để xem toàn bộ xe.
+  - Dropdown cho phép chuyển nhanh giữa các phương tiện của khách hàng (hiển thị kèm số phiếu và dư nợ từng xe).
+- **Tab 3 Phân Bổ Theo Xe (`CustomerVehicleDebtTab`)**:
+  - Highlight xe đang chọn bằng badge/button active.
+  - Click vào bất kỳ dòng xe nào tại Tab 3 sẽ tự động kích hoạt bộ lọc xe đó và chuyển ngay sang Tab 1 để xem các phiếu dịch vụ.
+- **Sidebar Tổng Quan (`CustomerSidebarSummary`)**:
+  - Khi đang lọc theo xe: Hiển thị dòng BKS xe đang xem, số phiếu của xe này / tổng số phiếu, và khối so sánh riêng giữa Dư nợ của xe này và Tổng dư nợ toàn bộ khách hàng.
 
 ## 5. Logic Nghiệp vụ & Thuật toán Trọng tâm
 

@@ -300,11 +300,15 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         mockResult,
       );
 
-      const cases = await controller.getCasesByCustomer('BRANCH_01', 'KH001');
+      const cases = await controller.getCasesByCustomer(
+        'BRANCH_01',
+        'KH001',
+        '51H-12345',
+      );
 
       expect(
         customerCasesDetailService.getCasesByCustomer,
-      ).toHaveBeenCalledWith('BRANCH_01', 'KH001');
+      ).toHaveBeenCalledWith('BRANCH_01', 'KH001', '51H-12345');
       expect(cases).toBe(mockResult);
     });
   });

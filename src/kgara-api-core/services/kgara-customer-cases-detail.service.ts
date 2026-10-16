@@ -36,6 +36,7 @@ export class KgaraCustomerCasesDetailService {
   async getCasesByCustomer(
     branchId: string,
     customerCode: string,
+    licensePlate?: string,
   ): Promise<EnrichedCustomerCaseItem[]> {
     const query = this.caseRepo
       .createQueryBuilder('case')
@@ -55,6 +56,16 @@ export class KgaraCustomerCasesDetailService {
 
     if (branchId) {
       query.andWhere('case.branchExternalId = :branchId', { branchId });
+    }
+
+    if (
+      licensePlate &&
+      licensePlate.trim() &&
+      licensePlate.trim().toUpperCase() !== 'ALL'
+    ) {
+      query.andWhere('case.bienSoXe = :licensePlate', {
+        licensePlate: licensePlate.trim(),
+      });
     }
 
     query.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST');

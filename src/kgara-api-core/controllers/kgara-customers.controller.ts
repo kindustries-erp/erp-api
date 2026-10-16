@@ -420,10 +420,12 @@ export class KgaraCustomersController {
   async getCasesByCustomer(
     @BranchId() branchId: string,
     @Param('customerCode') customerCode: string,
+    @Query('licensePlate') licensePlate?: string,
   ) {
     return this.customerCasesDetailService.getCasesByCustomer(
       branchId,
       customerCode,
+      licensePlate,
     );
   }
 }
