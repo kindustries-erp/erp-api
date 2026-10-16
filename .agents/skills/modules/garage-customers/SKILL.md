@@ -213,13 +213,26 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
 
 ### 4.3. `GET /cases/by-customer/:customerCode` (Danh Sách Phiếu DV của Khách Hàng)
 
-- **Mô tả**: Lấy toàn bộ danh sách phiếu dịch vụ hoàn tất của một khách hàng cụ thể để hiển thị trong Drawer Hồ sơ công nợ.
+- **Mô tả**: Lấy danh sách phiếu dịch vụ hoàn tất của một khách hàng cụ thể để hiển thị trong Drawer Hồ sơ công nợ.
 - **Path Parameter**: `customerCode` (mã khách hàng, hoặc `'UNKNOWN'` / `'NO_CODE'` nếu không có mã).
+- **Query Parameter (Mới)**: `licensePlate?: string` (tùy chọn: lọc các phiếu gắn với đúng biển số xe, bỏ qua hoặc truyền `'ALL'` để lấy toàn bộ).
 - **Header**: `x-kgara-branch-id` (tùy chọn theo chi nhánh).
 - **Xử lý Làm giàu Dữ liệu**:
   - Tự động map với bảng `kgara_case_settlements` để tính chính xác số tiền thực thu (`receipts`), thực chi (`payments`), dư nợ còn lại và số ngày tuổi nợ của từng phiếu.
+  - Lọc theo `case.bienSoXe = :licensePlate` nếu có truyền tham số biển số xe.
 
----
+### 4.4. Cơ Chế Lọc Theo Biển Số Xe Trên Drawer (`GarageCustomerDetailDrawer`)
+
+- **Truyền ngữ cảnh Biển số xe từ Bảng Chính**: Khi người dùng click vào dòng dữ liệu (biển số xe, tên khách hàng, số lượng phiếu hoặc action "Xem chi tiết công nợ") tại `GarageDebtsTable` hoặc `GaragePayablesTable`, BKS (`licensePlate`) được truyền nguyên vẹn vào Drawer qua `props.licensePlate`.
+- **Bộ Lọc Xe Nhanh (`CustomerVehicleSelector`)**:
+  - Tích hợp trực tiếp tại thanh công cụ phía trên Drawer (cạnh switch Công nợ).
+  - Hiển thị chip trạng thái `Lọc theo xe: <BKS> (số phiếu) [✕]` khi đang áp dụng lọc, cho phép 1-click hủy lọc để xem toàn bộ xe.
+  - Dropdown cho phép chuyển nhanh giữa các phương tiện của khách hàng (hiển thị kèm số phiếu và dư nợ từng xe).
+- **Tab 3 Phân Bổ Theo Xe (`CustomerVehicleDebtTab`)**:
+  - Highlight xe đang chọn bằng badge/button active.
+  - Click vào bất kỳ dòng xe nào tại Tab 3 sẽ tự động kích hoạt bộ lọc xe đó và chuyển ngay sang Tab 1 để xem các phiếu dịch vụ.
+- **Sidebar Tổng Quan (`CustomerSidebarSummary`)**:
+  - Khi đang lọc theo xe: Hiển thị dòng BKS xe đang xem, số phiếu của xe này / tổng số phiếu, và khối so sánh riêng giữa Dư nợ của xe này và Tổng dư nợ toàn bộ khách hàng.
 
 ## 5. Logic Nghiệp vụ & Thuật toán Trọng tâm
 
@@ -405,3 +418,52 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - Mọi file đều khống chế nghiêm ngặt **< 180 LoC/file** (tách riêng helper phân loại `PartnerMonthClassification.helper.ts` và columns `PartnerMonthCasesTable.columns.tsx`).
   - 100% **No Blue Mandate** (sử dụng token Tailwind emerald, amber, rose, slate/neutral/muted).
   - Co-located unit test `GaragePartnerMonthDetailDrawer.test.tsx` pass 100%.
+
+### 8.7. Chuẩn Hóa Xuất Excel Công Nợ Garage (GarageDebtsExportDrawer) & Runner Xuất Multi-Sheet (Group Sheets & Dashboard Charts)
+- **Nghiệp Vụ & Động Cơ Xuất Nền (Background Export Engine)**:
+  - Hỗ trợ 3 đối tượng xuất:
+    1. `all`: **Tất cả (Phải thu & Phải trả)** — Khởi chạy runner `garage-all-debts-xlsx-export`, sinh **file Excel đa sheet độc lập**:
+       - Sheet 1: `Dashboard` (Trung tâm điều hành: 8 thẻ KPI, 4 biểu đồ chuyên biệt cho từng group, và 2 bảng tổng hợp chỉ số).
+       - Sheet 2: `Thu Khách hàng Doanh nghiệp` (Tách riêng thành 1 sheet độc lập cho nhóm KH Doanh nghiệp).
+       - Sheet 3: `Thu Khách hàng Cá nhân` (Tách riêng thành 1 sheet độc lập cho nhóm KH Cá nhân).
+       - Sheet 4: `Thu Bảo hiểm` (Tách riêng thành 1 sheet độc lập cho nhóm Bảo hiểm nếu có phát sinh).
+       - Sheet cuối: `Công nợ phải trả` (Chi tiết công nợ nhà cung cấp, phân nhóm chi phí, 4 tầng tuổi nợ).
+    2. `customers`: **Phải thu (Khách hàng)** — Runner `garage-customers-debt-xlsx-export` (gồm `Dashboard` và các sheet tách riêng theo từng nhóm).
+    3. `suppliers`: **Phải trả (Nhà cung cấp)** — Runner `garage-suppliers-debt-xlsx-export`.
+  - **Endpoints API**:
+    - `POST /api/v1/greenway/debts/all/export/background`
+    - `GET /api/v1/greenway/debts/all/export/background/history`
+    - `GET /api/v1/greenway/debts/all/export/background/:jobId/download`
+    - `GET /api/v1/greenway/debts/all/export/progress/stream` (SSE)
+  - **Mốc kỳ & phân nhóm (cập nhật 2026-10-16)**:
+    - `from` luôn được kẹp tối thiểu bằng `GARAGE_DEBT_BASELINE_DATE` (`2026-07-01`), áp dụng đồng thời cho bảng chi tiết và phần phân nhóm (breakdown). Không còn rơi về tháng hiện tại khi thiếu `from`.
+    - `to` thiếu thì lấy ngày hôm nay (máy chủ) cho phần phân nhóm.
+    - Lỗi phân nhóm không làm hỏng file: service ghi `Logger.warn` (`garage-debts-export.service.ts`) và vẫn xuất các sheet chi tiết.
+    - Dòng `Kỳ:` trên Dashboard có thêm "Số dư, tuổi nợ tính đến dd/MM/yyyy" (`formatPeriod` trong `garage-debts-export.helper.ts`, nhận `meta.asOfDate`). Số dư và tuổi nợ luôn tính đến ngày xuất, không tính đến cuối kỳ.
+- **Triệt Tiêu Double Sum & Cấu Trúc Sheet Con Độc Lập**:
+  - Tách mỗi group thành một sheet riêng thông qua hàm `buildSingleGroupDebtSheet(workbook, sec.title, sec)`.
+  - **Tuyệt đối không chèn hàng tổng phụ xen kẽ (subtotal row)** giữa các case trong danh sách.
+  - Toàn bộ danh sách case được liệt kê tuần tự từ Row 5 đến Row n.
+  - Áp dụng `applyStandardExcelReportLayout`: Row 1 đặt công thức `=SUM(F5:Fn)`, Row 2 đặt công thức `=SUBTOTAL(9, F5:Fn)`. Vì không có dòng tổng phụ chen ngang, công thức chỉ quét qua dữ liệu gốc thuần túy ➔ **Triệt tiêu 100% lỗi double sum**.
+- **Đồng Bộ Màu Sắc 4 Khoảng Tuổi Nợ (Web ➔ Excel)**:
+  - Bản đồ màu `AGING_EXCEL_COLOR_MAP` áp dụng cho Header (Row 4), Data cells (Row 5+) và Summary rows (Row 1-2):
+    - `0-30 ngày`: Emerald (Header nền `#D1FAE5` chữ `#065F46`, Data cell nền `#F0FDF4` chữ `#047857`).
+    - `31-60 ngày`: Amber (Header nền `#FEF3C7` chữ `#92400E`, Data cell nền `#FFFBEB` chữ `#92400E`).
+    - `61-90 ngày`: Orange (Header nền `#FFEDD5` chữ `#9A3412`, Data cell nền `#FFF7ED` chữ `#C2410C`).
+    - `>90 ngày`: Rose (Header nền `#FFE4E6` chữ `#9F1239`, Data cell nền `#FFF1F2` chữ `#BE123C` bold).
+- **Sheet Dashboard Đa Biểu Đồ & 8 KPI Cards Từng Group**:
+  - **8 Thẻ KPI (2 hàng x 4 thẻ)**:
+    - Hàng 1 (Toàn hệ thống): Tổng phát sinh KH, Đã thu KH, Còn phải thu KH, Tỷ lệ thu hồi KH.
+    - Hàng 2 (Theo từng nhóm & Phải trả): Thu KH Doanh nghiệp, Thu KH Cá nhân, Thu Bảo hiểm, Còn phải trả NCC (hoặc Tổng số phiếu).
+  - **4 Biểu Đồ (Grid 2x2 trong vùng in A–P)**:
+    1. `Chart 1 (Doughnut)`: Cơ cấu doanh thu theo Nhóm đối tượng (Doanh nghiệp, Cá nhân, Bảo hiểm).
+    2. `Chart 2 (Clustered Column)`: So sánh Thu hồi nợ từng nhóm (Phát sinh, Đã thu, Còn nợ).
+    3. `Chart 3 (Doughnut)`: Cơ cấu tuổi nợ toàn hệ thống (0-30, 31-60, 61-90, >90 ngày theo 4 màu nhận diện).
+    4. `Chart 4 (Bar)`: Top 10 khách hàng còn nợ lớn nhất.
+  - **Bảng Tóm Tắt Chỉ Số Dưới Biểu Đồ**:
+    - Bảng `CƠ CẤU THU THEO ĐỐI TƯỢNG (PHẢI THU)`: Số đối tượng, số vụ việc, phát sinh, đã thu, còn nợ, % thu hồi, có HĐ, chưa HĐ cho 3 nhóm.
+    - Bảng `CHI PHÍ PHÁT SINH & CÒN NỢ (PHẢI TRẢ)`: Chi phí dịch vụ & phụ tùng NCC.
+- **Chuẩn Hóa UI Gộp Chung 1 DrawerSection (`/standardize-drawer`)**:
+  - Cột phải chỉ có duy nhất **1 `DrawerSection` mang tên "ĐIỀU KIỆN XUẤT DỮ LIỆU"** (`GarageDebtsExportConditionSection`).
+  - Trường **Đối tượng báo cáo** (`Combobox`) nằm ở vị trí đầu tiên bên trong section, ngay trước bộ chọn chế độ xuất (`ExportModeSelector`), loại bỏ hoàn toàn section thừa bên ngoài.
+  - Bảo toàn 100% test suite trong `GarageDebtsExportDrawer.test.tsx` (8/8 tests pass) và `garage-debts-export.service.spec.ts` (9/9 tests pass).

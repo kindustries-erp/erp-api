@@ -38,7 +38,6 @@ import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
-import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
@@ -72,6 +71,17 @@ import { GarageDebtsAnalyticsController } from './controllers/garage-debts-analy
 import { KgaraSuppliersService } from './services/kgara-suppliers.service';
 import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-suppliers-debt-query.engine';
 import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases-detail.service';
+import { KgaraCustomersDebtQueryService } from './services/kgara-customers-debt-query.service';
+import { GarageDebtsExportService } from './services/garage-debts-export.service';
+import { GarageCashflowExportService } from './services/garage-cashflow-export.service';
+import { GarageCashflowExcelBuilder } from './services/garage-cashflow-excel.builder';
+import { GarageExportJobsService } from './services/garage-export-jobs.service';
+import { GarageCasesExportController } from './controllers/garage-cases-export.controller';
+import { GarageDashboardExportController } from './controllers/garage-dashboard-export.controller';
+import { GaragePeriodReportService } from './services/garage-period-report.service';
+import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
+import { GarageDebtsExportController } from './controllers/garage-debts-export.controller';
+import { GarageCashflowExportController } from './controllers/garage-cashflow-export.controller';
 
 @Module({
   imports: [
@@ -115,7 +125,6 @@ import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases
     GarageDebtsAnalyticsService,
     GarageCheckpointService,
     GarageCustomerStatsService,
-    GarageDashboardExportService,
     GaragePnlService,
     GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
@@ -135,6 +144,13 @@ import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
     KgaraCustomerCasesDetailService,
+    KgaraCustomersDebtQueryService,
+    GarageDebtsExportService,
+    GarageExportJobsService,
+    GaragePeriodReportService,
+    GaragePeriodReportQueries,
+    GarageCashflowExcelBuilder,
+    GarageCashflowExportService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -148,6 +164,10 @@ import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases
     KgaraSyncController,
     KgaraCaseFinancialController,
     KgaraCasesController,
+    GarageCasesExportController,
+    GarageDashboardExportController,
+    GarageDebtsExportController,
+    GarageCashflowExportController,
   ],
   exports: [
     KgaraSyncService,
@@ -161,7 +181,6 @@ import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases
     GarageDashboardStatsService,
     GarageCheckpointService,
     GarageCustomerStatsService,
-    GarageDashboardExportService,
     GaragePnlService,
     GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
@@ -181,6 +200,7 @@ import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
     KgaraCustomerCasesDetailService,
+    KgaraCustomersDebtQueryService,
   ],
 })
 export class KgaraApiCoreModule {}

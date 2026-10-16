@@ -231,7 +231,7 @@ src/erp-invoices-core/
 │   ├── invoice-debts.service.ts               # FACADE: Báo cáo công nợ & chi tiết theo đối tác
 │   ├── invoice-debts-export-background.service.ts # Quản lý xuất Excel công nợ nền + SSE stream
 │   ├── invoice-query.service.ts               # FACADE: Phân trang, lọc, thống kê & xuất Excel hóa đơn
-│   ├── invoice-export-background.service.ts   # Quản lý xuất Excel danh sách hóa đơn nền + SSE stream
+│   ├── invoice-export-background.service.ts   # Fingerprint + tên file; ủy quyền job nền/SSE cho ExportJobRunner (common/export-jobs)
 │   ├── invoice-files.service.ts               # Upload/download PDF/XML Cloudflare R2 & nén ZIP stream
 │   ├── invoice-import.service.ts              # Nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
@@ -526,7 +526,7 @@ src/erp-invoices-core/
   - **Tham số `selected_columns`**: `ErpInvoiceQuery` chấp nhận `selected_columns` dạng mảng `string[]` hoặc chuỗi phân tách bằng dấu phẩy `string` (ví dụ: `stt,invoice_no,seller_name,total_amount`).
   - **Helper `resolveActiveColumns`** (`invoice-export-excel-columns.helper.ts`): Ánh xạ danh sách cột được chọn từ 22 cột mặc định của Sheet `Bảng kê`. Luôn đảm bảo cột `stt` tồn tại để giữ tính toàn vẹn cấu trúc. Mỗi cột được định nghĩa đầy đủ cấu hình alignment, fill, numFmt và width.
   - **Duyệt và Style Động** (`invoice-export-excel-writers.helper.ts`): Hàm `writeSummaryRows` duyệt trực tiếp qua `activeColumns` (index thực tế `1..activeColumns.length`) thay vì hardcode cell index cố định, tự động tính toán lại công thức `SUM`, `SUBTOTAL`, và căn chỉnh nhãn hàng tổng cộng an toàn theo `effectiveLabelCol`.
-  - **Cache Fingerprint Chống Trùng**: `InvoiceExportBackgroundService.buildQueryFingerprint()` chuẩn hóa và sắp xếp mảng `selected_columns` trước khi băm SHA-256 để đảm bảo phân biệt chính xác file kết quả giữa các yêu cầu xuất khác bộ cột.
+  - **Cache Fingerprint Chống Trùng**: `InvoiceExportBackgroundService.buildQueryFingerprint()` chuẩn hóa và sắp xếp mảng `selected_columns`, rồi dựng chuỗi JSON ổn định (`stableStringify`, **không băm SHA-256**) để phân biệt file kết quả giữa các yêu cầu xuất khác bộ cột. Job nền, SSE, lịch sử và reuse nằm ở `ExportJobRunner` dùng chung (`src/common/export-jobs/export-job-runner.ts`, in-memory: mất khi restart, không chia sẻ giữa replica); service invoice chỉ dựng fingerprint/tên file và truyền producer `exportExcel`.
 - **Cột Chi nhánh & Cấn trừ & Thuế suất**:
   - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
   - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).

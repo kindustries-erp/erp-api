@@ -24,6 +24,7 @@ export interface BankStatementExcelBuildOptions {
   sourceType?: 'BANK' | 'CASH';
   transactions: ErpBankTransaction[];
   netOffDetails: NetOffInvoiceItem[];
+  selectedColumns?: string[];
   onProgress?: (percent: number, message: string) => void;
 }
 
@@ -31,8 +32,51 @@ export interface BankStatementExcelBuildOptions {
 export class BankStatementExcelBuilder {
   private static readonly INVOICE_START_COL = 15;
 
+  private static readonly INVOICE_KEYS = new Set([
+    'invoiceBranchName',
+    'invoiceDate',
+    'invoiceNo',
+    'invoiceSerial',
+    'invoicePartner',
+    'invoiceDescription',
+    'invoiceTotalAmount',
+  ]);
+
+  private static readonly ALIGNMENTS: Record<
+    string,
+    { horizontal: 'center' | 'left' | 'right'; vertical: 'middle' }
+  > = {
+    stt: { horizontal: 'center', vertical: 'middle' },
+    account: { horizontal: 'left', vertical: 'middle' },
+    transDate: { horizontal: 'center', vertical: 'middle' },
+    referenceNumber: { horizontal: 'center', vertical: 'middle' },
+    description: { horizontal: 'left', vertical: 'middle' },
+    credit: { horizontal: 'right', vertical: 'middle' },
+    debit: { horizontal: 'right', vertical: 'middle' },
+    balance: { horizontal: 'right', vertical: 'middle' },
+    netOffAmount: { horizontal: 'right', vertical: 'middle' },
+    remainingAmount: { horizontal: 'right', vertical: 'middle' },
+    correspondentAccount: { horizontal: 'center', vertical: 'middle' },
+    correspondentName: { horizontal: 'left', vertical: 'middle' },
+    correspondentBank: { horizontal: 'left', vertical: 'middle' },
+    branchName: { horizontal: 'center', vertical: 'middle' },
+    invoiceBranchName: { horizontal: 'center', vertical: 'middle' },
+    invoiceDate: { horizontal: 'center', vertical: 'middle' },
+    invoiceNo: { horizontal: 'center', vertical: 'middle' },
+    invoiceSerial: { horizontal: 'center', vertical: 'middle' },
+    invoicePartner: { horizontal: 'left', vertical: 'middle' },
+    invoiceDescription: { horizontal: 'left', vertical: 'middle' },
+    invoiceTotalAmount: { horizontal: 'right', vertical: 'middle' },
+  };
+
   async build(options: BankStatementExcelBuildOptions): Promise<Buffer> {
-    const { sourceType, transactions, netOffDetails, onProgress } = options;
+    const {
+      sourceType,
+      transactions,
+      netOffDetails,
+      selectedColumns,
+      onProgress,
+    } = options;
     onProgress?.(65, 'Đang tạo cấu trúc bảng tính Excel...');
 
     const workbook = new Workbook();
@@ -48,7 +92,7 @@ export class BankStatementExcelBuilder {
       netOffMap.set(item.bankTransactionId, list);
     }
 
-    const columns: Array<{
+    const allColumns: Array<{
       header: string;
       key: string;
       width: number;
@@ -124,8 +168,14 @@ export class BankStatementExcelBuilder {
         key: 'invoiceTotalAmount',
         width: 22,
         style: { numFmt: '#,##0.00' },
+        isSum: true,
       },
     ];
+
+    const columns =
+      selectedColumns && selectedColumns.length > 0
+        ? allColumns.filter((c) => selectedColumns.includes(c.key))
+        : allColumns;
 
     worksheet.columns = columns.map((c) => ({ key: c.key, width: c.width }));
     worksheet.addRow([]);
@@ -150,6 +200,7 @@ export class BankStatementExcelBuilder {
     let totalDebit = 0;
     let totalNetOff = 0;
     let totalRemaining = 0;
+    let totalInvoiceAmount = 0;
 
     transactions.forEach((item, index) => {
       const credit = parseFloat(item.creditAmount as any) || 0;
@@ -204,6 +255,10 @@ export class BankStatementExcelBuilder {
           )
         : null;
 
+      if (invTotalAmount) {
+        totalInvoiceAmount += invTotalAmount;
+      }
+
       const row = worksheet.addRow({
         stt: index + 1,
         account: accountText,
@@ -231,53 +286,44 @@ export class BankStatementExcelBuilder {
       row.height = 20;
       row.font = { name: 'Calibri', size: 10 };
 
-      // Base Bank Statement Alignments & Formats
-      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-      if (transDateVal) row.getCell(3).numFmt = 'dd/mm/yyyy hh:mm:ss';
-      row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(5).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(6).numFmt = '#,##0.00';
-      row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(7).numFmt = '#,##0.00';
-      row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(8).numFmt = '#,##0.00';
-      row.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(9).numFmt = '#,##0.00';
-      row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(10).numFmt = '#,##0.00';
-      row.getCell(11).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(12).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(13).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(14).alignment = { horizontal: 'center', vertical: 'middle' };
-
-      // Invoice Net-Off Alignments & Formats (Cols 15-21)
-      row.getCell(15).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(16).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(17).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(18).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(19).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(20).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(21).alignment = { horizontal: 'right', vertical: 'middle' };
-      if (invTotalAmount !== null) row.getCell(21).numFmt = '#,##0.00';
-
-      // Apply 2-tone borders & fill
+      // Base Bank Statement Dynamic Alignments & Formats
       for (let c = 1; c <= columns.length; c++) {
+        const colDef = columns[c - 1];
         const cell = row.getCell(c);
-        if (c >= BankStatementExcelBuilder.INVOICE_START_COL) {
+        const isInvoiceCol = BankStatementExcelBuilder.INVOICE_KEYS.has(
+          colDef.key,
+        );
+
+        cell.alignment = BankStatementExcelBuilder.ALIGNMENTS[colDef.key] || {
+          horizontal: 'left',
+          vertical: 'middle',
+        };
+
+        if (colDef.key === 'transDate' && transDateVal) {
+          cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
+        } else if (
+          colDef.key === 'invoiceTotalAmount' &&
+          invTotalAmount !== null
+        ) {
+          cell.numFmt = '#,##0.00';
+        } else if (colDef.style?.numFmt) {
+          cell.numFmt = colDef.style.numFmt;
+        }
+
+        if (isInvoiceCol) {
           cell.fill = invoiceFill;
-          cell.border =
-            c === BankStatementExcelBuilder.INVOICE_START_COL
-              ? {
-                  ...borderThin,
-                  left: {
-                    style: 'double' as const,
-                    color: { argb: 'FF065F46' },
-                  },
-                }
-              : borderThin;
+          const isFirstInvCol =
+            c > 1 &&
+            !BankStatementExcelBuilder.INVOICE_KEYS.has(columns[c - 2].key);
+          cell.border = isFirstInvCol
+            ? {
+                ...borderThin,
+                left: {
+                  style: 'double' as const,
+                  color: { argb: 'FF065F46' },
+                },
+              }
+            : borderThin;
         } else {
           cell.border = borderThin;
         }
@@ -293,6 +339,7 @@ export class BankStatementExcelBuilder {
       totalDebit,
       totalNetOff,
       totalRemaining,
+      totalInvoiceAmount,
       borderThin,
       invoiceFill,
     );
@@ -310,6 +357,7 @@ export class BankStatementExcelBuilder {
     totalDebit: number,
     totalNetOff: number,
     totalRemaining: number,
+    totalInvoiceAmount: number,
     borderThin: any,
     invoiceFill: any,
   ) {
@@ -321,6 +369,7 @@ export class BankStatementExcelBuilder {
       debit: totalDebit,
       netOffAmount: totalNetOff,
       remainingAmount: totalRemaining,
+      invoiceTotalAmount: totalInvoiceAmount,
     };
 
     const sumRow = worksheet.getRow(1);
@@ -329,7 +378,7 @@ export class BankStatementExcelBuilder {
       name: 'Calibri',
       size: 10.5,
       bold: true,
-      color: { argb: 'FF0F172A' },
+      color: { argb: 'FF78350F' }, // Amber 900
     };
 
     const subtotalRow = worksheet.getRow(2);
@@ -338,7 +387,7 @@ export class BankStatementExcelBuilder {
       name: 'Calibri',
       size: 10.5,
       bold: true,
-      color: { argb: 'FF1E40AF' },
+      color: { argb: 'FF0F172A' }, // Slate 900
     };
 
     worksheet.getRow(3).height = 10;
@@ -351,29 +400,39 @@ export class BankStatementExcelBuilder {
       wrapText: true,
     };
 
+    // Label column: find description or column before first isSum
+    const firstSumColIdx = columns.findIndex((c) => c.isSum);
+    const descColIdx = columns.findIndex((c) => c.key === 'description');
+    const labelCol =
+      descColIdx >= 0
+        ? descColIdx + 1
+        : Math.max(1, firstSumColIdx >= 0 ? firstSumColIdx : 1);
+
     for (let c = 1; c <= totalCols; c++) {
       const colDef = columns[c - 1];
       const colLetter = this.getColLetter(c);
-      const isInvoiceCol = c >= BankStatementExcelBuilder.INVOICE_START_COL;
+      const isInvoiceCol = BankStatementExcelBuilder.INVOICE_KEYS.has(
+        colDef.key,
+      );
+      const isFirstInvCol =
+        isInvoiceCol &&
+        (c === 1 ||
+          !BankStatementExcelBuilder.INVOICE_KEYS.has(columns[c - 2].key));
 
       const cellSum = sumRow.getCell(c);
-      cellSum.fill = isInvoiceCol
-        ? invoiceFill
-        : {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF1F5F9' },
-          };
+      cellSum.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFBEB' }, // Amber 50
+      };
       cellSum.border = borderThin;
 
       const cellSub = subtotalRow.getCell(c);
-      cellSub.fill = isInvoiceCol
-        ? invoiceFill
-        : {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFEFF6FF' },
-          };
+      cellSub.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF8FAFC' }, // Slate 50
+      };
       cellSub.border = {
         top: { style: 'thin', color: { argb: 'FF94A3B8' } },
         bottom: { style: 'double', color: { argb: 'FF0F172A' } },
@@ -396,15 +455,14 @@ export class BankStatementExcelBuilder {
           argb: isInvoiceCol ? 'FF065F46' : 'FF334155', // Emerald 800 vs Slate 700
         },
       };
-      cellHdr.border =
-        c === BankStatementExcelBuilder.INVOICE_START_COL
-          ? {
-              ...borderThin,
-              left: { style: 'double', color: { argb: 'FF065F46' } },
-            }
-          : borderThin;
+      cellHdr.border = isFirstInvCol
+        ? {
+            ...borderThin,
+            left: { style: 'double', color: { argb: 'FF065F46' } },
+          }
+        : borderThin;
 
-      if (c === 5) {
+      if (c === labelCol) {
         cellSum.value = 'TỔNG CỘNG (SUM)';
         cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
         cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';

@@ -353,15 +353,35 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         .getRawMany();
     }
 
+    const selectedColumns = this.parseSelectedColumns(query.selected_columns);
+
     const buffer = await this.excelBuilder.build({
       sourceType: query.sourceType,
       transactions,
       netOffDetails,
+      selectedColumns,
       onProgress,
     });
 
     onProgress(100, 'Tạo file hoàn tất!');
     return buffer;
+  }
+
+  private parseSelectedColumns(raw?: string[] | string): string[] | undefined {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        return raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
+    return undefined;
   }
 
   private emitJobProgress(
@@ -465,6 +485,9 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         typeof rawColumnSearch === 'object'
           ? JSON.stringify(rawColumnSearch)
           : rawColumnSearch || '',
+      selectedColumns: Array.isArray(query.selected_columns)
+        ? [...query.selected_columns].sort().join(',')
+        : query.selected_columns || '',
       sortBy: query.sortBy || '',
       sortOrder: query.sortOrder || '',
     };

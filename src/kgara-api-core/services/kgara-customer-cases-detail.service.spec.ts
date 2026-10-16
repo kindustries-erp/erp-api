@@ -112,4 +112,22 @@ describe('KgaraCustomerCasesDetailService', () => {
     expect(item.isCompleted).toBe(true);
     expect(item.agingDays).toBeGreaterThanOrEqual(4);
   });
+
+  it('should filter by licensePlate when provided', async () => {
+    const mockCaseQb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+    caseRepo.createQueryBuilder.mockReturnValue(mockCaseQb);
+
+    await service.getCasesByCustomer('BRANCH_01', 'KH001', '51H-12345');
+
+    expect(mockCaseQb.andWhere).toHaveBeenCalledWith(
+      'case.bienSoXe = :licensePlate',
+      { licensePlate: '51H-12345' },
+    );
+  });
 });

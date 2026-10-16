@@ -456,7 +456,7 @@ export const finalizeSheetLayout = (
     name: 'Calibri',
     size: 10.5,
     bold: true,
-    color: { argb: 'FF0F172A' },
+    color: { argb: 'FF78350F' }, // Amber 900
   };
 
   const subtotalRow = sheet.getRow(2);
@@ -465,7 +465,7 @@ export const finalizeSheetLayout = (
     name: 'Calibri',
     size: 10.5,
     bold: true,
-    color: { argb: 'FF1E40AF' },
+    color: { argb: 'FF0F172A' }, // Slate 900
   };
 
   const blankRow = sheet.getRow(3);
@@ -493,7 +493,7 @@ export const finalizeSheetLayout = (
     cellSum.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFF1F5F9' },
+      fgColor: { argb: 'FFFFFBEB' }, // Amber 50
     };
     cellSum.border = borderThin;
 
@@ -501,7 +501,7 @@ export const finalizeSheetLayout = (
     cellSub.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFEFF6FF' },
+      fgColor: { argb: 'FFF8FAFC' }, // Slate 50
     };
     cellSub.border = {
       top: { style: 'thin', color: { argb: 'FF94A3B8' } },

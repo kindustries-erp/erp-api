@@ -3,7 +3,6 @@ import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
-import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 
@@ -12,7 +11,6 @@ describe('GarageDashboardService (Facade)', () => {
   let mockStatsService: any;
   let mockCheckpointService: any;
   let mockCustomerStatsService: any;
-  let mockExportService: any;
   let mockPnlService: any;
   let mockMonthlyBreakdownService: any;
 
@@ -28,10 +26,6 @@ describe('GarageDashboardService (Facade)', () => {
 
     mockCustomerStatsService = {
       getCustomersStats: jest.fn().mockResolvedValue({ items: [], total: 0 }),
-    };
-
-    mockExportService = {
-      exportExcel: jest.fn().mockResolvedValue(Buffer.from('excel')),
     };
 
     mockPnlService = {
@@ -55,10 +49,6 @@ describe('GarageDashboardService (Facade)', () => {
         {
           provide: GarageCustomerStatsService,
           useValue: mockCustomerStatsService,
-        },
-        {
-          provide: GarageDashboardExportService,
-          useValue: mockExportService,
         },
         { provide: GaragePnlService, useValue: mockPnlService },
         {
@@ -132,15 +122,6 @@ describe('GarageDashboardService (Facade)', () => {
       '{}',
       '{}',
     );
-  });
-
-  it('delegates exportExcel to exportService', async () => {
-    const res = await service.exportExcel('2026-01-01', '2026-01-31');
-    expect(mockExportService.exportExcel).toHaveBeenCalledWith(
-      '2026-01-01',
-      '2026-01-31',
-    );
-    expect(res).toBeDefined();
   });
 
   it('delegates getPnlReport to pnlService', async () => {

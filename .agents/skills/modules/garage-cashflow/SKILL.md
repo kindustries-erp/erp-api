@@ -20,7 +20,25 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
 - `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
-- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi (KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, Mua phụ tùng, OPEX, v.v.)
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 12 options có số thứ tự từ 1 đến 12:
+  1. `1. KH thanh toán`
+  2. `2. Tất toán`
+  3. `3. BH thanh toán`
+  4. `4. HHBH`
+  5. `5. Ứng trước`
+  6. `6. Cấn trừ`
+  7. `7. Phụ tùng / vật tư` (bỏ chữ "Mua")
+  8. `8. Vật tư tiêu hao` (option mới)
+  9. `9. Chi phí vận hành`
+  10. `10. Hoa hồng / nhân công`
+  11. `11. Hoàn ứng`
+  12. `12. Khác`
+  *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
+- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán đặc thù của phiếu chi (PAYMENT):
+  - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
+  - `APPROVED`: "Đã duyệt"
+  - `PAID`: "Đã chi" (mặc định backfill cho toàn bộ phiếu chi lịch sử)
+  *(Phiếu thu RECEIPT luôn có giá trị NULL, không áp dụng trường này).*
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
@@ -30,7 +48,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
-- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`.
+- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`, `IDX_gara_cashflow_payment_status`.
 
 **Sự thay đổi ở** `kgara_case_settlements`:
 - Được thêm trường `cashflow_voucher_id` (uuid, FK -> `kgara_cashflow_vouchers.id`, `ON DELETE SET NULL`) để mapping tự động từ phiếu thu/chi sang phiếu cấn trừ.
@@ -108,14 +126,15 @@ Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, 
 src/modules/garage/components/
 ├── molecules/
 │   ├── payment-method-combobox/     (Molecule dropdown chọn phương thức TT thuần túy: Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác, < 40 LoC)
-│   └── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, v.v., < 40 LoC)
+│   ├── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: 12 options có số thứ tự, < 40 LoC)
+│   └── cashflow-amount-input/       (Molecule input số tiền: format phân cách hàng nghìn vi-VN, đọc số bằng chữ qua readVietnameseCurrency, 100% i18n, < 90 LoC)
 └── organisms/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
     │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT đặt cạnh nhau, < 180 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT, Nội dung TT & Cột Trạng thái (phiếu chi), < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & Nội dung TT, < 70 LoC)
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT, 12 Nội dung TT & Trạng thái thanh toán Chờ duyệt/Đã duyệt/Đã chi, < 120 LoC)
     │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
     │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
     │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
@@ -127,7 +146,7 @@ src/modules/garage/components/
     │   ├── GarageCashflowDrawer.state.ts (Initial state, DTO payloads, computeAuditDiffs, < 140 LoC)
     │   ├── GarageCashflowDrawer.helper.ts (Baseline audit items, duplicate check helpers, < 160 LoC)
     │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
-    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Thêm field dropdown Nội dung TT cạnh Phương thức TT, < 170 LoC)
+    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Tích hợp CashflowAmountInput, PaymentContentCombobox, 100% i18n, < 150 LoC)
     │   ├── GarageCashflowDrawerViewSection.tsx (Sub-section View Mode bóc tách < 70 LoC)
     │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
     │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test bao phủ Tabs & Timeline)
@@ -203,3 +222,29 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
   - Tạo mới: luôn check khi `amount > 0`. Sửa: chỉ check khi đổi `amount`, `transDate`, `caseId` hoặc biển số.
   - i18n: namespace `garage:cashflowDuplicate.*` trong `modules/garage/locales/{vi,en}.ts`. `useT` không nội suy nên component tự `.replace("{{x}}")`.
 - **Test**: `garage-cashflow-duplicate.engine.spec.ts`, `GarageCashflowDuplicateWarning.test.tsx`, `useGarageCashflowDuplicateGuard.test.tsx`, nhóm "duplicate warning" trong `GarageCashflowDrawer.test.tsx`.
+
+## Nguồn dữ liệu cho báo cáo Garage theo kỳ (cập nhật 2026-10-16)
+- `kgara_cashflow_vouchers` là nguồn của sheet **Thu chi trong kỳ** và KPI **Đã thu / Đã chi** trên Dashboard xuất Excel tab Tổng quan (`GaragePeriodReportQueries.loadVouchers`, lọc `trans_date` trong kỳ, sắp tăng dần). `voucher_type`: `RECEIPT` = thu, `PAYMENT` = chi.
+- Bảng **không có cột chi nhánh**: lọc chi nhánh qua `case_id` → `kgara_cases.branch_external_id` (giữ phiếu không gắn phiếu dịch vụ và phiếu của phiếu dịch vụ chưa có chi nhánh).
+- Số liệu thực tế tại `erp_greenway_production` (2026-10-16): 289 phiếu (207 `RECEIPT`, 82 `PAYMENT`); `payment_content` hầu hết trống (249/289) nên sheet để trống cột Nội dung khi chưa phân loại.
+
+## 9. Xuất Excel Thu Chi Garage (Export Background & Drawer 2-cột)
+- **Kiến trúc Split-Button & Dropdown**:
+  - Main button góc trên phải bảng `[ + Tạo phiếu mới | v ]`. Nút chính tạo phiếu mới, nút mũi tên chevron bên phải mở dropdown menu có nhóm `THAO TÁC` -> `Xuất Excel` (icon `FileSpreadsheet` xanh lá).
+- **Drawer Xuất Excel 2-cột (`GarageCashflowExportDrawer`)**:
+  - `layout="2-columns"`, `size="lg"`, kế thừa trải nghiệm chuẩn mực từ `cashflow?tab=bank`.
+  - **Cột trái**: `GarageCashflowExportColumnSelector` (chọn cột động, gập/mở 3 nhóm: Thông tin chứng từ gồm Người tạo, Người cập nhật, Ngày tạo, Ngày cập nhật; Phát sinh & Thanh toán; Đối tác & Dịch vụ liên quan) + Bảng lịch sử xuất file 6 cột trong 24h kèm nút tải xuống, thời gian hết hạn và progress.
+  - **Cột phải**: `GarageCashflowExportConditionSection` (hỗ trợ 2 chế độ radio card: `Theo kỳ` Tuần/Tháng/Quý/Tùy chỉnh ngày và `Theo filter hiện tại` với tóm tắt `GarageCashflowExportFilterPreview`, Combobox Tài khoản ngân hàng và Loại giao dịch).
+  - **Cơ chế Auto-Download on Ready**: Tự động kích hoạt tải tệp XLSX về máy người dùng ngay khi job hoàn tất (thông qua SSE stream và fast polling 1.5s), không yêu cầu bấm tải thủ công.
+- **Backend Export Job Runner & Template Excel (`exceljs`)**:
+  - **Controller**: `GarageCashflowExportController` (`/api/v1/greenway/cashflow-vouchers/export/excel`), quyền `GARAGE_CASHFLOW:READ`.
+    - `POST /background`: Khởi tạo job xuất ngầm với `GarageCashflowExportDto` (hỗ trợ `periodType: 'week' | 'month' | 'quarter' | 'year' | 'custom'`, `week`, `period`, `quarter`, `dateFrom`, `dateTo`, `accountId`, `voucherType`).
+    - `GET /background/history`: Lấy lịch sử xuất file theo `userId`.
+    - `GET /background/:jobId/download`: Tải file XLSX nhị phân.
+    - `Sse /progress/stream`: Luồng SSE báo cáo tiến độ.
+  - **Runner**: `cashflowRunner` trong `GarageExportJobsService` (kế thừa `ExportJobRunner`, processId `garage-cashflow-xlsx-export`).
+  - **Builder**: `GarageCashflowExcelBuilder` tạo file Excel chuẩn:
+    - Dòng 1: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)`.
+    - Dòng 2: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)`.
+    - Dòng 4: Header Slate 700 (`#334155`), chữ trắng in đậm, freeze dòng đầu.
+    - Dòng 5+: Dữ liệu phiếu thu chi kèm các cột `updatedBy`, `updatedAt`, định dạng số tiền `#,##0` và ngày tháng `dd/mm/yyyy`.

@@ -106,8 +106,39 @@ export function highlightStatusCell(
   }
 }
 
+export const SHEET1_NAME = 'Bảng kê phiếu kết thúc';
+/** Dòng dữ liệu đầu tiên của Sheet 1 (sau 4 dòng cấu trúc). */
+export const SHEET1_FIRST_DATA_ROW = 5;
+
+/** Dữ liệu từng phiếu sau khi chuẩn hóa, dùng dựng Dashboard (cùng nguồn với Sheet 1). */
+export interface CaseDashboardRow {
+  caseNo: string;
+  customerName: string;
+  classification: string;
+  receivedDate: Date | null;
+  completionDate: Date | null;
+  issuedDate: Date | null;
+  revenue: number;
+  cost: number;
+  profit: number;
+  receivable: number;
+  payable: number;
+}
+
+export interface Sheet1Summary {
+  sums: Record<string, number>;
+  rows: CaseDashboardRow[];
+}
+
+const toDateOrNull = (v: unknown): Date | null => {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v as string);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
 /**
  * Sheet 1: Bảng kê phiếu kết thúc (Phương án 1: Cụm Thu & Cụm Trả với 2 cột Ghi chú riêng)
+ * Trả về tổng và các dòng chuẩn hóa để Dashboard dùng đúng số liệu của sheet này.
  */
 export function buildSheet1CompletedCases(
   workbook: ExcelJS.Workbook,
@@ -116,8 +147,9 @@ export function buildSheet1CompletedCases(
   linkedInvoiceSummaryMap: Record<string, string>,
   settlementsMap: Record<string, { receipts: number; payments: number }>,
   serviceLinesMap?: Map<string, any[]>,
-): void {
-  const sheet = workbook.addWorksheet('Bảng kê phiếu kết thúc');
+): Sheet1Summary {
+  const sheet = workbook.addWorksheet(SHEET1_NAME);
+  const dashboardRows: CaseDashboardRow[] = [];
   initSheetStructure(sheet, COMPLETED_CASES_COLUMNS);
 
   const sums: Record<string, number> = {
@@ -138,7 +170,7 @@ export function buildSheet1CompletedCases(
   };
 
   cases.forEach((c: any, idx: number) => {
-    const rowIdx = idx + 5;
+    const rowIdx = idx + SHEET1_FIRST_DATA_ROW;
     const gp = c.grossProfit;
     const rev =
       (Number(c.doanhThu) > 0 ? Number(c.doanhThu) : 0) ||
@@ -240,6 +272,20 @@ export function buildSheet1CompletedCases(
       ? CLASSIFICATION_LABELS[c.classification] || c.classification
       : 'Sửa chữa chung';
 
+    dashboardRows.push({
+      caseNo: c.soChungTu || '—',
+      customerName: c.khachHangName || '—',
+      classification: classLabel,
+      receivedDate: toDateOrNull(c.ngayTiepNhan),
+      completionDate: toDateOrNull(c.ngayHoanThanhCongViec),
+      issuedDate: toDateOrNull(c.ngayPhatSinh),
+      revenue: rev,
+      cost,
+      profit,
+      receivable: conPhaiThu,
+      payable: conPhaiTra,
+    });
+
     const row = sheet.addRow({
       index: idx + 1,
       soChungTu: c.soChungTu || '—',
@@ -326,6 +372,8 @@ export function buildSheet1CompletedCases(
     sumRow: { margin: 'IF(V1>0, (X1/V1), 0)' },
     subtotalRow: { margin: 'IF(V2>0, (X2/V2), 0)' },
   });
+
+  return { sums, rows: dashboardRows };
 }
 
 /**

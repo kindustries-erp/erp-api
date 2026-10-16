@@ -151,4 +151,12 @@ export class BankTransactionFilterDto {
   @IsString()
   @IsOptional()
   correspondentName?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Danh sách cột chọn xuất Excel',
+  })
+  @IsOptional()
+  @Allow()
+  selected_columns?: string[] | string;
 }

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { KgaraCustomersDebtQueryService } from '../services/kgara-customers-debt-query.service';
 import { KgaraCustomersController } from './kgara-customers.controller';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -32,6 +33,7 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [KgaraCustomersController],
       providers: [
+        KgaraCustomersDebtQueryService,
         { provide: getRepositoryToken(KgaraCase), useValue: caseRepo },
         {
           provide: getRepositoryToken(KgaraCaseSettlement),
@@ -298,11 +300,15 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         mockResult,
       );
 
-      const cases = await controller.getCasesByCustomer('BRANCH_01', 'KH001');
+      const cases = await controller.getCasesByCustomer(
+        'BRANCH_01',
+        'KH001',
+        '51H-12345',
+      );
 
       expect(
         customerCasesDetailService.getCasesByCustomer,
-      ).toHaveBeenCalledWith('BRANCH_01', 'KH001');
+      ).toHaveBeenCalledWith('BRANCH_01', 'KH001', '51H-12345');
       expect(cases).toBe(mockResult);
     });
   });

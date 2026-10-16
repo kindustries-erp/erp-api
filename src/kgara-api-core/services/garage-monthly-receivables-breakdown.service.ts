@@ -6,6 +6,11 @@ import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { ErpInvoice } from '../../erp-invoices-core/entities/erp_invoice.entity';
+import {
+  getHorizonCaseSqlCondition,
+  getHorizonTitle,
+} from '../helpers/garage-debts-horizon.helper';
+import { buildReceivablesTrendItem } from '../helpers/garage-receivables-classification.helper';
 import type {
   MonthlyReceivablesBreakdownResponse,
   MonthlyReceivablesGroupItem,
@@ -114,10 +119,38 @@ export class GarageMonthlyReceivablesBreakdownService {
   }
 
   async getMonthlyReceivablesBreakdown(
-    month: string,
+    month?: string,
     branchId?: string,
+    horizon?: string,
+    customDateFrom?: string,
+    customDateTo?: string,
   ): Promise<MonthlyReceivablesBreakdownResponse> {
-    const { dateFrom, dateTo, monthKey, monthLabel } = this.parseMonth(month);
+    let dateFrom = '';
+    let dateTo = '';
+    let monthKey = '';
+    let monthLabel = '';
+
+    if (horizon) {
+      monthKey = horizon;
+      monthLabel = getHorizonTitle(horizon);
+      if (customDateFrom) dateFrom = customDateFrom;
+      if (customDateTo) {
+        dateTo =
+          customDateTo.length === 10
+            ? `${customDateTo} 23:59:59.999`
+            : customDateTo;
+      }
+    } else {
+      const parsed = this.parseMonth(month || '');
+      dateFrom = customDateFrom || parsed.dateFrom;
+      dateTo = customDateTo
+        ? customDateTo.length === 10
+          ? `${customDateTo} 23:59:59.999`
+          : customDateTo
+        : parsed.dateTo;
+      monthKey = parsed.monthKey;
+      monthLabel = parsed.monthLabel;
+    }
 
     const emptyCategorized = (): MonthlyReceivablesGroupCategorized => ({
       all: [],
@@ -133,15 +166,28 @@ export class GarageMonthlyReceivablesBreakdownService {
       },
     });
 
-    // 1. Query các vụ việc hoàn thành trong tháng
+    // 1. Query các vụ việc hoàn thành
     const qb = this.caseRepo
       .createQueryBuilder('c')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.exclude_from_debt IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
+
+    if (horizon) {
+      qb.andWhere(getHorizonCaseSqlCondition(horizon, 'c'));
+      if (dateFrom) {
+        qb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom });
+      }
+      if (dateTo) {
+        qb.andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
+      }
+    } else {
+      qb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
+        dateFrom,
+      }).andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
+    }
 
     if (branchId) {
       qb.andWhere(
@@ -158,6 +204,8 @@ export class GarageMonthlyReceivablesBreakdownService {
       return {
         month: monthKey,
         monthLabel,
+        horizon,
+        trendItem: buildReceivablesTrendItem(monthKey, []),
         summary: {
           totalBilled: 0,
           totalPaid: 0,
@@ -578,6 +626,7 @@ export class GarageMonthlyReceivablesBreakdownService {
           invoiceId: bhInvoice?.invoiceId,
           buyerName: bhInvoice?.buyerName,
           vatWarning,
+          ngayHoanThanh: c.ngayHoanThanhCongViec,
         });
 
         insGroupMap.set(key, existing);
@@ -696,6 +745,7 @@ export class GarageMonthlyReceivablesBreakdownService {
           invoiceId: khInvoice?.invoiceId,
           buyerName: khInvoice?.buyerName,
           vatWarning,
+          ngayHoanThanh: c.ngayHoanThanhCongViec,
         });
 
         targetMap.set(key, existing);
@@ -816,9 +866,28 @@ export class GarageMonthlyReceivablesBreakdownService {
 
     const totalVatWithoutInvoice = custVatNoInv + insVatNoInv;
 
+    const caseHasInvoiceMap = new Map<string, boolean>();
+    const paidCostByCaseId = new Map<string, number>();
+    for (const [cId, list] of invoicesMap.entries()) {
+      if (list.length > 0) caseHasInvoiceMap.set(cId, true);
+    }
+    for (const [cId, s] of settlementsMap.entries()) {
+      if (s.paidCost > 0) paidCostByCaseId.set(cId, s.paidCost);
+    }
+
+    const trendItem = buildReceivablesTrendItem(
+      monthKey,
+      cases,
+      gpCostByCaseId,
+      caseHasInvoiceMap,
+      paidCostByCaseId,
+    );
+
     return {
       month: monthKey,
       monthLabel,
+      horizon,
+      trendItem,
       summary: {
         totalBilled,
         totalPaid,

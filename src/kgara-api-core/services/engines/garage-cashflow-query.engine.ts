@@ -127,6 +127,9 @@ export class GarageCashflowQueryEngine {
     } else if (column === 'chi') {
       selectField = 'voucher.amount';
       qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+    } else if (column === 'paymentStatus') {
+      selectField = 'voucher.payment_status';
+      qb.andWhere("voucher.voucher_type = 'PAYMENT'");
     } else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
@@ -276,6 +279,10 @@ export class GarageCashflowQueryEngine {
                 vpaymentContent: vals,
               });
             }
+          } else if (col === 'paymentStatus') {
+            qb.andWhere('voucher.payment_status IN (:...vpaymentStatus)', {
+              vpaymentStatus: vals,
+            });
           } else if (col === 'note') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -504,6 +511,10 @@ export class GarageCashflowQueryEngine {
                 fpaymentContent: arr,
               });
             }
+          } else if (col === 'paymentStatus') {
+            qb.andWhere('voucher.payment_status IN (:...fpaymentStatus)', {
+              fpaymentStatus: arr,
+            });
           } else if (col === 'note') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
