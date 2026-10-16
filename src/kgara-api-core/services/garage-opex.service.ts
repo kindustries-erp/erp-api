@@ -15,6 +15,8 @@ import {
   applyOpexListFilters,
   applyOpexListSorting,
   buildOpexColumnOptionsQuery,
+  COGS_GROUP_CATEGORIES,
+  SELLING_COMMISSION_CATEGORIES,
 } from '../helpers/garage-opex-query.builder';
 
 @Injectable()
@@ -432,6 +434,15 @@ export class GarageOpexService {
       note?: string | null;
     }> = [];
 
+    const sellingItems: Array<{
+      id: string;
+      categoryKey: string;
+      categoryName: string;
+      amount: number;
+      ojAmount: number;
+      note?: string | null;
+    }> = [];
+
     const directCostItems: Array<{
       id: string;
       categoryKey: string;
@@ -447,6 +458,8 @@ export class GarageOpexService {
     let ojTotalCommission = 0;
     let totalDirectCost = 0;
     let ojTotalDirectCost = 0;
+    let totalSelling = 0;
+    let ojTotalSelling = 0;
 
     for (const item of items) {
       const amt = Number(item.amount) || 0;
@@ -468,13 +481,14 @@ export class GarageOpexService {
         continue;
       }
 
-      if (
-        item.categoryKey === 'HOA_HONG_TRUC_TIEP' ||
-        item.categoryKey === 'CHI_PHI_TRUC_TIEP_KHAC'
-      ) {
+      if (COGS_GROUP_CATEGORIES.includes(item.categoryKey)) {
         directCostItems.push(row);
         totalDirectCost += amt;
         ojTotalDirectCost += ojAmt;
+      } else if (SELLING_COMMISSION_CATEGORIES.includes(item.categoryKey)) {
+        sellingItems.push(row);
+        totalSelling += amt;
+        ojTotalSelling += ojAmt;
       } else if (item.categoryKey.startsWith('HOA_HONG_')) {
         commissionItems.push(row);
         totalCommission += amt;
@@ -491,6 +505,11 @@ export class GarageOpexService {
         total: totalDirectCost,
         ojTotal: ojTotalDirectCost,
         items: directCostItems,
+      },
+      selling: {
+        total: totalSelling,
+        ojTotal: ojTotalSelling,
+        items: sellingItems,
       },
       opex: {
         total: totalOpex,

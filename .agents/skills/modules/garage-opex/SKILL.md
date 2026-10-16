@@ -12,7 +12,7 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 ### Các nghiệp vụ trọng tâm:
 - **3 Nhóm Chi Phí Cốt Lõi (`CostGroupType`)**:
   1. **Chi phí Vận hành (`OPEX`)**: Các chi phí định phí và biến phí vận hành xưởng (Nhân sự, Thuê mặt bằng, Điện nước, Bảo trì thiết bị, Khấu hao tài sản, Khác).
-  2. **Chi phí Giá vốn Nhập tay (`COGS`)**: Các chi phí giá vốn phát sinh ngoài phiếu dịch vụ hoặc chi phí đối tác trực tiếp (`HOA_HONG_TRUC_TIEP`, `CHI_PHI_TRUC_TIEP_KHAC`).
+  2. **Chi phí Giá vốn Nhập tay (`COGS`)**: Các chi phí giá vốn phát sinh ngoài phiếu dịch vụ hoặc chi phí đối tác trực tiếp (`HOA_HONG_TRUC_TIEP`, `CHI_PHI_TRUC_TIEP_KHAC`, `VAT_TU_TIEU_HAO`). `HHBH` là khoản Hoa hồng hiện ở mục 4.2 (Chi phí bán hàng) của P&L (bucket `selling`), không thuộc giá vốn.
   3. **Hoa hồng Xưởng (`COMMISSION`)**: Các khoản trích thưởng hoa hồng kinh doanh và dịch vụ (`HOA_HONG_SALE`, `HOA_HONG_DV`, `HOA_HONG_KHAC`).
 - **Lưu trữ & Phân kỳ theo Tháng (`period_year`, `period_month`)**: Quản lý chi phí chi tiết theo từng tháng báo cáo tài chính.
 - **Tách bạch Chi phí Phân bổ Cho Dòng Xe Ngoài (`oj_amount`)**: Cho phép ghi nhận số tiền chi phí phân bổ riêng cho nhánh dịch vụ Omoda/Jaecoo (`OJ`) để đối soát biên lợi nhuận riêng.
@@ -83,6 +83,8 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 | **OPEX** | `KHAU_HAO` | Khấu hao máy móc & thiết bị | Khấu hao thiết bị sửa chữa xưởng |
 | **OPEX** | `KHAC` | Khác | Chi phí quản lý xưởng phát sinh khác |
 | **COGS** | `HOA_HONG_TRUC_TIEP` | Hoa hồng trực tiếp | Chi phí hoa hồng tính thẳng vào giá vốn dịch vụ |
+| **COGS** | `VAT_TU_TIEU_HAO` | Vật tư tiêu hao | Ghi nhận từ phiếu chi nội dung 8. Vật tư tiêu hao (Đã duyệt / Đã chi) |
+| **COMMISSION** | `HHBH` | HHBH | Ghi nhận từ phiếu chi nội dung 4. HHBH; P&L hiển thị ở mục 4.2 (Chi phí bán hàng), không ghi %|
 | **COGS** | `CHI_PHI_TRUC_TIEP_KHAC`| Chi phí trực tiếp khác | Gia công tiện phay ngoài, thuê đồ gá đặc thù |
 | **COMMISSION** | `HOA_HONG_SALE` | Hoa hồng cho Sale | Trích thưởng doanh số bán hàng/dịch vụ |
 | **COMMISSION** | `HOA_HONG_DV` | Hoa hồng cho KTV DV | Trích thưởng hiệu suất cố vấn dịch vụ / KTV |
@@ -152,7 +154,8 @@ src/kgara-api-core/
 ### 6.1. Thuật toán Tổng hợp Chi phí theo Kỳ (`getSummaryByPeriod`)
 ```typescript
 // Phân loại tự động dựa trên category_key
-if (item.categoryKey === 'HOA_HONG_TRUC_TIEP' || item.categoryKey === 'CHI_PHI_TRUC_TIEP_KHAC') {
+if (COGS_GROUP_CATEGORIES.includes(item.categoryKey)) { // HOA_HONG_TRUC_TIEP, CHI_PHI_TRUC_TIEP_KHAC, VAT_TU_TIEU_HAO
+  // ... HHBH đi vào bucket selling trước nhánh HOA_HONG_*
   directCostItems.push(row);
   totalDirectCost += item.amount;
   ojTotalDirectCost += item.ojAmount;

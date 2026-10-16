@@ -223,6 +223,35 @@ describe('GarageOpexService', () => {
       expect(summary.opex.total).toBe(0);
     });
 
+    it('HHBH vào selling (Chi phí bán hàng), không vào giá vốn hay opex', async () => {
+      opexRepo.find.mockResolvedValue([
+        {
+          ...sourced,
+          id: 'uuid-hhbh',
+          categoryKey: 'HHBH',
+          categoryName: 'HHBH',
+          amount: 900000,
+          ojAmount: 100000,
+        },
+      ]);
+      const summary = await service.getSummaryByPeriod(2026, 10);
+      expect(summary.selling.total).toBe(900000);
+      expect(summary.selling.ojTotal).toBe(100000);
+      expect(summary.selling.items).toHaveLength(1);
+      expect(summary.directCost.total).toBe(0);
+      expect(summary.commission.total).toBe(0);
+      expect(summary.opex.total).toBe(0);
+    });
+
+    it('VAT_TU_TIEU_HAO vào directCost (Giá vốn)', async () => {
+      opexRepo.find.mockResolvedValue([
+        { ...sourced, categoryKey: 'VAT_TU_TIEU_HAO', amount: 300000 },
+      ]);
+      const summary = await service.getSummaryByPeriod(2026, 10);
+      expect(summary.directCost.total).toBe(300000);
+      expect(summary.selling.total).toBe(0);
+    });
+
     it('chặn sửa, xóa và áp dụng định kỳ thủ công', async () => {
       opexRepo.findOne.mockResolvedValue({ ...sourced });
       await expect(service.update('uuid-src', { amount: 1 })).rejects.toThrow(

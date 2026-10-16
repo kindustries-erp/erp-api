@@ -98,11 +98,9 @@ describe('garage-cashflow-payment-rules', () => {
 
   describe('getOpexCategoryForContent', () => {
     it('map nội dung sang nhóm Giá vốn', () => {
-      expect(getOpexCategoryForContent('4. HHBH')?.categoryKey).toBe(
-        'HOA_HONG_TRUC_TIEP',
-      );
+      expect(getOpexCategoryForContent('4. HHBH')?.categoryKey).toBe('HHBH');
       expect(getOpexCategoryForContent('8. Vật tư tiêu hao')?.categoryKey).toBe(
-        'CHI_PHI_TRUC_TIEP_KHAC',
+        'VAT_TU_TIEU_HAO',
       );
       expect(getOpexCategoryForContent('1. KH thanh toán')).toBeNull();
       expect(getOpexCategoryForContent(undefined)).toBeNull();

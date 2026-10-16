@@ -16,12 +16,12 @@ export const OPEX_ROUTED_PAYMENT_CONTENTS: Record<
   { categoryKey: string; categoryName: string }
 > = {
   [PAYMENT_CONTENT_HHBH]: {
-    categoryKey: 'HOA_HONG_TRUC_TIEP',
-    categoryName: 'Hoa hồng trực tiếp DV (Tính vào Giá vốn)',
+    categoryKey: 'HHBH',
+    categoryName: 'HHBH',
   },
   [PAYMENT_CONTENT_CONSUMABLES]: {
-    categoryKey: 'CHI_PHI_TRUC_TIEP_KHAC',
-    categoryName: 'Chi phí trực tiếp khác (Tính vào Giá vốn)',
+    categoryKey: 'VAT_TU_TIEU_HAO',
+    categoryName: 'Vật tư tiêu hao',
   },
 };
 

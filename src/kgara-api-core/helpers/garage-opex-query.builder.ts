@@ -14,12 +14,17 @@ export const OPEX_GROUP_CATEGORIES = [
 export const COGS_GROUP_CATEGORIES = [
   'HOA_HONG_TRUC_TIEP',
   'CHI_PHI_TRUC_TIEP_KHAC',
+  'VAT_TU_TIEU_HAO',
 ];
+
+/** HHBH hiển thị ở mục 4.2 (Chi phí bán hàng) của P&L, nhưng thuộc nhóm Hoa hồng trên màn hình opex. */
+export const SELLING_COMMISSION_CATEGORIES = ['HHBH'];
 
 export const COMMISSION_GROUP_CATEGORIES = [
   'HOA_HONG_SALE',
   'HOA_HONG_DV',
   'HOA_HONG_KHAC',
+  ...SELLING_COMMISSION_CATEGORIES,
 ];
 
 function parseMonthYear(

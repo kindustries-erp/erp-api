@@ -158,9 +158,20 @@ export class GaragePnlService {
       },
     ];
 
+    // HHBH (phiếu chi 4) thuộc mục 4.2 Chi phí bán hàng, không còn nằm trong giá vốn
+    const hhbhTotal = opexSummary.selling.total || 0;
+    const hhbhOjTotal = opexSummary.selling.ojTotal || 0;
+    sellingItems.push({
+      categoryKey: 'HHBH',
+      categoryName: 'HHBH',
+      amount: hhbhTotal,
+      ojAmount: hhbhOjTotal,
+      note: 'Từ phiếu chi nội dung 4. HHBH (Đã duyệt / Đã chi)',
+    });
+
     const sellingExpenses = {
-      total: saleCommission,
-      ojTotal: 0,
+      total: saleCommission + hhbhTotal,
+      ojTotal: hhbhOjTotal,
       items: sellingItems,
     };
 
@@ -223,7 +234,7 @@ export class GaragePnlService {
     const ojDirectCostTotal = opexSummary.directCost.ojTotal || 0;
     const ojCogs = ojCogsDirect + ojDirectCostTotal;
     const ojGrossProfit = ojRevenue - ojCogs;
-    const ojSellingExpensesTotal = 0;
+    const ojSellingExpensesTotal = opexSummary.selling.ojTotal || 0;
     const ojOpexTotal = opexSummary.opex.ojTotal || 0;
     const ojNetProfit = ojGrossProfit - ojSellingExpensesTotal - ojOpexTotal;
     const ojSaleCommission = 0; // OJ không tính hoa hồng ký gửi sale
@@ -753,6 +764,18 @@ export class GaragePnlService {
         isChild: true,
       });
     }
+
+    // 4.2. HHBH (từ phiếu chi 4. HHBH), không ghi tỷ lệ %
+    rowsData.push({
+      category: '   4.2. HHBH',
+      amount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.amount ?? 0,
+      ojAmount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.ojAmount ?? 0,
+      isChild: true,
+    });
 
     // 5. CHI PHÍ VẬN HÀNH (OPEX)
     rowsData.push({
