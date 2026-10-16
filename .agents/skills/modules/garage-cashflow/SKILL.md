@@ -34,6 +34,11 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
   11. `11. Hoàn ứng`
   12. `12. Khác`
   *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
+- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán đặc thù của phiếu chi (PAYMENT):
+  - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
+  - `APPROVED`: "Đã duyệt"
+  - `PAID`: "Đã chi" (mặc định backfill cho toàn bộ phiếu chi lịch sử)
+  *(Phiếu thu RECEIPT luôn có giá trị NULL, không áp dụng trường này).*
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
@@ -43,7 +48,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
-- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`.
+- Các chỉ mục: `IDX_gara_cashflow_code`, `IDX_gara_cashflow_case`, `IDX_gara_cashflow_trans_date`, `IDX_gara_cashflow_license_plate`, `IDX_gara_cashflow_payment_method`, `IDX_gara_cashflow_payment_content`, `IDX_gara_cashflow_payment_status`.
 
 **Sự thay đổi ở** `kgara_case_settlements`:
 - Được thêm trường `cashflow_voucher_id` (uuid, FK -> `kgara_cashflow_vouchers.id`, `ON DELETE SET NULL`) để mapping tự động từ phiếu thu/chi sang phiếu cấn trừ.
@@ -127,9 +132,9 @@ src/modules/garage/components/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
     │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT size 160px, < 180 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT, Nội dung TT & Cột Trạng thái (phiếu chi), < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & 12 Nội dung TT kèm fallback bóc tách số thứ tự, < 80 LoC)
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT, 12 Nội dung TT & Trạng thái thanh toán Chờ duyệt/Đã duyệt/Đã chi, < 120 LoC)
     │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
     │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
     │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)

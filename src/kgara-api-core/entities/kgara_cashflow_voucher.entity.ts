@@ -18,6 +18,7 @@ import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_ba
 @Index('IDX_gara_cashflow_license_plate', ['licensePlate'])
 @Index('IDX_gara_cashflow_payment_method', ['paymentMethod'])
 @Index('IDX_gara_cashflow_payment_content', ['paymentContent'])
+@Index('IDX_gara_cashflow_payment_status', ['paymentStatus'])
 export class KgaraCashflowVoucher {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -60,6 +61,14 @@ export class KgaraCashflowVoucher {
     nullable: true,
   })
   paymentContent?: string;
+
+  @Column({
+    type: 'varchar',
+    length: 30,
+    name: 'payment_status',
+    nullable: true,
+  })
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
 
   @Column({
     type: 'varchar',

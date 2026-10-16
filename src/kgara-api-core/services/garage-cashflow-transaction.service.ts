@@ -65,9 +65,13 @@ export class GarageCashflowTransactionService {
         caseRef = kCase;
       }
 
+      const paymentStatus: 'PENDING' | 'APPROVED' | 'PAID' | null =
+        dto.voucherType === 'PAYMENT' ? dto.paymentStatus || 'PENDING' : null;
+
       const newVoucher = queryRunner.manager.create(KgaraCashflowVoucher, {
         voucherCode: generatedCode,
         voucherType: dto.voucherType,
+        paymentStatus,
         amount: dto.amount,
         transDate: dto.transDate || now.toISOString().slice(0, 10),
         caseId: dto.caseId || undefined,
@@ -167,6 +171,15 @@ export class GarageCashflowTransactionService {
 
       const beforeSnapshot = { ...existingVoucher };
       queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
+      if (newType === 'PAYMENT') {
+        if (dto.paymentStatus !== undefined) {
+          existingVoucher.paymentStatus = dto.paymentStatus;
+        } else if (!existingVoucher.paymentStatus) {
+          existingVoucher.paymentStatus = 'PENDING';
+        }
+      } else {
+        existingVoucher.paymentStatus = null;
+      }
       if (
         newCaseId &&
         dto.licensePlate === undefined &&
