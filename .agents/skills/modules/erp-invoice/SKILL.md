@@ -511,7 +511,7 @@ src/erp-invoices-core/
   - **Chân bảng**: Loại bỏ dòng tổng cộng cuối bảng (vì đã có SUM & SUBTOTAL cố định ở đầu trang).
 - **Quy chuẩn Thứ tự & Tên Sheet**:
   - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
-    1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ.
+    1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ (hỗ trợ tùy chọn cột động qua `selected_columns`).
     2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
     3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
     4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
@@ -522,6 +522,11 @@ src/erp-invoices-core/
     4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
     5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
     6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Tùy Chọn Cột Động (`selected_columns`) & Dynamic Sheet Layout**:
+  - **Tham số `selected_columns`**: `ErpInvoiceQuery` chấp nhận `selected_columns` dạng mảng `string[]` hoặc chuỗi phân tách bằng dấu phẩy `string` (ví dụ: `stt,invoice_no,seller_name,total_amount`).
+  - **Helper `resolveActiveColumns`** (`invoice-export-excel-columns.helper.ts`): Ánh xạ danh sách cột được chọn từ 22 cột mặc định của Sheet `Bảng kê`. Luôn đảm bảo cột `stt` tồn tại để giữ tính toàn vẹn cấu trúc. Mỗi cột được định nghĩa đầy đủ cấu hình alignment, fill, numFmt và width.
+  - **Duyệt và Style Động** (`invoice-export-excel-writers.helper.ts`): Hàm `writeSummaryRows` duyệt trực tiếp qua `activeColumns` (index thực tế `1..activeColumns.length`) thay vì hardcode cell index cố định, tự động tính toán lại công thức `SUM`, `SUBTOTAL`, và căn chỉnh nhãn hàng tổng cộng an toàn theo `effectiveLabelCol`.
+  - **Cache Fingerprint Chống Trùng**: `InvoiceExportBackgroundService.buildQueryFingerprint()` chuẩn hóa và sắp xếp mảng `selected_columns` trước khi băm SHA-256 để đảm bảo phân biệt chính xác file kết quả giữa các yêu cầu xuất khác bộ cột.
 - **Cột Chi nhánh & Cấn trừ & Thuế suất**:
   - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
   - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).

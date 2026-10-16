@@ -53,6 +53,7 @@ export interface ErpInvoiceQuery {
   column_filters?: string;
   is_valid?: string;
   unlinked_po_id?: string;
+  selected_columns?: string[] | string;
 }
 
 /**
