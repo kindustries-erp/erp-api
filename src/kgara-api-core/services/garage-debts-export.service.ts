@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -15,16 +15,25 @@ import {
   type GarageDebtGroupExportSection,
   type GarageDebtGroupSummaryItem,
 } from '../helpers/garage-debts-export.helper';
-import { KgaraCustomersDebtQueryService } from './kgara-customers-debt-query.service';
+import {
+  GARAGE_DEBT_BASELINE_DATE,
+  KgaraCustomersDebtQueryService,
+} from './kgara-customers-debt-query.service';
 import { KgaraSuppliersService } from './kgara-suppliers.service';
 import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-receivables-breakdown.service';
 
 /** Lấy toàn bộ tập lọc, không phân trang (engine NCC không giới hạn pageSize). */
 const ALL_ROWS_PAGE_SIZE = '1000000';
 
+/** `YYYY-MM-DD` theo giờ máy chủ (khớp cách lọc ngày của các query công nợ). */
+const toLocalIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 @Injectable()
 export class GarageDebtsExportService {
   static readonly PROGRESS_TOTAL_UNITS = 100;
+
+  private readonly logger = new Logger(GarageDebtsExportService.name);
 
   constructor(
     private readonly customersDebtQueryService: KgaraCustomersDebtQueryService,
@@ -53,34 +62,15 @@ export class GarageDebtsExportService {
   ): Promise<Buffer> {
     const total = GarageDebtsExportService.PROGRESS_TOTAL_UNITS;
     const filters = this.normalizeFilters(dto);
+    const asOfDate = new Date();
 
     onProgress(5, total, 'Đang truy vấn công nợ...');
 
     // Nạp dữ liệu phân loại nhóm và danh sách từng phiếu dịch vụ nếu có breakdown service
-    let customerSections: GarageDebtGroupExportSection[] | undefined;
-    let customerGroupsSummary: GarageDebtGroupSummaryItem[] | undefined;
-
-    if (
-      (kind === 'customers' || kind === 'all') &&
-      this.receivablesBreakdownService
-    ) {
-      try {
-        const breakdown =
-          await this.receivablesBreakdownService.getMonthlyReceivablesBreakdown(
-            undefined,
-            branchId,
-            undefined,
-            filters.from,
-            filters.to,
-          );
-        customerSections =
-          convertReceivablesBreakdownToExportSections(breakdown);
-        customerGroupsSummary =
-          convertReceivablesBreakdownToGroupSummary(breakdown);
-      } catch {
-        // Fallback an toàn nếu phân tách breakdown gặp lỗi
-      }
-    }
+    const { customerSections, customerGroupsSummary } =
+      kind === 'customers' || kind === 'all'
+        ? await this.loadCustomerGroups(branchId, filters, asOfDate)
+        : { customerSections: undefined, customerGroupsSummary: undefined };
 
     if (kind === 'all') {
       const [customerRows, supplierRows] = await Promise.all([
@@ -140,6 +130,7 @@ export class GarageDebtsExportService {
         {
           dateFrom: filters.from,
           dateTo: filters.to,
+          asOfDate,
           branchLabel,
           modeLabel:
             dto.mode === 'by-current-filter'
@@ -172,6 +163,7 @@ export class GarageDebtsExportService {
       {
         dateFrom: filters.from,
         dateTo: filters.to,
+        asOfDate,
         branchLabel,
         modeLabel:
           dto.mode === 'by-current-filter'
@@ -187,9 +179,48 @@ export class GarageDebtsExportService {
     return buffer;
   }
 
-  private async resolveBranchLabel(
+  /**
+   * Phân nhóm phải thu theo đối tượng (KH doanh nghiệp / cá nhân / bảo hiểm).
+   * Cùng kỳ với bảng chi tiết: kẹp `from` theo mốc ghi nhận, thiếu `to` thì lấy
+   * ngày `asOfDate`. Lỗi phân nhóm không làm hỏng file: ghi log và trả rỗng.
+   */
+  async loadCustomerGroups(
     branchId: string,
-  ): Promise<string | undefined> {
+    filters: GarageDebtsExportDto,
+    asOfDate: Date = new Date(),
+  ): Promise<{
+    customerSections?: GarageDebtGroupExportSection[];
+    customerGroupsSummary?: GarageDebtGroupSummaryItem[];
+  }> {
+    if (!this.receivablesBreakdownService) return {};
+    try {
+      const breakdownFrom =
+        filters.from && filters.from > GARAGE_DEBT_BASELINE_DATE
+          ? filters.from
+          : GARAGE_DEBT_BASELINE_DATE;
+      const breakdown =
+        await this.receivablesBreakdownService.getMonthlyReceivablesBreakdown(
+          undefined,
+          branchId,
+          undefined,
+          breakdownFrom,
+          filters.to ?? toLocalIsoDate(asOfDate),
+        );
+      return {
+        customerSections:
+          convertReceivablesBreakdownToExportSections(breakdown),
+        customerGroupsSummary:
+          convertReceivablesBreakdownToGroupSummary(breakdown),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Bỏ qua phân nhóm công nợ (chi nhánh "${branchId}"): ${(error as Error).message}`,
+      );
+      return {};
+    }
+  }
+
+  async resolveBranchLabel(branchId: string): Promise<string | undefined> {
     if (!branchId) return undefined;
     try {
       const branch = await this.branchRepo?.findOne({
@@ -201,7 +232,7 @@ export class GarageDebtsExportService {
     }
   }
 
-  private async loadCustomerRows(
+  async loadCustomerRows(
     branchId: string,
     filters: GarageDebtsExportDto,
   ): Promise<GarageDebtExportRow[]> {
@@ -237,7 +268,7 @@ export class GarageDebtsExportService {
     }));
   }
 
-  private async loadSupplierRows(
+  async loadSupplierRows(
     branchId: string,
     filters: GarageDebtsExportDto,
   ): Promise<GarageDebtExportRow[]> {

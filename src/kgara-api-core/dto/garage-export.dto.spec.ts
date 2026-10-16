@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 
 import {
   GarageCasesExportDto,
+  GarageDashboardExportDto,
   GarageDebtsExportDto,
 } from './garage-export.dto';
 
@@ -39,6 +40,26 @@ describe('GarageDebtsExportDto', () => {
       to: "2026-07-01'; DROP TABLE kgara_cases;--",
     });
     expect(errors.map((e) => e.property)).toEqual(['to']);
+  });
+});
+
+describe('GarageDashboardExportDto', () => {
+  it('chấp nhận khoảng ngày hợp lệ và payload rỗng', async () => {
+    const ok = await check(GarageDashboardExportDto, {
+      from: '2026-10-01',
+      to: '2026-10-31',
+    });
+    expect(ok.errors).toHaveLength(0);
+    const empty = await check(GarageDashboardExportDto, {});
+    expect(empty.errors).toHaveLength(0);
+  });
+
+  it('chặn ngày sai định dạng và chuỗi chèn SQL', async () => {
+    const { errors } = await check(GarageDashboardExportDto, {
+      from: '01/10/2026',
+      to: "2026-10-31'; DROP TABLE kgara_cases;--",
+    });
+    expect(errors.map((e) => e.property).sort()).toEqual(['from', 'to']);
   });
 });
 

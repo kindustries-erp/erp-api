@@ -62,6 +62,8 @@ export interface GarageDebtReportMeta {
   /** `YYYY-MM-DD`; thiếu thì hiển thị "Tất cả". */
   dateFrom?: string;
   dateTo?: string;
+  /** Ngày xuất file: số dư và tuổi nợ được tính đến ngày này. */
+  asOfDate?: Date;
   branchLabel?: string;
   /** Mô tả chế độ xuất (theo kỳ / theo filter hiện tại). */
   modeLabel?: string;
@@ -467,10 +469,16 @@ export function topDebtRows(
     .slice(0, limit);
 }
 
-const formatPeriod = (meta: GarageDebtReportMeta) =>
-  meta.dateFrom || meta.dateTo
-    ? `Kỳ: ${formatDebtExportDate(meta.dateFrom) || '...'} - ${formatDebtExportDate(meta.dateTo) || '...'}`
-    : 'Kỳ: Tất cả';
+/** Dòng `Kỳ:`; nếu có `asOfDate` thì ghi rõ số dư và tuổi nợ tính đến ngày xuất. */
+export const formatPeriod = (meta: GarageDebtReportMeta) => {
+  const period =
+    meta.dateFrom || meta.dateTo
+      ? `Kỳ: ${formatDebtExportDate(meta.dateFrom) || '...'} - ${formatDebtExportDate(meta.dateTo) || '...'}`
+      : 'Kỳ: Tất cả';
+  return meta.asOfDate
+    ? `${period} · Số dư, tuổi nợ tính đến ${formatDebtExportDate(meta.asOfDate)}`
+    : period;
+};
 
 /** Dựng sheet Dashboard (KPI + dữ liệu biểu đồ); trả về cấu hình chart cần chèn. */
 function buildDebtDashboard(
@@ -1349,7 +1357,7 @@ function renderGroupSummaryTables(
   return currentRow;
 }
 
-function buildDebtDetailSheet(
+export function buildDebtDetailSheet(
   workbook: ExcelJS.Workbook,
   kind: GarageDebtExportKind,
   rows: GarageDebtExportRow[],

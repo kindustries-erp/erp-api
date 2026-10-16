@@ -6,8 +6,10 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { ErpAction, ErpResource } from '@/rbac-core/enums';
 import { GarageDebtsExportService } from '../services/garage-debts-export.service';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
+import { GaragePeriodReportService } from '../services/garage-period-report.service';
 import { KgaraCompletedCasesExportService } from '../services/kgara-completed-cases-export.service';
 import { GarageCasesExportController } from './garage-cases-export.controller';
+import { GarageDashboardExportController } from './garage-dashboard-export.controller';
 import { GarageDebtsExportController } from './garage-debts-export.controller';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -23,6 +25,7 @@ const routeMethods = (proto: object) =>
 describe('Garage export controllers', () => {
   let casesController: GarageCasesExportController;
   let debtsController: GarageDebtsExportController;
+  let dashboardController: GarageDashboardExportController;
   let jobs: GarageExportJobsService;
   const casesExport = {
     exportCompletedCasesExcel: jest
@@ -35,14 +38,23 @@ describe('Garage export controllers', () => {
     exportExcel: jest.fn().mockResolvedValue(Buffer.from('debts')),
   };
 
+  const periodReport = {
+    exportExcel: jest.fn().mockResolvedValue(Buffer.from('dashboard')),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [GarageCasesExportController, GarageDebtsExportController],
+      controllers: [
+        GarageCasesExportController,
+        GarageDebtsExportController,
+        GarageDashboardExportController,
+      ],
       providers: [
         GarageExportJobsService,
         { provide: KgaraCompletedCasesExportService, useValue: casesExport },
         { provide: GarageDebtsExportService, useValue: debtsExport },
+        { provide: GaragePeriodReportService, useValue: periodReport },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -53,6 +65,7 @@ describe('Garage export controllers', () => {
 
     casesController = module.get(GarageCasesExportController);
     debtsController = module.get(GarageDebtsExportController);
+    dashboardController = module.get(GarageDashboardExportController);
     jobs = module.get(GarageExportJobsService);
   });
 
@@ -88,6 +101,65 @@ describe('Garage export controllers', () => {
         GarageDebtsExportController.prototype,
         ErpResource.GARAGE_DEBTS,
       );
+    });
+  });
+
+  describe('dashboard export', () => {
+    it('mọi route (kể cả SSE) yêu cầu cả GARAGE:READ và GARAGE_DEBTS:READ', () => {
+      const proto = GarageDashboardExportController.prototype;
+      const methods = routeMethods(proto);
+      expect(methods.length).toBe(4);
+      for (const name of methods) {
+        expect(
+          Reflect.getMetadata(RBAC_PERMISSIONS_KEY, (proto as any)[name]),
+        ).toEqual([
+          { resource: ErpResource.GARAGE, action: ErpAction.READ },
+          { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+        ]);
+      }
+    });
+
+    it('khởi tạo job với chi nhánh + kỳ, lưu lịch sử theo user và tải đúng file', async () => {
+      const result = dashboardController.start(
+        { from: '2026-10-01', to: '2026-10-31' },
+        'CN1',
+        req('u1'),
+      );
+      expect(result).toMatchObject({ reused: false });
+      await flush();
+
+      expect(periodReport.exportExcel).toHaveBeenCalledWith(
+        'CN1',
+        { from: '2026-10-01', to: '2026-10-31' },
+        expect.any(Function),
+      );
+
+      const history = dashboardController.history(req('u1'));
+      expect(history.items[0]).toMatchObject({
+        status: 'COMPLETED',
+        canDownload: true,
+      });
+      expect(history.items[0].fileName).toContain(
+        'Bao_cao_Garage_20261001-20261031_',
+      );
+      expect(dashboardController.history(req('u2')).total).toBe(0);
+
+      const res: any = { setHeader: jest.fn(), send: jest.fn() };
+      dashboardController.download(result.jobId, req('u1'), res);
+      expect(res.send).toHaveBeenCalledWith(Buffer.from('dashboard'));
+      expect(() =>
+        dashboardController.download(result.jobId, req('u2'), res),
+      ).toThrow();
+    });
+
+    it('có runner riêng: không dùng lại file của chi nhánh khác', async () => {
+      const a = dashboardController.start({}, 'CN1', req('u1'));
+      await flush();
+      const same = dashboardController.start({}, 'CN1', req('u1'));
+      const other = dashboardController.start({}, 'CN2', req('u1'));
+      expect(same).toMatchObject({ jobId: a.jobId, reused: true });
+      expect(other.jobId).not.toBe(a.jobId);
+      await flush();
     });
   });
 

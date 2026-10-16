@@ -69,6 +69,17 @@ export class GarageDebtsExportDto {
   column_search?: string;
 }
 
+/** Điều kiện xuất báo cáo Garage theo kỳ (tab Tổng quan): chỉ có khoảng ngày. */
+export class GarageDashboardExportDto {
+  @IsOptional()
+  @Matches(DATE_PATTERN, { message: DATE_MESSAGE })
+  from?: string;
+
+  @IsOptional()
+  @Matches(DATE_PATTERN, { message: DATE_MESSAGE })
+  to?: string;
+}
+
 /** Điều kiện xuất Excel bảng kê phiếu dịch vụ (cases). */
 export class GarageCasesExportDto {
   @IsOptional()

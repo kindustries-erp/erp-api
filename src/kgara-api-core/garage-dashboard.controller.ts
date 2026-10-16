@@ -168,29 +168,6 @@ export class GarageDashboardController {
     );
   }
 
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  @Get('export')
-  @ApiProduces(
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  )
-  @ApiQuery({ name: 'date_from', required: false })
-  @ApiQuery({ name: 'date_to', required: false })
-  async exportExcel(
-    @Res() res: Response,
-    @Query('date_from') dateFrom?: string,
-    @Query('date_to') dateTo?: string,
-  ) {
-    const buffer = await this.service.exportExcel(dateFrom, dateTo);
-    res.set({
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition':
-        'attachment; filename="Garage_Dashboard_Report.xlsx"',
-      'Content-Length': buffer.length,
-    });
-    res.end(buffer);
-  }
-
   // ===================== OPERATING EXPENSES (CP VẬN HÀNH) =====================
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })

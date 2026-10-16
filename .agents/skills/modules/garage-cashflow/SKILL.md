@@ -222,3 +222,8 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
   - Tạo mới: luôn check khi `amount > 0`. Sửa: chỉ check khi đổi `amount`, `transDate`, `caseId` hoặc biển số.
   - i18n: namespace `garage:cashflowDuplicate.*` trong `modules/garage/locales/{vi,en}.ts`. `useT` không nội suy nên component tự `.replace("{{x}}")`.
 - **Test**: `garage-cashflow-duplicate.engine.spec.ts`, `GarageCashflowDuplicateWarning.test.tsx`, `useGarageCashflowDuplicateGuard.test.tsx`, nhóm "duplicate warning" trong `GarageCashflowDrawer.test.tsx`.
+
+## Nguồn dữ liệu cho báo cáo Garage theo kỳ (cập nhật 2026-10-16)
+- `kgara_cashflow_vouchers` là nguồn của sheet **Thu chi trong kỳ** và KPI **Đã thu / Đã chi** trên Dashboard xuất Excel tab Tổng quan (`GaragePeriodReportQueries.loadVouchers`, lọc `trans_date` trong kỳ, sắp tăng dần). `voucher_type`: `RECEIPT` = thu, `PAYMENT` = chi.
+- Bảng **không có cột chi nhánh**: lọc chi nhánh qua `case_id` → `kgara_cases.branch_external_id` (giữ phiếu không gắn phiếu dịch vụ và phiếu của phiếu dịch vụ chưa có chi nhánh).
+- Số liệu thực tế tại `erp_greenway_production` (2026-10-16): 289 phiếu (207 `RECEIPT`, 82 `PAYMENT`); `payment_content` hầu hết trống (249/289) nên sheet để trống cột Nội dung khi chưa phân loại.

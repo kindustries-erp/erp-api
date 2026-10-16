@@ -8,6 +8,7 @@ import {
 } from '../../common/export-jobs/export-job-runner';
 import type {
   GarageCasesExportDto,
+  GarageDashboardExportDto,
   GarageDebtsExportDto,
 } from '../dto/garage-export.dto';
 import {
@@ -16,6 +17,7 @@ import {
 } from '../helpers/garage-debts-export.helper';
 import { buildGarageCaseExportFileName } from '../helpers/kgara-excel-style.helper';
 import { GarageDebtsExportService } from './garage-debts-export.service';
+import { GaragePeriodReportService } from './garage-period-report.service';
 import { KgaraCompletedCasesExportService } from './kgara-completed-cases-export.service';
 
 /** Công nợ đổi theo ngày/đồng bộ nên chỉ tái dùng file vừa tạo trong 10 phút. */
@@ -23,6 +25,8 @@ const REUSE_WINDOW_MS = 10 * 60 * 1000;
 const PROGRESS_TOTAL_UNITS = 100;
 
 export const GARAGE_CASES_EXPORT_PROCESS_ID = 'garage-cases-xlsx-export';
+export const GARAGE_DASHBOARD_EXPORT_PROCESS_ID =
+  'garage-dashboard-xlsx-export';
 export const GARAGE_DEBTS_EXPORT_PROCESS_IDS: Record<
   GarageDebtExportKind,
   string
@@ -41,6 +45,11 @@ export const GARAGE_DEBTS_EXPORT_PROCESS_IDS: Record<
 export class GarageExportJobsService implements OnModuleDestroy {
   readonly casesRunner = new ExportJobRunner({
     processId: GARAGE_CASES_EXPORT_PROCESS_ID,
+    reuseWindowMs: REUSE_WINDOW_MS,
+  });
+
+  readonly dashboardRunner = new ExportJobRunner({
+    processId: GARAGE_DASHBOARD_EXPORT_PROCESS_ID,
     reuseWindowMs: REUSE_WINDOW_MS,
   });
 
@@ -63,10 +72,12 @@ export class GarageExportJobsService implements OnModuleDestroy {
   constructor(
     private readonly casesExportService: KgaraCompletedCasesExportService,
     private readonly debtsExportService: GarageDebtsExportService,
+    private readonly periodReportService: GaragePeriodReportService,
   ) {}
 
   onModuleDestroy() {
     this.casesRunner.destroy();
+    this.dashboardRunner.destroy();
     Object.values(this.debtRunners).forEach((runner) => runner.destroy());
   }
 
@@ -133,6 +144,30 @@ export class GarageExportJobsService implements OnModuleDestroy {
           dto,
           onProgress,
         ),
+    });
+  }
+
+  /** Báo cáo Garage theo kỳ (tab Tổng quan). Fingerprint gồm chi nhánh và khoảng ngày. */
+  startDashboardExport(
+    dto: GarageDashboardExportDto,
+    branchId: string | undefined,
+    userId: string,
+  ): ExportStartResult {
+    const timestamp = formatExportTimestamp(new Date());
+    const compact = (day?: string) =>
+      day ? day.slice(0, 10).replace(/-/g, '') : '';
+    const period =
+      dto.from || dto.to ? `${compact(dto.from)}-${compact(dto.to)}_` : '';
+
+    return this.dashboardRunner.start({
+      userId,
+      fingerprint: stableStringify({ branchId: branchId ?? '', ...dto }),
+      fileName: `Bao_cao_Garage_${period}${timestamp}.xlsx`,
+      totalUnits: GaragePeriodReportService.PROGRESS_TOTAL_UNITS,
+      dateFrom: dto.from,
+      dateTo: dto.to,
+      producer: (onProgress) =>
+        this.periodReportService.exportExcel(branchId ?? '', dto, onProgress),
     });
   }
 }

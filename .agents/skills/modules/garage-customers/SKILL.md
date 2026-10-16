@@ -422,6 +422,11 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
     - `GET /api/v1/greenway/debts/all/export/background/history`
     - `GET /api/v1/greenway/debts/all/export/background/:jobId/download`
     - `GET /api/v1/greenway/debts/all/export/progress/stream` (SSE)
+  - **Mốc kỳ & phân nhóm (cập nhật 2026-10-16)**:
+    - `from` luôn được kẹp tối thiểu bằng `GARAGE_DEBT_BASELINE_DATE` (`2026-07-01`), áp dụng đồng thời cho bảng chi tiết và phần phân nhóm (breakdown). Không còn rơi về tháng hiện tại khi thiếu `from`.
+    - `to` thiếu thì lấy ngày hôm nay (máy chủ) cho phần phân nhóm.
+    - Lỗi phân nhóm không làm hỏng file: service ghi `Logger.warn` (`garage-debts-export.service.ts`) và vẫn xuất các sheet chi tiết.
+    - Dòng `Kỳ:` trên Dashboard có thêm "Số dư, tuổi nợ tính đến dd/MM/yyyy" (`formatPeriod` trong `garage-debts-export.helper.ts`, nhận `meta.asOfDate`). Số dư và tuổi nợ luôn tính đến ngày xuất, không tính đến cuối kỳ.
 - **Triệt Tiêu Double Sum & Cấu Trúc Sheet Con Độc Lập**:
   - Tách mỗi group thành một sheet riêng thông qua hàm `buildSingleGroupDebtSheet(workbook, sec.title, sec)`.
   - **Tuyệt đối không chèn hàng tổng phụ xen kẽ (subtotal row)** giữa các case trong danh sách.

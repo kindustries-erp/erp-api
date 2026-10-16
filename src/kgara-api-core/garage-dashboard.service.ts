@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
-import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { ListGarageOpexQueryDto } from './dto/garage-opex.dto';
@@ -15,7 +14,6 @@ export class GarageDashboardService {
     private readonly statsService: GarageDashboardStatsService,
     private readonly checkpointService: GarageCheckpointService,
     private readonly customerStatsService: GarageCustomerStatsService,
-    private readonly exportService: GarageDashboardExportService,
     private readonly pnlService: GaragePnlService,
     private readonly monthlyReceivablesBreakdownService: GarageMonthlyReceivablesBreakdownService,
   ) {}
@@ -86,13 +84,6 @@ export class GarageDashboardService {
       columnSearch,
       columnFilters,
     );
-  }
-
-  /**
-   * 5. Xuất báo cáo Excel chuyên nghiệp đa bảng (Multi-sheet Export) theo Ngày hoàn thành
-   */
-  exportExcel(dateFrom?: string, dateTo?: string): Promise<Buffer> {
-    return this.exportService.exportExcel(dateFrom, dateTo);
   }
 
   /**

@@ -25,6 +25,19 @@ export interface DashboardKpi {
   numFmt?: string;
 }
 
+/** Thẻ cảnh báo 3 dòng (nhãn, giá trị, ghi chú) với màu nền và màu chữ riêng. */
+export interface DashboardAlertCard {
+  label: string;
+  value: string | number;
+  /** Dòng phụ (số đối tượng, đối tượng lớn nhất...). */
+  note?: string;
+  numFmt?: string;
+  /** ARGB, vd `FFFEE2E2`. */
+  fill: string;
+  /** ARGB màu chữ nhãn và giá trị. */
+  font: string;
+}
+
 export interface DashboardDataTable {
   /** Dòng (1-based) bắt đầu của bảng (dòng tiêu đề bảng). */
   startRow: number;
@@ -32,7 +45,8 @@ export interface DashboardDataTable {
   startCol: number;
   title: string;
   headers: string[];
-  rows: (string | number)[][];
+  /** `null` ghi ô trống (chart bỏ qua điểm đó). */
+  rows: (string | number | null)[][];
   numFmts?: (string | undefined)[];
   /** Độ rộng từng cột của bảng (đặt lên sheet). */
   columnWidths?: number[];
@@ -183,6 +197,108 @@ export function writeKpiCards(
   return row;
 }
 
+export interface AlertCardOptions {
+  /** Dòng tiêu đề nhóm phía trên các thẻ; bỏ trống thì không có dòng tiêu đề. */
+  title?: string;
+  /** Chiều cao 3 dòng của thẻ: nhãn, giá trị, ghi chú. */
+  heights?: [number, number, number];
+}
+
+/**
+ * Vẽ hàng thẻ cảnh báo (4 thẻ/hàng, mỗi thẻ 3 dòng: nhãn, giá trị, ghi chú), tùy chọn
+ * có dòng tiêu đề nhóm. Trả về dòng trống kế tiếp (sau một dòng đệm nhỏ).
+ */
+export function writeAlertCards(
+  sheet: ExcelJS.Worksheet,
+  startRow: number,
+  cards: DashboardAlertCard[],
+  options: AlertCardOptions = {},
+): number {
+  const [labelHeight, valueHeight, noteHeight] = options.heights ?? [
+    18, 26, 28,
+  ];
+  let row = startRow;
+  if (options.title) {
+    sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
+    const titleCell = sheet.getCell(row, 1);
+    titleCell.value = options.title;
+    titleCell.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: COLOR_TITLE },
+    };
+    titleCell.alignment = { vertical: 'middle' };
+    sheet.getRow(row).height = 20;
+    row += 1;
+  }
+
+  for (let i = 0; i < cards.length; i += CARDS_PER_ROW) {
+    cards.slice(i, i + CARDS_PER_ROW).forEach((card, slot) => {
+      const col = slot * CARD_COLS + 1;
+      const last = col + CARD_COLS - 1;
+
+      for (const r of [row, row + 1, row + 2])
+        sheet.mergeCells(r, col, r, last);
+
+      const label = sheet.getCell(row, col);
+      label.value = card.label;
+      label.font = {
+        name: 'Calibri',
+        size: 9,
+        bold: true,
+        color: { argb: card.font },
+      };
+      label.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+
+      const value = sheet.getCell(row + 1, col);
+      value.value = card.value;
+      if (typeof card.value === 'number') value.numFmt = card.numFmt ?? '#,##0';
+      value.font = {
+        name: 'Calibri',
+        size: 16,
+        bold: true,
+        color: { argb: card.font },
+      };
+      value.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+
+      const note = sheet.getCell(row + 2, col);
+      note.value = card.note ?? '';
+      note.font = {
+        name: 'Calibri',
+        size: 9,
+        italic: true,
+        color: { argb: card.font },
+      };
+      note.alignment = {
+        horizontal: 'left',
+        vertical: 'top',
+        indent: 1,
+        wrapText: true,
+      };
+
+      for (let c = col; c <= last; c++) {
+        [row, row + 1, row + 2].forEach((r, idx) => {
+          const cell = sheet.getCell(r, c);
+          cell.fill = fill(card.fill);
+          cell.border = {
+            top: idx === 0 ? thinBorder.top : undefined,
+            bottom: idx === 2 ? thinBorder.bottom : undefined,
+            left: c === col ? thinBorder.left : undefined,
+            right: c === last ? thinBorder.right : undefined,
+          };
+        });
+      }
+    });
+    sheet.getRow(row).height = labelHeight;
+    sheet.getRow(row + 1).height = valueHeight;
+    sheet.getRow(row + 2).height = noteHeight;
+    sheet.getRow(row + 3).height = 6;
+    row += 4;
+  }
+  return row;
+}
+
 /**
  * Vị trí chart theo "ô lưới": 2 chart mỗi hàng (trái/phải). `slot` 0,1 ở hàng đầu,
  * 2,3 ở hàng kế... `startRow` là dòng 1-based của hàng chart đầu tiên.
@@ -208,6 +324,27 @@ export function chartAnchor(
     fromRow,
     toCol: left ? CHART_COLS : DASHBOARD_COLUMNS,
     toRow: fromRow + DASHBOARD_CHART_ROWS,
+  };
+}
+
+/**
+ * Vị trí chart khi xếp `perRow` chart mỗi hàng, chia đều 16 cột (vd 3 chart: cột 0-5,
+ * 5-11, 11-16), mỗi chart cao `rows` hàng. `slot` đếm từ 0, `startRow` là dòng 1-based
+ * của hàng chart đầu tiên.
+ */
+export function chartAnchorRow(
+  startRow: number,
+  slot: number,
+  perRow: number,
+  rows: number,
+): XlsxChartAnchor {
+  const index = slot % perRow;
+  const fromRow = startRow - 1 + Math.floor(slot / perRow) * (rows + 1);
+  return {
+    fromCol: Math.round((index * DASHBOARD_COLUMNS) / perRow),
+    fromRow,
+    toCol: Math.round(((index + 1) * DASHBOARD_COLUMNS) / perRow),
+    toRow: fromRow + rows,
   };
 }
 

@@ -148,7 +148,9 @@ describe('GarageDebtsExportService', () => {
     expect(dash.getCell('A1').value).toBe(
       'Dashboard công nợ phải thu - Khách hàng',
     );
-    expect(dash.getCell('A2').value).toBe('Kỳ: 01/07/2026 - 31/07/2026');
+    expect(dash.getCell('A2').value).toMatch(
+      /^Kỳ: 01\/07\/2026 - 31\/07\/2026 · Số dư, tuổi nợ tính đến \d{2}\/\d{2}\/\d{4}$/,
+    );
     expect(dash.getCell('A3').value).toBe('Chi nhánh: Chi nhánh Quận 7');
     expect(dash.getCell('A4').value).toBe('Chế độ: Theo kỳ');
 
@@ -404,5 +406,79 @@ describe('GarageDebtsExportService', () => {
     // 4. Có 4 biểu đồ trong file Excel
     const charts = await chartParts(buffer);
     expect(charts.length).toBeGreaterThanOrEqual(4);
+  });
+
+  describe('kỳ của phân nhóm (breakdown)', () => {
+    const emptyBreakdown = {
+      summary: { totalBilled: 0 },
+      categorized: {
+        enterprise: {
+          totals: { billed: 0, paid: 0, remaining: 0, caseCount: 0 },
+          all: [],
+        },
+        individual: {
+          totals: { billed: 0, paid: 0, remaining: 0, caseCount: 0 },
+          all: [],
+        },
+        insurance: {
+          totals: { billed: 0, paid: 0, remaining: 0, caseCount: 0 },
+          all: [],
+        },
+      },
+    };
+
+    const withBreakdown = (breakdown: jest.Mock) =>
+      new GarageDebtsExportService(
+        customersQuery as any,
+        suppliers as any,
+        branchRepo as any,
+        { getMonthlyReceivablesBreakdown: breakdown } as any,
+      );
+
+    it('kẹp from theo mốc 01/07/2026 và không rơi về tháng hiện tại khi thiếu from', async () => {
+      const breakdown = jest.fn().mockResolvedValue(emptyBreakdown);
+      const svc = withBreakdown(breakdown);
+
+      await svc.exportExcel('customers', 'CN1', {
+        mode: 'by-period',
+        from: '2026-06-01',
+        to: '2026-06-30',
+      });
+      expect(breakdown).toHaveBeenLastCalledWith(
+        undefined,
+        'CN1',
+        undefined,
+        '2026-07-01',
+        '2026-06-30',
+      );
+
+      await svc.exportExcel('customers', 'CN1', {});
+      expect(breakdown).toHaveBeenLastCalledWith(
+        undefined,
+        'CN1',
+        undefined,
+        '2026-07-01',
+        expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      );
+    });
+
+    it('breakdown lỗi thì ghi log cảnh báo và vẫn xuất file', async () => {
+      const svc = withBreakdown(
+        jest.fn().mockRejectedValue(new Error('db down')),
+      );
+      const warn = jest
+        .spyOn((svc as any).logger, 'warn')
+        .mockImplementation(() => undefined);
+
+      const wb = await loadWorkbook(
+        await svc.exportExcel('customers', 'CN1', {}),
+      );
+
+      expect(wb.worksheets.map((w) => w.name)).toEqual([
+        'Dashboard',
+        'Công nợ phải thu',
+      ]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    });
   });
 });

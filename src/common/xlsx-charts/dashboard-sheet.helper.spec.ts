@@ -5,9 +5,11 @@ import {
   DASHBOARD_COLUMNS,
   absRef,
   chartAnchor,
+  chartAnchorRow,
   columnLetter,
   createDashboardSheet,
   rowAfterCharts,
+  writeAlertCards,
   writeDashboardHeader,
   writeDataTable,
   writeKpiCards,
@@ -133,5 +135,96 @@ describe('dashboard-sheet.helper', () => {
     });
     expect(refs.firstDataRow).toBe(3);
     expect(refs.lastDataRow).toBe(3);
+  });
+
+  it('writeAlertCards: có tiêu đề nhóm, 4 thẻ/hàng, mỗi thẻ 3 dòng, trả dòng trống kế tiếp', () => {
+    const wb = new ExcelJS.Workbook();
+    const dash = createDashboardSheet(wb, 'Dashboard');
+    const card = (label: string, value: string | number, note?: string) => ({
+      label,
+      value,
+      note,
+      fill: 'FFFEE2E2',
+      font: 'FFBE123C',
+    });
+
+    const next = writeAlertCards(
+      dash,
+      6,
+      [
+        card('MỨC CẢNH BÁO', 'CAO', 'Quá hạn 77,6%'),
+        card('NỢ >90 NGÀY', 12000000, '1 đối tượng'),
+        card('NỢ 61-90 NGÀY', 0),
+        card('NỢ 31-60 NGÀY', 500),
+        card('THẺ HÀNG HAI', 1),
+      ],
+      { title: 'PHẢI THU' },
+    );
+
+    expect(dash.getCell(6, 1).value).toBe('PHẢI THU');
+    // thẻ 1 ở cột A, thẻ 2 ở cột E (mỗi thẻ rộng 4 cột)
+    expect(dash.getCell(7, 1).value).toBe('MỨC CẢNH BÁO');
+    expect(dash.getCell(8, 1).value).toBe('CAO');
+    expect(dash.getCell(9, 1).value).toBe('Quá hạn 77,6%');
+    expect(dash.getCell(8, 5).value).toBe(12000000);
+    expect(dash.getCell(8, 5).numFmt).toBe('#,##0');
+    expect(dash.getCell(8, 1).numFmt).not.toBe('#,##0');
+    // hàng thẻ thứ hai bắt đầu sau 3 dòng + 1 dòng đệm
+    expect(dash.getCell(11, 1).value).toBe('THẺ HÀNG HAI');
+    expect(next).toBe(15);
+    expect((dash.getCell(8, 1).fill as ExcelJS.FillPattern).fgColor?.argb).toBe(
+      'FFFEE2E2',
+    );
+    expect(dash.getCell(8, 1).font?.color?.argb).toBe('FFBE123C');
+  });
+
+  it('writeAlertCards: không có tiêu đề thì thẻ bắt đầu ngay dòng startRow, dòng đệm nhỏ, chiều cao tùy chỉnh', () => {
+    const wb = new ExcelJS.Workbook();
+    const dash = createDashboardSheet(wb, 'Dashboard');
+    const card = {
+      label: 'NHÃN',
+      value: 1,
+      fill: 'FFF1F5F9',
+      font: 'FF64748B',
+    };
+
+    const next = writeAlertCards(dash, 5, [card, card, card, card], {
+      heights: [14, 22, 24],
+    });
+
+    expect(dash.getCell(5, 1).value).toBe('NHÃN');
+    expect(dash.getRow(5).height).toBe(14);
+    expect(dash.getRow(6).height).toBe(22);
+    expect(dash.getRow(7).height).toBe(24);
+    expect(dash.getRow(8).height).toBe(6);
+    expect(next).toBe(9);
+  });
+
+  it('chartAnchorRow: chia đều 16 cột cho 3 chart một hàng, hàng kế cách chart + 1 dòng', () => {
+    expect(chartAnchorRow(20, 0, 3, 14)).toEqual({
+      fromCol: 0,
+      fromRow: 19,
+      toCol: 5,
+      toRow: 33,
+    });
+    expect(chartAnchorRow(20, 1, 3, 14)).toMatchObject({
+      fromCol: 5,
+      toCol: 11,
+    });
+    expect(chartAnchorRow(20, 2, 3, 14)).toMatchObject({
+      fromCol: 11,
+      toCol: 16,
+    });
+    // slot 3 xuống hàng kế
+    expect(chartAnchorRow(20, 3, 3, 14)).toMatchObject({
+      fromCol: 0,
+      fromRow: 34,
+      toRow: 48,
+    });
+    // 2 chart một hàng: nửa trái, nửa phải
+    expect(chartAnchorRow(1, 1, 2, 10)).toMatchObject({
+      fromCol: 8,
+      toCol: 16,
+    });
   });
 });

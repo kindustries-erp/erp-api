@@ -15,6 +15,8 @@ export const NS_SPREADSHEET_DRAWING =
 
 const CAT_AX_ID = 50010;
 const VAL_AX_ID = 50020;
+const SEC_CAT_AX_ID = 50030;
+const SEC_VAL_AX_ID = 50040;
 
 /** Bỏ ký tự điều khiển không hợp lệ trong XML 1.0 (giữ tab, xuống dòng). */
 function stripInvalidXmlChars(value: string): string {
@@ -41,9 +43,11 @@ export function qualifyRef(sheetName: string, ref: string): string {
 
 const finite = (n: number) => (Number.isFinite(n) ? n : 0);
 
-function numCache(values: number[], fmt: string): string {
+function numCache(values: (number | null)[], fmt: string): string {
   const pts = values
-    .map((v, i) => `<c:pt idx="${i}"><c:v>${finite(v)}</c:v></c:pt>`)
+    .map((v, i) =>
+      v === null ? '' : `<c:pt idx="${i}"><c:v>${finite(v)}</c:v></c:pt>`,
+    )
     .join('');
   return `<c:numCache><c:formatCode>${escapeXml(fmt)}</c:formatCode><c:ptCount val="${values.length}"/>${pts}</c:numCache>`;
 }
@@ -58,18 +62,42 @@ function strCache(values: string[]): string {
 const solid = (hex: string) =>
   `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
 
-function dataLabels(show: 'val' | 'percent' | 'none', fmt: string): string {
+type LabelPosition = 'outEnd' | 'ctr' | 't';
+
+function dataLabels(
+  show: 'val' | 'percent' | 'none',
+  fmt: string,
+  size = 800,
+  position?: LabelPosition,
+): string {
   const val = show === 'val' ? 1 : 0;
   const pct = show === 'percent' ? 1 : 0;
   if (show === 'none') return '';
   return (
     `<c:dLbls><c:numFmt formatCode="${escapeXml(show === 'percent' ? '0%' : fmt)}" sourceLinked="0"/>` +
     `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>` +
-    `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="800"/></a:pPr><a:endParaRPr lang="vi-VN"/></a:p></c:txPr>` +
+    `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${size}"/></a:pPr><a:endParaRPr lang="vi-VN"/></a:p></c:txPr>` +
+    (position ? `<c:dLblPos val="${position}"/>` : '') +
     `<c:showLegendKey val="0"/><c:showVal val="${val}"/><c:showCatName val="0"/>` +
     `<c:showSerName val="0"/><c:showPercent val="${pct}"/><c:showBubbleSize val="0"/>` +
     (show === 'percent' ? '<c:showLeaderLines val="1"/>' : '') +
     `</c:dLbls>`
+  );
+}
+
+/** Nhãn giá trị của một series cột/đường theo cấu hình series, rồi đến cấu hình chart. */
+function seriesLabels(
+  spec: XlsxChartSpec,
+  series: XlsxChartSeries,
+  fmt: string,
+  position: LabelPosition,
+): string {
+  const on = series.dataLabels ?? spec.dataLabels ?? false;
+  return dataLabels(
+    on ? 'val' : 'none',
+    series.labelNumFmt ?? spec.labelNumFmt ?? fmt,
+    spec.labelFontSize,
+    position,
   );
 }
 
@@ -99,7 +127,7 @@ function barSeries(
   return (
     `<c:ser>${serHead(index, series)}` +
     `<c:spPr>${solid(series.color)}</c:spPr><c:invertIfNegative val="0"/>` +
-    dataLabels(spec.dataLabels ? 'val' : 'none', fmt) +
+    seriesLabels(spec, series, fmt, spec.stacked ? 'ctr' : 'outEnd') +
     catAndVal(spec, sheetName, series, fmt) +
     `</c:ser>`
   );
@@ -116,7 +144,7 @@ function lineSeries(
     `<c:ser>${serHead(index, series)}` +
     `<c:spPr><a:ln w="28575" cap="rnd">${solid(series.color)}<a:round/></a:ln></c:spPr>` +
     `<c:marker><c:symbol val="circle"/><c:size val="6"/><c:spPr>${solid(series.color)}</c:spPr></c:marker>` +
-    dataLabels(spec.dataLabels ? 'val' : 'none', fmt) +
+    seriesLabels(spec, series, fmt, 't') +
     catAndVal(spec, sheetName, series, fmt) +
     `<c:smooth val="0"/></c:ser>`
   );
@@ -138,13 +166,38 @@ function doughnutSeries(
     .join('');
   return (
     `<c:ser>${serHead(index, series)}${points}` +
-    dataLabels('percent', fmt) +
+    dataLabels('percent', fmt, spec.labelFontSize) +
     catAndVal(spec, sheetName, series, fmt) +
     `</c:ser>`
   );
 }
 
-function axes(spec: XlsxChartSpec, fmt: string): string {
+/** Trục phụ bên phải cho series đường (trục danh mục phụ bị ẩn). */
+function secondaryAxes(
+  spec: XlsxChartSpec,
+  secFmt: string,
+  txPr: string,
+): string {
+  // Thứ tự trong <c:scaling>: orientation, max, min
+  const max =
+    spec.secondaryMax === undefined
+      ? ''
+      : `<c:max val="${spec.secondaryMax}"/>`;
+  const min =
+    spec.secondaryMin === undefined
+      ? ''
+      : `<c:min val="${spec.secondaryMin}"/>`;
+  return (
+    `<c:valAx><c:axId val="${SEC_VAL_AX_ID}"/><c:scaling><c:orientation val="minMax"/>${max}${min}</c:scaling><c:delete val="0"/>` +
+    `<c:axPos val="r"/><c:numFmt formatCode="${escapeXml(secFmt)}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/>` +
+    `<c:tickLblPos val="nextTo"/>${txPr}<c:crossAx val="${SEC_CAT_AX_ID}"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>` +
+    `<c:catAx><c:axId val="${SEC_CAT_AX_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/>` +
+    `<c:axPos val="b"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>` +
+    `<c:crossAx val="${SEC_VAL_AX_ID}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`
+  );
+}
+
+function axes(spec: XlsxChartSpec, fmt: string, hasSecondary = false): string {
   const horizontal = spec.type === 'bar';
   const catPos = horizontal ? 'l' : 'b';
   const valPos = horizontal ? 'b' : 'l';
@@ -158,7 +211,10 @@ function axes(spec: XlsxChartSpec, fmt: string): string {
     `<c:valAx><c:axId val="${VAL_AX_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
     `<c:axPos val="${valPos}"/><c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>` +
     `<c:numFmt formatCode="${escapeXml(fmt)}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/>` +
-    `<c:tickLblPos val="nextTo"/>${txPr}<c:crossAx val="${CAT_AX_ID}"/><c:crosses val="${reverse ? 'max' : 'autoZero'}"/><c:crossBetween val="between"/></c:valAx>`
+    `<c:tickLblPos val="nextTo"/>${txPr}<c:crossAx val="${CAT_AX_ID}"/><c:crosses val="${reverse ? 'max' : 'autoZero'}"/><c:crossBetween val="between"/></c:valAx>` +
+    (hasSecondary
+      ? secondaryAxes(spec, spec.secondaryNumFmt ?? '0.0%', txPr)
+      : '')
   );
 }
 
@@ -174,27 +230,40 @@ function plotArea(spec: XlsxChartSpec, sheetName: string, fmt: string): string {
 
   const isLine = (s: XlsxChartSeries) =>
     spec.type === 'line' || (spec.type === 'combo' && s.kind === 'line');
+  const isSecondary = (s: XlsxChartSeries) =>
+    spec.type === 'combo' && isLine(s) && s.secondaryAxis === true;
+  const secFmt = spec.secondaryNumFmt ?? '0.0%';
   const axRefs = `<c:axId val="${CAT_AX_ID}"/><c:axId val="${VAL_AX_ID}"/>`;
+  const secAxRefs = `<c:axId val="${SEC_CAT_AX_ID}"/><c:axId val="${SEC_VAL_AX_ID}"/>`;
 
-  const bars = spec.series
-    .map((s, i) => ({ s, i }))
+  const indexed = spec.series.map((s, i) => ({ s, i }));
+  const bars = indexed
     .filter(({ s }) => !isLine(s))
     .map(({ s, i }) => barSeries(spec, sheetName, s, i, fmt))
     .join('');
-  const lines = spec.series
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => isLine(s))
-    .map(({ s, i }) => lineSeries(spec, sheetName, s, i, fmt))
-    .join('');
+  const lineChartXml = (
+    items: { s: XlsxChartSeries; i: number }[],
+    seriesFmt: string,
+    refs: string,
+  ) =>
+    items.length > 0
+      ? `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${items
+          .map(({ s, i }) => lineSeries(spec, sheetName, s, i, seriesFmt))
+          .join('')}<c:marker val="1"/>${refs}</c:lineChart>`
+      : '';
+  const primaryLines = indexed.filter(({ s }) => isLine(s) && !isSecondary(s));
+  const secondaryLines = indexed.filter(({ s }) => isSecondary(s));
 
+  const grouping = spec.stacked ? 'stacked' : 'clustered';
+  const overlap = spec.stacked ? '<c:overlap val="100"/>' : '';
   const barXml = bars
-    ? `<c:barChart><c:barDir val="${spec.type === 'bar' ? 'bar' : 'col'}"/><c:grouping val="clustered"/><c:varyColors val="0"/>${bars}<c:gapWidth val="80"/>${axRefs}</c:barChart>`
+    ? `<c:barChart><c:barDir val="${spec.type === 'bar' ? 'bar' : 'col'}"/><c:grouping val="${grouping}"/><c:varyColors val="0"/>${bars}<c:gapWidth val="80"/>${overlap}${axRefs}</c:barChart>`
     : '';
-  const lineXml = lines
-    ? `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${lines}<c:marker val="1"/>${axRefs}</c:lineChart>`
-    : '';
+  const lineXml =
+    lineChartXml(primaryLines, fmt, axRefs) +
+    lineChartXml(secondaryLines, secFmt, secAxRefs);
 
-  return `<c:plotArea><c:layout/>${barXml}${lineXml}${axes(spec, fmt)}</c:plotArea>`;
+  return `<c:plotArea><c:layout/>${barXml}${lineXml}${axes(spec, fmt, secondaryLines.length > 0)}</c:plotArea>`;
 }
 
 /** XML của một chart (`xl/charts/chartN.xml`). */

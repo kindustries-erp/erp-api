@@ -38,7 +38,6 @@ import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
-import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
 import { KgaraCaseQueryService } from './services/kgara-case-query.service';
@@ -76,6 +75,9 @@ import { KgaraCustomersDebtQueryService } from './services/kgara-customers-debt-
 import { GarageDebtsExportService } from './services/garage-debts-export.service';
 import { GarageExportJobsService } from './services/garage-export-jobs.service';
 import { GarageCasesExportController } from './controllers/garage-cases-export.controller';
+import { GarageDashboardExportController } from './controllers/garage-dashboard-export.controller';
+import { GaragePeriodReportService } from './services/garage-period-report.service';
+import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
 import { GarageDebtsExportController } from './controllers/garage-debts-export.controller';
 
 @Module({
@@ -120,7 +122,6 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     GarageDebtsAnalyticsService,
     GarageCheckpointService,
     GarageCustomerStatsService,
-    GarageDashboardExportService,
     GaragePnlService,
     GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
@@ -143,6 +144,8 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     KgaraCustomersDebtQueryService,
     GarageDebtsExportService,
     GarageExportJobsService,
+    GaragePeriodReportService,
+    GaragePeriodReportQueries,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -157,6 +160,7 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     KgaraCaseFinancialController,
     KgaraCasesController,
     GarageCasesExportController,
+    GarageDashboardExportController,
     GarageDebtsExportController,
   ],
   exports: [
@@ -171,7 +175,6 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     GarageDashboardStatsService,
     GarageCheckpointService,
     GarageCustomerStatsService,
-    GarageDashboardExportService,
     GaragePnlService,
     GarageMonthlyReceivablesBreakdownService,
     KgaraCaseListQueryService,
