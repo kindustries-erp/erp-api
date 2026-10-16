@@ -65,6 +65,7 @@
     "elkjs": "^0.11.1",
     "exceljs": "^4.4.0",
     "imapflow": "^1.6.5",
+    "jszip": "3.10.1",
     "mailparser": "^3.9.14",
     "multer": "^2.2.0",
     "node-fetch": "^2.7.0",

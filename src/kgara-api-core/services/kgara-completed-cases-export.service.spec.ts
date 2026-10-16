@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { KgaraCompletedCasesExportService } from './kgara-completed-cases-export.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -366,5 +367,172 @@ describe('KgaraCompletedCasesExportService', () => {
     styleMarginCell(row.getCell(1), 100);
     expect((row.getCell(1).fill as any)?.fgColor?.argb).toBe('FFE9D5FF');
     expect((row.getCell(1).font as any)?.color?.argb).toBe('FF6B21A8');
+  });
+
+  describe('mode by-current-filter', () => {
+    const getQb = () =>
+      mockCaseRepo.createQueryBuilder.mock.results.slice(-1)[0].value;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('bỏ điều kiện "phiếu kết thúc" và lọc kỳ theo ngày phát sinh như bảng', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        date_from: '2026-03-01',
+        date_to: '2026-03-31',
+        date_type: 'completion_date',
+        classification: 'OJ',
+        status: 'completed',
+        filtersStr: '{}',
+      });
+
+      const qb = getQb();
+      const conditions = qb.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+      expect(
+        conditions.some((c: string) => c.includes('tinhTrangDichVu')),
+      ).toBe(false);
+      expect(conditions.some((c: string) => c.includes('classification'))).toBe(
+        false,
+      );
+      expect(conditions).toContain('case.ngayPhatSinh >= :fromDate');
+      expect(conditions).toContain('case.ngayPhatSinh <= :toDate');
+    });
+
+    it('áp dụng sorts của bảng thay cho thứ tự mặc định', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        sorts: ['-doanhThu'],
+      });
+
+      const qb = getQb();
+      expect(qb.orderBy).toHaveBeenCalledWith(
+        'case.doanhThu',
+        'DESC',
+        'NULLS LAST',
+      );
+      expect(qb.orderBy).not.toHaveBeenCalledWith(
+        'case.ngayHoanThanhCongViec',
+        'DESC',
+        'NULLS LAST',
+      );
+    });
+
+    it('chế độ theo kỳ giữ điều kiện phiếu kết thúc và bỏ qua sorts', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-period',
+        sorts: ['-doanhThu'],
+        classification: 'OJ',
+      });
+
+      const qb = getQb();
+      expect(
+        qb.andWhere.mock.calls.some((c: any[]) => c[0] instanceof Object),
+      ).toBe(true);
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'case.classification = :classification',
+        {
+          classification: 'OJ',
+        },
+      );
+      expect(qb.orderBy).toHaveBeenCalledWith(
+        'case.ngayHoanThanhCongViec',
+        'DESC',
+        'NULLS LAST',
+      );
+    });
+  });
+
+  describe('Dashboard (sheet đầu tiên)', () => {
+    const load = async (buffer: Buffer) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as any);
+      return wb;
+    };
+
+    it('Dashboard nằm đầu file, trước 3 sheet cũ', async () => {
+      const wb = await load(
+        await service.exportCompletedCasesExcel({
+          date_from: '2026-03-01',
+          date_to: '2026-03-31',
+          branchId: 'CN-1',
+        }),
+      );
+      expect(wb.worksheets.map((w) => w.name)).toEqual([
+        'Dashboard',
+        'Bảng kê phiếu kết thúc',
+        'Theo dõi lãi lỗ',
+        'Chi tiết DV & Phụ tùng',
+      ]);
+      const dash = wb.getWorksheet('Dashboard')!;
+      expect(dash.getCell('A1').value).toBe('Dashboard bảng kê phiếu dịch vụ');
+      expect(dash.getCell('A2').value).toBe('Kỳ: 01/03/2026 - 31/03/2026');
+      expect(dash.getCell('A3').value).toBe('Chi nhánh: Chi nhánh Quận 1');
+      expect(dash.getCell('A4').value).toBe('Chế độ: Theo kỳ');
+    });
+
+    it('KPI là công thức tham chiếu Sheet 1 và khớp tổng của sheet đó', async () => {
+      const wb = await load(
+        await service.exportCompletedCasesExcel({
+          date_from: '2026-03-01',
+          date_to: '2026-03-31',
+        }),
+      );
+      const dash = wb.getWorksheet('Dashboard')!;
+      const sheet1 = wb.getWorksheet('Bảng kê phiếu kết thúc')!;
+      const value = (addr: string) => dash.getCell(addr).value as any;
+
+      expect(dash.getCell('A7').value).toBe(1);
+      expect(value('E7')).toMatchObject({
+        formula: "SUM('Bảng kê phiếu kết thúc'!V5:V5)",
+        result: 20000000,
+      });
+      expect(value('I7')).toMatchObject({ result: 12000000 });
+      expect(value('M7')).toMatchObject({ result: 8000000 });
+      expect(value('A10').result).toBeCloseTo(0.4, 6);
+
+      // Tổng Sheet 1 (hàng 1) bằng KPI Dashboard
+      expect((sheet1.getRow(1).getCell('V').value as any).result).toBe(
+        value('E7').result,
+      );
+    });
+
+    it('có chart gốc: theo thời gian (combo), phân loại (doughnut), top khách hàng (bar)', async () => {
+      const buffer = await service.exportCompletedCasesExcel({
+        date_from: '2026-03-01',
+        date_to: '2026-03-31',
+      });
+      const zip = await JSZip.loadAsync(buffer);
+      const parts = Object.keys(zip.files).filter((p) =>
+        /^xl\/charts\/chart\d+\.xml$/.test(p),
+      );
+      expect(parts).toHaveLength(3);
+
+      const xmls = await Promise.all(
+        parts.map((p) => zip.file(p)!.async('string')),
+      );
+      expect(
+        xmls.some(
+          (x) => x.includes('<c:lineChart>') && x.includes('<c:barChart>'),
+        ),
+      ).toBe(true);
+      expect(xmls.some((x) => x.includes('<c:doughnutChart>'))).toBe(true);
+      expect(xmls.some((x) => x.includes('<c:barDir val="bar"/>'))).toBe(true);
+      // Kỳ 31 ngày → gộp theo ngày (5/3 → "05/03")
+      expect(xmls.join('')).toContain('05/03');
+    });
+
+    it('theo filter hiện tại: tiêu đề chế độ và gộp theo ngày phát sinh', async () => {
+      const wb = await load(
+        await service.exportCompletedCasesExcel({ mode: 'by-current-filter' }),
+      );
+      expect(wb.getWorksheet('Dashboard')!.getCell('A2').value).toBe(
+        'Kỳ: Tất cả',
+      );
+      expect(wb.getWorksheet('Dashboard')!.getCell('A4').value).toBe(
+        'Chế độ: Theo filter hiện tại của bảng',
+      );
+    });
   });
 });
