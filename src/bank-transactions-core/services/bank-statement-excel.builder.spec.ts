@@ -122,6 +122,38 @@ describe('BankStatementExcelBuilder', () => {
     expect(sumRow.getCell(6).value).toMatchObject({
       formula: expect.stringContaining('SUM'),
     });
+
+    // Verify SUM & SUBTOTAL formulas for Column 21 ([HĐ] Tổng tiền HĐ (VND))
+    expect(sumRow.getCell(21).value).toEqual({
+      formula: 'SUM(U5:U5)',
+      result: 1500000,
+    });
+    expect(sumRow.getCell(21).numFmt).toBe('#,##0.00');
+
+    // Verify Row 1 (SUM) fill is Amber 50 (FFFFFBEB) and font is Amber 900 (FF78350F)
+    expect(sumRow.font?.color?.argb).toBe('FF78350F');
+    const sumBankFill: any = sumRow.getCell(6).fill;
+    expect(sumBankFill?.fgColor?.argb).toBe('FFFFFBEB');
+    const sumInvFill: any = sumRow.getCell(21).fill;
+    expect(sumInvFill?.fgColor?.argb).toBe('FFFFFBEB');
+
+    // Verify Row 2 (SUBTOTAL) formulas & styling (Row 2 is Slate 50, font Slate 900)
+    const subtotalRow = worksheet.getRow(2);
+    expect(subtotalRow.getCell(21).value).toEqual({
+      formula: 'SUBTOTAL(9,U5:U5)',
+      result: 1500000,
+    });
+    expect(subtotalRow.getCell(21).numFmt).toBe('#,##0.00');
+
+    // Verify Row 2 font color is Slate 900 (FF0F172A)
+    expect(subtotalRow.font?.color?.argb).toBe('FF0F172A');
+
+    // Verify Row 2 fill is Slate 50 (FFF8FAFC), NOT Blue (FFEFF6FF)
+    const subtotalBankFill: any = subtotalRow.getCell(6).fill;
+    expect(subtotalBankFill?.fgColor?.argb).toBe('FFF8FAFC');
+
+    const subtotalInvFill: any = subtotalRow.getCell(21).fill;
+    expect(subtotalInvFill?.fgColor?.argb).toBe('FFF8FAFC');
   });
 
   it('gracefully handles transactions without invoice net-offs and cash books', async () => {
@@ -151,5 +183,46 @@ describe('BankStatementExcelBuilder', () => {
     expect(dataRow.getCell(3).value).toBe('');
     expect(dataRow.getCell(15).value).toBe('');
     expect(dataRow.getCell(17).value).toBe('');
+  });
+
+  it('filters columns dynamically when selectedColumns is provided', async () => {
+    const transactions: Partial<ErpBankTransaction>[] = [
+      {
+        id: 'txn-3',
+        transDate: new Date('2026-03-14T14:01:32.000Z'),
+        referenceNumber: 'FT123456',
+        description: 'Test Selected Columns',
+        creditAmount: 500000 as any,
+        debitAmount: 0 as any,
+      },
+    ];
+
+    const buffer = await builder.build({
+      sourceType: 'BANK',
+      transactions: transactions as ErpBankTransaction[],
+      netOffDetails: [],
+      selectedColumns: ['stt', 'transDate', 'credit', 'description'],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const worksheet = workbook.worksheets[0];
+
+    // Header row 4 should have exactly 4 columns
+    // Natural order in allColumns: stt (1), transDate (3), description (5), credit (6)
+    const headerRow = worksheet.getRow(4);
+    expect(headerRow.getCell(1).value).toBe('STT');
+    expect(headerRow.getCell(2).value).toBe('Ngày GD');
+    expect(headerRow.getCell(3).value).toBe('Diễn giải');
+    expect(headerRow.getCell(4).value).toBe('Thu (VND)');
+    expect(headerRow.getCell(5).value).toBeNull();
+
+    // Data row 5 should match selected column values
+    const dataRow = worksheet.getRow(5);
+    expect(dataRow.getCell(1).value).toBe(1);
+    expect(dataRow.getCell(2).value).toBeInstanceOf(Date);
+    expect(dataRow.getCell(3).value).toBe('Test Selected Columns');
+    expect(dataRow.getCell(4).value).toBe(500000);
+    expect(dataRow.getCell(4).numFmt).toBe('#,##0.00');
   });
 });
