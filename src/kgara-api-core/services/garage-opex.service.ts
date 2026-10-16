@@ -195,6 +195,8 @@ export class GarageOpexService {
       );
     }
 
+    this.assertNotVoucherSourced(item);
+
     if (dto.periodYear !== undefined) item.periodYear = Number(dto.periodYear);
     if (dto.periodMonth !== undefined)
       item.periodMonth = Number(dto.periodMonth);
@@ -254,6 +256,8 @@ export class GarageOpexService {
         'Hoa hồng tự động không hỗ trợ thiết lập chi phí định kỳ.',
       );
     }
+
+    this.assertNotVoucherSourced(item);
 
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
     if (dto.ojAmount !== undefined) item.ojAmount = Number(dto.ojAmount) || 0;
@@ -381,8 +385,18 @@ export class GarageOpexService {
     if (!item) {
       throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
     }
+    this.assertNotVoucherSourced(item);
     await this.opexRepo.remove(item);
     return { success: true, id };
+  }
+
+  /** Dòng opex sinh từ phiếu thu chi garage chỉ được sửa/xóa qua phiếu gốc. */
+  private assertNotVoucherSourced(item: KgaraOperatingExpense) {
+    if (item.sourceCashflowVoucherId) {
+      throw new BadRequestException(
+        'Khoản chi này được ghi nhận từ phiếu chi garage, vui lòng chỉnh sửa tại Thu chi garage.',
+      );
+    }
   }
 
   /**

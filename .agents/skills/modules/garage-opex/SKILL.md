@@ -185,3 +185,7 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
   ```bash
   bun test src/kgara-api-core/services/garage-opex.service.spec.ts
   ```
+
+## Dòng opex sinh từ phiếu chi garage (cập nhật 2026-10-17)
+- Bảng `kgara_operating_expenses` có thêm `source_cashflow_voucher_id` (uuid, nullable, FK → `kgara_cashflow_vouchers.id` `ON DELETE CASCADE`, index `idx_kgara_opex_source_voucher`). Có giá trị = khoản chi ghi nhận từ phiếu chi 4. HHBH / 8. Vật tư tiêu hao (xem `garage-cashflow/SKILL.md`).
+- `GarageOpexService.update`, `applyRecurring`, `delete` từ chối dòng có `source_cashflow_voucher_id` (chỉ sửa/xóa qua phiếu chi gốc). List/detail trả thêm `sourceCashflowVoucherId`; web coi dòng này là chỉ đọc.
