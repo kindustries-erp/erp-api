@@ -73,12 +73,15 @@ import { KgaraSuppliersDebtQueryEngine } from './services/engines/kgara-supplier
 import { KgaraCustomerCasesDetailService } from './services/kgara-customer-cases-detail.service';
 import { KgaraCustomersDebtQueryService } from './services/kgara-customers-debt-query.service';
 import { GarageDebtsExportService } from './services/garage-debts-export.service';
+import { GarageCashflowExportService } from './services/garage-cashflow-export.service';
+import { GarageCashflowExcelBuilder } from './services/garage-cashflow-excel.builder';
 import { GarageExportJobsService } from './services/garage-export-jobs.service';
 import { GarageCasesExportController } from './controllers/garage-cases-export.controller';
 import { GarageDashboardExportController } from './controllers/garage-dashboard-export.controller';
 import { GaragePeriodReportService } from './services/garage-period-report.service';
 import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
 import { GarageDebtsExportController } from './controllers/garage-debts-export.controller';
+import { GarageCashflowExportController } from './controllers/garage-cashflow-export.controller';
 
 @Module({
   imports: [
@@ -146,6 +149,8 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     GarageExportJobsService,
     GaragePeriodReportService,
     GaragePeriodReportQueries,
+    GarageCashflowExcelBuilder,
+    GarageCashflowExportService,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -162,6 +167,7 @@ import { GarageDebtsExportController } from './controllers/garage-debts-export.c
     GarageCasesExportController,
     GarageDashboardExportController,
     GarageDebtsExportController,
+    GarageCashflowExportController,
   ],
   exports: [
     KgaraSyncService,

@@ -227,3 +227,24 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
 - `kgara_cashflow_vouchers` là nguồn của sheet **Thu chi trong kỳ** và KPI **Đã thu / Đã chi** trên Dashboard xuất Excel tab Tổng quan (`GaragePeriodReportQueries.loadVouchers`, lọc `trans_date` trong kỳ, sắp tăng dần). `voucher_type`: `RECEIPT` = thu, `PAYMENT` = chi.
 - Bảng **không có cột chi nhánh**: lọc chi nhánh qua `case_id` → `kgara_cases.branch_external_id` (giữ phiếu không gắn phiếu dịch vụ và phiếu của phiếu dịch vụ chưa có chi nhánh).
 - Số liệu thực tế tại `erp_greenway_production` (2026-10-16): 289 phiếu (207 `RECEIPT`, 82 `PAYMENT`); `payment_content` hầu hết trống (249/289) nên sheet để trống cột Nội dung khi chưa phân loại.
+
+## 9. Xuất Excel Thu Chi Garage (Export Background & Drawer 2-cột)
+- **Kiến trúc Split-Button & Dropdown**:
+  - Main button góc trên phải bảng `[ + Tạo phiếu mới | v ]`. Nút chính tạo phiếu mới, nút mũi tên chevron bên phải mở dropdown menu có nhóm `THAO TÁC` -> `Xuất Excel` (icon `FileSpreadsheet` xanh lá).
+- **Drawer Xuất Excel 2-cột (`GarageCashflowExportDrawer`)**:
+  - `layout="2-columns"`, `size="lg"`, kế thừa trải nghiệm chuẩn mực từ `cashflow?tab=bank`.
+  - **Cột trái**: `GarageCashflowExportColumnSelector` (chọn cột động, gập/mở 3 nhóm: Thông tin chứng từ gồm Người tạo, Người cập nhật, Ngày tạo, Ngày cập nhật; Phát sinh & Thanh toán; Đối tác & Dịch vụ liên quan) + Bảng lịch sử xuất file 6 cột trong 24h kèm nút tải xuống, thời gian hết hạn và progress.
+  - **Cột phải**: `GarageCashflowExportConditionSection` (hỗ trợ 2 chế độ radio card: `Theo kỳ` Tuần/Tháng/Quý/Tùy chỉnh ngày và `Theo filter hiện tại` với tóm tắt `GarageCashflowExportFilterPreview`, Combobox Tài khoản ngân hàng và Loại giao dịch).
+  - **Cơ chế Auto-Download on Ready**: Tự động kích hoạt tải tệp XLSX về máy người dùng ngay khi job hoàn tất (thông qua SSE stream và fast polling 1.5s), không yêu cầu bấm tải thủ công.
+- **Backend Export Job Runner & Template Excel (`exceljs`)**:
+  - **Controller**: `GarageCashflowExportController` (`/api/v1/greenway/cashflow-vouchers/export/excel`), quyền `GARAGE_CASHFLOW:READ`.
+    - `POST /background`: Khởi tạo job xuất ngầm với `GarageCashflowExportDto` (hỗ trợ `periodType: 'week' | 'month' | 'quarter' | 'year' | 'custom'`, `week`, `period`, `quarter`, `dateFrom`, `dateTo`, `accountId`, `voucherType`).
+    - `GET /background/history`: Lấy lịch sử xuất file theo `userId`.
+    - `GET /background/:jobId/download`: Tải file XLSX nhị phân.
+    - `Sse /progress/stream`: Luồng SSE báo cáo tiến độ.
+  - **Runner**: `cashflowRunner` trong `GarageExportJobsService` (kế thừa `ExportJobRunner`, processId `garage-cashflow-xlsx-export`).
+  - **Builder**: `GarageCashflowExcelBuilder` tạo file Excel chuẩn:
+    - Dòng 1: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)`.
+    - Dòng 2: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)`.
+    - Dòng 4: Header Slate 700 (`#334155`), chữ trắng in đậm, freeze dòng đầu.
+    - Dòng 5+: Dữ liệu phiếu thu chi kèm các cột `updatedBy`, `updatedAt`, định dạng số tiền `#,##0` và ngày tháng `dd/mm/yyyy`.

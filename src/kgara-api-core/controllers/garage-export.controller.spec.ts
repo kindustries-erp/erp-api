@@ -8,6 +8,7 @@ import { GarageDebtsExportService } from '../services/garage-debts-export.servic
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
 import { GaragePeriodReportService } from '../services/garage-period-report.service';
 import { KgaraCompletedCasesExportService } from '../services/kgara-completed-cases-export.service';
+import { GarageCashflowExportService } from '../services/garage-cashflow-export.service';
 import { GarageCasesExportController } from './garage-cases-export.controller';
 import { GarageDashboardExportController } from './garage-dashboard-export.controller';
 import { GarageDebtsExportController } from './garage-debts-export.controller';
@@ -37,6 +38,9 @@ describe('Garage export controllers', () => {
     normalizeFilters: jest.fn((dto) => dto),
     exportExcel: jest.fn().mockResolvedValue(Buffer.from('debts')),
   };
+  const cashflowExport = {
+    buildExcel: jest.fn().mockResolvedValue(Buffer.from('cashflow')),
+  };
 
   const periodReport = {
     exportExcel: jest.fn().mockResolvedValue(Buffer.from('dashboard')),
@@ -55,6 +59,7 @@ describe('Garage export controllers', () => {
         { provide: KgaraCompletedCasesExportService, useValue: casesExport },
         { provide: GarageDebtsExportService, useValue: debtsExport },
         { provide: GaragePeriodReportService, useValue: periodReport },
+        { provide: GarageCashflowExportService, useValue: cashflowExport },
       ],
     })
       .overrideGuard(JwtAuthGuard)
