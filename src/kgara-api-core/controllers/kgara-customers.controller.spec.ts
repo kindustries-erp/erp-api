@@ -227,6 +227,48 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
       );
     });
 
+    it('should return predefined currency range options for balanceAmount without querying customerCode', async () => {
+      const res = await controller.getCustomersDebtColumnOptions(
+        'BRANCH_01',
+        'balanceAmount',
+        '',
+        '1',
+        '20',
+        '',
+      );
+
+      expect(res.items).toEqual([
+        { label: '0 đ (Đã thanh toán hết)', value: '0' },
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ]);
+      expect(caseRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('should filter by balanceAmount in column_filters with HAVING condition', async () => {
+      caseRepo.manager.query
+        .mockResolvedValueOnce([{ total_customers: '1' }])
+        .mockResolvedValueOnce([]);
+
+      await controller.getCustomersDebt(
+        'BRANCH_01',
+        '1',
+        '20',
+        '',
+        undefined,
+        undefined,
+        undefined,
+        JSON.stringify({ balanceAmount: ['0-10m', '>50m'] }),
+        undefined,
+      );
+
+      const summaryQuery = caseRepo.manager.query.mock.calls[0][0];
+      expect(summaryQuery).toContain('HAVING');
+      expect(summaryQuery).toContain('tien_con_phai_thanh_toan');
+    });
+
     it('should sort by all aging buckets with the requested directions', async () => {
       caseRepo.manager.query
         .mockResolvedValueOnce([{ total_customers: '0' }])

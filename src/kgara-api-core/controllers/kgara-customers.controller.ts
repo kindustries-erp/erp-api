@@ -283,6 +283,32 @@ export class KgaraCustomersController {
             if (subConds.length > 0) {
               havingConditions.push(`(${subConds.join(' OR ')})`);
             }
+          } else if (col === 'balanceAmount' || col === 'balance') {
+            const subConds: string[] = [];
+            const balExpr =
+              'COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)';
+            if (
+              values.includes('0') ||
+              values.includes('0 đ') ||
+              values.includes('zero')
+            ) {
+              subConds.push(`(${balExpr} <= 0)`);
+            }
+            if (values.includes('0-10m') || values.includes('<10m')) {
+              subConds.push(`(${balExpr} > 0 AND ${balExpr} < 10000000)`);
+            }
+            if (values.includes('10m-20m')) {
+              subConds.push(`(${balExpr} BETWEEN 10000000 AND 20000000)`);
+            }
+            if (values.includes('20m-50m')) {
+              subConds.push(`(${balExpr} BETWEEN 20000000 AND 50000000)`);
+            }
+            if (values.includes('>50m')) {
+              subConds.push(`(${balExpr} > 50000000)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
           }
         }
       } catch {
@@ -337,6 +363,15 @@ export class KgaraCustomersController {
             if (!isNaN(num) && num > 0) {
               havingConditions.push(
                 `COALESCE(SUM("case"."tien_co_thue"), 0)::numeric >= $${queryParams.length + 1}`,
+              );
+              queryParams.push(num);
+            }
+          } else if (col === 'balanceAmount' || col === 'balance') {
+            const cleaned = val.replace(/[^0-9]/g, '');
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num > 0) {
+              havingConditions.push(
+                `COALESCE(SUM("case"."tien_con_phai_thanh_toan"), 0)::numeric >= $${queryParams.length + 1}`,
               );
               queryParams.push(num);
             }
@@ -595,7 +630,7 @@ export class KgaraCustomersController {
         totalPages: 1,
       };
     }
-    if (column === 'totalAmount') {
+    if (column === 'totalAmount' || column === 'totalRevenue') {
       const options = [
         { label: '< 10.000.000 đ', value: '0-10m' },
         { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
@@ -603,12 +638,38 @@ export class KgaraCustomersController {
         { label: '> 50.000.000 đ', value: '>50m' },
       ];
       const filtered = search
-        ? options.filter((opt) =>
-            opt.label.toLowerCase().includes(search.toLowerCase()),
+        ? options.filter(
+            (opt) =>
+              opt.label.toLowerCase().includes(search.toLowerCase()) ||
+              opt.value.toLowerCase().includes(search.toLowerCase()),
           )
         : options;
       return {
-        items: filtered.map((f) => f.value),
+        items: filtered,
+        total: filtered.length,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      };
+    }
+
+    if (column === 'balanceAmount' || column === 'balance') {
+      const options = [
+        { label: '0 đ (Đã thanh toán hết)', value: '0' },
+        { label: '< 10.000.000 đ', value: '0-10m' },
+        { label: '10.000.000 - 20.000.000 đ', value: '10m-20m' },
+        { label: '20.000.000 - 50.000.000 đ', value: '20m-50m' },
+        { label: '> 50.000.000 đ', value: '>50m' },
+      ];
+      const filtered = search
+        ? options.filter(
+            (opt) =>
+              opt.label.toLowerCase().includes(search.toLowerCase()) ||
+              opt.value.toLowerCase().includes(search.toLowerCase()),
+          )
+        : options;
+      return {
+        items: filtered,
         total: filtered.length,
         page: 1,
         pageSize: 20,
