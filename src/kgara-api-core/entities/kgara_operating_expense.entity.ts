@@ -59,6 +59,10 @@ export class KgaraOperatingExpense {
   @Index('idx_kgara_opex_recurrence_anchor')
   recurrenceAnchorId?: string | null;
 
+  @Column({ type: 'uuid', name: 'source_cashflow_voucher_id', nullable: true })
+  @Index('idx_kgara_opex_source_voucher')
+  sourceCashflowVoucherId?: string | null;
+
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy?: string | null;
 

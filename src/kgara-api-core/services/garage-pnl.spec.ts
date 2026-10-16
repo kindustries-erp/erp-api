@@ -87,6 +87,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     // 2. Mock OPEX Summary (OPEX = 146.500.000, DirectCost = 0, Commission = 0)
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: {
         total: 146500000,
         ojTotal: 0,
@@ -159,6 +160,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -211,6 +213,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     // OPEX (50M) > GP (20M) -> Net Profit = -30M
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -252,6 +255,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 20000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -288,6 +292,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     // Mock DB having HOA_HONG_KHAC = -500,000 (giảm trừ)
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: {
         total: -500000,
@@ -364,6 +369,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });

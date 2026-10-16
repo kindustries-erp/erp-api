@@ -17,6 +17,18 @@ import {
   toKgaraCashflowVoucherResponse,
 } from '../dto/garage-cashflow.dto';
 import { extractNetPayableAmount } from '../utils/kgara-parser.util';
+import {
+  isDebtOffsetPayment,
+  isPaymentLocked,
+} from '../helpers/garage-cashflow-payment-rules';
+import {
+  removeOpexForVoucher,
+  syncOpexFromVoucher,
+} from '../helpers/garage-cashflow-opex-sync.helper';
+
+/** Phiếu thu luôn có settlement; phiếu chi chỉ khi Đã chi và không thuộc nhóm 4/8. */
+const shouldHaveSettlement = (v: KgaraCashflowVoucher): boolean =>
+  v.voucherType === 'RECEIPT' || isDebtOffsetPayment(v);
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -87,7 +99,9 @@ export class GarageCashflowTransactionService {
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
-      if (dto.caseId) {
+      await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+
+      if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
         if (dto.paymentMethod === 'Chuyển khoản')
           paymentMethod = 'BANK_TRANSFER';
@@ -113,7 +127,9 @@ export class GarageCashflowTransactionService {
           partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
         await queryRunner.manager.save(newSettlement);
+      }
 
+      if (dto.caseId) {
         await this._recalculateCaseDebt(queryRunner, dto.caseId);
       }
 
@@ -169,6 +185,22 @@ export class GarageCashflowTransactionService {
       const oldType = existingVoucher.voucherType;
       const newType = dto.voucherType !== undefined ? dto.voucherType : oldType;
 
+      if (isPaymentLocked(existingVoucher)) {
+        if (
+          dto.paymentStatus !== undefined &&
+          dto.paymentStatus !== existingVoucher.paymentStatus
+        ) {
+          throw new BadRequestException(
+            'Phiếu chi đã ở trạng thái Đã chi, không thể cập nhật lại trạng thái thanh toán.',
+          );
+        }
+        if (newType !== 'PAYMENT') {
+          throw new BadRequestException(
+            'Phiếu chi đã ở trạng thái Đã chi, không thể đổi loại phiếu.',
+          );
+        }
+      }
+
       const beforeSnapshot = { ...existingVoucher };
       queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
       if (newType === 'PAYMENT') {
@@ -199,8 +231,13 @@ export class GarageCashflowTransactionService {
         },
       );
 
+      await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+
+      const wantsSettlement =
+        !!newCaseId && shouldHaveSettlement(updatedVoucher);
+
       if (existingSettlement) {
-        if (newCaseId === null && oldCaseId) {
+        if (!wantsSettlement) {
           await queryRunner.manager.remove(existingSettlement);
         } else {
           existingSettlement.caseId = newCaseId || undefined;
@@ -228,7 +265,7 @@ export class GarageCashflowTransactionService {
           }
           await queryRunner.manager.save(existingSettlement);
         }
-      } else if (newCaseId) {
+      } else if (wantsSettlement) {
         let partnerName: string | undefined = undefined;
         const kCase = await queryRunner.manager.findOne(KgaraCase, {
           where: { id: newCaseId },
@@ -347,6 +384,7 @@ export class GarageCashflowTransactionService {
         await queryRunner.manager.remove(existingSettlement);
       }
 
+      await removeOpexForVoucher(queryRunner.manager, id);
       await queryRunner.manager.remove(existingVoucher);
 
       if (relatedCaseId) {

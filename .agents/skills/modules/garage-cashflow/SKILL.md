@@ -106,7 +106,7 @@ src/kgara-api-core/
   - Phía Web (`GarageCashflowDrawer`) tự động lấy nhật ký kiểm toán từ API `/api/v1/audit-logs-core/garage_cashflow_voucher/:id/timeline` và kết hợp với baseline metadata qua `mergeAuditItems` để hiển thị trong Tab **"Lịch sử & Kiểm duyệt"** (`DrawerAuditTimeline`).
   - **Timeline Smart Actor Rendering**: `DrawerAuditTimeline` hiển thị ưu tiên `actorEmail` (hoặc `{actorName} ({actorEmail})` nếu có tên riêng), fallback thông minh sang `currentUserEmail` từ `useAuthStore` cho các phiếu cũ chưa có `createdBy`.
 - **Auto-Sync Settlements**:
-  - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType = 'KH'`.
+  - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType = 'KH'`. **Phiếu chi** chỉ sinh settlement khi `payment_status = 'PAID'` và `payment_content` không phải `4. HHBH` / `8. Vật tư tiêu hao` (xem mục "Quy tắc phiếu chi" cuối file).
   - Khi **cập nhật** Voucher (thay đổi `amount`, `date`, `caseId`), hệ thống dò tìm `KgaraCaseSettlement` qua `cashflowVoucherId` để cập nhật đồng bộ, hoặc xóa đi (nếu `caseId` bị gỡ), hoặc tạo mới (nếu `caseId` mới được thêm vào).
   - Khi **xóa** Voucher, hệ thống tự động kiểm tra và xóa `KgaraCaseSettlement` tương ứng nếu có.
 - **Mã tự động**: `voucherCode` nếu client không truyền lên sẽ tự sinh theo format: `PT-GARA-YYMMDD-XXX` hoặc `PC-GARA-YYMMDD-XXX`.
@@ -248,3 +248,10 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
     - Dòng 2: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)`.
     - Dòng 4: Header Slate 700 (`#334155`), chữ trắng in đậm, freeze dòng đầu.
     - Dòng 5+: Dữ liệu phiếu thu chi kèm các cột `updatedBy`, `updatedAt`, định dạng số tiền `#,##0` và ngày tháng `dd/mm/yyyy`.
+
+## Quy tắc phiếu chi: Trừ công nợ, Ghi garage-opex, Khóa trạng thái (cập nhật 2026-10-17)
+Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp dụng trong `GarageCashflowTransactionService` (create/update/delete, cùng transaction).
+- **Trừ công nợ garage** (`isDebtOffsetPayment`): phiếu `PAYMENT` + `payment_status = 'PAID'` + nội dung khác `4. HHBH`, `8. Vật tư tiêu hao`. Chỉ khi đó mới có dòng `kgara_case_settlements.settlement_type = 'PAYMENT'` (nguồn "Đã chi" của `/garage-debts`). Phiếu thu (`RECEIPT`) luôn có settlement. Đổi trạng thái/nội dung sẽ tạo hoặc gỡ settlement tương ứng.
+- **Ghi garage-opex** (`isRecordedToOpex`): phiếu `PAYMENT` nội dung 4/8 ở trạng thái `APPROVED` hoặc `PAID`. `helpers/garage-cashflow-opex-sync.helper.ts` upsert 1 dòng `kgara_operating_expenses` theo `source_cashflow_voucher_id` (kỳ = tháng của `trans_date`), gỡ dòng khi không còn đủ điều kiện hoặc khi xóa phiếu. Map (cập nhật 2026-10-17): `4. HHBH` → `HHBH` (vào bucket `selling` của `getSummaryByPeriod`, hiện ở **mục 4.2 HHBH** trong mục IV "Chi phí bán hàng" của P&L, không ghi %); `8. Vật tư tiêu hao` → `VAT_TU_TIEU_HAO` (nhóm COGS, vào `directCost`, hiện ở mục II "Chi phí (Giá vốn)"). Migration `20261017120000-RemapCashflowOpexCategories` chuyển các dòng cũ có nguồn phiếu. Phiếu `PENDING` chưa ghi.
+- **Khóa**: phiếu chi đã `PAID` không đổi được `paymentStatus` và `voucherType` (`BadRequestException` ở `updateVoucher`).
+- Migration: `20261017100000-AddSourceCashflowVoucherToKgaraOperatingExpenses` (cột `source_cashflow_voucher_id`, FK `ON DELETE CASCADE`), `20261017101000-RouteGarageCashflowPaymentVouchers` (xóa settlement PAYMENT không đủ điều kiện, backfill dòng opex; `down()` không khôi phục settlement đã xóa).
