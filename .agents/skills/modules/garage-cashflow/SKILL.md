@@ -20,7 +20,20 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
 - `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
-- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi (KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, Mua phụ tùng, OPEX, v.v.)
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 12 options có số thứ tự từ 1 đến 12:
+  1. `1. KH thanh toán`
+  2. `2. Tất toán`
+  3. `3. BH thanh toán`
+  4. `4. HHBH`
+  5. `5. Ứng trước`
+  6. `6. Cấn trừ`
+  7. `7. Phụ tùng / vật tư` (bỏ chữ "Mua")
+  8. `8. Vật tư tiêu hao` (option mới)
+  9. `9. Chi phí vận hành`
+  10. `10. Hoa hồng / nhân công`
+  11. `11. Hoàn ứng`
+  12. `12. Khác`
+  *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
@@ -108,14 +121,15 @@ Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, 
 src/modules/garage/components/
 ├── molecules/
 │   ├── payment-method-combobox/     (Molecule dropdown chọn phương thức TT thuần túy: Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác, < 40 LoC)
-│   └── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: KH thanh toán, Tất toán, BH thanh toán, HHBH, Ứng trước, Cấn trừ, v.v., < 40 LoC)
+│   ├── payment-content-combobox/    (Molecule dropdown chọn nội dung TT: 12 options có số thứ tự, < 40 LoC)
+│   └── cashflow-amount-input/       (Molecule input số tiền: format phân cách hàng nghìn vi-VN, đọc số bằng chữ qua readVietnameseCurrency, 100% i18n, < 90 LoC)
 └── organisms/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
     │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT đặt cạnh nhau, < 180 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT & Cột Nội dung TT size 160px, < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & Nội dung TT, < 70 LoC)
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT & 12 Nội dung TT kèm fallback bóc tách số thứ tự, < 80 LoC)
     │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
     │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
     │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
@@ -127,7 +141,7 @@ src/modules/garage/components/
     │   ├── GarageCashflowDrawer.state.ts (Initial state, DTO payloads, computeAuditDiffs, < 140 LoC)
     │   ├── GarageCashflowDrawer.helper.ts (Baseline audit items, duplicate check helpers, < 160 LoC)
     │   ├── GarageCashflowDrawer.type.ts (< 30 LoC)
-    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Thêm field dropdown Nội dung TT cạnh Phương thức TT, < 170 LoC)
+    │   ├── GarageCashflowDrawerGeneralSection.tsx (Grid 2 cột: Tích hợp CashflowAmountInput, PaymentContentCombobox, 100% i18n, < 150 LoC)
     │   ├── GarageCashflowDrawerViewSection.tsx (Sub-section View Mode bóc tách < 70 LoC)
     │   ├── GarageCashflowDrawerSettlementSection.tsx (< 90 LoC)
     │   └── GarageCashflowDrawer.test.tsx (Co-located Unit Test bao phủ Tabs & Timeline)
