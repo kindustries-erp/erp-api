@@ -54,13 +54,12 @@ Mandatory reading order when working on a specific family:
 - **Verify Runtime**: Read the actual `.env` before making changes (no outdated assumptions).
 
 ### Pre-Commit/Push Checklist
-Before committing or pushing, run in order:
+After committing and rebasing, run the Final Gate once on the final commit:
 ```bash
-bun run build
-bun run check:ci
-bun run test  # or: bunx jest --forceExit (for API)
 git commit
-git push github-industries [target-branch]
+git pull --rebase github-industries [target-branch]
+bun run verify:final
+git push github-industries [target-branch] --no-verify
 ```
 
 ---
@@ -108,8 +107,8 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ### Scenario 2: Committing & Pushing Code (ERP)
 1. Load `/erp-git-workflow` workflow.
 2. Ensure you're on `erp-master`.
-3. Run the pre-push checklist (build, check:ci, test), then `git commit` and `git push github-industries erp-master`.
-4. If conflict: `git pull --rebase github-industries erp-master`.
+3. Commit with the fast pre-commit hook, then `git pull --rebase github-industries erp-master`.
+4. Run `bun run verify:final` once on the clean final commit, then push with `--no-verify`.
 
 ### Scenario 3: Building a Data Table (ERP Web)
 1. Load `/standardize-table` workflow.
@@ -174,7 +173,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 - ❌ Don't leave ad-hoc `.ts` files at repo root (breaks `dist/` output structure)
 - ❌ Don't reference outdated docs (always verify with actual code state)
 - ❌ Don't mix database schemas, `.env`, or domain models between ERP and Klotus
-- ❌ Don't commit code without running the pre-push checklist (build, check:ci, test)
+- ❌ Don't commit/push code without a passing `verify:final` on the final commit
 
 ---
 
@@ -213,7 +212,7 @@ Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng
 4. **Tooling**: Chỉ dùng `bun` / `bunx`. Không dùng `npm` hay `yarn`.
 5. **Local Dev Only**: Dev local chạy `bun run start:dev` / `bun run dev` (API port 10010). Không build container thủ công.
 6. **Isolation**: ERP dùng nhánh `erp-master`, Klotus dùng `master`. Không trộn database, `.env`, schema hay collection (`klotus_*`) giữa hai hệ.
-7. **Pre-commit/push**: `bun run build`, `bun run check:ci`, `bun run test` (API: `bunx jest --forceExit`), theo đúng thứ tự.
+7. **Final Gate**: chạy `bun run verify:final` một lần trên commit cuối; push theo workflow bằng `--no-verify`.
 
 ## ERP Workflows
 
