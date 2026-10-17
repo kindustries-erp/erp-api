@@ -4,7 +4,6 @@ import {
   DASHBOARD_COLUMNS,
   rowAfterCharts,
   setDashboardPrintArea,
-  writeAlertCards,
   writeDashboardHeader,
   writeKpiCards,
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
@@ -17,14 +16,10 @@ import {
 } from './garage-period-dashboard-charts.helper';
 import { BUCKET_UNIT_LABEL, bucketUnitOf } from './garage-period-series.helper';
 import {
-  buildCashflowKpis,
-  buildOverdueAlertCards,
   buildPeriodDebtKpis,
+  buildPlannedPaymentKpis,
 } from './garage-period-summary-cards.helper';
 import { summarizePeriod } from './garage-period-summary.builder';
-
-/** Chiều cao 3 dòng card cảnh báo (nhãn, giá trị, ghi chú) để cả sheet gọn một màn hình. */
-const ALERT_HEIGHTS: [number, number, number] = [14, 22, 20];
 
 /** Ghi chú nguồn số liệu một dòng ở cuối sheet. */
 function writeFootnote(
@@ -47,9 +42,9 @@ function writeFootnote(
 }
 
 /**
- * Dashboard báo cáo kỳ gói gọn một màn hình (không số đối tượng): thu chi trong kỳ, công nợ
- * phát sinh trong kỳ, cảnh báo nợ 61-90 và trên 90 ngày, 2 chart. Trả về cấu hình chart để
- * chèn sau khi ghi buffer.
+ * Dashboard báo cáo kỳ gói gọn một màn hình (không số đối tượng): dự chi trong kỳ, công nợ
+ * phát sinh trong kỳ, 2 chart (thu/chi + dòng tiền ròng theo thời gian; tuổi nợ). Trả về cấu
+ * hình chart để chèn sau khi ghi buffer.
  */
 export function buildPeriodDashboard(
   dashboard: ExcelJS.Worksheet,
@@ -69,24 +64,14 @@ export function buildPeriodDashboard(
     ],
   );
 
-  row = writeKpiCards(dashboard, row, buildCashflowKpis(summary), {
-    title: 'Thu chi trong kỳ',
+  row = writeKpiCards(dashboard, row, buildPlannedPaymentKpis(summary), {
+    title: 'Dự chi trong kỳ (phiếu chi chờ duyệt + đã duyệt)',
   });
   row = writeKpiCards(dashboard, row, buildPeriodDebtKpis(summary), {
     title: 'Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ)',
   });
-  row = writeAlertCards(
-    dashboard,
-    row,
-    buildOverdueAlertCards(summary.receivable, summary.payable),
-    {
-      title:
-        'Công nợ quá hạn lũy kế đến ngày xuất: 61-90 và trên 90 ngày (phải thu | phải trả)',
-      heights: ALERT_HEIGHTS,
-    },
-  );
 
-  // 2 chart cạnh nhau trên một hàng: thu/chi và tuổi nợ
+  // 2 chart cạnh nhau trên một hàng: thu/chi + dòng tiền ròng và tuổi nợ
   const charts = buildDashboardCharts(dashboard, data, summary, row);
   const unit = BUCKET_UNIT_LABEL[bucketUnitOf(data)];
   const footnoteRow = writeFootnote(

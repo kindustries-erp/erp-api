@@ -2,9 +2,8 @@ import type { GarageDebtExportRow } from './garage-debts-export.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import { summarizePeriod } from './garage-period-summary.builder';
 import {
-  buildCashflowKpis,
-  buildOverdueAlertCards,
   buildPeriodDebtKpis,
+  buildPlannedPaymentKpis,
 } from './garage-period-summary-cards.helper';
 
 const debtRow = (patch: Partial<GarageDebtExportRow>): GarageDebtExportRow => ({
@@ -126,12 +125,9 @@ describe('summarizePeriod', () => {
 describe('card Dashboard', () => {
   const summary = summarizePeriod(data());
 
-  it('thu chi trong kỳ: đúng 4 thẻ, có Dự chi', () => {
-    expect(buildCashflowKpis(summary)).toEqual([
-      { label: 'ĐÃ THU TRONG KỲ', value: 1000 },
-      { label: 'ĐÃ CHI TRONG KỲ', value: 400 },
+  it('dự chi trong kỳ: đúng 1 thẻ', () => {
+    expect(buildPlannedPaymentKpis(summary)).toEqual([
       { label: 'DỰ CHI TRONG KỲ', value: 0 },
-      { label: 'DÒNG TIỀN RÒNG (THU - CHI)', value: 600 },
     ]);
   });
 
@@ -139,28 +135,6 @@ describe('card Dashboard', () => {
     expect(buildPeriodDebtKpis(summary)).toEqual([
       { label: 'PHẢI THU PHÁT SINH TRONG KỲ (KH)', value: 1500 },
       { label: 'PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)', value: 800 },
-    ]);
-  });
-
-  it('cảnh báo lũy kế: đúng 4 thẻ 61-90 và trên 90 ngày của hai phía, ghi chú % tổng nợ', () => {
-    const cards = buildOverdueAlertCards(summary.receivable, summary.payable);
-    expect(cards.map((c) => c.label)).toEqual([
-      'PHẢI THU: NỢ 61-90 NGÀY',
-      'PHẢI THU: NỢ TRÊN 90 NGÀY',
-      'PHẢI TRẢ: NỢ 61-90 NGÀY',
-      'PHẢI TRẢ: NỢ TRÊN 90 NGÀY',
-    ]);
-    expect(cards.map((c) => c.value)).toEqual([300, 400, 0, 150]);
-    expect(cards[0].note).toBe('30,0% tổng nợ');
-    expect(cards.some((c) => /đối tượng/.test(c.note ?? ''))).toBe(false);
-  });
-
-  it('bậc không có nợ: nền xám, ghi "Không có"', () => {
-    const s = summarizePeriod(data({ openSupplierRows: [] }));
-    const cards = buildOverdueAlertCards(s.receivable, s.payable);
-    expect(cards.slice(2).map((c) => [c.value, c.note, c.fill])).toEqual([
-      [0, 'Không có', 'FFF1F5F9'],
-      [0, 'Không có', 'FFF1F5F9'],
     ]);
   });
 });

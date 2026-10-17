@@ -178,22 +178,6 @@ const kpiValue = (sheet: ExcelJS.Worksheet, label: string) => {
   return found;
 };
 
-/** Thẻ cảnh báo: nhãn ở dòng r, giá trị r+1, ghi chú r+2 (cùng cột). */
-const card = (sheet: ExcelJS.Worksheet, label: string) => {
-  let found: { value: unknown; note: unknown } | undefined;
-  sheet.eachRow((row, r) => {
-    row.eachCell((cell, c) => {
-      if (cell.value === label)
-        found = {
-          value: sheet.getCell(r + 1, c).value,
-          note: sheet.getCell(r + 2, c).value,
-        };
-    });
-  });
-  if (!found) throw new Error(`Không thấy thẻ ${label}`);
-  return found;
-};
-
 describe('buildGaragePeriodReport', () => {
   it('thứ tự sheet: Dashboard, Báo cáo lợi nhuận, nhóm phải thu, phải trả, nợ quá hạn, thu chi', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
@@ -238,7 +222,7 @@ describe('buildGaragePeriodReport', () => {
     // 2 chart của Dashboard, không có chart P&L
     expect(await chartCount(buffer)).toBe(2);
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
@@ -275,16 +259,15 @@ describe('buildGaragePeriodReport', () => {
     );
   });
 
-  it('Dashboard: thu chi trong kỳ có đã thu, đã chi, dự chi, dòng tiền ròng', async () => {
+  it('Dashboard: chỉ có thẻ dự chi trong kỳ; đã thu/đã chi/dòng tiền ròng nằm ở chart', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
 
-    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
-    expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBe(200);
     expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeDefined();
-    expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBe(500);
     // các card đã bỏ
-    expect(kpiValue(dash, 'CHÊNH LỆCH PHẢI THU - PHẢI TRẢ')).toBeUndefined();
+    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBeUndefined();
+    expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBeUndefined();
+    expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBeUndefined();
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
@@ -322,14 +305,9 @@ describe('buildGaragePeriodReport', () => {
     expect(values('CÒN LẠI')).toEqual([]);
   });
 
-  it('Dashboard: cảnh báo lũy kế chỉ nợ 61-90 và trên 90 ngày của hai phía, không ghi số đối tượng', async () => {
+  it('Dashboard: không còn thẻ cảnh báo lũy kế (tuổi nợ đã thể hiện ở chart), không ghi số đối tượng', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
-
-    expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY').value).toBe(0);
-    expect(card(dash, 'PHẢI THU: NỢ TRÊN 90 NGÀY').value).toBe(5001000);
-    expect(card(dash, 'PHẢI TRẢ: NỢ 61-90 NGÀY').value).toBe(0);
-    expect(card(dash, 'PHẢI TRẢ: NỢ TRÊN 90 NGÀY').value).toBe(0);
 
     const texts: string[] = [];
     dash.eachRow((row) =>
@@ -340,12 +318,13 @@ describe('buildGaragePeriodReport', () => {
     // không ghi số đối tượng trên card (vd "2 đối tượng")
     expect(texts.some((t) => /\d+ đối tượng/.test(t))).toBe(false);
     // các thẻ đã bỏ
+    expect(texts).not.toContain('PHẢI THU: NỢ 61-90 NGÀY');
+    expect(texts).not.toContain('PHẢI THU: NỢ TRÊN 90 NGÀY');
+    expect(texts).not.toContain('PHẢI TRẢ: NỢ 61-90 NGÀY');
+    expect(texts).not.toContain('PHẢI TRẢ: NỢ TRÊN 90 NGÀY');
     expect(texts).not.toContain('PHẢI THU: TỔNG NỢ CÒN MỞ');
     expect(texts).not.toContain('PHẢI THU: NỢ 31-60 NGÀY');
     expect(texts).not.toContain('PHẢI THU: TỶ LỆ QUÁ HẠN');
-    expect(texts).not.toContain('PHẢI THU: NỢ 0-30 NGÀY');
-    expect(texts).not.toContain('PHẢI THU: MỨC CẢNH BÁO');
-    expect(texts).not.toContain('PHẢI THU: QUÁ HẠN TRÊN 30 NGÀY');
   });
 
   it('sheet Báo cáo lợi nhuận: bảng tháng báo cáo (tháng cuối)', async () => {
@@ -464,8 +443,7 @@ describe('buildGaragePeriodReport', () => {
       ),
     );
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY').value).toBe(0);
-    expect(card(dash, 'PHẢI TRẢ: NỢ TRÊN 90 NGÀY').value).toBe(0);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
     expect(wb.getWorksheet('Báo cáo lợi nhuận')!.getCell('A1').value).toBe(
       'Báo cáo lợi nhuận',
     );
