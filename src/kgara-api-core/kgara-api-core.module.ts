@@ -34,6 +34,7 @@ import { GarageCashflowService } from './services/garage-cashflow.service';
 import { GarageCashflowQueryEngine } from './services/engines/garage-cashflow-query.engine';
 import { GarageCashflowDuplicateEngine } from './services/engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './services/garage-cashflow-transaction.service';
+import { GarageCashflowDashboardEngine } from './services/engines/garage-cashflow-dashboard.engine';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
@@ -151,6 +152,7 @@ import { GarageCashflowExportController } from './controllers/garage-cashflow-ex
     GaragePeriodReportQueries,
     GarageCashflowExcelBuilder,
     GarageCashflowExportService,
+    GarageCashflowDashboardEngine,
   ],
   controllers: [
     KgaraApiCoreController,
@@ -177,6 +179,7 @@ import { GarageCashflowExportController } from './controllers/garage-cashflow-ex
     GarageCashflowService,
     GarageCashflowQueryEngine,
     GarageCashflowTransactionService,
+    GarageCashflowDashboardEngine,
     GarageDashboardService,
     GarageDashboardStatsService,
     GarageCheckpointService,

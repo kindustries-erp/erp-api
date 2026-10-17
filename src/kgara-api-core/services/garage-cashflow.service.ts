@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GarageCashflowQueryEngine } from './engines/garage-cashflow-query.engine';
 import { GarageCashflowDuplicateEngine } from './engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './garage-cashflow-transaction.service';
+import { GarageCashflowDashboardEngine } from './engines/garage-cashflow-dashboard.engine';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
@@ -9,6 +10,8 @@ import {
   KgaraCashflowVoucherResponseDto,
   CheckKgaraCashflowDuplicateQueryDto,
   KgaraCashflowDuplicateResponseDto,
+  GarageCashflowDashboardQueryDto,
+  GarageCashflowDashboardResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @Injectable()
@@ -19,6 +22,7 @@ export class GarageCashflowService {
     private readonly queryEngine: GarageCashflowQueryEngine,
     private readonly transactionService: GarageCashflowTransactionService,
     private readonly duplicateEngine: GarageCashflowDuplicateEngine,
+    private readonly dashboardEngine: GarageCashflowDashboardEngine,
   ) {}
 
   async findPotentialDuplicates(
@@ -46,8 +50,10 @@ export class GarageCashflowService {
     return this.transactionService.deleteVoucher(id, user);
   }
 
-  async getDashboardStats() {
-    return this.queryEngine.getDashboardStats();
+  async getDashboardStats(
+    query: GarageCashflowDashboardQueryDto = {},
+  ): Promise<GarageCashflowDashboardResponseDto> {
+    return this.dashboardEngine.getDashboardStats(query);
   }
 
   async getColumnOptions(

@@ -2,6 +2,7 @@ import { GarageCashflowService } from './garage-cashflow.service';
 import { GarageCashflowQueryEngine } from './engines/garage-cashflow-query.engine';
 import { GarageCashflowDuplicateEngine } from './engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './garage-cashflow-transaction.service';
+import { GarageCashflowDashboardEngine } from './engines/garage-cashflow-dashboard.engine';
 
 describe('GarageCashflowService (Facade)', () => {
   let service: GarageCashflowService;
@@ -11,16 +12,26 @@ describe('GarageCashflowService (Facade)', () => {
   >;
 
   let mockDuplicateEngine: jest.Mocked<Partial<GarageCashflowDuplicateEngine>>;
+  let mockDashboardEngine: jest.Mocked<Partial<GarageCashflowDashboardEngine>>;
 
   beforeEach(() => {
     mockQueryEngine = {
-      getDashboardStats: jest
-        .fn()
-        .mockResolvedValue({ totalIn: 100, totalOut: 50, netAmount: 50 }),
+      getDashboardStats: jest.fn().mockResolvedValue({
+        totalIn: 100,
+        totalOut: 50,
+        netAmount: 50,
+      } as any),
       getColumnOptions: jest
         .fn()
         .mockResolvedValue({ data: ['option1'], total: 1 }),
       listVouchers: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    };
+
+    mockDashboardEngine = {
+      getDashboardStats: jest.fn().mockResolvedValue({
+        kpi: { totalIn: 100, totalOut: 50, net: 50 },
+        trend: [],
+      } as any),
     };
 
     mockTransactionService = {
@@ -37,6 +48,7 @@ describe('GarageCashflowService (Facade)', () => {
       mockQueryEngine as GarageCashflowQueryEngine,
       mockTransactionService as GarageCashflowTransactionService,
       mockDuplicateEngine as GarageCashflowDuplicateEngine,
+      mockDashboardEngine as GarageCashflowDashboardEngine,
     );
   });
 
@@ -83,11 +95,15 @@ describe('GarageCashflowService (Facade)', () => {
     expect(res).toEqual({ success: true });
   });
 
-  it('delegates getDashboardStats to queryEngine', async () => {
-    const res = await service.getDashboardStats();
+  it('delegates getDashboardStats to dashboardEngine', async () => {
+    const query = { dateFrom: '2026-10-01' };
+    const res = await service.getDashboardStats(query);
 
-    expect(mockQueryEngine.getDashboardStats).toHaveBeenCalled();
-    expect(res).toEqual({ totalIn: 100, totalOut: 50, netAmount: 50 });
+    expect(mockDashboardEngine.getDashboardStats).toHaveBeenCalledWith(query);
+    expect(res).toEqual({
+      kpi: { totalIn: 100, totalOut: 50, net: 50 },
+      trend: [],
+    });
   });
 
   it('delegates getColumnOptions to queryEngine', async () => {

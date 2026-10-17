@@ -61,14 +61,15 @@ src/kgara-api-core/
 │   ├── kgara_cashflow_voucher.entity.ts
 │   └── kgara_case_settlement.entity.ts (cập nhật mapping cashflow_voucher_id)
 ├── dto/
-│   └── garage-cashflow.dto.ts (Create, Update, List Query, KgaraCashflowVoucherResponseDto & toKgaraCashflowVoucherResponse)
+│   └── garage-cashflow.dto.ts (Create, Update, List Query, Dashboard DTOs, KgaraCashflowVoucherResponseDto & toKgaraCashflowVoucherResponse)
 ├── controllers/
 │   └── garage-cashflow.controller.ts (Base path: /api/v1/greenway/cashflow-vouchers, Return Zero-Entity Leaking DTO)
 └── services/
     ├── garage-cashflow.service.ts (Facade Service Pattern, Clean DI Constructor)
     ├── garage-cashflow-transaction.service.ts (Sub-Service quản lý tạo, sửa, xóa, cấn trừ, transaction lock)
     └── engines/
-        └── garage-cashflow-query.engine.ts (Sub-Service query, get list, selective column projection, options, filter)
+        ├── garage-cashflow-query.engine.ts (Sub-Service query, get list, selective column projection, options, filter)
+        └── garage-cashflow-dashboard.engine.ts (Sub-Service tính toán KPI, method/content breakdowns, trend 6 tháng & top 5 txns)
 ```
 
 ## 4. Danh sách API Endpoints & RBAC Contract
@@ -81,7 +82,7 @@ src/kgara-api-core/
 |-------------|----------|----------------|-------|
 | `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Trả về `PaginatedResult<KgaraCashflowVoucherResponseDto>` (Zero-Entity Leaking). |
 | `GET` | `/column-options` | `READ` | Lấy danh sách giá trị option phân trang cho bộ lọc cột (dynamic column filters). |
-| `GET` | `/dashboard` | `READ` | Thống kê KPI (tổng thu, chi, net), breakdown theo loại và trend 6 tháng gần nhất. |
+| `GET` | `/dashboard` | `READ` | Thống kê KPI (tổng thu, chi, net, số phiếu), breakdown theo phương thức và nội dung thanh toán, xu hướng 6 tháng gần nhất và Top 5 giao dịch thu/chi lớn nhất. Nhận `GarageCashflowDashboardQueryDto` (`dateFrom`, `dateTo`, `branchId`, `paymentMethod`, `paymentStatus`), trả về `GarageCashflowDashboardResponseDto` (Zero-Entity Leaking). |
 | `POST` | `/` | `CREATE` | Tạo phiếu mới. Nếu có `case_id`, tự động tạo record cấn trừ trong `kgara_case_settlements`. Trả về `KgaraCashflowVoucherResponseDto`. |
 | `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. Trả về `KgaraCashflowVoucherResponseDto`. |
 | `DELETE` | `/:id` | `DELETE` | Xóa phiếu thu/chi, đồng thời xóa record cấn trừ liên kết. |
@@ -260,3 +261,25 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - **Toolbar Combobox Dropdown**: Tích hợp `GarageViewModeCombobox` (kế thừa `ViewModeCombobox`) vào `customActionsNode` của `SpreadsheetPageTemplate`:
   - **Tầng 1 (Filter Group - Loại phiếu)**: `Tất cả` (`ALL`), `Phiếu thu (Tiền vào)` (`RECEIPT`), `Phiếu chi (Tiền ra)` (`PAYMENT`). Tự động đồng bộ với `tableHook.columnFilters['voucherType']`.
   - **Tầng 2 (Chế độ xem cột - View Presets)**: `Tổng quan` (`overview`), `Đối soát` (`reconciliation`), `Đầy đủ` (`all_columns`), lưu cấu hình vào `useUserPreferencesStore` (`garage-cashflow-column-views`).
+
+## 11. Tab Tổng Quan Thu Chi Xưởng (Dashboard Tab & Atomic Design - Cập nhật 2026-10-17)
+- **Định tuyến & Keep-Alive Tab Switching**:
+  - Mặc định truy cập `/garage-cashflow` render `GarageCashflowTab` (Layer 3 Organism), tự động đồng bộ query param hai chiều `?tab=dashboard` (URL gắn `?tab=dashboard`, tương tự `/cashflow`).
+  - Gồm 2 Top Tabs: **"Tổng quan"** (`dashboard`) và **"Danh sách phiếu thu chi"** (`vouchers`).
+  - Cơ chế **Keep-Alive DOM**: Sử dụng `mountedViewsRef.current` và toggling qua CSS `className={currentTabKey === ... ? "..." : "hidden"}`, đảm bảo không mất state lọc/bảng khi chuyển đổi qua lại giữa Dashboard và Danh sách phiếu.
+- **Cấu trúc Atomic Design 5 tầng (`/ui-atomic-refactor`, 100% file < 180 LoC)**:
+  - **L1 Atoms**: `cashflow-kpi-badge` (`CashflowKpiBadge.tsx`, 35 LoC)
+  - **L2 Molecules**:
+    - `cashflow-legend-item` (`CashflowLegendItem.tsx`, 18 LoC)
+    - `cashflow-top-row` (`CashflowTopRow.tsx`, 70 LoC)
+  - **L3 Organisms**:
+    - `garage-cashflow-kpi-cards` (`GarageCashflowKpiCards.tsx`, 102 LoC) - 3 thẻ KPI: Tiền vào (Thu - Emerald), Tiền ra (Chi - Orange), Dòng tiền ròng (Net).
+    - `garage-cashflow-trend-panel` (`GarageCashflowTrendPanel.tsx`, 67 LoC) - Biểu đồ cột thu chi theo tháng.
+    - `garage-cashflow-breakdown-panels` (`GarageCashflowBreakdownPanels.tsx`, 139 LoC) - 2 panels phân bổ theo Phương thức thanh toán và Nội dung thanh toán.
+    - `garage-cashflow-top-txns-table` (`GarageCashflowTopTxnsTable.tsx`, 87 LoC) - Bảng Top 5 giao dịch thu lớn nhất và chi lớn nhất, tích hợp click mở Drawer.
+    - `garage-cashflow-dashboard` (`GarageCashflowDashboard.tsx`, 82 LoC; hook 131 LoC) - Organism bọc `DashboardTemplate`, tích hợp `useFilterPanel` theo chi nhánh, phương thức, trạng thái thanh toán và khoảng thời gian.
+    - `garage-cashflow-tab` (`GarageCashflowTab.tsx`, 51 LoC; hook 74 LoC) - Bộ điều hướng giữ trạng thái 2 views.
+  - **L4 Templates**: `DashboardTemplate` (khung chuẩn hoá của ERP Web).
+  - **L5 Pages**: `GarageCashflowPage` (`GarageCashflowPage.tsx`, 23 LoC) - Entry point phân quyền RBAC `GARAGE_CASHFLOW:READ`.
+- **No Blue Mandate**: 0 instance class `blue-`, dùng Emerald (`#059669`) cho Tiền vào, Orange (`#ea580c`) cho Tiền ra, Amber/Slate/Zinc cho các badges và borders.
+- **Đa ngôn ngữ & Co-located Tests**: 100% chuỗi dùng i18n (`garageVi.cashflow.*`, `garageEn.cashflow.*`), 11 test suites co-located Vitest (39 tests) PASS 100%.
