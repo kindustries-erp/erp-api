@@ -38,4 +38,13 @@ export interface GaragePeriodReportData {
   /** Toàn bộ nợ còn mở từ mốc ghi nhận, không giới hạn theo kỳ (cho cảnh báo quá hạn). */
   openCustomerRows: GarageDebtExportRow[];
   openSupplierRows: GarageDebtExportRow[];
+  /** Cùng dữ liệu của kỳ liền trước (cùng độ dài) để so sánh ±%; thiếu thì không có so sánh. */
+  previousPeriod?: PreviousPeriodData;
+}
+
+/** Dữ liệu kỳ trước dùng cho dòng so sánh trên thẻ Dashboard. */
+export interface PreviousPeriodData {
+  vouchers: PeriodVoucherRow[];
+  customerRows: GarageDebtExportRow[];
+  supplierRows: GarageDebtExportRow[];
 }

@@ -4,6 +4,7 @@ import {
 } from './garage-overdue-warning.helper';
 import type { GarageDebtExportRow } from './garage-debts-export.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
+import { isPlannedPayment } from './garage-period-series.helper';
 
 /** Công nợ của các phiếu hoàn thành trong kỳ: phát sinh, đã thu/trả và còn lại. */
 export interface PeriodDebtSummary {
@@ -22,6 +23,14 @@ export interface PeriodSummary {
   /** Công nợ lũy kế: nợ mở từ mốc ghi nhận đến ngày xuất, kèm tuổi nợ. */
   receivable: OverdueSummary;
   payable: OverdueSummary;
+  /** Số kỳ trước để so sánh ±%; thiếu khi báo cáo không có kỳ hoặc kỳ trước trước mốc ghi nhận. */
+  previous?: PeriodComparison;
+}
+
+export interface PeriodComparison {
+  planned: number;
+  receivableTotal: number;
+  payableTotal: number;
 }
 
 const num = (value: unknown) => Number(value) || 0;
@@ -49,14 +58,7 @@ export function summarizePeriod(data: GaragePeriodReportData): PeriodSummary {
     (v) => v.amount,
   );
 
-  const planned = sum(
-    data.vouchers.filter(
-      (v) =>
-        v.type === 'PAYMENT' &&
-        (v.paymentStatus === 'PENDING' || v.paymentStatus === 'APPROVED'),
-    ),
-    (v) => v.amount,
-  );
+  const planned = sum(data.vouchers.filter(isPlannedPayment), (v) => v.amount);
 
   return {
     cashflow: { received, paid, net: received - paid, planned },
@@ -64,5 +66,19 @@ export function summarizePeriod(data: GaragePeriodReportData): PeriodSummary {
     periodPayable: periodDebt(data.supplierRows),
     receivable: summarizeOverdue('receivable', data.openCustomerRows),
     payable: summarizeOverdue('payable', data.openSupplierRows),
+    previous: data.previousPeriod
+      ? comparisonOf(data.previousPeriod)
+      : undefined,
+  };
+}
+
+/** Số so sánh của kỳ trước: dự chi và công nợ phát sinh hai phía (cùng quy tắc kỳ hiện tại). */
+function comparisonOf(
+  prev: NonNullable<GaragePeriodReportData['previousPeriod']>,
+) {
+  return {
+    planned: sum(prev.vouchers.filter(isPlannedPayment), (v) => v.amount),
+    receivableTotal: periodDebt(prev.customerRows).total,
+    payableTotal: periodDebt(prev.supplierRows).total,
   };
 }

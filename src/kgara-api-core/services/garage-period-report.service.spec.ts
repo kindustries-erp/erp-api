@@ -51,8 +51,14 @@ describe('GaragePeriodReportService', () => {
   it('công nợ trong kỳ dùng đúng kỳ; nợ quá hạn lấy từ mốc ghi nhận, không giới hạn kỳ', async () => {
     await service.exportExcel('CN1', { from: '2026-10-01', to: '2026-10-31' });
 
+    // gồm: công nợ trong kỳ, nợ còn mở từ mốc ghi nhận, và kỳ liền trước để so sánh ±%
     const customerCalls = debtsExport.loadCustomerRows.mock.calls;
-    expect(customerCalls).toHaveLength(2);
+    expect(customerCalls).toHaveLength(3);
+    expect(customerCalls[2][1]).toEqual({
+      mode: 'by-period',
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
     expect(customerCalls[0]).toEqual([
       'CN1',
       { mode: 'by-period', from: '2026-10-01', to: '2026-10-31' },
@@ -63,7 +69,7 @@ describe('GaragePeriodReportService', () => {
       from: '2026-07-01',
     });
     expect(customerCalls[1][1].to).toBeUndefined();
-    expect(debtsExport.loadSupplierRows).toHaveBeenCalledTimes(2);
+    expect(debtsExport.loadSupplierRows).toHaveBeenCalledTimes(3);
   });
 
   it('truyền kỳ và chi nhánh cho truy vấn thu chi; P&L lấy 12 tháng kết thúc ở tháng chứa ngày kết thúc kỳ', async () => {
@@ -133,7 +139,8 @@ describe('GaragePeriodReportService', () => {
     });
 
     expect(queries.loadPnlMonthly).not.toHaveBeenCalled();
-    expect(queries.loadVouchers).toHaveBeenCalledTimes(1);
+    // thu chi kỳ này và kỳ liền trước (so sánh ±%)
+    expect(queries.loadVouchers).toHaveBeenCalledTimes(2);
     expect(debtsExport.loadCustomerGroups).toHaveBeenCalledTimes(1);
   });
 

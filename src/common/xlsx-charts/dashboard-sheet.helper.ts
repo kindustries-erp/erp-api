@@ -23,6 +23,8 @@ export interface DashboardKpi {
   label: string;
   value: DashboardKpiValue;
   numFmt?: string;
+  /** Dòng phụ dưới giá trị (vd so sánh kỳ trước); thẻ không có ghi chú thì không có dòng này. */
+  note?: string;
 }
 
 /** Thẻ cảnh báo 3 dòng (nhãn, giá trị, ghi chú) với màu nền và màu chữ riêng. */
@@ -162,7 +164,10 @@ function writeGroupTitle(
   return row + 1;
 }
 
-/** Vẽ các thẻ KPI (4 thẻ/hàng, mỗi thẻ 2 dòng: nhãn + giá trị), tùy chọn có dòng tiêu đề nhóm. Trả về dòng trống kế tiếp. */
+/**
+ * Vẽ các thẻ KPI (4 thẻ/hàng, mỗi thẻ 2 dòng: nhãn + giá trị, thêm dòng ghi chú nếu có),
+ * tùy chọn có dòng tiêu đề nhóm. Trả về dòng trống kế tiếp.
+ */
 export function writeKpiCards(
   sheet: ExcelJS.Worksheet,
   startRow: number,
@@ -171,12 +176,15 @@ export function writeKpiCards(
 ): number {
   let row = writeGroupTitle(sheet, startRow, options.title);
   for (let i = 0; i < kpis.length; i += CARDS_PER_ROW) {
-    kpis.slice(i, i + CARDS_PER_ROW).forEach((kpi, slot) => {
+    const rowKpis = kpis.slice(i, i + CARDS_PER_ROW);
+    const hasNote = rowKpis.some((kpi) => kpi.note !== undefined);
+    rowKpis.forEach((kpi, slot) => {
       const col = slot * CARD_COLS + 1;
       const last = col + CARD_COLS - 1;
 
       sheet.mergeCells(row, col, row, last);
       sheet.mergeCells(row + 1, col, row + 1, last);
+      if (hasNote) sheet.mergeCells(row + 2, col, row + 2, last);
 
       const label = sheet.getCell(row, col);
       label.value = kpi.label;
@@ -199,22 +207,36 @@ export function writeKpiCards(
       };
       value.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
 
+      if (hasNote) {
+        const note = sheet.getCell(row + 2, col);
+        note.value = kpi.note ?? '';
+        note.font = {
+          name: 'Calibri',
+          size: 9,
+          italic: true,
+          color: { argb: COLOR_MUTED },
+        };
+        note.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      }
+
+      const cardRows = hasNote ? [row, row + 1, row + 2] : [row, row + 1];
       for (let c = col; c <= last; c++) {
-        for (const r of [row, row + 1]) {
+        cardRows.forEach((r, idx) => {
           const cell = sheet.getCell(r, c);
           cell.fill = fill(COLOR_CARD_FILL);
           cell.border = {
-            top: r === row ? thinBorder.top : undefined,
-            bottom: r === row + 1 ? thinBorder.bottom : undefined,
+            top: idx === 0 ? thinBorder.top : undefined,
+            bottom: idx === cardRows.length - 1 ? thinBorder.bottom : undefined,
             left: c === col ? thinBorder.left : undefined,
             right: c === last ? thinBorder.right : undefined,
           };
-        }
+        });
       }
     });
     sheet.getRow(row).height = 18;
     sheet.getRow(row + 1).height = 28;
-    row += 3;
+    if (hasNote) sheet.getRow(row + 2).height = 16;
+    row += hasNote ? 4 : 3;
   }
   return row;
 }

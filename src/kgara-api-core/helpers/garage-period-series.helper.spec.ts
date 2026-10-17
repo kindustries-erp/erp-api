@@ -1,3 +1,4 @@
+import type { GaragePeriodReportData } from './garage-period-report.types';
 import {
   BUCKET_UNIT_LABEL,
   bucketUnitOf,
@@ -41,9 +42,19 @@ describe('garage-period-series.helper', () => {
       });
       expect(unit).toBe('day');
       expect(points).toHaveLength(7);
-      expect(points[0]).toEqual({ label: '12/10', thu: 100, chi: 30 });
-      expect(points[1]).toEqual({ label: '13/10', thu: 0, chi: 0 });
-      expect(points[2]).toEqual({ label: '14/10', thu: 50, chi: 0 });
+      expect(points[0]).toEqual({
+        label: '12/10',
+        thu: 100,
+        chi: 30,
+        planned: 0,
+      });
+      expect(points[1]).toEqual({ label: '13/10', thu: 0, chi: 0, planned: 0 });
+      expect(points[2]).toEqual({
+        label: '14/10',
+        thu: 50,
+        chi: 0,
+        planned: 0,
+      });
     });
 
     it('kỳ tháng: gom theo tuần, tổng thu chi giữ nguyên', () => {
@@ -123,5 +134,53 @@ describe('garage-period-series.helper', () => {
       apTotal: 30,
       apPaid: 10,
     });
+  });
+});
+
+describe('buildCashflowSeries: dự chi', () => {
+  it('phiếu chi Chờ duyệt + Đã duyệt vào dự chi theo ngày; Đã chi (PAID) và phiếu thu không vào dự chi', () => {
+    const { points } = buildCashflowSeries({
+      from: '2026-10-12',
+      to: '2026-10-13',
+      asOfDate: new Date(2026, 9, 16),
+      pnlMonths: [],
+      customerRows: [],
+      supplierRows: [],
+      openCustomerRows: [],
+      openSupplierRows: [],
+      vouchers: [
+        {
+          transDate: '2026-10-12',
+          type: 'PAYMENT',
+          paymentStatus: 'PENDING',
+          amount: 100,
+        },
+        {
+          transDate: '2026-10-12',
+          type: 'PAYMENT',
+          paymentStatus: 'APPROVED',
+          amount: 50,
+        },
+        {
+          transDate: '2026-10-12',
+          type: 'PAYMENT',
+          paymentStatus: 'PAID',
+          amount: 30,
+        },
+        {
+          transDate: '2026-10-13',
+          type: 'RECEIPT',
+          paymentStatus: null,
+          amount: 70,
+        },
+      ] as GaragePeriodReportData['vouchers'],
+    } as GaragePeriodReportData);
+    expect(points[0]).toEqual({
+      label: '12/10',
+      thu: 0,
+      chi: 180,
+      planned: 150,
+    });
+    expect(points[1]).toEqual({ label: '13/10', thu: 70, chi: 0, planned: 0 });
   });
 });

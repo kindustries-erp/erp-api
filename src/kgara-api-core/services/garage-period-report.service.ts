@@ -12,6 +12,8 @@ import type {
 import { resolveBucketUnit } from '../helpers/garage-period-bucket.helper';
 import { reportMonthOf } from '../helpers/garage-pnl-month.helper';
 import { buildGaragePeriodReport } from '../helpers/garage-period-report.helper';
+import type { PreviousPeriodData } from '../helpers/garage-period-report.types';
+import { previousPeriodRange } from '../helpers/garage-period-previous.helper';
 import { resolvePeriodReportSections } from '../helpers/garage-period-report-sections.helper';
 import { GarageDebtsExportService } from './garage-debts-export.service';
 import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
@@ -108,6 +110,34 @@ export class GaragePeriodReportService {
           : [],
       ]);
 
+    // Kỳ liền trước (cùng độ dài) để dòng so sánh ±% trên thẻ Dashboard
+    let previousPeriod: PreviousPeriodData | undefined;
+    const prevRange = sections.has('dashboard')
+      ? previousPeriodRange(dto.from, dto.to, GARAGE_DEBT_BASELINE_DATE)
+      : undefined;
+    if (prevRange) {
+      const prevFilters: GarageDebtsExportDto = {
+        mode: 'by-period',
+        from: prevRange.from,
+        to: prevRange.to,
+      };
+      const [prevVouchers, prevCustomerRows, prevSupplierRows] =
+        await Promise.all([
+          this.queries.loadVouchers(
+            prevRange.from,
+            prevRange.to,
+            branchId || undefined,
+          ),
+          this.debtsExport.loadCustomerRows(branchId, prevFilters),
+          this.debtsExport.loadSupplierRows(branchId, prevFilters),
+        ]);
+      previousPeriod = {
+        vouchers: prevVouchers,
+        customerRows: prevCustomerRows,
+        supplierRows: prevSupplierRows,
+      };
+    }
+
     onProgress(85, total, 'Đang tạo file Excel...');
     const buffer = await buildGaragePeriodReport({
       reportType: dto.reportType,
@@ -125,6 +155,7 @@ export class GaragePeriodReportService {
       customerSections,
       openCustomerRows,
       openSupplierRows,
+      previousPeriod,
     });
 
     onProgress(100, total, 'Hoàn tất.');

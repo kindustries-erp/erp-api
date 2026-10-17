@@ -15,10 +15,7 @@ import {
   buildDashboardCharts,
 } from './garage-period-dashboard-charts.helper';
 import { BUCKET_UNIT_LABEL, bucketUnitOf } from './garage-period-series.helper';
-import {
-  buildPeriodDebtKpis,
-  buildPlannedPaymentKpis,
-} from './garage-period-summary-cards.helper';
+import { buildPeriodDebtKpis } from './garage-period-summary-cards.helper';
 import { summarizePeriod } from './garage-period-summary.builder';
 
 /** Ghi chú nguồn số liệu một dòng ở cuối sheet. */
@@ -42,9 +39,9 @@ function writeFootnote(
 }
 
 /**
- * Dashboard báo cáo kỳ gói gọn một màn hình (không số đối tượng): dự chi trong kỳ, công nợ
- * phát sinh trong kỳ, 2 chart (thu/chi + dòng tiền ròng theo thời gian; tuổi nợ). Trả về cấu
- * hình chart để chèn sau khi ghi buffer.
+ * Dashboard báo cáo kỳ gói gọn một màn hình (không số đối tượng): công nợ phát sinh trong kỳ
+ * (kèm ±% so với kỳ trước), 2 chart (thu/chi/dự chi + dòng tiền ròng theo thời gian; tuổi nợ).
+ * Trả về cấu hình chart để chèn sau khi ghi buffer.
  */
 export function buildPeriodDashboard(
   dashboard: ExcelJS.Worksheet,
@@ -64,20 +61,17 @@ export function buildPeriodDashboard(
     ],
   );
 
-  row = writeKpiCards(dashboard, row, buildPlannedPaymentKpis(summary), {
-    title: 'Dự chi trong kỳ (phiếu chi chờ duyệt + đã duyệt)',
-  });
   row = writeKpiCards(dashboard, row, buildPeriodDebtKpis(summary), {
     title: 'Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ)',
   });
 
-  // 2 chart cạnh nhau trên một hàng: thu/chi + dòng tiền ròng và tuổi nợ
+  // 2 chart cạnh nhau trên một hàng: thu/chi/dự chi + dòng tiền ròng, và tuổi nợ
   const charts = buildDashboardCharts(dashboard, data, summary, row);
   const unit = BUCKET_UNIT_LABEL[bucketUnitOf(data)];
   const footnoteRow = writeFootnote(
     dashboard,
     rowAfterCharts(row, 1, PERIOD_CHART_ROWS),
-    `Chart thu chi theo ${unit}. Công nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
+    `Chart thu chi theo ${unit}: dự chi là phiếu chi Chờ duyệt + Đã duyệt; dòng tiền ròng = thu − chi. Công nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
   );
   setDashboardPrintArea(dashboard, footnoteRow);
   return charts;

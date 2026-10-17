@@ -3,7 +3,7 @@ import type { GaragePeriodReportData } from './garage-period-report.types';
 import { summarizePeriod } from './garage-period-summary.builder';
 import {
   buildPeriodDebtKpis,
-  buildPlannedPaymentKpis,
+  trendNote,
 } from './garage-period-summary-cards.helper';
 
 const debtRow = (patch: Partial<GarageDebtExportRow>): GarageDebtExportRow => ({
@@ -125,10 +125,35 @@ describe('summarizePeriod', () => {
 describe('card Dashboard', () => {
   const summary = summarizePeriod(data());
 
-  it('dự chi trong kỳ: đúng 1 thẻ', () => {
-    expect(buildPlannedPaymentKpis(summary)).toEqual([
-      { label: 'DỰ CHI TRONG KỲ', value: 0 },
+  it('công nợ phát sinh không có ±% khi không có kỳ trước', () => {
+    expect(buildPeriodDebtKpis(summary).map((k) => k.note)).toEqual([
+      undefined,
+      undefined,
     ]);
+  });
+
+  it('công nợ phát sinh có ±% so với kỳ trước khi có số kỳ trước', () => {
+    const s = summarizePeriod(
+      data({
+        previousPeriod: {
+          vouchers: [],
+          customerRows: [debtRow({ totalAmount: 1200 })],
+          supplierRows: [debtRow({ totalAmount: 0 })],
+        },
+      }),
+    );
+    expect(buildPeriodDebtKpis(s).map((k) => k.note)).toEqual([
+      '+25,0% so với kỳ trước',
+      'Kỳ trước: 0',
+    ]);
+  });
+
+  it('trendNote: tăng, không đổi, kỳ trước 0 và cả hai bằng 0', () => {
+    expect(trendNote(150, 100)).toBe('+50,0% so với kỳ trước');
+    expect(trendNote(100, 100)).toBe('Không đổi so với kỳ trước');
+    expect(trendNote(0, 0)).toBe('Không đổi so với kỳ trước');
+    expect(trendNote(50, 0)).toBe('Kỳ trước: 0');
+    expect(trendNote(50, undefined)).toBeUndefined();
   });
 
   it('công nợ phát sinh: chỉ thẻ "Phát sinh trong kỳ" của hai phía', () => {

@@ -222,7 +222,7 @@ describe('buildGaragePeriodReport', () => {
     // 2 chart của Dashboard, không có chart P&L
     expect(await chartCount(buffer)).toBe(2);
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
@@ -259,11 +259,11 @@ describe('buildGaragePeriodReport', () => {
     );
   });
 
-  it('Dashboard: chỉ có thẻ dự chi trong kỳ; đã thu/đã chi/dòng tiền ròng nằm ở chart', async () => {
+  it('Dashboard: không còn thẻ thu chi; dự chi, đã thu, đã chi, dòng tiền ròng nằm ở chart', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
 
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeDefined();
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
     // các card đã bỏ
     expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBeUndefined();
     expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBeUndefined();
@@ -443,7 +443,7 @@ describe('buildGaragePeriodReport', () => {
       ),
     );
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
     expect(wb.getWorksheet('Báo cáo lợi nhuận')!.getCell('A1').value).toBe(
       'Báo cáo lợi nhuận',
     );

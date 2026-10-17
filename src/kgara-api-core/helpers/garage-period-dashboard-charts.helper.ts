@@ -48,17 +48,19 @@ export function buildDashboardCharts(
   const cash = buildCashflowSeries(data);
   const cashUnit = BUCKET_UNIT_LABEL[cash.unit];
   const cashRows = orEmpty(
-    cash.points.map((p): Row => [p.label, p.thu, p.chi, p.thu - p.chi]),
-    4,
+    cash.points.map(
+      (p): Row => [p.label, p.thu, p.chi, p.planned, p.thu - p.chi],
+    ),
+    5,
   );
   const cashTable = writeDataTable(sheet, {
     startRow,
     startCol: col,
     columnWidths: COLUMN_WIDTHS,
     title: `Dữ liệu biểu đồ: Thu vs chi theo ${cashUnit}`,
-    headers: ['Mốc thời gian', 'Thu', 'Chi', 'Dòng tiền ròng'],
+    headers: ['Mốc thời gian', 'Thu', 'Chi', 'Dự chi', 'Dòng tiền ròng'],
     rows: cashRows,
-    numFmts: [undefined, MONEY, MONEY, MONEY],
+    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY],
   });
 
   const agingRows: Row[] = [
@@ -101,9 +103,15 @@ export function buildDashboardCharts(
           color: CHART_PALETTE[3],
         },
         {
-          name: 'Dòng tiền ròng',
+          name: 'Dự chi',
           valuesRef: cashTable.ref(3),
           values: column(cashRows, 3),
+          color: CHART_PALETTE[6],
+        },
+        {
+          name: 'Dòng tiền ròng',
+          valuesRef: cashTable.ref(4),
+          values: column(cashRows, 4),
           color: CHART_PALETTE[2],
           kind: 'line',
           dataLabels: false,
