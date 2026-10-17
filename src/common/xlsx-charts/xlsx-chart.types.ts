@@ -51,6 +51,11 @@ export interface XlsxChartSpec {
   labelNumFmt?: string;
   /** Cỡ chữ nhãn giá trị, đơn vị 1/100 pt (mặc định 800 = 8pt). */
   labelFontSize?: number;
+  /**
+   * Mini chart (vd xu hướng trong thẻ KPI): không tiêu đề, chú thích, lưới và trục; đường không marker.
+   * Mặc định `false` nên không ảnh hưởng chart khác.
+   */
+  compact?: boolean;
   /** Cận dưới / cận trên cố định của trục phụ (vd 0 để % không bị phóng đại). */
   secondaryMin?: number;
   secondaryMax?: number;

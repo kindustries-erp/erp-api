@@ -37,6 +37,40 @@ const parse = (xml: string) => {
 };
 
 describe('buildChartXml', () => {
+  it('compact: không tiêu đề, không chú thích, hai trục ẩn, không lưới, đường không marker', () => {
+    const xml = buildChartXml(
+      spec({
+        compact: true,
+        type: 'line',
+        series: [
+          {
+            name: 'Phải thu',
+            valuesRef: '$B$2:$B$3',
+            values: [10, 20],
+            color: '059669',
+          },
+        ],
+      }),
+      'Dashboard',
+    );
+    const doc = parse(xml);
+    expect(xml).not.toContain('<c:title>');
+    expect(xml).not.toContain('<c:legend>');
+    expect(xml).not.toContain('<c:majorGridlines>');
+    expect(xml).toContain('<c:autoTitleDeleted val="1"/>');
+    expect(xml.match(/<c:delete val="1"\/>/g)).toHaveLength(2);
+    expect(xml).toContain('<c:symbol val="none"/>');
+    expect(doc.getElementsByTagName('c:lineChart').length).toBe(1);
+  });
+
+  it('không compact (mặc định): vẫn có tiêu đề, lưới và trục hiện', () => {
+    const xml = buildChartXml(spec(), 'Dashboard');
+    expect(xml).toContain('<c:title>');
+    expect(xml).toContain('<c:majorGridlines>');
+    expect(xml).toContain('<c:autoTitleDeleted val="0"/>');
+    expect(xml).not.toContain('<c:delete val="1"/>');
+  });
+
   it('mặc định là cột ghép, không có overlap và không có trục phụ', () => {
     const xml = buildChartXml(spec(), 'Dash');
     parse(xml);

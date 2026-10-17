@@ -2,17 +2,19 @@ import * as ExcelJS from 'exceljs';
 
 import {
   DASHBOARD_DATA_START_COL,
-  chartAnchor,
+  chartAnchorRow,
   writeDataTable,
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   CHART_PALETTE,
   LABEL_MONEY_FMT,
+  type XlsxChartAnchor,
   type XlsxChartSpec,
 } from '../../common/xlsx-charts/xlsx-chart.types';
 import {
   BUCKET_UNIT_LABEL,
   buildCashflowSeries,
+  buildDebtSeries,
 } from './garage-period-series.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import type { PeriodSummary } from './garage-period-summary.builder';
@@ -20,9 +22,17 @@ import type { PeriodSummary } from './garage-period-summary.builder';
 /** Chiều cao (số dòng) mỗi chart của Dashboard kỳ, thấp hơn mặc định để sheet gọn một màn hình. */
 export const PERIOD_CHART_ROWS = 14;
 
+/** Số chart lớn xếp một hàng (thu chi, tuổi nợ, phải thu theo nhóm khách). */
+export const PERIOD_CHARTS_PER_ROW = 3;
+
 const MONEY = '#,##0';
 const COLUMN_WIDTHS = [34, 18, 18, 18, 18];
 const AGING_LABELS = ['0-30 ngày', '31-60 ngày', '61-90 ngày', 'Trên 90 ngày'];
+const GROUP_LABELS: Record<string, string> = {
+  enterprise: 'Doanh nghiệp',
+  individual: 'Cá nhân',
+  insurance: 'Bảo hiểm',
+};
 
 type Row = (string | number)[];
 
@@ -34,16 +44,21 @@ const orEmpty = (rows: Row[], width: number): Row[] =>
   rows.length > 0 ? rows : [['Không có dữ liệu', ...Array(width - 1).fill(0)]];
 
 /**
- * 2 chart của Dashboard: thu vs chi + dòng tiền ròng theo ngày/tuần/tháng, tuổi nợ phải thu
- * vs phải trả. Bảng dữ liệu chart xếp dọc ở vùng bên phải (ngoài vùng in A–P), bắt đầu từ `startRow`.
+ * Chart của Dashboard kỳ: 3 chart lớn một hàng (thu vs chi + dòng tiền ròng theo thời gian,
+ * tuổi nợ phải thu vs phải trả, phải thu theo nhóm khách) và 2 mini chart xu hướng phải thu/phải
+ * trả đặt trong 2 thẻ công nợ. Bảng dữ liệu chart xếp dọc ở vùng bên phải (ngoài vùng in A–P).
+ * `startRow` là dòng đầu hàng chart lớn; `debtTitleRow` là dòng tiêu đề nhóm thẻ công nợ.
  */
 export function buildDashboardCharts(
   sheet: ExcelJS.Worksheet,
   data: GaragePeriodReportData,
   summary: PeriodSummary,
   startRow: number,
+  debtTitleRow: number,
 ): XlsxChartSpec[] {
   const col = DASHBOARD_DATA_START_COL;
+  const large = (slot: number) =>
+    chartAnchorRow(startRow, slot, PERIOD_CHARTS_PER_ROW, PERIOD_CHART_ROWS);
 
   const cash = buildCashflowSeries(data);
   const cashUnit = BUCKET_UNIT_LABEL[cash.unit];
@@ -79,11 +94,80 @@ export function buildDashboardCharts(
     numFmts: [undefined, MONEY, MONEY],
   });
 
+  // Phải thu phát sinh theo nhóm khách: nhóm không có phiếu và không có số tiền thì bỏ qua
+  const groupRows = orEmpty(
+    (data.customerSections ?? [])
+      .filter((s) => s.cases.length > 0 || s.totalAmount !== 0)
+      .map(
+        (s): Row => [
+          GROUP_LABELS[s.key] ?? s.title,
+          s.paidAmount,
+          s.balanceAmount,
+        ],
+      ),
+    3,
+  );
+  const groupTable = writeDataTable(sheet, {
+    startRow: agingTable.nextRow,
+    startCol: col,
+    columnWidths: COLUMN_WIDTHS,
+    title: 'Dữ liệu biểu đồ: Phải thu phát sinh theo nhóm khách',
+    headers: ['Nhóm khách', 'Đã thu', 'Còn nợ'],
+    rows: groupRows,
+    numFmts: [undefined, MONEY, MONEY],
+  });
+
+  const debt = buildDebtSeries(data);
+  const debtUnit = BUCKET_UNIT_LABEL[debt.unit];
+  const debtRows = orEmpty(
+    debt.points.map((p): Row => [p.label, p.arTotal, p.apTotal]),
+    3,
+  );
+  const debtTable = writeDataTable(sheet, {
+    startRow: groupTable.nextRow,
+    startCol: col,
+    columnWidths: COLUMN_WIDTHS,
+    title: `Dữ liệu biểu đồ: Xu hướng phát sinh phải thu/phải trả theo ${debtUnit}`,
+    headers: ['Mốc thời gian', 'Phải thu phát sinh', 'Phải trả phát sinh'],
+    rows: debtRows,
+    numFmts: [undefined, MONEY, MONEY],
+  });
+
+  // Mini chart nằm trong nửa phải của thẻ: thẻ phải thu cột 3-4, thẻ phải trả cột 7-8
+  const miniAnchor = (fromCol: number): XlsxChartAnchor => ({
+    fromCol,
+    fromRow: debtTitleRow + 1,
+    toCol: fromCol + 2,
+    toRow: debtTitleRow + 3,
+  });
+  const miniChart = (
+    side: 'receivable' | 'payable',
+    anchorCol: number,
+    tableCol: number,
+    color: string,
+  ): XlsxChartSpec => ({
+    type: 'line',
+    compact: true,
+    title: side === 'receivable' ? 'Phải thu' : 'Phải trả',
+    anchor: miniAnchor(anchorCol),
+    categoriesRef: debtTable.ref(0),
+    categories: debtRows.map((r) => String(r[0])),
+    series: [
+      {
+        name:
+          side === 'receivable' ? 'Phải thu phát sinh' : 'Phải trả phát sinh',
+        valuesRef: debtTable.ref(tableCol),
+        values: column(debtRows, tableCol),
+        color,
+      },
+    ],
+  });
+
   return [
     {
       type: 'combo',
       title: `Thu vs chi theo ${cashUnit}`,
-      anchor: chartAnchor(startRow, 0, { rows: PERIOD_CHART_ROWS }),
+      anchor: large(0),
       categoriesRef: cashTable.ref(0),
       categories: cashRows.map((r) => String(r[0])),
       dataLabels: true,
@@ -121,7 +205,7 @@ export function buildDashboardCharts(
     {
       type: 'column',
       title: 'Tuổi nợ phải thu vs phải trả',
-      anchor: chartAnchor(startRow, 1, { rows: PERIOD_CHART_ROWS }),
+      anchor: large(1),
       categoriesRef: agingTable.ref(0),
       categories: AGING_LABELS,
       dataLabels: true,
@@ -141,5 +225,33 @@ export function buildDashboardCharts(
         },
       ],
     },
+    {
+      type: 'bar',
+      stacked: true,
+      title: 'Phải thu phát sinh theo nhóm khách',
+      anchor: large(2),
+      categoriesRef: groupTable.ref(0),
+      categories: groupRows.map((r) => String(r[0])),
+      reverseCategories: true,
+      dataLabels: true,
+      labelNumFmt: LABEL_MONEY_FMT,
+      labelFontSize: 700,
+      series: [
+        {
+          name: 'Đã thu',
+          valuesRef: groupTable.ref(1),
+          values: column(groupRows, 1),
+          color: CHART_PALETTE[0],
+        },
+        {
+          name: 'Còn nợ',
+          valuesRef: groupTable.ref(2),
+          values: column(groupRows, 2),
+          color: CHART_PALETTE[1],
+        },
+      ],
+    },
+    miniChart('receivable', 2, 1, CHART_PALETTE[0]),
+    miniChart('payable', 6, 2, CHART_PALETTE[1]),
   ];
 }

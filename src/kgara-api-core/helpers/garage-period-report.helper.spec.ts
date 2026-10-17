@@ -219,8 +219,8 @@ describe('buildGaragePeriodReport', () => {
       'Công nợ phải trả',
       'Thu chi trong kỳ',
     ]);
-    // 2 chart của Dashboard, không có chart P&L
-    expect(await chartCount(buffer)).toBe(2);
+    // 3 chart lớn + 2 mini chart của Dashboard, không có chart P&L
+    expect(await chartCount(buffer)).toBe(5);
     const dash = wb.getWorksheet('Dashboard')!;
     expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
@@ -335,10 +335,10 @@ describe('buildGaragePeriodReport', () => {
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
-  it('5 chart: 2 ở Dashboard (thu chi, tuổi nợ) và 3 ở Báo cáo lợi nhuận', async () => {
+  it('8 chart: 5 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm, 2 mini) và 3 ở Báo cáo lợi nhuận', async () => {
     for (const patch of [{}, { customerSections: undefined }]) {
       const buffer = await buildGaragePeriodReport(baseData(patch));
-      expect(await chartCount(buffer)).toBe(5);
+      expect(await chartCount(buffer)).toBe(8);
     }
 
     const zip = await JSZip.loadAsync(
@@ -349,12 +349,16 @@ describe('buildGaragePeriodReport', () => {
         .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
         .map((p) => zip.file(p)!.async('string')),
     );
-    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(2);
+    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(5);
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
       3,
     );
-    // mọi chart đều có nhãn số
-    expect(xmls.every((x) => x.includes('<c:dLbls>'))).toBe(true);
+    // mọi chart có tiêu đề đều có nhãn số (mini chart không tiêu đề, không nhãn)
+    expect(
+      xmls
+        .filter((x) => x.includes('<c:title>'))
+        .every((x) => x.includes('<c:dLbls>')),
+    ).toBe(true);
     // chart theo thời gian có tên theo đơn vị gom (kỳ tháng → tuần)
     const titles = xmls.join('');
     expect(titles).toContain('Thu vs chi theo tuần');
@@ -393,7 +397,10 @@ describe('buildGaragePeriodReport', () => {
         if (v.startsWith('Dữ liệu biểu đồ')) tableTitles.push(v);
       }),
     );
-    expect(tableTitles).toHaveLength(2);
+    expect(tableTitles).toHaveLength(4);
+    expect(tableTitles).toContain(
+      'Dữ liệu biểu đồ: Phải thu phát sinh theo nhóm khách',
+    );
     expect(footnote).toContain('Công nợ lũy kế');
     expect(footnote).toContain('theo tuần');
     expect(dash.pageSetup.printArea).toMatch(/^A1:P\d+$/);
