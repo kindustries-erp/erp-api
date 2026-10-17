@@ -6,6 +6,7 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { KgaraSuppliersDebtQueryEngine } from './engines/kgara-suppliers-debt-query.engine';
 
 describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
   let service: KgaraCaseListQueryService;
@@ -43,6 +44,17 @@ describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
   };
 
   mockQueryBuilder.clone.mockReturnValue(mockQueryBuilder);
+
+  // Tổng còn phải trả lấy từ Dashboard công nợ NCC (cùng phạm vi, sàn 0 theo vụ việc).
+  const mockSuppliersDebtEngine = {
+    getSuppliersDebt: jest.fn().mockResolvedValue({
+      summary: {
+        totalCost: 114593300,
+        totalPaid: 13992160,
+        totalBalance: 101501300,
+      },
+    }),
+  };
 
   const mockCaseRepo = {
     createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
@@ -98,6 +110,10 @@ describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: KgaraSuppliersDebtQueryEngine,
+          useValue: mockSuppliersDebtEngine,
         },
       ],
     }).compile();

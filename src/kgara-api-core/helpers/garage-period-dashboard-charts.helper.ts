@@ -13,10 +13,12 @@ import {
 import {
   BUCKET_UNIT_LABEL,
   buildCashflowSeries,
-  buildDebtSeries,
 } from './garage-period-series.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import type { PeriodSummary } from './garage-period-summary.builder';
+
+/** Chiều cao (số dòng) mỗi chart của Dashboard kỳ, thấp hơn mặc định để sheet gọn một màn hình. */
+export const PERIOD_CHART_ROWS = 14;
 
 const MONEY = '#,##0';
 const COLUMN_WIDTHS = [34, 18, 18, 18, 18];
@@ -32,9 +34,8 @@ const orEmpty = (rows: Row[], width: number): Row[] =>
   rows.length > 0 ? rows : [['Không có dữ liệu', ...Array(width - 1).fill(0)]];
 
 /**
- * 3 chart của Dashboard: thu vs chi + dòng tiền ròng theo ngày/tuần/tháng, tuổi nợ phải thu
- * vs phải trả, công nợ phát sinh vs đã thu/trả theo ngày/tuần/tháng. Bảng dữ liệu chart xếp
- * dọc ở vùng bên phải (ngoài vùng in A–P), bắt đầu từ `startRow`.
+ * 2 chart của Dashboard: thu vs chi + dòng tiền ròng theo ngày/tuần/tháng, tuổi nợ phải thu
+ * vs phải trả. Bảng dữ liệu chart xếp dọc ở vùng bên phải (ngoài vùng in A–P), bắt đầu từ `startRow`.
  */
 export function buildDashboardCharts(
   sheet: ExcelJS.Worksheet,
@@ -76,35 +77,11 @@ export function buildDashboardCharts(
     numFmts: [undefined, MONEY, MONEY],
   });
 
-  const debt = buildDebtSeries(data);
-  const debtUnit = BUCKET_UNIT_LABEL[debt.unit];
-  const debtRows = orEmpty(
-    debt.points.map(
-      (p): Row => [p.label, p.arTotal, p.arPaid, p.apTotal, p.apPaid],
-    ),
-    5,
-  );
-  const debtTable = writeDataTable(sheet, {
-    startRow: agingTable.nextRow,
-    startCol: col,
-    columnWidths: COLUMN_WIDTHS,
-    title: `Dữ liệu biểu đồ: Công nợ phát sinh vs đã thu/trả theo ${debtUnit}`,
-    headers: [
-      'Mốc thời gian',
-      'Phải thu phát sinh',
-      'Phải thu đã thu',
-      'Phải trả phát sinh',
-      'Phải trả đã trả',
-    ],
-    rows: debtRows,
-    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY],
-  });
-
   return [
     {
       type: 'combo',
       title: `Thu vs chi theo ${cashUnit}`,
-      anchor: chartAnchor(startRow, 0),
+      anchor: chartAnchor(startRow, 0, { rows: PERIOD_CHART_ROWS }),
       categoriesRef: cashTable.ref(0),
       categories: cashRows.map((r) => String(r[0])),
       dataLabels: true,
@@ -136,7 +113,7 @@ export function buildDashboardCharts(
     {
       type: 'column',
       title: 'Tuổi nợ phải thu vs phải trả',
-      anchor: chartAnchor(startRow, 1),
+      anchor: chartAnchor(startRow, 1, { rows: PERIOD_CHART_ROWS }),
       categoriesRef: agingTable.ref(0),
       categories: AGING_LABELS,
       dataLabels: true,
@@ -153,42 +130,6 @@ export function buildDashboardCharts(
           valuesRef: agingTable.ref(2),
           values: column(agingRows, 2),
           color: CHART_PALETTE[1],
-        },
-      ],
-    },
-    {
-      type: 'column',
-      title: `Công nợ phát sinh vs đã thu/trả theo ${debtUnit}`,
-      anchor: chartAnchor(startRow, 2, { fullWidth: true }),
-      categoriesRef: debtTable.ref(0),
-      categories: debtRows.map((r) => String(r[0])),
-      dataLabels: true,
-      labelNumFmt: LABEL_MONEY_FMT,
-      labelFontSize: 700,
-      series: [
-        {
-          name: 'Phải thu phát sinh',
-          valuesRef: debtTable.ref(1),
-          values: column(debtRows, 1),
-          color: CHART_PALETTE[0],
-        },
-        {
-          name: 'Phải thu đã thu',
-          valuesRef: debtTable.ref(2),
-          values: column(debtRows, 2),
-          color: CHART_PALETTE[4],
-        },
-        {
-          name: 'Phải trả phát sinh',
-          valuesRef: debtTable.ref(3),
-          values: column(debtRows, 3),
-          color: CHART_PALETTE[1],
-        },
-        {
-          name: 'Phải trả đã trả',
-          valuesRef: debtTable.ref(4),
-          values: column(debtRows, 4),
-          color: CHART_PALETTE[3],
         },
       ],
     },

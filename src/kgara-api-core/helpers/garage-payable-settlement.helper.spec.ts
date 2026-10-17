@@ -12,11 +12,10 @@ describe('garage-payable-settlement.helper', () => {
     expect(PAYMENT_BY_CASE_JOIN).toContain('"pay"."case_id" = "c"."id"');
   });
 
-  it('paid = 0 khi không có PAYMENT, balance = cost - paid (không chặn trần)', () => {
+  it('paid = 0 khi không có PAYMENT, balance = max(0, cost - paid) theo từng vụ việc', () => {
     const { paidExpr, balanceExpr } = buildPayableExprs(cost);
     expect(paidExpr).toBe('COALESCE("pay"."paid", 0)::numeric');
-    expect(balanceExpr).toBe(`(${cost} - ${paidExpr})`);
-    expect(balanceExpr).not.toContain('LEAST');
+    expect(balanceExpr).toBe(`GREATEST(${cost} - ${paidExpr}, 0)`);
   });
 
   it('giữ vụ việc chi phí 0 nhưng đã chi', () => {

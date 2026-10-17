@@ -14,7 +14,8 @@ export interface PeriodDebtSummary {
 
 /** Các số tổng của sheet Dashboard báo cáo kỳ; không có số đối tượng. */
 export interface PeriodSummary {
-  cashflow: { received: number; paid: number; net: number };
+  /** Đã thu/đã chi/dòng tiền ròng: tổng mọi phiếu trong kỳ. `planned` = phiếu chi Chờ duyệt + Đã duyệt. */
+  cashflow: { received: number; paid: number; net: number; planned: number };
   /** Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ). */
   periodReceivable: PeriodDebtSummary;
   periodPayable: PeriodDebtSummary;
@@ -48,8 +49,17 @@ export function summarizePeriod(data: GaragePeriodReportData): PeriodSummary {
     (v) => v.amount,
   );
 
+  const planned = sum(
+    data.vouchers.filter(
+      (v) =>
+        v.type === 'PAYMENT' &&
+        (v.paymentStatus === 'PENDING' || v.paymentStatus === 'APPROVED'),
+    ),
+    (v) => v.amount,
+  );
+
   return {
-    cashflow: { received, paid, net: received - paid },
+    cashflow: { received, paid, net: received - paid, planned },
     periodReceivable: periodDebt(data.customerRows),
     periodPayable: periodDebt(data.supplierRows),
     receivable: summarizeOverdue('receivable', data.openCustomerRows),

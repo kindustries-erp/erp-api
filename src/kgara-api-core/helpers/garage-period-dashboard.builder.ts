@@ -11,16 +11,19 @@ import {
 import type { XlsxChartSpec } from '../../common/xlsx-charts/xlsx-chart.types';
 import { formatPeriod } from './garage-debts-export.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
-import { buildDashboardCharts } from './garage-period-dashboard-charts.helper';
+import {
+  PERIOD_CHART_ROWS,
+  buildDashboardCharts,
+} from './garage-period-dashboard-charts.helper';
 import { BUCKET_UNIT_LABEL, bucketUnitOf } from './garage-period-series.helper';
 import {
   buildCashflowKpis,
-  buildDebtCards,
+  buildOverdueAlertCards,
   buildPeriodDebtKpis,
 } from './garage-period-summary-cards.helper';
 import { summarizePeriod } from './garage-period-summary.builder';
 
-/** Chiều cao 3 dòng card công nợ (nhãn, giá trị, ghi chú) để cả sheet gọn một màn hình. */
+/** Chiều cao 3 dòng card cảnh báo (nhãn, giá trị, ghi chú) để cả sheet gọn một màn hình. */
 const ALERT_HEIGHTS: [number, number, number] = [14, 22, 20];
 
 /** Ghi chú nguồn số liệu một dòng ở cuối sheet. */
@@ -44,9 +47,9 @@ function writeFootnote(
 }
 
 /**
- * Dashboard báo cáo kỳ gồm card, số tổng và 3 chart (không số đối tượng): thu chi trong
- * kỳ, công nợ phát sinh trong kỳ, công nợ lũy kế đến ngày xuất (tuổi nợ phải thu/phải trả).
- * Trả về cấu hình chart để chèn sau khi ghi buffer.
+ * Dashboard báo cáo kỳ gói gọn một màn hình (không số đối tượng): thu chi trong kỳ, công nợ
+ * phát sinh trong kỳ, cảnh báo nợ 61-90 và trên 90 ngày, 2 chart. Trả về cấu hình chart để
+ * chèn sau khi ghi buffer.
  */
 export function buildPeriodDashboard(
   dashboard: ExcelJS.Worksheet,
@@ -69,34 +72,27 @@ export function buildPeriodDashboard(
   row = writeKpiCards(dashboard, row, buildCashflowKpis(summary), {
     title: 'Thu chi trong kỳ',
   });
-  row = writeKpiCards(
+  row = writeKpiCards(dashboard, row, buildPeriodDebtKpis(summary), {
+    title: 'Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ)',
+  });
+  row = writeAlertCards(
     dashboard,
     row,
-    buildPeriodDebtKpis('receivable', summary.periodReceivable),
-    { title: 'Công nợ phát sinh trong kỳ - phải thu (khách hàng)' },
+    buildOverdueAlertCards(summary.receivable, summary.payable),
+    {
+      title:
+        'Công nợ quá hạn lũy kế đến ngày xuất: 61-90 và trên 90 ngày (phải thu | phải trả)',
+      heights: ALERT_HEIGHTS,
+    },
   );
-  row = writeKpiCards(
-    dashboard,
-    row,
-    buildPeriodDebtKpis('payable', summary.periodPayable),
-    { title: 'Công nợ phát sinh trong kỳ - phải trả (nhà cung cấp)' },
-  );
-  row = writeAlertCards(dashboard, row, buildDebtCards(summary.receivable), {
-    title: 'Công nợ lũy kế đến ngày xuất - phải thu (khách hàng)',
-    heights: ALERT_HEIGHTS,
-  });
-  row = writeAlertCards(dashboard, row, buildDebtCards(summary.payable), {
-    title: 'Công nợ lũy kế đến ngày xuất - phải trả (nhà cung cấp)',
-    heights: ALERT_HEIGHTS,
-  });
 
-  // Chart xếp lưới 2 cột: 2 chart hàng đầu, chart thứ 3 rộng hết hàng thứ hai
+  // 2 chart cạnh nhau trên một hàng: thu/chi và tuổi nợ
   const charts = buildDashboardCharts(dashboard, data, summary, row);
   const unit = BUCKET_UNIT_LABEL[bucketUnitOf(data)];
   const footnoteRow = writeFootnote(
     dashboard,
-    rowAfterCharts(row, 2),
-    `Nguồn số liệu: đã thu, đã chi theo ngày giao dịch của phiếu thu chi xưởng; công nợ trong kỳ tính trên phiếu hoàn thành trong kỳ; công nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Chart theo kỳ gom theo ${unit}. Chi tiết từng đối tượng xem các sheet bên cạnh. Số dạng "tr" là triệu đồng, "k" là nghìn đồng.`,
+    rowAfterCharts(row, 1, PERIOD_CHART_ROWS),
+    `Chart thu chi theo ${unit}. Công nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
   );
   setDashboardPrintArea(dashboard, footnoteRow);
   return charts;

@@ -314,24 +314,25 @@ export function writeAlertCards(
 export function chartAnchor(
   startRow: number,
   slot: number,
-  options: { fullWidth?: boolean } = {},
+  options: { fullWidth?: boolean; rows?: number } = {},
 ): XlsxChartAnchor {
+  const chartRows = options.rows ?? DASHBOARD_CHART_ROWS;
   const gridRow = Math.floor(slot / 2);
-  const fromRow = startRow - 1 + gridRow * (DASHBOARD_CHART_ROWS + 1);
+  const fromRow = startRow - 1 + gridRow * (chartRows + 1);
   const left = slot % 2 === 0;
   if (options.fullWidth) {
     return {
       fromCol: 0,
       fromRow,
       toCol: DASHBOARD_COLUMNS,
-      toRow: fromRow + DASHBOARD_CHART_ROWS,
+      toRow: fromRow + chartRows,
     };
   }
   return {
     fromCol: left ? 0 : CHART_COLS,
     fromRow,
     toCol: left ? CHART_COLS : DASHBOARD_COLUMNS,
-    toRow: fromRow + DASHBOARD_CHART_ROWS,
+    toRow: fromRow + chartRows,
   };
 }
 
@@ -365,8 +366,11 @@ export function setDashboardPrintArea(
 }
 
 /** Dòng 1-based nằm ngay dưới `rowsOfCharts` hàng chart bắt đầu từ `startRow`. */
-export const rowAfterCharts = (startRow: number, rowsOfCharts: number) =>
-  startRow + rowsOfCharts * (DASHBOARD_CHART_ROWS + 1) + 1;
+export const rowAfterCharts = (
+  startRow: number,
+  rowsOfCharts: number,
+  chartRows = DASHBOARD_CHART_ROWS,
+) => startRow + rowsOfCharts * (chartRows + 1) + 1;
 
 /** Bảng "Dữ liệu biểu đồ": tiêu đề, header và các dòng; trả về tham chiếu từng cột. */
 export function writeDataTable(

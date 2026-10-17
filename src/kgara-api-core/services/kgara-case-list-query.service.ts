@@ -5,6 +5,7 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { KgaraSuppliersDebtQueryEngine } from './engines/kgara-suppliers-debt-query.engine';
 import { extractNetPayableAmount } from '../kgara-sync.service';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import {
@@ -63,6 +64,7 @@ export class KgaraCaseListQueryService {
     @InjectRepository(KgaraCaseLinkedInvoice)
     private readonly linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
     private readonly dataSource: DataSource,
+    private readonly suppliersDebtEngine: KgaraSuppliersDebtQueryEngine,
   ) {}
 
   /**
@@ -359,10 +361,16 @@ export class KgaraCaseListQueryService {
         parseFloat(totalsRaw?.totalPhaiThuBaoHiem || '0') || 0;
       grandTotalPaid = parseFloat(totalsRaw?.totalPaid || '0') || 0;
       grandTotalBalance = parseFloat(totalsRaw?.totalBalance || '0') || 0;
-      grandTotalRemainingPayable = Math.max(
-        0,
-        grandTotalCost - grandTotalPaidCost,
-      );
+      // Còn phải trả dùng cùng phạm vi và công thức sàn 0 theo vụ việc với Dashboard công nợ NCC.
+      const payableScope = await this.suppliersDebtEngine.getSuppliersDebt({
+        branchId,
+        from,
+        to,
+        pageSize: 1,
+      });
+      grandTotalPaidCost = Number(payableScope.summary.totalPaid) || 0;
+      grandTotalRemainingPayable =
+        Number(payableScope.summary.totalBalance) || 0;
 
       if (currentPage === 1) {
         cumulativeRevenue = enrichedData.reduce(

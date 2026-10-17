@@ -235,8 +235,8 @@ describe('buildGaragePeriodReport', () => {
       'Công nợ phải trả',
       'Thu chi trong kỳ',
     ]);
-    // 3 chart của Dashboard, không có chart P&L
-    expect(await chartCount(buffer)).toBe(3);
+    // 2 chart của Dashboard, không có chart P&L
+    expect(await chartCount(buffer)).toBe(2);
     const dash = wb.getWorksheet('Dashboard')!;
     expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
@@ -275,12 +275,13 @@ describe('buildGaragePeriodReport', () => {
     );
   });
 
-  it('Dashboard: thu chi trong kỳ chỉ có đã thu, đã chi, dòng tiền ròng', async () => {
+  it('Dashboard: thu chi trong kỳ có đã thu, đã chi, dự chi, dòng tiền ròng', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
 
     expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
     expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBe(200);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeDefined();
     expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBe(500);
     // các card đã bỏ
     expect(kpiValue(dash, 'CHÊNH LỆCH PHẢI THU - PHẢI TRẢ')).toBeUndefined();
@@ -313,27 +314,22 @@ describe('buildGaragePeriodReport', () => {
       );
       return out;
     };
-    // [phải thu, phải trả]
-    expect(values('PHÁT SINH TRONG KỲ')).toEqual([1000, 300]);
-    expect(values('ĐÃ THU')).toEqual([400]);
-    expect(values('ĐÃ TRẢ')).toEqual([100]);
-    expect(values('CÒN LẠI')).toEqual([600, 200]);
+    expect(values('PHẢI THU PHÁT SINH TRONG KỲ (KH)')).toEqual([1000]);
+    expect(values('PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)')).toEqual([300]);
+    // chỉ giữ số phát sinh: không còn đã thu/đã trả/còn lại
+    expect(values('ĐÃ THU')).toEqual([]);
+    expect(values('ĐÃ TRẢ')).toEqual([]);
+    expect(values('CÒN LẠI')).toEqual([]);
   });
 
-  it('Dashboard: công nợ lũy kế phải thu và phải trả, không ghi số đối tượng', async () => {
+  it('Dashboard: cảnh báo lũy kế chỉ nợ 61-90 và trên 90 ngày của hai phía, không ghi số đối tượng', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
 
-    expect(card(dash, 'PHẢI THU: TỔNG NỢ CÒN MỞ').value).toBe(5001100);
-    expect(card(dash, 'PHẢI THU: NỢ 31-60 NGÀY').value).toBe(0);
     expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY').value).toBe(0);
     expect(card(dash, 'PHẢI THU: NỢ TRÊN 90 NGÀY').value).toBe(5001000);
-    expect(card(dash, 'PHẢI THU: TỶ LỆ QUÁ HẠN').value).toBeCloseTo(
-      5001000 / 5001100,
-    );
-    expect(card(dash, 'PHẢI TRẢ: TỔNG NỢ CÒN MỞ').value).toBe(300);
-    expect(card(dash, 'PHẢI TRẢ: NỢ 31-60 NGÀY').value).toBe(300);
-    expect(card(dash, 'PHẢI TRẢ: TỶ LỆ QUÁ HẠN').value).toBe(1);
+    expect(card(dash, 'PHẢI TRẢ: NỢ 61-90 NGÀY').value).toBe(0);
+    expect(card(dash, 'PHẢI TRẢ: NỢ TRÊN 90 NGÀY').value).toBe(0);
 
     const texts: string[] = [];
     dash.eachRow((row) =>
@@ -343,7 +339,10 @@ describe('buildGaragePeriodReport', () => {
     );
     // không ghi số đối tượng trên card (vd "2 đối tượng")
     expect(texts.some((t) => /\d+ đối tượng/.test(t))).toBe(false);
-    // các card đã bỏ
+    // các thẻ đã bỏ
+    expect(texts).not.toContain('PHẢI THU: TỔNG NỢ CÒN MỞ');
+    expect(texts).not.toContain('PHẢI THU: NỢ 31-60 NGÀY');
+    expect(texts).not.toContain('PHẢI THU: TỶ LỆ QUÁ HẠN');
     expect(texts).not.toContain('PHẢI THU: NỢ 0-30 NGÀY');
     expect(texts).not.toContain('PHẢI THU: MỨC CẢNH BÁO');
     expect(texts).not.toContain('PHẢI THU: QUÁ HẠN TRÊN 30 NGÀY');
@@ -357,10 +356,10 @@ describe('buildGaragePeriodReport', () => {
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
-  it('6 chart: 3 ở Dashboard (thu chi, tuổi nợ, công nợ theo thời gian) và 3 ở Báo cáo lợi nhuận', async () => {
+  it('5 chart: 2 ở Dashboard (thu chi, tuổi nợ) và 3 ở Báo cáo lợi nhuận', async () => {
     for (const patch of [{}, { customerSections: undefined }]) {
       const buffer = await buildGaragePeriodReport(baseData(patch));
-      expect(await chartCount(buffer)).toBe(6);
+      expect(await chartCount(buffer)).toBe(5);
     }
 
     const zip = await JSZip.loadAsync(
@@ -371,7 +370,7 @@ describe('buildGaragePeriodReport', () => {
         .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
         .map((p) => zip.file(p)!.async('string')),
     );
-    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(3);
+    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(2);
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
       3,
     );
@@ -380,7 +379,7 @@ describe('buildGaragePeriodReport', () => {
     // chart theo thời gian có tên theo đơn vị gom (kỳ tháng → tuần)
     const titles = xmls.join('');
     expect(titles).toContain('Thu vs chi theo tuần');
-    expect(titles).toContain('Công nợ phát sinh vs đã thu/trả theo tuần');
+    expect(titles).not.toContain('Công nợ phát sinh vs đã thu/trả');
     expect(titles).toContain('Doanh thu, giá vốn, lãi gộp theo tuần');
   });
 
@@ -411,14 +410,17 @@ describe('buildGaragePeriodReport', () => {
       row.eachCell((cell) => {
         const v = cell.value;
         if (typeof v !== 'string') return;
-        if (v.startsWith('Nguồn số liệu')) footnote = v;
+        if (v.startsWith('Chart thu chi theo')) footnote = v;
         if (v.startsWith('Dữ liệu biểu đồ')) tableTitles.push(v);
       }),
     );
-    expect(tableTitles).toHaveLength(3);
-    expect(footnote).toContain('công nợ lũy kế');
-    expect(footnote).toContain('gom theo tuần');
+    expect(tableTitles).toHaveLength(2);
+    expect(footnote).toContain('Công nợ lũy kế');
+    expect(footnote).toContain('theo tuần');
     expect(dash.pageSetup.printArea).toMatch(/^A1:P\d+$/);
+    // gọn một màn hình: vùng in không quá 34 dòng
+    const lastPrintRow = Number(dash.pageSetup.printArea?.match(/\d+$/)?.[0]);
+    expect(lastPrintRow).toBeLessThanOrEqual(34);
   });
 
   it('sheet nợ quá hạn: chỉ nợ trên 30 ngày, nợ >90 ngày lớn nhất lên đầu, có cả phải trả', async () => {
@@ -462,9 +464,8 @@ describe('buildGaragePeriodReport', () => {
       ),
     );
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(card(dash, 'PHẢI THU: TỔNG NỢ CÒN MỞ').value).toBe(0);
-    expect(card(dash, 'PHẢI THU: TỶ LỆ QUÁ HẠN').value).toBe(0);
-    expect(card(dash, 'PHẢI TRẢ: TỔNG NỢ CÒN MỞ').value).toBe(0);
+    expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY').value).toBe(0);
+    expect(card(dash, 'PHẢI TRẢ: NỢ TRÊN 90 NGÀY').value).toBe(0);
     expect(wb.getWorksheet('Báo cáo lợi nhuận')!.getCell('A1').value).toBe(
       'Báo cáo lợi nhuận',
     );

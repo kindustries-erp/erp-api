@@ -3,7 +3,7 @@ import type { GaragePeriodReportData } from './garage-period-report.types';
 import { summarizePeriod } from './garage-period-summary.builder';
 import {
   buildCashflowKpis,
-  buildDebtCards,
+  buildOverdueAlertCards,
   buildPeriodDebtKpis,
 } from './garage-period-summary-cards.helper';
 
@@ -56,6 +56,26 @@ describe('summarizePeriod', () => {
       received: 1000,
       paid: 400,
       net: 600,
+      planned: 0,
+    });
+  });
+
+  it('dự chi = phiếu chi Chờ duyệt + Đã duyệt; Đã chi vẫn cộng mọi phiếu chi', () => {
+    const s = summarizePeriod(
+      data({
+        vouchers: [
+          { type: 'RECEIPT', amount: 1000 },
+          { type: 'PAYMENT', amount: 400, paymentStatus: 'PAID' },
+          { type: 'PAYMENT', amount: 100, paymentStatus: 'PENDING' },
+          { type: 'PAYMENT', amount: 50, paymentStatus: 'APPROVED' },
+        ] as GaragePeriodReportData['vouchers'],
+      }),
+    );
+    expect(s.cashflow).toEqual({
+      received: 1000,
+      paid: 550,
+      net: 450,
+      planned: 150,
     });
   });
 
@@ -97,7 +117,7 @@ describe('summarizePeriod', () => {
         openSupplierRows: [],
       }),
     );
-    expect(s.cashflow).toEqual({ received: 0, paid: 0, net: 0 });
+    expect(s.cashflow).toEqual({ received: 0, paid: 0, net: 0, planned: 0 });
     expect(s.periodReceivable).toEqual({ total: 0, paid: 0, balance: 0 });
     expect(s.receivable.level).toBe('OK');
   });
@@ -106,53 +126,39 @@ describe('summarizePeriod', () => {
 describe('card Dashboard', () => {
   const summary = summarizePeriod(data());
 
-  it('thu chi trong kỳ: đúng 3 thẻ', () => {
+  it('thu chi trong kỳ: đúng 4 thẻ, có Dự chi', () => {
     expect(buildCashflowKpis(summary)).toEqual([
       { label: 'ĐÃ THU TRONG KỲ', value: 1000 },
       { label: 'ĐÃ CHI TRONG KỲ', value: 400 },
+      { label: 'DỰ CHI TRONG KỲ', value: 0 },
       { label: 'DÒNG TIỀN RÒNG (THU - CHI)', value: 600 },
     ]);
   });
 
-  it('công nợ trong kỳ: phải thu dùng "Đã thu", phải trả dùng "Đã trả"', () => {
-    expect(
-      buildPeriodDebtKpis('receivable', summary.periodReceivable).map(
-        (k) => k.label,
-      ),
-    ).toEqual(['PHÁT SINH TRONG KỲ', 'ĐÃ THU', 'CÒN LẠI']);
-    expect(
-      buildPeriodDebtKpis('payable', summary.periodPayable).map((k) => [
-        k.label,
-        k.value,
-      ]),
-    ).toEqual([
-      ['PHÁT SINH TRONG KỲ', 800],
-      ['ĐÃ TRẢ', 300],
-      ['CÒN LẠI', 500],
+  it('công nợ phát sinh: chỉ thẻ "Phát sinh trong kỳ" của hai phía', () => {
+    expect(buildPeriodDebtKpis(summary)).toEqual([
+      { label: 'PHẢI THU PHÁT SINH TRONG KỲ (KH)', value: 1500 },
+      { label: 'PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)', value: 800 },
     ]);
   });
 
-  it('công nợ lũy kế: đúng 5 thẻ, ghi chú % tổng nợ và không ghi số đối tượng', () => {
-    const cards = buildDebtCards(summary.receivable);
+  it('cảnh báo lũy kế: đúng 4 thẻ 61-90 và trên 90 ngày của hai phía, ghi chú % tổng nợ', () => {
+    const cards = buildOverdueAlertCards(summary.receivable, summary.payable);
     expect(cards.map((c) => c.label)).toEqual([
-      'PHẢI THU: TỔNG NỢ CÒN MỞ',
-      'PHẢI THU: NỢ 31-60 NGÀY',
       'PHẢI THU: NỢ 61-90 NGÀY',
       'PHẢI THU: NỢ TRÊN 90 NGÀY',
-      'PHẢI THU: TỶ LỆ QUÁ HẠN',
+      'PHẢI TRẢ: NỢ 61-90 NGÀY',
+      'PHẢI TRẢ: NỢ TRÊN 90 NGÀY',
     ]);
-    expect(cards.map((c) => c.value)).toEqual([1000, 200, 300, 400, 0.9]);
-    expect(cards[1].note).toBe('20,0% tổng nợ');
-    expect(cards[4].numFmt).toBe('0.0%');
+    expect(cards.map((c) => c.value)).toEqual([300, 400, 0, 150]);
+    expect(cards[0].note).toBe('30,0% tổng nợ');
     expect(cards.some((c) => /đối tượng/.test(c.note ?? ''))).toBe(false);
   });
 
   it('bậc không có nợ: nền xám, ghi "Không có"', () => {
-    const cards = buildDebtCards(
-      summarizePeriod(data({ openSupplierRows: [] })).payable,
-    );
-    expect(cards.slice(1, 4).map((c) => [c.value, c.note, c.fill])).toEqual([
-      [0, 'Không có', 'FFF1F5F9'],
+    const s = summarizePeriod(data({ openSupplierRows: [] }));
+    const cards = buildOverdueAlertCards(s.receivable, s.payable);
+    expect(cards.slice(2).map((c) => [c.value, c.note, c.fill])).toEqual([
       [0, 'Không có', 'FFF1F5F9'],
       [0, 'Không có', 'FFF1F5F9'],
     ]);
