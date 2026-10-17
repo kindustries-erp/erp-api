@@ -11,6 +11,11 @@ export interface XlsxChartSeries {
   values: (number | null)[];
   /** Màu hex 6 ký tự, không có `#`. */
   color: string;
+  /**
+   * Series không tô màu, không nhãn (nền vô hình để dựng waterfall bằng cột chồng).
+   * Mặc định `false`.
+   */
+  hidden?: boolean;
   /** Chỉ dùng cho `combo`: series vẽ dạng đường thay vì cột. */
   kind?: 'column' | 'line';
   /** Chỉ dùng cho series đường của `combo`: vẽ trên trục giá trị phụ (bên phải). */
@@ -51,6 +56,15 @@ export interface XlsxChartSpec {
   labelNumFmt?: string;
   /** Cỡ chữ nhãn giá trị, đơn vị 1/100 pt (mặc định 800 = 8pt). */
   labelFontSize?: number;
+  /**
+   * Mini chart (vd xu hướng trong thẻ KPI): không tiêu đề, chú thích, lưới và trục; đường không marker.
+   * Mặc định `false` nên không ảnh hưởng chart khác.
+   */
+  compact?: boolean;
+  /** Nhãn trục danh mục nằm ở đáy chart (không đè lên cột âm); mặc định `false`. */
+  categoryLabelsLow?: boolean;
+  /** Hiện chú thích (legend) khi có nhiều series; mặc định `true`. */
+  showLegend?: boolean;
   /** Cận dưới / cận trên cố định của trục phụ (vd 0 để % không bị phóng đại). */
   secondaryMin?: number;
   secondaryMax?: number;

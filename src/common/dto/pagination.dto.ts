@@ -65,6 +65,18 @@ export class PaginationDto {
   @IsString()
   column_filters?: string;
 
+  @ApiPropertyOptional({
+    description: 'JSON bộ lọc toán tử theo cột của bảng V2',
+  })
+  @IsOptional()
+  @IsString()
+  column_operators?: string;
+
+  @ApiPropertyOptional({ description: 'JSON khoảng ngày theo cột của bảng V2' })
+  @IsOptional()
+  @IsString()
+  date_ranges?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -45,6 +45,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
     - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
   - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
   - Phân rã kiến trúc Atomic Design 5 tầng, toàn bộ file component/organism khống chế nghiêm ngặt < 180 LoC.
+  - **Tab Tổng quan (`garage-debts?tab=overview`)**: Tái cấu trúc thành Organism chuẩn `garage-debts-dashboard-tab/` (< 150 LoC/file), gỡ bỏ hoàn toàn Filter Panel (phễu lọc & trượt phải) để tối ưu không gian hiển thị và tránh rối người dùng, dữ liệu phân tích tự động lấy theo chi nhánh kích hoạt. Trang bị cụm nút thao tác chuẩn gồm nút chính dạng Split Button **Xuất Excel** (kèm dropdown Xuất nâng cao / Đồng bộ) và nút **Tải lại (Reload)** đồng bộ 100% với các tab danh sách `SpreadsheetPageTemplate`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
   - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/ui-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
   - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).
@@ -147,6 +148,7 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
   - `to`: Ngày kết thúc.
   - `sorts`: Danh sách sắp xếp đa cột (vd: `["-balanceAmount", "customerName"]`). Các key aging `aging0_30`, `aging31_60`, `aging61_90`, `agingOver90` được map lần lượt sang các alias SQL `aging_0_30`, `aging_31_60`, `aging_61_90`, `aging_over_90`, hỗ trợ cả ASC và DESC.
   - `filtersStr` / `column_filters`: JSON string chứa bộ lọc các cột (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`).
+  - `agingBucket` (dropdown "Trạng thái nợ" của tab Phải thu): giá trị `0-30` | `31-60` | `61-90` | `>90`. Lọc theo **xe có số dư trong mốc** (`HAVING SUM(số dư phiếu trong mốc) > 0`), nên tổng cột mốc đó khớp với dữ liệu lọc. Khác với `maxAgingDays`, vốn lọc theo tuổi nợ **cũ nhất** của xe.
   - `column_search`: JSON string tìm kiếm nhanh theo từng cột.
 
 - **Cấu trúc Dữ liệu Phản hồi (JSON Response Contract)**:
@@ -484,3 +486,15 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 - **Tương thích & Lưu trữ**:
   - Preset visibility được lưu trữ và đồng bộ tự động với `useUserPreferencesStore` thông qua table ID `garage-debts-table-column-views` / `garage-payables-table-column-views`.
   - Giữ vững 100% khả năng tương thích ngược với API query params hiện tại (`column_filters['paymentProgress']`, `column_filters['maxAgingDays']`).
+
+### 8.9. Chuẩn Hóa Main Action Button "Xuất Excel" & Dropdown Action Menu Đồng Bộ Phiếu Dịch Vụ (Cập nhật 2026-10-17)
+- **Mục tiêu**: Đồng bộ chuẩn Action Button trên `GarageDebtsTable` (Phải thu) và `GaragePayablesTable` (Phải trả) theo kiến trúc của `garage-cases?tab=cases`:
+  - Khắc phục tình trạng thiếu `onCreate` và `createLabel` khiến `SpreadsheetPageTemplate` bị fallback thành nhãn "Tạo mới".
+- **Cấu hình Nút Chính (Main Action Button)**:
+  - `createLabel`: `t("debts.exportExcel", "Xuất Excel")`
+  - `createIcon`: `<FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600" />`
+  - `onCreate`: Gọi mở `GarageDebtsExportDrawer` với ngữ cảnh bảng hiện tại (`customers` cho Phải thu, `suppliers` cho Phải trả).
+- **Cấu hình Menu Thả Xuống (`createActions`)**:
+  - **Nhóm 1 (`Báo cáo & Xuất file`)**: Mục "Xuất Excel theo kỳ / Nâng cao" mở `GarageDebtsExportDrawer`.
+  - **Nhóm 2 (`Tùy chọn đồng bộ`)**: Hiển thị khi người dùng có quyền `GARAGE CREATE/UPDATE` (`canSyncGarage`) và có callback `onSyncCases`. Khi bấm kích hoạt drawer đồng bộ `GarageCaseSyncDrawer` (chế độ `"cases"`), cho phép quét lại các phiếu dịch vụ mới từ hệ thống và tự động làm mới danh sách công nợ sau khi đồng bộ thành công.
+

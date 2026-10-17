@@ -61,6 +61,20 @@ describe('GarageDashboardExportDto', () => {
     });
     expect(errors.map((e) => e.property).sort()).toEqual(['from', 'to']);
   });
+
+  it('chấp nhận các reportType hợp lệ', async () => {
+    for (const reportType of ['all', 'business', 'cashflow-debts', 'overdue']) {
+      const { errors } = await check(GarageDashboardExportDto, { reportType });
+      expect(errors).toHaveLength(0);
+    }
+  });
+
+  it('chặn reportType lạ', async () => {
+    const { errors } = await check(GarageDashboardExportDto, {
+      reportType: 'everything',
+    });
+    expect(errors.map((e) => e.property)).toEqual(['reportType']);
+  });
 });
 
 describe('GarageCasesExportDto', () => {

@@ -18,8 +18,13 @@ import {
   initSheetStructure,
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
-import { buildPeriodDashboard } from './garage-period-dashboard.builder';
+import {
+  PERIOD_REPORT_COLUMNS,
+  PERIOD_REPORT_SHEET,
+  buildPeriodDashboard,
+} from './garage-period-dashboard.builder';
 import { PNL_SHEET, buildPnlSheet } from './garage-period-pnl.builder';
+import { resolvePeriodReportSections } from './garage-period-report-sections.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 
 export const OVERDUE_SHEET = 'Nợ quá hạn cần chú ý';
@@ -220,7 +225,7 @@ export function buildCashflowSheet(
 
 /**
  * Dựng file báo cáo Garage theo kỳ:
- * Dashboard thu chi & công nợ (card cảnh báo, KPI, chart) → Báo cáo lợi nhuận (P&L) →
+ * Dashboard (card + số tổng, không chart) → Báo cáo lợi nhuận (P&L, kèm chart) →
  * sheet từng nhóm đối tượng phải thu → Công nợ phải trả → Nợ quá hạn cần chú ý →
  * Thu chi trong kỳ.
  */
@@ -232,35 +237,58 @@ export async function buildGaragePeriodReport(
   workbook.lastModifiedBy = 'Liouni ERP';
   workbook.created = new Date();
 
-  // Dashboard phải tạo trước để nằm đầu file, kế đó là sheet P&L
-  const dashboard = createDashboardSheet(workbook, DEBT_DASHBOARD_SHEET);
-  const pnlCharts = buildPnlSheet(workbook, data.pnlMonths);
-
-  const sections = (data.customerSections ?? []).filter(
-    (s) => s.cases.length > 0 || s.totalAmount !== 0,
+  const sectionSet = resolvePeriodReportSections(
+    data.reportType,
+    data.reportSections,
   );
-  if (sections.length > 0) {
-    sections.forEach((section) =>
-      buildSingleGroupDebtSheet(
-        workbook,
-        section.title,
-        section,
-        GARAGE_DEBT_CASE_COLUMNS,
-      ),
-    );
-  } else {
-    buildDebtDetailSheet(workbook, 'customers', data.customerRows);
-  }
-  buildDebtDetailSheet(workbook, 'suppliers', data.supplierRows);
-  buildOverdueSheet(workbook, data.openCustomerRows, data.openSupplierRows);
-  buildCashflowSheet(workbook, data.vouchers);
 
-  const charts = buildPeriodDashboard(dashboard, data);
+  // Dashboard phải tạo trước để nằm đầu file, kế đó là sheet P&L
+  const dashboard = sectionSet.has('dashboard')
+    ? createDashboardSheet(workbook, PERIOD_REPORT_SHEET, PERIOD_REPORT_COLUMNS)
+    : null;
+  const pnlCharts = sectionSet.has('pnl')
+    ? buildPnlSheet(workbook, data.pnlMonths, {
+        periodSize: data.pnlPeriodSize ?? 1,
+      })
+    : null;
+
+  if (sectionSet.has('receivables')) {
+    const sections = (data.customerSections ?? []).filter(
+      (s) => s.cases.length > 0 || s.totalAmount !== 0,
+    );
+    if (sections.length > 0) {
+      sections.forEach((section) =>
+        buildSingleGroupDebtSheet(
+          workbook,
+          section.title,
+          section,
+          GARAGE_DEBT_CASE_COLUMNS,
+        ),
+      );
+    } else {
+      buildDebtDetailSheet(workbook, 'customers', data.customerRows);
+    }
+  }
+  if (sectionSet.has('payables')) {
+    buildDebtDetailSheet(workbook, 'suppliers', data.supplierRows);
+  }
+  if (sectionSet.has('overdue')) {
+    buildOverdueSheet(workbook, data.openCustomerRows, data.openSupplierRows);
+  }
+  if (sectionSet.has('cashflow')) {
+    buildCashflowSheet(workbook, data.vouchers);
+  }
+
+  const dashboardCharts = dashboard
+    ? buildPeriodDashboard(dashboard, data)
+    : [];
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
   const withDashboard = await injectCharts(
     buffer,
-    DEBT_DASHBOARD_SHEET,
-    charts,
+    PERIOD_REPORT_SHEET,
+    dashboardCharts,
   );
-  return injectCharts(withDashboard, PNL_SHEET, pnlCharts);
+  return pnlCharts
+    ? injectCharts(withDashboard, PNL_SHEET, pnlCharts)
+    : withDashboard;
 }

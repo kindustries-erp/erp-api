@@ -3,6 +3,17 @@ export interface PnlLineItem {
   categoryKey: string;
   categoryName: string;
   amount: number;
+  /** Ghi chú của dòng nhập (nhãn cấp 3 của báo cáo lợi nhuận); thiếu thì không có. */
+  note?: string;
+}
+
+/** Doanh thu và giá vốn từ phiếu của một nhóm phân loại trong tháng. */
+export interface PnlRevenueSegment {
+  key: string;
+  label: string;
+  caseCount: number;
+  revenue: number;
+  cogs: number;
 }
 
 /** P&L một tháng đã rút gọn từ `GaragePnlService.getPnlReport`. */
@@ -10,17 +21,28 @@ export interface PnlMonthRow {
   year: number;
   month: number;
   revenue: number;
-  /** Chi phí phụ tùng ngoài & gia công ngoài (giá vốn). */
+  /** Giá vốn gồm giá vốn từ phiếu và điều chỉnh giá vốn nhập tay. */
   cogs: number;
+  /** Chi phí phụ tùng ngoài & gia công ngoài lấy từ phiếu (chưa gồm điều chỉnh nhập tay). */
+  cogsDirect: number;
+  /** Điều chỉnh giá vốn nhập tay (hoa hồng trực tiếp, chi phí trực tiếp khác, vật tư tiêu hao). */
+  cogsAdjustmentItems: PnlLineItem[];
+  /** Doanh thu theo phân loại phiếu; tổng bằng `revenue`. */
+  revenueSegments: PnlRevenueSegment[];
   grossProfit: number;
   /** Tỷ lệ lợi nhuận gộp trên doanh thu, 0..100. */
   grossMarginRate: number;
   opexTotal: number;
   opexItems: PnlLineItem[];
   netBeforeCommission: number;
+  /** Chi phí bán hàng (HHBH) đã trừ trong lợi nhuận ròng sau hoa hồng. */
+  hhbhTotal: number;
   commissionTotal: number;
   commissionItems: PnlLineItem[];
   netAfterCommission: number;
+  /** Kỳ đã cộng gộp (quý, nhiều tháng): tháng đầu và số tháng; thiếu thì là một tháng (`year`/`month`). */
+  periodStart?: PnlMonthRef;
+  periodMonths?: number;
 }
 
 export interface OpexBuckets {
@@ -40,10 +62,23 @@ export interface PnlMonthRef {
 const num = (value: unknown) => Number(value) || 0;
 
 const mapItems = (items: unknown): PnlLineItem[] =>
-  (Array.isArray(items) ? items : []).map((i: any) => ({
-    categoryKey: String(i?.categoryKey ?? ''),
-    categoryName: String(i?.categoryName ?? ''),
-    amount: num(i?.amount),
+  (Array.isArray(items) ? items : []).map((i: any) => {
+    const item: PnlLineItem = {
+      categoryKey: String(i?.categoryKey ?? ''),
+      categoryName: String(i?.categoryName ?? ''),
+      amount: num(i?.amount),
+    };
+    const note = typeof i?.note === 'string' ? i.note.trim() : '';
+    return note ? { ...item, note } : item;
+  });
+
+const mapSegments = (segments: unknown): PnlRevenueSegment[] =>
+  (Array.isArray(segments) ? segments : []).map((s: any) => ({
+    key: String(s?.key ?? ''),
+    label: String(s?.label ?? ''),
+    caseCount: num(s?.caseCount),
+    revenue: num(s?.revenue),
+    cogs: num(s?.cogs),
   }));
 
 /** Rút gọn kết quả `getPnlReport` thành dòng P&L của tháng. */
@@ -53,11 +88,20 @@ export function toPnlMonthRow(ref: PnlMonthRef, report: any): PnlMonthRow {
     month: ref.month,
     revenue: num(report?.revenue),
     cogs: num(report?.cogs),
+    cogsDirect: num(report?.cogsDirect),
+    cogsAdjustmentItems: mapItems(report?.cogsAdjustment?.items),
+    revenueSegments: mapSegments(report?.revenueByClassification),
     grossProfit: num(report?.grossProfit),
     grossMarginRate: num(report?.grossMarginRate),
     opexTotal: num(report?.opex?.total),
     opexItems: mapItems(report?.opex?.items),
     netBeforeCommission: num(report?.netProfitBeforeCommission),
+    hhbhTotal: num(
+      (Array.isArray(report?.sellingExpenses?.items)
+        ? report.sellingExpenses.items
+        : []
+      ).find((i: any) => i?.categoryKey === 'HHBH')?.amount,
+    ),
     commissionTotal: num(report?.commission?.total),
     commissionItems: mapItems(report?.commission?.items),
     netAfterCommission: num(report?.netProfitAfterCommission),

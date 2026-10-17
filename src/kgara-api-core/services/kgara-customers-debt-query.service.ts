@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { GARAGE_AGING_BUCKET_RANGES } from '../helpers/garage-aging-bucket.helper';
 
 /** Mốc bắt đầu theo dõi công nợ: từ 07/2026 (2026-07-01). */
 export const GARAGE_DEBT_BASELINE_DATE = '2026-07-01';
@@ -261,6 +262,18 @@ export class KgaraCustomersDebtQueryService {
             }
             if (values.includes('>90') || values.includes('>90 ngày')) {
               subConds.push(`(${maxAgingExpr} > 90)`);
+            }
+            if (subConds.length > 0) {
+              havingConditions.push(`(${subConds.join(' OR ')})`);
+            }
+          } else if (col === 'agingBucket') {
+            const subConds: string[] = [];
+            for (const v of values) {
+              const range = GARAGE_AGING_BUCKET_RANGES[v];
+              if (!range) continue;
+              subConds.push(
+                `(COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) ${range} THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0) > 0)`,
+              );
             }
             if (subConds.length > 0) {
               havingConditions.push(`(${subConds.join(' OR ')})`);

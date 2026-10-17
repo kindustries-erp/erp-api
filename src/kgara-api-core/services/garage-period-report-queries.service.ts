@@ -16,6 +16,8 @@ export interface PeriodVoucherRow {
   voucherCode: string;
   transDate: string;
   type: 'RECEIPT' | 'PAYMENT';
+  /** Trạng thái duyệt của phiếu chi (chỉ có với PAYMENT). */
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
   paymentContent: string;
   partnerName: string;
   licensePlate: string;
@@ -72,6 +74,8 @@ export class GaragePeriodReportQueries {
       voucherCode: v.voucherCode,
       transDate: String(v.transDate ?? '').slice(0, 10),
       type: v.voucherType === 'PAYMENT' ? 'PAYMENT' : 'RECEIPT',
+      paymentStatus:
+        v.voucherType === 'PAYMENT' ? (v.paymentStatus ?? null) : null,
       paymentContent: v.paymentContent ?? '',
       partnerName: v.partnerName ?? '',
       licensePlate: v.licensePlate || v.case?.bienSoXe || '',

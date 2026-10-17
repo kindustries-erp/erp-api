@@ -124,10 +124,17 @@ function barSeries(
   index: number,
   fmt: string,
 ): string {
+  // Series ẩn: nền trong suốt, không viền, không nhãn (dùng làm đệm cho waterfall)
+  const fillXml = series.hidden
+    ? `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>`
+    : `<c:spPr>${solid(series.color)}</c:spPr>`;
+  const labelsXml = series.hidden
+    ? ''
+    : seriesLabels(spec, series, fmt, spec.stacked ? 'ctr' : 'outEnd');
   return (
     `<c:ser>${serHead(index, series)}` +
-    `<c:spPr>${solid(series.color)}</c:spPr><c:invertIfNegative val="0"/>` +
-    seriesLabels(spec, series, fmt, spec.stacked ? 'ctr' : 'outEnd') +
+    `${fillXml}<c:invertIfNegative val="0"/>` +
+    labelsXml +
     catAndVal(spec, sheetName, series, fmt) +
     `</c:ser>`
   );
@@ -143,7 +150,9 @@ function lineSeries(
   return (
     `<c:ser>${serHead(index, series)}` +
     `<c:spPr><a:ln w="28575" cap="rnd">${solid(series.color)}<a:round/></a:ln></c:spPr>` +
-    `<c:marker><c:symbol val="circle"/><c:size val="6"/><c:spPr>${solid(series.color)}</c:spPr></c:marker>` +
+    (spec.compact
+      ? `<c:marker><c:symbol val="none"/></c:marker>`
+      : `<c:marker><c:symbol val="circle"/><c:size val="6"/><c:spPr>${solid(series.color)}</c:spPr></c:marker>`) +
     seriesLabels(spec, series, fmt, 't') +
     catAndVal(spec, sheetName, series, fmt) +
     `<c:smooth val="0"/></c:ser>`
@@ -197,7 +206,22 @@ function secondaryAxes(
   );
 }
 
+/** Mini chart: hai trục ẩn, không lưới. */
+function compactAxes(horizontal: boolean): string {
+  const catPos = horizontal ? 'l' : 'b';
+  const valPos = horizontal ? 'b' : 'l';
+  return (
+    `<c:catAx><c:axId val="${CAT_AX_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/>` +
+    `<c:axPos val="${catPos}"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="none"/>` +
+    `<c:crossAx val="${VAL_AX_ID}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
+    `<c:valAx><c:axId val="${VAL_AX_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/>` +
+    `<c:axPos val="${valPos}"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="none"/>` +
+    `<c:crossAx val="${CAT_AX_ID}"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`
+  );
+}
+
 function axes(spec: XlsxChartSpec, fmt: string, hasSecondary = false): string {
+  if (spec.compact) return compactAxes(spec.type === 'bar');
   const horizontal = spec.type === 'bar';
   const catPos = horizontal ? 'l' : 'b';
   const valPos = horizontal ? 'b' : 'l';
@@ -206,7 +230,7 @@ function axes(spec: XlsxChartSpec, fmt: string, hasSecondary = false): string {
   return (
     `<c:catAx><c:axId val="${CAT_AX_ID}"/><c:scaling><c:orientation val="${reverse ? 'maxMin' : 'minMax'}"/></c:scaling><c:delete val="0"/>` +
     `<c:axPos val="${catPos}"/><c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/>` +
-    `<c:tickLblPos val="nextTo"/>${txPr}<c:crossAx val="${VAL_AX_ID}"/><c:crosses val="autoZero"/><c:auto val="1"/>` +
+    `<c:tickLblPos val="${spec.categoryLabelsLow ? 'low' : 'nextTo'}"/>${txPr}<c:crossAx val="${VAL_AX_ID}"/><c:crosses val="autoZero"/><c:auto val="1"/>` +
     `<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
     `<c:valAx><c:axId val="${VAL_AX_ID}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
     `<c:axPos val="${valPos}"/><c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>` +
@@ -273,16 +297,18 @@ export function buildChartXml(spec: XlsxChartSpec, sheetName: string): string {
     `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr>` +
     `<a:r><a:rPr lang="vi-VN" sz="1200" b="1"/><a:t>${escapeXml(spec.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
   const legend =
-    spec.series.length > 1 || spec.type === 'doughnut'
+    spec.showLegend !== false &&
+    (spec.series.length > 1 || spec.type === 'doughnut')
       ? `<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>`
       : '';
+  const compact = spec.compact === true;
 
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<c:chartSpace xmlns:c="${NS_CHART}" xmlns:a="${NS_DRAWING_MAIN}" xmlns:r="${NS_REL}">` +
-    `<c:roundedCorners val="0"/><c:chart>${title}<c:autoTitleDeleted val="0"/>` +
+    `<c:roundedCorners val="0"/><c:chart>${compact ? '' : title}<c:autoTitleDeleted val="${compact ? 1 : 0}"/>` +
     plotArea(spec, sheetName, fmt) +
-    `${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
+    `${compact ? '' : legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
     `<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="CBD5E1"/></a:solidFill></a:ln></c:spPr>` +
     `</c:chartSpace>`
   );

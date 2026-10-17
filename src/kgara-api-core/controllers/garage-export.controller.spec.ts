@@ -9,6 +9,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import { GaragePeriodReportService } from '../services/garage-period-report.service';
 import { KgaraCompletedCasesExportService } from '../services/kgara-completed-cases-export.service';
 import { GarageCashflowExportService } from '../services/garage-cashflow-export.service';
+import { GarageOpexExportService } from '../services/garage-opex-export.service';
 import { GarageCasesExportController } from './garage-cases-export.controller';
 import { GarageDashboardExportController } from './garage-dashboard-export.controller';
 import { GarageDebtsExportController } from './garage-debts-export.controller';
@@ -41,6 +42,9 @@ describe('Garage export controllers', () => {
   const cashflowExport = {
     buildExcel: jest.fn().mockResolvedValue(Buffer.from('cashflow')),
   };
+  const opexExport = {
+    buildExcel: jest.fn().mockResolvedValue(Buffer.from('opex')),
+  };
 
   const periodReport = {
     exportExcel: jest.fn().mockResolvedValue(Buffer.from('dashboard')),
@@ -60,6 +64,7 @@ describe('Garage export controllers', () => {
         { provide: GarageDebtsExportService, useValue: debtsExport },
         { provide: GaragePeriodReportService, useValue: periodReport },
         { provide: GarageCashflowExportService, useValue: cashflowExport },
+        { provide: GarageOpexExportService, useValue: opexExport },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -155,6 +160,42 @@ describe('Garage export controllers', () => {
       expect(() =>
         dashboardController.download(result.jobId, req('u2'), res),
       ).toThrow();
+    });
+
+    it('reportType tới service, tên file có nhãn loại và không dùng lại file của loại khác', async () => {
+      const all = dashboardController.start({}, 'CN1', req('u1'));
+      await flush();
+      const business = dashboardController.start(
+        { reportType: 'business' },
+        'CN1',
+        req('u1'),
+      );
+      await flush();
+
+      expect(business.jobId).not.toBe(all.jobId);
+      expect(periodReport.exportExcel).toHaveBeenLastCalledWith(
+        'CN1',
+        { reportType: 'business' },
+        expect.any(Function),
+      );
+      const names = dashboardController
+        .history(req('u1'))
+        .items.map((item) => item.fileName);
+      expect(
+        names.some((n) => n.includes('Bao_cao_Garage_Hoat_dong_kinh_doanh_')),
+      ).toBe(true);
+      expect(names.some((n) => n.includes('Tong_hop'))).toBe(false);
+    });
+
+    it('reportType=all tường minh dùng lại file của yêu cầu không truyền reportType', async () => {
+      const first = dashboardController.start({}, 'CN1', req('u1'));
+      await flush();
+      const same = dashboardController.start(
+        { reportType: 'all' },
+        'CN1',
+        req('u1'),
+      );
+      expect(same).toMatchObject({ jobId: first.jobId, reused: true });
     });
 
     it('có runner riêng: không dùng lại file của chi nhánh khác', async () => {

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  ArrayUnique,
   IsArray,
   IsIn,
   IsOptional,
@@ -69,7 +70,38 @@ export class GarageDebtsExportDto {
   column_search?: string;
 }
 
-/** Điều kiện xuất báo cáo Garage theo kỳ (tab Tổng quan): chỉ có khoảng ngày. */
+/**
+ * Loại báo cáo Garage theo kỳ:
+ * - `all`: toàn bộ file (mặc định, giữ tương thích ngược).
+ * - `business`: tình hình hoạt động kinh doanh (P&L kèm chart).
+ * - `cashflow-debts`: thu chi & công nợ.
+ * - `overdue`: nợ quá hạn cần chú ý.
+ */
+export const GARAGE_PERIOD_REPORT_TYPES = [
+  'all',
+  'business',
+  'cashflow-debts',
+  'overdue',
+] as const;
+export type GaragePeriodReportType =
+  (typeof GARAGE_PERIOD_REPORT_TYPES)[number];
+
+/**
+ * Mục chọn trực tiếp trên màn xuất (multi-select): báo cáo tổng quan, lợi nhuận, công nợ phải
+ * thu / phải trả, nợ quá hạn, thu chi. Khi có mục chọn thì ưu tiên hơn `reportType`.
+ */
+export const GARAGE_PERIOD_REPORT_SECTION_KEYS = [
+  'overview',
+  'pnl',
+  'receivables',
+  'payables',
+  'overdue',
+  'cashflow',
+] as const;
+export type GaragePeriodReportSectionKey =
+  (typeof GARAGE_PERIOD_REPORT_SECTION_KEYS)[number];
+
+/** Điều kiện xuất báo cáo Garage theo kỳ (tab Tổng quan): khoảng ngày + loại báo cáo. */
 export class GarageDashboardExportDto {
   @IsOptional()
   @Matches(DATE_PATTERN, { message: DATE_MESSAGE })
@@ -78,6 +110,16 @@ export class GarageDashboardExportDto {
   @IsOptional()
   @Matches(DATE_PATTERN, { message: DATE_MESSAGE })
   to?: string;
+
+  @IsOptional()
+  @IsIn(GARAGE_PERIOD_REPORT_TYPES)
+  reportType?: GaragePeriodReportType;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(GARAGE_PERIOD_REPORT_SECTION_KEYS, { each: true })
+  reportSections?: GaragePeriodReportSectionKey[];
 }
 
 /** Điều kiện xuất Excel bảng kê phiếu dịch vụ (cases). */

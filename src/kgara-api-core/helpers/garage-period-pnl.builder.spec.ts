@@ -22,6 +22,9 @@ const month = (
   month: m,
   revenue: 444218804,
   cogs: 241508218,
+  cogsDirect: 241508218,
+  cogsAdjustmentItems: [],
+  revenueSegments: [],
   grossProfit: 202710586,
   grossMarginRate: 45.63,
   opexTotal: 146500000,
@@ -45,6 +48,7 @@ const month = (
     },
   ],
   netBeforeCommission: 56210586,
+  hhbhTotal: 0,
   commissionTotal: 5621059,
   commissionItems: [
     {
@@ -77,26 +81,28 @@ describe('buildPnlTableRows', () => {
   it('bảng đúng thứ tự: doanh thu, chi phí, lãi gộp, vận hành từng khoản, ròng, hoa hồng', () => {
     const rows = buildPnlTableRows(month(2026, 7));
     expect(rows.map((r) => r.label)).toEqual([
-      'I. Doanh thu',
-      'Doanh thu',
-      'II. Chi phí',
-      'Chi phí phụ tùng ngoài & Gia công ngoài',
-      'III. Lợi nhuận gộp',
-      'IV. Chi phí vận hành',
-      'Nhân sự',
-      'Thuê mặt bằng & điện nước',
-      'Vật tư tiêu hao',
-      'Bảo trì',
-      'Khấu hao máy móc & thiết bị',
-      'V. Lợi nhuận ròng (trước hoa hồng)',
-      'VI. Hoa hồng',
-      'Tỷ lệ lãi gộp ký gửi / Lãi gộp',
-      'Hoa hồng cho Sale (10%)',
-      'Hoa hồng cho DV (10%)',
-      'VII. Lợi nhuận ròng (sau hoa hồng)',
+      '1. Doanh thu',
+      '1.1 Doanh thu',
+      '2. Chi phí',
+      '2.1 Chi phí phụ tùng ngoài & Gia công ngoài',
+      '3. Lợi nhuận gộp',
+      '4. Chi phí bán hàng',
+      '4.1 Tỷ lệ lãi gộp ký gửi / Lãi gộp',
+      '4.2 Hoa hồng cho Sale (10%)',
+      '5. Chi phí vận hành',
+      '5.1 Nhân sự',
+      '5.2 Thuê mặt bằng & điện nước',
+      '5.3 Vật tư tiêu hao',
+      '5.4 Bảo trì',
+      '5.5 Khấu hao máy móc & thiết bị',
+      '6. Lợi nhuận ròng (trước hoa hồng DV)',
+      '7. Hoa hồng DV',
+      '7.1 Hoa hồng cho DV (10%)',
+      '8. Lợi nhuận ròng (sau hoa hồng DV)',
     ]);
-    expect(rows.filter((r) => r.group).map((r) => r.value)).toEqual([
-      444218804, 241508218, 202710586, 146500000, 56210586, 5621059, 50589527,
+    expect(rows.filter((r) => r.level === 1).map((r) => r.value)).toEqual([
+      444218804, 241508218, 202710586, 0, 146500000, 56210586, 5621059,
+      50589527,
     ]);
   });
 
@@ -112,32 +118,32 @@ describe('buildPnlTableRows', () => {
         ],
       }),
     );
-    const rate = rows.find((r) => r.label.startsWith('Tỷ lệ'))!;
+    const rate = rows.find((r) => r.label.includes('Tỷ lệ'))!;
     expect(rate.value).toBeCloseTo(0.125, 6);
     expect(rate.numFmt).toBe('0.00%');
   });
 });
 
 describe('buildPnlSheet', () => {
-  it('chart xếp dọc trong cùng cột D:M, trên hàng 40 để bảng + 2 chart gọn một màn hình', async () => {
+  it('chart xếp dọc trong cùng cột E:N, trên hàng 40 để bảng + 2 chart gọn một màn hình', async () => {
     const wb = new ExcelJS.Workbook();
     const [combo, stacked] = buildPnlSheet(wb, twelveMonths());
 
-    expect(combo.anchor).toMatchObject({ fromCol: 3, toCol: 13, fromRow: 3 });
-    expect(stacked.anchor).toMatchObject({ fromCol: 3, toCol: 13 });
+    expect(combo.anchor).toMatchObject({ fromCol: 4, toCol: 14, fromRow: 3 });
+    expect(stacked.anchor).toMatchObject({ fromCol: 4, toCol: 14 });
     // chart 2 nằm ngay dưới chart 1, không chồng lên nhau
     expect(stacked.anchor.fromRow).toBe(combo.anchor.toRow);
     expect(stacked.anchor.toRow).toBeLessThanOrEqual(40);
 
     // bảng dữ liệu biểu đồ nằm dưới màn hình đầu, không dưới chart
     const sheet = wb.getWorksheet(PNL_SHEET)!;
-    expect(sheet.getCell('D44').value).toContain('Dữ liệu biểu đồ');
-    expect(sheet.pageSetup.printArea).toBe('A1:M41');
+    expect(sheet.getCell('E80').value).toContain('Dữ liệu biểu đồ');
+    expect(sheet.pageSetup.printArea).toBe('A1:N77');
   });
 
-  it('bật nhãn số: tiền theo triệu cho cột, % cho đường, % ẩn dưới 1% cho cột chồng', () => {
+  it('bật nhãn số cho chart 12 tháng (tiền theo triệu, % cho đường); waterfall không nhãn số, không chú thích', () => {
     const wb = new ExcelJS.Workbook();
-    const [combo, stacked] = buildPnlSheet(wb, twelveMonths());
+    const [combo, ratio, waterfall] = buildPnlSheet(wb, twelveMonths());
 
     expect(combo).toMatchObject({
       dataLabels: true,
@@ -145,10 +151,12 @@ describe('buildPnlSheet', () => {
       labelFontSize: 700,
     });
     expect(combo.series[3].labelNumFmt).toBe('0%');
-    expect(stacked).toMatchObject({
+    expect(ratio).toMatchObject({
       dataLabels: true,
       labelNumFmt: LABEL_PERCENT_FMT,
     });
+    expect(waterfall.dataLabels).toBeFalsy();
+    expect(waterfall.showLegend).toBe(false);
   });
 
   it('tháng không có doanh thu: % lợi nhuận gộp để trống (null) thay vì 0%', () => {
@@ -162,7 +170,7 @@ describe('buildPnlSheet', () => {
     expect(line[1]).toBeCloseTo(202710586 / 444218804, 6);
     // ô trong bảng dữ liệu cũng để trống
     const sheet = wb.getWorksheet(PNL_SHEET)!;
-    expect(sheet.getCell('H46').value).toBeNull();
+    expect(sheet.getCell('I46').value).toBeNull();
   });
 
   const build = async () => {
@@ -181,18 +189,19 @@ describe('buildPnlSheet', () => {
 
     expect(sheet.getCell('A1').value).toBe('Báo cáo lợi nhuận - Tháng 07/2026');
     expect(sheet.getCell('A4').value).toBe('Danh mục');
-    expect(sheet.getCell('B4').value).toBe('Giá trị');
-    expect(sheet.getCell('A5').value).toBe('I. Doanh thu');
+    expect(sheet.getCell('B4').value).toBe('Tháng 07/2026');
+    expect(sheet.getCell('C4').value).toBe('Trước: Tháng 06/2026');
+    expect(sheet.getCell('A5').value).toBe('1. Doanh thu');
     expect(sheet.getCell('B5').value).toBe(444218804);
     expect(sheet.getCell('A5').font?.bold).toBe(true);
     expect(sheet.getCell('A6').font?.bold).toBe(false);
   });
 
-  it('2 chart 12 tháng: combo có % lợi nhuận gộp trên trục phụ, tỷ trọng là cột chồng 7 series', async () => {
+  it('2 chart: combo 12 tháng có % lợi nhuận gộp trên trục phụ; waterfall tháng báo cáo là cột chồng có nền vô hình', async () => {
     const { charts } = await build();
-    expect(charts).toHaveLength(2);
+    expect(charts).toHaveLength(4);
 
-    const [combo, stacked] = charts;
+    const [combo, , waterfall] = charts;
     expect(combo.type).toBe('combo');
     expect(combo.categories).toHaveLength(12);
     expect(combo.categories[0]).toBe('2025-thg 8');
@@ -207,14 +216,22 @@ describe('buildPnlSheet', () => {
     expect(line).toMatchObject({ kind: 'line', secondaryAxis: true });
     expect(line.values[0]).toBeCloseTo(202710586 / 444218804, 6);
 
-    expect(stacked.stacked).toBe(true);
-    expect(stacked.series).toHaveLength(7);
-    // Tổng tỷ trọng một tháng = (cogs + vận hành) / doanh thu
-    const total = stacked.series.reduce(
-      (acc, s) => acc + (s.values[0] ?? 0),
-      0,
+    expect(waterfall.stacked).toBe(true);
+    expect(waterfall.series.map((s) => s.name)).toEqual(
+      expect.arrayContaining([
+        'Nền',
+        'Doanh thu',
+        'Giá vốn',
+        'Chi phí bán hàng',
+        'Chi phí vận hành',
+        'Hoa hồng DV',
+        'Giá vốn (âm)',
+      ]),
     );
-    expect(total).toBeCloseTo((241508218 + 146500000) / 444218804, 6);
+    expect(waterfall.series[0].hidden).toBe(true);
+    expect(waterfall.series).toHaveLength(13);
+    expect(waterfall.categories).toHaveLength(8);
+    expect(waterfall.categories[0]).toBe('Doanh thu\n444,2tr · 100,0%');
   });
 
   it('chart được chèn vào đúng sheet với trục phụ và grouping stacked', async () => {
@@ -223,7 +240,7 @@ describe('buildPnlSheet', () => {
     const chartFiles = Object.keys(zip.files).filter((p) =>
       /^xl\/charts\/chart\d+\.xml$/.test(p),
     );
-    expect(chartFiles).toHaveLength(2);
+    expect(chartFiles).toHaveLength(4);
     const xmls = await Promise.all(
       chartFiles.map((p) => zip.file(p)!.async('string')),
     );
@@ -243,12 +260,228 @@ describe('buildPnlSheet', () => {
     );
   });
 
-  it('doanh thu 0 thì tỷ lệ là 0, không NaN', () => {
+  it('doanh thu 0: đường % để trống, waterfall không có NaN', () => {
     const wb = new ExcelJS.Workbook();
     const charts = buildPnlSheet(wb, [month(2026, 7, { revenue: 0 })]);
     expect(charts[0].series[3].values).toEqual([null]);
-    expect(charts[1].series.every((s) => s.values.every((v) => v === 0))).toBe(
-      true,
+    expect(
+      charts[1].series.every((s) => s.values.every((v) => Number.isFinite(v))),
+    ).toBe(true);
+  });
+});
+
+describe('buildPnlTableRows - 3 cấp', () => {
+  /** Bỏ số thứ bậc để so sánh tên dòng. */
+  const plain = (label: string) => label.replace(/^\d+(\.\d+)*\.? /, '');
+  const rowsOf = (m: PnlMonthRow) =>
+    buildPnlTableRows(m).map((r) => ({ ...r, label: plain(r.label) }));
+  const detailed = () =>
+    month(2026, 10, {
+      revenue: 1000,
+      cogs: 700,
+      cogsDirect: 600,
+      grossProfit: 300,
+      cogsAdjustmentItems: [
+        {
+          categoryKey: 'VAT_TU_TIEU_HAO',
+          categoryName: 'Vật tư tiêu hao',
+          amount: 100,
+          note: 'Dầu nhớt xưởng',
+        },
+      ],
+      revenueSegments: [
+        {
+          key: 'KY_GUI',
+          label: 'Ký gửi / Nội bộ',
+          caseCount: 2,
+          revenue: 400,
+          cogs: 250,
+        },
+        {
+          key: 'SUA_CHUA_CHUNG',
+          label: 'Sửa chữa chung',
+          caseCount: 3,
+          revenue: 600,
+          cogs: 350,
+        },
+        { key: 'OJ', label: 'OJ', caseCount: 0, revenue: 0, cogs: 0 },
+        { key: 'KHAC', label: 'Khác', caseCount: 0, revenue: 0, cogs: 0 },
+      ],
+      opexTotal: 150,
+      opexItems: [
+        {
+          categoryKey: 'NHAN_SU',
+          categoryName: 'Nhân sự',
+          amount: 100,
+          note: 'Lương T10',
+        },
+        { categoryKey: 'NHAN_SU', categoryName: 'Nhân sự', amount: 30 },
+        { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 20 },
+      ],
+      netBeforeCommission: 150,
+      hhbhTotal: 40,
+      commissionTotal: 20,
+      commissionItems: [
+        {
+          categoryKey: 'HOA_HONG_DV',
+          categoryName: 'Hoa hồng cho DV (10%)',
+          amount: 20,
+        },
+      ],
+      netAfterCommission: 90,
+    });
+
+  it('doanh thu: phân loại (cấp 2) kèm số phiếu (cấp 3), bỏ phân loại trống', () => {
+    const rows = rowsOf(detailed());
+    const labelsOf = (from: string, to: string) => {
+      const a = rows.findIndex((r) => r.label === from);
+      const b = rows.findIndex((r) => r.label === to);
+      return rows.slice(a, b).map((r) => [r.level, r.label, r.value]);
+    };
+    expect(labelsOf('Doanh thu', 'Chi phí')).toEqual([
+      [1, 'Doanh thu', 1000],
+      [2, 'Ký gửi / Nội bộ', 400],
+      [3, 'Số phiếu hoàn thành', 2],
+      [2, 'Sửa chữa chung', 600],
+      [3, 'Số phiếu hoàn thành', 3],
+    ]);
+    expect(rows.find((r) => r.label === 'Số phiếu hoàn thành')!.numFmt).toBe(
+      '#,##0',
+    );
+  });
+
+  it('chi phí: giá vốn từ phiếu theo phân loại và điều chỉnh giá vốn nhập tay từng dòng', () => {
+    const rows = rowsOf(detailed());
+    const a = rows.findIndex((r) => r.label === 'Chi phí');
+    const b = rows.findIndex((r) => r.label === 'Lợi nhuận gộp');
+    expect(rows.slice(a, b).map((r) => [r.level, r.label, r.value])).toEqual([
+      [1, 'Chi phí', 700],
+      [2, 'Giá vốn từ phiếu (phụ tùng ngoài & gia công ngoài)', 600],
+      [3, 'Ký gửi / Nội bộ', 250],
+      [3, 'Sửa chữa chung', 350],
+      [2, 'Điều chỉnh giá vốn nhập tay', 100],
+      [3, 'Vật tư tiêu hao - Dầu nhớt xưởng', 100],
+    ]);
+  });
+
+  it('chi phí vận hành: hạng mục cộng dòng cùng khóa, từng dòng nhập ở cấp 3', () => {
+    const rows = rowsOf(detailed());
+    const a = rows.findIndex((r) => r.label === 'Chi phí vận hành');
+    const b = rows.findIndex((r) =>
+      r.label.startsWith('Lợi nhuận ròng (trước'),
+    );
+    expect(rows.slice(a, b).map((r) => [r.level, r.label, r.value])).toEqual([
+      [1, 'Chi phí vận hành', 150],
+      [2, 'Nhân sự', 130],
+      [3, 'Lương T10', 100],
+      [3, 'Khoản chi', 30],
+      [2, 'Bảo trì', 20], // một dòng không ghi chú: không mở cấp 3
+    ]);
+  });
+
+  it('chi phí bán hàng gồm HHBH; hoa hồng DV tách riêng nên 6 − 7 = 8', () => {
+    const rows = rowsOf(detailed());
+    const value = (name: string) => rows.find((r) => r.label === name)!.value;
+    expect(value('Chi phí bán hàng')).toBe(40);
+    expect(rows.find((r) => r.label === 'HHBH')).toMatchObject({
+      level: 2,
+      value: 40,
+    });
+    expect(value('Lợi nhuận ròng (trước hoa hồng DV)')).toBe(110);
+    expect(value('Hoa hồng DV')).toBe(20);
+    expect(
+      value('Lợi nhuận ròng (trước hoa hồng DV)') - value('Hoa hồng DV'),
+    ).toBe(value('Lợi nhuận ròng (sau hoa hồng DV)'));
+  });
+
+  it('không có HHBH thì không thêm dòng HHBH', () => {
+    const rows = buildPnlTableRows(month(2026, 7));
+    expect(rows.some((r) => r.label === 'HHBH')).toBe(false);
+  });
+
+  it('bảng ghi thụt lề theo cấp: cấp 1 đậm nền xám, cấp 3 chữ nghiêng', () => {
+    const wb = new ExcelJS.Workbook();
+    buildPnlSheet(wb, [detailed()]);
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+    expect(sheet.getCell('A5').font?.bold).toBe(true);
+    expect(sheet.getCell('A5').alignment?.indent).toBe(1);
+    expect(sheet.getCell('A6').alignment?.indent).toBe(2);
+    expect(sheet.getCell('A7').font?.italic).toBe(true);
+    expect(sheet.getCell('A7').alignment?.indent).toBe(4);
+  });
+});
+
+describe('buildPnlSheet - cột tháng trước và vùng in', () => {
+  it('cột C là tháng trước: cùng dòng khớp theo khóa, dòng chỉ có ở tháng này thì tháng trước là 0', () => {
+    const wb = new ExcelJS.Workbook();
+    const months = twelveMonths();
+    months[10] = month(2026, 6, { revenue: 300000000, cogs: 100000000 });
+    buildPnlSheet(wb, months);
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+
+    expect(sheet.getCell('C5').value).toBe(300000000); // 1. Doanh thu
+    expect(sheet.getCell('B5').value).toBe(444218804);
+    // dòng cấp 2 "Chi phí vận hành" của Nhân sự: tháng trước cùng số dòng (vì dựng từ cùng tháng)
+    const nhanSu = [
+      5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+      25, 26,
+    ].find((r) => sheet.getCell(`A${r}`).value === '5.1 Nhân sự')!;
+    expect(sheet.getCell(`C${nhanSu}`).value).toBe(76500000);
+  });
+
+  it('chỉ có một tháng: cột tháng trước để trống, không lỗi', () => {
+    const wb = new ExcelJS.Workbook();
+    buildPnlSheet(wb, [month(2026, 7)]);
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+
+    expect(sheet.getCell('C4').value).toBe('Trước');
+    expect(sheet.getCell('C5').value).toBeNull();
+  });
+
+  it('dòng chi tiết nhập tay không có ở tháng trước thì để trống, không đoán 0', () => {
+    const wb = new ExcelJS.Workbook();
+    const current = month(2026, 7, {
+      opexItems: [
+        {
+          categoryKey: 'BAO_TRI',
+          categoryName: 'Bảo trì',
+          amount: 10,
+          note: 'Thay lốp',
+        },
+        {
+          categoryKey: 'BAO_TRI',
+          categoryName: 'Bảo trì',
+          amount: 5,
+          note: 'Sơn',
+        },
+      ],
+    });
+    buildPnlSheet(wb, [month(2026, 6), current]);
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+    const rowOf = (label: string) => {
+      let found = 0;
+      sheet.eachRow((row, r) => {
+        if (row.getCell(1).value === label) found = r;
+      });
+      return found;
+    };
+    // hạng mục Bảo trì tháng trước có cùng khóa (10 triệu), nên hiện số tháng trước
+    expect(sheet.getCell(`C${rowOf('5.1 Bảo trì')}`).value).toBe(10000000);
+    // dòng nhập "Thay lốp" không có ở tháng trước: để trống
+    expect(sheet.getCell(`C${rowOf('5.1.1 Thay lốp')}`).value).toBeNull();
+  });
+
+  it('bảng P&L dài hơn vùng chart thì vùng in kéo theo số dòng bảng', () => {
+    const wb = new ExcelJS.Workbook();
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      categoryKey: `K${i}`,
+      categoryName: `Hạng mục ${i}`,
+      amount: 1,
+    }));
+    buildPnlSheet(wb, [month(2026, 7, { opexItems: items })]);
+    const rows = buildPnlTableRows(month(2026, 7, { opexItems: items }));
+    expect(wb.getWorksheet(PNL_SHEET)!.pageSetup.printArea).toBe(
+      `A1:N${5 + rows.length}`,
     );
   });
 });

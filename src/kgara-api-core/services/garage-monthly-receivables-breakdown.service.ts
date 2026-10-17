@@ -482,6 +482,10 @@ export class GarageMonthlyReceivablesBreakdownService {
 
       // Thuế VAT từ KGara
       const vatTotal = Number(raw?.TienThue) || 0;
+      // Hồ sơ có cả phần BH và phần KH: chi phí chia theo tỷ trọng số tiền để không cộng trùng
+      const partTotal = phaiThuBH + phaiThuKH;
+      const shareBH = partTotal > 0 ? phaiThuBH / partTotal : 0;
+      const shareKH = partTotal > 0 ? phaiThuKH / partTotal : 0;
       const vatKH = Number(raw?.TienThueKH) || (phaiThuBH <= 0 ? vatTotal : 0);
       const vatBH =
         Number(raw?.TienThueBH) ||
@@ -593,10 +597,10 @@ export class GarageMonthlyReceivablesBreakdownService {
         };
 
         const gpCost = gpCostByCaseId.get(c.id);
-        const caseCost = Number(
-          gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0,
-        );
-        const casePaidCost = setInfo?.paidCost || 0;
+        const caseCost =
+          Number(gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0) *
+          shareBH;
+        const casePaidCost = (setInfo?.paidCost || 0) * shareBH;
         const caseRemainingCost = Math.max(0, caseCost - casePaidCost);
 
         if (bhInvoice?.invoiceNo) existing.invoiceNos.add(bhInvoice.invoiceNo);
@@ -712,10 +716,10 @@ export class GarageMonthlyReceivablesBreakdownService {
         };
 
         const gpCost = gpCostByCaseId.get(c.id);
-        const caseCost = Number(
-          gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0,
-        );
-        const casePaidCost = setInfo?.paidCost || 0;
+        const caseCost =
+          Number(gpCost != null && gpCost > 0 ? gpCost : c.chiPhi || 0) *
+          shareKH;
+        const casePaidCost = (setInfo?.paidCost || 0) * shareKH;
         const caseRemainingCost = Math.max(0, caseCost - casePaidCost);
 
         if (khInvoice?.invoiceNo) existing.invoiceNos.add(khInvoice.invoiceNo);

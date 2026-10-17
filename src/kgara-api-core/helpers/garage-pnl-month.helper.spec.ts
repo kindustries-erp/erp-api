@@ -160,6 +160,75 @@ describe('garage-pnl-month.helper', () => {
       expect(row.revenue).toBe(0);
       expect(row.opexItems).toEqual([]);
       expect(row.commissionItems).toEqual([]);
+      expect(row.cogsAdjustmentItems).toEqual([]);
+      expect(row.revenueSegments).toEqual([]);
+      expect(row.cogsDirect).toBe(0);
+      expect(row.hhbhTotal).toBe(0);
+    });
+
+    it('lấy phân loại doanh thu, điều chỉnh giá vốn, HHBH và ghi chú dòng nhập', () => {
+      const row = toPnlMonthRow(
+        { year: 2026, month: 10 },
+        {
+          revenue: 1000,
+          cogs: 700,
+          cogsDirect: 600,
+          cogsAdjustment: {
+            total: 100,
+            items: [
+              {
+                categoryKey: 'VAT_TU_TIEU_HAO',
+                categoryName: 'Vật tư tiêu hao',
+                amount: '100',
+                note: '  Dầu nhớt xưởng  ',
+              },
+            ],
+          },
+          revenueByClassification: [
+            {
+              key: 'OJ',
+              label: 'OJ',
+              caseCount: '2',
+              revenue: '400',
+              cogs: '300',
+            },
+          ],
+          opex: {
+            total: 50,
+            items: [
+              {
+                categoryKey: 'NHAN_SU',
+                categoryName: 'Nhân sự',
+                amount: 50,
+                note: '   ',
+              },
+            ],
+          },
+          sellingExpenses: {
+            total: 80,
+            items: [
+              { categoryKey: 'RATE_X', amount: 5 },
+              { categoryKey: 'HHBH', categoryName: 'HHBH', amount: '30' },
+            ],
+          },
+        },
+      );
+
+      expect(row.cogsDirect).toBe(600);
+      expect(row.cogsAdjustmentItems).toEqual([
+        {
+          categoryKey: 'VAT_TU_TIEU_HAO',
+          categoryName: 'Vật tư tiêu hao',
+          amount: 100,
+          note: 'Dầu nhớt xưởng',
+        },
+      ]);
+      expect(row.revenueSegments).toEqual([
+        { key: 'OJ', label: 'OJ', caseCount: 2, revenue: 400, cogs: 300 },
+      ]);
+      expect(row.hhbhTotal).toBe(30);
+      // ghi chú trống bị bỏ, không để chuỗi rỗng
+      expect('note' in row.opexItems[0]).toBe(false);
     });
   });
   describe('toPnlTrendPoint', () => {

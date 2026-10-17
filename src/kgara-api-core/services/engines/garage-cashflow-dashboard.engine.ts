@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
+import { KgaraBranch } from '../../entities/kgara_branch.entity';
 import {
   GarageCashflowDashboardQueryDto,
   GarageCashflowDashboardResponseDto,
@@ -40,14 +41,20 @@ export class GarageCashflowDashboardEngine {
         paymentContent: query.paymentContent,
       });
     }
-    if (query.branchId) {
+    if (
+      query.branchId &&
+      query.branchId.trim() !== '' &&
+      query.branchId !== 'ALL'
+    ) {
+      const branchId = query.branchId.trim();
       if (!hasCaseJoin) {
         qb.leftJoin('v.case', 'c');
       }
+      qb.leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id');
       qb.andWhere(
-        'c.branchExternalId = :branchId OR c.branchName = :branchId',
+        '(c.branch_external_id = :branchId OR CAST(b.id AS TEXT) = :branchId OR b.name = :branchId OR b.code = :branchId)',
         {
-          branchId: query.branchId,
+          branchId,
         },
       );
     }
@@ -133,7 +140,7 @@ export class GarageCashflowDashboardEngine {
       qb.select(`COALESCE(NULLIF(v.payment_method, ''), 'Khác')`, 'name')
         .addSelect('SUM(v.amount)', 'amount')
         .addSelect('COUNT(1)', 'count')
-        .where('v.voucher_type = :type', { type })
+        .andWhere('v.voucher_type = :type', { type })
         .groupBy(`COALESCE(NULLIF(v.payment_method, ''), 'Khác')`)
         .orderBy('SUM(v.amount)', 'DESC');
 
@@ -161,7 +168,7 @@ export class GarageCashflowDashboardEngine {
       qb.select(`COALESCE(NULLIF(v.payment_content, ''), 'Khác')`, 'name')
         .addSelect('SUM(v.amount)', 'amount')
         .addSelect('COUNT(1)', 'count')
-        .where('v.voucher_type = :type', { type })
+        .andWhere('v.voucher_type = :type', { type })
         .groupBy(`COALESCE(NULLIF(v.payment_content, ''), 'Khác')`)
         .orderBy('SUM(v.amount)', 'DESC');
 
@@ -233,7 +240,7 @@ export class GarageCashflowDashboardEngine {
         'c.so_chung_tu AS "caseCode"',
         'v.case_id AS "caseId"',
       ])
-        .where('v.voucher_type = :type', { type })
+        .andWhere('v.voucher_type = :type', { type })
         .orderBy('v.amount', 'DESC')
         .limit(5);
 

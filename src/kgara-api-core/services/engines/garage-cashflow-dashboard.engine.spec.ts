@@ -98,4 +98,60 @@ describe('GarageCashflowDashboardEngine', () => {
     expect(result.trend[1].label).toBe('2026-10');
     expect(result.trend[1].net).toBe(30000000);
   });
+
+  it('applies branchId filter by joining v.case and KgaraBranch safely without c.branchName', async () => {
+    qb.getRawOne.mockResolvedValue({});
+    qb.getRawMany.mockResolvedValue([]);
+
+    await engine.getDashboardStats({
+      branchId: '0b4d6d3a-55df-492b-abaf-377d84b61d05',
+    });
+
+    expect(qb.leftJoin).toHaveBeenCalledWith('v.case', 'c');
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      '(c.branch_external_id = :branchId OR CAST(b.id AS TEXT) = :branchId OR b.name = :branchId OR b.code = :branchId)',
+      { branchId: '0b4d6d3a-55df-492b-abaf-377d84b61d05' },
+    );
+
+    // Verify c.branchName is never used in any where clause
+    const allWhereCalls = qb.andWhere.mock.calls;
+    for (const [sql] of allWhereCalls) {
+      expect(sql).not.toContain('branchName');
+    }
+  });
+
+  it('ignores branchId if it is empty, whitespace, or ALL', async () => {
+    qb.getRawOne.mockResolvedValue({});
+    qb.getRawMany.mockResolvedValue([]);
+
+    await engine.getDashboardStats({
+      branchId: 'ALL',
+    });
+
+    const allWhereCalls = qb.andWhere.mock.calls;
+    for (const [sql] of allWhereCalls) {
+      expect(sql).not.toContain('branch_external_id');
+    }
+  });
+
+  it('uses andWhere instead of where for breakdown and top transactions to preserve base filters', async () => {
+    qb.getRawOne.mockResolvedValue({});
+    qb.getRawMany.mockResolvedValue([]);
+
+    await engine.getDashboardStats({
+      dateFrom: '2026-10-01',
+      branchId: '0b4d6d3a-55df-492b-abaf-377d84b61d05',
+    });
+
+    // qb.where should never be called so base filters are not wiped out
+    expect(qb.where).not.toHaveBeenCalled();
+
+    // Verify andWhere was called for RECEIPT and PAYMENT voucher_type
+    expect(qb.andWhere).toHaveBeenCalledWith('v.voucher_type = :type', {
+      type: 'RECEIPT',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('v.voucher_type = :type', {
+      type: 'PAYMENT',
+    });
+  });
 });

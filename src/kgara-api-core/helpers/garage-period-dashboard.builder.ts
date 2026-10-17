@@ -1,38 +1,31 @@
 import * as ExcelJS from 'exceljs';
 
 import {
-  DASHBOARD_CHART_ROWS,
-  DASHBOARD_COLUMNS,
-  DASHBOARD_DATA_START_COL,
-  chartAnchorRow,
   rowAfterCharts,
   setDashboardPrintArea,
-  writeAlertCards,
   writeDashboardHeader,
-  writeDataTable,
+  writeGroupTitle,
   writeKpiCards,
-  type DashboardKpi,
+  type CardGroupTheme,
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
-import {
-  CHART_PALETTE,
-  LABEL_MONEY_FMT,
-  type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+import type { XlsxChartSpec } from '../../common/xlsx-charts/xlsx-chart.types';
 import { formatPeriod } from './garage-debts-export.helper';
-import {
-  buildOverdueCards,
-  summarizeOverdue,
-} from './garage-overdue-warning.helper';
-import { bucketCashflow } from './garage-period-cashflow-bucket.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
+import {
+  PERIOD_CHART_ROWS,
+  buildDashboardCharts,
+} from './garage-period-dashboard-charts.helper';
+import { BUCKET_UNIT_LABEL, bucketUnitOf } from './garage-period-series.helper';
+import {
+  buildCashflowKpis,
+  buildOpenDebtKpis,
+  buildPeriodDebtKpis,
+} from './garage-period-summary-cards.helper';
+import { summarizePeriod } from './garage-period-summary.builder';
 
-const MONEY = '#,##0';
-const AGING_LABELS = ['0-30 ngày', '31-60 ngày', '61-90 ngày', 'Trên 90 ngày'];
-/** Chiều cao 3 dòng card cảnh báo (nhãn, giá trị, ghi chú) để cả khối chỉ ~ 8 hàng. */
-const ALERT_HEIGHTS: [number, number, number] = [14, 22, 24];
-
-const sum = <T>(items: T[], pick: (item: T) => number) =>
-  items.reduce((acc, item) => acc + (Number(pick(item)) || 0), 0);
+/** Tên sheet và số cột của báo cáo kỳ (sheet "Báo cáo", 3 cột đều nhau 6 cột). */
+export const PERIOD_REPORT_SHEET = 'Báo cáo';
+export const PERIOD_REPORT_COLUMNS = 18;
 
 /** Ghi chú nguồn số liệu một dòng ở cuối sheet. */
 function writeFootnote(
@@ -40,7 +33,7 @@ function writeFootnote(
   row: number,
   text: string,
 ): number {
-  sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
+  sheet.mergeCells(row, 1, row, PERIOD_REPORT_COLUMNS);
   const cell = sheet.getCell(row, 1);
   cell.value = text;
   cell.font = {
@@ -55,20 +48,58 @@ function writeFootnote(
 }
 
 /**
- * Dashboard thu chi & công nợ gọn một màn hình: 8 card cảnh báo quá hạn (phải thu,
- * phải trả), 4 KPI và 3 chart có nhãn số. Doanh thu, giá vốn, lãi gộp nằm ở sheet
- * "Báo cáo lợi nhuận". Trả về cấu hình chart để chèn sau khi ghi buffer.
+ * Màu theo nhóm thẻ (để người xem phân biệt): thu chi (emerald), tuổi nợ (hổ phách), phát sinh
+ * theo nhóm khách (violet). Đều thuộc bảng màu chart sẵn có, không dùng xanh dương.
+ */
+const THEME_CASH: CardGroupTheme = {
+  titleColor: 'FF065F46',
+  titleFill: 'FFD1FAE5',
+  titleSize: 13,
+  cardFill: 'FFECFDF5',
+  border: 'FFA7F3D0',
+  labelColor: 'FF047857',
+  valueColor: 'FF065F46',
+};
+const THEME_AGING: CardGroupTheme = {
+  titleColor: 'FF92400E',
+  titleFill: 'FFFDE68A',
+  titleSize: 13,
+  cardFill: 'FFFFFBEB',
+  border: 'FFFDE68A',
+  labelColor: 'FFB45309',
+  valueColor: 'FF92400E',
+};
+const THEME_GROUP: CardGroupTheme = {
+  titleColor: 'FF5B21B6',
+  titleFill: 'FFEDE9FE',
+  titleSize: 13,
+  cardFill: 'FFF5F3FF',
+  border: 'FFDDD6FE',
+  labelColor: 'FF6D28D9',
+  valueColor: 'FF5B21B6',
+};
+
+/** Cột (1-based) đầu và cuối của từng vùng 6 cột: thu chi, tuổi nợ, phát sinh theo nhóm. */
+const COLUMN_SPANS = [
+  { startCol: 1, endCol: 6 },
+  { startCol: 7, endCol: 12 },
+  { startCol: 13, endCol: 18 },
+];
+
+/**
+ * Báo cáo kỳ (sheet "Báo cáo"): 3 cột có tiêu đề riêng. Cột 1 thu chi và cột 2 tuổi nợ, mỗi
+ * cột 4 thẻ (2 thẻ/hàng); cột 3 là 2 thẻ phát sinh nằm ngay trên chart nhóm khách. Chart cột 1,
+ * 2 bắt đầu sau 2 hàng thẻ; chart cột 3 cao hơn để đáy ba chart ngang nhau. Không số đối tượng.
  */
 export function buildPeriodDashboard(
   dashboard: ExcelJS.Worksheet,
   data: GaragePeriodReportData,
 ): XlsxChartSpec[] {
-  const receivable = summarizeOverdue('receivable', data.openCustomerRows);
-  const payable = summarizeOverdue('payable', data.openSupplierRows);
+  const summary = summarizePeriod(data);
 
-  const headerEnd = writeDashboardHeader(
+  const headerRow = writeDashboardHeader(
     dashboard,
-    'Dashboard thu chi & công nợ Garage',
+    'Báo cáo thu chi & công nợ Garage',
     [
       `${formatPeriod({
         dateFrom: data.from,
@@ -76,173 +107,78 @@ export function buildPeriodDashboard(
         asOfDate: data.asOfDate,
       })} · Chi nhánh: ${data.branchLabel || 'Tất cả chi nhánh'}`,
     ],
+    PERIOD_REPORT_COLUMNS,
   );
-  const receivableEnd = writeAlertCards(
+
+  // Ba cột thẻ cùng bắt đầu từ một dòng để chữ và số thẳng hàng
+  writeGroupTitle(
     dashboard,
-    headerEnd,
-    buildOverdueCards(receivable),
-    { heights: ALERT_HEIGHTS },
+    headerRow,
+    'Thu chi trong kỳ',
+    COLUMN_SPANS[0],
+    THEME_CASH,
   );
-  const kpiStart = writeAlertCards(
+  writeGroupTitle(
     dashboard,
-    receivableEnd,
-    buildOverdueCards(payable),
-    { heights: ALERT_HEIGHTS },
+    headerRow,
+    'Tuổi nợ lũy kế đến ngày xuất',
+    COLUMN_SPANS[1],
+    THEME_AGING,
   );
-
-  const thu = sum(
-    data.vouchers.filter((v) => v.type === 'RECEIPT'),
-    (v) => v.amount,
-  );
-  const chi = sum(
-    data.vouchers.filter((v) => v.type === 'PAYMENT'),
-    (v) => v.amount,
-  );
-  const kpis: DashboardKpi[] = [
-    { label: 'ĐÃ THU TRONG KỲ', value: thu },
-    { label: 'ĐÃ CHI TRONG KỲ', value: chi },
-    { label: 'CÒN PHẢI THU (NỢ MỞ)', value: receivable.totalBalance },
-    { label: 'CÒN PHẢI TRẢ (NỢ MỞ)', value: payable.totalBalance },
-  ];
-  const chartsRow = writeKpiCards(dashboard, kpiStart, kpis);
-
-  // Bảng dữ liệu chart xếp dọc ở vùng bên phải (ngoài vùng in A–P)
-  const col = DASHBOARD_DATA_START_COL;
-  const widths = [34, 16, 16];
-
-  const agingRows: [string, number, number][] = [
-    [AGING_LABELS[0], receivable.b0_30, payable.b0_30],
-    [AGING_LABELS[1], receivable.b31_60, payable.b31_60],
-    [AGING_LABELS[2], receivable.b61_90, payable.b61_90],
-    [AGING_LABELS[3], receivable.over90, payable.over90],
-  ];
-  const agingTable = writeDataTable(dashboard, {
-    startRow: chartsRow,
-    startCol: col,
-    columnWidths: widths,
-    title: 'Dữ liệu biểu đồ: Tuổi nợ phải thu vs phải trả',
-    headers: ['Khoảng tuổi nợ', 'Phải thu', 'Phải trả'],
-    rows: agingRows,
-    numFmts: [undefined, MONEY, MONEY],
-  });
-
-  const cashflowRows = bucketCashflow(data.vouchers);
-  const cashflowTable = writeDataTable(dashboard, {
-    startRow: agingTable.nextRow,
-    startCol: col,
-    columnWidths: widths,
-    title: 'Dữ liệu biểu đồ: Thu vs chi (theo ngày, kỳ dài gộp theo tuần)',
-    headers: ['Mốc thời gian', 'Thu', 'Chi'],
-    rows:
-      cashflowRows.length > 0
-        ? cashflowRows.map((b) => [b.label, b.thu, b.chi])
-        : [['Không có phiếu', 0, 0]],
-    numFmts: [undefined, MONEY, MONEY],
-  });
-
-  const groupRows: [string, number][] = (data.customerSections ?? [])
-    .filter((s) => (s.balanceAmount || 0) > 0)
-    .map((s) => [s.title, s.balanceAmount]);
-  const groupTable = writeDataTable(dashboard, {
-    startRow: cashflowTable.nextRow,
-    startCol: col,
-    columnWidths: widths,
-    title: 'Dữ liệu biểu đồ: Còn phải thu theo nhóm đối tượng',
-    headers: ['Nhóm đối tượng', 'Còn phải thu'],
-    rows: groupRows.length > 0 ? groupRows : [['Không có dữ liệu', 0]],
-    numFmts: [undefined, MONEY],
-  });
-
-  const charts: XlsxChartSpec[] = [
+  const cashRow = writeKpiCards(
+    dashboard,
+    headerRow + 1,
+    buildCashflowKpis(summary),
     {
-      type: 'column',
-      title: 'Tuổi nợ phải thu vs phải trả',
-      anchor: { fromCol: 0, fromRow: 0, toCol: 0, toRow: 0 },
-      categoriesRef: agingTable.ref(0),
-      categories: agingRows.map((r) => r[0]),
-      dataLabels: true,
-      labelNumFmt: LABEL_MONEY_FMT,
-      series: [
-        {
-          name: 'Phải thu',
-          valuesRef: agingTable.ref(1),
-          values: agingRows.map((r) => r[1]),
-          color: CHART_PALETTE[0],
-        },
-        {
-          name: 'Phải trả',
-          valuesRef: agingTable.ref(2),
-          values: agingRows.map((r) => r[2]),
-          color: CHART_PALETTE[1],
-        },
-      ],
+      startCol: COLUMN_SPANS[0].startCol,
+      theme: THEME_CASH,
+      cardCols: 3,
+      cardsPerRow: 2,
+      reserveNote: true,
     },
+  );
+  const debtRow = writeKpiCards(
+    dashboard,
+    headerRow + 1,
+    buildOpenDebtKpis(summary),
     {
-      type: 'column',
-      title: 'Thu vs chi trong kỳ',
-      anchor: { fromCol: 0, fromRow: 0, toCol: 0, toRow: 0 },
-      categoriesRef: cashflowTable.ref(0),
-      categories:
-        cashflowRows.length > 0
-          ? cashflowRows.map((b) => b.label)
-          : ['Không có phiếu'],
-      dataLabels: true,
-      labelNumFmt: LABEL_MONEY_FMT,
-      labelFontSize: 700,
-      series: [
-        {
-          name: 'Thu',
-          valuesRef: cashflowTable.ref(1),
-          values:
-            cashflowRows.length > 0 ? cashflowRows.map((b) => b.thu) : [0],
-          color: CHART_PALETTE[0],
-        },
-        {
-          name: 'Chi',
-          valuesRef: cashflowTable.ref(2),
-          values:
-            cashflowRows.length > 0 ? cashflowRows.map((b) => b.chi) : [0],
-          color: CHART_PALETTE[3],
-        },
-      ],
+      startCol: COLUMN_SPANS[1].startCol,
+      theme: THEME_AGING,
+      cardCols: 3,
+      cardsPerRow: 2,
+      reserveNote: true,
     },
-  ];
+  );
+  const groupRow = writeKpiCards(
+    dashboard,
+    headerRow,
+    buildPeriodDebtKpis(summary),
+    {
+      title: 'Phát sinh trong kỳ theo nhóm khách',
+      startCol: COLUMN_SPANS[2].startCol,
+      theme: THEME_GROUP,
+      cardCols: 3,
+      cardsPerRow: 2,
+      reserveNote: true,
+    },
+  );
 
-  if (groupRows.length > 0) {
-    charts.push({
-      type: 'doughnut',
-      title: 'Còn phải thu theo nhóm đối tượng',
-      anchor: { fromCol: 0, fromRow: 0, toCol: 0, toRow: 0 },
-      categoriesRef: groupTable.ref(0),
-      categories: groupRows.map((r) => r[0]),
-      series: [
-        {
-          name: 'Còn phải thu',
-          valuesRef: groupTable.ref(1),
-          values: groupRows.map((r) => r[1]),
-          color: CHART_PALETTE[0],
-        },
-      ],
-      pointColors: [CHART_PALETTE[0], CHART_PALETTE[1], CHART_PALETTE[4]],
-      dataLabels: true,
-    });
-  }
-
-  // Các chart chia đều một hàng (2 hoặc 3 chart)
-  charts.forEach((chart, slot) => {
-    chart.anchor = chartAnchorRow(
-      chartsRow,
-      slot,
-      charts.length,
-      DASHBOARD_CHART_ROWS,
-    );
-  });
-
+  // Chart cột 1, 2 bắt đầu sau hai hàng thẻ; chart cột 3 bắt đầu sau một hàng thẻ
+  const chartTop = Math.max(cashRow, debtRow);
+  const charts = buildDashboardCharts(
+    dashboard,
+    data,
+    summary,
+    chartTop,
+    groupRow,
+    PERIOD_REPORT_COLUMNS + 2,
+  );
+  const unit = BUCKET_UNIT_LABEL[bucketUnitOf(data)];
   const footnoteRow = writeFootnote(
     dashboard,
-    rowAfterCharts(chartsRow, 1),
-    'Nguồn số liệu: đã thu, đã chi theo ngày giao dịch của phiếu thu chi xưởng; nợ còn mở (từ 01/07/2026, không giới hạn theo kỳ) và tuổi nợ tính đến ngày xuất. Doanh thu, giá vốn, lãi gộp xem sheet "Báo cáo lợi nhuận". Số dạng "tr" là triệu đồng, "k" là nghìn đồng.',
+    rowAfterCharts(chartTop, 1, PERIOD_CHART_ROWS),
+    `Chart thu chi theo ${unit}: dự chi là phiếu chi Chờ duyệt + Đã duyệt; dòng tiền ròng = thu − chi. Nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Phải thu/chi theo nhóm khách tách theo có VAT và không VAT. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
   );
-  setDashboardPrintArea(dashboard, footnoteRow);
+  setDashboardPrintArea(dashboard, footnoteRow, PERIOD_REPORT_COLUMNS);
   return charts;
 }

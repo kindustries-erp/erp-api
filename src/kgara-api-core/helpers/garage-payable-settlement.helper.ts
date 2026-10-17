@@ -12,7 +12,7 @@ export const PAYMENT_BY_CASE_JOIN = `LEFT JOIN (
 export interface PayableSqlExprs {
   /** Tổng đã chi (PAYMENT) của vụ việc, 0 nếu chưa có. */
   paidExpr: string;
-  /** Còn phải trả = chi phí - đã chi; không chặn trần nên có thể âm. */
+  /** Còn phải trả của MỘT vụ việc = max(0, chi phí - đã chi); trả dư không bù sang vụ khác. */
   balanceExpr: string;
   /** Giữ dòng có chi phí hoặc có khoản đã chi (kể cả chi phí = 0). */
   hasPayableCondition: string;
@@ -22,7 +22,7 @@ export function buildPayableExprs(costExpr: string): PayableSqlExprs {
   const paidExpr = 'COALESCE("pay"."paid", 0)::numeric';
   return {
     paidExpr,
-    balanceExpr: `(${costExpr} - ${paidExpr})`,
+    balanceExpr: `GREATEST(${costExpr} - ${paidExpr}, 0)`,
     hasPayableCondition: `(${costExpr} > 0 OR ${paidExpr} <> 0)`,
   };
 }

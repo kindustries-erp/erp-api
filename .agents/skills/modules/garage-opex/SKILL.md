@@ -197,3 +197,25 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
 - **Toolbar Combobox Dropdown**: Thay thế thanh ngang `PillTabs` bằng `GarageViewModeCombobox` (kế thừa `ViewModeCombobox` từ `@/shared/components/ViewModeCombobox`) gọn gàng trên `SpreadsheetPageTemplate`:
   - **Tầng 1 (Filter Group - Nhóm chi phí)**: `Tất cả` (`ALL`), `CP Vận hành` (`OPEX`), `Giá vốn (COGS)` (`COGS`), `Hoa hồng` (`COMMISSION`).
   - **Tầng 2 (Chế độ xem cột - View Presets)**: `Tổng quan` (`overview`), `Đầy đủ` (`all_columns`), lưu cấu hình vào `useUserPreferencesStore` (`garage-opex-column-views`).
+
+## 9. Background Export Runner & GarageOpexExportDrawer (Cập nhật 2026-10-17)
+- **Kiến trúc Xuất File Nền (Background Export Engine)**:
+  - Runner process ID: `garage-opex-xlsx-export` quản lý bởi `GarageExportJobsService`.
+  - Service tạo workbook: `GarageOpexExportService` (dùng `exceljs`, hỗ trợ tái sử dụng job trong 10 phút, stream tiến độ SSE).
+- **Cấu trúc 3 Sheets trong file Excel OPEX**:
+  - **Sheet 1 (`Dashboard`)**: Dashboard & KPI Overview với chart scheme màu theo chuẩn báo cáo tổng quan `garage-cases?tab=overview` (Tổng chi phí, phân bổ theo nhóm OPEX/COGS/COMMISSION, tỷ trọng %, chi phí theo tháng).
+  - **Sheet 2 (`Chi tiết chi phí`)**: Bảng kê chi tiết chi phí chuẩn layout tài chính kế toán như `erp-invoice` (Hàng 1 SUM, Hàng 2 SUBTOTAL, Hàng 4 Header tô màu xanh ngọc/emerald, Freeze 4 hàng đầu, AutoFilter, format số tiền `#,,0`).
+  - **Sheet 3 (`Báo cáo P&L`)**: Báo cáo Lợi nhuận P&L tháng tích hợp (`GarageDashboardPnlService`), liên kết Doanh thu, Giá vốn, Chi phí vận hành và Lợi nhuận ròng.
+- **Hệ thống Endpoints API**:
+  - `POST /api/v1/greenway/opex/export/background`: Tạo job xuất file nền.
+  - `GET /api/v1/greenway/opex/export/background/history`: Lấy lịch sử 10 job trong 24h.
+  - `GET /api/v1/greenway/opex/export/background/:jobId/download`: Tải file `.xlsx`.
+  - `GET /api/v1/greenway/opex/export/progress/stream`: Stream SSE tiến độ thời gian thực.
+  - Bảo vệ bởi `@RequirePermissions(ErpResource.GARAGE, ErpAction.VIEW)`.
+- **Frontend Component `GarageOpexExportDrawer`**:
+  - Kiến trúc `StandardFormDrawer` kích thước `size="lg"`, bố cục 2 cột (`layout="2-columns"`).
+  - Cột trái: `GarageExportHistoryPanel` (bảng lịch sử tải lại trong 24h, hiển thị % tiến độ và nút tải).
+  - Cột phải: Toàn bộ controls lựa chọn (Nhóm chi phí `Combobox`, Chế độ xuất `ExportModeSelector`, Bộ chọn kỳ `ExportPeriodPicker` / Xem trước bộ lọc `GarageExportFilterPreview`, Ghi chú và Nút bấm bắt đầu xuất `Button w-full`) được gom trọn vào **duy nhất 1 `DrawerSection` mang tiêu đề "Điều kiện xuất dữ liệu"** (`collapsible`, `defaultCollapsed={false}`), đồng bộ 100% với giao diện của `garage-debts`.
+- **Chuẩn Main Action Button & Dropdown Menu**:
+  - Áp dụng chuẩn `SpreadsheetPageTemplate` tương tự `garage-cases?tab=cases`: Render **Split Button** với nút chính "Thêm chi phí" (`createLabel`, `createIcon`, `onCreate={openCreate}`) và Action Dropdown Menu (`createActions`) chứa nhóm "Báo cáo & Xuất file" ("Xuất Excel chi phí (Bảng kê)", "Tải báo cáo P&L (Lợi nhuận Garage)").
+

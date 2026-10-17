@@ -37,6 +37,80 @@ const parse = (xml: string) => {
 };
 
 describe('buildChartXml', () => {
+  it('categoryLabelsLow: nhãn trục danh mục ở đáy (low), mặc định nextTo', () => {
+    const low = buildChartXml(spec({ categoryLabelsLow: true }), 'Báo cáo');
+    expect(low).toContain('<c:tickLblPos val="low"/>');
+    const normal = buildChartXml(spec(), 'Báo cáo');
+    expect(normal).not.toContain('<c:tickLblPos val="low"/>');
+  });
+
+  it('series ẩn không tô màu, không nhãn; showLegend:false bỏ chú thích', () => {
+    const xml = buildChartXml(
+      spec({
+        stacked: true,
+        dataLabels: true,
+        showLegend: false,
+        series: [
+          {
+            name: 'Nền',
+            valuesRef: '$B$2:$B$3',
+            values: [0, 5],
+            color: '000000',
+            hidden: true,
+          },
+          {
+            name: 'Doanh thu',
+            valuesRef: '$C$2:$C$3',
+            values: [10, 5],
+            color: '059669',
+          },
+        ],
+      }),
+      'Dashboard',
+    );
+    const doc = parse(xml);
+    const sers = Array.from(doc.getElementsByTagName('c:ser'));
+    const hidden = sers[0];
+    expect(hidden.getElementsByTagName('a:noFill').length).toBeGreaterThan(0);
+    expect(hidden.getElementsByTagName('c:dLbls').length).toBe(0);
+    expect(sers[1].getElementsByTagName('c:dLbls').length).toBe(1);
+    expect(xml).not.toContain('<c:legend>');
+  });
+
+  it('compact: không tiêu đề, không chú thích, hai trục ẩn, không lưới, đường không marker', () => {
+    const xml = buildChartXml(
+      spec({
+        compact: true,
+        type: 'line',
+        series: [
+          {
+            name: 'Phải thu',
+            valuesRef: '$B$2:$B$3',
+            values: [10, 20],
+            color: '059669',
+          },
+        ],
+      }),
+      'Dashboard',
+    );
+    const doc = parse(xml);
+    expect(xml).not.toContain('<c:title>');
+    expect(xml).not.toContain('<c:legend>');
+    expect(xml).not.toContain('<c:majorGridlines>');
+    expect(xml).toContain('<c:autoTitleDeleted val="1"/>');
+    expect(xml.match(/<c:delete val="1"\/>/g)).toHaveLength(2);
+    expect(xml).toContain('<c:symbol val="none"/>');
+    expect(doc.getElementsByTagName('c:lineChart').length).toBe(1);
+  });
+
+  it('không compact (mặc định): vẫn có tiêu đề, lưới và trục hiện', () => {
+    const xml = buildChartXml(spec(), 'Dashboard');
+    expect(xml).toContain('<c:title>');
+    expect(xml).toContain('<c:majorGridlines>');
+    expect(xml).toContain('<c:autoTitleDeleted val="0"/>');
+    expect(xml).not.toContain('<c:delete val="1"/>');
+  });
+
   it('mặc định là cột ghép, không có overlap và không có trục phụ', () => {
     const xml = buildChartXml(spec(), 'Dash');
     parse(xml);

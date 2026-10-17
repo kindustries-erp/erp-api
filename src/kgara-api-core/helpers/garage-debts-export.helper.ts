@@ -129,6 +129,10 @@ export interface GarageDebtCaseExportRow {
   shareRate: number;
   maxAgingDays: number;
   completedDate?: string;
+  /** Chi phí hồ sơ (đã chia theo tỷ trọng nếu có cả phần BH và KH); dùng cho "Phải chi" theo nhóm. */
+  costAmount?: number;
+  /** Hồ sơ có tiền thuế VAT (phần thu BH hoặc KH của hồ sơ). */
+  hasVat?: boolean;
 }
 
 /** Nhóm đối tượng gom các phiếu dịch vụ (VD: KH Doanh nghiệp, KH Cá nhân, Bảo hiểm). */
@@ -141,6 +145,8 @@ export interface GarageDebtGroupExportSection {
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
+  /** Tổng chi phí hồ sơ của nhóm; không có thì 0. */
+  costAmount?: number;
   cases: GarageDebtCaseExportRow[];
 }
 
@@ -1067,6 +1073,8 @@ export function convertReceivablesBreakdownToExportSections(
             totalBilled > 0 ? (Number(c.amount) || 0) / totalBilled : 0,
           maxAgingDays: days,
           completedDate: formatDebtExportDate(c.ngayHoanThanh),
+          costAmount: Number(c.cost) || 0,
+          hasVat: (Number(c.vatAmount) || 0) > 0,
         });
       });
     });
@@ -1083,6 +1091,8 @@ export function convertReceivablesBreakdownToExportSections(
       paidAmount: Number(totals.paid) || sumOfCases(cases, (r) => r.paidAmount),
       balanceAmount:
         Number(totals.remaining) || sumOfCases(cases, (r) => r.balanceAmount),
+      costAmount:
+        Number(totals.cost) || sumOfCases(cases, (r) => r.costAmount ?? 0),
       cases,
     };
   };
