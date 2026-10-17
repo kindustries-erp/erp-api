@@ -24,12 +24,12 @@ export function buildPeriodDebtKpis(summary: PeriodSummary): DashboardKpi[] {
   const prev = summary.previous;
   return [
     {
-      label: 'PHẢI THU PHÁT SINH TRONG KỲ (KH)',
+      label: 'PHẢI THU PHÁT SINH (KH)',
       value: summary.periodReceivable.total,
       note: trendNote(summary.periodReceivable.total, prev?.receivableTotal),
     },
     {
-      label: 'PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)',
+      label: 'PHẢI CHI PHÁT SINH (NCC)',
       value: summary.periodPayable.total,
       note: trendNote(summary.periodPayable.total, prev?.payableTotal),
     },

@@ -141,29 +141,52 @@ function cogsRows(m: PnlMonthRow): Draft[] {
   ];
 }
 
+/** Mã dòng hoa hồng Sale (10% lợi nhuận gộp ký gửi), thuộc nhóm chi phí bán hàng. */
+const SALE_KEY = 'HOA_HONG_SALE';
+
 /**
  * Các dòng bảng "Báo cáo lợi nhuận" của một tháng (Danh mục, Giá trị), 3 cấp, đánh số
- * 1 / 1.1 / 1.1.1. Nhóm 6 gồm cả HHBH để nhóm 5 − nhóm 6 = nhóm 7 luôn đúng.
+ * 1 / 1.1 / 1.1.1. Nhóm 4 là chi phí bán hàng (hoa hồng Sale và HHBH, như web); nhóm 6 là
+ * lợi nhuận ròng sau chi phí bán hàng và vận hành; nhóm 7 là hoa hồng DV và các khoản nhập
+ * tay, nên 6 − 7 = 8.
  */
 export function buildPnlTableRows(m: PnlMonthRow): PnlTableRow[] {
+  const rate = m.commissionItems.find((i) => i.categoryKey === RATE_KEY);
+  const sale = m.commissionItems.find((i) => i.categoryKey === SALE_KEY);
+  const saleAmount = sale?.amount ?? 0;
+  const sellingTotal = saleAmount + m.hhbhTotal;
+  const dvItems = m.commissionItems.filter(
+    (i) => i.categoryKey !== RATE_KEY && i.categoryKey !== SALE_KEY,
+  );
   return numberRows([
     l1('rev', 'Doanh thu', m.revenue),
     ...revenueRows(m),
     l1('cogs', 'Chi phí', m.cogs),
     ...cogsRows(m),
     l1('gp', 'Lợi nhuận gộp', m.grossProfit),
+    l1('sell', 'Chi phí bán hàng', round(sellingTotal)),
+    // Dòng tỷ lệ lãi gộp ký gửi lưu theo %, đổi sang tỷ lệ để định dạng 0,00%
+    ...(rate
+      ? [l2('sell:rate', rate.categoryName, rate.amount / 100, PERCENT)]
+      : []),
+    l2(
+      'sell:sale',
+      sale?.categoryName ?? 'Hoa hồng cho Sale (10%)',
+      saleAmount,
+    ),
+    ...(m.hhbhTotal ? [l2('sell:hhbh', 'HHBH', m.hhbhTotal)] : []),
     l1('opex', 'Chi phí vận hành', m.opexTotal),
     ...opexRows(m.opexItems),
-    l1('net1', 'Lợi nhuận ròng (trước hoa hồng)', m.netBeforeCommission),
-    l1('comm', 'Hoa hồng', round(m.commissionTotal + m.hhbhTotal)),
-    // Dòng tỷ lệ lãi gộp ký gửi lưu theo %, đổi sang tỷ lệ để định dạng 0,00%
-    ...m.commissionItems.map((i) =>
-      i.categoryKey === RATE_KEY
-        ? l2(`comm:${i.categoryKey}`, i.categoryName, i.amount / 100, PERCENT)
-        : l2(`comm:${i.categoryKey}`, i.categoryName, i.amount),
+    l1(
+      'net1',
+      'Lợi nhuận ròng (trước hoa hồng DV)',
+      m.grossProfit - sellingTotal - m.opexTotal,
     ),
-    ...(m.hhbhTotal ? [l2('comm:hhbh', 'HHBH', m.hhbhTotal)] : []),
-    l1('net2', 'Lợi nhuận ròng (sau hoa hồng)', m.netAfterCommission),
+    l1('comm', 'Hoa hồng DV', round(m.commissionTotal - saleAmount)),
+    ...dvItems.map((i) =>
+      l2(`comm:${i.categoryKey}`, i.categoryName, i.amount),
+    ),
+    l1('net2', 'Lợi nhuận ròng (sau hoa hồng DV)', m.netAfterCommission),
   ]);
 }
 

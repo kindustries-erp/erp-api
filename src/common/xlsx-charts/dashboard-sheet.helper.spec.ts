@@ -64,6 +64,28 @@ describe('dashboard-sheet.helper', () => {
     expect(plain.getCell('A5').value).toBe('Thu');
   });
 
+  it('KPI: đặt thẻ theo cột (startCol, cardCols, cardsPerRow), tiêu đề chỉ gộp đúng dải cột', () => {
+    const wb = new ExcelJS.Workbook();
+    const dash = createDashboardSheet(wb, 'Dashboard');
+    writeKpiCards(
+      dash,
+      5,
+      [
+        { label: 'Phải thu', value: 1, note: 'x' },
+        { label: 'Phải chi', value: 2, note: 'y' },
+      ],
+      { title: 'Cột ba', startCol: 11, cardCols: 3, cardsPerRow: 1 },
+    );
+
+    expect(dash.getCell('K5').value).toBe('Cột ba');
+    expect(dash.getCell('K6').value).toBe('Phải thu');
+    expect(dash.getCell('K7').value).toBe(1);
+    expect(dash.getCell('K8').value).toBe('x');
+    // thẻ thứ hai xuống hàng dưới, vẫn ở cột K
+    expect(dash.getCell('K10').value).toBe('Phải chi');
+    expect(dash.getCell('A6').value).toBeNull();
+  });
+
   it('KPI: công thức giữ nguyên kèm result, số thường, 4 thẻ/hàng', () => {
     const wb = new ExcelJS.Workbook();
     const dash = createDashboardSheet(wb, 'Dashboard');

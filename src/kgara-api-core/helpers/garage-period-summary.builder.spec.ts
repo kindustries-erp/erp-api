@@ -158,8 +158,8 @@ describe('card Dashboard', () => {
 
   it('công nợ phát sinh: chỉ thẻ "Phát sinh trong kỳ" của hai phía', () => {
     expect(buildPeriodDebtKpis(summary)).toEqual([
-      { label: 'PHẢI THU PHÁT SINH TRONG KỲ (KH)', value: 1500 },
-      { label: 'PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)', value: 800 },
+      { label: 'PHẢI THU PHÁT SINH (KH)', value: 1500 },
+      { label: 'PHẢI CHI PHÁT SINH (NCC)', value: 800 },
     ]);
   });
 });

@@ -293,8 +293,8 @@ describe('buildGaragePeriodReport', () => {
       );
       return out;
     };
-    expect(values('PHẢI THU PHÁT SINH TRONG KỲ (KH)')).toEqual([1000]);
-    expect(values('PHẢI TRẢ PHÁT SINH TRONG KỲ (NCC)')).toEqual([300]);
+    expect(values('PHẢI THU PHÁT SINH (KH)')).toEqual([1000]);
+    expect(values('PHẢI CHI PHÁT SINH (NCC)')).toEqual([300]);
     // chỉ giữ số phát sinh: không còn đã thu/đã trả/còn lại
     expect(values('ĐÃ THU')).toEqual([]);
     expect(values('ĐÃ TRẢ')).toEqual([]);

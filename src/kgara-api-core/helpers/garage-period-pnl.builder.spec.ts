@@ -86,21 +86,23 @@ describe('buildPnlTableRows', () => {
       '2. Chi phí',
       '2.1 Chi phí phụ tùng ngoài & Gia công ngoài',
       '3. Lợi nhuận gộp',
-      '4. Chi phí vận hành',
-      '4.1 Nhân sự',
-      '4.2 Thuê mặt bằng & điện nước',
-      '4.3 Vật tư tiêu hao',
-      '4.4 Bảo trì',
-      '4.5 Khấu hao máy móc & thiết bị',
-      '5. Lợi nhuận ròng (trước hoa hồng)',
-      '6. Hoa hồng',
-      '6.1 Tỷ lệ lãi gộp ký gửi / Lãi gộp',
-      '6.2 Hoa hồng cho Sale (10%)',
-      '6.3 Hoa hồng cho DV (10%)',
-      '7. Lợi nhuận ròng (sau hoa hồng)',
+      '4. Chi phí bán hàng',
+      '4.1 Tỷ lệ lãi gộp ký gửi / Lãi gộp',
+      '4.2 Hoa hồng cho Sale (10%)',
+      '5. Chi phí vận hành',
+      '5.1 Nhân sự',
+      '5.2 Thuê mặt bằng & điện nước',
+      '5.3 Vật tư tiêu hao',
+      '5.4 Bảo trì',
+      '5.5 Khấu hao máy móc & thiết bị',
+      '6. Lợi nhuận ròng (trước hoa hồng DV)',
+      '7. Hoa hồng DV',
+      '7.1 Hoa hồng cho DV (10%)',
+      '8. Lợi nhuận ròng (sau hoa hồng DV)',
     ]);
     expect(rows.filter((r) => r.level === 1).map((r) => r.value)).toEqual([
-      444218804, 241508218, 202710586, 146500000, 56210586, 5621059, 50589527,
+      444218804, 241508218, 202710586, 0, 146500000, 56210586, 5621059,
+      50589527,
     ]);
   });
 
@@ -193,7 +195,7 @@ describe('buildPnlSheet', () => {
     expect(sheet.getCell('A6').font?.bold).toBe(false);
   });
 
-  it('2 chart 12 tháng: combo có % lợi nhuận gộp trên trục phụ, tỷ trọng là cột chồng 7 series', async () => {
+  it('2 chart 12 tháng: combo có % lợi nhuận gộp trên trục phụ, tỷ trọng là cột chồng 8 series (có chi phí bán hàng)', async () => {
     const { charts } = await build();
     expect(charts).toHaveLength(2);
 
@@ -213,7 +215,7 @@ describe('buildPnlSheet', () => {
     expect(line.values[0]).toBeCloseTo(202710586 / 444218804, 6);
 
     expect(stacked.stacked).toBe(true);
-    expect(stacked.series).toHaveLength(7);
+    expect(stacked.series).toHaveLength(8);
     // Tổng tỷ trọng một tháng = (cogs + vận hành) / doanh thu
     const total = stacked.series.reduce(
       (acc, s) => acc + (s.values[0] ?? 0),
@@ -367,17 +369,19 @@ describe('buildPnlTableRows - 3 cấp', () => {
     ]);
   });
 
-  it('nhóm VI gồm cả HHBH nên V - VI = VII', () => {
+  it('chi phí bán hàng gồm HHBH; hoa hồng DV tách riêng nên 6 − 7 = 8', () => {
     const rows = rowsOf(detailed());
     const value = (name: string) => rows.find((r) => r.label === name)!.value;
-    expect(value('Hoa hồng')).toBe(60);
+    expect(value('Chi phí bán hàng')).toBe(40);
     expect(rows.find((r) => r.label === 'HHBH')).toMatchObject({
       level: 2,
       value: 40,
     });
-    expect(value('Lợi nhuận ròng (trước hoa hồng)') - value('Hoa hồng')).toBe(
-      value('Lợi nhuận ròng (sau hoa hồng)'),
-    );
+    expect(value('Lợi nhuận ròng (trước hoa hồng DV)')).toBe(110);
+    expect(value('Hoa hồng DV')).toBe(20);
+    expect(
+      value('Lợi nhuận ròng (trước hoa hồng DV)') - value('Hoa hồng DV'),
+    ).toBe(value('Lợi nhuận ròng (sau hoa hồng DV)'));
   });
 
   it('không có HHBH thì không thêm dòng HHBH', () => {
@@ -411,7 +415,7 @@ describe('buildPnlSheet - cột tháng trước và vùng in', () => {
     const nhanSu = [
       5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
       25, 26,
-    ].find((r) => sheet.getCell(`A${r}`).value === '4.1 Nhân sự')!;
+    ].find((r) => sheet.getCell(`A${r}`).value === '5.1 Nhân sự')!;
     expect(sheet.getCell(`C${nhanSu}`).value).toBe(76500000);
   });
 
@@ -452,9 +456,9 @@ describe('buildPnlSheet - cột tháng trước và vùng in', () => {
       return found;
     };
     // hạng mục Bảo trì tháng trước có cùng khóa (10 triệu), nên hiện số tháng trước
-    expect(sheet.getCell(`C${rowOf('4.1 Bảo trì')}`).value).toBe(10000000);
+    expect(sheet.getCell(`C${rowOf('5.1 Bảo trì')}`).value).toBe(10000000);
     // dòng nhập "Thay lốp" không có ở tháng trước: để trống
-    expect(sheet.getCell(`C${rowOf('4.1.1 Thay lốp')}`).value).toBeNull();
+    expect(sheet.getCell(`C${rowOf('5.1.1 Thay lốp')}`).value).toBeNull();
   });
 
   it('bảng P&L dài hơn vùng chart thì vùng in kéo theo số dòng bảng', () => {

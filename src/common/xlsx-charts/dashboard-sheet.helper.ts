@@ -144,14 +144,18 @@ export function writeDashboardHeader(
 }
 
 /** Dòng tiêu đề nhóm thẻ (gộp cả 16 cột); trả về dòng kế tiếp, `title` trống thì giữ nguyên. */
-function writeGroupTitle(
+export function writeGroupTitle(
   sheet: ExcelJS.Worksheet,
   row: number,
   title?: string,
+  span: { startCol: number; endCol: number } = {
+    startCol: 1,
+    endCol: DASHBOARD_COLUMNS,
+  },
 ): number {
   if (!title) return row;
-  sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
-  const titleCell = sheet.getCell(row, 1);
+  sheet.mergeCells(row, span.startCol, row, span.endCol);
+  const titleCell = sheet.getCell(row, span.startCol);
   titleCell.value = title;
   titleCell.font = {
     name: 'Calibri',
@@ -164,6 +168,17 @@ function writeGroupTitle(
   return row + 1;
 }
 
+export interface KpiCardOptions {
+  /** Dòng tiêu đề nhóm phía trên các thẻ. */
+  title?: string;
+  /** Cột (1-based) bắt đầu của thẻ đầu tiên; mặc định cột A. */
+  startCol?: number;
+  /** Số cột mỗi thẻ; mặc định 4. */
+  cardCols?: number;
+  /** Số thẻ mỗi hàng; mặc định 4. */
+  cardsPerRow?: number;
+}
+
 /**
  * Vẽ các thẻ KPI (4 thẻ/hàng, mỗi thẻ 2 dòng: nhãn + giá trị, thêm dòng ghi chú nếu có),
  * tùy chọn có dòng tiêu đề nhóm. Trả về dòng trống kế tiếp.
@@ -172,15 +187,21 @@ export function writeKpiCards(
   sheet: ExcelJS.Worksheet,
   startRow: number,
   kpis: DashboardKpi[],
-  options: { title?: string } = {},
+  options: KpiCardOptions = {},
 ): number {
-  let row = writeGroupTitle(sheet, startRow, options.title);
-  for (let i = 0; i < kpis.length; i += CARDS_PER_ROW) {
-    const rowKpis = kpis.slice(i, i + CARDS_PER_ROW);
+  const cardCols = options.cardCols ?? CARD_COLS;
+  const perRow = options.cardsPerRow ?? CARDS_PER_ROW;
+  const firstCol = options.startCol ?? 1;
+  let row = writeGroupTitle(sheet, startRow, options.title, {
+    startCol: firstCol,
+    endCol: firstCol + perRow * cardCols - 1,
+  });
+  for (let i = 0; i < kpis.length; i += perRow) {
+    const rowKpis = kpis.slice(i, i + perRow);
     const hasNote = rowKpis.some((kpi) => kpi.note !== undefined);
     rowKpis.forEach((kpi, slot) => {
-      const col = slot * CARD_COLS + 1;
-      const last = col + CARD_COLS - 1;
+      const col = firstCol + slot * cardCols;
+      const last = col + cardCols - 1;
 
       sheet.mergeCells(row, col, row, last);
       sheet.mergeCells(row + 1, col, row + 1, last);

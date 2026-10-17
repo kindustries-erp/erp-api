@@ -205,6 +205,7 @@ export function buildPnlSheet(
 
   const ratioHeaders = [
     'Chi phí phụ tùng / DT',
+    'Chi phí bán hàng / DT',
     'Nhân sự / DT',
     'Mặt bằng, điện nước / DT',
     'Vật tư tiêu hao / DT',
@@ -214,9 +215,15 @@ export function buildPnlSheet(
   ];
   const ratioRows = months.map((m, i): (string | number)[] => {
     const b = bucketOpex(m.opexItems);
+    // Chi phí bán hàng = hoa hồng Sale + HHBH, cùng nhóm 4 của bảng
+    const sale = m.commissionItems.find(
+      (c) => c.categoryKey === 'HOA_HONG_SALE',
+    );
+    const selling = (sale?.amount ?? 0) + m.hhbhTotal;
     return [
       labels[i],
       ratio(m.cogs, m.revenue),
+      ratio(selling, m.revenue),
       ratio(b.nhanSu, m.revenue),
       ratio(b.matBang, m.revenue),
       ratio(b.vatTu, m.revenue),

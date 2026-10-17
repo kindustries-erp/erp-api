@@ -2,7 +2,6 @@ import * as ExcelJS from 'exceljs';
 
 import {
   DASHBOARD_DATA_START_COL,
-  chartAnchorRow,
   writeDataTable,
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
@@ -21,7 +20,15 @@ import type { PeriodSummary } from './garage-period-summary.builder';
 export const PERIOD_CHART_ROWS = 22;
 
 /** Số chart lớn xếp một hàng (thu chi, tuổi nợ, phải thu theo nhóm khách). */
-export const PERIOD_CHARTS_PER_ROW = 3;
+/**
+ * Dải cột (0-based, [từ, đến)) của 3 cột Dashboard: thu chi (A–E), tuổi nợ (F–J), phải thu/chi
+ * theo nhóm khách (K–P). Mỗi cột có tiêu đề riêng và thẻ nằm trong cột chart của nó.
+ */
+export const PERIOD_CHART_BANDS: [number, number][] = [
+  [0, 5],
+  [5, 10],
+  [10, 16],
+];
 
 const MONEY = '#,##0';
 const COLUMN_WIDTHS = [34, 18, 18, 18, 18];
@@ -53,8 +60,15 @@ export function buildDashboardCharts(
   startRow: number,
 ): XlsxChartSpec[] {
   const col = DASHBOARD_DATA_START_COL;
-  const large = (slot: number) =>
-    chartAnchorRow(startRow, slot, PERIOD_CHARTS_PER_ROW, PERIOD_CHART_ROWS);
+  const large = (slot: number) => {
+    const [fromCol, toCol] = PERIOD_CHART_BANDS[slot];
+    return {
+      fromCol,
+      fromRow: startRow - 1,
+      toCol,
+      toRow: startRow - 1 + PERIOD_CHART_ROWS,
+    };
+  };
 
   const cash = buildCashflowSeries(data);
   const cashUnit = BUCKET_UNIT_LABEL[cash.unit];
