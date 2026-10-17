@@ -138,10 +138,6 @@ const baseData = (
     }),
     debtRow({ partnerName: 'Mới', balanceAmount: 100, aging0_30: 100 }),
   ],
-  revenueTimeline: [{ date: '2026-10-05', revenue: 1000, cogs: 600 }],
-  debtTimeline: [
-    { date: '2026-10-06', arTotal: 800, arPaid: 300, apTotal: 100, apPaid: 50 },
-  ],
   openSupplierRows: [
     debtRow({
       partnerCode: 'NCC9',
@@ -199,13 +195,13 @@ describe('buildGaragePeriodReport', () => {
     expect(await names('all')).toEqual(await names());
   });
 
-  it('reportType=business: chỉ sheet Báo cáo lợi nhuận kèm 3 chart (theo kỳ + 12 tháng)', async () => {
+  it('reportType=business: chỉ sheet Báo cáo lợi nhuận kèm 2 chart (12 tháng)', async () => {
     const buffer = await buildGaragePeriodReport(
       baseData({ reportType: 'business' }),
     );
     const wb = await load(buffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Báo cáo lợi nhuận']);
-    expect(await chartCount(buffer)).toBe(3);
+    expect(await chartCount(buffer)).toBe(2);
   });
 
   it('reportType=cashflow-debts: dashboard, công nợ, thu chi; không có P&L và nợ quá hạn', async () => {
@@ -220,7 +216,7 @@ describe('buildGaragePeriodReport', () => {
       'Thu chi trong kỳ',
     ]);
     // 3 chart lớn + 2 mini chart của Dashboard, không có chart P&L
-    expect(await chartCount(buffer)).toBe(5);
+    expect(await chartCount(buffer)).toBe(3);
     const dash = wb.getWorksheet('Dashboard')!;
     expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
@@ -331,14 +327,14 @@ describe('buildGaragePeriodReport', () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const pnl = wb.getWorksheet('Báo cáo lợi nhuận')!;
     expect(pnl.getCell('A1').value).toBe('Báo cáo lợi nhuận - Tháng 07/2026');
-    expect(pnl.getCell('A5').value).toBe('I. Doanh thu');
+    expect(pnl.getCell('A5').value).toBe('1. Doanh thu');
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
-  it('8 chart: 5 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm, 2 mini) và 3 ở Báo cáo lợi nhuận', async () => {
+  it('5 chart: 3 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm) và 2 ở Báo cáo lợi nhuận', async () => {
     for (const patch of [{}, { customerSections: undefined }]) {
       const buffer = await buildGaragePeriodReport(baseData(patch));
-      expect(await chartCount(buffer)).toBe(8);
+      expect(await chartCount(buffer)).toBe(5);
     }
 
     const zip = await JSZip.loadAsync(
@@ -349,9 +345,9 @@ describe('buildGaragePeriodReport', () => {
         .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
         .map((p) => zip.file(p)!.async('string')),
     );
-    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(5);
+    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(3);
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
-      3,
+      2,
     );
     // mọi chart có tiêu đề đều có nhãn số (mini chart không tiêu đề, không nhãn)
     expect(
@@ -363,7 +359,6 @@ describe('buildGaragePeriodReport', () => {
     const titles = xmls.join('');
     expect(titles).toContain('Thu vs chi theo tuần');
     expect(titles).not.toContain('Công nợ phát sinh vs đã thu/trả');
-    expect(titles).toContain('Doanh thu, giá vốn, lãi gộp theo tuần');
   });
 
   it('đơn vị gom đổi theo kỳ: tuần → ngày, quý → tháng', async () => {
@@ -397,9 +392,9 @@ describe('buildGaragePeriodReport', () => {
         if (v.startsWith('Dữ liệu biểu đồ')) tableTitles.push(v);
       }),
     );
-    expect(tableTitles).toHaveLength(4);
+    expect(tableTitles).toHaveLength(3);
     expect(tableTitles).toContain(
-      'Dữ liệu biểu đồ: Phải thu phát sinh theo nhóm khách',
+      'Dữ liệu biểu đồ: Phải thu phát sinh và phải chi theo nhóm khách',
     );
     expect(footnote).toContain('Công nợ lũy kế');
     expect(footnote).toContain('theo tuần');

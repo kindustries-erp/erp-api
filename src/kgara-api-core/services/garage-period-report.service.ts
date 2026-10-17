@@ -17,7 +17,6 @@ import { previousPeriodRange } from '../helpers/garage-period-previous.helper';
 import { resolvePeriodReportSections } from '../helpers/garage-period-report-sections.helper';
 import { GarageDebtsExportService } from './garage-debts-export.service';
 import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
-import { GaragePeriodTimelineQueries } from './garage-period-timeline-queries.service';
 import { GARAGE_DEBT_BASELINE_DATE } from './kgara-customers-debt-query.service';
 
 /**
@@ -31,7 +30,6 @@ export class GaragePeriodReportService {
   constructor(
     private readonly debtsExport: GarageDebtsExportService,
     private readonly queries: GaragePeriodReportQueries,
-    private readonly timelines: GaragePeriodTimelineQueries,
   ) {}
 
   async exportExcel(
@@ -90,25 +88,16 @@ export class GaragePeriodReportService {
     onProgress(65, total, 'Đang tổng hợp thu chi và báo cáo lợi nhuận...');
     // Chart theo thời gian gom ngày/tuần/tháng theo độ dài kỳ; chỉ truy vấn khi sheet cần
     const bucketUnit = resolveBucketUnit(dto.from, dto.to);
-    const [vouchers, pnlMonths, branchLabel, revenueTimeline, debtTimeline] =
-      await Promise.all([
-        needsVouchers
-          ? this.queries.loadVouchers(dto.from, dto.to, branchId || undefined)
-          : [],
-        // P&L theo tháng: 12 tháng kết thúc ở tháng chứa ngày kết thúc kỳ (không vượt hôm nay)
-        needsPnl
-          ? this.queries.loadPnlMonthly(reportMonthOf(dto.to, asOfDate))
-          : [],
-        this.debtsExport.resolveBranchLabel(branchId),
-        needsPnl ? this.timelines.loadRevenueTimeline(dto.from, dto.to) : [],
-        sections.has('dashboard')
-          ? this.timelines.loadDebtTimeline(
-              dto.from,
-              dto.to,
-              branchId || undefined,
-            )
-          : [],
-      ]);
+    const [vouchers, pnlMonths, branchLabel] = await Promise.all([
+      needsVouchers
+        ? this.queries.loadVouchers(dto.from, dto.to, branchId || undefined)
+        : [],
+      // P&L theo tháng: 12 tháng kết thúc ở tháng chứa ngày kết thúc kỳ (không vượt hôm nay)
+      needsPnl
+        ? this.queries.loadPnlMonthly(reportMonthOf(dto.to, asOfDate))
+        : [],
+      this.debtsExport.resolveBranchLabel(branchId),
+    ]);
 
     // Kỳ liền trước (cùng độ dài) để dòng so sánh ±% trên thẻ Dashboard
     let previousPeriod: PreviousPeriodData | undefined;
@@ -142,8 +131,6 @@ export class GaragePeriodReportService {
     const buffer = await buildGaragePeriodReport({
       reportType: dto.reportType,
       bucketUnit,
-      revenueTimeline,
-      debtTimeline,
       from: dto.from,
       to: dto.to,
       asOfDate,

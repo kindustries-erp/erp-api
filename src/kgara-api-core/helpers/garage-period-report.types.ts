@@ -1,8 +1,4 @@
 import type { GaragePeriodReportType } from '../dto/garage-export.dto';
-import type {
-  DebtTimelineRow,
-  RevenueTimelineRow,
-} from '../services/garage-period-timeline-queries.service';
 import type { BucketUnit } from './garage-period-bucket.helper';
 import type { PeriodVoucherRow } from '../services/garage-period-report-queries.service';
 import type {
@@ -20,10 +16,6 @@ export interface GaragePeriodReportData {
   reportType?: GaragePeriodReportType;
   /** Đơn vị gom mốc của chart; thiếu thì suy ra từ độ dài kỳ. */
   bucketUnit?: BucketUnit;
-  /** Doanh thu, giá vốn theo ngày hoàn thành phiếu trong kỳ (chart ở sheet lợi nhuận). */
-  revenueTimeline?: RevenueTimelineRow[];
-  /** Công nợ phát sinh và đã thu/trả theo ngày hoàn thành phiếu trong kỳ (chart ở Dashboard). */
-  debtTimeline?: DebtTimelineRow[];
   /** Ngày xuất: số dư và tuổi nợ được tính đến ngày này. */
   asOfDate: Date;
   branchLabel?: string;

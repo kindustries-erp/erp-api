@@ -3,8 +3,6 @@ import {
   BUCKET_UNIT_LABEL,
   bucketUnitOf,
   buildCashflowSeries,
-  buildDebtSeries,
-  buildRevenueSeries,
 } from './garage-period-series.helper';
 
 const week = { from: '2026-10-12', to: '2026-10-18' };
@@ -88,51 +86,6 @@ describe('garage-period-series.helper', () => {
         '12/2026',
       ]);
       expect(points[1].thu).toBe(7);
-    });
-  });
-
-  it('buildRevenueSeries: cộng doanh thu, giá vốn theo mốc; thiếu dữ liệu vẫn đủ mốc', () => {
-    const { points } = buildRevenueSeries({
-      ...month,
-      vouchers: [],
-      revenueTimeline: [
-        { date: '2026-10-05', revenue: 1000, cogs: 600 },
-        { date: '2026-10-07', revenue: 500, cogs: 100 },
-      ],
-    });
-    expect(points[1]).toEqual({
-      label: 'Tuần 05/10',
-      revenue: 1500,
-      cogs: 700,
-    });
-    expect(
-      buildRevenueSeries({ ...month, vouchers: [] }).points.every(
-        (p) => p.revenue === 0 && p.cogs === 0,
-      ),
-    ).toBe(true);
-  });
-
-  it('buildDebtSeries: phát sinh và đã thu/trả hai phía theo mốc', () => {
-    const { points } = buildDebtSeries({
-      ...quarter,
-      vouchers: [],
-      debtTimeline: [
-        { date: '2026-10-05', arTotal: 100, arPaid: 40, apTotal: 0, apPaid: 0 },
-        {
-          date: '2026-10-25',
-          arTotal: 50,
-          arPaid: 50,
-          apTotal: 30,
-          apPaid: 10,
-        },
-      ],
-    });
-    expect(points[0]).toEqual({
-      label: '10/2026',
-      arTotal: 150,
-      arPaid: 90,
-      apTotal: 30,
-      apPaid: 10,
     });
   });
 });

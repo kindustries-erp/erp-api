@@ -61,20 +61,12 @@ export function buildPeriodDashboard(
     ],
   );
 
-  // Dòng tiêu đề thẻ công nợ: mini chart xu hướng nằm trong thẻ, tính từ dòng này
-  const debtTitleRow = row;
   row = writeKpiCards(dashboard, row, buildPeriodDebtKpis(summary), {
     title: 'Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ)',
   });
 
   // 3 chart lớn một hàng: thu/chi/dự chi + dòng tiền ròng, tuổi nợ, phải thu theo nhóm khách
-  const charts = buildDashboardCharts(
-    dashboard,
-    data,
-    summary,
-    row,
-    debtTitleRow,
-  );
+  const charts = buildDashboardCharts(dashboard, data, summary, row);
   const unit = BUCKET_UNIT_LABEL[bucketUnitOf(data)];
   const footnoteRow = writeFootnote(
     dashboard,

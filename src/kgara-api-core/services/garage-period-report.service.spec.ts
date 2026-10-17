@@ -25,10 +25,6 @@ describe('GaragePeriodReportService', () => {
     resolveBranchLabel: jest.fn(),
   };
   const queries = { loadVouchers: jest.fn(), loadPnlMonthly: jest.fn() };
-  const timelines = {
-    loadRevenueTimeline: jest.fn(),
-    loadDebtTimeline: jest.fn(),
-  };
   let service: GaragePeriodReportService;
 
   beforeEach(() => {
@@ -39,13 +35,7 @@ describe('GaragePeriodReportService', () => {
     debtsExport.resolveBranchLabel.mockResolvedValue('Chi nhánh Quận 7');
     queries.loadVouchers.mockResolvedValue([]);
     queries.loadPnlMonthly.mockResolvedValue([]);
-    timelines.loadRevenueTimeline.mockResolvedValue([]);
-    timelines.loadDebtTimeline.mockResolvedValue([]);
-    service = new GaragePeriodReportService(
-      debtsExport as any,
-      queries as any,
-      timelines as any,
-    );
+    service = new GaragePeriodReportService(debtsExport as any, queries as any);
   });
 
   it('công nợ trong kỳ dùng đúng kỳ; nợ quá hạn lấy từ mốc ghi nhận, không giới hạn kỳ', async () => {
@@ -142,50 +132,6 @@ describe('GaragePeriodReportService', () => {
     // thu chi kỳ này và kỳ liền trước (so sánh ±%)
     expect(queries.loadVouchers).toHaveBeenCalledTimes(2);
     expect(debtsExport.loadCustomerGroups).toHaveBeenCalledTimes(1);
-  });
-
-  it('chart theo thời gian: truyền kỳ và chi nhánh, chỉ chạy timeline mà loại báo cáo cần', async () => {
-    await service.exportExcel('CN1', {
-      from: '2026-10-01',
-      to: '2026-10-31',
-      reportType: 'all',
-    });
-    expect(timelines.loadRevenueTimeline).toHaveBeenCalledWith(
-      '2026-10-01',
-      '2026-10-31',
-    );
-    expect(timelines.loadDebtTimeline).toHaveBeenCalledWith(
-      '2026-10-01',
-      '2026-10-31',
-      'CN1',
-    );
-
-    jest.clearAllMocks();
-    await service.exportExcel('CN1', {
-      from: '2026-10-01',
-      to: '2026-10-31',
-      reportType: 'business',
-    });
-    expect(timelines.loadRevenueTimeline).toHaveBeenCalledTimes(1);
-    expect(timelines.loadDebtTimeline).not.toHaveBeenCalled();
-
-    jest.clearAllMocks();
-    await service.exportExcel('CN1', {
-      from: '2026-10-01',
-      to: '2026-10-31',
-      reportType: 'cashflow-debts',
-    });
-    expect(timelines.loadRevenueTimeline).not.toHaveBeenCalled();
-    expect(timelines.loadDebtTimeline).toHaveBeenCalledTimes(1);
-
-    jest.clearAllMocks();
-    await service.exportExcel('CN1', {
-      from: '2026-10-01',
-      to: '2026-10-31',
-      reportType: 'overdue',
-    });
-    expect(timelines.loadRevenueTimeline).not.toHaveBeenCalled();
-    expect(timelines.loadDebtTimeline).not.toHaveBeenCalled();
   });
 
   it('báo tiến trình tăng dần đến 100 và trả file Excel hợp lệ có Dashboard đầu tiên', async () => {

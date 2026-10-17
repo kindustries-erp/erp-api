@@ -242,8 +242,12 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
     expect(result.categorized?.individual.all[0].invoiceCategory).toBe(
       'PENDING_INVOICE',
     );
-    expect(result.categorized?.individual.all[0].cases[0].cost).toBe(6500000);
-    expect(result.categorized?.individual.all[0].cost).toBe(6500000);
+    // Hồ sơ có cả phần BH (4 triệu) và phần KH (6 triệu): chi phí 6,5 triệu chia theo tỷ trọng
+    // (KH 60% → 3,9 triệu; BH 40% → 2,6 triệu), không cộng trùng sang cả hai nhóm
+    expect(result.categorized?.individual.all[0].cases[0].cost).toBe(3900000);
+    expect(result.categorized?.individual.all[0].cost).toBe(3900000);
+    expect(result.categorized?.insurance.all[0].cases[0].cost).toBe(2600000);
+    expect(result.categorized?.insurance.all[0].cost).toBe(2600000);
   });
 
   it('should categorize correctly for non-VAT individual customers (NO_INVOICE)', async () => {

@@ -14,12 +14,6 @@ export const BUCKET_UNIT_LABEL: Record<BucketUnit, string> = {
   month: 'tháng',
 };
 
-export interface RevenueSeriesPoint {
-  label: string;
-  revenue: number;
-  cogs: number;
-}
-
 export interface CashflowSeriesPoint {
   label: string;
   thu: number;
@@ -28,36 +22,15 @@ export interface CashflowSeriesPoint {
   planned: number;
 }
 
-export interface DebtSeriesPoint {
-  label: string;
-  arTotal: number;
-  arPaid: number;
-  apTotal: number;
-  apPaid: number;
-}
-
 type SeriesInput = Pick<
   GaragePeriodReportData,
-  'from' | 'to' | 'bucketUnit' | 'vouchers' | 'revenueTimeline' | 'debtTimeline'
+  'from' | 'to' | 'bucketUnit' | 'vouchers'
 >;
 
 /** Đơn vị gom của báo cáo: dùng giá trị truyền vào, thiếu thì suy ra từ độ dài kỳ. */
 export const bucketUnitOf = (
   data: Pick<SeriesInput, 'from' | 'to' | 'bucketUnit'>,
 ) => data.bucketUnit ?? resolveBucketUnit(data.from, data.to);
-
-/** Doanh thu, giá vốn từ phiếu theo ngày/tuần/tháng; mốc trống là 0. */
-export function buildRevenueSeries(data: SeriesInput) {
-  const unit = bucketUnitOf(data);
-  const axis = buildBucketAxis(data.from, data.to, unit);
-  const points: RevenueSeriesPoint[] = aggregateByBucket(
-    axis,
-    unit,
-    data.revenueTimeline ?? [],
-    ['revenue', 'cogs'] as const,
-  ).map(({ label, revenue, cogs }) => ({ label, revenue, cogs }));
-  return { unit, points };
-}
 
 /** Phiếu chi Chờ duyệt hoặc Đã duyệt: được tính vào dự chi. */
 export const isPlannedPayment = (v: PeriodVoucherRow) =>
@@ -83,25 +56,6 @@ export function buildCashflowSeries(data: SeriesInput) {
     thu,
     chi,
     planned,
-  }));
-  return { unit, points };
-}
-
-/** Công nợ phát sinh và đã thu/trả theo ngày/tuần/tháng hoàn thành phiếu; mốc trống là 0. */
-export function buildDebtSeries(data: SeriesInput) {
-  const unit = bucketUnitOf(data);
-  const axis = buildBucketAxis(data.from, data.to, unit);
-  const points: DebtSeriesPoint[] = aggregateByBucket(
-    axis,
-    unit,
-    data.debtTimeline ?? [],
-    ['arTotal', 'arPaid', 'apTotal', 'apPaid'] as const,
-  ).map(({ label, arTotal, arPaid, apTotal, apPaid }) => ({
-    label,
-    arTotal,
-    arPaid,
-    apTotal,
-    apPaid,
   }));
   return { unit, points };
 }

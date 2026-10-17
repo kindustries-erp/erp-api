@@ -19,15 +19,7 @@ import {
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
 import { buildPeriodDashboard } from './garage-period-dashboard.builder';
-import {
-  PNL_SHEET,
-  buildPnlSheet,
-  type PnlTimelineSeries,
-} from './garage-period-pnl.builder';
-import {
-  BUCKET_UNIT_LABEL,
-  buildRevenueSeries,
-} from './garage-period-series.helper';
+import { PNL_SHEET, buildPnlSheet } from './garage-period-pnl.builder';
 import { resolvePeriodReportSections } from './garage-period-report-sections.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 
@@ -35,12 +27,6 @@ export const OVERDUE_SHEET = 'Nợ quá hạn cần chú ý';
 export const CASHFLOW_SHEET = 'Thu chi trong kỳ';
 
 const MONEY = '#,##0';
-
-/** Chuỗi doanh thu, giá vốn theo ngày/tuần/tháng của kỳ cho chart đầu của sheet lợi nhuận. */
-function buildPnlTimeline(data: GaragePeriodReportData): PnlTimelineSeries {
-  const { unit, points } = buildRevenueSeries(data);
-  return { unitLabel: BUCKET_UNIT_LABEL[unit], points };
-}
 
 const OVERDUE_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'STT', key: 'stt', width: 6, align: 'center' },
@@ -254,7 +240,7 @@ export async function buildGaragePeriodReport(
     ? createDashboardSheet(workbook, DEBT_DASHBOARD_SHEET)
     : null;
   const pnlCharts = sectionSet.has('pnl')
-    ? buildPnlSheet(workbook, data.pnlMonths, buildPnlTimeline(data))
+    ? buildPnlSheet(workbook, data.pnlMonths)
     : null;
 
   if (sectionSet.has('debts')) {

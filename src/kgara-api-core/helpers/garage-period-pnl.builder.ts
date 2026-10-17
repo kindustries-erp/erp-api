@@ -1,6 +1,9 @@
 import * as ExcelJS from 'exceljs';
 
-import { writeDataTable } from '../../common/xlsx-charts/dashboard-sheet.helper';
+import {
+  columnLetter,
+  writeDataTable,
+} from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   CHART_PALETTE,
   LABEL_MONEY_FMT,
@@ -16,7 +19,6 @@ import {
   buildPnlTableRows,
   writePnlTable,
 } from './garage-period-pnl-table.helper';
-import type { RevenueSeriesPoint } from './garage-period-series.helper';
 
 export { buildPnlTableRows };
 
@@ -25,20 +27,15 @@ export const PNL_SHEET = 'Báo cáo lợi nhuận';
 const MONEY = '#,##0';
 
 const DATA_COL_WIDTH = 14;
-const CHART_FIRST_COL = 4;
-/** Chart xếp dọc ở cột D:M, bảng dữ liệu biểu đồ nằm dưới các chart. */
-const CHART_LAST_COL = 13;
+/** Cột C là "Tháng trước" của bảng; cột D là khoảng đệm; chart và bảng dữ liệu từ cột E. */
+const COMPARE_COL_WIDTH = 20;
+const SPACER_COL = 4;
+const CHART_FIRST_COL = 5;
+/** Chart xếp dọc ở cột E:N, bảng dữ liệu biểu đồ nằm dưới các chart. */
+const CHART_LAST_COL = 14;
 /** Mỗi chart cao 18 hàng; chart đầu bắt đầu ở hàng 3 (0-based). */
 const CHART_FIRST_ROW = 3;
 const CHART_HEIGHT_ROWS = 18;
-const MIN_PRINT_ROWS = 20;
-
-/** Chuỗi doanh thu, giá vốn theo ngày/tuần/tháng của kỳ báo cáo (chart đầu tiên). */
-export interface PnlTimelineSeries {
-  /** `ngày`, `tuần` hoặc `tháng`, ghép vào tiêu đề chart. */
-  unitLabel: string;
-  points: RevenueSeriesPoint[];
-}
 
 /** Tỷ lệ trên doanh thu; không có doanh thu thì `null` để đường % ngắt quãng. */
 const ratioOrBlank = (part: number, revenue: number): number | null =>
@@ -59,6 +56,10 @@ const chartAnchor = (slot: number) => ({
   toCol: CHART_LAST_COL,
   toRow: CHART_FIRST_ROW + (slot + 1) * CHART_HEIGHT_ROWS,
 });
+
+/** `MM/YYYY` của một tháng P&L. */
+const monthTag = (m: PnlMonthRow) =>
+  `${String(m.month).padStart(2, '0')}/${m.year}`;
 
 /** Chart combo: cột doanh thu / chi phí / lợi nhuận gộp + đường % lợi nhuận gộp trên trục phụ. */
 function profitComboChart(
@@ -114,16 +115,14 @@ function profitComboChart(
 }
 
 /**
- * Sheet "Báo cáo lợi nhuận": bảng P&L 3 cấp của tháng cuối cùng trong `months` và các
- * chart: (nếu có `timeline`) doanh thu, giá vốn, lãi gộp theo ngày/tuần/tháng của kỳ báo
- * cáo; rồi 2 chart 12 tháng (doanh thu/chi phí/lợi nhuận gộp + % lợi nhuận gộp trên trục
- * phụ; tỷ trọng chi phí trên doanh thu dạng cột chồng). Trả về cấu hình chart để chèn
- * sau khi ghi buffer.
+ * Sheet "Báo cáo lợi nhuận": bảng P&L 3 cấp (đánh số 1 / 1.1 / 1.1.1) của tháng cuối cùng
+ * trong `months`, cạnh cột "Tháng trước" lấy tháng liền trước; rồi 2 chart 12 tháng
+ * (doanh thu/chi phí/lợi nhuận gộp + % lợi nhuận gộp trên trục phụ; tỷ trọng chi phí trên
+ * doanh thu dạng cột chồng). Trả về cấu hình chart để chèn sau khi ghi buffer.
  */
 export function buildPnlSheet(
   workbook: ExcelJS.Workbook,
   months: PnlMonthRow[],
-  timeline?: PnlTimelineSeries,
 ): XlsxChartSpec[] {
   const sheet = workbook.addWorksheet(PNL_SHEET, {
     views: [{ showGridLines: false }],
@@ -137,13 +136,14 @@ export function buildPnlSheet(
   });
   sheet.getColumn(1).width = 46;
   sheet.getColumn(2).width = 20;
-  sheet.getColumn(3).width = 3;
-  for (let c = CHART_FIRST_COL; c <= 26; c++)
+  sheet.getColumn(3).width = COMPARE_COL_WIDTH;
+  for (let c = SPACER_COL; c <= 26; c++)
     sheet.getColumn(c).width = DATA_COL_WIDTH;
+  sheet.getColumn(SPACER_COL).width = 3;
 
   const current = months[months.length - 1];
   const title = current
-    ? `Báo cáo lợi nhuận - Tháng ${String(current.month).padStart(2, '0')}/${current.year}`
+    ? `Báo cáo lợi nhuận - Tháng ${monthTag(current)}`
     : 'Báo cáo lợi nhuận';
   sheet.getCell('A1').value = title;
   sheet.getCell('A1').font = {
@@ -154,7 +154,7 @@ export function buildPnlSheet(
   };
   sheet.getRow(1).height = 30;
   sheet.getCell('A2').value =
-    'Doanh thu, giá vốn theo ngày hoàn thành phiếu; chi phí vận hành, hoa hồng theo tháng. Chart đầu theo kỳ báo cáo (giá vốn chỉ gồm giá vốn từ phiếu), hai chart sau hiển thị 12 tháng gần nhất.';
+    'Doanh thu, giá vốn theo ngày hoàn thành phiếu; chi phí vận hành, hoa hồng theo tháng. Cột Tháng trước là tháng liền trước. Hai chart hiển thị 12 tháng gần nhất.';
   sheet.getCell('A2').font = {
     name: 'Calibri',
     size: 10,
@@ -163,14 +163,18 @@ export function buildPnlSheet(
   };
 
   if (!current) return [];
+  const previous = months.length > 1 ? months[months.length - 2] : undefined;
   const tableRows = buildPnlTableRows(current);
-  writePnlTable(sheet, tableRows);
+  writePnlTable(sheet, tableRows, {
+    currentLabel: `Tháng ${monthTag(current)}`,
+    prevLabel: previous ? `Tháng trước ${monthTag(previous)}` : 'Tháng trước',
+    prevRows: previous ? buildPnlTableRows(previous) : undefined,
+  });
 
-  const showTimeline = Boolean(timeline && timeline.points.length > 0);
-  const chartCount = showTimeline ? 3 : 2;
+  const chartCount = 2;
   const chartsEndRow = CHART_FIRST_ROW + chartCount * CHART_HEIGHT_ROWS;
   // Chỉ in bảng P&L và các chart, bỏ các bảng dữ liệu biểu đồ bên dưới
-  sheet.pageSetup.printArea = `A1:M${Math.max(chartsEndRow + 2, 5 + tableRows.length)}`;
+  sheet.pageSetup.printArea = `A1:${columnLetter(CHART_LAST_COL)}${Math.max(chartsEndRow + 2, 5 + tableRows.length)}`;
   const tableStartRow = chartsEndRow + 5;
 
   const labels = months.map(monthLabel);
@@ -230,48 +234,10 @@ export function buildPnlSheet(
     numFmts: [undefined, ...ratioHeaders.map(() => '0.0%')],
   });
 
-  const charts: XlsxChartSpec[] = [];
-
-  if (showTimeline && timeline) {
-    const timelineRows = timeline.points.map(
-      (p): Row => [
-        p.label,
-        p.revenue,
-        p.cogs,
-        p.revenue - p.cogs,
-        ratioOrBlank(p.revenue - p.cogs, p.revenue),
-      ],
-    );
-    const timelineTable = writeDataTable(sheet, {
-      startRow: tableStartRow,
-      startCol: CHART_FIRST_COL + 15,
-      title: `Dữ liệu biểu đồ: Doanh thu - Giá vốn - Lãi gộp theo ${timeline.unitLabel}`,
-      headers: [
-        timeline.unitLabel === 'tháng' ? 'Tháng' : 'Mốc',
-        'Doanh thu',
-        'Giá vốn từ phiếu',
-        'Lãi gộp',
-        '% Lãi gộp',
-      ],
-      rows: timelineRows,
-      numFmts: [undefined, MONEY, MONEY, MONEY, '0.0%'],
-    });
-    charts.push(
-      profitComboChart(
-        `Doanh thu, giá vốn, lãi gộp theo ${timeline.unitLabel}`,
-        0,
-        timelineTable,
-        timeline.points.map((p) => p.label),
-        timelineRows,
-        'Giá vốn từ phiếu',
-      ),
-    );
-  }
-
-  charts.push(
+  const charts: XlsxChartSpec[] = [
     profitComboChart(
       'Báo cáo lợi nhuận',
-      charts.length,
+      0,
       trendTable,
       labels,
       trendRows,
@@ -280,7 +246,7 @@ export function buildPnlSheet(
     {
       type: 'column',
       title: 'Tỷ trọng các chỉ số trên 100% doanh thu',
-      anchor: chartAnchor(charts.length + 1),
+      anchor: chartAnchor(1),
       categoriesRef: ratioTable.ref(0),
       categories: labels,
       numFmt: '0%',
@@ -295,6 +261,6 @@ export function buildPnlSheet(
         color: CHART_PALETTE[i % CHART_PALETTE.length],
       })),
     },
-  );
+  ];
   return charts;
 }
