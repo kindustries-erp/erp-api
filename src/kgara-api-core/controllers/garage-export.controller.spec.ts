@@ -162,6 +162,42 @@ describe('Garage export controllers', () => {
       ).toThrow();
     });
 
+    it('reportType tới service, tên file có nhãn loại và không dùng lại file của loại khác', async () => {
+      const all = dashboardController.start({}, 'CN1', req('u1'));
+      await flush();
+      const business = dashboardController.start(
+        { reportType: 'business' },
+        'CN1',
+        req('u1'),
+      );
+      await flush();
+
+      expect(business.jobId).not.toBe(all.jobId);
+      expect(periodReport.exportExcel).toHaveBeenLastCalledWith(
+        'CN1',
+        { reportType: 'business' },
+        expect.any(Function),
+      );
+      const names = dashboardController
+        .history(req('u1'))
+        .items.map((item) => item.fileName);
+      expect(
+        names.some((n) => n.includes('Bao_cao_Garage_Hoat_dong_kinh_doanh_')),
+      ).toBe(true);
+      expect(names.some((n) => n.includes('Tong_hop'))).toBe(false);
+    });
+
+    it('reportType=all tường minh dùng lại file của yêu cầu không truyền reportType', async () => {
+      const first = dashboardController.start({}, 'CN1', req('u1'));
+      await flush();
+      const same = dashboardController.start(
+        { reportType: 'all' },
+        'CN1',
+        req('u1'),
+      );
+      expect(same).toMatchObject({ jobId: first.jobId, reused: true });
+    });
+
     it('có runner riêng: không dùng lại file của chi nhánh khác', async () => {
       const a = dashboardController.start({}, 'CN1', req('u1'));
       await flush();

@@ -141,13 +141,35 @@ export function writeDashboardHeader(
   return row + 1;
 }
 
-/** Vẽ các thẻ KPI (4 thẻ/hàng, mỗi thẻ 2 dòng: nhãn + giá trị). Trả về dòng trống kế tiếp. */
+/** Dòng tiêu đề nhóm thẻ (gộp cả 16 cột); trả về dòng kế tiếp, `title` trống thì giữ nguyên. */
+function writeGroupTitle(
+  sheet: ExcelJS.Worksheet,
+  row: number,
+  title?: string,
+): number {
+  if (!title) return row;
+  sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
+  const titleCell = sheet.getCell(row, 1);
+  titleCell.value = title;
+  titleCell.font = {
+    name: 'Calibri',
+    size: 11,
+    bold: true,
+    color: { argb: COLOR_TITLE },
+  };
+  titleCell.alignment = { vertical: 'middle' };
+  sheet.getRow(row).height = 20;
+  return row + 1;
+}
+
+/** Vẽ các thẻ KPI (4 thẻ/hàng, mỗi thẻ 2 dòng: nhãn + giá trị), tùy chọn có dòng tiêu đề nhóm. Trả về dòng trống kế tiếp. */
 export function writeKpiCards(
   sheet: ExcelJS.Worksheet,
   startRow: number,
   kpis: DashboardKpi[],
+  options: { title?: string } = {},
 ): number {
-  let row = startRow;
+  let row = writeGroupTitle(sheet, startRow, options.title);
   for (let i = 0; i < kpis.length; i += CARDS_PER_ROW) {
     kpis.slice(i, i + CARDS_PER_ROW).forEach((kpi, slot) => {
       const col = slot * CARD_COLS + 1;
@@ -217,21 +239,7 @@ export function writeAlertCards(
   const [labelHeight, valueHeight, noteHeight] = options.heights ?? [
     18, 26, 28,
   ];
-  let row = startRow;
-  if (options.title) {
-    sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
-    const titleCell = sheet.getCell(row, 1);
-    titleCell.value = options.title;
-    titleCell.font = {
-      name: 'Calibri',
-      size: 11,
-      bold: true,
-      color: { argb: COLOR_TITLE },
-    };
-    titleCell.alignment = { vertical: 'middle' };
-    sheet.getRow(row).height = 20;
-    row += 1;
-  }
+  let row = writeGroupTitle(sheet, startRow, options.title);
 
   for (let i = 0; i < cards.length; i += CARDS_PER_ROW) {
     cards.slice(i, i + CARDS_PER_ROW).forEach((card, slot) => {

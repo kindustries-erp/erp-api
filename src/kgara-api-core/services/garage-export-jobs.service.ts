@@ -10,6 +10,7 @@ import type {
   GarageCasesExportDto,
   GarageDashboardExportDto,
   GarageDebtsExportDto,
+  GaragePeriodReportType,
 } from '../dto/garage-export.dto';
 import type { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
 import type { GarageOpexExportDto } from '../dto/garage-opex-export.dto';
@@ -27,6 +28,14 @@ import { GarageOpexExportService } from './garage-opex-export.service';
 /** Công nợ đổi theo ngày/đồng bộ nên chỉ tái dùng file vừa tạo trong 10 phút. */
 const REUSE_WINDOW_MS = 10 * 60 * 1000;
 const PROGRESS_TOTAL_UNITS = 100;
+
+/** Nhãn không dấu gắn vào tên file theo loại báo cáo kỳ. */
+const PERIOD_REPORT_FILE_LABEL: Record<GaragePeriodReportType, string> = {
+  all: 'Tong_hop',
+  business: 'Hoat_dong_kinh_doanh',
+  'cashflow-debts': 'Thu_chi_cong_no',
+  overdue: 'No_qua_han',
+};
 
 export const GARAGE_CASES_EXPORT_PROCESS_ID = 'garage-cases-xlsx-export';
 export const GARAGE_DASHBOARD_EXPORT_PROCESS_ID =
@@ -179,10 +188,19 @@ export class GarageExportJobsService implements OnModuleDestroy {
     const period =
       dto.from || dto.to ? `${compact(dto.from)}-${compact(dto.to)}_` : '';
 
+    const reportType = dto.reportType ?? 'all';
+    // `all` giữ nguyên tên cũ; các loại khác thêm nhãn để phân biệt file.
+    const typeLabel =
+      reportType === 'all' ? '' : `${PERIOD_REPORT_FILE_LABEL[reportType]}_`;
+
     return this.dashboardRunner.start({
       userId,
-      fingerprint: stableStringify({ branchId: branchId ?? '', ...dto }),
-      fileName: `Bao_cao_Garage_${period}${timestamp}.xlsx`,
+      fingerprint: stableStringify({
+        branchId: branchId ?? '',
+        ...dto,
+        reportType,
+      }),
+      fileName: `Bao_cao_Garage_${typeLabel}${period}${timestamp}.xlsx`,
       totalUnits: GaragePeriodReportService.PROGRESS_TOTAL_UNITS,
       dateFrom: dto.from,
       dateTo: dto.to,

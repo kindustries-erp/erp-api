@@ -1,4 +1,3 @@
-import type { DashboardAlertCard } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   debtRowLabel,
   type GarageDebtExportRow,
@@ -45,15 +44,6 @@ export const OVERDUE_LEVEL_STYLE: Record<
 };
 
 const num = (value: unknown) => Number(value) || 0;
-
-/** `85.000.000 đ` (dấu chấm ngăn cách, không phụ thuộc ICU của Node). */
-export const formatVnd = (value: number) =>
-  `${Math.round(value)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, '.')} đ`;
-
-const formatPercent = (rate: number) =>
-  `${(rate * 100).toFixed(1).replace('.', ',')}%`;
 
 /** Mức cảnh báo theo bậc tuổi nợ cao nhất còn dư nợ. */
 export function levelOf(
@@ -116,63 +106,4 @@ export function summarizeOverdue(
     summary.totalBalance > 0 ? summary.overdueAmount / summary.totalBalance : 0;
   summary.level = levelOf(summary);
   return summary;
-}
-
-const NEUTRAL_CARD = { fill: 'FFF1F5F9', font: 'FF64748B' };
-
-/**
- * 4 thẻ cảnh báo cho một phía: mức cảnh báo, nợ trên 90 ngày (kèm đối tượng lớn nhất),
- * nợ 61-90 ngày và nợ 31-60 ngày. Bậc không có nợ hiển thị nền xám nhạt.
- */
-export function buildOverdueCards(s: OverdueSummary): DashboardAlertCard[] {
-  const level = OVERDUE_LEVEL_STYLE[s.level];
-  const top = s.topOver90
-    ? `; lớn nhất: ${s.topOver90.label} (${formatVnd(s.topOver90.amount)})`
-    : '';
-  const bucket = (
-    label: string,
-    amount: number,
-    count: number,
-    style: { fill: string; font: string },
-    note: string,
-  ): DashboardAlertCard => ({
-    label: `${s.sideLabel.toUpperCase()}: ${label}`,
-    value: amount,
-    note: amount > 0 ? `${count} đối tượng${note}` : 'Không có',
-    ...(amount > 0 ? style : NEUTRAL_CARD),
-  });
-
-  return [
-    {
-      label: `${s.sideLabel.toUpperCase()}: MỨC CẢNH BÁO`,
-      value: level.tag,
-      note:
-        s.level === 'OK'
-          ? 'Không có nợ quá hạn trên 30 ngày'
-          : `Quá hạn >30 ngày: ${formatPercent(s.overdueRate)} tổng nợ (${formatVnd(s.overdueAmount)})`,
-      fill: level.fill,
-      font: level.font,
-    },
-    bucket(
-      'NỢ TRÊN 90 NGÀY',
-      s.over90,
-      s.countOver90,
-      OVERDUE_LEVEL_STYLE.HIGH,
-      top,
-    ),
-    bucket(
-      'NỢ 61-90 NGÀY',
-      s.b61_90,
-      s.count61_90,
-      OVERDUE_LEVEL_STYLE.MEDIUM,
-      '',
-    ),
-    bucket(
-      'NỢ 31-60 NGÀY',
-      s.b31_60,
-      s.count31_60,
-      OVERDUE_LEVEL_STYLE.WATCH,
-      '',
-    ),
-  ];
 }

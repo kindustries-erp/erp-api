@@ -30,6 +30,9 @@ const pnlMonths = (): PnlMonthRow[] =>
       month: (idx % 12) + 1,
       revenue: 1000,
       cogs: 600,
+      cogsDirect: 600,
+      cogsAdjustmentItems: [],
+      revenueSegments: [],
       grossProfit: 400,
       grossMarginRate: 40,
       opexTotal: 100,
@@ -37,6 +40,7 @@ const pnlMonths = (): PnlMonthRow[] =>
         { categoryKey: 'NHAN_SU', categoryName: 'Nhân sự', amount: 100 },
       ],
       netBeforeCommission: 300,
+      hhbhTotal: 0,
       commissionTotal: 30,
       commissionItems: [],
       netAfterCommission: 270,
@@ -134,6 +138,10 @@ const baseData = (
     }),
     debtRow({ partnerName: 'Mới', balanceAmount: 100, aging0_30: 100 }),
   ],
+  revenueTimeline: [{ date: '2026-10-05', revenue: 1000, cogs: 600 }],
+  debtTimeline: [
+    { date: '2026-10-06', arTotal: 800, arPaid: 300, apTotal: 100, apPaid: 50 },
+  ],
   openSupplierRows: [
     debtRow({
       partnerCode: 'NCC9',
@@ -199,6 +207,50 @@ describe('buildGaragePeriodReport', () => {
     ]);
   });
 
+  it('reportType=all giống hệt khi không truyền reportType', async () => {
+    const names = async (reportType?: 'all') =>
+      (
+        await load(await buildGaragePeriodReport(baseData({ reportType })))
+      ).worksheets.map((w) => w.name);
+    expect(await names('all')).toEqual(await names());
+  });
+
+  it('reportType=business: chỉ sheet Báo cáo lợi nhuận kèm 3 chart (theo kỳ + 12 tháng)', async () => {
+    const buffer = await buildGaragePeriodReport(
+      baseData({ reportType: 'business' }),
+    );
+    const wb = await load(buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Báo cáo lợi nhuận']);
+    expect(await chartCount(buffer)).toBe(3);
+  });
+
+  it('reportType=cashflow-debts: dashboard, công nợ, thu chi; không có P&L và nợ quá hạn', async () => {
+    const buffer = await buildGaragePeriodReport(
+      baseData({ reportType: 'cashflow-debts' }),
+    );
+    const wb = await load(buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Dashboard',
+      'Thu Khách hàng Doanh nghiệp',
+      'Công nợ phải trả',
+      'Thu chi trong kỳ',
+    ]);
+    // 3 chart của Dashboard, không có chart P&L
+    expect(await chartCount(buffer)).toBe(3);
+    const dash = wb.getWorksheet('Dashboard')!;
+    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
+    expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
+  });
+
+  it('reportType=overdue: chỉ sheet nợ quá hạn, không chart', async () => {
+    const buffer = await buildGaragePeriodReport(
+      baseData({ reportType: 'overdue' }),
+    );
+    const wb = await load(buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Nợ quá hạn cần chú ý']);
+    expect(await chartCount(buffer)).toBe(0);
+  });
+
   it('thiếu phân nhóm thì dùng sheet Công nợ phải thu phẳng', async () => {
     const wb = await load(
       await buildGaragePeriodReport(baseData({ customerSections: undefined })),
@@ -223,55 +275,81 @@ describe('buildGaragePeriodReport', () => {
     );
   });
 
-  it('Dashboard: cảnh báo quá hạn dạng card cho phải thu và phải trả, không còn dòng chữ banner', async () => {
-    const wb = await load(await buildGaragePeriodReport(baseData()));
-    const dash = wb.getWorksheet('Dashboard')!;
-
-    const level = (label: string) => card(dash, label);
-    expect(level('PHẢI THU: MỨC CẢNH BÁO')).toMatchObject({ value: 'CAO' });
-    expect(level('PHẢI TRẢ: MỨC CẢNH BÁO')).toMatchObject({ value: 'CHÚ Ý' });
-
-    const over90 = card(dash, 'PHẢI THU: NỢ TRÊN 90 NGÀY');
-    expect(over90.value).toBe(5001000);
-    expect(over90.note).toBe(
-      '2 đối tượng; lớn nhất: 51K-222.22 - Lớn (5.000.000 đ)',
-    );
-    expect(card(dash, 'PHẢI TRẢ: NỢ 31-60 NGÀY')).toMatchObject({
-      value: 300,
-      note: '1 đối tượng',
-    });
-    expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY')).toMatchObject({ value: 0 });
-
-    const banner: string[] = [];
-    dash.eachRow((row) => {
-      const v = row.getCell(1).value;
-      if (typeof v === 'string' && v.startsWith('CẢNH BÁO QUÁ HẠN'))
-        banner.push(v);
-    });
-    expect(banner).toEqual([]);
-  });
-
-  it('Dashboard: chỉ 4 KPI (đã thu, đã chi, còn phải thu, còn phải trả), bỏ các KPI phụ và P&L', async () => {
+  it('Dashboard: thu chi trong kỳ chỉ có đã thu, đã chi, dòng tiền ròng', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
 
     expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
     expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBe(200);
-    expect(kpiValue(dash, 'CÒN PHẢI THU (NỢ MỞ)')).toBe(5001100);
-    expect(kpiValue(dash, 'CÒN PHẢI TRẢ (NỢ MỞ)')).toBe(300);
-    for (const removed of [
-      'DÒNG TIỀN RÒNG (THU - CHI)',
-      'SỐ PHIẾU THU / CHI',
-      'NỢ QUÁ HẠN >30 NGÀY',
-      '% NỢ QUÁ HẠN / TỔNG NỢ',
-      'DOANH THU TRONG KỲ',
-      'LÃI GỘP TRONG KỲ',
-    ]) {
-      expect(kpiValue(dash, removed)).toBeUndefined();
-    }
+    expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBe(500);
+    // các card đã bỏ
+    expect(kpiValue(dash, 'CHÊNH LỆCH PHẢI THU - PHẢI TRẢ')).toBeUndefined();
+    expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
-  it('sheet Báo cáo lợi nhuận: bảng tháng báo cáo (tháng cuối) và 2 chart', async () => {
+  it('Dashboard: công nợ phát sinh trong kỳ cho từng phía', async () => {
+    const wb = await load(
+      await buildGaragePeriodReport(
+        baseData({
+          customerRows: [
+            debtRow({ totalAmount: 1000, paidAmount: 400, balanceAmount: 600 }),
+          ],
+          supplierRows: [
+            debtRow({ totalAmount: 300, paidAmount: 100, balanceAmount: 200 }),
+          ],
+        }),
+      ),
+    );
+    const dash = wb.getWorksheet('Dashboard')!;
+
+    const values = (label: string) => {
+      const out: unknown[] = [];
+      dash.eachRow((row, r) =>
+        row.eachCell((cell, c) => {
+          // ô gộp lặp giá trị ở mọi cột: chỉ lấy ô chính
+          if (cell.value === label && cell.master === cell)
+            out.push(dash.getCell(r + 1, c).value);
+        }),
+      );
+      return out;
+    };
+    // [phải thu, phải trả]
+    expect(values('PHÁT SINH TRONG KỲ')).toEqual([1000, 300]);
+    expect(values('ĐÃ THU')).toEqual([400]);
+    expect(values('ĐÃ TRẢ')).toEqual([100]);
+    expect(values('CÒN LẠI')).toEqual([600, 200]);
+  });
+
+  it('Dashboard: công nợ lũy kế phải thu và phải trả, không ghi số đối tượng', async () => {
+    const wb = await load(await buildGaragePeriodReport(baseData()));
+    const dash = wb.getWorksheet('Dashboard')!;
+
+    expect(card(dash, 'PHẢI THU: TỔNG NỢ CÒN MỞ').value).toBe(5001100);
+    expect(card(dash, 'PHẢI THU: NỢ 31-60 NGÀY').value).toBe(0);
+    expect(card(dash, 'PHẢI THU: NỢ 61-90 NGÀY').value).toBe(0);
+    expect(card(dash, 'PHẢI THU: NỢ TRÊN 90 NGÀY').value).toBe(5001000);
+    expect(card(dash, 'PHẢI THU: TỶ LỆ QUÁ HẠN').value).toBeCloseTo(
+      5001000 / 5001100,
+    );
+    expect(card(dash, 'PHẢI TRẢ: TỔNG NỢ CÒN MỞ').value).toBe(300);
+    expect(card(dash, 'PHẢI TRẢ: NỢ 31-60 NGÀY').value).toBe(300);
+    expect(card(dash, 'PHẢI TRẢ: TỶ LỆ QUÁ HẠN').value).toBe(1);
+
+    const texts: string[] = [];
+    dash.eachRow((row) =>
+      row.eachCell((cell) => {
+        if (typeof cell.value === 'string') texts.push(cell.value);
+      }),
+    );
+    // không ghi số đối tượng trên card (vd "2 đối tượng")
+    expect(texts.some((t) => /\d+ đối tượng/.test(t))).toBe(false);
+    // các card đã bỏ
+    expect(texts).not.toContain('PHẢI THU: NỢ 0-30 NGÀY');
+    expect(texts).not.toContain('PHẢI THU: MỨC CẢNH BÁO');
+    expect(texts).not.toContain('PHẢI THU: QUÁ HẠN TRÊN 30 NGÀY');
+  });
+
+  it('sheet Báo cáo lợi nhuận: bảng tháng báo cáo (tháng cuối)', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     const pnl = wb.getWorksheet('Báo cáo lợi nhuận')!;
     expect(pnl.getCell('A1').value).toBe('Báo cáo lợi nhuận - Tháng 07/2026');
@@ -279,64 +357,68 @@ describe('buildGaragePeriodReport', () => {
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
-  it('5 chart khi có phân nhóm (3 dashboard + 2 P&L), 4 chart khi không có; không còn chart top 10 và cơ cấu tuổi nợ', async () => {
-    const withSections = await buildGaragePeriodReport(baseData());
-    expect(await chartCount(withSections)).toBe(5);
-    expect(
-      await chartCount(
-        await buildGaragePeriodReport(
-          baseData({ customerSections: undefined }),
-        ),
-      ),
-    ).toBe(4);
+  it('6 chart: 3 ở Dashboard (thu chi, tuổi nợ, công nợ theo thời gian) và 3 ở Báo cáo lợi nhuận', async () => {
+    for (const patch of [{}, { customerSections: undefined }]) {
+      const buffer = await buildGaragePeriodReport(baseData(patch));
+      expect(await chartCount(buffer)).toBe(6);
+    }
 
-    const zip = await JSZip.loadAsync(withSections);
+    const zip = await JSZip.loadAsync(
+      await buildGaragePeriodReport(baseData()),
+    );
     const xmls = await Promise.all(
       Object.keys(zip.files)
         .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
         .map((p) => zip.file(p)!.async('string')),
     );
-    expect(xmls.some((x) => x.includes('Top 10'))).toBe(false);
-    expect(xmls.some((x) => x.includes('Cơ cấu tuổi nợ'))).toBe(false);
-    expect(xmls.some((x) => x.includes("'Dashboard'!"))).toBe(true);
-    expect(xmls.some((x) => x.includes("'Báo cáo lợi nhuận'!"))).toBe(true);
+    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(3);
+    expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
+      3,
+    );
     // mọi chart đều có nhãn số
     expect(xmls.every((x) => x.includes('<c:dLbls>'))).toBe(true);
+    // chart theo thời gian có tên theo đơn vị gom (kỳ tháng → tuần)
+    const titles = xmls.join('');
+    expect(titles).toContain('Thu vs chi theo tuần');
+    expect(titles).toContain('Công nợ phát sinh vs đã thu/trả theo tuần');
+    expect(titles).toContain('Doanh thu, giá vốn, lãi gộp theo tuần');
   });
 
-  it('Dashboard gọn một màn hình: 3 chart cùng một hàng chia đều 16 cột, có ghi chú nguồn số liệu', async () => {
-    const buffer = await buildGaragePeriodReport(baseData());
-    const zip = await JSZip.loadAsync(buffer);
-    const drawings = await Promise.all(
-      Object.keys(zip.files)
-        .filter((p) => /^xl\/drawings\/drawing\d+\.xml$/.test(p))
-        .map((p) => zip.file(p)!.async('string')),
-    );
-    // drawing đầu là của Dashboard (3 chart), drawing sau là của P&L (2 chart)
-    const dashboardDrawing = drawings.find(
-      (d) => (d.match(/<xdr:twoCellAnchor/g) ?? []).length === 3,
-    )!;
-    const cols = [
-      ...dashboardDrawing.matchAll(/<xdr:from><xdr:col>(\d+)<\/xdr:col>/g),
-    ].map((m) => +m[1]);
-    const rows = [
-      ...dashboardDrawing.matchAll(
-        /<xdr:to><xdr:col>\d+<\/xdr:col><xdr:colOff>0<\/xdr:colOff><xdr:row>(\d+)<\/xdr:row>/g,
-      ),
-    ].map((m) => +m[1]);
-    expect(cols).toEqual([0, 5, 11]);
-    expect(new Set(rows).size).toBe(1);
-    // chart kết thúc trong khoảng 36 hàng đầu (vừa một màn hình)
-    expect(rows[0]).toBeLessThanOrEqual(36);
+  it('đơn vị gom đổi theo kỳ: tuần → ngày, quý → tháng', async () => {
+    const chartTitles = async (patch: object) => {
+      const zip = await JSZip.loadAsync(
+        await buildGaragePeriodReport(baseData(patch)),
+      );
+      const xmls = await Promise.all(
+        Object.keys(zip.files)
+          .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
+          .map((p) => zip.file(p)!.async('string')),
+      );
+      return xmls.join('');
+    };
+    const week = await chartTitles({ from: '2026-10-12', to: '2026-10-18' });
+    expect(week).toContain('Thu vs chi theo ngày');
+    const quarter = await chartTitles({ from: '2026-10-01', to: '2026-12-31' });
+    expect(quarter).toContain('Thu vs chi theo tháng');
+  });
 
-    const wb = await load(buffer);
+  it('Dashboard: bảng dữ liệu biểu đồ nằm ngoài vùng in và có ghi chú nguồn số liệu', async () => {
+    const wb = await load(await buildGaragePeriodReport(baseData()));
     const dash = wb.getWorksheet('Dashboard')!;
     let footnote = '';
-    dash.eachRow((row) => {
-      const v = row.getCell(1).value;
-      if (typeof v === 'string' && v.startsWith('Nguồn số liệu')) footnote = v;
-    });
-    expect(footnote).toContain('Báo cáo lợi nhuận');
+    const tableTitles: string[] = [];
+    dash.eachRow((row) =>
+      row.eachCell((cell) => {
+        const v = cell.value;
+        if (typeof v !== 'string') return;
+        if (v.startsWith('Nguồn số liệu')) footnote = v;
+        if (v.startsWith('Dữ liệu biểu đồ')) tableTitles.push(v);
+      }),
+    );
+    expect(tableTitles).toHaveLength(3);
+    expect(footnote).toContain('công nợ lũy kế');
+    expect(footnote).toContain('gom theo tuần');
+    expect(dash.pageSetup.printArea).toMatch(/^A1:P\d+$/);
   });
 
   it('sheet nợ quá hạn: chỉ nợ trên 30 ngày, nợ >90 ngày lớn nhất lên đầu, có cả phải trả', async () => {
@@ -365,7 +447,7 @@ describe('buildGaragePeriodReport', () => {
     expect((sheet.getRow(1).getCell(paymentIdx).value as any).result).toBe(200);
   });
 
-  it('không có dữ liệu vẫn tạo file hợp lệ và cả hai phía ở mức ỔN', async () => {
+  it('không có dữ liệu vẫn tạo file hợp lệ, số tổng bằng 0 và chart vẫn đủ mốc', async () => {
     const wb = await load(
       await buildGaragePeriodReport(
         baseData({
@@ -380,9 +462,9 @@ describe('buildGaragePeriodReport', () => {
       ),
     );
     const dash = wb.getWorksheet('Dashboard')!;
-    expect(card(dash, 'PHẢI THU: MỨC CẢNH BÁO').value).toBe('ỔN');
-    expect(card(dash, 'PHẢI TRẢ: MỨC CẢNH BÁO').value).toBe('ỔN');
-    expect(kpiValue(dash, 'CÒN PHẢI THU (NỢ MỞ)')).toBe(0);
+    expect(card(dash, 'PHẢI THU: TỔNG NỢ CÒN MỞ').value).toBe(0);
+    expect(card(dash, 'PHẢI THU: TỶ LỆ QUÁ HẠN').value).toBe(0);
+    expect(card(dash, 'PHẢI TRẢ: TỔNG NỢ CÒN MỞ').value).toBe(0);
     expect(wb.getWorksheet('Báo cáo lợi nhuận')!.getCell('A1').value).toBe(
       'Báo cáo lợi nhuận',
     );

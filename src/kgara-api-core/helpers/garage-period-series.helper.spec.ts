@@ -1,0 +1,127 @@
+import {
+  BUCKET_UNIT_LABEL,
+  bucketUnitOf,
+  buildCashflowSeries,
+  buildDebtSeries,
+  buildRevenueSeries,
+} from './garage-period-series.helper';
+
+const week = { from: '2026-10-12', to: '2026-10-18' };
+const month = { from: '2026-10-01', to: '2026-10-31' };
+const quarter = { from: '2026-10-01', to: '2026-12-31' };
+
+const voucher = (
+  transDate: string,
+  type: 'RECEIPT' | 'PAYMENT',
+  amount: number,
+) => ({ transDate, type, amount }) as any;
+
+describe('garage-period-series.helper', () => {
+  it('đơn vị: ưu tiên bucketUnit truyền vào, thiếu thì suy từ độ dài kỳ', () => {
+    expect(bucketUnitOf({ ...week })).toBe('day');
+    expect(bucketUnitOf({ ...month })).toBe('week');
+    expect(bucketUnitOf({ ...quarter })).toBe('month');
+    expect(bucketUnitOf({ ...week, bucketUnit: 'month' })).toBe('month');
+    expect(BUCKET_UNIT_LABEL).toEqual({
+      day: 'ngày',
+      week: 'tuần',
+      month: 'tháng',
+    });
+  });
+
+  describe('buildCashflowSeries', () => {
+    it('kỳ tuần: 7 mốc theo ngày, thu và chi đúng ngày, ngày trống bằng 0', () => {
+      const { unit, points } = buildCashflowSeries({
+        ...week,
+        vouchers: [
+          voucher('2026-10-12', 'RECEIPT', 100),
+          voucher('2026-10-12', 'PAYMENT', 30),
+          voucher('2026-10-14', 'RECEIPT', 50),
+        ],
+      });
+      expect(unit).toBe('day');
+      expect(points).toHaveLength(7);
+      expect(points[0]).toEqual({ label: '12/10', thu: 100, chi: 30 });
+      expect(points[1]).toEqual({ label: '13/10', thu: 0, chi: 0 });
+      expect(points[2]).toEqual({ label: '14/10', thu: 50, chi: 0 });
+    });
+
+    it('kỳ tháng: gom theo tuần, tổng thu chi giữ nguyên', () => {
+      const vouchers = [
+        voucher('2026-10-01', 'RECEIPT', 10),
+        voucher('2026-10-08', 'RECEIPT', 20),
+        voucher('2026-10-30', 'PAYMENT', 5),
+      ];
+      const { unit, points } = buildCashflowSeries({ ...month, vouchers });
+      expect(unit).toBe('week');
+      expect(points.map((p) => p.label)).toEqual([
+        'Tuần 28/09',
+        'Tuần 05/10',
+        'Tuần 12/10',
+        'Tuần 19/10',
+        'Tuần 26/10',
+      ]);
+      expect(points.reduce((s, p) => s + p.thu, 0)).toBe(30);
+      expect(points.reduce((s, p) => s + p.chi, 0)).toBe(5);
+    });
+
+    it('kỳ quý: gom theo tháng', () => {
+      const { unit, points } = buildCashflowSeries({
+        ...quarter,
+        vouchers: [voucher('2026-11-20', 'RECEIPT', 7)],
+      });
+      expect(unit).toBe('month');
+      expect(points.map((p) => p.label)).toEqual([
+        '10/2026',
+        '11/2026',
+        '12/2026',
+      ]);
+      expect(points[1].thu).toBe(7);
+    });
+  });
+
+  it('buildRevenueSeries: cộng doanh thu, giá vốn theo mốc; thiếu dữ liệu vẫn đủ mốc', () => {
+    const { points } = buildRevenueSeries({
+      ...month,
+      vouchers: [],
+      revenueTimeline: [
+        { date: '2026-10-05', revenue: 1000, cogs: 600 },
+        { date: '2026-10-07', revenue: 500, cogs: 100 },
+      ],
+    });
+    expect(points[1]).toEqual({
+      label: 'Tuần 05/10',
+      revenue: 1500,
+      cogs: 700,
+    });
+    expect(
+      buildRevenueSeries({ ...month, vouchers: [] }).points.every(
+        (p) => p.revenue === 0 && p.cogs === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('buildDebtSeries: phát sinh và đã thu/trả hai phía theo mốc', () => {
+    const { points } = buildDebtSeries({
+      ...quarter,
+      vouchers: [],
+      debtTimeline: [
+        { date: '2026-10-05', arTotal: 100, arPaid: 40, apTotal: 0, apPaid: 0 },
+        {
+          date: '2026-10-25',
+          arTotal: 50,
+          arPaid: 50,
+          apTotal: 30,
+          apPaid: 10,
+        },
+      ],
+    });
+    expect(points[0]).toEqual({
+      label: '10/2026',
+      arTotal: 150,
+      arPaid: 90,
+      apTotal: 30,
+      apPaid: 10,
+    });
+  });
+});

@@ -81,6 +81,7 @@ import { GarageCasesExportController } from './controllers/garage-cases-export.c
 import { GarageDashboardExportController } from './controllers/garage-dashboard-export.controller';
 import { GaragePeriodReportService } from './services/garage-period-report.service';
 import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
+import { GaragePeriodTimelineQueries } from './services/garage-period-timeline-queries.service';
 import { GarageDebtsExportController } from './controllers/garage-debts-export.controller';
 import { GarageCashflowExportController } from './controllers/garage-cashflow-export.controller';
 import { GarageOpexExportService } from './services/garage-opex-export.service';
@@ -152,6 +153,7 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     GarageExportJobsService,
     GaragePeriodReportService,
     GaragePeriodReportQueries,
+    GaragePeriodTimelineQueries,
     GarageCashflowExcelBuilder,
     GarageCashflowExportService,
     GarageCashflowDashboardEngine,

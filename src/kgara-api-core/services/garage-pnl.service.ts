@@ -256,6 +256,40 @@ export class GaragePnlService {
       grossProfit,
       grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
 
+      // Doanh thu / giá vốn từ phiếu theo phân loại (cấp 2-3 của báo cáo lợi nhuận);
+      // "Khác" là phần còn lại nên tổng 4 nhóm luôn bằng tổng doanh thu
+      revenueByClassification: [
+        {
+          key: 'KY_GUI',
+          label: 'Ký gửi / Nội bộ',
+          caseCount: kyGuiCaseCount,
+          revenue: kyGuiRevenue,
+          cogs: kyGuiCogs,
+        },
+        {
+          key: 'SUA_CHUA_CHUNG',
+          label: 'Sửa chữa chung',
+          caseCount: suaChuaChungCaseCount,
+          revenue: suaChuaChungRevenue,
+          cogs: suaChuaChungCogs,
+        },
+        {
+          key: 'OJ',
+          label: 'OJ',
+          caseCount: ojCaseCount,
+          revenue: ojRevenue,
+          cogs: ojCogsDirect,
+        },
+        {
+          key: 'KHAC',
+          label: 'Khác',
+          caseCount:
+            caseCount - kyGuiCaseCount - suaChuaChungCaseCount - ojCaseCount,
+          revenue: revenue - kyGuiRevenue - suaChuaChungRevenue - ojRevenue,
+          cogs: cogsDirect - kyGuiCogs - suaChuaChungCogs - ojCogsDirect,
+        },
+      ],
+
       // Chi tiết mảng Ký gửi / Nội bộ (từ kgara_cases.classification)
       kyGui: {
         caseCount: kyGuiCaseCount,

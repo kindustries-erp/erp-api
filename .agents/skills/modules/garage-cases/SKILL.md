@@ -342,6 +342,7 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
 
 - Chế độ `by-period` của công nợ chỉ giữ kỳ; `normalizeFilters` loại mọi filter/sort khác. Chi nhánh lấy từ header `x-greenway-branch-id`, **luôn nằm trong fingerprint**.
 - File công nợ: `Cong_no_phai_thu_khach_hang_*.xlsx` / `Cong_no_phai_tra_nha_cung_cap_*.xlsx`, gom theo biển số xe, cột tuổi nợ 4 mức. Endpoint đồng bộ `GET /cases/export/excel` vẫn giữ để tương thích.
+- Tab Tổng quan và Hoạt động garage dùng **chung một drawer xuất** trên web; khi chọn loại báo cáo kỳ, web gọi `POST /greenway/dashboard/export/background` với `reportType` (xem skill `garage-dashboard`), còn "Bảng kê phiếu dịch vụ" vẫn dùng endpoint cases ở trên (không đổi).
 - Sorts của bảng cases dùng chung helper `kgara-case-sort.helper.ts` (`applyCaseListSorts`) giữa danh sách và export.
 
 **Dashboard + chart gốc Excel (sheet đầu của cả 2 report)**

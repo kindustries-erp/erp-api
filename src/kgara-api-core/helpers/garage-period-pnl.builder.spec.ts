@@ -22,6 +22,9 @@ const month = (
   month: m,
   revenue: 444218804,
   cogs: 241508218,
+  cogsDirect: 241508218,
+  cogsAdjustmentItems: [],
+  revenueSegments: [],
   grossProfit: 202710586,
   grossMarginRate: 45.63,
   opexTotal: 146500000,
@@ -45,6 +48,7 @@ const month = (
     },
   ],
   netBeforeCommission: 56210586,
+  hhbhTotal: 0,
   commissionTotal: 5621059,
   commissionItems: [
     {
@@ -95,7 +99,7 @@ describe('buildPnlTableRows', () => {
       'Hoa hồng cho DV (10%)',
       'VII. Lợi nhuận ròng (sau hoa hồng)',
     ]);
-    expect(rows.filter((r) => r.group).map((r) => r.value)).toEqual([
+    expect(rows.filter((r) => r.level === 1).map((r) => r.value)).toEqual([
       444218804, 241508218, 202710586, 146500000, 56210586, 5621059, 50589527,
     ]);
   });
@@ -249,6 +253,205 @@ describe('buildPnlSheet', () => {
     expect(charts[0].series[3].values).toEqual([null]);
     expect(charts[1].series.every((s) => s.values.every((v) => v === 0))).toBe(
       true,
+    );
+  });
+});
+
+describe('buildPnlTableRows - 3 cấp', () => {
+  const detailed = () =>
+    month(2026, 10, {
+      revenue: 1000,
+      cogs: 700,
+      cogsDirect: 600,
+      grossProfit: 300,
+      cogsAdjustmentItems: [
+        {
+          categoryKey: 'VAT_TU_TIEU_HAO',
+          categoryName: 'Vật tư tiêu hao',
+          amount: 100,
+          note: 'Dầu nhớt xưởng',
+        },
+      ],
+      revenueSegments: [
+        {
+          key: 'KY_GUI',
+          label: 'Ký gửi / Nội bộ',
+          caseCount: 2,
+          revenue: 400,
+          cogs: 250,
+        },
+        {
+          key: 'SUA_CHUA_CHUNG',
+          label: 'Sửa chữa chung',
+          caseCount: 3,
+          revenue: 600,
+          cogs: 350,
+        },
+        { key: 'OJ', label: 'OJ', caseCount: 0, revenue: 0, cogs: 0 },
+        { key: 'KHAC', label: 'Khác', caseCount: 0, revenue: 0, cogs: 0 },
+      ],
+      opexTotal: 150,
+      opexItems: [
+        {
+          categoryKey: 'NHAN_SU',
+          categoryName: 'Nhân sự',
+          amount: 100,
+          note: 'Lương T10',
+        },
+        { categoryKey: 'NHAN_SU', categoryName: 'Nhân sự', amount: 30 },
+        { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 20 },
+      ],
+      netBeforeCommission: 150,
+      hhbhTotal: 40,
+      commissionTotal: 20,
+      commissionItems: [
+        {
+          categoryKey: 'HOA_HONG_DV',
+          categoryName: 'Hoa hồng cho DV (10%)',
+          amount: 20,
+        },
+      ],
+      netAfterCommission: 90,
+    });
+
+  it('doanh thu: phân loại (cấp 2) kèm số phiếu (cấp 3), bỏ phân loại trống', () => {
+    const rows = buildPnlTableRows(detailed());
+    const labelsOf = (from: string, to: string) => {
+      const a = rows.findIndex((r) => r.label === from);
+      const b = rows.findIndex((r) => r.label === to);
+      return rows.slice(a, b).map((r) => [r.level, r.label, r.value]);
+    };
+    expect(labelsOf('I. Doanh thu', 'II. Chi phí')).toEqual([
+      [1, 'I. Doanh thu', 1000],
+      [2, 'Ký gửi / Nội bộ', 400],
+      [3, 'Số phiếu hoàn thành', 2],
+      [2, 'Sửa chữa chung', 600],
+      [3, 'Số phiếu hoàn thành', 3],
+    ]);
+    expect(rows.find((r) => r.label === 'Số phiếu hoàn thành')!.numFmt).toBe(
+      '#,##0',
+    );
+  });
+
+  it('chi phí: giá vốn từ phiếu theo phân loại và điều chỉnh giá vốn nhập tay từng dòng', () => {
+    const rows = buildPnlTableRows(detailed());
+    const a = rows.findIndex((r) => r.label === 'II. Chi phí');
+    const b = rows.findIndex((r) => r.label === 'III. Lợi nhuận gộp');
+    expect(rows.slice(a, b).map((r) => [r.level, r.label, r.value])).toEqual([
+      [1, 'II. Chi phí', 700],
+      [2, 'Giá vốn từ phiếu (phụ tùng ngoài & gia công ngoài)', 600],
+      [3, 'Ký gửi / Nội bộ', 250],
+      [3, 'Sửa chữa chung', 350],
+      [2, 'Điều chỉnh giá vốn nhập tay', 100],
+      [3, 'Vật tư tiêu hao - Dầu nhớt xưởng', 100],
+    ]);
+  });
+
+  it('chi phí vận hành: hạng mục cộng dòng cùng khóa, từng dòng nhập ở cấp 3', () => {
+    const rows = buildPnlTableRows(detailed());
+    const a = rows.findIndex((r) => r.label === 'IV. Chi phí vận hành');
+    const b = rows.findIndex((r) => r.label.startsWith('V. '));
+    expect(rows.slice(a, b).map((r) => [r.level, r.label, r.value])).toEqual([
+      [1, 'IV. Chi phí vận hành', 150],
+      [2, 'Nhân sự', 130],
+      [3, 'Lương T10', 100],
+      [3, 'Khoản chi', 30],
+      [2, 'Bảo trì', 20], // một dòng không ghi chú: không mở cấp 3
+    ]);
+  });
+
+  it('nhóm VI gồm cả HHBH nên V - VI = VII', () => {
+    const rows = buildPnlTableRows(detailed());
+    const value = (prefix: string) =>
+      rows.find((r) => r.label.startsWith(prefix))!.value;
+    expect(value('VI.')).toBe(60);
+    expect(rows.find((r) => r.label === 'HHBH')).toMatchObject({
+      level: 2,
+      value: 40,
+    });
+    expect(value('V.') - value('VI.')).toBe(value('VII.'));
+  });
+
+  it('không có HHBH thì không thêm dòng HHBH', () => {
+    const rows = buildPnlTableRows(month(2026, 7));
+    expect(rows.some((r) => r.label === 'HHBH')).toBe(false);
+  });
+
+  it('bảng ghi thụt lề theo cấp: cấp 1 đậm nền xám, cấp 3 chữ nghiêng', () => {
+    const wb = new ExcelJS.Workbook();
+    buildPnlSheet(wb, [detailed()]);
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+    expect(sheet.getCell('A5').font?.bold).toBe(true);
+    expect(sheet.getCell('A5').alignment?.indent).toBe(1);
+    expect(sheet.getCell('A6').alignment?.indent).toBe(2);
+    expect(sheet.getCell('A7').font?.italic).toBe(true);
+    expect(sheet.getCell('A7').alignment?.indent).toBe(4);
+  });
+});
+
+describe('buildPnlSheet - chart theo kỳ báo cáo', () => {
+  const timeline = {
+    unitLabel: 'tuần',
+    points: [
+      { label: 'Tuần 28/09', revenue: 1000, cogs: 600 },
+      { label: 'Tuần 05/10', revenue: 0, cogs: 0 },
+    ],
+  };
+
+  it('có timeline: 3 chart, chart theo kỳ ở đầu, bảng dữ liệu và vùng in dời xuống', () => {
+    const wb = new ExcelJS.Workbook();
+    const charts = buildPnlSheet(wb, twelveMonths(), timeline);
+
+    expect(charts).toHaveLength(3);
+    const [byPeriod, combo, stacked] = charts;
+    expect(byPeriod.title).toBe('Doanh thu, giá vốn, lãi gộp theo tuần');
+    expect(byPeriod.anchor).toMatchObject({ fromRow: 3, toRow: 21 });
+    expect(combo.anchor).toMatchObject({ fromRow: 21, toRow: 39 });
+    expect(stacked.anchor).toMatchObject({ fromRow: 39, toRow: 57 });
+
+    const sheet = wb.getWorksheet(PNL_SHEET)!;
+    expect(sheet.pageSetup.printArea).toBe('A1:M59');
+    expect(sheet.getCell('D62').value).toContain('Dữ liệu biểu đồ');
+  });
+
+  it('chart theo kỳ: cột doanh thu / giá vốn / lãi gộp, đường % lãi gộp (null khi không có doanh thu)', () => {
+    const wb = new ExcelJS.Workbook();
+    const [byPeriod] = buildPnlSheet(wb, twelveMonths(), timeline);
+
+    expect(byPeriod.series.map((s) => s.name)).toEqual([
+      'Doanh thu',
+      'Giá vốn từ phiếu',
+      'Lợi nhuận gộp',
+      '% Lợi nhuận gộp',
+    ]);
+    expect(byPeriod.series[2].values).toEqual([400, 0]);
+    expect(byPeriod.series[3].values).toEqual([0.4, null]);
+    expect(byPeriod).toMatchObject({
+      dataLabels: true,
+      labelNumFmt: LABEL_MONEY_FMT,
+    });
+  });
+
+  it('timeline rỗng hoặc không truyền thì vẫn 2 chart như cũ', () => {
+    const wb = new ExcelJS.Workbook();
+    expect(buildPnlSheet(wb, twelveMonths())).toHaveLength(2);
+    const wb2 = new ExcelJS.Workbook();
+    expect(
+      buildPnlSheet(wb2, twelveMonths(), { unitLabel: 'ngày', points: [] }),
+    ).toHaveLength(2);
+  });
+
+  it('bảng P&L dài hơn vùng chart thì vùng in kéo theo số dòng bảng', () => {
+    const wb = new ExcelJS.Workbook();
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      categoryKey: `K${i}`,
+      categoryName: `Hạng mục ${i}`,
+      amount: 1,
+    }));
+    buildPnlSheet(wb, [month(2026, 7, { opexItems: items })]);
+    const rows = buildPnlTableRows(month(2026, 7, { opexItems: items }));
+    expect(wb.getWorksheet(PNL_SHEET)!.pageSetup.printArea).toBe(
+      `A1:M${5 + rows.length}`,
     );
   });
 });

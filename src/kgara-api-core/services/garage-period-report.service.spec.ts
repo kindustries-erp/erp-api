@@ -25,6 +25,10 @@ describe('GaragePeriodReportService', () => {
     resolveBranchLabel: jest.fn(),
   };
   const queries = { loadVouchers: jest.fn(), loadPnlMonthly: jest.fn() };
+  const timelines = {
+    loadRevenueTimeline: jest.fn(),
+    loadDebtTimeline: jest.fn(),
+  };
   let service: GaragePeriodReportService;
 
   beforeEach(() => {
@@ -35,7 +39,13 @@ describe('GaragePeriodReportService', () => {
     debtsExport.resolveBranchLabel.mockResolvedValue('Chi nhánh Quận 7');
     queries.loadVouchers.mockResolvedValue([]);
     queries.loadPnlMonthly.mockResolvedValue([]);
-    service = new GaragePeriodReportService(debtsExport as any, queries as any);
+    timelines.loadRevenueTimeline.mockResolvedValue([]);
+    timelines.loadDebtTimeline.mockResolvedValue([]);
+    service = new GaragePeriodReportService(
+      debtsExport as any,
+      queries as any,
+      timelines as any,
+    );
   });
 
   it('công nợ trong kỳ dùng đúng kỳ; nợ quá hạn lấy từ mốc ghi nhận, không giới hạn kỳ', async () => {
@@ -78,6 +88,97 @@ describe('GaragePeriodReportService', () => {
       undefined,
       undefined,
     );
+  });
+
+  it('reportType=business: chỉ truy vấn P&L, không đụng công nợ và thu chi', async () => {
+    const buffer = await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'business',
+    });
+
+    expect(queries.loadPnlMonthly).toHaveBeenCalledTimes(1);
+    expect(queries.loadVouchers).not.toHaveBeenCalled();
+    expect(debtsExport.loadCustomerRows).not.toHaveBeenCalled();
+    expect(debtsExport.loadSupplierRows).not.toHaveBeenCalled();
+    expect(debtsExport.loadCustomerGroups).not.toHaveBeenCalled();
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as any);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Báo cáo lợi nhuận']);
+  });
+
+  it('reportType=overdue: chỉ truy vấn nợ còn mở từ mốc ghi nhận', async () => {
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'overdue',
+    });
+
+    expect(debtsExport.loadCustomerRows).toHaveBeenCalledTimes(1);
+    expect(debtsExport.loadCustomerRows.mock.calls[0][1]).toEqual({
+      mode: 'by-period',
+      from: '2026-07-01',
+    });
+    expect(debtsExport.loadCustomerGroups).not.toHaveBeenCalled();
+    expect(queries.loadPnlMonthly).not.toHaveBeenCalled();
+    expect(queries.loadVouchers).not.toHaveBeenCalled();
+  });
+
+  it('reportType=cashflow-debts: không truy vấn P&L', async () => {
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'cashflow-debts',
+    });
+
+    expect(queries.loadPnlMonthly).not.toHaveBeenCalled();
+    expect(queries.loadVouchers).toHaveBeenCalledTimes(1);
+    expect(debtsExport.loadCustomerGroups).toHaveBeenCalledTimes(1);
+  });
+
+  it('chart theo thời gian: truyền kỳ và chi nhánh, chỉ chạy timeline mà loại báo cáo cần', async () => {
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'all',
+    });
+    expect(timelines.loadRevenueTimeline).toHaveBeenCalledWith(
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(timelines.loadDebtTimeline).toHaveBeenCalledWith(
+      '2026-10-01',
+      '2026-10-31',
+      'CN1',
+    );
+
+    jest.clearAllMocks();
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'business',
+    });
+    expect(timelines.loadRevenueTimeline).toHaveBeenCalledTimes(1);
+    expect(timelines.loadDebtTimeline).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'cashflow-debts',
+    });
+    expect(timelines.loadRevenueTimeline).not.toHaveBeenCalled();
+    expect(timelines.loadDebtTimeline).toHaveBeenCalledTimes(1);
+
+    jest.clearAllMocks();
+    await service.exportExcel('CN1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      reportType: 'overdue',
+    });
+    expect(timelines.loadRevenueTimeline).not.toHaveBeenCalled();
+    expect(timelines.loadDebtTimeline).not.toHaveBeenCalled();
   });
 
   it('báo tiến trình tăng dần đến 100 và trả file Excel hợp lệ có Dashboard đầu tiên', async () => {

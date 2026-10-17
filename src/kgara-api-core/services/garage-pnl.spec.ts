@@ -133,6 +133,26 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(report.commission.auto.dvCommission).toBe(5621059);
     expect(report.serviceCommission.dvCommission).toBe(5621059);
     expect(report.commission.total).toBe(5621059);
+
+    // Doanh thu theo phân loại: tổng 4 nhóm luôn bằng doanh thu
+    const segments = report.revenueByClassification;
+    expect(segments.map((x: any) => x.key)).toEqual([
+      'KY_GUI',
+      'SUA_CHUA_CHUNG',
+      'OJ',
+      'KHAC',
+    ]);
+    expect(segments.reduce((sum: number, x: any) => sum + x.revenue, 0)).toBe(
+      444218804,
+    );
+    expect(segments.reduce((sum: number, x: any) => sum + x.caseCount, 0)).toBe(
+      15,
+    );
+    expect(segments.find((x: any) => x.key === 'KHAC')).toMatchObject({
+      caseCount: 0,
+      revenue: 0,
+      cogs: 0,
+    });
     expect(report.netProfitAfterCommission).toBe(50589527);
   });
 

@@ -47,6 +47,23 @@ describe('dashboard-sheet.helper', () => {
     expect(next).toBe(5);
   });
 
+  it('KPI: có tiêu đề nhóm thì thẻ xuống một dòng, không có thì giữ nguyên vị trí', () => {
+    const wb = new ExcelJS.Workbook();
+    const dash = createDashboardSheet(wb, 'Dashboard');
+    const next = writeKpiCards(dash, 5, [{ label: 'Thu', value: 1 }], {
+      title: 'Thu chi trong kỳ',
+    });
+
+    expect(dash.getCell('A5').value).toBe('Thu chi trong kỳ');
+    expect(dash.getCell('A6').value).toBe('Thu');
+    expect(dash.getCell('A7').value).toBe(1);
+    expect(next).toBe(9);
+
+    const plain = wb.addWorksheet('Plain');
+    expect(writeKpiCards(plain, 5, [{ label: 'Thu', value: 1 }])).toBe(8);
+    expect(plain.getCell('A5').value).toBe('Thu');
+  });
+
   it('KPI: công thức giữ nguyên kèm result, số thường, 4 thẻ/hàng', () => {
     const wb = new ExcelJS.Workbook();
     const dash = createDashboardSheet(wb, 'Dashboard');
