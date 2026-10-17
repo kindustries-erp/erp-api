@@ -94,6 +94,7 @@ const fill = (argb: string): ExcelJS.Fill => ({
 export function createDashboardSheet(
   workbook: ExcelJS.Workbook,
   name: string,
+  columns = DASHBOARD_COLUMNS,
 ): ExcelJS.Worksheet {
   const sheet = workbook.addWorksheet(name, {
     views: [{ showGridLines: false }],
@@ -105,7 +106,7 @@ export function createDashboardSheet(
       fitToHeight: 0,
     },
   });
-  for (let c = 1; c <= DASHBOARD_COLUMNS; c++) sheet.getColumn(c).width = 13;
+  for (let c = 1; c <= columns; c++) sheet.getColumn(c).width = 13;
   return sheet;
 }
 
@@ -114,8 +115,9 @@ export function writeDashboardHeader(
   sheet: ExcelJS.Worksheet,
   title: string,
   subtitleLines: string[],
+  columns = DASHBOARD_COLUMNS,
 ): number {
-  sheet.mergeCells(1, 1, 1, DASHBOARD_COLUMNS);
+  sheet.mergeCells(1, 1, 1, columns);
   const titleCell = sheet.getCell(1, 1);
   titleCell.value = title;
   titleCell.font = {
@@ -129,7 +131,7 @@ export function writeDashboardHeader(
 
   let row = 2;
   for (const line of subtitleLines) {
-    sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
+    sheet.mergeCells(row, 1, row, columns);
     const cell = sheet.getCell(row, 1);
     cell.value = line;
     cell.font = {
@@ -177,6 +179,8 @@ export interface KpiCardOptions {
   cardCols?: number;
   /** Số thẻ mỗi hàng; mặc định 4. */
   cardsPerRow?: number;
+  /** Luôn giữ dòng ghi chú (kể cả khi thẻ chưa có ghi chú) để các cột thẻ cạnh nhau thẳng hàng. */
+  reserveNote?: boolean;
 }
 
 /**
@@ -198,7 +202,9 @@ export function writeKpiCards(
   });
   for (let i = 0; i < kpis.length; i += perRow) {
     const rowKpis = kpis.slice(i, i + perRow);
-    const hasNote = rowKpis.some((kpi) => kpi.note !== undefined);
+    const hasNote =
+      options.reserveNote === true ||
+      rowKpis.some((kpi) => kpi.note !== undefined);
     rowKpis.forEach((kpi, slot) => {
       const col = firstCol + slot * cardCols;
       const last = col + cardCols - 1;
@@ -404,8 +410,9 @@ export function chartAnchorRow(
 export function setDashboardPrintArea(
   sheet: ExcelJS.Worksheet,
   lastRow: number,
+  columns = DASHBOARD_COLUMNS,
 ): void {
-  sheet.pageSetup.printArea = `A1:${columnLetter(DASHBOARD_COLUMNS)}${lastRow}`;
+  sheet.pageSetup.printArea = `A1:${columnLetter(columns)}${lastRow}`;
 }
 
 /** Dòng 1-based nằm ngay dưới `rowsOfCharts` hàng chart bắt đầu từ `startRow`. */

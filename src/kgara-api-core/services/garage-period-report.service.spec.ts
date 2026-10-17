@@ -148,7 +148,7 @@ describe('GaragePeriodReportService', () => {
 
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer as any);
-    expect(wb.worksheets[0].name).toBe('Dashboard');
+    expect(wb.worksheets[0].name).toBe('Báo cáo');
     expect(wb.worksheets.map((w) => w.name)).toContain('Thu chi trong kỳ');
     expect(wb.worksheets.map((w) => w.name)).toContain('Nợ quá hạn cần chú ý');
   });

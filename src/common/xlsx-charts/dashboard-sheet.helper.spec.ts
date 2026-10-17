@@ -9,6 +9,7 @@ import {
   columnLetter,
   createDashboardSheet,
   rowAfterCharts,
+  setDashboardPrintArea,
   writeAlertCards,
   writeDashboardHeader,
   writeDataTable,
@@ -62,6 +63,15 @@ describe('dashboard-sheet.helper', () => {
     const plain = wb.addWorksheet('Plain');
     expect(writeKpiCards(plain, 5, [{ label: 'Thu', value: 1 }])).toBe(8);
     expect(plain.getCell('A5').value).toBe('Thu');
+  });
+
+  it('sheet tuỳ chọn số cột: 18 cột, độ rộng và vùng in theo cột R', () => {
+    const wb = new ExcelJS.Workbook();
+    const sheet = createDashboardSheet(wb, 'Báo cáo', 18);
+    writeDashboardHeader(sheet, 'Tiêu đề', ['dòng phụ'], 18);
+    setDashboardPrintArea(sheet, 30, 18);
+    expect(sheet.getColumn(18).width).toBe(13);
+    expect(sheet.pageSetup.printArea).toBe('A1:R30');
   });
 
   it('KPI: đặt thẻ theo cột (startCol, cardCols, cardsPerRow), tiêu đề chỉ gộp đúng dải cột', () => {

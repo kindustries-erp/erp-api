@@ -50,9 +50,15 @@ export class GaragePeriodReportService {
       from: GARAGE_DEBT_BASELINE_DATE,
     };
 
-    const sections = resolvePeriodReportSections(dto.reportType);
+    const sections = resolvePeriodReportSections(
+      dto.reportType,
+      dto.reportSections,
+    );
     // Dashboard dùng cả công nợ trong kỳ, nợ quá hạn và thu chi nên kéo theo các nguồn đó.
-    const needsDebts = sections.has('debts') || sections.has('dashboard');
+    const needsDebts =
+      sections.has('receivables') ||
+      sections.has('payables') ||
+      sections.has('dashboard');
     const needsOpenDebts = sections.has('overdue') || sections.has('dashboard');
     const needsVouchers = sections.has('cashflow') || sections.has('dashboard');
     const needsPnl = sections.has('pnl');
@@ -130,6 +136,7 @@ export class GaragePeriodReportService {
     onProgress(85, total, 'Đang tạo file Excel...');
     const buffer = await buildGaragePeriodReport({
       reportType: dto.reportType,
+      reportSections: dto.reportSections,
       bucketUnit,
       from: dto.from,
       to: dto.to,

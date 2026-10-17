@@ -178,7 +178,7 @@ describe('buildGaragePeriodReport', () => {
   it('thứ tự sheet: Dashboard, Báo cáo lợi nhuận, nhóm phải thu, phải trả, nợ quá hạn, thu chi', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     expect(wb.worksheets.map((w) => w.name)).toEqual([
-      'Dashboard',
+      'Báo cáo',
       'Báo cáo lợi nhuận',
       'Thu Khách hàng Doanh nghiệp',
       'Công nợ phải trả',
@@ -210,15 +210,15 @@ describe('buildGaragePeriodReport', () => {
     );
     const wb = await load(buffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual([
-      'Dashboard',
+      'Báo cáo',
       'Thu Khách hàng Doanh nghiệp',
       'Công nợ phải trả',
       'Thu chi trong kỳ',
     ]);
     // 3 chart lớn + 2 mini chart của Dashboard, không có chart P&L
     expect(await chartCount(buffer)).toBe(3);
-    const dash = wb.getWorksheet('Dashboard')!;
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
+    const dash = wb.getWorksheet('Báo cáo')!;
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
@@ -236,7 +236,7 @@ describe('buildGaragePeriodReport', () => {
       await buildGaragePeriodReport(baseData({ customerSections: undefined })),
     );
     expect(wb.worksheets.map((w) => w.name)).toEqual([
-      'Dashboard',
+      'Báo cáo',
       'Báo cáo lợi nhuận',
       'Công nợ phải thu',
       'Công nợ phải trả',
@@ -247,23 +247,22 @@ describe('buildGaragePeriodReport', () => {
 
   it('Dashboard: tiêu đề và một dòng phụ gộp kỳ, ngày xuất, chi nhánh', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
-    const dash = wb.getWorksheet('Dashboard')!;
+    const dash = wb.getWorksheet('Báo cáo')!;
 
-    expect(dash.getCell('A1').value).toBe('Dashboard thu chi & công nợ Garage');
+    expect(dash.getCell('A1').value).toBe('Báo cáo thu chi & công nợ Garage');
     expect(dash.getCell('A2').value).toBe(
       'Kỳ: 01/10/2026 - 31/10/2026 · Số dư, tuổi nợ tính đến 16/10/2026 · Chi nhánh: Chi nhánh Quận 7',
     );
   });
 
-  it('Dashboard: không còn thẻ thu chi; dự chi, đã thu, đã chi, dòng tiền ròng nằm ở chart', async () => {
+  it('Báo cáo: thẻ thu chi đủ 4 thẻ (đã thu, đã chi, dự chi, dòng tiền ròng)', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
-    const dash = wb.getWorksheet('Dashboard')!;
+    const dash = wb.getWorksheet('Báo cáo')!;
 
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
-    // các card đã bỏ
-    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBeUndefined();
-    expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBeUndefined();
-    expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBeUndefined();
+    expect(kpiValue(dash, 'ĐÃ THU TRONG KỲ')).toBe(700);
+    expect(kpiValue(dash, 'ĐÃ CHI TRONG KỲ')).toBe(200);
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
+    expect(kpiValue(dash, 'DÒNG TIỀN RÒNG (THU - CHI)')).toBe(500);
     expect(kpiValue(dash, 'DOANH THU')).toBeUndefined();
   });
 
@@ -280,7 +279,7 @@ describe('buildGaragePeriodReport', () => {
         }),
       ),
     );
-    const dash = wb.getWorksheet('Dashboard')!;
+    const dash = wb.getWorksheet('Báo cáo')!;
 
     const values = (label: string) => {
       const out: unknown[] = [];
@@ -303,7 +302,7 @@ describe('buildGaragePeriodReport', () => {
 
   it('Dashboard: không còn thẻ cảnh báo lũy kế (tuổi nợ đã thể hiện ở chart), không ghi số đối tượng', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
-    const dash = wb.getWorksheet('Dashboard')!;
+    const dash = wb.getWorksheet('Báo cáo')!;
 
     const texts: string[] = [];
     dash.eachRow((row) =>
@@ -345,7 +344,7 @@ describe('buildGaragePeriodReport', () => {
         .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
         .map((p) => zip.file(p)!.async('string')),
     );
-    expect(xmls.filter((x) => x.includes("'Dashboard'!"))).toHaveLength(3);
+    expect(xmls.filter((x) => x.includes("'Báo cáo'!"))).toHaveLength(3);
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
       2,
     );
@@ -381,7 +380,7 @@ describe('buildGaragePeriodReport', () => {
 
   it('Dashboard: bảng dữ liệu biểu đồ nằm ngoài vùng in và có ghi chú nguồn số liệu', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
-    const dash = wb.getWorksheet('Dashboard')!;
+    const dash = wb.getWorksheet('Báo cáo')!;
     let footnote = '';
     const tableTitles: string[] = [];
     dash.eachRow((row) =>
@@ -396,9 +395,9 @@ describe('buildGaragePeriodReport', () => {
     expect(tableTitles).toContain(
       'Dữ liệu biểu đồ: Phải thu phát sinh và phải chi theo nhóm khách',
     );
-    expect(footnote).toContain('Công nợ lũy kế');
+    expect(footnote).toContain('Nợ lũy kế');
     expect(footnote).toContain('theo tuần');
-    expect(dash.pageSetup.printArea).toMatch(/^A1:P\d+$/);
+    expect(dash.pageSetup.printArea).toMatch(/^A1:R\d+$/);
     // gọn một màn hình: vùng in không quá 34 dòng
     const lastPrintRow = Number(dash.pageSetup.printArea?.match(/\d+$/)?.[0]);
     expect(lastPrintRow).toBeLessThanOrEqual(34);
@@ -444,8 +443,8 @@ describe('buildGaragePeriodReport', () => {
         }),
       ),
     );
-    const dash = wb.getWorksheet('Dashboard')!;
-    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBeUndefined();
+    const dash = wb.getWorksheet('Báo cáo')!;
+    expect(kpiValue(dash, 'DỰ CHI TRONG KỲ')).toBe(0);
     expect(wb.getWorksheet('Báo cáo lợi nhuận')!.getCell('A1').value).toBe(
       'Báo cáo lợi nhuận',
     );

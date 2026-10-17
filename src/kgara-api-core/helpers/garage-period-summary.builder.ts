@@ -28,6 +28,8 @@ export interface PeriodSummary {
 }
 
 export interface PeriodComparison {
+  received: number;
+  paid: number;
   planned: number;
   receivableTotal: number;
   payableTotal: number;
@@ -77,6 +79,14 @@ function comparisonOf(
   prev: NonNullable<GaragePeriodReportData['previousPeriod']>,
 ) {
   return {
+    received: sum(
+      prev.vouchers.filter((v) => v.type === 'RECEIPT'),
+      (v) => v.amount,
+    ),
+    paid: sum(
+      prev.vouchers.filter((v) => v.type === 'PAYMENT'),
+      (v) => v.amount,
+    ),
     planned: sum(prev.vouchers.filter(isPlannedPayment), (v) => v.amount),
     receivableTotal: periodDebt(prev.customerRows).total,
     payableTotal: periodDebt(prev.supplierRows).total,

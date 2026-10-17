@@ -10,6 +10,7 @@ import type {
   GarageCasesExportDto,
   GarageDashboardExportDto,
   GarageDebtsExportDto,
+  GaragePeriodReportSectionKey,
   GaragePeriodReportType,
 } from '../dto/garage-export.dto';
 import type { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
@@ -35,6 +36,16 @@ const PERIOD_REPORT_FILE_LABEL: Record<GaragePeriodReportType, string> = {
   business: 'Hoat_dong_kinh_doanh',
   'cashflow-debts': 'Thu_chi_cong_no',
   overdue: 'No_qua_han',
+};
+
+/** Nhãn tên file cho từng mục chọn (multi-select); đủ cả 6 mục thì không thêm nhãn. */
+const SECTION_FILE_LABEL: Record<GaragePeriodReportSectionKey, string> = {
+  overview: 'Tong_quan',
+  pnl: 'Loi_nhuan',
+  receivables: 'Phai_thu',
+  payables: 'Phai_chi',
+  overdue: 'No_qua_han',
+  cashflow: 'Thu_chi',
 };
 
 export const GARAGE_CASES_EXPORT_PROCESS_ID = 'garage-cases-xlsx-export';
@@ -189,15 +200,34 @@ export class GarageExportJobsService implements OnModuleDestroy {
       dto.from || dto.to ? `${compact(dto.from)}-${compact(dto.to)}_` : '';
 
     const reportType = dto.reportType ?? 'all';
+    // Mục chọn trực tiếp: bỏ trùng và sắp xếp để cùng một tập mục luôn cho cùng fingerprint
+    const reportSections = dto.reportSections?.length
+      ? [...new Set(dto.reportSections)].sort()
+      : undefined;
+    const normalizedDto: GarageDashboardExportDto = {
+      ...dto,
+      reportSections,
+    };
+    const allSections =
+      reportSections?.length === Object.keys(SECTION_FILE_LABEL).length;
     // `all` giữ nguyên tên cũ; các loại khác thêm nhãn để phân biệt file.
-    const typeLabel =
-      reportType === 'all' ? '' : `${PERIOD_REPORT_FILE_LABEL[reportType]}_`;
+    const typeLabel = reportSections?.length
+      ? allSections
+        ? ''
+        : `${reportSections
+            .map(
+              (key) => SECTION_FILE_LABEL[key as GaragePeriodReportSectionKey],
+            )
+            .join('_')}_`
+      : reportType === 'all'
+        ? ''
+        : `${PERIOD_REPORT_FILE_LABEL[reportType]}_`;
 
     return this.dashboardRunner.start({
       userId,
       fingerprint: stableStringify({
         branchId: branchId ?? '',
-        ...dto,
+        ...normalizedDto,
         reportType,
       }),
       fileName: `Bao_cao_Garage_${typeLabel}${period}${timestamp}.xlsx`,
@@ -205,7 +235,11 @@ export class GarageExportJobsService implements OnModuleDestroy {
       dateFrom: dto.from,
       dateTo: dto.to,
       producer: (onProgress) =>
-        this.periodReportService.exportExcel(branchId ?? '', dto, onProgress),
+        this.periodReportService.exportExcel(
+          branchId ?? '',
+          normalizedDto,
+          onProgress,
+        ),
     });
   }
 

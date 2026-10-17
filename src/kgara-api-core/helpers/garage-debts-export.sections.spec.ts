@@ -45,4 +45,26 @@ describe('convertReceivablesBreakdownToExportSections: chi phí hồ sơ', () =>
     expect(section.cases[0].costAmount).toBe(0);
     expect(section.costAmount).toBe(0);
   });
+
+  it('hồ sơ có tiền thuế VAT được đánh dấu hasVat', () => {
+    const [section] = convertReceivablesBreakdownToExportSections(
+      breakdown([
+        {
+          id: 'c1',
+          amount: 4000000,
+          paid: 0,
+          remaining: 4000000,
+          vatAmount: 320000,
+        },
+        {
+          id: 'c2',
+          amount: 6000000,
+          paid: 0,
+          remaining: 6000000,
+          vatAmount: 0,
+        },
+      ]),
+    );
+    expect(section.cases.map((c) => c.hasVat)).toEqual([true, false]);
+  });
 });

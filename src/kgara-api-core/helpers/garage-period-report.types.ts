@@ -1,4 +1,7 @@
-import type { GaragePeriodReportType } from '../dto/garage-export.dto';
+import type {
+  GaragePeriodReportSectionKey,
+  GaragePeriodReportType,
+} from '../dto/garage-export.dto';
 import type { BucketUnit } from './garage-period-bucket.helper';
 import type { PeriodVoucherRow } from '../services/garage-period-report-queries.service';
 import type {
@@ -14,6 +17,8 @@ export interface GaragePeriodReportData {
   to?: string;
   /** Loại báo cáo quyết định sheet nào được dựng; thiếu thì `all`. */
   reportType?: GaragePeriodReportType;
+  /** Mục chọn trực tiếp (multi-select); có thì ưu tiên hơn `reportType`. */
+  reportSections?: GaragePeriodReportSectionKey[];
   /** Đơn vị gom mốc của chart; thiếu thì suy ra từ độ dài kỳ. */
   bucketUnit?: BucketUnit;
   /** Ngày xuất: số dư và tuổi nợ được tính đến ngày này. */

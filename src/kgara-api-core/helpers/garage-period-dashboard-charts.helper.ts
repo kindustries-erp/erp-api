@@ -1,9 +1,6 @@
 import * as ExcelJS from 'exceljs';
 
-import {
-  DASHBOARD_DATA_START_COL,
-  writeDataTable,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
+import { writeDataTable } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   CHART_PALETTE,
   LABEL_MONEY_FMT,
@@ -16,18 +13,17 @@ import {
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import type { PeriodSummary } from './garage-period-summary.builder';
 
-/** Chiều cao (số dòng) mỗi chart của Dashboard kỳ. */
-export const PERIOD_CHART_ROWS = 22;
+/** Chiều cao (số dòng) của chart cột 1 và 2; chart cột 3 cao hơn để đáy ba chart ngang nhau. */
+export const PERIOD_CHART_ROWS = 18;
 
-/** Số chart lớn xếp một hàng (thu chi, tuổi nợ, phải thu theo nhóm khách). */
 /**
- * Dải cột (0-based, [từ, đến)) của 3 cột Dashboard: thu chi (A–E), tuổi nợ (F–J), phải thu/chi
- * theo nhóm khách (K–P). Mỗi cột có tiêu đề riêng và thẻ nằm trong cột chart của nó.
+ * Dải cột (0-based, [từ, đến)) của 3 cột báo cáo: thu chi (A–F), tuổi nợ (G–L), phát sinh theo
+ * nhóm khách (M–R). Mỗi cột có tiêu đề riêng và thẻ nằm trong cột chart của nó.
  */
 export const PERIOD_CHART_BANDS: [number, number][] = [
-  [0, 5],
-  [5, 10],
-  [10, 16],
+  [0, 6],
+  [6, 12],
+  [12, 18],
 ];
 
 const MONEY = '#,##0';
@@ -49,24 +45,27 @@ const orEmpty = (rows: Row[], width: number): Row[] =>
   rows.length > 0 ? rows : [['Không có dữ liệu', ...Array(width - 1).fill(0)]];
 
 /**
- * Chart của Dashboard kỳ: 3 chart một hàng (thu vs chi + dự chi + dòng tiền ròng theo thời
- * gian, tuổi nợ phải thu vs phải trả, phải thu theo nhóm khách). Bảng dữ liệu chart xếp dọc
- * ở vùng bên phải (ngoài vùng in A–P), bắt đầu từ `startRow`.
+ * Chart của báo cáo kỳ: thu vs chi + dự chi + dòng tiền ròng, tuổi nợ phải thu vs phải trả
+ * (cột 1, 2, bắt đầu ở `chartTop`) và phải thu/chi theo nhóm khách (cột 3, bắt đầu ở `groupTop`).
+ * Bảng dữ liệu chart xếp dọc từ cột `dataStartCol` (ngoài vùng in).
  */
 export function buildDashboardCharts(
   sheet: ExcelJS.Worksheet,
   data: GaragePeriodReportData,
   summary: PeriodSummary,
-  startRow: number,
+  chartTop: number,
+  groupTop: number,
+  dataStartCol: number,
 ): XlsxChartSpec[] {
-  const col = DASHBOARD_DATA_START_COL;
+  const col = dataStartCol;
   const large = (slot: number) => {
     const [fromCol, toCol] = PERIOD_CHART_BANDS[slot];
+    const top = slot === 2 ? groupTop : chartTop;
     return {
       fromCol,
-      fromRow: startRow - 1,
+      fromRow: top - 1,
       toCol,
-      toRow: startRow - 1 + PERIOD_CHART_ROWS,
+      toRow: chartTop - 1 + PERIOD_CHART_ROWS,
     };
   };
 
@@ -79,7 +78,7 @@ export function buildDashboardCharts(
     5,
   );
   const cashTable = writeDataTable(sheet, {
-    startRow,
+    startRow: chartTop,
     startCol: col,
     columnWidths: COLUMN_WIDTHS,
     title: `Dữ liệu biểu đồ: Thu vs chi theo ${cashUnit}`,
@@ -105,16 +104,28 @@ export function buildDashboardCharts(
   });
 
   // Phải thu phát sinh và chi phí hồ sơ theo nhóm khách: nhóm không có phiếu và không có số tiền thì bỏ qua
+  // Mỗi nhóm khách tách thành Có VAT / Không VAT theo hồ sơ; nhóm rỗng thì bỏ qua
+  const sumOf = (cases: { totalAmount: number; costAmount?: number }[]) => [
+    cases.reduce((acc, c) => acc + c.totalAmount, 0),
+    cases.reduce((acc, c) => acc + (c.costAmount ?? 0), 0),
+  ];
   const groupRows = orEmpty(
-    (data.customerSections ?? [])
-      .filter((s) => s.cases.length > 0 || s.totalAmount !== 0)
-      .map(
-        (s): Row => [
-          GROUP_LABELS[s.key] ?? s.title,
-          s.totalAmount,
-          s.costAmount ?? 0,
-        ],
-      ),
+    (data.customerSections ?? []).flatMap((s) =>
+      [
+        { suffix: 'Có VAT', vat: true },
+        { suffix: 'Không VAT', vat: false },
+      ]
+        .map(({ suffix, vat }): Row => {
+          const cases = s.cases.filter((c) => Boolean(c.hasVat) === vat);
+          const [receivable, cost] = sumOf(cases);
+          return [
+            `${GROUP_LABELS[s.key] ?? s.title} - ${suffix}`,
+            receivable,
+            cost,
+          ];
+        })
+        .filter((r) => Number(r[1]) !== 0 || Number(r[2]) !== 0),
+    ),
     3,
   );
   const groupTable = writeDataTable(sheet, {

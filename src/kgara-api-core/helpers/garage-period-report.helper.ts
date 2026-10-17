@@ -18,7 +18,11 @@ import {
   initSheetStructure,
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
-import { buildPeriodDashboard } from './garage-period-dashboard.builder';
+import {
+  PERIOD_REPORT_COLUMNS,
+  PERIOD_REPORT_SHEET,
+  buildPeriodDashboard,
+} from './garage-period-dashboard.builder';
 import { PNL_SHEET, buildPnlSheet } from './garage-period-pnl.builder';
 import { resolvePeriodReportSections } from './garage-period-report-sections.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
@@ -233,17 +237,20 @@ export async function buildGaragePeriodReport(
   workbook.lastModifiedBy = 'Liouni ERP';
   workbook.created = new Date();
 
-  const sectionSet = resolvePeriodReportSections(data.reportType);
+  const sectionSet = resolvePeriodReportSections(
+    data.reportType,
+    data.reportSections,
+  );
 
   // Dashboard phải tạo trước để nằm đầu file, kế đó là sheet P&L
   const dashboard = sectionSet.has('dashboard')
-    ? createDashboardSheet(workbook, DEBT_DASHBOARD_SHEET)
+    ? createDashboardSheet(workbook, PERIOD_REPORT_SHEET, PERIOD_REPORT_COLUMNS)
     : null;
   const pnlCharts = sectionSet.has('pnl')
     ? buildPnlSheet(workbook, data.pnlMonths)
     : null;
 
-  if (sectionSet.has('debts')) {
+  if (sectionSet.has('receivables')) {
     const sections = (data.customerSections ?? []).filter(
       (s) => s.cases.length > 0 || s.totalAmount !== 0,
     );
@@ -259,6 +266,8 @@ export async function buildGaragePeriodReport(
     } else {
       buildDebtDetailSheet(workbook, 'customers', data.customerRows);
     }
+  }
+  if (sectionSet.has('payables')) {
     buildDebtDetailSheet(workbook, 'suppliers', data.supplierRows);
   }
   if (sectionSet.has('overdue')) {
@@ -274,7 +283,7 @@ export async function buildGaragePeriodReport(
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
   const withDashboard = await injectCharts(
     buffer,
-    DEBT_DASHBOARD_SHEET,
+    PERIOD_REPORT_SHEET,
     dashboardCharts,
   );
   return pnlCharts
