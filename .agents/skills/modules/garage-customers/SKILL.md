@@ -147,6 +147,7 @@ Quyền hạn truy cập: `@RequirePermissions({ resource: 'garage', action: 're
   - `to`: Ngày kết thúc.
   - `sorts`: Danh sách sắp xếp đa cột (vd: `["-balanceAmount", "customerName"]`). Các key aging `aging0_30`, `aging31_60`, `aging61_90`, `agingOver90` được map lần lượt sang các alias SQL `aging_0_30`, `aging_31_60`, `aging_61_90`, `aging_over_90`, hỗ trợ cả ASC và DESC.
   - `filtersStr` / `column_filters`: JSON string chứa bộ lọc các cột (`customerCode`, `customerName`, `branchName`, `paymentProgress`, `maxAgingDays`, `caseCount`, `totalAmount`).
+  - `agingBucket` (dropdown "Trạng thái nợ" của tab Phải thu): giá trị `0-30` | `31-60` | `61-90` | `>90`. Lọc theo **xe có số dư trong mốc** (`HAVING SUM(số dư phiếu trong mốc) > 0`), nên tổng cột mốc đó khớp với dữ liệu lọc. Khác với `maxAgingDays`, vốn lọc theo tuổi nợ **cũ nhất** của xe.
   - `column_search`: JSON string tìm kiếm nhanh theo từng cột.
 
 - **Cấu trúc Dữ liệu Phản hồi (JSON Response Contract)**:
