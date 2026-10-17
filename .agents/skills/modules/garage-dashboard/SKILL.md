@@ -69,7 +69,8 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
-  - Bố trí tại `GarageDashboard` (`garage-cases?tab=overview`) với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
+  - Bố trí tại `GarageDashboard` (`garage-cases?tab=overview` / `?tab=dashboard`) nằm ở **Section 2** (ngay dưới `GarageStatsCards`), nằm TRÊN **Section 3** (`GarageConversionFunnelCard` - Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ).
+  - Badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
   - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
@@ -84,6 +85,9 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - **Hàng 1 (Main Amount)**: Số tiền chính căn phải, font mono, `whitespace-nowrap` (tuyệt đối không bị rớt dòng đơn vị `đ`).
     - **Hàng 2 (Sub-text %)**: Căn phải ngay dưới số tiền với font nhỏ (`text-[10px]`), gồm **Delta %** (so sánh với tháng liền kề trước, xanh lá nếu tốt, đỏ nếu chi phí tăng/doanh thu giảm) và **% Doanh thu (% DT)** của chính tháng đó.
     - **Cột Danh Mục**: Loại bỏ các badge % lẻ tẻ để giữ cột Danh mục thoáng đãng, thuần túy tên khoản mục; toàn bộ % DT được hiển thị chuẩn xác ở Hàng 2 của từng cột tháng tương ứng.
+  - **Quy chuẩn Numeric Style Level 3 Bảng P&L**:
+    - Toàn bộ dòng con Level 3 (bao gồm các dòng `Trong đó: Phát sinh liên quan OJ` 1.1.1, 2.1.1, 3.1, 5.x.1, 6.1, 7.1.1, 7.x.1, 8.1, 2.2.x.1 và chi tiết ký gửi 4.1.1, 4.1.2) đồng nhất 100% text style `text-[11px] font-mono tabular-nums text-muted-foreground font-normal` trên cả 3 cột tháng.
+    - Tái sử dụng `PnlAmountCell` với `hideDelta={true}`, `hideRate={true}` để hiển thị 1 dòng phẳng compact, không lệch màu, không lệch bold và không phát sinh delta/rate badge phụ ở cấp con.
   - Tự động ghép nối và đối soát dòng con chi tiết giữa 3 tháng liên tiếp (`mergePnlItems`), hiển thị đầy đủ số tiền và tỷ lệ biến động (delta) giữa các kỳ tháng.
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - **Tổng hợp tự động 8 chỉ mục tài chính phân cấp (Số La Mã I → VIII)**:
@@ -269,8 +273,12 @@ Resource RBAC: `garage`
   - Pages & Components (Chuẩn `/ui-atomic-refactor`):
     - [`pages/GarageDashboard/`](erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
-    - [`components/GarageConversionFunnelCard/`](erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
-    - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 7 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+    - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 8 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+      - **Quy chuẩn Design Tokens phân cấp theo Number Level (4 Tầng)**:
+        - **Level 1 (Số La Mã: I → VIII)**: `py-2.5 px-4`, `font-bold text-foreground text-[13px]`, numeric month 0 `font-bold text-foreground`.
+        - **Level 2 (`X.Y`: 1.1, 2.1, 2.2, 3.1, 4.1, 4.2, 5.x, 6.1, 7.1, 7.x, 8.1)**: Thụt lề `py-2 px-8`, chữ `font-medium text-slate-700 dark:text-slate-300 text-xs`, numeric month 0 `py-2 px-4 font-semibold text-foreground` (hoặc `font-medium`), đồng bộ màu sắc và độ đậm không phân biệt module.
+        - **Level 3 (`X.Y.Z`: 1.1.1, 2.1.1, 2.2.x, 4.1.1, 4.1.2, 5.x.1, 7.x.1)**: Thụt lề `py-1.5 pl-14 pr-4`, chữ `text-[11px] text-muted-foreground`, numeric cells `py-1.5 px-4 text-[11px] text-muted-foreground font-normal`.
+        - **Level 4 (`X.Y.Z.W`: 2.2.x.1)**: Thụt lề `py-1.5 pl-20 pr-4`, chữ `text-[11px] italic text-muted-foreground`, numeric cells `py-1.5 px-4 text-[11px] text-muted-foreground font-normal`.
     - [`components/GaragePaymentProgressCard/`](erp/erp-web/src/modules/garage/components/GaragePaymentProgressCard/) (Tiến độ thu/chi & công nợ dịch vụ theo tháng)
     - [`GarageOpex.tsx`](erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
     - [`GarageOpexDrawer.tsx`](erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
