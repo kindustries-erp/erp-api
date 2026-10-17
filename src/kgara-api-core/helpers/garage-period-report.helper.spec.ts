@@ -348,10 +348,14 @@ describe('buildGaragePeriodReport', () => {
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
       2,
     );
-    // mọi chart có tiêu đề đều có nhãn số (mini chart không tiêu đề, không nhãn)
+    // mọi chart có tiêu đề (trừ waterfall, không nhãn số để đỡ rối) đều có nhãn số
     expect(
       xmls
-        .filter((x) => x.includes('<c:title>'))
+        .filter(
+          (x) =>
+            x.includes('<c:title>') &&
+            !x.includes('Từ doanh thu đến lợi nhuận ròng'),
+        )
         .every((x) => x.includes('<c:dLbls>')),
     ).toBe(true);
     // chart theo thời gian có tên theo đơn vị gom (kỳ tháng → tuần)

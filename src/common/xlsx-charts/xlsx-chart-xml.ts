@@ -124,10 +124,17 @@ function barSeries(
   index: number,
   fmt: string,
 ): string {
+  // Series ẩn: nền trong suốt, không viền, không nhãn (dùng làm đệm cho waterfall)
+  const fillXml = series.hidden
+    ? `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>`
+    : `<c:spPr>${solid(series.color)}</c:spPr>`;
+  const labelsXml = series.hidden
+    ? ''
+    : seriesLabels(spec, series, fmt, spec.stacked ? 'ctr' : 'outEnd');
   return (
     `<c:ser>${serHead(index, series)}` +
-    `<c:spPr>${solid(series.color)}</c:spPr><c:invertIfNegative val="0"/>` +
-    seriesLabels(spec, series, fmt, spec.stacked ? 'ctr' : 'outEnd') +
+    `${fillXml}<c:invertIfNegative val="0"/>` +
+    labelsXml +
     catAndVal(spec, sheetName, series, fmt) +
     `</c:ser>`
   );
@@ -290,7 +297,8 @@ export function buildChartXml(spec: XlsxChartSpec, sheetName: string): string {
     `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"/></a:pPr>` +
     `<a:r><a:rPr lang="vi-VN" sz="1200" b="1"/><a:t>${escapeXml(spec.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>`;
   const legend =
-    spec.series.length > 1 || spec.type === 'doughnut'
+    spec.showLegend !== false &&
+    (spec.series.length > 1 || spec.type === 'doughnut')
       ? `<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>`
       : '';
   const compact = spec.compact === true;

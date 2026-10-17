@@ -10,11 +10,11 @@ import {
   LABEL_PERCENT_FMT,
   type XlsxChartSpec,
 } from '../../common/xlsx-charts/xlsx-chart.types';
+import { monthLabel, type PnlMonthRow } from './garage-pnl-month.helper';
 import {
-  bucketOpex,
-  monthLabel,
-  type PnlMonthRow,
-} from './garage-pnl-month.helper';
+  buildWaterfallSeries,
+  buildWaterfallSteps,
+} from './garage-period-pnl-waterfall.helper';
 import {
   buildPnlTableRows,
   writePnlTable,
@@ -203,42 +203,24 @@ export function buildPnlSheet(
     numFmts: [undefined, MONEY, MONEY, MONEY, '0.0%'],
   });
 
-  const ratioHeaders = [
-    'Chi phí phụ tùng / DT',
-    'Chi phí bán hàng / DT',
-    'Nhân sự / DT',
-    'Mặt bằng, điện nước / DT',
-    'Vật tư tiêu hao / DT',
-    'Bảo trì / DT',
-    'Khấu hao / DT',
-    'CP vận hành khác / DT',
-  ];
-  const ratioRows = months.map((m, i): (string | number)[] => {
-    const b = bucketOpex(m.opexItems);
-    // Chi phí bán hàng = hoa hồng Sale + HHBH, cùng nhóm 4 của bảng
-    const sale = m.commissionItems.find(
-      (c) => c.categoryKey === 'HOA_HONG_SALE',
-    );
-    const selling = (sale?.amount ?? 0) + m.hhbhTotal;
-    return [
-      labels[i],
-      ratio(m.cogs, m.revenue),
-      ratio(selling, m.revenue),
-      ratio(b.nhanSu, m.revenue),
-      ratio(b.matBang, m.revenue),
-      ratio(b.vatTu, m.revenue),
-      ratio(b.baoTri, m.revenue),
-      ratio(b.khauHao, m.revenue),
-      ratio(b.khac, m.revenue),
-    ];
-  });
-  const ratioTable = writeDataTable(sheet, {
+  const steps = buildWaterfallSteps(current);
+  const waterfall = buildWaterfallSeries(steps, current.revenue);
+  const waterfallTable = writeDataTable(sheet, {
     startRow: tableStartRow,
     startCol: CHART_FIRST_COL + 6,
-    title: 'Dữ liệu biểu đồ: Tỷ trọng chi phí trên doanh thu',
-    headers: ['Tháng', ...ratioHeaders],
-    rows: ratioRows,
-    numFmts: [undefined, ...ratioHeaders.map(() => '0.0%')],
+    title: `Dữ liệu biểu đồ: Từ doanh thu đến lợi nhuận ròng, tháng ${monthTag(current)}`,
+    headers: ['Bước', 'Nền', 'Tổng', 'Tổng (âm)', 'Chi phí', 'Chi phí (âm)'],
+    rows: waterfall.categories.map(
+      (label, i): Row => [
+        label,
+        waterfall.base[i],
+        waterfall.totalPos[i],
+        waterfall.totalNeg[i],
+        waterfall.costPos[i],
+        waterfall.costNeg[i],
+      ],
+    ),
+    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY, MONEY],
   });
 
   const charts: XlsxChartSpec[] = [
@@ -251,22 +233,48 @@ export function buildPnlSheet(
       'Chi phí',
     ),
     {
+      // Waterfall bằng cột chồng: series "Nền" vô hình đệm cho từng cột trôi
       type: 'column',
-      title: 'Tỷ trọng các chỉ số trên 100% doanh thu',
+      title: `Từ doanh thu đến lợi nhuận ròng, tháng ${monthTag(current)}`,
       anchor: chartAnchor(1),
-      categoriesRef: ratioTable.ref(0),
-      categories: labels,
-      numFmt: '0%',
+      categoriesRef: waterfallTable.ref(0),
+      categories: waterfall.categories,
+      numFmt: MONEY,
       stacked: true,
-      dataLabels: true,
-      labelNumFmt: LABEL_PERCENT_FMT,
-      labelFontSize: 700,
-      series: ratioHeaders.map((name, i) => ({
-        name,
-        valuesRef: ratioTable.ref(i + 1),
-        values: column(ratioRows, i + 1),
-        color: CHART_PALETTE[i % CHART_PALETTE.length],
-      })),
+      showLegend: false,
+      series: [
+        {
+          name: 'Nền',
+          valuesRef: waterfallTable.ref(1),
+          values: waterfall.base,
+          color: '000000',
+          hidden: true,
+        },
+        {
+          name: 'Tổng',
+          valuesRef: waterfallTable.ref(2),
+          values: waterfall.totalPos,
+          color: CHART_PALETTE[0],
+        },
+        {
+          name: 'Tổng (âm)',
+          valuesRef: waterfallTable.ref(3),
+          values: waterfall.totalNeg,
+          color: CHART_PALETTE[0],
+        },
+        {
+          name: 'Chi phí',
+          valuesRef: waterfallTable.ref(4),
+          values: waterfall.costPos,
+          color: CHART_PALETTE[3],
+        },
+        {
+          name: 'Chi phí (âm)',
+          valuesRef: waterfallTable.ref(5),
+          values: waterfall.costNeg,
+          color: CHART_PALETTE[3],
+        },
+      ],
     },
   ];
   return charts;

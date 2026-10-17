@@ -141,9 +141,9 @@ describe('buildPnlSheet', () => {
     expect(sheet.pageSetup.printArea).toBe('A1:N41');
   });
 
-  it('bật nhãn số: tiền theo triệu cho cột, % cho đường, % ẩn dưới 1% cho cột chồng', () => {
+  it('bật nhãn số cho chart 12 tháng (tiền theo triệu, % cho đường); waterfall không nhãn số, không chú thích', () => {
     const wb = new ExcelJS.Workbook();
-    const [combo, stacked] = buildPnlSheet(wb, twelveMonths());
+    const [combo, waterfall] = buildPnlSheet(wb, twelveMonths());
 
     expect(combo).toMatchObject({
       dataLabels: true,
@@ -151,10 +151,9 @@ describe('buildPnlSheet', () => {
       labelFontSize: 700,
     });
     expect(combo.series[3].labelNumFmt).toBe('0%');
-    expect(stacked).toMatchObject({
-      dataLabels: true,
-      labelNumFmt: LABEL_PERCENT_FMT,
-    });
+    expect(waterfall.dataLabels).toBeFalsy();
+    expect(waterfall.showLegend).toBe(false);
+    expect(LABEL_PERCENT_FMT).toBeDefined();
   });
 
   it('tháng không có doanh thu: % lợi nhuận gộp để trống (null) thay vì 0%', () => {
@@ -195,11 +194,11 @@ describe('buildPnlSheet', () => {
     expect(sheet.getCell('A6').font?.bold).toBe(false);
   });
 
-  it('2 chart 12 tháng: combo có % lợi nhuận gộp trên trục phụ, tỷ trọng là cột chồng 8 series (có chi phí bán hàng)', async () => {
+  it('2 chart: combo 12 tháng có % lợi nhuận gộp trên trục phụ; waterfall tháng báo cáo là cột chồng có nền vô hình', async () => {
     const { charts } = await build();
     expect(charts).toHaveLength(2);
 
-    const [combo, stacked] = charts;
+    const [combo, waterfall] = charts;
     expect(combo.type).toBe('combo');
     expect(combo.categories).toHaveLength(12);
     expect(combo.categories[0]).toBe('2025-thg 8');
@@ -214,14 +213,17 @@ describe('buildPnlSheet', () => {
     expect(line).toMatchObject({ kind: 'line', secondaryAxis: true });
     expect(line.values[0]).toBeCloseTo(202710586 / 444218804, 6);
 
-    expect(stacked.stacked).toBe(true);
-    expect(stacked.series).toHaveLength(8);
-    // Tổng tỷ trọng một tháng = (cogs + vận hành) / doanh thu
-    const total = stacked.series.reduce(
-      (acc, s) => acc + (s.values[0] ?? 0),
-      0,
-    );
-    expect(total).toBeCloseTo((241508218 + 146500000) / 444218804, 6);
+    expect(waterfall.stacked).toBe(true);
+    expect(waterfall.series.map((s) => s.name)).toEqual([
+      'Nền',
+      'Tổng',
+      'Tổng (âm)',
+      'Chi phí',
+      'Chi phí (âm)',
+    ]);
+    expect(waterfall.series[0].hidden).toBe(true);
+    expect(waterfall.categories).toHaveLength(8);
+    expect(waterfall.categories[0]).toBe('Doanh thu · 444,2tr · 100,0%');
   });
 
   it('chart được chèn vào đúng sheet với trục phụ và grouping stacked', async () => {
@@ -250,13 +252,13 @@ describe('buildPnlSheet', () => {
     );
   });
 
-  it('doanh thu 0 thì tỷ lệ là 0, không NaN', () => {
+  it('doanh thu 0: đường % để trống, waterfall không có NaN', () => {
     const wb = new ExcelJS.Workbook();
     const charts = buildPnlSheet(wb, [month(2026, 7, { revenue: 0 })]);
     expect(charts[0].series[3].values).toEqual([null]);
-    expect(charts[1].series.every((s) => s.values.every((v) => v === 0))).toBe(
-      true,
-    );
+    expect(
+      charts[1].series.every((s) => s.values.every((v) => Number.isFinite(v))),
+    ).toBe(true);
   });
 });
 

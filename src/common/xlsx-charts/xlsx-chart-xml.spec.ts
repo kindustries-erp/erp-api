@@ -37,6 +37,39 @@ const parse = (xml: string) => {
 };
 
 describe('buildChartXml', () => {
+  it('series ẩn không tô màu, không nhãn; showLegend:false bỏ chú thích', () => {
+    const xml = buildChartXml(
+      spec({
+        stacked: true,
+        dataLabels: true,
+        showLegend: false,
+        series: [
+          {
+            name: 'Nền',
+            valuesRef: '$B$2:$B$3',
+            values: [0, 5],
+            color: '000000',
+            hidden: true,
+          },
+          {
+            name: 'Doanh thu',
+            valuesRef: '$C$2:$C$3',
+            values: [10, 5],
+            color: '059669',
+          },
+        ],
+      }),
+      'Dashboard',
+    );
+    const doc = parse(xml);
+    const sers = Array.from(doc.getElementsByTagName('c:ser'));
+    const hidden = sers[0];
+    expect(hidden.getElementsByTagName('a:noFill').length).toBeGreaterThan(0);
+    expect(hidden.getElementsByTagName('c:dLbls').length).toBe(0);
+    expect(sers[1].getElementsByTagName('c:dLbls').length).toBe(1);
+    expect(xml).not.toContain('<c:legend>');
+  });
+
   it('compact: không tiêu đề, không chú thích, hai trục ẩn, không lưới, đường không marker', () => {
     const xml = buildChartXml(
       spec({

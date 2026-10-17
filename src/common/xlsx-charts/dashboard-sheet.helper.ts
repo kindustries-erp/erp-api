@@ -154,6 +154,7 @@ export function writeGroupTitle(
     startCol: 1,
     endCol: DASHBOARD_COLUMNS,
   },
+  theme?: CardGroupTheme,
 ): number {
   if (!title) return row;
   sheet.mergeCells(row, span.startCol, row, span.endCol);
@@ -161,16 +162,41 @@ export function writeGroupTitle(
   titleCell.value = title;
   titleCell.font = {
     name: 'Calibri',
-    size: 11,
+    size: theme?.titleSize ?? 11,
     bold: true,
-    color: { argb: COLOR_TITLE },
+    color: { argb: theme?.titleColor ?? COLOR_TITLE },
   };
-  titleCell.alignment = { vertical: 'middle' };
-  sheet.getRow(row).height = 20;
+  titleCell.alignment = { vertical: 'middle', indent: 1 };
+  if (theme) {
+    for (let c = span.startCol; c <= span.endCol; c++) {
+      sheet.getCell(row, c).fill = fill(theme.titleFill);
+    }
+  }
+  sheet.getRow(row).height = theme ? 24 : 20;
   return row + 1;
 }
 
+/** Màu riêng của một nhóm thẻ (không truyền thì dùng bảng màu trung tính mặc định). */
+export interface CardGroupTheme {
+  /** Màu chữ tiêu đề nhóm (ARGB). */
+  titleColor: string;
+  /** Nền dải tiêu đề nhóm. */
+  titleFill: string;
+  /** Cỡ chữ tiêu đề nhóm, đơn vị pt. */
+  titleSize?: number;
+  /** Nền từng thẻ. */
+  cardFill: string;
+  /** Màu viền thẻ. */
+  border: string;
+  /** Màu nhãn thẻ. */
+  labelColor: string;
+  /** Màu giá trị thẻ. */
+  valueColor: string;
+}
+
 export interface KpiCardOptions {
+  /** Màu theo nhóm thẻ; thiếu thì giữ hệ màu mặc định. */
+  theme?: CardGroupTheme;
   /** Dòng tiêu đề nhóm phía trên các thẻ. */
   title?: string;
   /** Cột (1-based) bắt đầu của thẻ đầu tiên; mặc định cột A. */
@@ -196,10 +222,14 @@ export function writeKpiCards(
   const cardCols = options.cardCols ?? CARD_COLS;
   const perRow = options.cardsPerRow ?? CARDS_PER_ROW;
   const firstCol = options.startCol ?? 1;
-  let row = writeGroupTitle(sheet, startRow, options.title, {
-    startCol: firstCol,
-    endCol: firstCol + perRow * cardCols - 1,
-  });
+  const theme = options.theme;
+  let row = writeGroupTitle(
+    sheet,
+    startRow,
+    options.title,
+    { startCol: firstCol, endCol: firstCol + perRow * cardCols - 1 },
+    theme,
+  );
   for (let i = 0; i < kpis.length; i += perRow) {
     const rowKpis = kpis.slice(i, i + perRow);
     const hasNote =
@@ -219,7 +249,7 @@ export function writeKpiCards(
         name: 'Calibri',
         size: 9,
         bold: true,
-        color: { argb: COLOR_MUTED },
+        color: { argb: theme?.labelColor ?? COLOR_MUTED },
       };
       label.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
 
@@ -230,7 +260,7 @@ export function writeKpiCards(
         name: 'Calibri',
         size: 16,
         bold: true,
-        color: { argb: COLOR_TITLE },
+        color: { argb: theme?.valueColor ?? COLOR_TITLE },
       };
       value.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
 
@@ -247,15 +277,23 @@ export function writeKpiCards(
       }
 
       const cardRows = hasNote ? [row, row + 1, row + 2] : [row, row + 1];
+      const border = theme
+        ? {
+            top: { style: 'thin' as const, color: { argb: theme.border } },
+            bottom: { style: 'thin' as const, color: { argb: theme.border } },
+            left: { style: 'thin' as const, color: { argb: theme.border } },
+            right: { style: 'thin' as const, color: { argb: theme.border } },
+          }
+        : thinBorder;
       for (let c = col; c <= last; c++) {
         cardRows.forEach((r, idx) => {
           const cell = sheet.getCell(r, c);
-          cell.fill = fill(COLOR_CARD_FILL);
+          cell.fill = fill(theme?.cardFill ?? COLOR_CARD_FILL);
           cell.border = {
-            top: idx === 0 ? thinBorder.top : undefined,
-            bottom: idx === cardRows.length - 1 ? thinBorder.bottom : undefined,
-            left: c === col ? thinBorder.left : undefined,
-            right: c === last ? thinBorder.right : undefined,
+            top: idx === 0 ? border.top : undefined,
+            bottom: idx === cardRows.length - 1 ? border.bottom : undefined,
+            left: c === col ? border.left : undefined,
+            right: c === last ? border.right : undefined,
           };
         });
       }

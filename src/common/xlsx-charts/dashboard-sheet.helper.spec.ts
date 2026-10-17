@@ -74,6 +74,43 @@ describe('dashboard-sheet.helper', () => {
     expect(sheet.pageSetup.printArea).toBe('A1:R30');
   });
 
+  it('KPI: theme nhóm đổi màu tiêu đề, nền dải, nền thẻ, nhãn và giá trị; không theme thì giữ màu cũ', () => {
+    const wb = new ExcelJS.Workbook();
+    const dash = createDashboardSheet(wb, 'Báo cáo', 18);
+    const theme = {
+      titleColor: 'FF065F46',
+      titleFill: 'FFD1FAE5',
+      titleSize: 13,
+      cardFill: 'FFECFDF5',
+      border: 'FFA7F3D0',
+      labelColor: 'FF047857',
+      valueColor: 'FF065F46',
+    };
+    writeKpiCards(dash, 5, [{ label: 'Thu', value: 1 }], {
+      title: 'Thu chi',
+      theme,
+      cardCols: 3,
+      cardsPerRow: 2,
+    });
+    expect(dash.getCell('A5').font?.size).toBe(13);
+    expect(dash.getCell('A5').font?.color?.argb).toBe('FF065F46');
+    expect(dash.getCell('A5').fill).toMatchObject({
+      fgColor: { argb: 'FFD1FAE5' },
+    });
+    expect(dash.getCell('A6').font?.color?.argb).toBe('FF047857');
+    expect(dash.getCell('A7').font?.color?.argb).toBe('FF065F46');
+    expect(dash.getCell('A7').fill).toMatchObject({
+      fgColor: { argb: 'FFECFDF5' },
+    });
+
+    const plain = wb.addWorksheet('Plain');
+    writeKpiCards(plain, 5, [{ label: 'Thu', value: 1 }], { title: 'Thu' });
+    expect(plain.getCell('A5').font?.size).toBe(11);
+    expect(plain.getCell('A6').fill).toMatchObject({
+      fgColor: { argb: 'FFF8FAFC' },
+    });
+  });
+
   it('KPI: đặt thẻ theo cột (startCol, cardCols, cardsPerRow), tiêu đề chỉ gộp đúng dải cột', () => {
     const wb = new ExcelJS.Workbook();
     const dash = createDashboardSheet(wb, 'Dashboard');

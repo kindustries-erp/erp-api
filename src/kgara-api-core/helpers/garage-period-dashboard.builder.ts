@@ -6,6 +6,7 @@ import {
   writeDashboardHeader,
   writeGroupTitle,
   writeKpiCards,
+  type CardGroupTheme,
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import type { XlsxChartSpec } from '../../common/xlsx-charts/xlsx-chart.types';
 import { formatPeriod } from './garage-debts-export.helper';
@@ -46,6 +47,38 @@ function writeFootnote(
   return row;
 }
 
+/**
+ * Màu theo nhóm thẻ (để người xem phân biệt): thu chi (emerald), tuổi nợ (hổ phách), phát sinh
+ * theo nhóm khách (violet). Đều thuộc bảng màu chart sẵn có, không dùng xanh dương.
+ */
+const THEME_CASH: CardGroupTheme = {
+  titleColor: 'FF065F46',
+  titleFill: 'FFD1FAE5',
+  titleSize: 13,
+  cardFill: 'FFECFDF5',
+  border: 'FFA7F3D0',
+  labelColor: 'FF047857',
+  valueColor: 'FF065F46',
+};
+const THEME_AGING: CardGroupTheme = {
+  titleColor: 'FF92400E',
+  titleFill: 'FFFDE68A',
+  titleSize: 13,
+  cardFill: 'FFFFFBEB',
+  border: 'FFFDE68A',
+  labelColor: 'FFB45309',
+  valueColor: 'FF92400E',
+};
+const THEME_GROUP: CardGroupTheme = {
+  titleColor: 'FF5B21B6',
+  titleFill: 'FFEDE9FE',
+  titleSize: 13,
+  cardFill: 'FFF5F3FF',
+  border: 'FFDDD6FE',
+  labelColor: 'FF6D28D9',
+  valueColor: 'FF5B21B6',
+};
+
 /** Cột (1-based) đầu và cuối của từng vùng 6 cột: thu chi, tuổi nợ, phát sinh theo nhóm. */
 const COLUMN_SPANS = [
   { startCol: 1, endCol: 6 },
@@ -78,12 +111,19 @@ export function buildPeriodDashboard(
   );
 
   // Ba cột thẻ cùng bắt đầu từ một dòng để chữ và số thẳng hàng
-  writeGroupTitle(dashboard, headerRow, 'Thu chi trong kỳ', COLUMN_SPANS[0]);
+  writeGroupTitle(
+    dashboard,
+    headerRow,
+    'Thu chi trong kỳ',
+    COLUMN_SPANS[0],
+    THEME_CASH,
+  );
   writeGroupTitle(
     dashboard,
     headerRow,
     'Tuổi nợ lũy kế đến ngày xuất',
     COLUMN_SPANS[1],
+    THEME_AGING,
   );
   const cashRow = writeKpiCards(
     dashboard,
@@ -91,6 +131,7 @@ export function buildPeriodDashboard(
     buildCashflowKpis(summary),
     {
       startCol: COLUMN_SPANS[0].startCol,
+      theme: THEME_CASH,
       cardCols: 3,
       cardsPerRow: 2,
       reserveNote: true,
@@ -102,6 +143,7 @@ export function buildPeriodDashboard(
     buildOpenDebtKpis(summary),
     {
       startCol: COLUMN_SPANS[1].startCol,
+      theme: THEME_AGING,
       cardCols: 3,
       cardsPerRow: 2,
       reserveNote: true,
@@ -114,6 +156,7 @@ export function buildPeriodDashboard(
     {
       title: 'Phát sinh trong kỳ theo nhóm khách',
       startCol: COLUMN_SPANS[2].startCol,
+      theme: THEME_GROUP,
       cardCols: 3,
       cardsPerRow: 2,
       reserveNote: true,
