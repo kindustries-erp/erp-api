@@ -12,6 +12,7 @@ import type {
   GarageDebtsExportDto,
 } from '../dto/garage-export.dto';
 import type { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
+import type { GarageOpexExportDto } from '../dto/garage-opex-export.dto';
 import {
   buildGarageDebtFileName,
   type GarageDebtExportKind,
@@ -21,6 +22,7 @@ import { GarageDebtsExportService } from './garage-debts-export.service';
 import { GaragePeriodReportService } from './garage-period-report.service';
 import { KgaraCompletedCasesExportService } from './kgara-completed-cases-export.service';
 import { GarageCashflowExportService } from './garage-cashflow-export.service';
+import { GarageOpexExportService } from './garage-opex-export.service';
 
 /** Công nợ đổi theo ngày/đồng bộ nên chỉ tái dùng file vừa tạo trong 10 phút. */
 const REUSE_WINDOW_MS = 10 * 60 * 1000;
@@ -30,6 +32,7 @@ export const GARAGE_CASES_EXPORT_PROCESS_ID = 'garage-cases-xlsx-export';
 export const GARAGE_DASHBOARD_EXPORT_PROCESS_ID =
   'garage-dashboard-xlsx-export';
 export const GARAGE_CASHFLOW_EXPORT_PROCESS_ID = 'garage-cashflow-xlsx-export';
+export const GARAGE_OPEX_EXPORT_PROCESS_ID = 'garage-opex-xlsx-export';
 export const GARAGE_DEBTS_EXPORT_PROCESS_IDS: Record<
   GarageDebtExportKind,
   string
@@ -61,6 +64,11 @@ export class GarageExportJobsService implements OnModuleDestroy {
     reuseWindowMs: REUSE_WINDOW_MS,
   });
 
+  readonly opexRunner = new ExportJobRunner({
+    processId: GARAGE_OPEX_EXPORT_PROCESS_ID,
+    reuseWindowMs: REUSE_WINDOW_MS,
+  });
+
   private readonly debtRunners: Record<GarageDebtExportKind, ExportJobRunner> =
     {
       all: new ExportJobRunner({
@@ -82,12 +90,14 @@ export class GarageExportJobsService implements OnModuleDestroy {
     private readonly debtsExportService: GarageDebtsExportService,
     private readonly periodReportService: GaragePeriodReportService,
     private readonly cashflowExportService: GarageCashflowExportService,
+    private readonly opexExportService: GarageOpexExportService,
   ) {}
 
   onModuleDestroy() {
     this.casesRunner.destroy();
     this.dashboardRunner.destroy();
     this.cashflowRunner.destroy();
+    this.opexRunner.destroy();
     Object.values(this.debtRunners).forEach((runner) => runner.destroy());
   }
 
@@ -197,6 +207,25 @@ export class GarageExportJobsService implements OnModuleDestroy {
       dateTo: dto.dateTo || dto.endDate,
       producer: (onProgress) =>
         this.cashflowExportService.buildExcel(dto, onProgress),
+    });
+  }
+
+  startOpexExport(dto: GarageOpexExportDto, userId: string): ExportStartResult {
+    const timestamp = formatExportTimestamp(new Date());
+    const byCurrentFilter = dto.mode === 'by-current-filter';
+    const fileName = byCurrentFilter
+      ? `Chi_phi_van_hanh_garage_theo_bo_loc_${timestamp}.xlsx`
+      : `Chi_phi_van_hanh_garage_${timestamp}.xlsx`;
+
+    return this.opexRunner.start({
+      userId,
+      fingerprint: stableStringify(dto),
+      fileName,
+      totalUnits: PROGRESS_TOTAL_UNITS,
+      dateFrom: dto.date_from,
+      dateTo: dto.date_to,
+      producer: (onProgress) =>
+        this.opexExportService.exportExcel(dto, onProgress),
     });
   }
 }

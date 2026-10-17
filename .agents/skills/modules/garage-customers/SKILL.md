@@ -484,3 +484,15 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 - **Tương thích & Lưu trữ**:
   - Preset visibility được lưu trữ và đồng bộ tự động với `useUserPreferencesStore` thông qua table ID `garage-debts-table-column-views` / `garage-payables-table-column-views`.
   - Giữ vững 100% khả năng tương thích ngược với API query params hiện tại (`column_filters['paymentProgress']`, `column_filters['maxAgingDays']`).
+
+### 8.9. Chuẩn Hóa Main Action Button "Xuất Excel" & Dropdown Action Menu Đồng Bộ Phiếu Dịch Vụ (Cập nhật 2026-10-17)
+- **Mục tiêu**: Đồng bộ chuẩn Action Button trên `GarageDebtsTable` (Phải thu) và `GaragePayablesTable` (Phải trả) theo kiến trúc của `garage-cases?tab=cases`:
+  - Khắc phục tình trạng thiếu `onCreate` và `createLabel` khiến `SpreadsheetPageTemplate` bị fallback thành nhãn "Tạo mới".
+- **Cấu hình Nút Chính (Main Action Button)**:
+  - `createLabel`: `t("debts.exportExcel", "Xuất Excel")`
+  - `createIcon`: `<FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600" />`
+  - `onCreate`: Gọi mở `GarageDebtsExportDrawer` với ngữ cảnh bảng hiện tại (`customers` cho Phải thu, `suppliers` cho Phải trả).
+- **Cấu hình Menu Thả Xuống (`createActions`)**:
+  - **Nhóm 1 (`Báo cáo & Xuất file`)**: Mục "Xuất Excel theo kỳ / Nâng cao" mở `GarageDebtsExportDrawer`.
+  - **Nhóm 2 (`Tùy chọn đồng bộ`)**: Hiển thị khi người dùng có quyền `GARAGE CREATE/UPDATE` (`canSyncGarage`) và có callback `onSyncCases`. Khi bấm kích hoạt drawer đồng bộ `GarageCaseSyncDrawer` (chế độ `"cases"`), cho phép quét lại các phiếu dịch vụ mới từ hệ thống và tự động làm mới danh sách công nợ sau khi đồng bộ thành công.
+
