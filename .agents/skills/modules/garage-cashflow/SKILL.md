@@ -283,3 +283,23 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - **L5 Pages**: `GarageCashflowPage` (`GarageCashflowPage.tsx`, 23 LoC) - Entry point phân quyền RBAC `GARAGE_CASHFLOW:READ`.
 - **No Blue Mandate**: 0 instance class `blue-`, dùng Emerald (`#059669`) cho Tiền vào, Orange (`#ea580c`) cho Tiền ra, Amber/Slate/Zinc cho các badges và borders.
 - **Đa ngôn ngữ & Co-located Tests**: 100% chuỗi dùng i18n (`garageVi.cashflow.*`, `garageEn.cashflow.*`), 11 test suites co-located Vitest (39 tests) PASS 100%.
+
+## 12. Dashboard Engine & Cơ Chế Lọc Chi Nhánh (`GarageCashflowDashboardEngine`)
+- **Vị trí file**: `src/kgara-api-core/services/engines/garage-cashflow-dashboard.engine.ts`
+- **Logic Lọc Chi Nhánh (`branchId`)**:
+  - Giao diện `GarageBranchSelector` gửi `branchId` là `b.externalId` (ví dụ `0b4d6d3a-55df-492b-abaf-377d84b61d05` hoặc `CN1`).
+  - Trong `applyBaseFilters`, engine thực hiện:
+    ```typescript
+    qb.leftJoin('v.case', 'c');
+    qb.leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id');
+    qb.andWhere(
+      '(c.branch_external_id = :branchId OR CAST(b.id AS TEXT) = :branchId OR b.name = :branchId OR b.code = :branchId)',
+      { branchId },
+    );
+    ```
+  - ⚠️ **Cấm dùng `c.branchName`**: Entity `KgaraCase` chỉ chứa cột `branch_external_id` (property `branchExternalId`), hoàn toàn không có cột `branchName` hay `branchname`. Truy vấn qua `c.branchName` sẽ gây lỗi Postgres 500: `column c.branchname does not exist`.
+  - Bỏ qua lọc khi `branchId` là rỗng hoặc `'ALL'`.
+- **Nguyên tắc bảo toàn bộ lọc (`andWhere` vs `where`)**:
+  - Tại các hàm `getMethodBreakdown`, `getContentBreakdown` và `getTopTransactions`, điều kiện loại phiếu `v.voucher_type = :type` **BẮT BUỘC phải dùng `qb.andWhere(...)`**.
+  - Tuyệt đối không dùng `qb.where(...)` sau khi đã gọi `applyBaseFilters`, vì `where()` của TypeORM sẽ xóa sạch toàn bộ các điều kiện lọc trước đó (`dateFrom`, `dateTo`, `paymentMethod`, `paymentContent`, `branchId`).
+
