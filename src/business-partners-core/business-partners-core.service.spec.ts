@@ -153,6 +153,77 @@ describe('BusinessPartnersCoreService', () => {
       );
       expect(qb.andWhere).toHaveBeenCalled();
     });
+
+    it('should apply V2 operators, date ranges and all-matching filters', async () => {
+      await service.findAll({
+        page: 1,
+        pageSize: 20,
+        column_filters: JSON.stringify({ code: ['__ALL_MATCHING__', 'KH'] }),
+        column_operators: JSON.stringify({
+          name: { operator: 'contains', value: 'Công ty' },
+          email: { operator: 'is_not_empty', value: '' },
+        }),
+        date_ranges: JSON.stringify({
+          createdAt: { from: '2026-01-01', to: '2026-12-31' },
+        }),
+      });
+
+      const calls = qb.andWhere.mock.calls.map(([sql]: [string]) => sql);
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('bp.name ILIKE'),
+          expect.stringContaining('bp.email IS NOT NULL'),
+          expect.stringContaining('bp.createdAt >='),
+          expect.stringContaining('bp.createdAt <='),
+        ]),
+      );
+    });
+
+    it('should apply V2 date operators with whole-day boundaries', async () => {
+      await service.findAll({
+        column_operators: JSON.stringify({
+          createdAt: {
+            operator: 'between',
+            value: '2026-01-01',
+            valueTo: '2026-01-31',
+          },
+        }),
+      });
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'bp.createdAt BETWEEN :bp_operator_0_from AND :bp_operator_0_to',
+        expect.objectContaining({
+          bp_operator_0_from: expect.any(Date),
+          bp_operator_0_to: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should ignore unknown operator columns', async () => {
+      await service.findAll({
+        column_operators: JSON.stringify({
+          unsafe: { operator: 'contains', value: 'x' },
+        }),
+      });
+
+      expect(qb.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('unsafe'),
+        expect.anything(),
+      );
+    });
+
+    it('should ignore date operators for non-date columns', async () => {
+      await service.findAll({
+        column_operators: JSON.stringify({
+          name: { operator: 'before', value: '2026-01-01' },
+        }),
+      });
+
+      expect(qb.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('bp.name <'),
+        expect.anything(),
+      );
+    });
   });
 
   describe('getColumnOptions', () => {
@@ -179,6 +250,32 @@ describe('BusinessPartnersCoreService', () => {
       expect(result.items).toEqual([]);
       expect(result.total).toBe(0);
       expect(result.next).toBeNull();
+    });
+
+    it('should apply nested V2 cross-column filters', async () => {
+      await service.getColumnOptions(
+        'status',
+        undefined,
+        1,
+        20,
+        JSON.stringify({
+          columnFilters: { code: ['KH-001'] },
+          columnOperators: {
+            name: { operator: 'starts_with', value: 'Công' },
+          },
+          dateRanges: { createdAt: { from: '2026-01-01' } },
+        }),
+        'CUSTOMER',
+      );
+
+      const calls = qb.andWhere.mock.calls.map(([sql]: [string]) => sql);
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('bp.code IN'),
+          expect.stringContaining('bp.name ILIKE'),
+          expect.stringContaining('bp.createdAt >='),
+        ]),
+      );
     });
   });
 
