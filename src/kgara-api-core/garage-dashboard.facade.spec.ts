@@ -5,6 +5,7 @@ import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
 import { GaragePnlService } from './services/garage-pnl.service';
 import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
+import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
 
 describe('GarageDashboardService (Facade)', () => {
   let service: GarageDashboardService;
@@ -13,6 +14,7 @@ describe('GarageDashboardService (Facade)', () => {
   let mockCustomerStatsService: any;
   let mockPnlService: any;
   let mockMonthlyBreakdownService: any;
+  let mockPeriodQueries: any;
 
   beforeEach(async () => {
     mockStatsService = {
@@ -41,6 +43,25 @@ describe('GarageDashboardService (Facade)', () => {
         .mockResolvedValue({ month: '2026-10' }),
     };
 
+    mockPeriodQueries = {
+      loadPnlMonthly: jest.fn().mockResolvedValue([
+        {
+          year: 2026,
+          month: 10,
+          revenue: 100,
+          cogs: 60,
+          grossProfit: 40,
+          grossMarginRate: 40,
+          opexTotal: 0,
+          opexItems: [],
+          netBeforeCommission: 40,
+          commissionTotal: 0,
+          commissionItems: [],
+          netAfterCommission: 40,
+        },
+      ]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GarageDashboardService,
@@ -55,6 +76,7 @@ describe('GarageDashboardService (Facade)', () => {
           provide: GarageMonthlyReceivablesBreakdownService,
           useValue: mockMonthlyBreakdownService,
         },
+        { provide: GaragePeriodReportQueries, useValue: mockPeriodQueries },
       ],
     }).compile();
 
@@ -154,5 +176,15 @@ describe('GarageDashboardService (Facade)', () => {
       mockMonthlyBreakdownService.getMonthlyReceivablesBreakdown,
     ).toHaveBeenCalledWith('2026-10', 'BR01');
     expect(res).toEqual({ month: '2026-10' });
+  });
+
+  it('getPnlTrend: lấy 12 tháng kết thúc ở tháng chọn và kẹp count 1..24', async () => {
+    const result = await service.getPnlTrend(2026, 7, 99);
+    expect(mockPeriodQueries.loadPnlMonthly).toHaveBeenCalledWith(
+      { year: 2026, month: 7 },
+      24,
+    );
+    expect(result[0].label).toBe('2026-thg 10');
+    expect(result[0].grossMarginRatio).toBeCloseTo(0.4);
   });
 });

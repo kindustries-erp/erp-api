@@ -259,6 +259,23 @@ export class GarageDashboardController {
   }
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @Get('pnl-trend')
+  @ApiQuery({ name: 'year', required: false })
+  @ApiQuery({ name: 'month', required: false })
+  @ApiQuery({ name: 'count', required: false })
+  getPnlTrend(
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('count') count?: string,
+  ) {
+    return this.service.getPnlTrend(
+      year ? parseInt(year, 10) : undefined,
+      month ? parseInt(month, 10) : undefined,
+      count ? parseInt(count, 10) : undefined,
+    );
+  }
+
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('pnl-report/export')
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

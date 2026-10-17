@@ -129,3 +129,49 @@ export function bucketOpex(items: PnlLineItem[]): OpexBuckets {
   }
   return buckets;
 }
+
+/** Điểm một tháng của 2 chart dashboard: combo lợi nhuận và tỷ trọng chi phí / doanh thu. */
+export interface PnlTrendPoint {
+  year: number;
+  month: number;
+  label: string;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  /** Lợi nhuận gộp / doanh thu (0..1), `null` khi không có doanh thu. */
+  grossMarginRatio: number | null;
+  /** Tỷ trọng trên doanh thu (0..1), doanh thu 0 thì 0. */
+  ratios: {
+    cogs: number;
+    nhanSu: number;
+    matBang: number;
+    vatTu: number;
+    baoTri: number;
+    khauHao: number;
+    khac: number;
+  };
+}
+
+/** Cùng công thức với sheet "Báo cáo lợi nhuận" của file Excel xuất theo kỳ. */
+export function toPnlTrendPoint(row: PnlMonthRow): PnlTrendPoint {
+  const b = bucketOpex(row.opexItems);
+  const ratio = (part: number) => (row.revenue > 0 ? part / row.revenue : 0);
+  return {
+    year: row.year,
+    month: row.month,
+    label: monthLabel(row),
+    revenue: row.revenue,
+    cogs: row.cogs,
+    grossProfit: row.grossProfit,
+    grossMarginRatio: row.revenue > 0 ? row.grossProfit / row.revenue : null,
+    ratios: {
+      cogs: ratio(row.cogs),
+      nhanSu: ratio(b.nhanSu),
+      matBang: ratio(b.matBang),
+      vatTu: ratio(b.vatTu),
+      baoTri: ratio(b.baoTri),
+      khauHao: ratio(b.khauHao),
+      khac: ratio(b.khac),
+    },
+  };
+}

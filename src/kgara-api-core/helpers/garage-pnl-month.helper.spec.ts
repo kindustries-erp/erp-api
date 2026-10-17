@@ -4,6 +4,7 @@ import {
   monthWindow,
   reportMonthOf,
   toPnlMonthRow,
+  toPnlTrendPoint,
 } from './garage-pnl-month.helper';
 
 describe('garage-pnl-month.helper', () => {
@@ -159,6 +160,40 @@ describe('garage-pnl-month.helper', () => {
       expect(row.revenue).toBe(0);
       expect(row.opexItems).toEqual([]);
       expect(row.commissionItems).toEqual([]);
+    });
+  });
+  describe('toPnlTrendPoint', () => {
+    const row = toPnlMonthRow(
+      { year: 2026, month: 7 },
+      {
+        revenue: 1000,
+        cogs: 570,
+        grossProfit: 430,
+        opex: {
+          total: 300,
+          items: [
+            { categoryKey: 'NHAN_SU', categoryName: 'Nhân sự', amount: 110 },
+            { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 40 },
+            { categoryKey: 'LA', categoryName: 'Lạ', amount: 150 },
+          ],
+        },
+      },
+    );
+
+    it('tính tỷ trọng trên doanh thu và nhãn tháng', () => {
+      const p = toPnlTrendPoint(row);
+      expect(p.label).toBe('2026-thg 7');
+      expect(p.grossMarginRatio).toBeCloseTo(0.43);
+      expect(p.ratios.cogs).toBeCloseTo(0.57);
+      expect(p.ratios.nhanSu).toBeCloseTo(0.11);
+      expect(p.ratios.baoTri).toBeCloseTo(0.04);
+      expect(p.ratios.khac).toBeCloseTo(0.15);
+    });
+
+    it('doanh thu 0: ratios = 0 và grossMarginRatio = null', () => {
+      const p = toPnlTrendPoint({ ...row, revenue: 0 });
+      expect(p.grossMarginRatio).toBeNull();
+      expect(Object.values(p.ratios).every((v) => v === 0)).toBe(true);
     });
   });
 });

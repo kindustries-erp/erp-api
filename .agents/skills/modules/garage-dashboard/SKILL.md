@@ -223,6 +223,7 @@ Resource RBAC: `garage`
 | `POST`| `/opex/:id/apply-recurring` | `{ resource: 'garage', action: 'update' }`| `ApplyRecurringOpexDto` | Áp dụng thay đổi định kỳ (This vs This and Future) |
 | `DELETE`| `/opex/:id` | `{ resource: 'garage', action: 'delete' }`| `id` (uuid) | Xóa khoản chi phí vận hành |
 | `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L theo tháng kèm `cogsAdjustment` |
+| `GET` | `/pnl-trend` | `{ resource: 'garage', action: 'read' }` | `year`, `month`, `count` (mặc định 12, kẹp 1..24) | P&L nhiều tháng cũ→mới cho 2 chart web: `PnlTrendPoint[]` `{year, month, label, revenue, cogs, grossProfit, grossMarginRatio (null khi DT=0), ratios{cogs,nhanSu,matBang,vatTu,baoTri,khauHao,khac}}`; cùng nguồn `loadPnlMonthly` + `bucketOpex` với sheet Excel (`toPnlTrendPoint` trong `garage-pnl-month.helper.ts`, `GarageDashboardService.getPnlTrend`) |
 | `GET` | `/pnl-report/export` | `{ resource: 'garage', action: 'read' }`| `year`, `month` | Xuất file Excel Báo cáo P&L theo tháng |
 | `GET` | `/monthly-receivables-breakdown` | `{ resource: 'garage', action: 'read' }` | `month`, `branch_id` | Phân rã chi tiết Phải thu & Đã thu theo tháng: Thu KH, Thu BH, Từng Công ty Bảo hiểm & Cảnh báo VAT chưa xuất HĐ |
 | `GET` | `/debts-analytics` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Phân tích tổng hợp công nợ KH vs NCC, mốc thời gian & dự báo IFRS 9 |
@@ -290,3 +291,7 @@ Resource RBAC: `garage`
 1. **TypeCheck & Linting**: Chạy `bun run check:ci` trong `erp-api/` và `erp-web/`.
 2. **Backend Unit Tests**: Chạy `bunx jest src/kgara-api-core/ --forceExit` (bắt buộc pass 100%).
 3. **Web Build**: Chạy `bun run build` trong `erp-web/` (bắt buộc pass 100%).
+
+> **Bảng màu chart Excel (2026-10-17)**: `CHART_PALETTE` (`src/common/xlsx-charts/xlsx-chart.types.ts`) đổi sang tông chart Dòng tiền web: `059669, EA580C, 475569, E11D48, 7C3AED, 0D9488, CA8A04` (+3 màu dự phòng). Đường `% Lợi nhuận gộp` ở sheet Báo cáo lợi nhuận dùng slot teal `[5]`. Mọi sheet có chart dùng chung bảng này.
+
+> **Phễu chuyển đổi (2026-10-17)**: `conversionFunnel` / `conversionFunnelByMonth` (`garage-dashboard-stats.service.ts`) có thêm `quotation {count, amount, rate}` và `byClassification.*.quotationCount/quotationAmount`. Báo giá = phiếu chưa hoàn thành, chưa hủy và thỏa `quotationStatusSql(alias)` (`helpers/kgara-case-filter.helper.ts`, cùng điều kiện tab Báo giá của danh sách vụ việc); `inProgress*` chỉ còn phiếu chưa hoàn thành không phải báo giá.
