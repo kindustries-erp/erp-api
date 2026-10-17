@@ -45,6 +45,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
     - Cột `customer` (Khách hàng): Trả về danh sách distinct tên khách hàng, hỗ trợ lọc và tìm kiếm đồng thời cả tên và mã KH.
   - Bảng dạng `SpreadsheetPageTemplate` với variant spreadsheet không lồng viền, STT `{idx}` (không `{idx + 1}`), No Blue Mandate, SubtotalSummaryCell truyền đủ `cumulativeCount` và `cumulativeAmount` cho đa trang.
   - Phân rã kiến trúc Atomic Design 5 tầng, toàn bộ file component/organism khống chế nghiêm ngặt < 180 LoC.
+  - **Tab Tổng quan (`garage-debts?tab=overview`)**: Tái cấu trúc thành Organism chuẩn `garage-debts-dashboard-tab/` (< 150 LoC/file), gỡ bỏ hoàn toàn Filter Panel (phễu lọc & trượt phải) để tối ưu không gian hiển thị và tránh rối người dùng, dữ liệu phân tích tự động lấy theo chi nhánh kích hoạt. Trang bị cụm nút thao tác chuẩn gồm nút chính dạng Split Button **Xuất Excel** (kèm dropdown Xuất nâng cao / Đồng bộ) và nút **Tải lại (Reload)** đồng bộ 100% với các tab danh sách `SpreadsheetPageTemplate`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
   - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/ui-atomic-refactor` < 200 LoC/file, 100% i18n VI/EN).
   - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).

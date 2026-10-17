@@ -277,7 +277,7 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
     - `garage-cashflow-trend-panel` (`GarageCashflowTrendPanel.tsx`, 67 LoC) - Biểu đồ cột thu chi theo tháng.
     - `garage-cashflow-breakdown-panels` (`GarageCashflowBreakdownPanels.tsx`, 139 LoC) - 2 panels phân bổ theo Phương thức thanh toán và Nội dung thanh toán.
     - `garage-cashflow-top-txns-table` (`GarageCashflowTopTxnsTable.tsx`, 87 LoC) - Bảng Top 5 giao dịch thu lớn nhất và chi lớn nhất, tích hợp click mở Drawer.
-    - `garage-cashflow-dashboard` (`GarageCashflowDashboard.tsx`, 82 LoC; hook 131 LoC) - Organism bọc `DashboardTemplate`, tích hợp `useFilterPanel` theo chi nhánh, phương thức, trạng thái thanh toán và khoảng thời gian.
+    - `garage-cashflow-dashboard` (`GarageCashflowDashboard.tsx`, 120 LoC; hook 97 LoC) - Organism bọc `DashboardTemplate`, gỡ bỏ hoàn toàn Filter Panel (tối ưu hóa không gian hiển thị và trải nghiệm người dùng, tự động query theo chi nhánh `selectedBranchId`). Trang bị cụm nút chuẩn gồm Split Button **Xuất Excel** (tích hợp `GarageCashflowExportDrawer`) và nút **Tải lại (Reload)** đồng bộ với tab Sổ quỹ.
     - `garage-cashflow-tab` (`GarageCashflowTab.tsx`, 51 LoC; hook 74 LoC) - Bộ điều hướng giữ trạng thái 2 views.
   - **L4 Templates**: `DashboardTemplate` (khung chuẩn hoá của ERP Web).
   - **L5 Pages**: `GarageCashflowPage` (`GarageCashflowPage.tsx`, 23 LoC) - Entry point phân quyền RBAC `GARAGE_CASHFLOW:READ`.
