@@ -192,3 +192,8 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
 ## Dòng opex sinh từ phiếu chi garage (cập nhật 2026-10-17)
 - Bảng `kgara_operating_expenses` có thêm `source_cashflow_voucher_id` (uuid, nullable, FK → `kgara_cashflow_vouchers.id` `ON DELETE CASCADE`, index `idx_kgara_opex_source_voucher`). Có giá trị = khoản chi ghi nhận từ phiếu chi 4. HHBH / 8. Vật tư tiêu hao (xem `garage-cashflow/SKILL.md`).
 - `GarageOpexService.update`, `applyRecurring`, `delete` từ chối dòng có `source_cashflow_voucher_id` (chỉ sửa/xóa qua phiếu chi gốc). List/detail trả thêm `sourceCashflowVoucherId`; web coi dòng này là chỉ đọc.
+
+## 8. Chuẩn Hóa Giao Diện Web (Cập nhật 2026-10-17)
+- **Toolbar Combobox Dropdown**: Thay thế thanh ngang `PillTabs` bằng `GarageViewModeCombobox` (kế thừa `ViewModeCombobox` từ `@/shared/components/ViewModeCombobox`) gọn gàng trên `SpreadsheetPageTemplate`:
+  - **Tầng 1 (Filter Group - Nhóm chi phí)**: `Tất cả` (`ALL`), `CP Vận hành` (`OPEX`), `Giá vốn (COGS)` (`COGS`), `Hoa hồng` (`COMMISSION`).
+  - **Tầng 2 (Chế độ xem cột - View Presets)**: `Tổng quan` (`overview`), `Đầy đủ` (`all_columns`), lưu cấu hình vào `useUserPreferencesStore` (`garage-opex-column-views`).
