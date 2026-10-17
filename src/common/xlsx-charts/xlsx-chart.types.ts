@@ -61,6 +61,8 @@ export interface XlsxChartSpec {
    * Mặc định `false` nên không ảnh hưởng chart khác.
    */
   compact?: boolean;
+  /** Nhãn trục danh mục nằm ở đáy chart (không đè lên cột âm); mặc định `false`. */
+  categoryLabelsLow?: boolean;
   /** Hiện chú thích (legend) khi có nhiều series; mặc định `true`. */
   showLegend?: boolean;
   /** Cận dưới / cận trên cố định của trục phụ (vd 0 để % không bị phóng đại). */

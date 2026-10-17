@@ -1,28 +1,60 @@
 import type { PnlMonthRow } from './garage-pnl-month.helper';
 
+/** Nhóm của một bước: cùng nhóm thì cùng màu trong waterfall. */
+export type WaterfallGroup =
+  | 'revenue'
+  | 'cogs'
+  | 'profit'
+  | 'selling'
+  | 'opex'
+  | 'commission';
+
 /** Một bước của waterfall: tổng (cột từ 0) hoặc giảm (cột trôi từ số dư trước). */
 export interface WaterfallStep {
   label: string;
   value: number;
   kind: 'total' | 'decrease';
+  group: WaterfallGroup;
 }
 
-/** Chuỗi cột chồng của waterfall, cùng thứ tự series trong chart. */
+/** Phần dương và âm của một nhóm, theo từng bước (0 khi bước không thuộc nhóm). */
+export interface WaterfallGroupSeries {
+  group: WaterfallGroup;
+  name: string;
+  color: string;
+  pos: number[];
+  neg: number[];
+}
+
+/** Chuỗi cột chồng của waterfall: nền vô hình, rồi một cặp dương/âm cho mỗi nhóm. */
 export interface WaterfallSeries {
   categories: string[];
-  /** Nền vô hình: đệm từ 0 tới đáy của mỗi cột trôi. */
   base: number[];
-  /** Phần dương của cột tổng (doanh thu, lợi nhuận). */
-  totalPos: number[];
-  /** Phần âm của cột tổng (lỗ). */
-  totalNeg: number[];
-  /** Phần dương của cột giảm (chi phí, hoa hồng). */
-  costPos: number[];
-  /** Phần âm của cột giảm (vượt qua mức 0). */
-  costNeg: number[];
+  groups: WaterfallGroupSeries[];
 }
 
+/** Màu theo nhóm, lấy từ bảng màu chart sẵn có. */
+export const WATERFALL_GROUP_STYLE: Record<
+  WaterfallGroup,
+  { name: string; color: string }
+> = {
+  revenue: { name: 'Doanh thu', color: '059669' },
+  cogs: { name: 'Giá vốn', color: 'E11D48' },
+  profit: { name: 'Lợi nhuận', color: '475569' },
+  selling: { name: 'Chi phí bán hàng', color: 'EA580C' },
+  opex: { name: 'Chi phí vận hành', color: '7C3AED' },
+  commission: { name: 'Hoa hồng DV', color: 'CA8A04' },
+};
+
 const SALE_KEY = 'HOA_HONG_SALE';
+const GROUP_ORDER: WaterfallGroup[] = [
+  'revenue',
+  'cogs',
+  'profit',
+  'selling',
+  'opex',
+  'commission',
+];
 
 /** Số tiền gọn cho nhãn trục: "444,2tr" (triệu), "138k" (nghìn), còn lại giữ nguyên. */
 const compactMoney = (value: number) => {
@@ -40,40 +72,63 @@ export function buildWaterfallSteps(m: PnlMonthRow): WaterfallStep[] {
   const selling = saleAmount + m.hhbhTotal;
   const net1 = m.grossProfit - selling - m.opexTotal;
   return [
-    { label: 'Doanh thu', value: m.revenue, kind: 'total' },
-    { label: 'Giá vốn', value: m.cogs, kind: 'decrease' },
-    { label: 'Lợi nhuận gộp', value: m.grossProfit, kind: 'total' },
-    { label: 'Chi phí bán hàng', value: selling, kind: 'decrease' },
-    { label: 'Chi phí vận hành', value: m.opexTotal, kind: 'decrease' },
-    { label: 'Lợi nhuận ròng', value: net1, kind: 'total' },
+    { label: 'Doanh thu', value: m.revenue, kind: 'total', group: 'revenue' },
+    { label: 'Giá vốn', value: m.cogs, kind: 'decrease', group: 'cogs' },
+    {
+      label: 'Lợi nhuận gộp',
+      value: m.grossProfit,
+      kind: 'total',
+      group: 'profit',
+    },
+    {
+      label: 'Chi phí bán hàng',
+      value: selling,
+      kind: 'decrease',
+      group: 'selling',
+    },
+    {
+      label: 'Chi phí vận hành',
+      value: m.opexTotal,
+      kind: 'decrease',
+      group: 'opex',
+    },
+    { label: 'Lợi nhuận ròng', value: net1, kind: 'total', group: 'profit' },
     {
       label: 'Hoa hồng DV',
       value: Math.round(m.commissionTotal - saleAmount),
       kind: 'decrease',
+      group: 'commission',
     },
-    { label: 'LN sau hoa hồng', value: m.netAfterCommission, kind: 'total' },
+    {
+      label: 'LN sau hoa hồng',
+      value: m.netAfterCommission,
+      kind: 'total',
+      group: 'profit',
+    },
   ];
 }
 
 /**
- * Chuyển các bước thành chuỗi cột chồng. Mỗi cột có đáy (nền) và đoạn nằm trên hoặc dưới mốc
- * 0; cột vắt qua 0 được tách thành phần dương và phần âm. Nhãn trục có tên bước, số tiền và
- * % trên doanh thu.
+ * Chuyển các bước thành chuỗi cột chồng. Mỗi cột có đáy vô hình và đoạn nằm trên hoặc dưới mốc 0
+ * (cột vắt qua 0 được tách phần dương và phần âm). Mỗi nhóm có một cặp series cùng màu. Nhãn trục
+ * có hai dòng: tên bước, rồi số tiền và % trên doanh thu.
  */
 export function buildWaterfallSeries(
   steps: WaterfallStep[],
   revenue: number,
 ): WaterfallSeries {
-  const out: WaterfallSeries = {
-    categories: [],
-    base: [],
-    totalPos: [],
-    totalNeg: [],
-    costPos: [],
-    costNeg: [],
-  };
+  const n = steps.length;
+  const zeros = () => Array.from({ length: n }, () => 0);
+  const groups: WaterfallGroupSeries[] = GROUP_ORDER.map((group) => ({
+    group,
+    name: WATERFALL_GROUP_STYLE[group].name,
+    color: WATERFALL_GROUP_STYLE[group].color,
+    pos: zeros(),
+    neg: zeros(),
+  }));
+  const out: WaterfallSeries = { categories: [], base: zeros(), groups };
   let running = 0;
-  for (const step of steps) {
+  steps.forEach((step, i) => {
     const end = step.kind === 'total' ? step.value : running - step.value;
     const start = step.kind === 'total' ? 0 : running;
     running = end;
@@ -83,7 +138,7 @@ export function buildWaterfallSeries(
       revenue > 0
         ? ` · ${((step.value / revenue) * 100).toFixed(1).replace('.', ',')}%`
         : '';
-    out.categories.push(`${step.label} · ${compactMoney(step.value)}${share}`);
+    out.categories.push(`${step.label}\n${compactMoney(step.value)}${share}`);
 
     let base = 0;
     let pos = 0;
@@ -98,18 +153,10 @@ export function buildWaterfallSeries(
       pos = hi;
       neg = lo;
     }
-    out.base.push(base);
-    if (step.kind === 'total') {
-      out.totalPos.push(pos);
-      out.totalNeg.push(neg);
-      out.costPos.push(0);
-      out.costNeg.push(0);
-    } else {
-      out.totalPos.push(0);
-      out.totalNeg.push(0);
-      out.costPos.push(pos);
-      out.costNeg.push(neg);
-    }
-  }
+    out.base[i] = base;
+    const target = groups.find((g) => g.group === step.group)!;
+    target.pos[i] = pos;
+    target.neg[i] = neg;
+  });
   return out;
 }

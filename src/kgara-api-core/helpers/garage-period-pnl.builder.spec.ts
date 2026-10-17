@@ -137,13 +137,13 @@ describe('buildPnlSheet', () => {
 
     // bảng dữ liệu biểu đồ nằm dưới màn hình đầu, không dưới chart
     const sheet = wb.getWorksheet(PNL_SHEET)!;
-    expect(sheet.getCell('E44').value).toContain('Dữ liệu biểu đồ');
-    expect(sheet.pageSetup.printArea).toBe('A1:N41');
+    expect(sheet.getCell('E80').value).toContain('Dữ liệu biểu đồ');
+    expect(sheet.pageSetup.printArea).toBe('A1:N77');
   });
 
   it('bật nhãn số cho chart 12 tháng (tiền theo triệu, % cho đường); waterfall không nhãn số, không chú thích', () => {
     const wb = new ExcelJS.Workbook();
-    const [combo, waterfall] = buildPnlSheet(wb, twelveMonths());
+    const [combo, ratio, waterfall] = buildPnlSheet(wb, twelveMonths());
 
     expect(combo).toMatchObject({
       dataLabels: true,
@@ -151,9 +151,12 @@ describe('buildPnlSheet', () => {
       labelFontSize: 700,
     });
     expect(combo.series[3].labelNumFmt).toBe('0%');
+    expect(ratio).toMatchObject({
+      dataLabels: true,
+      labelNumFmt: LABEL_PERCENT_FMT,
+    });
     expect(waterfall.dataLabels).toBeFalsy();
     expect(waterfall.showLegend).toBe(false);
-    expect(LABEL_PERCENT_FMT).toBeDefined();
   });
 
   it('tháng không có doanh thu: % lợi nhuận gộp để trống (null) thay vì 0%', () => {
@@ -187,7 +190,7 @@ describe('buildPnlSheet', () => {
     expect(sheet.getCell('A1').value).toBe('Báo cáo lợi nhuận - Tháng 07/2026');
     expect(sheet.getCell('A4').value).toBe('Danh mục');
     expect(sheet.getCell('B4').value).toBe('Tháng 07/2026');
-    expect(sheet.getCell('C4').value).toBe('Tháng trước 06/2026');
+    expect(sheet.getCell('C4').value).toBe('Trước: Tháng 06/2026');
     expect(sheet.getCell('A5').value).toBe('1. Doanh thu');
     expect(sheet.getCell('B5').value).toBe(444218804);
     expect(sheet.getCell('A5').font?.bold).toBe(true);
@@ -196,9 +199,9 @@ describe('buildPnlSheet', () => {
 
   it('2 chart: combo 12 tháng có % lợi nhuận gộp trên trục phụ; waterfall tháng báo cáo là cột chồng có nền vô hình', async () => {
     const { charts } = await build();
-    expect(charts).toHaveLength(2);
+    expect(charts).toHaveLength(4);
 
-    const [combo, waterfall] = charts;
+    const [combo, , waterfall] = charts;
     expect(combo.type).toBe('combo');
     expect(combo.categories).toHaveLength(12);
     expect(combo.categories[0]).toBe('2025-thg 8');
@@ -214,16 +217,21 @@ describe('buildPnlSheet', () => {
     expect(line.values[0]).toBeCloseTo(202710586 / 444218804, 6);
 
     expect(waterfall.stacked).toBe(true);
-    expect(waterfall.series.map((s) => s.name)).toEqual([
-      'Nền',
-      'Tổng',
-      'Tổng (âm)',
-      'Chi phí',
-      'Chi phí (âm)',
-    ]);
+    expect(waterfall.series.map((s) => s.name)).toEqual(
+      expect.arrayContaining([
+        'Nền',
+        'Doanh thu',
+        'Giá vốn',
+        'Chi phí bán hàng',
+        'Chi phí vận hành',
+        'Hoa hồng DV',
+        'Giá vốn (âm)',
+      ]),
+    );
     expect(waterfall.series[0].hidden).toBe(true);
+    expect(waterfall.series).toHaveLength(13);
     expect(waterfall.categories).toHaveLength(8);
-    expect(waterfall.categories[0]).toBe('Doanh thu · 444,2tr · 100,0%');
+    expect(waterfall.categories[0]).toBe('Doanh thu\n444,2tr · 100,0%');
   });
 
   it('chart được chèn vào đúng sheet với trục phụ và grouping stacked', async () => {
@@ -232,7 +240,7 @@ describe('buildPnlSheet', () => {
     const chartFiles = Object.keys(zip.files).filter((p) =>
       /^xl\/charts\/chart\d+\.xml$/.test(p),
     );
-    expect(chartFiles).toHaveLength(2);
+    expect(chartFiles).toHaveLength(4);
     const xmls = await Promise.all(
       chartFiles.map((p) => zip.file(p)!.async('string')),
     );
@@ -426,7 +434,7 @@ describe('buildPnlSheet - cột tháng trước và vùng in', () => {
     buildPnlSheet(wb, [month(2026, 7)]);
     const sheet = wb.getWorksheet(PNL_SHEET)!;
 
-    expect(sheet.getCell('C4').value).toBe('Tháng trước');
+    expect(sheet.getCell('C4').value).toBe('Trước');
     expect(sheet.getCell('C5').value).toBeNull();
   });
 

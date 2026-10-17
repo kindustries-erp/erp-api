@@ -37,6 +37,13 @@ const parse = (xml: string) => {
 };
 
 describe('buildChartXml', () => {
+  it('categoryLabelsLow: nhãn trục danh mục ở đáy (low), mặc định nextTo', () => {
+    const low = buildChartXml(spec({ categoryLabelsLow: true }), 'Báo cáo');
+    expect(low).toContain('<c:tickLblPos val="low"/>');
+    const normal = buildChartXml(spec(), 'Báo cáo');
+    expect(normal).not.toContain('<c:tickLblPos val="low"/>');
+  });
+
   it('series ẩn không tô màu, không nhãn; showLegend:false bỏ chú thích', () => {
     const xml = buildChartXml(
       spec({

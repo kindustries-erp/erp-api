@@ -201,7 +201,7 @@ describe('buildGaragePeriodReport', () => {
     );
     const wb = await load(buffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Báo cáo lợi nhuận']);
-    expect(await chartCount(buffer)).toBe(2);
+    expect(await chartCount(buffer)).toBe(4);
   });
 
   it('reportType=cashflow-debts: dashboard, công nợ, thu chi; không có P&L và nợ quá hạn', async () => {
@@ -330,10 +330,10 @@ describe('buildGaragePeriodReport', () => {
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
-  it('5 chart: 3 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm) và 2 ở Báo cáo lợi nhuận', async () => {
+  it('7 chart: 3 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm) và 4 ở Báo cáo lợi nhuận', async () => {
     for (const patch of [{}, { customerSections: undefined }]) {
       const buffer = await buildGaragePeriodReport(baseData(patch));
-      expect(await chartCount(buffer)).toBe(5);
+      expect(await chartCount(buffer)).toBe(7);
     }
 
     const zip = await JSZip.loadAsync(
@@ -346,7 +346,7 @@ describe('buildGaragePeriodReport', () => {
     );
     expect(xmls.filter((x) => x.includes("'Báo cáo'!"))).toHaveLength(3);
     expect(xmls.filter((x) => x.includes("'Báo cáo lợi nhuận'!"))).toHaveLength(
-      2,
+      4,
     );
     // mọi chart có tiêu đề (trừ waterfall, không nhãn số để đỡ rối) đều có nhãn số
     expect(

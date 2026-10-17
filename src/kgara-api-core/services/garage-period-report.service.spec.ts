@@ -70,10 +70,10 @@ describe('GaragePeriodReportService', () => {
       '2026-09-30',
       'CN1',
     );
-    expect(queries.loadPnlMonthly).toHaveBeenCalledWith({
-      year: 2026,
-      month: 9,
-    });
+    expect(queries.loadPnlMonthly).toHaveBeenCalledWith(
+      { year: 2026, month: 9 },
+      12,
+    );
     expect(debtsExport.resolveBranchLabel).toHaveBeenCalledWith('CN1');
   });
 

@@ -10,7 +10,11 @@ import type {
   GarageDebtGroupExportSection,
 } from '../helpers/garage-debts-export.helper';
 import { resolveBucketUnit } from '../helpers/garage-period-bucket.helper';
-import { reportMonthOf } from '../helpers/garage-pnl-month.helper';
+import {
+  groupPnlPeriods,
+  periodWindowSize,
+  resolvePnlPeriod,
+} from '../helpers/garage-pnl-period.helper';
 import { buildGaragePeriodReport } from '../helpers/garage-period-report.helper';
 import type { PreviousPeriodData } from '../helpers/garage-period-report.types';
 import { previousPeriodRange } from '../helpers/garage-period-previous.helper';
@@ -94,13 +98,18 @@ export class GaragePeriodReportService {
     onProgress(65, total, 'Đang tổng hợp thu chi và báo cáo lợi nhuận...');
     // Chart theo thời gian gom ngày/tuần/tháng theo độ dài kỳ; chỉ truy vấn khi sheet cần
     const bucketUnit = resolveBucketUnit(dto.from, dto.to);
-    const [vouchers, pnlMonths, branchLabel] = await Promise.all([
+    // Kỳ lợi nhuận: tháng, quý trọn hoặc nhiều tháng; các tháng được cộng gộp theo kỳ
+    const pnlPeriod = resolvePnlPeriod(dto.from, dto.to, asOfDate);
+    const [vouchers, pnlMonthRows, branchLabel] = await Promise.all([
       needsVouchers
         ? this.queries.loadVouchers(dto.from, dto.to, branchId || undefined)
         : [],
       // P&L theo tháng: 12 tháng kết thúc ở tháng chứa ngày kết thúc kỳ (không vượt hôm nay)
       needsPnl
-        ? this.queries.loadPnlMonthly(reportMonthOf(dto.to, asOfDate))
+        ? this.queries.loadPnlMonthly(
+            pnlPeriod.end,
+            periodWindowSize(pnlPeriod.size),
+          )
         : [],
       this.debtsExport.resolveBranchLabel(branchId),
     ]);
@@ -142,7 +151,8 @@ export class GaragePeriodReportService {
       to: dto.to,
       asOfDate,
       branchLabel,
-      pnlMonths,
+      pnlMonths: groupPnlPeriods(pnlMonthRows, pnlPeriod.size),
+      pnlPeriodSize: pnlPeriod.size,
       vouchers,
       customerRows,
       supplierRows,

@@ -40,6 +40,9 @@ export interface PnlMonthRow {
   commissionTotal: number;
   commissionItems: PnlLineItem[];
   netAfterCommission: number;
+  /** Kỳ đã cộng gộp (quý, nhiều tháng): tháng đầu và số tháng; thiếu thì là một tháng (`year`/`month`). */
+  periodStart?: PnlMonthRef;
+  periodMonths?: number;
 }
 
 export interface OpexBuckets {

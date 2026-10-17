@@ -247,7 +247,9 @@ export async function buildGaragePeriodReport(
     ? createDashboardSheet(workbook, PERIOD_REPORT_SHEET, PERIOD_REPORT_COLUMNS)
     : null;
   const pnlCharts = sectionSet.has('pnl')
-    ? buildPnlSheet(workbook, data.pnlMonths)
+    ? buildPnlSheet(workbook, data.pnlMonths, {
+        periodSize: data.pnlPeriodSize ?? 1,
+      })
     : null;
 
   if (sectionSet.has('receivables')) {

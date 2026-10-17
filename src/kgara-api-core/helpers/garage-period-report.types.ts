@@ -26,6 +26,8 @@ export interface GaragePeriodReportData {
   branchLabel?: string;
   /** P&L 12 tháng gần nhất, cũ đến mới; tháng cuối là tháng báo cáo. */
   pnlMonths: PnlMonthRow[];
+  /** Số tháng của một kỳ lợi nhuận (1 = tháng, 3 = quý, ...). */
+  pnlPeriodSize?: number;
   /** Phiếu thu/chi xưởng có `trans_date` trong kỳ. */
   vouchers: PeriodVoucherRow[];
   /** Công nợ của phiếu hoàn thành trong kỳ (cho các sheet chi tiết). */
