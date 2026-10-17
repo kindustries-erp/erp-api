@@ -3,20 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { GARAGE_AGING_BUCKET_RANGES } from '../helpers/garage-aging-bucket.helper';
 
 /** Mốc bắt đầu theo dõi công nợ: từ 07/2026 (2026-07-01). */
 export const GARAGE_DEBT_BASELINE_DATE = '2026-07-01';
-
-/**
- * Khoảng tuổi nợ (ngày) cho bộ lọc `agingBucket`. Xe được giữ lại khi tổng
- * số dư trong khoảng này > 0, nên tổng cột tương ứng khớp với dữ liệu lọc.
- */
-const AGING_BUCKET_RANGES: Record<string, string> = {
-  '0-30': '<= 30',
-  '31-60': 'BETWEEN 31 AND 60',
-  '61-90': 'BETWEEN 61 AND 90',
-  '>90': '> 90',
-};
 
 export type CustomersDebtQueryParams = {
   page?: string;
@@ -279,7 +269,7 @@ export class KgaraCustomersDebtQueryService {
           } else if (col === 'agingBucket') {
             const subConds: string[] = [];
             for (const v of values) {
-              const range = AGING_BUCKET_RANGES[v];
+              const range = GARAGE_AGING_BUCKET_RANGES[v];
               if (!range) continue;
               subConds.push(
                 `(COALESCE(SUM(CASE WHEN COALESCE("case"."tien_con_phai_thanh_toan", 0) > 0 AND (CURRENT_DATE - DATE("case"."ngay_hoan_thanh_cong_viec")) ${range} THEN "case"."tien_con_phai_thanh_toan" ELSE 0 END), 0) > 0)`,

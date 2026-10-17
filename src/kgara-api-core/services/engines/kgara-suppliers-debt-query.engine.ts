@@ -8,6 +8,7 @@ import {
 import { KgaraCase } from '../../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../../entities/kgara_gross_profit.entity';
 import { KGARA_STATUS_COMPLETED } from '../../helpers/kgara-completion-date.helper';
+import { GARAGE_AGING_BUCKET_RANGES } from '../../helpers/garage-aging-bucket.helper';
 
 /** Công nợ phải trả chỉ tính phiếu ERP đã Kết thúc (3), không lấy dòng lãi gộp chưa có phiếu. */
 const COMPLETED_CASE_CONDITIONS = [
@@ -190,6 +191,22 @@ export class KgaraSuppliersDebtQueryEngine {
               );
               queryParams.push(numVals);
             }
+            continue;
+          }
+
+          if (col === 'agingBucket') {
+            const subConds: string[] = [];
+            const ageExpr = `(CURRENT_DATE - DATE(${dateExpr}))`;
+            for (const v of values) {
+              const range = GARAGE_AGING_BUCKET_RANGES[v];
+              if (!range) continue;
+              // Giữ xe có ít nhất một phiếu số dư khác 0 trong mốc (phải trả có thể âm).
+              subConds.push(
+                `(COUNT(CASE WHEN ${ageExpr} ${range} AND ${balanceExpr} <> 0 THEN 1 END) > 0)`,
+              );
+            }
+            if (subConds.length > 0)
+              havingConditions.push(`(${subConds.join(' OR ')})`);
             continue;
           }
 

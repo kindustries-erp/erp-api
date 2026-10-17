@@ -70,6 +70,27 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
     expect(filtered.total).toBe(1);
   });
 
+  it('agingBucket: giữ xe có phiếu số dư khác 0 trong mốc (HAVING COUNT > 0)', async () => {
+    caseRepo.manager.query
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([]);
+
+    await engine.getSuppliersDebt({
+      branchId: 'BR-01',
+      page: 1,
+      pageSize: 20,
+      column_filters: JSON.stringify({ agingBucket: ['31-60'] }),
+    });
+
+    const calls = caseRepo.manager.query.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [sql] of calls) {
+      expect(sql).toContain('HAVING');
+      expect(sql).toContain('BETWEEN 31 AND 60 AND');
+      expect(sql).toContain('<> 0 THEN 1 END) > 0');
+    }
+  });
+
   it('should return caseCount options correctly', async () => {
     caseRepo.manager.query.mockResolvedValueOnce([
       { value: '1' },
