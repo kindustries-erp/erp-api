@@ -64,16 +64,16 @@ export const LABEL_MONEY_FMT = '[>=1000000]#,##0.0,,"tr";[>=1000]#,##0,"k";""';
 /** Nhãn phần trăm (`35%`), ẩn các giá trị dưới 3% để chart cột chồng đỡ rối. */
 export const LABEL_PERCENT_FMT = '[<0.03]"";0%';
 
-/** Bảng màu trung tính (không dùng xanh dương). */
+/** Bảng màu trung tính (không dùng xanh dương), cùng tông với chart Dòng tiền trên web. */
 export const CHART_PALETTE = [
   '059669', // emerald
-  'D97706', // amber
+  'EA580C', // orange
   '475569', // slate
   'E11D48', // rose
   '7C3AED', // violet
   '0D9488', // teal
   'CA8A04', // yellow
   '9333EA', // purple
-  'EA580C', // orange
+  'D97706', // amber
   '64748B', // slate-light
 ];

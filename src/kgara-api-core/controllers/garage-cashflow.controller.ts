@@ -26,6 +26,8 @@ import {
   KgaraCashflowVoucherResponseDto,
   CheckKgaraCashflowDuplicateQueryDto,
   KgaraCashflowDuplicateResponseDto,
+  GarageCashflowDashboardQueryDto,
+  GarageCashflowDashboardResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @ApiTags('greenway_cashflow')
@@ -51,8 +53,10 @@ export class GarageCashflowController {
     resource: ErpResource.GARAGE_CASHFLOW,
     action: ErpAction.READ,
   })
-  async getDashboard() {
-    return this.cashflowService.getDashboardStats();
+  async getDashboard(
+    @Query() query: GarageCashflowDashboardQueryDto,
+  ): Promise<GarageCashflowDashboardResponseDto> {
+    return this.cashflowService.getDashboardStats(query);
   }
 
   @Get('column-options')

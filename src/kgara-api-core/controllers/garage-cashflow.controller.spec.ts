@@ -78,4 +78,17 @@ describe('GarageCashflowController RBAC Permissions', () => {
       { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.DELETE },
     ]);
   });
+
+  it('getDashboard calls cashflowService.getDashboardStats with query', async () => {
+    const mockService = {
+      getDashboardStats: jest.fn().mockResolvedValue({ kpi: {} }),
+    };
+    const controller = new GarageCashflowController(mockService as any);
+    const query = { dateFrom: '2026-10-01', dateTo: '2026-10-15' };
+
+    const result = await controller.getDashboard(query);
+
+    expect(mockService.getDashboardStats).toHaveBeenCalledWith(query);
+    expect(result).toEqual({ kpi: {} });
+  });
 });

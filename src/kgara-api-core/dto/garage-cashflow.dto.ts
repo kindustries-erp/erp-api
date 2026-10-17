@@ -302,3 +302,86 @@ export class KgaraCashflowDuplicateResponseDto {
   sameCase: KgaraCashflowDuplicateGroupDto;
   samePlate: KgaraCashflowDuplicateGroupDto;
 }
+
+export class GarageCashflowDashboardQueryDto {
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentContent?: string;
+
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+}
+
+export class GarageCashflowKpiDto {
+  totalIn: number;
+  totalOut: number;
+  net: number;
+  countIn: number;
+  countOut: number;
+  pendingOutAmount: number;
+  pendingOutCount: number;
+}
+
+export class GarageCashflowBreakdownItemDto {
+  name: string;
+  amount: number;
+  count: number;
+  percentage?: number;
+}
+
+export class GarageCashflowMethodBreakdownDto {
+  in: GarageCashflowBreakdownItemDto[];
+  out: GarageCashflowBreakdownItemDto[];
+}
+
+export class GarageCashflowContentBreakdownDto {
+  in: GarageCashflowBreakdownItemDto[];
+  out: GarageCashflowBreakdownItemDto[];
+}
+
+export class GarageCashflowTrendItemDto {
+  label: string;
+  cashIn: number;
+  cashOut: number;
+  net: number;
+}
+
+export class GarageCashflowTopTransactionItemDto {
+  id: string;
+  voucherCode: string;
+  transDate: string;
+  amount: number;
+  partnerName?: string | null;
+  licensePlate?: string | null;
+  paymentMethod?: string | null;
+  paymentContent?: string | null;
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  caseCode?: string | null;
+  caseId?: string | null;
+}
+
+export class GarageCashflowTopTransactionsDto {
+  in: GarageCashflowTopTransactionItemDto[];
+  out: GarageCashflowTopTransactionItemDto[];
+}
+
+export class GarageCashflowDashboardResponseDto {
+  kpi: GarageCashflowKpiDto;
+  methodBreakdown: GarageCashflowMethodBreakdownDto;
+  contentBreakdown: GarageCashflowContentBreakdownDto;
+  trend: GarageCashflowTrendItemDto[];
+  topTransactions: GarageCashflowTopTransactionsDto;
+}

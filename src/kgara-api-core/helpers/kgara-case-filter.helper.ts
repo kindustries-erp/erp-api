@@ -7,6 +7,16 @@ import {
 } from '../../common/utils/query-builder.util';
 
 /**
+ * Điều kiện SQL của trạng thái "Báo giá" (tab Báo giá của danh sách vụ việc và giai đoạn
+ * Báo giá của phễu chuyển đổi Dashboard), `alias` là alias bảng `kgara_case` trong truy vấn.
+ */
+export function quotationStatusSql(alias: string): string {
+  const status = `"${alias}"."tinh_trang_dich_vu"`;
+  const name = `"${alias}"."ten_tinh_trang_dich_vu"`;
+  return `(${status} = 1 OR ${name} ILIKE '%báo giá%' OR ${name} ILIKE '%nháp%' OR ${name} ILIKE '%chờ%')`;
+}
+
+/**
  * Ánh xạ tên cột sang biểu thức SQL cho truy vấn Vụ việc (KgaraCase)
  */
 export function getCaseColumnSelectExpr(column: string): string | null {
@@ -272,9 +282,7 @@ export function applySingleCaseColumnFilter(
   if (column === 'statusTab') {
     const conditions: string[] = [];
     if (values.includes('quotation')) {
-      conditions.push(
-        '("case"."tinh_trang_dich_vu" = 1 OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%báo giá%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%nháp%\' OR "case"."ten_tinh_trang_dich_vu" ILIKE \'%chờ%\')',
-      );
+      conditions.push(quotationStatusSql('case'));
     }
     if (values.includes('in_progress')) {
       conditions.push(

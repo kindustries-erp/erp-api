@@ -5,6 +5,7 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { format, subMonths } from 'date-fns';
+import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
 
 @Injectable()
 export class GarageDashboardStatsService {
@@ -985,6 +986,10 @@ export class GarageDashboardStatsService {
       .sort((a, b) => b.revenue - a.revenue);
 
     // 1.4.1 Phễu Chuyển đổi Dịch vụ (Conversion Funnel) theo 4 nhóm Phân loại ERP
+    // Phiếu chưa hoàn thành, chưa hủy: tách thành Báo giá và Đang xử lý
+    const openCase =
+      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+    const quotation = quotationStatusSql('c');
     const funnelQb = this.caseRepo
       .createQueryBuilder('c')
       .select(
@@ -1019,11 +1024,19 @@ export class GarageDashboardStatsService {
         'completedAmount',
       )
       .addSelect(
-        'COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN c.id END)',
+        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN c.id END)`,
+        'quotationCount',
+      )
+      .addSelect(
+        `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+        'quotationAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND NOT ${quotation} THEN c.id END)`,
         'inProgressCount',
       )
       .addSelect(
-        'SUM(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        `SUM(CASE WHEN ${openCase} AND NOT ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
         'inProgressAmount',
       )
       .where('c.kgara_deleted_at IS NULL')
@@ -1039,6 +1052,7 @@ export class GarageDashboardStatsService {
 
     const buildFunnelObj = () => ({
       totalIntake: { count: 0, amount: 0 },
+      quotation: { count: 0, amount: 0, rate: 0 },
       inProgress: { count: 0, amount: 0, rate: 0 },
       completed: { count: 0, amount: 0, rate: 0 },
       cancelled: { count: 0, amount: 0, rate: 0 },
@@ -1047,6 +1061,8 @@ export class GarageDashboardStatsService {
           name: 'Sửa chữa chung',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1060,6 +1076,8 @@ export class GarageDashboardStatsService {
           name: 'Ký gửi / Nội bộ',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1073,6 +1091,8 @@ export class GarageDashboardStatsService {
           name: 'OJ Ngoài',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1086,6 +1106,8 @@ export class GarageDashboardStatsService {
           name: 'Khác',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1109,6 +1131,8 @@ export class GarageDashboardStatsService {
       const key = f.classificationKey || 'KHAC';
       const totCnt = Number(f.totalCount) || 0;
       const totAmt = Number(f.totalAmount) || 0;
+      const quoCnt = Number(f.quotationCount) || 0;
+      const quoAmt = Number(f.quotationAmount) || 0;
       const inProgCnt = Number(f.inProgressCount) || 0;
       const inProgAmt = Number(f.inProgressAmount) || 0;
       const compCnt = Number(f.completedCount) || 0;
@@ -1124,6 +1148,8 @@ export class GarageDashboardStatsService {
       // Month totals
       mFunnel.totalIntake.count += totCnt;
       mFunnel.totalIntake.amount += totAmt;
+      mFunnel.quotation.count += quoCnt;
+      mFunnel.quotation.amount += quoAmt;
       mFunnel.inProgress.count += inProgCnt;
       mFunnel.inProgress.amount += inProgAmt;
       mFunnel.completed.count += compCnt;
@@ -1136,6 +1162,8 @@ export class GarageDashboardStatsService {
         const c = mFunnel.byClassification[key];
         c.totalCount += totCnt;
         c.totalAmount += totAmt;
+        c.quotationCount += quoCnt;
+        c.quotationAmount += quoAmt;
         c.inProgressCount += inProgCnt;
         c.inProgressAmount += inProgAmt;
         c.completedCount += compCnt;
@@ -1147,6 +1175,8 @@ export class GarageDashboardStatsService {
       // Overall totals
       conversionFunnel.totalIntake.count += totCnt;
       conversionFunnel.totalIntake.amount += totAmt;
+      conversionFunnel.quotation.count += quoCnt;
+      conversionFunnel.quotation.amount += quoAmt;
       conversionFunnel.inProgress.count += inProgCnt;
       conversionFunnel.inProgress.amount += inProgAmt;
       conversionFunnel.completed.count += compCnt;
@@ -1159,6 +1189,8 @@ export class GarageDashboardStatsService {
         const c = conversionFunnel.byClassification[key];
         c.totalCount += totCnt;
         c.totalAmount += totAmt;
+        c.quotationCount += quoCnt;
+        c.quotationAmount += quoAmt;
         c.inProgressCount += inProgCnt;
         c.inProgressAmount += inProgAmt;
         c.completedCount += compCnt;
@@ -1171,6 +1203,8 @@ export class GarageDashboardStatsService {
     // Compute conversion rates
     const computeRates = (target: ReturnType<typeof buildFunnelObj>) => {
       const tot = target.totalIntake.count || 1;
+      target.quotation.rate =
+        Math.round((target.quotation.count / tot) * 1000) / 10;
       target.inProgress.rate =
         Math.round((target.inProgress.count / tot) * 1000) / 10;
       target.completed.rate =

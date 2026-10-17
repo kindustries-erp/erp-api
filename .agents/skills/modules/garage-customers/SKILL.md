@@ -467,3 +467,20 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - Cột phải chỉ có duy nhất **1 `DrawerSection` mang tên "ĐIỀU KIỆN XUẤT DỮ LIỆU"** (`GarageDebtsExportConditionSection`).
   - Trường **Đối tượng báo cáo** (`Combobox`) nằm ở vị trí đầu tiên bên trong section, ngay trước bộ chọn chế độ xuất (`ExportModeSelector`), loại bỏ hoàn toàn section thừa bên ngoài.
   - Bảo toàn 100% test suite trong `GarageDebtsExportDrawer.test.tsx` (8/8 tests pass) và `garage-debts-export.service.spec.ts` (9/9 tests pass).
+
+### 8.8. Chuẩn Hóa Thanh Công Cụ Combobox Dropdown 2 Tầng (`GarageViewModeCombobox`) & Lọc Tuổi Nợ Chi Tiết
+- **Mục tiêu**: Chuẩn hoá thanh công cụ trên `GarageDebtsTable` (Tab Phải thu) và `GaragePayablesTable` (Tab Phải trả) theo kiến trúc Dropdown 2 tầng tương tự như `garage-cases?tab=cases`:
+  - **Tầng 1 (Filter Group - Trạng thái & Tuổi nợ)**:
+    - `Tất cả`: Xóa bộ lọc trạng thái và tuổi nợ.
+    - `Còn nợ`: Lọc theo `paymentProgress: 'UNPAID,PARTIAL'`.
+    - `0-30 ngày`: Lọc `maxAgingDays: '0-30'`.
+    - `31-60 ngày`: Lọc `maxAgingDays: '31-60'`.
+    - `61-90 ngày`: Lọc `maxAgingDays: '61-90'`.
+    - `> 90 ngày`: Lọc `maxAgingDays: '>90'`.
+  - **Tầng 2 (View Presets - Chế độ xem cột)**:
+    - `Tổng quan` (`overview`): Chỉ hiển thị các cột cốt lõi (`licensePlate`, `customer`, `receivableAmount`, `paidAmount`, `balanceAmount`).
+    - `Chi tiết tuổi nợ` (`aging`): Bật thêm 4 cột tuổi nợ chi tiết `aging_0_30`, `aging_31_60`, `aging_61_90`, `aging_over_90`.
+    - `Đầy đủ` (`all_columns`): Bật toàn bộ tất cả các cột của bảng.
+- **Tương thích & Lưu trữ**:
+  - Preset visibility được lưu trữ và đồng bộ tự động với `useUserPreferencesStore` thông qua table ID `garage-debts-table-column-views` / `garage-payables-table-column-views`.
+  - Giữ vững 100% khả năng tương thích ngược với API query params hiện tại (`column_filters['paymentProgress']`, `column_filters['maxAgingDays']`).

@@ -6,6 +6,7 @@ import { GarageDashboardStatsService } from './garage-dashboard-stats.service';
 import { GarageCheckpointService } from './garage-checkpoint.service';
 import { GarageCustomerStatsService } from './garage-customer-stats.service';
 import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-receivables-breakdown.service';
+import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
 import { GarageOpexService } from './garage-opex.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
 
@@ -44,6 +45,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
           provide: GarageMonthlyReceivablesBreakdownService,
           useValue: {},
         },
+        { provide: GaragePeriodReportQueries, useValue: {} },
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,

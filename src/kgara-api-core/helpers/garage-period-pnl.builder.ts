@@ -270,7 +270,7 @@ export function buildPnlSheet(
           name: '% Lợi nhuận gộp',
           valuesRef: trendTable.ref(4),
           values: column(trendRows, 4),
-          color: CHART_PALETTE[6],
+          color: CHART_PALETTE[5],
           kind: 'line',
           secondaryAxis: true,
           labelNumFmt: '0%',
