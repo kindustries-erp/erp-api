@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { {{entityName}} } from './entities/{{entityKebab}}.entity';
+import { {{entityName}}Controller } from './controllers/{{entityKebab}}.controller';
+import { {{serviceClass}} } from './{{moduleName}}.service';
+import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
+import { {{entityName}}QueryService } from './services/{{entityKebab}}-query.service';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([{{entityName}}])],
+  controllers: [{{entityName}}Controller],
+  providers: [{{serviceClass}}, {{entityName}}QueryService, {{entityName}}CommandService],
+  exports: [{{serviceClass}}],
+})
+export class {{moduleClass}}Module {}

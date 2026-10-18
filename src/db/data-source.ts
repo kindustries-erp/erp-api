@@ -83,6 +83,7 @@ import { ErpSystemOperation } from '../system-operations-core/entities/erp_syste
 import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
 import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
 import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
+// plop:api-v2-entity-imports
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -167,6 +168,7 @@ const entities = [
   ErpEmailAttachment,
   VinfastPartsCatalog,
   VinfastPartsLedger,
+  // plop:api-v2-entities
 ];
 
 const databaseUrl = process.env.DATABASE_URL;

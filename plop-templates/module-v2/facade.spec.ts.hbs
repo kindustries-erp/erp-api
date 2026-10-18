@@ -1,0 +1,64 @@
+import { NotFoundException } from '@nestjs/common';
+import { {{entityName}} } from './entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from './dto/create-{{entityKebab}}.dto';
+import { Query{{entityName}}Dto } from './dto/query-{{entityKebab}}.dto';
+import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
+import { {{entityName}}QueryService } from './services/{{entityKebab}}-query.service';
+import { {{serviceClass}} } from './{{moduleName}}.service';
+
+describe('{{serviceClass}}', () => {
+  const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  const row = { id: 'id-1', isDeleted: false, createdAt, updatedAt: createdAt } as {{entityName}};
+
+  let query: { findAll: jest.Mock; findById: jest.Mock };
+  let command: { create: jest.Mock; update: jest.Mock; softDelete: jest.Mock };
+  let service: {{serviceClass}};
+
+  beforeEach(() => {
+    query = { findAll: jest.fn(), findById: jest.fn() };
+    command = { create: jest.fn(), update: jest.fn(), softDelete: jest.fn() };
+    service = new {{serviceClass}}(
+      query as unknown as {{entityName}}QueryService,
+      command as unknown as {{entityName}}CommandService,
+    );
+  });
+
+  it('returns a response DTO without isDeleted', async () => {
+    query.findById.mockResolvedValue(row);
+
+    const result = await service.findOne('id-1');
+
+    expect(result.id).toBe('id-1');
+    expect(result).not.toHaveProperty('isDeleted');
+  });
+
+  it('throws NotFound when the row is missing or soft-deleted', async () => {
+    query.findById.mockResolvedValue(null);
+
+    await expect(service.findOne('missing')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('maps paginated items to response DTOs', async () => {
+    query.findAll.mockResolvedValue({ items: [row], total: 1, page: 1, pageSize: 20 });
+
+    const result = await service.findAll({} as Query{{entityName}}Dto);
+
+    expect(result.total).toBe(1);
+    expect(result.items[0]).not.toHaveProperty('isDeleted');
+  });
+
+  it('creates and returns a response DTO', async () => {
+    command.create.mockResolvedValue(row);
+
+    const result = await service.create({} as Create{{entityName}}Dto);
+
+    expect(result.id).toBe('id-1');
+  });
+
+  it('soft-deletes an existing row', async () => {
+    query.findById.mockResolvedValue(row);
+
+    await expect(service.remove('id-1')).resolves.toEqual({ id: 'id-1', deleted: true });
+    expect(command.softDelete).toHaveBeenCalledWith(row);
+  });
+});

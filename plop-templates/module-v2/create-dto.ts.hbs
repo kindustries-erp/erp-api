@@ -1,0 +1,16 @@
+import { {{#each swaggerImports}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} } from '@nestjs/swagger';
+import {
+{{#each classValidatorImports}}
+  {{this}},
+{{/each}}
+} from 'class-validator';
+
+export class Create{{entityName}}Dto {
+{{#each customFields}}
+{{#each this.dtoDecorators}}
+  {{{this}}}
+{{/each}}
+  {{this.name}}{{{this.nullableMark}}}: {{{this.dtoType}}};
+
+{{/each}}
+}

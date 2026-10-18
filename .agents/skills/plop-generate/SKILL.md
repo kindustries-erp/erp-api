@@ -126,6 +126,21 @@ bun plop api-migration <migrationName> <tableName>
 bun plop api-migration CreateCustomerClaims erp_customer_claims
 ```
 
+### 🧱 Generator 3: `api-module-v2` (Module API v2: Facade + sub-services + spec)
+
+Sinh module theo kiến trúc v2 (Facade, sub-services Query/Command, mapper, response DTO, controller có RBAC `ErpResource`/`ErpAction`, spec co-located). Quy ước và bẫy xem skill [`api-v2-refactor`](../api-v2-refactor/SKILL.md).
+
+```bash
+bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
+# Ví dụ:
+bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required,amount:decimal,status:status" "" "" "" false
+```
+
+- Tham số theo thứ tự: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`. Chuỗi rỗng = mặc định.
+- `wire = true`: nối vào `app.module.ts` và `data-source.ts`. Resource RBAC luôn được đăng ký trong `erp-resource.enum.ts`.
+- Input sai bị chặn trước khi ghi file nào.
+- Test generator: `bun test plop-helpers`.
+
 ---
 
 ## 🎯 3. Quy trình Đề xuất cho Agent

@@ -53,6 +53,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
+// plop:api-v2-imports
 
 @Module({
   imports: [
@@ -162,6 +163,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
     VinfastPartsModule,
     AppConfigModule,
     AiHubCoreModule,
+    // plop:api-v2-modules
   ],
   controllers: [AppController],
   providers: [

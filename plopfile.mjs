@@ -1,3 +1,14 @@
+import { buildApiV2Data } from './plop-helpers/apiV2Data.mjs';
+import { moduleFileMap, rbacPlan, wiringPlan } from './plop-helpers/apiV2Files.mjs';
+import { insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
+
+/** Biến một mục wiring thành action `modify` có chèn idempotent tại marker. */
+const toModifyAction = (item) => ({
+  type: 'modify',
+  path: item.file,
+  transform: (content) => insertAtMarker(content, { marker: item.marker, snippet: item.snippet, tag: item.tag }),
+});
+
 export default function (plop) {
   // Handlebars helper: timestamp
   plop.setHelper('timestamp', function () {
@@ -83,6 +94,69 @@ export default function (plop) {
         templateFile: 'plop-templates/module/module.ts.hbs',
       },
     ],
+  });
+
+  // 3. GENERATOR: API v2 module (Facade + sub-services + helpers + response DTO + spec co-located)
+  plop.setGenerator('api-module-v2', {
+    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill api-v2-refactor)',
+    prompts: [
+      {
+        type: 'input',
+        name: 'moduleInput',
+        message: 'Tên module (kebab-case, vd: customer-claims-core):',
+        validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên module'),
+      },
+      {
+        type: 'input',
+        name: 'entityInput',
+        message: 'Tên entity chính (PascalCase, vd: CustomerClaim):',
+        validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên entity'),
+      },
+      {
+        type: 'input',
+        name: 'fieldSpecInput',
+        message: 'Các trường nghiệp vụ name:type[:required],... (type: string|text|number|decimal|boolean|date|status):',
+        default: 'code:string:required,name:string:required,status:status',
+      },
+      {
+        type: 'input',
+        name: 'tableNameInput',
+        message: 'Tên bảng PostgreSQL (để trống = erp_<module không -core>):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'routePathInput',
+        message: 'Đường dẫn API (để trống = module không -core):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'permissionResourceInput',
+        message: 'Resource RBAC snake_case (để trống = theo module):',
+        default: '',
+      },
+      {
+        type: 'confirm',
+        name: 'wireInput',
+        message: 'Nối tự động vào app.module.ts và data-source.ts? (resource RBAC luôn được đăng ký)',
+        default: false,
+      },
+    ],
+    actions: (answers) => {
+      // Validate và dựng dữ liệu trước: input sai thì dừng tại đây, chưa ghi file nào.
+      const data = buildApiV2Data(answers);
+      return [
+        ...moduleFileMap(data).map(({ template, path }) => ({
+          type: 'add',
+          path,
+          templateFile: `plop-templates/module-v2/${template}`,
+          data,
+        })),
+        ...rbacPlan(data).map(toModifyAction),
+        ...wiringPlan(data).map(toModifyAction),
+      ];
+    },
   });
 
   // 2. GENERATOR: TypeORM Migration
