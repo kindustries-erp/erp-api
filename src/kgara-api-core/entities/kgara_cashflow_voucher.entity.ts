@@ -90,6 +90,31 @@ export class KgaraCashflowVoucher {
   @Column({ type: 'varchar', length: 255, name: 'created_by', nullable: true })
   createdBy?: string;
 
+  @Column({
+    type: 'boolean',
+    name: 'is_auto_commission',
+    default: false,
+    nullable: true,
+  })
+  isAutoCommission?: boolean;
+
+  @Column({ type: 'smallint', name: 'pnl_period_year', nullable: true })
+  pnlPeriodYear?: number | null;
+
+  @Column({ type: 'smallint', name: 'pnl_period_month', nullable: true })
+  pnlPeriodMonth?: number | null;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'pnl_commission_type',
+    nullable: true,
+  })
+  pnlCommissionType?: 'HOA_HONG_SALE' | 'HOA_HONG_DV' | string | null;
+
+  @Column({ type: 'uuid', name: 'pnl_commission_anchor_id', nullable: true })
+  pnlCommissionAnchorId?: string | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 

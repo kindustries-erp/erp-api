@@ -25,21 +25,28 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
   2. `2. Tất toán`
   3. `3. BH thanh toán`
   4. `4. HHBH`
-  5. `5. HH Bán hàng` (thêm mới ngay sau HHBH)
-  6. `6. HH Thưởng` (đổi từ mục 10. Hoa hồng / nhân công cũ)
-  7. `7. Ứng trước` (trước là 5)
-  8. `8. Cấn trừ` (trước là 6)
-  9. `9. Phụ tùng / vật tư` (trước là 7)
-  10. `10. Vật tư tiêu hao` (trước là 8, ghi nhận tự động vào garage-opex nhóm Giá vốn)
-  11. `11. Chi phí vận hành` (trước là 9)
-  12. `12. Hoàn ứng` (trước là 11)
-  13. `13. Khác` (trước là 12)
-  *(Đã chạy migration `20261018140000-UpdateKgaraCashflowVoucherPaymentContentHhnv` cập nhật toàn bộ chứng từ lịch sử trong DB).*
+  5. `5. HH Bán hàng`
+  6. `6. HH Xưởng` (Hoa hồng cho DV xưởng, tính từ 10% Lợi nhuận ròng P&L)
+  7. `7. Ứng trước`
+  8. `8. Cấn trừ`
+  9. `9. Phụ tùng / vật tư`
+  10. `10. Vật tư tiêu hao` (ghi nhận tự động vào garage-opex nhóm Giá vốn)
+  11. `11. Chi phí vận hành`
+  12. `12. Hoàn ứng`
+  13. `13. Khác`
+  *(Đã chạy migration `20261018150000-RenameHhThuongToHhXuong` đổi nhãn 6. HH Thưởng thành 6. HH Xưởng trong DB).*
+- `is_auto_commission` (boolean, default false) - Đánh dấu phiếu hoa hồng sinh tự động từ P&L report.
+- `pnl_period_year` (smallint, nullable) - Năm kỳ P&L nguồn.
+- `pnl_period_month` (smallint, nullable) - Tháng kỳ P&L nguồn.
+- `pnl_commission_type` (varchar 20, nullable) - Loại hoa hồng P&L (`'HOA_HONG_SALE'` hoặc `'HOA_HONG_DV'`).
+- `pnl_commission_anchor_id` (uuid, nullable) - FK tham chiếu phiếu gốc đã `PAID` (dùng cho phiếu chênh lệch delta).
 - `payment_status` (varchar 30, nullable) - Trạng thái thanh toán của phiếu thu (RECEIPT) và phiếu chi (PAYMENT):
   - **Phiếu chi (PAYMENT)**:
-    - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
+    - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi hoặc khi P&L bơm tự động)
     - `APPROVED`: "Đã duyệt"
-    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm OPEX 4/10)
+    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm OPEX hoặc nhóm Hoa hồng).
+    - **Quy tắc Settlements Guard**: Mọi nội dung thanh toán thuộc nhóm Hoa hồng (`4. HHBH`, `5. HH Bán hàng`, `6. HH Xưởng`), dù có gắn `case_id` để theo dõi, khi sang `PAID` **TUYỆT ĐỐI KHÔNG cấn trừ vào phiếu dịch vụ / không sinh settlement**.
+    - **Quy tắc Delta Lock**: Phiếu hoa hồng đã `PAID` không bao giờ bị sửa `amount`. Khi P&L thay đổi tạo chênh lệch, hệ thống tự động tách phiếu mới ở trạng thái `PENDING` cho phần `delta`.
   - **Phiếu thu (RECEIPT)**:
     - `EXPECTED`: "Dự thu" (tiền chưa vào quỹ/tài khoản, **KHÔNG** tạo bản ghi cấn trừ `kgara_case_settlements` và không trừ công nợ của Case)
     - `PAID` (hoặc `NULL` trong dữ liệu lịch sử): "Đã thu" (tiền đã thực thu, tự động tạo `kgara_case_settlements` và tính trừ công nợ của Case)

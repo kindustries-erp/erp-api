@@ -19,6 +19,7 @@ import {
 } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { GarageCashflowService } from '../services/garage-cashflow.service';
+import { GaragePnlService } from '../services/garage-pnl.service';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
@@ -35,7 +36,27 @@ import {
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway/cashflow-vouchers')
 export class GarageCashflowController {
-  constructor(private readonly cashflowService: GarageCashflowService) {}
+  constructor(
+    private readonly cashflowService: GarageCashflowService,
+    private readonly pnlService?: GaragePnlService,
+  ) {}
+
+  @Post('sync-pnl-commissions')
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_CASHFLOW, action: ErpAction.UPDATE },
+  )
+  async syncPnlCommissions(
+    @Query('year') year?: number,
+    @Query('month') month?: number,
+  ) {
+    const currentYear = year ? Number(year) : new Date().getFullYear();
+    const currentMonth = month ? Number(month) : new Date().getMonth() + 1;
+    if (this.pnlService) {
+      return this.pnlService.syncCommissionVouchers(currentYear, currentMonth);
+    }
+    return { message: 'PnlService not injected' };
+  }
 
   @Get()
   @RequirePermissions({

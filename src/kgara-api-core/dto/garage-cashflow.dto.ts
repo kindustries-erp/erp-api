@@ -202,6 +202,11 @@ export class KgaraCashflowVoucherResponseDto {
   erpBankTransactionId?: string | null;
   erpCashVoucherId?: string | null;
   createdBy?: string | null;
+  isAutoCommission?: boolean;
+  pnlPeriodYear?: number | null;
+  pnlPeriodMonth?: number | null;
+  pnlCommissionType?: string | null;
+  pnlCommissionAnchorId?: string | null;
   createdAt: string;
   updatedAt: string;
   case?: KgaraCashflowCaseResponseDto | null;
@@ -231,6 +236,11 @@ export function toKgaraCashflowVoucherResponse(
     erpBankTransactionId: entity.erpBankTransactionId ?? null,
     erpCashVoucherId: entity.erpCashVoucherId ?? null,
     createdBy: entity.createdBy ?? null,
+    isAutoCommission: entity.isAutoCommission ?? false,
+    pnlPeriodYear: entity.pnlPeriodYear ?? null,
+    pnlPeriodMonth: entity.pnlPeriodMonth ?? null,
+    pnlCommissionType: entity.pnlCommissionType ?? null,
+    pnlCommissionAnchorId: entity.pnlCommissionAnchorId ?? null,
     createdAt:
       entity.createdAt instanceof Date
         ? entity.createdAt.toISOString()

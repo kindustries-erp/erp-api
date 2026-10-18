@@ -32,18 +32,24 @@ describe('garage-cashflow-payment-rules', () => {
       },
     );
 
-    it.each(['4. HHBH', '8. Vật tư tiêu hao', '10. Vật tư tiêu hao'])(
-      'không trừ công nợ với nội dung %s dù Đã chi',
-      (content) => {
-        expect(
-          isDebtOffsetPayment({
-            voucherType: 'PAYMENT',
-            paymentStatus: 'PAID',
-            paymentContent: content,
-          }),
-        ).toBe(false);
-      },
-    );
+    it.each([
+      '4. HHBH',
+      '5. HH Bán hàng',
+      '6. HH Xưởng',
+      '6. HH Thưởng',
+      'HH Bán hàng Tháng 10/2026',
+      'HH Xưởng Tháng 10/2026',
+      '8. Vật tư tiêu hao',
+      '10. Vật tư tiêu hao',
+    ])('không trừ công nợ với nội dung %s dù Đã chi', (content) => {
+      expect(
+        isDebtOffsetPayment({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: content,
+        }),
+      ).toBe(false);
+    });
 
     it('phiếu thu không phải khoản trừ công nợ phải trả', () => {
       expect(

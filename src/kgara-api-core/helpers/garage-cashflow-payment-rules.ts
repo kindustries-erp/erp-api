@@ -8,8 +8,33 @@ export interface GaragePaymentRuleInput {
 }
 
 export const PAYMENT_CONTENT_HHBH = '4. HHBH';
+export const PAYMENT_CONTENT_SALE_COMMISSION = '5. HH Bán hàng';
+export const PAYMENT_CONTENT_DV_COMMISSION = '6. HH Xưởng';
+export const PAYMENT_CONTENT_DV_COMMISSION_LEGACY = '6. HH Thưởng';
 export const PAYMENT_CONTENT_CONSUMABLES = '10. Vật tư tiêu hao';
 export const PAYMENT_CONTENT_CONSUMABLES_LEGACY = '8. Vật tư tiêu hao';
+
+export const COMMISSION_PAYMENT_CONTENTS = [
+  PAYMENT_CONTENT_HHBH,
+  PAYMENT_CONTENT_SALE_COMMISSION,
+  PAYMENT_CONTENT_DV_COMMISSION,
+  PAYMENT_CONTENT_DV_COMMISSION_LEGACY,
+  '5. HHNV',
+];
+
+export function isCommissionPaymentContent(content?: string | null): boolean {
+  if (!content) return false;
+  return (
+    COMMISSION_PAYMENT_CONTENTS.includes(content) ||
+    content.startsWith('4. HHBH') ||
+    content.startsWith('5. HH Bán hàng') ||
+    content.startsWith('6. HH Xưởng') ||
+    content.startsWith('6. HH Thưởng') ||
+    content.includes('HH Bán hàng') ||
+    content.includes('HH Xưởng') ||
+    content.includes('HH Thưởng')
+  );
+}
 
 /** Nội dung chi ghi vào garage-opex (nhóm Giá vốn) thay vì trừ công nợ garage. */
 export const OPEX_ROUTED_PAYMENT_CONTENTS: Record<
@@ -34,12 +59,13 @@ const isOpexRoutedContent = (content?: string | null): boolean =>
   !!content &&
   Object.prototype.hasOwnProperty.call(OPEX_ROUTED_PAYMENT_CONTENTS, content);
 
-/** Phiếu chi chỉ trừ công nợ garage khi Đã chi và nội dung không thuộc nhóm 4/8. */
+/** Phiếu chi chỉ trừ công nợ garage khi Đã chi và nội dung không thuộc nhóm chi phí trực tiếp hoặc hoa hồng. */
 export function isDebtOffsetPayment(v: GaragePaymentRuleInput): boolean {
   return (
     v.voucherType === 'PAYMENT' &&
     v.paymentStatus === 'PAID' &&
-    !isOpexRoutedContent(v.paymentContent)
+    !isOpexRoutedContent(v.paymentContent) &&
+    !isCommissionPaymentContent(v.paymentContent)
   );
 }
 
