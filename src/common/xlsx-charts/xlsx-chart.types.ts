@@ -78,6 +78,12 @@ export const LABEL_MONEY_FMT = '[>=1000000]#,##0.0,,"tr";[>=1000]#,##0,"k";""';
 /** Nhãn phần trăm (`35%`), ẩn các giá trị dưới 3% để chart cột chồng đỡ rối. */
 export const LABEL_PERCENT_FMT = '[<0.03]"";0%';
 
+/** Màu nhạt của cặp thực tế/dự kiến: cùng họ màu với Thu (xanh) và Chi (đỏ), dễ nhận ra cặp. */
+export const CHART_TINT = {
+  emerald: '6EE7B7',
+  rose: 'FDA4AF',
+} as const;
+
 /** Bảng màu trung tính (không dùng xanh dương), cùng tông với chart Dòng tiền trên web. */
 export const CHART_PALETTE = [
   '059669', // emerald

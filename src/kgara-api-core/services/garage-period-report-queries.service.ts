@@ -4,6 +4,10 @@ import { Repository } from 'typeorm';
 
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import {
+  loadPeriodVoucherRows,
+  type PeriodVoucherRow,
+} from '../helpers/garage-period-voucher-rows.helper';
+import {
   monthWindow,
   toPnlMonthRow,
   type PnlMonthRef,
@@ -11,32 +15,10 @@ import {
 } from '../helpers/garage-pnl-month.helper';
 import { GaragePnlService } from './garage-pnl.service';
 
-/** Một phiếu thu/chi xưởng trong kỳ, đã chuẩn hóa để ghi ra Excel. */
-export interface PeriodVoucherRow {
-  voucherCode: string;
-  transDate: string;
-  type: 'RECEIPT' | 'PAYMENT';
-  /** Trạng thái duyệt của phiếu chi (chỉ có với PAYMENT). */
-  paymentStatus?:
-    | 'PENDING'
-    | 'APPROVED'
-    | 'PAID'
-    | 'EXPECTED'
-    | 'CANCELLED'
-    | null;
-  paymentContent: string;
-  partnerName: string;
-  licensePlate: string;
-  soChungTu: string;
-  paymentMethod: string;
-  note: string;
-  amount: number;
-}
+export type { PeriodVoucherRow } from '../helpers/garage-period-voucher-rows.helper';
 
 /** Số yêu cầu `getPnlReport` chạy song song khi lấy P&L nhiều tháng. */
 const PNL_CONCURRENCY = 3;
-
-const toDay = (value?: string) => (value ? value.slice(0, 10) : undefined);
 
 /** Truy vấn riêng cho báo cáo Garage theo kỳ: phiếu thu chi xưởng và P&L theo tháng. */
 @Injectable()
@@ -47,49 +29,13 @@ export class GaragePeriodReportQueries {
     private readonly pnlService: GaragePnlService,
   ) {}
 
-  /**
-   * Phiếu thu/chi theo `trans_date` trong kỳ. Bảng không có cột chi nhánh nên
-   * lọc qua phiếu dịch vụ: phiếu không gắn phiếu dịch vụ luôn được giữ.
-   */
-  async loadVouchers(
+  /** Phiếu thu/chi trong kỳ; truy vấn dùng chung với Hub qua `loadPeriodVoucherRows`. */
+  loadVouchers(
     from?: string,
     to?: string,
     branchId?: string,
   ): Promise<PeriodVoucherRow[]> {
-    const qb = this.voucherRepo
-      .createQueryBuilder('voucher')
-      .leftJoinAndSelect('voucher.case', 'c');
-
-    const dayFrom = toDay(from);
-    const dayTo = toDay(to);
-    if (dayFrom) qb.andWhere('voucher.transDate >= :dayFrom', { dayFrom });
-    if (dayTo) qb.andWhere('voucher.transDate <= :dayTo', { dayTo });
-    if (branchId) {
-      qb.andWhere(
-        '(voucher.caseId IS NULL OR c.branchExternalId = :branchId OR c.branchExternalId IS NULL)',
-        { branchId },
-      );
-    }
-
-    const vouchers = await qb
-      .orderBy('voucher.transDate', 'ASC')
-      .addOrderBy('voucher.createdAt', 'ASC')
-      .getMany();
-
-    return vouchers.map((v) => ({
-      voucherCode: v.voucherCode,
-      transDate: String(v.transDate ?? '').slice(0, 10),
-      type: v.voucherType === 'PAYMENT' ? 'PAYMENT' : 'RECEIPT',
-      paymentStatus:
-        v.voucherType === 'PAYMENT' ? (v.paymentStatus ?? null) : null,
-      paymentContent: v.paymentContent ?? '',
-      partnerName: v.partnerName ?? '',
-      licensePlate: v.licensePlate || v.case?.bienSoXe || '',
-      soChungTu: v.case?.soChungTu ?? '',
-      paymentMethod: v.paymentMethod ?? '',
-      note: v.note ?? '',
-      amount: Number(v.amount) || 0,
-    }));
+    return loadPeriodVoucherRows(this.voucherRepo, from, to, branchId);
   }
 
   /**

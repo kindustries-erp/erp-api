@@ -13,6 +13,16 @@ export interface TimeSeriesPoint {
   profit: number;
 }
 
+/** Thu/chi thực tế và dự thu/dự chi theo kỳ (biểu đồ dòng tiền bảng kê). */
+export interface CashSeriesPoint {
+  key: string;
+  label: string;
+  received: number;
+  expected: number;
+  paid: number;
+  planned: number;
+}
+
 export interface NamedAmount {
   label: string;
   revenue: number;
@@ -124,6 +134,34 @@ export function buildTimeSeries(
     point.revenue += row.revenue;
     point.cost += row.cost;
     point.profit += row.profit;
+    buckets.set(key, point);
+  }
+  return [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** Đã thu, dự thu, đã trả, dự chi theo kỳ (chỉ các kỳ có dữ liệu), sắp tăng dần. */
+export function buildCashSeries(
+  rows: CaseDashboardRow[],
+  basis: DateBasis,
+  unit: BucketUnit,
+): CashSeriesPoint[] {
+  const buckets = new Map<string, CashSeriesPoint>();
+  for (const row of rows) {
+    const date = pickBasisDate(row, basis);
+    if (!date) continue;
+    const { key, label } = bucketOf(date, unit);
+    const point = buckets.get(key) ?? {
+      key,
+      label,
+      received: 0,
+      expected: 0,
+      paid: 0,
+      planned: 0,
+    };
+    point.received += row.received;
+    point.expected += row.expected;
+    point.paid += row.paid;
+    point.planned += row.planned;
     buckets.set(key, point);
   }
   return [...buckets.values()].sort((a, b) => a.key.localeCompare(b.key));

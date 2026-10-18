@@ -1,4 +1,8 @@
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
+import type {
+  LedgerTotals,
+  LedgerVoucherRow,
+} from '../helpers/garage-ledger-classifier';
 
 /** Payload khi phiếu dịch vụ thay đổi trạng thái */
 export interface CaseTransitionEvent {
@@ -78,4 +82,10 @@ export interface GarageHealthOverview {
     isBalanced: boolean;
     difference: number;
   };
+}
+
+/** Sổ quỹ trong kỳ: phiếu đã phân loại và tổng theo nhóm. */
+export interface PeriodLedger {
+  vouchers: LedgerVoucherRow[];
+  totals: LedgerTotals;
 }

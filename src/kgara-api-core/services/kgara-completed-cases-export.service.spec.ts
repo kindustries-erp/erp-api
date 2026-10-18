@@ -9,6 +9,7 @@ import { KgaraCaseService } from '../entities/kgara_case_service.entity';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 describe('KgaraCompletedCasesExportService', () => {
   let service: KgaraCompletedCasesExportService;
@@ -128,6 +129,12 @@ describe('KgaraCompletedCasesExportService', () => {
     }),
   };
 
+  const mockHub = {
+    getCaseLedger: jest.fn().mockResolvedValue({
+      'case-1': { expectedIn: 300000, plannedOut: 150000 },
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -150,6 +157,7 @@ describe('KgaraCompletedCasesExportService', () => {
           provide: getRepositoryToken(KgaraCaseLinkedInvoice),
           useValue: mockLinkedInvoiceRepo,
         },
+        { provide: GarageHubService, useValue: mockHub },
       ],
     }).compile();
 
@@ -498,7 +506,7 @@ describe('KgaraCompletedCasesExportService', () => {
       );
     });
 
-    it('có chart gốc: theo thời gian (combo), phân loại (doughnut), top khách hàng (bar)', async () => {
+    it('có chart: theo thời gian (combo), dòng tiền thực tế và dự kiến (column), phân loại (doughnut), top khách hàng (bar)', async () => {
       const buffer = await service.exportCompletedCasesExcel({
         date_from: '2026-03-01',
         date_to: '2026-03-31',
@@ -507,7 +515,7 @@ describe('KgaraCompletedCasesExportService', () => {
       const parts = Object.keys(zip.files).filter((p) =>
         /^xl\/charts\/chart\d+\.xml$/.test(p),
       );
-      expect(parts).toHaveLength(3);
+      expect(parts).toHaveLength(4);
 
       const xmls = await Promise.all(
         parts.map((p) => zip.file(p)!.async('string')),
@@ -519,8 +527,42 @@ describe('KgaraCompletedCasesExportService', () => {
       ).toBe(true);
       expect(xmls.some((x) => x.includes('<c:doughnutChart>'))).toBe(true);
       expect(xmls.some((x) => x.includes('<c:barDir val="bar"/>'))).toBe(true);
+      // Chart dòng tiền có chuỗi Dự thu và Dự chi
+      expect(xmls.join('')).toContain('Dự thu');
+      expect(xmls.join('')).toContain('Dự chi');
       // Kỳ 31 ngày → gộp theo ngày (5/3 → "05/03")
       expect(xmls.join('')).toContain('05/03');
+    });
+
+    it('thẻ DỰ THU, DỰ CHI và cột Dự thu/Dự chi lấy từ sổ quỹ Hub theo phiếu dịch vụ', async () => {
+      const wb = await load(
+        await service.exportCompletedCasesExcel({
+          date_from: '2026-03-01',
+          date_to: '2026-03-31',
+        }),
+      );
+      const dash = wb.getWorksheet('Dashboard')!;
+      const cardValue = (label: string) => {
+        let found: ExcelJS.Cell | undefined;
+        dash.eachRow((r) =>
+          r.eachCell((c) => {
+            if (c.value === label) found = c;
+          }),
+        );
+        expect(found).toBeDefined();
+        return (dash.getCell(found!.row + 1, found!.col).value as any).result;
+      };
+      expect(cardValue('DỰ THU')).toBe(300000);
+      expect(cardValue('DỰ CHI')).toBe(150000);
+
+      const sheet = wb.getWorksheet('Bảng kê phiếu kết thúc')!;
+      const header = sheet.getRow(4).values as unknown[];
+      expect(
+        sheet.getRow(5).getCell(header.indexOf('Dự thu (VNĐ)')).value,
+      ).toBe(300000);
+      expect(
+        sheet.getRow(5).getCell(header.indexOf('Dự chi (VNĐ)')).value,
+      ).toBe(150000);
     });
 
     it('theo filter hiện tại: tiêu đề chế độ và gộp theo ngày phát sinh', async () => {

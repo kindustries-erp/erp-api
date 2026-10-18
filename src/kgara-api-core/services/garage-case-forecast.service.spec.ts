@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   GarageCaseForecastService,
   CaseForecastInput,
@@ -59,7 +59,9 @@ describe('GarageCaseForecastService', () => {
           caseId: 'case-123',
           voucherType: 'RECEIPT',
           isAutoExpected: true,
+          paymentStatus: In(['EXPECTED', 'CANCELLED']),
         },
+        order: { createdAt: 'DESC' },
       });
 
       expect(voucherRepo.create).toHaveBeenCalledWith(
@@ -146,18 +148,9 @@ describe('GarageCaseForecastService', () => {
       );
     });
 
-    it('should NOT overwrite or modify voucher if paymentStatus is already PAID', async () => {
-      const paidVoucher = {
-        id: 'v-1',
-        voucherCode: 'DT-GARA-261010-001',
-        voucherType: 'RECEIPT',
-        paymentStatus: 'PAID',
-        isAutoExpected: true,
-        amount: 5000000,
-        caseId: 'case-123',
-      } as KgaraCashflowVoucher;
-
-      voucherRepo.findOne.mockResolvedValue(paidVoucher);
+    it('phiếu tự sinh đã Đã thu (8tr) thì phần còn lại (2tr) tạo dự thu mới, không đè phiếu đã thu', async () => {
+      // Không còn phiếu EXPECTED/CANCELLED đang mở: truy vấn trả về null
+      voucherRepo.findOne.mockResolvedValue(null);
 
       const input: CaseForecastInput = {
         caseId: 'case-123',
@@ -169,7 +162,44 @@ describe('GarageCaseForecastService', () => {
 
       await service.syncCaseForecast(input);
 
-      expect(voucherRepo.save).not.toHaveBeenCalled();
+      expect(voucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paymentStatus: 'EXPECTED',
+          isAutoExpected: true,
+          amount: 2000000,
+        }),
+      );
+      expect(voucherRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('dự thu 10tr, khách thu 8tr → còn 2tr thì cập nhật đúng phiếu EXPECTED thành 2tr', async () => {
+      const expected = {
+        id: 'v-1',
+        voucherCode: 'DT-GARA-261018-001',
+        voucherType: 'RECEIPT',
+        paymentStatus: 'EXPECTED',
+        isAutoExpected: true,
+        amount: 10000000,
+        caseId: 'case-123',
+      } as KgaraCashflowVoucher;
+      voucherRepo.findOne.mockResolvedValue(expected);
+
+      await service.syncCaseForecast({
+        caseId: 'case-123',
+        previousStatus: 3,
+        newStatus: 3,
+        ngayHoanThanhCongViec: new Date('2026-10-10T10:00:00Z'),
+        tienConPhaiThanhToan: 2000000,
+      });
+
+      expect(voucherRepo.create).not.toHaveBeenCalled();
+      expect(voucherRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'v-1',
+          amount: 2000000,
+          paymentStatus: 'EXPECTED',
+        }),
+      );
     });
 
     it('should NOT create an EXPECTED receipt if tienConPhaiThanhToan is 0 or negative', async () => {

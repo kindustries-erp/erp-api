@@ -60,6 +60,7 @@ const baseData = (
       voucherCode: 'PT001',
       transDate: '2026-10-05',
       type: 'RECEIPT',
+      category: 'ACTUAL_IN',
       paymentContent: '1. KH thanh toán',
       partnerName: 'Công ty A',
       licensePlate: '30A-111.11',
@@ -72,6 +73,7 @@ const baseData = (
       voucherCode: 'PC001',
       transDate: '2026-10-06',
       type: 'PAYMENT',
+      category: 'ACTUAL_OUT',
       paymentContent: '',
       partnerName: 'NCC B',
       licensePlate: '',
@@ -175,14 +177,15 @@ const kpiValue = (sheet: ExcelJS.Worksheet, label: string) => {
 };
 
 describe('buildGaragePeriodReport', () => {
-  it('thứ tự sheet: Dashboard, Báo cáo lợi nhuận, nhóm phải thu, phải trả, nợ quá hạn, thu chi', async () => {
+  it('thứ tự sheet: Dashboard, Báo cáo lợi nhuận, nợ quá hạn phải thu và phải chi, nhóm phải thu, phải trả, thu chi', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       'Báo cáo',
       'Báo cáo lợi nhuận',
+      'Nợ quá hạn phải thu',
+      'Nợ quá hạn phải chi',
       'Thu Khách hàng Doanh nghiệp',
       'Công nợ phải trả',
-      'Nợ quá hạn cần chú ý',
       'Thu chi trong kỳ',
     ]);
   });
@@ -227,7 +230,10 @@ describe('buildGaragePeriodReport', () => {
       baseData({ reportType: 'overdue' }),
     );
     const wb = await load(buffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['Nợ quá hạn cần chú ý']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'Nợ quá hạn phải thu',
+      'Nợ quá hạn phải chi',
+    ]);
     expect(await chartCount(buffer)).toBe(0);
   });
 
@@ -238,9 +244,10 @@ describe('buildGaragePeriodReport', () => {
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       'Báo cáo',
       'Báo cáo lợi nhuận',
+      'Nợ quá hạn phải thu',
+      'Nợ quá hạn phải chi',
       'Công nợ phải thu',
       'Công nợ phải trả',
-      'Nợ quá hạn cần chú ý',
       'Thu chi trong kỳ',
     ]);
   });
@@ -330,6 +337,38 @@ describe('buildGaragePeriodReport', () => {
     expect(pnl.getCell('B5').value).toBe(1000);
   });
 
+  it('chart thu chi: Thu/Chi màu đậm, Dự thu/Dự chi màu nhạt cùng họ và không có nhãn số', async () => {
+    const zip = await JSZip.loadAsync(
+      await buildGaragePeriodReport(baseData()),
+    );
+    const xmls = await Promise.all(
+      Object.keys(zip.files)
+        .filter((p) => /^xl\/charts\/chart\d+\.xml$/.test(p))
+        .map((p) => zip.file(p)!.async('string')),
+    );
+    const cash = xmls.find((x) => x.includes('<c:v>Dự thu</c:v>'))!;
+    expect(cash).toBeDefined();
+    const colorOf = (name: string) => {
+      const block = cash
+        .split('<c:ser>')
+        .find((b) => b.includes(`<c:v>${name}</c:v>`))!;
+      return block.match(/srgbClr val="([0-9A-F]{6})"/)![1];
+    };
+    expect(colorOf('Thu')).toBe('059669');
+    expect(colorOf('Dự thu')).toBe('6EE7B7');
+    expect(colorOf('Chi')).toBe('E11D48');
+    expect(colorOf('Dự chi')).toBe('FDA4AF');
+    const hasValueLabel = (name: string) =>
+      cash
+        .split('<c:ser>')
+        .find((b) => b.includes(`<c:v>${name}</c:v>`))!
+        .includes('<c:showVal val="1"/>');
+    expect(hasValueLabel('Dự thu')).toBe(false);
+    expect(hasValueLabel('Dự chi')).toBe(false);
+    expect(hasValueLabel('Thu')).toBe(true);
+    expect(hasValueLabel('Chi')).toBe(true);
+  });
+
   it('7 chart: 3 ở Dashboard (thu chi, tuổi nợ, phải thu theo nhóm) và 4 ở Báo cáo lợi nhuận', async () => {
     for (const patch of [{}, { customerSections: undefined }]) {
       const buffer = await buildGaragePeriodReport(baseData(patch));
@@ -402,20 +441,27 @@ describe('buildGaragePeriodReport', () => {
     expect(footnote).toContain('Nợ lũy kế');
     expect(footnote).toContain('theo tuần');
     expect(dash.pageSetup.printArea).toMatch(/^A1:R\d+$/);
-    // gọn một màn hình: vùng in không quá 34 dòng
+    // gọn một màn hình: vùng in không quá 37 dòng (thẻ Thu chi có 5 thẻ = 3 hàng, thêm Dự thu)
     const lastPrintRow = Number(dash.pageSetup.printArea?.match(/\d+$/)?.[0]);
-    expect(lastPrintRow).toBeLessThanOrEqual(34);
+    expect(lastPrintRow).toBeLessThanOrEqual(37);
   });
 
-  it('sheet nợ quá hạn: chỉ nợ trên 30 ngày, nợ >90 ngày lớn nhất lên đầu, có cả phải trả', async () => {
+  it('sheet nợ quá hạn: mỗi phía một sheet, không có cột Loại, nợ >90 ngày lớn nhất lên đầu', async () => {
     const wb = await load(await buildGaragePeriodReport(baseData()));
-    const sheet = wb.getWorksheet('Nợ quá hạn cần chú ý')!;
 
-    expect(sheet.getRow(4).getCell(1).value).toBe('STT');
-    const names = [5, 6, 7, 8].map((r) => sheet.getRow(r).getCell(5).value);
-    expect(names).toEqual(['Lớn', 'Nhỏ', 'Phụ tùng B', null]);
-    expect(sheet.getRow(5).getCell(2).value).toBe('Phải thu');
-    expect(sheet.getRow(7).getCell(2).value).toBe('Phải trả');
+    const receivable = wb.getWorksheet('Nợ quá hạn phải thu')!;
+    expect(receivable.getRow(4).getCell(1).value).toBe('STT');
+    expect(receivable.getRow(4).values).not.toContain('Loại');
+    expect([5, 6].map((r) => receivable.getRow(r).getCell(4).value)).toEqual([
+      'Lớn',
+      'Nhỏ',
+    ]);
+    expect(receivable.getRow(7).getCell(4).value).toBeNull();
+
+    const payable = wb.getWorksheet('Nợ quá hạn phải chi')!;
+    expect(payable.getRow(4).values).not.toContain('Loại');
+    expect(payable.getRow(5).getCell(4).value).toBe('Phụ tùng B');
+    expect(payable.getRow(6).getCell(4).value).toBeNull();
   });
 
   it('sheet thu chi: số tiền tách cột Thu và Chi, tổng khớp', async () => {
@@ -428,9 +474,52 @@ describe('buildGaragePeriodReport', () => {
     expect(sheet.getRow(5).getCell(receiptIdx).value).toBe(700);
     expect(sheet.getRow(5).getCell(paymentIdx).value).toBeNull();
     expect(sheet.getRow(6).getCell(paymentIdx).value).toBe(200);
-    expect(sheet.getRow(5).getCell(9).value).toBe('Tiền mặt');
+    expect(sheet.getRow(5).getCell(header.indexOf('Hình thức')).value).toBe(
+      'Tiền mặt',
+    );
     expect((sheet.getRow(1).getCell(receiptIdx).value as any).result).toBe(700);
     expect((sheet.getRow(1).getCell(paymentIdx).value as any).result).toBe(200);
+  });
+
+  it('sheet thu chi: cột Dự thu và Dự chi tô nền amber khác cột Thu/Chi thực tế', async () => {
+    const wb = await load(await buildGaragePeriodReport(baseData()));
+    const sheet = wb.getWorksheet('Thu chi trong kỳ')!;
+    const header = sheet.getRow(4).values as unknown[];
+    const fill = (rowNo: number, col: string) =>
+      (sheet.getRow(rowNo).getCell(header.indexOf(col)).fill as any)?.fgColor
+        ?.argb;
+    expect(fill(4, 'Dự thu')).toBe('FFB45309');
+    expect(fill(5, 'Dự thu')).toBe('FFFFFBEB');
+    expect(fill(4, 'Thu')).not.toBe('FFB45309');
+    expect(fill(5, 'Thu')).not.toBe('FFFFFBEB');
+  });
+
+  it('sheet thu chi: dự thu và dự chi nằm cột riêng, có Trạng thái, không lẫn vào Thu/Chi', async () => {
+    const wb = await load(
+      await buildGaragePeriodReport(
+        baseData({
+          vouchers: [
+            { ...baseData().vouchers[0], category: 'EXPECTED_IN', amount: 300 },
+            {
+              ...baseData().vouchers[1],
+              type: 'PAYMENT',
+              paymentStatus: 'PENDING',
+              category: 'PLANNED_OUT',
+              amount: 150,
+            },
+          ],
+        }),
+      ),
+    );
+    const sheet = wb.getWorksheet('Thu chi trong kỳ')!;
+    const header = sheet.getRow(4).values as unknown[];
+    const statusIdx = header.indexOf('Trạng thái');
+    expect(sheet.getRow(5).getCell(statusIdx).value).toBe('Dự thu');
+    expect(sheet.getRow(6).getCell(statusIdx).value).toBe('Dự chi (Chờ duyệt)');
+    expect(sheet.getRow(5).getCell(header.indexOf('Thu')).value).toBeNull();
+    expect(sheet.getRow(5).getCell(header.indexOf('Dự thu')).value).toBe(300);
+    expect(sheet.getRow(6).getCell(header.indexOf('Chi')).value).toBeNull();
+    expect(sheet.getRow(6).getCell(header.indexOf('Dự chi')).value).toBe(150);
   });
 
   it('không có dữ liệu vẫn tạo file hợp lệ, số tổng bằng 0 và chart vẫn đủ mốc', async () => {

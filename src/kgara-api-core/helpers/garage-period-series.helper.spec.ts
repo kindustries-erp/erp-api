@@ -1,4 +1,5 @@
 import type { GaragePeriodReportData } from './garage-period-report.types';
+import { classifyVoucher } from './garage-ledger-classifier';
 import {
   BUCKET_UNIT_LABEL,
   bucketUnitOf,
@@ -9,11 +10,20 @@ const week = { from: '2026-10-12', to: '2026-10-18' };
 const month = { from: '2026-10-01', to: '2026-10-31' };
 const quarter = { from: '2026-10-01', to: '2026-12-31' };
 
+/** Phiếu đã gắn nhóm dòng tiền như sổ quỹ Hub trả về. */
 const voucher = (
   transDate: string,
   type: 'RECEIPT' | 'PAYMENT',
   amount: number,
-) => ({ transDate, type, amount }) as any;
+  paymentStatus: string | null = null,
+) =>
+  ({
+    transDate,
+    type,
+    amount,
+    paymentStatus,
+    category: classifyVoucher({ voucherType: type, paymentStatus }),
+  }) as any;
 
 describe('garage-period-series.helper', () => {
   it('đơn vị: ưu tiên bucketUnit truyền vào, thiếu thì suy từ độ dài kỳ', () => {
@@ -34,7 +44,7 @@ describe('garage-period-series.helper', () => {
         ...week,
         vouchers: [
           voucher('2026-10-12', 'RECEIPT', 100),
-          voucher('2026-10-12', 'PAYMENT', 30),
+          voucher('2026-10-12', 'PAYMENT', 30, 'PAID'),
           voucher('2026-10-14', 'RECEIPT', 50),
         ],
       });
@@ -44,13 +54,21 @@ describe('garage-period-series.helper', () => {
         label: '12/10',
         thu: 100,
         chi: 30,
+        duThu: 0,
         planned: 0,
       });
-      expect(points[1]).toEqual({ label: '13/10', thu: 0, chi: 0, planned: 0 });
+      expect(points[1]).toEqual({
+        label: '13/10',
+        thu: 0,
+        chi: 0,
+        duThu: 0,
+        planned: 0,
+      });
       expect(points[2]).toEqual({
         label: '14/10',
         thu: 50,
         chi: 0,
+        duThu: 0,
         planned: 0,
       });
     });
@@ -59,7 +77,7 @@ describe('garage-period-series.helper', () => {
       const vouchers = [
         voucher('2026-10-01', 'RECEIPT', 10),
         voucher('2026-10-08', 'RECEIPT', 20),
-        voucher('2026-10-30', 'PAYMENT', 5),
+        voucher('2026-10-30', 'PAYMENT', 5, 'PAID'),
       ];
       const { unit, points } = buildCashflowSeries({ ...month, vouchers });
       expect(unit).toBe('week');
@@ -90,50 +108,49 @@ describe('garage-period-series.helper', () => {
   });
 });
 
-describe('buildCashflowSeries: dự chi', () => {
-  it('phiếu chi Chờ duyệt + Đã duyệt vào dự chi theo ngày; Đã chi (PAID) và phiếu thu không vào dự chi', () => {
+describe('buildCashflowSeries: dự thu và dự chi', () => {
+  it('phiếu thu dự kiến (EXPECTED) vào dự thu, không vào thu thực tế', () => {
     const { points } = buildCashflowSeries({
       from: '2026-10-12',
       to: '2026-10-13',
-      asOfDate: new Date(2026, 9, 16),
-      pnlMonths: [],
-      customerRows: [],
-      supplierRows: [],
-      openCustomerRows: [],
-      openSupplierRows: [],
       vouchers: [
-        {
-          transDate: '2026-10-12',
-          type: 'PAYMENT',
-          paymentStatus: 'PENDING',
-          amount: 100,
-        },
-        {
-          transDate: '2026-10-12',
-          type: 'PAYMENT',
-          paymentStatus: 'APPROVED',
-          amount: 50,
-        },
-        {
-          transDate: '2026-10-12',
-          type: 'PAYMENT',
-          paymentStatus: 'PAID',
-          amount: 30,
-        },
-        {
-          transDate: '2026-10-13',
-          type: 'RECEIPT',
-          paymentStatus: null,
-          amount: 70,
-        },
-      ] as GaragePeriodReportData['vouchers'],
+        voucher('2026-10-12', 'RECEIPT', 500, 'EXPECTED'),
+        voucher('2026-10-13', 'RECEIPT', 70, 'PAID'),
+      ],
     } as GaragePeriodReportData);
     expect(points[0]).toEqual({
       label: '12/10',
       thu: 0,
-      chi: 180,
+      chi: 0,
+      duThu: 500,
+      planned: 0,
+    });
+    expect(points[1]).toEqual({
+      label: '13/10',
+      thu: 70,
+      chi: 0,
+      duThu: 0,
+      planned: 0,
+    });
+  });
+
+  it('phiếu chi Chờ duyệt + Đã duyệt vào dự chi; Đã chi (PAID) vào chi; phiếu đã hủy không vào đâu', () => {
+    const { points } = buildCashflowSeries({
+      from: '2026-10-12',
+      to: '2026-10-13',
+      vouchers: [
+        voucher('2026-10-12', 'PAYMENT', 100, 'PENDING'),
+        voucher('2026-10-12', 'PAYMENT', 50, 'APPROVED'),
+        voucher('2026-10-12', 'PAYMENT', 30, 'PAID'),
+        voucher('2026-10-12', 'PAYMENT', 999, 'CANCELLED'),
+      ],
+    } as GaragePeriodReportData);
+    expect(points[0]).toEqual({
+      label: '12/10',
+      thu: 0,
+      chi: 30,
+      duThu: 0,
       planned: 150,
     });
-    expect(points[1]).toEqual({ label: '13/10', thu: 70, chi: 0, planned: 0 });
   });
 });

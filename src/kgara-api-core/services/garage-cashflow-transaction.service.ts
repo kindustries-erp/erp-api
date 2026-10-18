@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   Optional,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
@@ -31,6 +32,8 @@ import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GarageCashflowTransactionService {
+  private readonly logger = new Logger(GarageCashflowTransactionService.name);
+
   constructor(
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
@@ -146,6 +149,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([dto.caseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -347,6 +351,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([oldCaseId, newCaseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -418,6 +423,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([relatedCaseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -436,6 +442,26 @@ export class GarageCashflowTransactionService {
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  /**
+   * Sau khi giao dịch đã lưu: đặt lại dự thu của các phiếu dịch vụ bị ảnh hưởng theo còn phải thu.
+   * Lỗi chỉ ghi log, không làm hỏng thao tác phiếu thu chi của người dùng.
+   */
+  private async syncReceiptForecast(
+    caseIds: (string | null | undefined)[],
+  ): Promise<void> {
+    if (!this.garageHub) return;
+    const ids = new Set(caseIds.filter((id): id is string => !!id));
+    for (const caseId of ids) {
+      try {
+        await this.garageHub.handleCaseReceiptChanged(caseId);
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to sync receipt forecast for case ${caseId}: ${error?.message}`,
+        );
+      }
     }
   }
 

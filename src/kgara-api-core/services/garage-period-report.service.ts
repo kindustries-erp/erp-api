@@ -21,6 +21,7 @@ import { previousPeriodRange } from '../helpers/garage-period-previous.helper';
 import { resolvePeriodReportSections } from '../helpers/garage-period-report-sections.helper';
 import { GarageDebtsExportService } from './garage-debts-export.service';
 import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
+import { GarageHubService } from '../hub/garage-hub.service';
 import { GARAGE_DEBT_BASELINE_DATE } from './kgara-customers-debt-query.service';
 
 /**
@@ -34,6 +35,7 @@ export class GaragePeriodReportService {
   constructor(
     private readonly debtsExport: GarageDebtsExportService,
     private readonly queries: GaragePeriodReportQueries,
+    private readonly hub: GarageHubService,
   ) {}
 
   async exportExcel(
@@ -101,8 +103,11 @@ export class GaragePeriodReportService {
     // Kỳ lợi nhuận: tháng, quý trọn hoặc nhiều tháng; các tháng được cộng gộp theo kỳ
     const pnlPeriod = resolvePnlPeriod(dto.from, dto.to, asOfDate);
     const [vouchers, pnlMonthRows, branchLabel] = await Promise.all([
+      // Thu chi đọc qua sổ quỹ Hub: nhóm dòng tiền và loại phiếu đã hủy do Hub quyết định
       needsVouchers
-        ? this.queries.loadVouchers(dto.from, dto.to, branchId || undefined)
+        ? this.hub
+            .getPeriodLedger(dto.from, dto.to, branchId || undefined)
+            .then((ledger) => ledger.vouchers)
         : [],
       // P&L theo tháng: 12 tháng kết thúc ở tháng chứa ngày kết thúc kỳ (không vượt hôm nay)
       needsPnl
@@ -127,11 +132,13 @@ export class GaragePeriodReportService {
       };
       const [prevVouchers, prevCustomerRows, prevSupplierRows] =
         await Promise.all([
-          this.queries.loadVouchers(
-            prevRange.from,
-            prevRange.to,
-            branchId || undefined,
-          ),
+          this.hub
+            .getPeriodLedger(
+              prevRange.from,
+              prevRange.to,
+              branchId || undefined,
+            )
+            .then((ledger) => ledger.vouchers),
           this.debtsExport.loadCustomerRows(branchId, prevFilters),
           this.debtsExport.loadSupplierRows(branchId, prevFilters),
         ]);

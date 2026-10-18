@@ -13,6 +13,13 @@ import {
   GarageCashflowTopTransactionsDto,
 } from '../../dto/garage-cashflow.dto';
 
+/** Thực thu: phiếu thu không phải Dự thu (EXPECTED) và không bị hủy (CANCELLED). Khớp `classifyVoucher` (ACTUAL_IN). */
+const ACTUAL_IN_SQL = `v.voucher_type = 'RECEIPT' AND (v.payment_status IS NULL OR v.payment_status NOT IN ('EXPECTED', 'CANCELLED'))`;
+/** Thực chi: phiếu chi đã chi (PAID) hoặc phiếu cũ không có trạng thái. Khớp `classifyVoucher` (ACTUAL_OUT). */
+const ACTUAL_OUT_SQL = `v.voucher_type = 'PAYMENT' AND (v.payment_status IS NULL OR v.payment_status = 'PAID')`;
+/** Dự chi: phiếu chi Chờ duyệt hoặc Đã duyệt. Khớp `classifyVoucher` (PLANNED_OUT). */
+const PLANNED_OUT_SQL = `v.voucher_type = 'PAYMENT' AND v.payment_status IN ('PENDING', 'APPROVED')`;
+
 @Injectable()
 export class GarageCashflowDashboardEngine {
   constructor(
@@ -88,27 +95,21 @@ export class GarageCashflowDashboardEngine {
     this.applyBaseFilters(qb, query);
 
     qb.select(
-      `SUM(CASE WHEN v.voucher_type = 'RECEIPT' AND (v.payment_status IS NULL OR v.payment_status != 'EXPECTED') THEN v.amount ELSE 0 END)`,
+      `SUM(CASE WHEN ${ACTUAL_IN_SQL} THEN v.amount ELSE 0 END)`,
       'totalIn',
     )
       .addSelect(
-        `SUM(CASE WHEN v.voucher_type = 'PAYMENT' THEN v.amount ELSE 0 END)`,
+        `SUM(CASE WHEN ${ACTUAL_OUT_SQL} THEN v.amount ELSE 0 END)`,
         'totalOut',
       )
+      .addSelect(`COUNT(CASE WHEN ${ACTUAL_IN_SQL} THEN 1 END)`, 'countIn')
+      .addSelect(`COUNT(CASE WHEN ${ACTUAL_OUT_SQL} THEN 1 END)`, 'countOut')
       .addSelect(
-        `COUNT(CASE WHEN v.voucher_type = 'RECEIPT' AND (v.payment_status IS NULL OR v.payment_status != 'EXPECTED') THEN 1 END)`,
-        'countIn',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN v.voucher_type = 'PAYMENT' THEN 1 END)`,
-        'countOut',
-      )
-      .addSelect(
-        `SUM(CASE WHEN v.voucher_type = 'PAYMENT' AND v.payment_status = 'PENDING' THEN v.amount ELSE 0 END)`,
+        `SUM(CASE WHEN ${PLANNED_OUT_SQL} THEN v.amount ELSE 0 END)`,
         'pendingOutAmount',
       )
       .addSelect(
-        `COUNT(CASE WHEN v.voucher_type = 'PAYMENT' AND v.payment_status = 'PENDING' THEN 1 END)`,
+        `COUNT(CASE WHEN ${PLANNED_OUT_SQL} THEN 1 END)`,
         'pendingOutCount',
       )
       .addSelect(
@@ -206,11 +207,11 @@ export class GarageCashflowDashboardEngine {
     this.applyBaseFilters(qb, query);
     qb.select(`TO_CHAR(v.trans_date, 'YYYY-MM')`, 'label')
       .addSelect(
-        `SUM(CASE WHEN v.voucher_type = 'RECEIPT' THEN v.amount ELSE 0 END)`,
+        `SUM(CASE WHEN ${ACTUAL_IN_SQL} THEN v.amount ELSE 0 END)`,
         'cashIn',
       )
       .addSelect(
-        `SUM(CASE WHEN v.voucher_type = 'PAYMENT' THEN v.amount ELSE 0 END)`,
+        `SUM(CASE WHEN ${ACTUAL_OUT_SQL} THEN v.amount ELSE 0 END)`,
         'cashOut',
       )
       .groupBy(`TO_CHAR(v.trans_date, 'YYYY-MM')`)

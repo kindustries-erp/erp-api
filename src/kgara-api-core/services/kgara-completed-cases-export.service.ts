@@ -8,6 +8,7 @@ import { KgaraCaseService } from '../entities/kgara_case_service.entity';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { GarageHubService } from '../hub/garage-hub.service';
 import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
 import { applyCaseListSorts } from '../helpers/kgara-case-sort.helper';
 import { createDashboardSheet } from '../../common/xlsx-charts/dashboard-sheet.helper';
@@ -49,6 +50,7 @@ export class KgaraCompletedCasesExportService {
     private readonly caseRepo: Repository<KgaraCase>,
     @InjectRepository(KgaraCaseSettlement)
     private readonly settlementRepo: Repository<KgaraCaseSettlement>,
+    private readonly hub: GarageHubService,
     @Optional()
     @InjectRepository(KgaraCaseService)
     private readonly serviceRepo?: Repository<KgaraCaseService>,
@@ -75,11 +77,13 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceSummaryMap,
       serviceLinesMap,
       settlementsMap,
+      caseLedgerMap,
     ] = await Promise.all([
       this.getBranchNameMap(),
       this.getLinkedInvoiceSummaryMap(caseDbIds),
       this.getServiceLinesMap(hdIds, cases),
       this.getSettlementsMap(caseDbIds),
+      this.hub.getCaseLedger(caseDbIds),
     ]);
 
     const workbook = new ExcelJS.Workbook();
@@ -97,6 +101,7 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceSummaryMap,
       settlementsMap,
       serviceLinesMap,
+      caseLedgerMap,
     );
 
     buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);

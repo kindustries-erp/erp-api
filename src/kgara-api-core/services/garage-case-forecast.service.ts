@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { parseSafeDate } from '../utils/kgara-parser.util';
 
@@ -71,33 +71,28 @@ export class GarageCaseForecastService {
     const transDate = this.formatDateString(targetDate);
     const amount = Math.max(0, Number(tienConPhaiThanhToan ?? 0));
 
-    // Tìm phiếu RECEIPT auto hiện có liên kết với case
+    // Chỉ phiếu tự sinh đang còn hiệu lực (EXPECTED/CANCELLED) mới được cập nhật.
+    // Phiếu tự sinh đã thành Đã thu/Đã duyệt không còn là dự thu: phần còn lại tạo phiếu dự thu mới.
     const existing = await this.voucherRepo.findOne({
       where: {
         caseId,
         voucherType: 'RECEIPT',
         isAutoExpected: true,
+        paymentStatus: In(['EXPECTED', 'CANCELLED']),
       },
+      order: { createdAt: 'DESC' },
     });
 
-    // Guard: Nếu case đã thu đủ (amount <= 0)
+    // Guard: Nếu case đã thu đủ (amount <= 0) thì hủy dự thu đang mở
     if (amount <= 0) {
-      if (existing) {
-        if (
-          existing.paymentStatus === 'PAID' ||
-          existing.paymentStatus === 'APPROVED'
-        ) {
-          return existing;
-        }
-        if (existing.paymentStatus === 'EXPECTED') {
-          existing.paymentStatus = 'CANCELLED';
-          existing.amount = 0;
-          const cancelled = await this.voucherRepo.save(existing);
-          this.logger.log(
-            `Cancelled auto-forecast receipt ${cancelled.voucherCode} for case ${caseId} because remaining debt is 0`,
-          );
-          return cancelled;
-        }
+      if (existing?.paymentStatus === 'EXPECTED') {
+        existing.paymentStatus = 'CANCELLED';
+        existing.amount = 0;
+        const cancelled = await this.voucherRepo.save(existing);
+        this.logger.log(
+          `Cancelled auto-forecast receipt ${cancelled.voucherCode} for case ${caseId} because remaining debt is 0`,
+        );
+        return cancelled;
       }
       this.logger.log(
         `Case ${caseId} has 0 remaining debt. Skip auto-forecast creation.`,
@@ -106,18 +101,7 @@ export class GarageCaseForecastService {
     }
 
     if (existing) {
-      // Bảo vệ: Nếu phiếu đã được thu thực tế (PAID) hoặc đã duyệt (APPROVED) thì không đè/hủy
-      if (
-        existing.paymentStatus === 'PAID' ||
-        existing.paymentStatus === 'APPROVED'
-      ) {
-        this.logger.log(
-          `Case ${caseId} already has settled/approved receipt ${existing.voucherCode}. Skip auto-forecast update.`,
-        );
-        return existing;
-      }
-
-      // Cập nhật lại số tiền, ngày dự thu, và mở lại EXPECTED nếu trước đó bị CANCELLED
+      // Cập nhật lại số tiền theo còn phải thu, và mở lại EXPECTED nếu trước đó bị CANCELLED
       existing.amount = amount;
       existing.transDate = transDate;
       existing.paymentStatus = 'EXPECTED';

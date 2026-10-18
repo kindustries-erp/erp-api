@@ -177,7 +177,7 @@ export function buildPeriodDashboard(
   const footnoteRow = writeFootnote(
     dashboard,
     rowAfterCharts(chartTop, 1, PERIOD_CHART_ROWS),
-    `Chart thu chi theo ${unit}: dự chi là phiếu chi Chờ duyệt + Đã duyệt; dòng tiền ròng = thu − chi. Nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Phải thu/chi theo nhóm khách tách theo có VAT và không VAT. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
+    `Chart thu chi theo ${unit}: thu và chi là số thực tế (không gồm dự thu, dự chi); dự thu là phiếu thu dự kiến chưa thu; dự chi là phiếu chi Chờ duyệt + Đã duyệt; dòng tiền ròng = thu − chi. Phiếu đã hủy không tính vào bất kỳ số nào. Nợ lũy kế là nợ còn mở từ 01/07/2026 đến ngày xuất. Phải thu/chi theo nhóm khách tách theo có VAT và không VAT. Chi tiết từng đối tượng xem các sheet bên cạnh; số "tr" là triệu đồng, "k" là nghìn đồng.`,
   );
   setDashboardPrintArea(dashboard, footnoteRow, PERIOD_REPORT_COLUMNS);
   return charts;

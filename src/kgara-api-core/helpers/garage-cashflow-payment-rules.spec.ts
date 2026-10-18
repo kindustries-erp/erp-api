@@ -134,6 +134,21 @@ describe('garage-cashflow-payment-rules', () => {
         isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: 'EXPECTED' }),
       ).toBe(false);
     });
+
+    it('phiếu thu đã hủy (CANCELLED) không được tính settlement', () => {
+      expect(
+        isReceiptSettled({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'CANCELLED',
+        }),
+      ).toBe(false);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'CANCELLED',
+        }),
+      ).toBe(false);
+    });
   });
 
   describe('shouldHaveSettlement', () => {

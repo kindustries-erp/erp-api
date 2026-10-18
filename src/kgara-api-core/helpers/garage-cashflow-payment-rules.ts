@@ -74,9 +74,13 @@ export function isDebtOffsetPayment(v: GaragePaymentRuleInput): boolean {
   );
 }
 
-/** Phiếu thu trừ công nợ garage khi không phải là Dự thu (EXPECTED). */
+/** Phiếu thu trừ công nợ garage khi không phải Dự thu (EXPECTED) và không bị hủy (CANCELLED). */
 export function isReceiptSettled(v: GaragePaymentRuleInput): boolean {
-  return v.voucherType === 'RECEIPT' && v.paymentStatus !== 'EXPECTED';
+  return (
+    v.voucherType === 'RECEIPT' &&
+    v.paymentStatus !== 'EXPECTED' &&
+    v.paymentStatus !== 'CANCELLED'
+  );
 }
 
 /** Phiếu thu có settlement khi không phải Dự thu; phiếu chi chỉ khi Đã chi và không thuộc nhóm 4/8. */
