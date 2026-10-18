@@ -3,7 +3,7 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import dataSource from './db/data-source';
-import { ErpBusinessPartner } from './business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from './v2/business-partners-core/entities/erp_business_partner.entity';
 
 async function seedDealers() {
   await dataSource.initialize();

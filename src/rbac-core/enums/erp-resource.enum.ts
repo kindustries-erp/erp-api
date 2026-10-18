@@ -32,4 +32,5 @@ export enum ErpResource {
   DASHBOARD = 'dashboard',
   ATTACHMENTS = 'attachments',
   CUSTOM_FIELDS = 'custom_fields',
+  // plop:api-v2-resources
 }

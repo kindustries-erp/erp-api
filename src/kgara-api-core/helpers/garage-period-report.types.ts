@@ -3,7 +3,7 @@ import type {
   GaragePeriodReportType,
 } from '../dto/garage-export.dto';
 import type { BucketUnit } from './garage-period-bucket.helper';
-import type { PeriodVoucherRow } from '../services/garage-period-report-queries.service';
+import type { LedgerVoucherRow } from './garage-ledger-classifier';
 import type {
   GarageDebtExportRow,
   GarageDebtGroupExportSection,
@@ -28,8 +28,8 @@ export interface GaragePeriodReportData {
   pnlMonths: PnlMonthRow[];
   /** Số tháng của một kỳ lợi nhuận (1 = tháng, 3 = quý, ...). */
   pnlPeriodSize?: number;
-  /** Phiếu thu/chi xưởng có `trans_date` trong kỳ. */
-  vouchers: PeriodVoucherRow[];
+  /** Phiếu thu/chi xưởng có `trans_date` trong kỳ, đã gán nhóm dòng tiền (từ sổ quỹ Hub). */
+  vouchers: LedgerVoucherRow[];
   /** Công nợ của phiếu hoàn thành trong kỳ (cho các sheet chi tiết). */
   customerRows: GarageDebtExportRow[];
   supplierRows: GarageDebtExportRow[];
@@ -43,7 +43,7 @@ export interface GaragePeriodReportData {
 
 /** Dữ liệu kỳ trước dùng cho dòng so sánh trên thẻ Dashboard. */
 export interface PreviousPeriodData {
-  vouchers: PeriodVoucherRow[];
+  vouchers: LedgerVoucherRow[];
   customerRows: GarageDebtExportRow[];
   supplierRows: GarageDebtExportRow[];
 }

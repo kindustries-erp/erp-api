@@ -11,7 +11,10 @@ interface HarnessState {
   opex?: any;
 }
 
-function buildHarness(state: HarnessState = {}) {
+function buildHarness(
+  state: HarnessState = {},
+  garageHub?: Record<string, jest.Mock>,
+) {
   const created: Array<{ entity: unknown; data: any }> = [];
   const manager: any = {
     findOne: jest.fn(async (entity: unknown) => {
@@ -52,6 +55,8 @@ function buildHarness(state: HarnessState = {}) {
     {} as any,
     {} as any,
     dataSource,
+    undefined,
+    garageHub as any,
   );
   const createdOf = (entity: unknown) =>
     created.filter((c) => c.entity === entity).map((c) => c.data);
@@ -64,6 +69,31 @@ const baseDto = {
   transDate: '2026-10-05',
   caseId: 'case-1',
 };
+
+describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu phiếu', () => {
+  it('tạo phiếu gắn case thì gọi Hub đặt lại dự thu của case đó sau khi commit', async () => {
+    const hub = {
+      handleCashflowSettled: jest.fn().mockResolvedValue({}),
+      handleCaseReceiptChanged: jest.fn().mockResolvedValue({}),
+    };
+    const h = buildHarness({}, hub);
+    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    expect(h.queryRunner.commitTransaction).toHaveBeenCalled();
+    expect(hub.handleCaseReceiptChanged).toHaveBeenCalledWith('case-1');
+  });
+
+  it('lỗi khi đồng bộ dự thu không làm hỏng việc lưu phiếu', async () => {
+    const hub = {
+      handleCashflowSettled: jest.fn().mockResolvedValue({}),
+      handleCaseReceiptChanged: jest.fn().mockRejectedValue(new Error('boom')),
+    };
+    const h = buildHarness({}, hub);
+    await expect(
+      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+    ).resolves.toBeDefined();
+    expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
+  });
+});
 
 describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
   describe('createVoucher', () => {
@@ -90,12 +120,12 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(0);
     });
 
-    it('phiếu chi 8. Vật tư tiêu hao Đã chi ghi garage-opex, không trừ công nợ', async () => {
+    it('phiếu chi 10. Vật tư tiêu hao (hoặc 8. Vật tư tiêu hao) Đã chi ghi garage-opex, không trừ công nợ', async () => {
       const h = buildHarness();
       await h.service.createVoucher({
         ...baseDto,
         paymentStatus: 'PAID',
-        paymentContent: '8. Vật tư tiêu hao',
+        paymentContent: '10. Vật tư tiêu hao',
       });
       expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
       const opex = h.createdOf(KgaraOperatingExpense);
@@ -112,7 +142,7 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(0);
     });
 
-    it('phiếu thu luôn tạo settlement RECEIPT', async () => {
+    it('phiếu thu thường hoặc không truyền status tạo settlement RECEIPT', async () => {
       const h = buildHarness();
       await h.service.createVoucher({
         ...baseDto,
@@ -121,6 +151,16 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       const settlements = h.createdOf(KgaraCaseSettlement);
       expect(settlements).toHaveLength(1);
       expect(settlements[0].settlementType).toBe('RECEIPT');
+    });
+
+    it('phiếu thu Dự thu (EXPECTED) không tạo settlement', async () => {
+      const h = buildHarness();
+      await h.service.createVoucher({
+        ...baseDto,
+        voucherType: 'RECEIPT',
+        paymentStatus: 'EXPECTED',
+      });
+      expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
     });
   });
 
@@ -177,6 +217,40 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       });
       expect(h.manager.remove).toHaveBeenCalledWith(settlement);
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(1);
+    });
+
+    it('phiếu thu từ EXPECTED chuyển sang PAID tạo settlement RECEIPT', async () => {
+      const h = buildHarness({
+        voucher: {
+          id: 'v1',
+          voucherCode: 'PT-GARA-1',
+          voucherType: 'RECEIPT',
+          paymentStatus: 'EXPECTED',
+          amount: 500_000,
+          transDate: '2026-10-05',
+          caseId: 'case-1',
+        },
+      });
+      await h.service.updateVoucher('v1', { paymentStatus: 'PAID' });
+      expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(1);
+    });
+
+    it('phiếu thu từ PAID chuyển sang EXPECTED gỡ bỏ settlement', async () => {
+      const settlement = { id: 's1', caseId: 'case-1' };
+      const h = buildHarness({
+        voucher: {
+          id: 'v1',
+          voucherCode: 'PT-GARA-1',
+          voucherType: 'RECEIPT',
+          paymentStatus: 'PAID',
+          amount: 500_000,
+          transDate: '2026-10-05',
+          caseId: 'case-1',
+        },
+        settlement,
+      });
+      await h.service.updateVoucher('v1', { paymentStatus: 'EXPECTED' });
+      expect(h.manager.remove).toHaveBeenCalledWith(settlement);
     });
   });
 

@@ -51,6 +51,22 @@ describe('GarageCashflowDashboardEngine', () => {
     expect(result.kpi.pendingOutCount).toBe(2);
   });
 
+  it('KPI khớp quy tắc sổ quỹ: Tiền vào loại EXPECTED/CANCELLED, Tiền ra chỉ PAID/null, Dự chi = PENDING + APPROVED', async () => {
+    qb.getRawOne.mockResolvedValue({});
+    qb.getRawMany.mockResolvedValue([]);
+
+    await engine.getDashboardStats({});
+
+    const selects: string[] = qb.addSelect.mock.calls
+      .map((call: unknown[]) => String(call[0]))
+      .concat(String(qb.select.mock.calls[0]?.[0]));
+    const sql = selects.join('\n');
+    expect(sql).toContain("payment_status NOT IN ('EXPECTED', 'CANCELLED')");
+    expect(sql).toContain("v.payment_status = 'PAID')");
+    expect(sql).toContain("v.payment_status IN ('PENDING', 'APPROVED')");
+    expect(sql).not.toContain("v.payment_status = 'PENDING' THEN");
+  });
+
   it('applies date and filter conditions to query builder', async () => {
     qb.getRawOne.mockResolvedValue({});
     qb.getRawMany.mockResolvedValue([]);

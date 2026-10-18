@@ -53,7 +53,7 @@ Các nghiệp vụ trọng tâm:
 
 ### 3.1. Backend (`erp-api`)
 ```text
-src/business-partners-core/
+src/v2/business-partners-core/ (đã chuyển sang v2, xem business-partners-core)
 ├── dto/
 │   ├── create-business-partner.dto.ts   # DTO tạo mới đối tác
 │   └── update-business-partner.dto.ts   # DTO cập nhật thông tin đối tác
@@ -142,7 +142,7 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
    - Backend: `cd erp-api && bun run type:check` (0 errors).
    - Frontend: `cd erp-web && bun run type:check` (0 errors).
 2. **Unit test**:
-   - Backend: `cd erp-api && bunx jest src/business-partners-core/ --forceExit` (100% passing).
+   - Backend: `cd erp-api && bunx jest src/v2/business-partners-core/ --forceExit` (100% passing).
    - Frontend: `cd erp-web && bun run test` (100% passing).
 
 ---

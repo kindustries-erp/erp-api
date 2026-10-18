@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Workbook } from 'exceljs';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { toVietnamExcelDate } from '../../common/utils/date.util';
+import { classifyVoucher } from '../helpers/garage-ledger-classifier';
+import { applyForecastColumnStyle } from '../helpers/kgara-excel-style.helper';
 
 export interface GarageCashflowExcelBuildOptions {
   vouchers: KgaraCashflowVoucher[];
@@ -28,6 +30,8 @@ export class GarageCashflowExcelBuilder {
     voucherCode: { horizontal: 'center', vertical: 'middle' },
     thu: { horizontal: 'right', vertical: 'middle' },
     chi: { horizontal: 'right', vertical: 'middle' },
+    duThu: { horizontal: 'right', vertical: 'middle' },
+    duChi: { horizontal: 'right', vertical: 'middle' },
     paymentStatus: { horizontal: 'center', vertical: 'middle' },
     paymentMethod: { horizontal: 'center', vertical: 'middle' },
     paymentContent: { horizontal: 'left', vertical: 'middle' },
@@ -72,6 +76,21 @@ export class GarageCashflowExcelBuilder {
         style: { numFmt: '#,##0' },
         isSum: true,
       },
+      // Dự thu/dự chi: phiếu chưa thực tế, không cộng vào Thu/Chi
+      {
+        header: 'Dự thu',
+        key: 'duThu',
+        width: 18,
+        style: { numFmt: '#,##0' },
+        isSum: true,
+      },
+      {
+        header: 'Dự chi',
+        key: 'duChi',
+        width: 18,
+        style: { numFmt: '#,##0' },
+        isSum: true,
+      },
       { header: 'Trạng thái', key: 'paymentStatus', width: 16 },
       { header: 'Phương thức TT', key: 'paymentMethod', width: 18 },
       { header: 'Nội dung TT', key: 'paymentContent', width: 25 },
@@ -95,10 +114,18 @@ export class GarageCashflowExcelBuilder {
       },
     ];
 
-    const columns =
+    // Chọn Thu/Chi thì kèm Dự thu/Dự chi tương ứng để người xem thấy cả hai nhóm
+    const expandedColumns =
       selectedColumns && selectedColumns.length > 0
-        ? allColumns.filter((c) => selectedColumns.includes(c.key))
-        : allColumns;
+        ? [
+            ...selectedColumns,
+            ...(selectedColumns.includes('thu') ? ['duThu'] : []),
+            ...(selectedColumns.includes('chi') ? ['duChi'] : []),
+          ]
+        : undefined;
+    const columns = expandedColumns
+      ? allColumns.filter((c) => expandedColumns.includes(c.key))
+      : allColumns;
 
     worksheet.columns = columns.map((c) => ({ key: c.key, width: c.width }));
 
@@ -115,24 +142,40 @@ export class GarageCashflowExcelBuilder {
       right: { style: 'thin' as const, color: { argb: 'FFCBD5E1' } },
     };
 
-    let totalThu = 0;
-    let totalChi = 0;
+    const sums: Record<string, number> = {
+      thu: 0,
+      duThu: 0,
+      chi: 0,
+      duChi: 0,
+    };
 
     vouchers.forEach((item, index) => {
-      const isReceipt = item.voucherType === 'RECEIPT';
-      const isPayment = item.voucherType === 'PAYMENT';
       const amount = Number(item.amount) || 0;
-      const thu = isReceipt ? amount : 0;
-      const chi = isPayment ? amount : 0;
+      // Nhóm dòng tiền theo sổ quỹ (cùng quy tắc báo cáo kỳ); phiếu đã hủy không vào cột tiền nào
+      const category = classifyVoucher({
+        voucherType: item.voucherType,
+        paymentStatus: item.paymentStatus,
+      });
+      const amountOf = (target: string) => (category === target ? amount : 0);
+      const thu = amountOf('ACTUAL_IN');
+      const duThu = amountOf('EXPECTED_IN');
+      const chi = amountOf('ACTUAL_OUT');
+      const duChi = amountOf('PLANNED_OUT');
 
-      totalThu += thu;
-      totalChi += chi;
+      sums.thu += thu;
+      sums.duThu += duThu;
+      sums.chi += chi;
+      sums.duChi += duChi;
 
-      let paymentStatusText = '';
-      if (item.paymentStatus === 'PAID') paymentStatusText = 'Đã chi';
-      else if (item.paymentStatus === 'APPROVED')
-        paymentStatusText = 'Đã duyệt';
-      else if (item.paymentStatus === 'PENDING') paymentStatusText = 'Chờ chi';
+      let paymentStatusText = 'Đã hủy';
+      if (category === 'ACTUAL_IN') paymentStatusText = 'Đã thu';
+      else if (category === 'EXPECTED_IN') paymentStatusText = 'Dự thu';
+      else if (category === 'ACTUAL_OUT') paymentStatusText = 'Đã chi';
+      else if (category === 'PLANNED_OUT')
+        paymentStatusText =
+          item.paymentStatus === 'APPROVED'
+            ? 'Dự chi (Đã duyệt)'
+            : 'Dự chi (Chờ duyệt)';
 
       const transDateVal = toVietnamExcelDate(item.transDate);
       const createdAtVal = toVietnamExcelDate(item.createdAt);
@@ -143,7 +186,9 @@ export class GarageCashflowExcelBuilder {
         transDate: transDateVal ?? item.transDate,
         voucherCode: item.voucherCode,
         thu: thu || null,
+        duThu: duThu || null,
         chi: chi || null,
+        duChi: duChi || null,
         paymentStatus: paymentStatusText,
         paymentMethod: item.paymentMethod || '',
         paymentContent: item.paymentContent || '',
@@ -175,13 +220,12 @@ export class GarageCashflowExcelBuilder {
 
     onProgress?.(85, 'Đang định dạng công thức và header...');
 
-    this.applySummaryAndHeaders(
-      worksheet,
-      columns,
-      totalThu,
-      totalChi,
-      borderThin,
-    );
+    this.applySummaryAndHeaders(worksheet, columns, sums, borderThin);
+    // Cột dự kiến tô nền khác cột thực tế; cột có thể không được chọn nên tính theo danh sách hiện tại
+    for (const key of ['duThu', 'duChi']) {
+      const idx = columns.findIndex((c) => c.key === key);
+      if (idx >= 0) applyForecastColumnStyle(worksheet, idx + 1);
+    }
 
     onProgress?.(95, 'Đang nén file Excel...');
     const buffer = await workbook.xlsx.writeBuffer();
@@ -193,17 +237,12 @@ export class GarageCashflowExcelBuilder {
   private applySummaryAndHeaders(
     worksheet: any,
     columns: CashflowColumnDefinition[],
-    totalThu: number,
-    totalChi: number,
+    calculatedSums: Record<string, number>,
     borderThin: any,
   ) {
     const totalCols = columns.length;
     const startRow = 5;
     const endRow = Math.max(startRow, worksheet.rowCount);
-    const calculatedSums: Record<string, number> = {
-      thu: totalThu,
-      chi: totalChi,
-    };
 
     const sumRow = worksheet.getRow(1);
     sumRow.height = 22;

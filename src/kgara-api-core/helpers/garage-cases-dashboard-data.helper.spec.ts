@@ -1,5 +1,6 @@
 import {
   bucketOf,
+  buildCashSeries,
   buildTimeSeries,
   chooseBucketUnit,
   classificationBreakdown,
@@ -22,6 +23,10 @@ const row = (over: Partial<CaseDashboardRow> = {}): CaseDashboardRow => ({
   profit: 40,
   receivable: 0,
   payable: 0,
+  received: 0,
+  paid: 0,
+  expected: 0,
+  planned: 0,
   ...over,
 });
 
@@ -199,5 +204,52 @@ describe('classificationBreakdown & topCustomersByRevenue', () => {
       { label: 'A', revenue: 150, profit: 15 },
     ]);
     expect(topCustomersByRevenue(rows, 1)).toHaveLength(1);
+  });
+});
+
+describe('buildCashSeries', () => {
+  it('gom đã thu, dự thu, đã trả, dự chi theo kỳ và bỏ kỳ không có phiếu', () => {
+    const points = buildCashSeries(
+      [
+        row({
+          completionDate: new Date(2026, 6, 10),
+          received: 100,
+          expected: 40,
+          paid: 30,
+          planned: 10,
+        }),
+        row({
+          completionDate: new Date(2026, 6, 10),
+          received: 50,
+          expected: 0,
+          paid: 0,
+          planned: 5,
+        }),
+        row({
+          completionDate: new Date(2026, 6, 12),
+          received: 0,
+          expected: 80,
+          paid: 20,
+          planned: 0,
+        }),
+      ],
+      'completion',
+      'day',
+    );
+    expect(points).toEqual([
+      expect.objectContaining({
+        received: 150,
+        expected: 40,
+        paid: 30,
+        planned: 15,
+      }),
+      expect.objectContaining({
+        received: 0,
+        expected: 80,
+        paid: 20,
+        planned: 0,
+      }),
+    ]);
+    expect(points).toHaveLength(2);
   });
 });

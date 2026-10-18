@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   Optional,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
@@ -20,18 +21,19 @@ import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 import {
   isDebtOffsetPayment,
   isPaymentLocked,
+  shouldHaveSettlement,
+  type GaragePaymentStatus,
 } from '../helpers/garage-cashflow-payment-rules';
 import {
   removeOpexForVoucher,
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
-
-/** Phiếu thu luôn có settlement; phiếu chi chỉ khi Đã chi và không thuộc nhóm 4/8. */
-const shouldHaveSettlement = (v: KgaraCashflowVoucher): boolean =>
-  v.voucherType === 'RECEIPT' || isDebtOffsetPayment(v);
+import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GarageCashflowTransactionService {
+  private readonly logger = new Logger(GarageCashflowTransactionService.name);
+
   constructor(
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
@@ -42,6 +44,8 @@ export class GarageCashflowTransactionService {
     private readonly dataSource: DataSource,
     @Optional()
     private readonly auditCoreService?: AuditCoreService,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   async createVoucher(
@@ -77,8 +81,12 @@ export class GarageCashflowTransactionService {
         caseRef = kCase;
       }
 
-      const paymentStatus: 'PENDING' | 'APPROVED' | 'PAID' | null =
-        dto.voucherType === 'PAYMENT' ? dto.paymentStatus || 'PENDING' : null;
+      let paymentStatus: GaragePaymentStatus | null = null;
+      if (dto.voucherType === 'PAYMENT') {
+        paymentStatus = dto.paymentStatus || 'PENDING';
+      } else if (dto.voucherType === 'RECEIPT') {
+        paymentStatus = dto.paymentStatus || 'PAID';
+      }
 
       const newVoucher = queryRunner.manager.create(KgaraCashflowVoucher, {
         voucherCode: generatedCode,
@@ -99,7 +107,14 @@ export class GarageCashflowTransactionService {
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
-      await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: savedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+      }
 
       if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
@@ -134,6 +149,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([dto.caseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -206,11 +222,18 @@ export class GarageCashflowTransactionService {
       if (newType === 'PAYMENT') {
         if (dto.paymentStatus !== undefined) {
           existingVoucher.paymentStatus = dto.paymentStatus;
-        } else if (!existingVoucher.paymentStatus) {
+        } else if (
+          !existingVoucher.paymentStatus ||
+          existingVoucher.paymentStatus === 'EXPECTED'
+        ) {
           existingVoucher.paymentStatus = 'PENDING';
         }
-      } else {
-        existingVoucher.paymentStatus = null;
+      } else if (newType === 'RECEIPT') {
+        if (dto.paymentStatus !== undefined) {
+          existingVoucher.paymentStatus = dto.paymentStatus;
+        } else if (!existingVoucher.paymentStatus) {
+          existingVoucher.paymentStatus = 'PAID';
+        }
       }
       if (
         newCaseId &&
@@ -231,7 +254,14 @@ export class GarageCashflowTransactionService {
         },
       );
 
-      await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: updatedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+      }
 
       const wantsSettlement =
         !!newCaseId && shouldHaveSettlement(updatedVoucher);
@@ -321,6 +351,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([oldCaseId, newCaseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -392,6 +423,7 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([relatedCaseId]);
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -410,6 +442,26 @@ export class GarageCashflowTransactionService {
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  /**
+   * Sau khi giao dịch đã lưu: đặt lại dự thu của các phiếu dịch vụ bị ảnh hưởng theo còn phải thu.
+   * Lỗi chỉ ghi log, không làm hỏng thao tác phiếu thu chi của người dùng.
+   */
+  private async syncReceiptForecast(
+    caseIds: (string | null | undefined)[],
+  ): Promise<void> {
+    if (!this.garageHub) return;
+    const ids = new Set(caseIds.filter((id): id is string => !!id));
+    for (const caseId of ids) {
+      try {
+        await this.garageHub.handleCaseReceiptChanged(caseId);
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to sync receipt forecast for case ${caseId}: ${error?.message}`,
+        );
+      }
     }
   }
 

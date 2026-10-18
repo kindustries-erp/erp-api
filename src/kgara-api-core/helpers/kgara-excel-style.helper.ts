@@ -224,6 +224,50 @@ export function applyStandardExcelReportLayout(
 /**
  * Định nghĩa cột chuẩn cho Sheet 1: Bảng kê phiếu kết thúc
  */
+/**
+ * Tô nền vàng hổ phách cho cột tiền dự kiến (dự thu, dự chi) để phân biệt với cột thực tế.
+ * Header đậm, dòng tổng và dữ liệu nhạt, chữ nghiêng nâu; giữ nguyên định dạng số và viền.
+ * `columnIndex` là chỉ số cột 1-based; dòng 1-2 là tổng, dòng 4 là tiêu đề.
+ */
+export function applyForecastColumnStyle(
+  sheet: ExcelJS.Worksheet,
+  columnIndex: number,
+  firstDataRow = 5,
+): void {
+  const solid = (argb: string): ExcelJS.Fill => ({
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb },
+  });
+  const endRow = Math.max(firstDataRow, sheet.rowCount);
+
+  const header = sheet.getRow(4).getCell(columnIndex);
+  header.fill = solid('FFB45309'); // amber 700
+  header.font = {
+    name: 'Calibri',
+    size: 11,
+    bold: true,
+    color: { argb: 'FFFFFFFF' },
+  };
+
+  for (const rowNo of [1, 2]) {
+    const cell = sheet.getRow(rowNo).getCell(columnIndex);
+    cell.fill = solid('FFFEF3C7'); // amber 100
+  }
+
+  for (let rowNo = firstDataRow; rowNo <= endRow; rowNo++) {
+    const cell = sheet.getRow(rowNo).getCell(columnIndex);
+    cell.fill = solid('FFFFFBEB'); // amber 50
+    cell.font = {
+      ...(cell.font ?? {}),
+      name: 'Calibri',
+      size: 10,
+      italic: true,
+      color: { argb: 'FF92400E' }, // amber 800
+    };
+  }
+}
+
 export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'STT', key: 'index', width: 8, align: 'center' },
   { header: 'Số phiếu', key: 'soChungTu', width: 18, align: 'left' },
@@ -374,6 +418,23 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     align: 'center',
   },
   { header: 'Chi nhánh', key: 'branchName', width: 22, align: 'left' },
+  // Thêm cuối sheet để không làm lệch chữ cột của các công thức phía trên
+  {
+    header: 'Dự thu (VNĐ)',
+    key: 'duThu',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Dự chi (VNĐ)',
+    key: 'duChi',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
 ];
 
 /**

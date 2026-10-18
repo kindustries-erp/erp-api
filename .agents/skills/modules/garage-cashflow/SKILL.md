@@ -20,31 +20,58 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
 - `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
-- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 12 options có số thứ tự từ 1 đến 12:
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 13 options có số thứ tự từ 1 đến 13:
   1. `1. KH thanh toán`
   2. `2. Tất toán`
   3. `3. BH thanh toán`
   4. `4. HHBH`
-  5. `5. Ứng trước`
-  6. `6. Cấn trừ`
-  7. `7. Phụ tùng / vật tư` (bỏ chữ "Mua")
-  8. `8. Vật tư tiêu hao` (option mới)
-  9. `9. Chi phí vận hành`
-  10. `10. Hoa hồng / nhân công`
-  11. `11. Hoàn ứng`
-  12. `12. Khác`
-  *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
-- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán đặc thù của phiếu chi (PAYMENT):
-  - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
-  - `APPROVED`: "Đã duyệt"
-  - `PAID`: "Đã chi" (mặc định backfill cho toàn bộ phiếu chi lịch sử)
-  *(Phiếu thu RECEIPT luôn có giá trị NULL, không áp dụng trường này).*
+  5. `5. HH Bán hàng`
+  6. `6. HH Xưởng` (Hoa hồng cho DV xưởng, tính từ 10% Lợi nhuận ròng P&L)
+  7. `7. Ứng trước`
+  8. `8. Cấn trừ`
+  9. `9. Phụ tùng / vật tư`
+  10. `10. Vật tư tiêu hao` (ghi nhận tự động vào garage-opex nhóm Giá vốn)
+  11. `11. Chi phí vận hành`
+  12. `12. Hoàn ứng`
+  13. `13. Khác`
+  *(Đã chạy migration `20261018150000-RenameHhThuongToHhXuong` đổi nhãn 6. HH Thưởng thành 6. HH Xưởng trong DB).*
+- `is_auto_commission` (boolean, default false) - Đánh dấu phiếu hoa hồng sinh tự động từ P&L report.
+- `pnl_period_year` (smallint, nullable) - Năm kỳ P&L nguồn.
+- `pnl_period_month` (smallint, nullable) - Tháng kỳ P&L nguồn.
+- `pnl_commission_type` (varchar 20, nullable) - Loại hoa hồng P&L (`'HOA_HONG_SALE'` hoặc `'HOA_HONG_DV'`).
+- `pnl_commission_anchor_id` (uuid, nullable) - FK tham chiếu phiếu gốc đã `PAID` (dùng cho phiếu chênh lệch delta).
+- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán của phiếu thu (RECEIPT) và phiếu chi (PAYMENT):
+  - **Phiếu chi (PAYMENT)**:
+    - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi hoặc khi P&L bơm tự động)
+    - `APPROVED`: "Đã duyệt"
+    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm OPEX hoặc nhóm Hoa hồng).
+    - **Quy tắc Settlements Guard**: Mọi nội dung thanh toán thuộc nhóm Hoa hồng (`4. HHBH`, `5. HH Bán hàng`, `6. HH Xưởng`), dù có gắn `case_id` để theo dõi, khi sang `PAID` **TUYỆT ĐỐI KHÔNG cấn trừ vào phiếu dịch vụ / không sinh settlement**.
+    - **Quy tắc Delta Lock**: Phiếu hoa hồng đã `PAID` không bao giờ bị sửa `amount`. Khi P&L thay đổi tạo chênh lệch, hệ thống tự động tách phiếu mới ở trạng thái `PENDING` cho phần `delta`.
+  - **Phiếu thu (RECEIPT)**:
+    - `EXPECTED`: "Dự thu" (tiền chưa vào quỹ/tài khoản, **KHÔNG** tạo bản ghi cấn trừ `kgara_case_settlements` và không trừ công nợ của Case). Hỗ trợ tự sinh tự động từ `GarageCaseForecastService` khi phiếu dịch vụ hoàn thành (`newStatus === 3`).
+    - `PAID` (hoặc `NULL` trong dữ liệu lịch sử): "Đã thu" (tiền đã thực thu, tự động tạo `kgara_case_settlements` và tính trừ công nợ của Case).
+    - `CANCELLED`: "Hủy" (phiếu dự thu tự động bị hủy khi phiếu dịch vụ revert trạng thái từ Hoàn tất về trạng thái khác).
+- `is_auto_expected` (boolean, default false) - Đánh dấu phiếu dự thu sinh tự động từ sự kiện hoàn tất phiếu dịch vụ (`GarageCaseForecastService`).
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP
 - `note` (text, nullable)
 - `created_by` (varchar 255, nullable) - Lưu email/user id của người tạo phiếu (lấy động 100% từ `req.user.email` của phiên đăng nhập)
 - `created_at` (timestamptz), `updated_at` (timestamptz)
+
+### Cơ chế Tự động Dự Thu từ Phiếu Dịch Vụ (`GarageCaseForecastService`)
+1. **Rule 1 — Sinh / Cập nhật Dự thu (status -> 3)**:
+   - Khi case chuyển sang Hoàn tất (`newStatus === 3`), hệ thống tự sinh hoặc cập nhật phiếu RECEIPT có mã `DT-GARA-YYMMDD-XXX` với `payment_status = 'EXPECTED'`, `is_auto_expected = true`.
+   - `trans_date`: `ngayHoanThanhCongViec + 7 ngày` (nếu null dùng hôm nay + 7 ngày).
+   - `amount`: `tienConPhaiThanhToan`.
+   - **Guard đã thu đủ**: Nếu `tienConPhaiThanhToan <= 0` (phiếu đã thanh toán đủ), hệ thống **TUYỆT ĐỐI KHÔNG sinh phiếu dự thu 0 đ**. Nếu case đã có phiếu auto `EXPECTED` trước đó thì tự động chuyển sang `CANCELLED` (amount = 0).
+   - Nếu case đã có phiếu dự thu auto trước đó: cập nhật lại số tiền, ngày giao dịch và mở lại `EXPECTED` nếu trước đó đang `CANCELLED`.
+   - **Bảo vệ**: Nếu phiếu đã được thực thu (`PAID`) hoặc duyệt (`APPROVED`), hệ thống tuyệt đối không can thiệp.
+2. **Rule 2 — Hủy Dự thu khi Revert khỏi Hoàn tất (previousStatus === 3 && newStatus !== 3)**:
+   - Khi case rời khỏi Hoàn tất (ví dụ quay lại Đang sửa, Báo giá hoặc Hủy), toàn bộ phiếu auto có trạng thái `EXPECTED` của case này sẽ tự động chuyển sang `CANCELLED`. Phiếu đã `PAID`/`APPROVED` không bị ảnh hưởng.
+3. **Công cụ Backfill Lịch Sử (`scripts/backfill-garage-forecast.ts`)**:
+   - Hỗ trợ quét và bù phiếu dự thu cho các phiếu hoàn tất trong quá khứ (`--dry-run`, `--env=...`), tự động loại trừ các phiếu đã thu đủ.
+
 
 **Ràng buộc & Index**:
 - Khóa ngoại liên kết tới `kgara_cases.id` và `erp_bank_transactions.id` với `ON DELETE SET NULL`.
@@ -57,6 +84,13 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 Thuộc phân hệ `kgara-api-core`:
 ```text
 src/kgara-api-core/
+├── hub/                                  # 🌟 GARAGE DOMAIN HUB (Orchestrator)
+│   ├── garage-hub.service.ts             # Facade Hub Service (< 150 LoC)
+│   ├── garage-hub.types.ts               # Domain Event contracts & interfaces
+│   └── handlers/                         # Domain Action Handlers (< 250 LoC)
+│       ├── garage-case-lifecycle.handler.ts # UC1: Transition vụ việc & dự thu
+│       ├── garage-cashflow-settle.handler.ts# UC2: Xử lý phiếu chi sang OPEX & settlement
+│       └── garage-pnl-commission.handler.ts # UC3: Chốt hoa hồng P&L & delta lock
 ├── entities/
 │   ├── kgara_cashflow_voucher.entity.ts
 │   └── kgara_case_settlement.entity.ts (cập nhật mapping cashflow_voucher_id)
@@ -67,6 +101,7 @@ src/kgara-api-core/
 └── services/
     ├── garage-cashflow.service.ts (Facade Service Pattern, Clean DI Constructor)
     ├── garage-cashflow-transaction.service.ts (Sub-Service quản lý tạo, sửa, xóa, cấn trừ, transaction lock)
+    ├── garage-case-forecast.service.ts (Quản lý tự động sinh / cập nhật / hủy phiếu dự thu DT-GARA)
     └── engines/
         ├── garage-cashflow-query.engine.ts (Sub-Service query, get list, selective column projection, options, filter)
         └── garage-cashflow-dashboard.engine.ts (Sub-Service tính toán KPI, method/content breakdowns, trend 6 tháng & top 5 txns)
@@ -303,3 +338,40 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - Tại các hàm `getMethodBreakdown`, `getContentBreakdown` và `getTopTransactions`, điều kiện loại phiếu `v.voucher_type = :type` **BẮT BUỘC phải dùng `qb.andWhere(...)`**.
   - Tuyệt đối không dùng `qb.where(...)` sau khi đã gọi `applyBaseFilters`, vì `where()` của TypeORM sẽ xóa sạch toàn bộ các điều kiện lọc trước đó (`dateFrom`, `dateTo`, `paymentMethod`, `paymentContent`, `branchId`).
 
+## 13. Cơ Chế Bơm Hoa Hồng P&L Tự Động & Trạng Thái "Dự Chi" (Cập nhật 2026-10-18)
+- **Tách biệt hoa hồng**: Phân rã `4. HHBH` thành `5. HH Bán hàng` (`HOA_HONG_SALE`) và đổi `6. HH Thưởng` thành `6. HH Xưởng` (`HOA_HONG_DV`).
+- **5 Cột P&L Commission trong `kgara_cashflow_vouchers`**:
+  - `is_auto_commission` (boolean, default false): Đánh dấu phiếu sinh tự động từ P&L.
+  - `pnl_period_year` (int, nullable), `pnl_period_month` (int, nullable): Kỳ P&L gốc.
+  - `pnl_commission_type` (varchar 50, nullable): `'HOA_HONG_SALE'` hoặc `'HOA_HONG_DV'`.
+  - `pnl_commission_anchor_id` (uuid, nullable): ID phiếu `PAID` gốc làm mốc khi phát sinh chênh lệch (delta).
+- **Ngày Cashflow mặc định (`trans_date`)**: Tính vào **ngày 10 tháng sau** (`nextMonthYear-nextMonth-10`) của kỳ $T$.
+- **Trạng thái "Dự chi" đối ứng với "Dự thu"**:
+  - `paymentStatus = 'PENDING'` hiển thị trên UI bảng, bộ lọc, thẻ KPI, Drawer và file Excel xuất ra dưới nhãn **"Dự chi"** (Badge Amber).
+  - Khóa số tiền khi phiếu đã chuyển sang `PAID` (Đã chi). Nếu P&L tăng thêm, hệ thống tự động sinh thêm phiếu delta ở trạng thái **Dự chi** (`PENDING`).
+- **Settlement Guard**: Cấm cấn trừ công nợ phiếu dịch vụ đối với tất cả các phiếu có nội dung hoa hồng (`isCommissionContent`).
+
+
+## 14. Sổ quỹ xưởng qua Garage Hub & Phân loại dòng tiền (cập nhật 2026-10-18)
+- **Nguồn định nghĩa duy nhất**: `helpers/garage-ledger-classifier.ts` → `classifyVoucher(v)` trả `LedgerCategory`:
+
+| Loại phiếu | paymentStatus | Nhóm | Vào tổng |
+|---|---|---|---|
+| RECEIPT | `EXPECTED` | `EXPECTED_IN` (Dự thu) | Dự thu |
+| RECEIPT | khác `EXPECTED`/`CANCELLED` (kể cả `PAID`, `null`) | `ACTUAL_IN` (Thực thu) | Đã thu |
+| PAYMENT | `PAID` hoặc `null` (phiếu cũ) | `ACTUAL_OUT` (Thực chi) | Đã chi |
+| PAYMENT | `PENDING` / `APPROVED` | `PLANNED_OUT` (Dự chi) | Dự chi — **không** cộng vào Đã chi |
+| bất kỳ | `CANCELLED` | `null` | Loại khỏi mọi tổng và danh sách |
+
+- **Dòng tiền ròng** = Thực thu − Thực chi (không tính dự thu/dự chi).
+- **Hub là cổng đọc sổ quỹ**: `GarageHubService.getPeriodLedger(from, to, branchId)` → `GaragePeriodLedgerHandler.loadLedger` (truy vấn qua `GaragePeriodReportQueries.loadVouchers`, phân loại, cộng tổng `summarizeLedger`). Export Excel theo kỳ (`GaragePeriodReportService`) lấy phiếu kỳ hiện tại và kỳ trước qua Hub; builder (summary, series, cards, chart, sheet Thu chi) chỉ đọc `category`, không tự lọc `type`.
+- **Dashboard Engine web** (`GarageCashflowDashboardEngine`): KPI `totalIn/totalOut` và trend 6 tháng dùng cùng điều kiện SQL (`ACTUAL_IN_SQL`, `ACTUAL_OUT_SQL`) — thay đổi so với trước: `totalOut` không còn gồm phiếu chi Chờ duyệt/Đã duyệt, `totalIn` loại phiếu đã hủy. Breakdown theo nội dung và danh sách top giao dịch chưa đổi.
+- **Excel sheet `Thu chi trong kỳ`**: 4 cột tiền tách theo nhóm (Thu, Dự thu, Chi, Dự chi) và cột `Trạng thái` (Thực tế / Dự thu / Dự chi (Chờ duyệt|Đã duyệt)); mỗi phiếu chỉ rơi vào đúng một cột tiền.
+- **Excel Dashboard `Báo cáo`**: thẻ Thu chi có 5 thẻ (ĐÃ THU, DỰ THU, ĐÃ CHI, DỰ CHI, DÒNG TIỀN RÒNG); chart thu chi có 5 chuỗi (Thu, Dự thu, Chi, Dự chi, Dòng tiền ròng).
+- Test: `helpers/garage-ledger-classifier.spec.ts`, `hub/handlers/garage-period-ledger.handler.spec.ts`, `helpers/garage-period-summary.builder.spec.ts`, `helpers/garage-period-series.helper.spec.ts`.
+- **Plan v2 (2026-10-18)**: `Dự chi` = `PENDING` + `APPROVED` ở mọi nơi (thẻ KPI web `pendingOut*`, `PLANNED_OUT_SQL`, Excel báo cáo kỳ, Excel danh sách Thu chi). `isReceiptSettled` loại `CANCELLED`, nên phiếu thu đã hủy không tạo settlement.
+- **Excel danh sách Thu chi** (`GarageCashflowExcelBuilder`): cột Thu, Dự thu, Chi, Dự chi; chọn Thu/Chi thì tự kèm Dự thu/Dự chi. Nhãn Trạng thái: Đã thu, Dự thu, Đã chi, Dự chi (Chờ duyệt | Đã duyệt), Đã hủy. Phiếu chi không có trạng thái (phiếu cũ) hiện "Đã chi" (trước đây để trống). Phân loại dùng trực tiếp `classifyVoucher`, không gọi Hub (danh sách lọc theo bộ lọc người dùng).
+- **Plan v3 (2026-10-18)**: cột Dự thu/Dự chi trong Excel (sheet `Thu chi trong kỳ`, Excel danh sách Thu chi, Bảng kê phiếu dịch vụ) tô nền amber (`applyForecastColumnStyle` trong `helpers/kgara-excel-style.helper.ts`) để phân biệt với cột thực tế. Dự thu thực tế là phiếu tự sinh `is_auto_expected`.
+- **Đồng bộ Dự thu khi thu một phần**: sau khi tạo, sửa hoặc xóa phiếu gắn phiếu dịch vụ, `GarageCashflowTransactionService` gọi `GarageHubService.handleCaseReceiptChanged(caseId)` (sau commit, lỗi chỉ log). Nếu case đang Hoàn tất, phiếu Dự thu được đặt bằng `max(0, tien_con_phai_thanh_toan)` của case: thu 8tr trên dự thu 10tr thì còn 2tr; về 0 thì phiếu chuyển `CANCELLED`.
+- **Phiếu tự sinh đã Đã thu/Đã duyệt không còn chặn sinh Dự thu**: `GarageCaseForecastService` chỉ cập nhật phiếu `EXPECTED`/`CANCELLED` mới nhất; phần còn lại tạo phiếu mới.
+- Lưu ý: nếu người dùng tự sửa số tiền phiếu Dự thu mà vẫn để trạng thái Dự thu, lần đồng bộ kế tiếp sẽ đặt lại theo còn phải thu.

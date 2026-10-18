@@ -38,8 +38,8 @@ export class CreateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED', 'CANCELLED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | 'CANCELLED';
 
   @IsString()
   @IsOptional()
@@ -115,8 +115,8 @@ export class UpdateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED', 'CANCELLED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | 'CANCELLED';
 
   @IsString()
   @IsOptional()
@@ -196,12 +196,24 @@ export class KgaraCashflowVoucherResponseDto {
   note?: string | null;
   paymentMethod?: string | null;
   paymentContent?: string | null;
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  paymentStatus?:
+    | 'PENDING'
+    | 'APPROVED'
+    | 'PAID'
+    | 'EXPECTED'
+    | 'CANCELLED'
+    | null;
   referenceNumber?: string | null;
   caseId?: string | null;
   erpBankTransactionId?: string | null;
   erpCashVoucherId?: string | null;
   createdBy?: string | null;
+  isAutoCommission?: boolean;
+  isAutoExpected?: boolean;
+  pnlPeriodYear?: number | null;
+  pnlPeriodMonth?: number | null;
+  pnlCommissionType?: string | null;
+  pnlCommissionAnchorId?: string | null;
   createdAt: string;
   updatedAt: string;
   case?: KgaraCashflowCaseResponseDto | null;
@@ -231,6 +243,12 @@ export function toKgaraCashflowVoucherResponse(
     erpBankTransactionId: entity.erpBankTransactionId ?? null,
     erpCashVoucherId: entity.erpCashVoucherId ?? null,
     createdBy: entity.createdBy ?? null,
+    isAutoCommission: entity.isAutoCommission ?? false,
+    isAutoExpected: entity.isAutoExpected ?? false,
+    pnlPeriodYear: entity.pnlPeriodYear ?? null,
+    pnlPeriodMonth: entity.pnlPeriodMonth ?? null,
+    pnlCommissionType: entity.pnlCommissionType ?? null,
+    pnlCommissionAnchorId: entity.pnlCommissionAnchorId ?? null,
     createdAt:
       entity.createdAt instanceof Date
         ? entity.createdAt.toISOString()
@@ -333,6 +351,8 @@ export class GarageCashflowKpiDto {
   countOut: number;
   pendingOutAmount: number;
   pendingOutCount: number;
+  pendingInAmount?: number;
+  pendingInCount?: number;
 }
 
 export class GarageCashflowBreakdownItemDto {
@@ -368,7 +388,7 @@ export class GarageCashflowTopTransactionItemDto {
   licensePlate?: string | null;
   paymentMethod?: string | null;
   paymentContent?: string | null;
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
   caseCode?: string | null;
   caseId?: string | null;
 }

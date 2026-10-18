@@ -13,6 +13,7 @@ import {
   type GarageDebtExportRow,
 } from './garage-debts-export.helper';
 import {
+  applyForecastColumnStyle,
   applyStandardExcelReportLayout,
   borderThin,
   initSheetStructure,
@@ -24,17 +25,21 @@ import {
   buildPeriodDashboard,
 } from './garage-period-dashboard.builder';
 import { PNL_SHEET, buildPnlSheet } from './garage-period-pnl.builder';
+import type {
+  LedgerCategory,
+  LedgerVoucherRow,
+} from './garage-ledger-classifier';
 import { resolvePeriodReportSections } from './garage-period-report-sections.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 
-export const OVERDUE_SHEET = 'Nợ quá hạn cần chú ý';
+export const OVERDUE_RECEIVABLE_SHEET = 'Nợ quá hạn phải thu';
+export const OVERDUE_PAYABLE_SHEET = 'Nợ quá hạn phải chi';
 export const CASHFLOW_SHEET = 'Thu chi trong kỳ';
 
 const MONEY = '#,##0';
 
 const OVERDUE_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'STT', key: 'stt', width: 6, align: 'center' },
-  { header: 'Loại', key: 'side', width: 12 },
   { header: 'Biển số xe', key: 'licensePlate', width: 16 },
   { header: 'Mã đối tượng', key: 'partnerCode', width: 16 },
   { header: 'Đối tượng', key: 'partnerName', width: 34 },
@@ -92,6 +97,7 @@ const CASHFLOW_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'Ngày', key: 'transDate', width: 12, align: 'center' },
   { header: 'Mã phiếu', key: 'voucherCode', width: 16 },
   { header: 'Loại', key: 'typeLabel', width: 8, align: 'center' },
+  { header: 'Trạng thái', key: 'statusLabel', width: 22, align: 'center' },
   { header: 'Nội dung', key: 'paymentContent', width: 26 },
   { header: 'Đối tác', key: 'partnerName', width: 30 },
   { header: 'Biển số xe', key: 'licensePlate', width: 14 },
@@ -107,6 +113,14 @@ const CASHFLOW_COLUMNS: ExcelReportColumnDef[] = [
     style: { numFmt: MONEY },
   },
   {
+    header: 'Dự thu',
+    key: 'expected',
+    width: 16,
+    align: 'right',
+    isSum: true,
+    style: { numFmt: MONEY },
+  },
+  {
     header: 'Chi',
     key: 'payment',
     width: 16,
@@ -114,7 +128,26 @@ const CASHFLOW_COLUMNS: ExcelReportColumnDef[] = [
     isSum: true,
     style: { numFmt: MONEY },
   },
+  {
+    header: 'Dự chi',
+    key: 'planned',
+    width: 16,
+    align: 'right',
+    isSum: true,
+    style: { numFmt: MONEY },
+  },
 ];
+
+/** Nhãn trạng thái của một dòng trong sheet Thu chi: thực tế, dự thu hoặc dự chi theo duyệt. */
+const STATUS_LABEL: Record<LedgerCategory, string> = {
+  ACTUAL_IN: 'Thực tế',
+  EXPECTED_IN: 'Dự thu',
+  ACTUAL_OUT: 'Thực tế',
+  PLANNED_OUT: 'Dự chi',
+};
+
+const plannedStatusLabel = (v: LedgerVoucherRow) =>
+  v.paymentStatus === 'APPROVED' ? 'Dự chi (Đã duyệt)' : 'Dự chi (Chờ duyệt)';
 
 const METHOD_LABEL: Record<string, string> = {
   CASH: 'Tiền mặt',
@@ -125,27 +158,27 @@ const METHOD_LABEL: Record<string, string> = {
 
 const num = (value: unknown) => Number(value) || 0;
 
-/** Sheet nợ quá hạn (>30 ngày) của cả phải thu và phải trả, nợ >90 ngày lớn nhất lên đầu. */
+/**
+ * Sheet nợ quá hạn (>30 ngày) của một phía (phải thu hoặc phải trả), nợ >90 ngày lớn nhất lên đầu.
+ * Mỗi phía một sheet riêng để người xem không phải lọc cột "Loại".
+ */
 export function buildOverdueSheet(
   workbook: ExcelJS.Workbook,
-  receivable: GarageDebtExportRow[],
-  payable: GarageDebtExportRow[],
+  sheetName: string,
+  rows: GarageDebtExportRow[],
 ): void {
-  const sheet = workbook.addWorksheet(OVERDUE_SHEET);
+  const sheet = workbook.addWorksheet(sheetName);
   initSheetStructure(sheet, OVERDUE_COLUMNS);
 
   const overdue = (r: GarageDebtExportRow) =>
     num(r.aging31_60) + num(r.aging61_90) + num(r.agingOver90);
-  const rows = [
-    ...receivable.map((row) => ({ side: 'Phải thu', row })),
-    ...payable.map((row) => ({ side: 'Phải trả', row })),
-  ]
-    .filter(({ row }) => overdue(row) > 0)
+  const sorted = rows
+    .filter((row) => overdue(row) > 0)
     .sort(
       (a, b) =>
-        num(b.row.agingOver90) - num(a.row.agingOver90) ||
-        num(b.row.aging61_90) - num(a.row.aging61_90) ||
-        num(b.row.aging31_60) - num(a.row.aging31_60),
+        num(b.agingOver90) - num(a.agingOver90) ||
+        num(b.aging61_90) - num(a.aging61_90) ||
+        num(b.aging31_60) - num(a.aging31_60),
     );
 
   const sums: Record<string, number> = {};
@@ -153,10 +186,9 @@ export function buildOverdueSheet(
     if (c.isSum) sums[c.key] = 0;
   });
 
-  rows.forEach(({ side, row }, index) => {
+  sorted.forEach((row, index) => {
     const values: Record<string, string | number> = {
       stt: index + 1,
-      side,
       licensePlate: row.licensePlate,
       partnerCode: row.partnerCode,
       partnerName: row.partnerName || debtRowLabel(row),
@@ -180,7 +212,8 @@ export function buildOverdueSheet(
     });
   });
 
-  applyStandardExcelReportLayout(sheet, OVERDUE_COLUMNS, 5, sums);
+  // Cột Đối tượng là cột thứ 4 sau khi bỏ cột Loại
+  applyStandardExcelReportLayout(sheet, OVERDUE_COLUMNS, 4, sums);
   applyAgingColumnStyles(sheet, OVERDUE_COLUMNS);
 }
 
@@ -192,25 +225,38 @@ export function buildCashflowSheet(
   const sheet = workbook.addWorksheet(CASHFLOW_SHEET);
   initSheetStructure(sheet, CASHFLOW_COLUMNS);
 
-  const sums = { receipt: 0, payment: 0 };
+  const sums = { receipt: 0, expected: 0, payment: 0, planned: 0 };
   vouchers.forEach((v, index) => {
-    const isPayment = v.type === 'PAYMENT';
-    sums.receipt += isPayment ? 0 : v.amount;
-    sums.payment += isPayment ? v.amount : 0;
+    // Chi = nhóm chi (đã chi hoặc dự chi); còn lại là Thu
+    const isPayment =
+      v.category === 'ACTUAL_OUT' || v.category === 'PLANNED_OUT';
+    // Mỗi phiếu chỉ rơi vào đúng một cột tiền theo nhóm dòng tiền để tổng không lẫn
+    const amountBy = (category: LedgerCategory) =>
+      v.category === category ? v.amount : null;
+    sums.receipt += amountBy('ACTUAL_IN') ?? 0;
+    sums.expected += amountBy('EXPECTED_IN') ?? 0;
+    sums.payment += amountBy('ACTUAL_OUT') ?? 0;
+    sums.planned += amountBy('PLANNED_OUT') ?? 0;
 
     const excelRow = sheet.addRow({
       stt: index + 1,
       transDate: formatDebtExportDate(v.transDate),
       voucherCode: v.voucherCode,
       typeLabel: isPayment ? 'Chi' : 'Thu',
+      statusLabel:
+        v.category === 'PLANNED_OUT'
+          ? plannedStatusLabel(v)
+          : STATUS_LABEL[v.category],
       paymentContent: v.paymentContent,
       partnerName: v.partnerName,
       licensePlate: v.licensePlate,
       soChungTu: v.soChungTu,
       methodLabel: METHOD_LABEL[v.paymentMethod] ?? v.paymentMethod,
       note: v.note,
-      receipt: isPayment ? null : v.amount,
-      payment: isPayment ? v.amount : null,
+      receipt: amountBy('ACTUAL_IN'),
+      expected: amountBy('EXPECTED_IN'),
+      payment: amountBy('ACTUAL_OUT'),
+      planned: amountBy('PLANNED_OUT'),
     });
     CASHFLOW_COLUMNS.forEach((col, i) => {
       const cell = excelRow.getCell(i + 1);
@@ -221,13 +267,19 @@ export function buildCashflowSheet(
   });
 
   applyStandardExcelReportLayout(sheet, CASHFLOW_COLUMNS, 6, sums);
+  for (const key of ['expected', 'planned']) {
+    applyForecastColumnStyle(
+      sheet,
+      CASHFLOW_COLUMNS.findIndex((c) => c.key === key) + 1,
+    );
+  }
 }
 
 /**
  * Dựng file báo cáo Garage theo kỳ:
  * Dashboard (card + số tổng, không chart) → Báo cáo lợi nhuận (P&L, kèm chart) →
- * sheet từng nhóm đối tượng phải thu → Công nợ phải trả → Nợ quá hạn cần chú ý →
- * Thu chi trong kỳ.
+ * Nợ quá hạn phải thu → Nợ quá hạn phải chi → sheet từng nhóm đối tượng phải thu →
+ * Công nợ phải trả → Thu chi trong kỳ.
  */
 export async function buildGaragePeriodReport(
   data: GaragePeriodReportData,
@@ -252,6 +304,14 @@ export async function buildGaragePeriodReport(
       })
     : null;
 
+  if (sectionSet.has('overdue')) {
+    buildOverdueSheet(
+      workbook,
+      OVERDUE_RECEIVABLE_SHEET,
+      data.openCustomerRows,
+    );
+    buildOverdueSheet(workbook, OVERDUE_PAYABLE_SHEET, data.openSupplierRows);
+  }
   if (sectionSet.has('receivables')) {
     const sections = (data.customerSections ?? []).filter(
       (s) => s.cases.length > 0 || s.totalAmount !== 0,
@@ -271,9 +331,6 @@ export async function buildGaragePeriodReport(
   }
   if (sectionSet.has('payables')) {
     buildDebtDetailSheet(workbook, 'suppliers', data.supplierRows);
-  }
-  if (sectionSet.has('overdue')) {
-    buildOverdueSheet(workbook, data.openCustomerRows, data.openSupplierRows);
   }
   if (sectionSet.has('cashflow')) {
     buildCashflowSheet(workbook, data.vouchers);

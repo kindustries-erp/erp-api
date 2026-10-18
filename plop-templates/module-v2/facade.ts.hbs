@@ -1,0 +1,63 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { {{entityName}} } from './entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from './dto/create-{{entityKebab}}.dto';
+import { Query{{entityName}}Dto } from './dto/query-{{entityKebab}}.dto';
+import { Update{{entityName}}Dto } from './dto/update-{{entityKebab}}.dto';
+import { to{{entityName}}Response } from './helpers/{{entityKebab}}.mapper';
+import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
+import { {{entityName}}QueryService } from './services/{{entityKebab}}-query.service';
+
+/** Facade của module: điều phối query/command và luôn trả response DTO, không lộ entity. */
+@Injectable()
+export class {{serviceClass}} {
+  constructor(
+    private readonly query: {{entityName}}QueryService,
+    private readonly command: {{entityName}}CommandService,
+  ) {}
+
+  async findAll(dto: Query{{entityName}}Dto) {
+    const page = await this.query.findAll(dto);
+    return {
+      items: page.items.map((item) => to{{entityName}}Response(item)),
+      total: page.total,
+      page: page.page,
+      pageSize: page.pageSize,
+      totalPages: Math.ceil(page.total / page.pageSize),
+      summaries: page.summaries,
+    };
+  }
+
+  findColumnOptions(column: string, search: string | undefined, page: number, pageSize: number, filters?: string) {
+    return this.query.findColumnOptions(column, search, page, pageSize, filters);
+  }
+
+  async findOne(id: string) {
+    const entity = await this.requireById(id);
+    return { message: 'Lấy thông tin thành công', data: to{{entityName}}Response(entity) };
+  }
+
+  async create(dto: Create{{entityName}}Dto) {
+    const entity = await this.command.create(dto);
+    return { message: 'Tạo thành công', data: to{{entityName}}Response(entity) };
+  }
+
+  async update(id: string, dto: Update{{entityName}}Dto) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.update(entity, dto);
+    return { message: 'Cập nhật thành công', data: to{{entityName}}Response(saved) };
+  }
+
+  async remove(id: string) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.softDelete(entity);
+    return { message: 'Xóa thành công', data: to{{entityName}}Response(saved) };
+  }
+
+  private async requireById(id: string): Promise<{{entityName}}> {
+    const entity = await this.query.findById(id);
+    if (!entity) {
+      throw new NotFoundException(`Không tìm thấy {{entityName}} với id ${id}`);
+    }
+    return entity;
+  }
+}

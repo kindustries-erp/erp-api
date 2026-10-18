@@ -3,6 +3,8 @@ import {
   isDebtOffsetPayment,
   isPaymentLocked,
   isRecordedToOpex,
+  isReceiptSettled,
+  shouldHaveSettlement,
 } from './garage-cashflow-payment-rules';
 
 describe('garage-cashflow-payment-rules', () => {
@@ -30,18 +32,24 @@ describe('garage-cashflow-payment-rules', () => {
       },
     );
 
-    it.each(['4. HHBH', '8. Vật tư tiêu hao'])(
-      'không trừ công nợ với nội dung %s dù Đã chi',
-      (content) => {
-        expect(
-          isDebtOffsetPayment({
-            voucherType: 'PAYMENT',
-            paymentStatus: 'PAID',
-            paymentContent: content,
-          }),
-        ).toBe(false);
-      },
-    );
+    it.each([
+      '4. HHBH',
+      '5. HH Bán hàng',
+      '6. HH Xưởng',
+      '6. HH Thưởng',
+      'HH Bán hàng Tháng 10/2026',
+      'HH Xưởng Tháng 10/2026',
+      '8. Vật tư tiêu hao',
+      '10. Vật tư tiêu hao',
+    ])('không trừ công nợ với nội dung %s dù Đã chi', (content) => {
+      expect(
+        isDebtOffsetPayment({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: content,
+        }),
+      ).toBe(false);
+    });
 
     it('phiếu thu không phải khoản trừ công nợ phải trả', () => {
       expect(
@@ -52,7 +60,7 @@ describe('garage-cashflow-payment-rules', () => {
 
   describe('isRecordedToOpex', () => {
     it.each(['APPROVED', 'PAID'])(
-      'ghi opex khi 4/8 ở trạng thái %s',
+      'ghi opex khi 4/8/10 ở trạng thái %s',
       (status) => {
         expect(
           isRecordedToOpex({
@@ -69,17 +77,17 @@ describe('garage-cashflow-payment-rules', () => {
         isRecordedToOpex({
           voucherType: 'PAYMENT',
           paymentStatus: 'PENDING',
-          paymentContent: '8. Vật tư tiêu hao',
+          paymentContent: '10. Vật tư tiêu hao',
         }),
       ).toBe(false);
     });
 
-    it('không ghi opex với nội dung khác 4/8', () => {
+    it('không ghi opex với nội dung khác 4/8/10', () => {
       expect(
         isRecordedToOpex({
           voucherType: 'PAYMENT',
           paymentStatus: 'PAID',
-          paymentContent: '9. Chi phí vận hành',
+          paymentContent: '11. Chi phí vận hành',
         }),
       ).toBe(false);
     });
@@ -102,8 +110,85 @@ describe('garage-cashflow-payment-rules', () => {
       expect(getOpexCategoryForContent('8. Vật tư tiêu hao')?.categoryKey).toBe(
         'VAT_TU_TIEU_HAO',
       );
+      expect(
+        getOpexCategoryForContent('10. Vật tư tiêu hao')?.categoryKey,
+      ).toBe('VAT_TU_TIEU_HAO');
       expect(getOpexCategoryForContent('1. KH thanh toán')).toBeNull();
       expect(getOpexCategoryForContent(undefined)).toBeNull();
+    });
+  });
+
+  describe('isReceiptSettled', () => {
+    it('phiếu thu Đã thu hoặc null đều được tính settlement', () => {
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: 'PAID' }),
+      ).toBe(true);
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: null }),
+      ).toBe(true);
+      expect(isReceiptSettled({ voucherType: 'RECEIPT' })).toBe(true);
+    });
+
+    it('phiếu thu Dự thu (EXPECTED) không được tính settlement', () => {
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: 'EXPECTED' }),
+      ).toBe(false);
+    });
+
+    it('phiếu thu đã hủy (CANCELLED) không được tính settlement', () => {
+      expect(
+        isReceiptSettled({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'CANCELLED',
+        }),
+      ).toBe(false);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'CANCELLED',
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('shouldHaveSettlement', () => {
+    it('phiếu thu thường có settlement, phiếu thu dự thu không có settlement', () => {
+      expect(
+        shouldHaveSettlement({ voucherType: 'RECEIPT', paymentStatus: 'PAID' }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({ voucherType: 'RECEIPT', paymentStatus: null }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'EXPECTED',
+        }),
+      ).toBe(false);
+    });
+
+    it('phiếu chi Đã chi và không phải 4/8 mới có settlement', () => {
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: '7. Phụ tùng / vật tư',
+        }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PENDING',
+          paymentContent: '7. Phụ tùng / vật tư',
+        }),
+      ).toBe(false);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: '4. HHBH',
+        }),
+      ).toBe(false);
     });
   });
 });

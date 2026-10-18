@@ -54,6 +54,13 @@ import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
+import { GarageCaseForecastService } from './services/garage-case-forecast.service';
+import { GarageHubService } from './hub/garage-hub.service';
+import { GarageCaseLifecycleHandler } from './hub/handlers/garage-case-lifecycle.handler';
+import { GarageCashflowSettleHandler } from './hub/handlers/garage-cashflow-settle.handler';
+import { GaragePnlCommissionHandler } from './hub/handlers/garage-pnl-commission.handler';
+import { GaragePeriodLedgerHandler } from './hub/handlers/garage-period-ledger.handler';
+import { GarageCaseLedgerHandler } from './hub/handlers/garage-case-ledger.handler';
 import { KgaraCaseLookupService } from './services/kgara-case-lookup.service';
 
 import { KgaraApiCoreController } from './kgara-api-core.controller';
@@ -143,6 +150,13 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    GarageCaseForecastService,
+    GarageCaseLifecycleHandler,
+    GarageCashflowSettleHandler,
+    GaragePnlCommissionHandler,
+    GaragePeriodLedgerHandler,
+    GarageCaseLedgerHandler,
+    GarageHubService,
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,
@@ -203,6 +217,8 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     SyncGrossProfitService,
     SyncDebtService,
     SyncCaseService,
+    GarageCaseForecastService,
+    GarageHubService,
     KgaraCaseLookupService,
     KgaraSuppliersDebtQueryEngine,
     KgaraSuppliersService,

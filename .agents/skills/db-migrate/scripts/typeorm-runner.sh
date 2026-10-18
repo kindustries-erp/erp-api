@@ -175,8 +175,12 @@ run_migrations() {
 
   backup_schema "$target_url" "$(basename "${env_file:-runtime-env}")"
 
-  echo "INFO: Running migrations"
-  typeorm "$target_url" migration:run
+  echo "INFO: Running migrations (theo thời gian thật của tên file, xem src/db/migration-order.ts)"
+  if [[ -f "$REPO_ROOT/dist/db/run-migrations.js" ]]; then
+    DATABASE_URL="$target_url" node "$REPO_ROOT/dist/db/run-migrations.js" run
+  else
+    DATABASE_URL="$target_url" node -r ts-node/register -r tsconfig-paths/register "$REPO_ROOT/src/db/run-migrations.ts" run
+  fi
 }
 
 run_sync_schema() {

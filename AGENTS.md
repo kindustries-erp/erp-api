@@ -77,6 +77,7 @@ Global workflows in `./.agents/workflows/`:
 - `erp-git-workflow.md` — ERP master-first Git workflow.
 - `erp-web-v2-refactor.md` — ERP Web v2 migration workflow.
 - `api-service-refactor.md` — ERP API service/controller refactoring.
+- `api-v2-refactor.md` — ERP API v2 module architecture (plop `api-module-v2`, Facade + sub-services + spec).
 - `standardize-table.md` — ERP table standardization.
 - `ui-atomic-refactor.md` — UI atomic refactoring.
 

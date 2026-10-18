@@ -9,12 +9,16 @@ import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-recei
 import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
 import { GarageOpexService } from './garage-opex.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 
 describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation', () => {
   let service: GarageDashboardService;
   let pnlService: GaragePnlService;
   let mockCaseRepo: any;
   let mockOpexService: any;
+  let mockOpexRepo: any;
+  let mockVoucherRepo: any;
 
   beforeEach(async () => {
     mockCaseRepo = {
@@ -23,6 +27,20 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
 
     mockOpexService = {
       getSummaryByPeriod: jest.fn(),
+    };
+
+    mockOpexRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto) => ({ ...dto, id: 'mock-opex-id' })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+    };
+
+    mockVoucherRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto) => ({ ...dto, id: 'mock-voucher-id' })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+      remove: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -53,6 +71,14 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
         {
           provide: GarageOpexService,
           useValue: mockOpexService,
+        },
+        {
+          provide: getRepositoryToken(KgaraOperatingExpense),
+          useValue: mockOpexRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraCashflowVoucher),
+          useValue: mockVoucherRepo,
         },
       ],
     }).compile();
@@ -416,5 +442,151 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(dvItem.isAutoCalculated).toBe(true);
     expect(dvItem.isReadOnly).toBe(true);
     expect(dvItem.amount).toBe(4800000);
+  });
+
+  describe('syncCommissionVouchers()', () => {
+    const mockPnlReport = {
+      commission: {
+        auto: {
+          saleCommission: 5000000,
+          dvCommission: 8000000,
+          kyGuiProfitRate: 25.5,
+        },
+      },
+    };
+
+    it('Scenario 1: Tạo mới 2 phiếu PENDING và 2 bản ghi OPEX khi chưa có phiếu nào', async () => {
+      mockVoucherRepo.find.mockResolvedValue([]);
+      mockOpexRepo.findOne.mockResolvedValue(null);
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.createdVouchers).toBe(2);
+      expect(result.updatedVouchers).toBe(0);
+      expect(result.deltaVouchers).toBe(0);
+      expect(result.syncedOpex).toBe(2);
+      expect(mockVoucherRepo.save).toHaveBeenCalledTimes(2);
+      expect(mockOpexRepo.save).toHaveBeenCalledTimes(2);
+      expect(mockVoucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transDate: '2026-11-10',
+          paymentStatus: 'PENDING',
+        }),
+      );
+    });
+
+    it('Scenario 2: Cập nhật số tiền phiếu PENDING khi chưa chi và P&L thay đổi', async () => {
+      const pendingSale: any = {
+        id: 'v-sale',
+        amount: 4000000,
+        transDate: '2026-10-01',
+        paymentStatus: 'PENDING',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      const pendingDv: any = {
+        id: 'v-dv',
+        amount: 7000000,
+        transDate: '2026-10-01',
+        paymentStatus: 'PENDING',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_DV',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE')
+          return Promise.resolve([pendingSale]);
+        if (where.pnlCommissionType === 'HOA_HONG_DV')
+          return Promise.resolve([pendingDv]);
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.updatedVouchers).toBe(2);
+      expect(pendingSale.amount).toBe(5000000);
+      expect(pendingSale.transDate).toBe('2026-11-10');
+      expect(pendingDv.amount).toBe(8000000);
+      expect(pendingDv.transDate).toBe('2026-11-10');
+    });
+
+    it('Scenario 3: Khi đã có phiếu PAID và P&L tăng -> Giữ nguyên phiếu PAID, tạo phiếu delta PENDING mới', async () => {
+      const paidVoucher = {
+        id: 'paid-1',
+        voucherCode: 'PC-GARA-001',
+        amount: 3000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE') {
+          return Promise.resolve([paidVoucher]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      // Sale có 1 delta voucher mới (5M - 3M = 2M); DV tạo 1 voucher mới (8M)
+      expect(result.deltaVouchers).toBe(1);
+      expect(paidVoucher.amount).toBe(3000000); // KHÔNG sửa số tiền của phiếu đã chi!
+      expect(mockVoucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 2000000,
+          transDate: '2026-11-10',
+          paymentStatus: 'PENDING',
+          pnlCommissionAnchorId: 'paid-1',
+          isAutoCommission: true,
+        }),
+      );
+    });
+
+    it('Scenario 4: Khi đã có phiếu PAID và số tiền P&L khớp đúng số đã chi -> Không tạo thêm delta', async () => {
+      const paidSale = {
+        id: 'paid-sale',
+        voucherCode: 'PC-GARA-SALE',
+        amount: 5000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      const paidDv = {
+        id: 'paid-dv',
+        voucherCode: 'PC-GARA-DV',
+        amount: 8000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_DV',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE')
+          return Promise.resolve([paidSale]);
+        if (where.pnlCommissionType === 'HOA_HONG_DV')
+          return Promise.resolve([paidDv]);
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.deltaVouchers).toBe(0);
+      expect(result.createdVouchers).toBe(0);
+      expect(result.updatedVouchers).toBe(0);
+    });
   });
 });
