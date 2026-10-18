@@ -27,6 +27,7 @@ import {
   removeOpexForVoucher,
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -40,6 +41,8 @@ export class GarageCashflowTransactionService {
     private readonly dataSource: DataSource,
     @Optional()
     private readonly auditCoreService?: AuditCoreService,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   async createVoucher(
@@ -101,7 +104,14 @@ export class GarageCashflowTransactionService {
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
-      await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: savedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+      }
 
       if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
@@ -240,7 +250,14 @@ export class GarageCashflowTransactionService {
         },
       );
 
-      await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: updatedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+      }
 
       const wantsSettlement =
         !!newCaseId && shouldHaveSettlement(updatedVoucher);

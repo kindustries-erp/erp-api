@@ -21,7 +21,7 @@ import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
-import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';

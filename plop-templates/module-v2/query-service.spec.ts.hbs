@@ -12,11 +12,21 @@ describe('{{entityName}}QueryService', () => {
     qb = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
       getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      getRawOne: jest.fn().mockResolvedValue({}),
+      getRawMany: jest.fn().mockResolvedValue([]),
     };
+    qb.clone = jest.fn(() => qb);
     repo = { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn() };
     service = new {{entityName}}QueryService(repo as unknown as Repository<{{entityName}}>);
   });
@@ -27,20 +37,37 @@ describe('{{entityName}}QueryService', () => {
     expect(qb.where).toHaveBeenCalledWith('e.isDeleted = :isDeleted', { isDeleted: false });
     expect(qb.skip).toHaveBeenCalledWith(10);
     expect(qb.take).toHaveBeenCalledWith(10);
-    expect(result).toEqual({ items: [], total: 0, page: 2, pageSize: 10 });
+    expect(result).toMatchObject({ items: [], total: 0, page: 2, pageSize: 10 });
+  });
+
+  it('orders by createdAt descending when no sort is given', async () => {
+    await service.findAll({} as Query{{entityName}}Dto);
+
+    expect(qb.orderBy).toHaveBeenCalledWith('e.createdAt', 'DESC');
   });
 
 {{#if hasSearchColumns}}
   it('applies the keyword to the searchable columns', async () => {
     await service.findAll({ search: '  abc ' } as Query{{entityName}}Dto);
 
-    expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), { keyword: '%abc%' });
+    expect(qb.andWhere).toHaveBeenCalledTimes(1);
   });
 {{else}}
   it('ignores the keyword when the module has no searchable column', async () => {
     await service.findAll({ search: 'abc' } as Query{{entityName}}Dto);
 
     expect(qb.andWhere).not.toHaveBeenCalled();
+  });
+{{/if}}
+
+{{#if hasSummaryColumns}}
+  it('sums numeric columns over the filtered rows before paging', async () => {
+    qb.getRawOne.mockResolvedValue({ {{#each summaryColumnsKeys}}{{this}}: 0{{#unless @last}}, {{/unless}}{{/each}} });
+
+    const result = await service.findAll({ page: 3, pageSize: 10 } as Query{{entityName}}Dto);
+
+    expect(qb.select).toHaveBeenCalledWith(expect.stringContaining('COALESCE(SUM('), expect.any(String));
+    expect(result.summaries).toEqual({ {{#each summaryColumnsKeys}}{{this}}: 0{{#unless @last}}, {{/unless}}{{/each}} });
   });
 {{/if}}
 

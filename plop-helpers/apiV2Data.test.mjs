@@ -73,16 +73,16 @@ describe('moduleFileMap', () => {
   it('lists 16 files under src/<module>/ with co-located specs', () => {
     const files = moduleFileMap(buildApiV2Data(base));
     expect(files).toHaveLength(16);
-    expect(files.every((f) => f.path.startsWith('src/customer-claims-core/'))).toBe(true);
+    expect(files.every((f) => f.path.startsWith('src/v2/customer-claims-core/'))).toBe(true);
     const specs = files.filter((f) => f.path.endsWith('.spec.ts'));
     expect(specs).toHaveLength(5);
   });
 
   it('places the facade at the module root and sub-units in their folders', () => {
     const paths = moduleFileMap(buildApiV2Data(base)).map((f) => f.path);
-    expect(paths).toContain('src/customer-claims-core/customer-claims-core.service.ts');
-    expect(paths).toContain('src/customer-claims-core/services/customer-claim-query.service.ts');
-    expect(paths).toContain('src/customer-claims-core/controllers/customer-claim.controller.ts');
+    expect(paths).toContain('src/v2/customer-claims-core/customer-claims-core.service.ts');
+    expect(paths).toContain('src/v2/customer-claims-core/services/customer-claim-query.service.ts');
+    expect(paths).toContain('src/v2/customer-claims-core/controllers/customer-claim.controller.ts');
   });
 });
 
@@ -110,5 +110,76 @@ describe('rbacPlan', () => {
     const [item] = rbacPlan(buildApiV2Data(base));
     expect(item.file).toBe('src/rbac-core/enums/erp-resource.enum.ts');
     expect(item.snippet).toBe("  CUSTOMER_CLAIMS = 'customer_claims',");
+  });
+});
+
+describe('table query data (whitelist, summary, search)', () => {
+  it('builds sql-qualified table columns with snake_case aliases and always includes createdAt', () => {
+    const data = buildApiV2Data(base);
+    expect(data.tableColumnsLiteral).toContain('"code": { sql: "e.code", type: "text" }');
+    expect(data.tableColumnsLiteral).toContain('"status": { sql: "e.status", type: "status" }');
+    expect(data.tableColumnsLiteral).toContain('"createdAt": { sql: "e.createdAt", type: "date" }');
+  });
+
+  it('emits a snake_case alias only when the name differs', () => {
+    const data = buildApiV2Data({ ...base, fieldSpecInput: 'contactName:string,amount:decimal' });
+    expect(data.tableColumnsLiteral).toContain('"contactName": { sql: "e.contactName", type: "text" }');
+    expect(data.tableColumnsLiteral).toContain('"contact_name": { sql: "e.contactName", type: "text" }');
+    expect(data.tableColumnsLiteral).not.toContain('"code"');
+  });
+
+  it('sums only number and decimal fields, keyed by field name', () => {
+    const data = buildApiV2Data(base);
+    expect(data.hasSummaryColumns).toBe(true);
+    expect(data.summaryColumnsKeys).toEqual(['amount']);
+    expect(data.summaryColumnsLiteral).toBe('[{"key":"amount","sql":"e.amount"}]');
+  });
+
+  it('reports no summary columns when the module has no numeric field', () => {
+    const data = buildApiV2Data({ ...base, fieldSpecInput: 'code:string:required,name:string' });
+    expect(data.hasSummaryColumns).toBe(false);
+    expect(data.summaryColumnsLiteral).toBe('[]');
+  });
+
+  it('exposes search columns as sql expressions for the keyword filter', () => {
+    const data = buildApiV2Data(base);
+    expect(data.searchColumnsLiteral).toBe('["e.code"]');
+  });
+
+  it('leaves boolean fields out of the table column whitelist', () => {
+    const data = buildApiV2Data({ ...base, fieldSpecInput: 'code:string,active:boolean' });
+    expect(data.tableColumnsLiteral).not.toContain('active');
+  });
+});
+
+describe('mapper expressions for nullable entity columns', () => {
+  it('maps optional string, text, number and date to undefined instead of null', () => {
+    const data = buildApiV2Data({
+      ...base,
+      fieldSpecInput: 'code:string:required,title:string,body:text,qty:number,due:date',
+    });
+    const byName = Object.fromEntries(data.customFields.map((f) => [f.name, f.mapExpression]));
+    expect(byName.title).toBe('entity.title ?? undefined');
+    expect(byName.body).toBe('entity.body ?? undefined');
+    expect(byName.qty).toBe('entity.qty ?? undefined');
+    expect(byName.due).toBe('entity.due ?? undefined');
+    expect(byName.code).toBe('entity.code');
+  });
+});
+
+describe('v2 location and wiring', () => {
+  it('wires the module from src/v2 and imports the entity with the @/v2 alias', () => {
+    const data = buildApiV2Data({
+      moduleInput: 'customer-claims-core',
+      entityInput: 'CustomerClaim',
+      tableNameInput: '',
+      routePathInput: '',
+      permissionResourceInput: '',
+      fieldSpecInput: 'code:string:required',
+      wireInput: true,
+    });
+    const snippets = wiringPlan(data).map((item) => item.snippet);
+    expect(snippets).toContain(`import { CustomerClaimsCoreModule } from './v2/customer-claims-core/customer-claims-core.module';`);
+    expect(snippets).toContain(`import { CustomerClaim } from '@/v2/customer-claims-core/entities/customer-claim.entity';`);
   });
 });

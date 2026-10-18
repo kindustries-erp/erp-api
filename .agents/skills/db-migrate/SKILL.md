@@ -85,6 +85,19 @@ bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync <SOURCE_ENV_FILE> 
 
 ---
 
+## 3b. Thứ tự migration (bắt buộc đọc trước khi chạy `migration:run`)
+
+- Repo có 2 kiểu tên: epoch ms 13 số (`1791505856412-...`) và `YYYYMMDDHHmmss` 14 số (`20261013083000-...`). TypeORM mặc định lấy `parseInt(name.substr(-13))`, nên 14 số luôn bị sắp **trước** mọi epoch, sai thứ tự thời gian thật (lỗi Klotus 2026-10-18).
+- Runner hiện tại dùng `src/db/chronological-migration-executor.ts` (kế thừa `MigrationExecutor` của TypeORM, override `getMigrations`): sắp xếp theo ngày thật của cả hai kiểu. Khóa tính trong `src/db/migration-order.ts`.
+- Lệnh:
+  - `bun run migration:show`: liệt kê pending, không ghi.
+  - `bun run migration:run`: áp dụng pending (qua `src/db/run-migrations.ts`).
+  - `bun run migration:run:typeorm`: CLI gốc của TypeORM, chỉ để đối chiếu (dùng thứ tự cũ, không dùng cho pipeline).
+- Pipeline: `typeorm-runner.sh run` dùng `dist/db/run-migrations.js` khi có `dist/`, không có thì `ts-node`.
+- Không sửa tên migration đã chạy trên bất kỳ DB nào. Muốn đổi thứ tự thì thêm cặp vào `src/db/migration-order.repo.spec.ts`, không đổi tên file.
+- Migration mới có thể dùng epoch (`Date.now()`, plop `api-migration`) hoặc 14 số: cả hai đều được sắp đúng.
+- Trước khi chạy trên DB có dữ liệu: backup đầy đủ `pg_dump -Fc` vào `.agents/skills/db-migrate/backups/` (runner chỉ tạo schema `.sql`, không đủ để khôi phục dữ liệu), ghi log lần chạy cùng thư mục, rồi chạy `migration:show` xem danh sách pending.
+
 ## 4. Hướng dẫn Viết Migration EAV Mới (Idempotent Standard)
 
 Khi tạo file migration mới để khai báo thêm thuộc tính hoặc backfill dữ liệu cho phân hệ:

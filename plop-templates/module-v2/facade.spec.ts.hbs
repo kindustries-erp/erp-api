@@ -10,12 +10,12 @@ describe('{{serviceClass}}', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const row = { id: 'id-1', isDeleted: false, createdAt, updatedAt: createdAt } as {{entityName}};
 
-  let query: { findAll: jest.Mock; findById: jest.Mock };
+  let query: { findAll: jest.Mock; findById: jest.Mock; findColumnOptions: jest.Mock };
   let command: { create: jest.Mock; update: jest.Mock; softDelete: jest.Mock };
   let service: {{serviceClass}};
 
   beforeEach(() => {
-    query = { findAll: jest.fn(), findById: jest.fn() };
+    query = { findAll: jest.fn(), findById: jest.fn(), findColumnOptions: jest.fn() };
     command = { create: jest.fn(), update: jest.fn(), softDelete: jest.fn() };
     service = new {{serviceClass}}(
       query as unknown as {{entityName}}QueryService,
@@ -23,13 +23,14 @@ describe('{{serviceClass}}', () => {
     );
   });
 
-  it('returns a response DTO without isDeleted', async () => {
+  it('wraps a response DTO in the message/data envelope without isDeleted', async () => {
     query.findById.mockResolvedValue(row);
 
     const result = await service.findOne('id-1');
 
-    expect(result.id).toBe('id-1');
-    expect(result).not.toHaveProperty('isDeleted');
+    expect(result.data.id).toBe('id-1');
+    expect(result.message).toEqual(expect.any(String));
+    expect(result.data).not.toHaveProperty('isDeleted');
   });
 
   it('throws NotFound when the row is missing or soft-deleted', async () => {
@@ -38,27 +39,49 @@ describe('{{serviceClass}}', () => {
     await expect(service.findOne('missing')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('maps paginated items to response DTOs', async () => {
-    query.findAll.mockResolvedValue({ items: [row], total: 1, page: 1, pageSize: 20 });
+  it('maps paginated items to response DTOs with totalPages', async () => {
+    query.findAll.mockResolvedValue({ items: [row], total: 41, page: 1, pageSize: 20 });
 
     const result = await service.findAll({} as Query{{entityName}}Dto);
 
-    expect(result.total).toBe(1);
+    expect(result.total).toBe(41);
+    expect(result.totalPages).toBe(3);
     expect(result.items[0]).not.toHaveProperty('isDeleted');
   });
 
-  it('creates and returns a response DTO', async () => {
+  it('passes summaries through with the page', async () => {
+    query.findAll.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20, summaries: { amount: 9 } });
+
+    const result = await service.findAll({} as Query{{entityName}}Dto);
+
+    expect(result.summaries).toEqual({ amount: 9 });
+  });
+
+  it('delegates column options to the query service', async () => {
+    query.findColumnOptions.mockResolvedValue({ items: [], total: 0, next: null });
+
+    await service.findColumnOptions('code', undefined, 1, 20, undefined);
+
+    expect(query.findColumnOptions).toHaveBeenCalledWith('code', undefined, 1, 20, undefined);
+  });
+
+  it('creates and returns the envelope with a response DTO', async () => {
     command.create.mockResolvedValue(row);
 
     const result = await service.create({} as Create{{entityName}}Dto);
 
-    expect(result.id).toBe('id-1');
+    expect(result.data.id).toBe('id-1');
+    expect(result.message).toEqual(expect.any(String));
   });
 
-  it('soft-deletes an existing row', async () => {
+  it('soft-deletes an existing row and returns the envelope', async () => {
     query.findById.mockResolvedValue(row);
+    command.softDelete.mockResolvedValue({ ...row, isDeleted: true });
 
-    await expect(service.remove('id-1')).resolves.toEqual({ id: 'id-1', deleted: true });
+    const result = await service.remove('id-1');
+
     expect(command.softDelete).toHaveBeenCalledWith(row);
+    expect(result.data.id).toBe('id-1');
+    expect(result.data).not.toHaveProperty('isDeleted');
   });
 });

@@ -1,5 +1,10 @@
 export type GarageVoucherType = 'RECEIPT' | 'PAYMENT';
-export type GaragePaymentStatus = 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
+export type GaragePaymentStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'PAID'
+  | 'EXPECTED'
+  | 'CANCELLED';
 
 export interface GaragePaymentRuleInput {
   voucherType?: GarageVoucherType | string | null;

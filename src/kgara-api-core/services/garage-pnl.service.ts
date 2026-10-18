@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
@@ -12,6 +12,7 @@ import {
   PAYMENT_CONTENT_SALE_COMMISSION,
   PAYMENT_CONTENT_DV_COMMISSION,
 } from '../helpers/garage-cashflow-payment-rules';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GaragePnlService {
@@ -25,6 +26,8 @@ export class GaragePnlService {
     private readonly opexRepo: Repository<KgaraOperatingExpense>,
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   /**
@@ -438,6 +441,16 @@ export class GaragePnlService {
     const saleCommission = Number(pnl.commission?.auto?.saleCommission) || 0;
     const dvCommission = Number(pnl.commission?.auto?.dvCommission) || 0;
     const kyGuiProfitRate = Number(pnl.commission?.auto?.kyGuiProfitRate) || 0;
+
+    if (this.garageHub) {
+      return this.garageHub.handlePnlCommissionSync({
+        year,
+        month,
+        saleCommission,
+        dvCommission,
+        kyGuiProfitRate,
+      });
+    }
 
     let syncedVouchers = 0;
     let createdVouchers = 0;

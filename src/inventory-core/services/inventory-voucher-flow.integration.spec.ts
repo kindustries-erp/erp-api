@@ -21,7 +21,7 @@ import { ErpInventoryTrackingSerial } from '../entities/erp_inventory_tracking_s
 import { ErpVehicle } from '../../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpInventoryItem } from '../entities/erp_inventory_item.entity';
 import { ErpSerialLifecycle } from '../entities/erp_serial_lifecycle.entity';
-import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
 
 const j: any = jest;
 

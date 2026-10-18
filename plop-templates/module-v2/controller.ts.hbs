@@ -11,11 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
-import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpAction } from '../../rbac-core/enums/erp-action.enum';
-import { ErpResource } from '../../rbac-core/enums/erp-resource.enum';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
+import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
+import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
+import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
 import { {{serviceClass}} } from '../{{moduleName}}.service';
 import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
 import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
@@ -33,6 +33,26 @@ export class {{entityName}}Controller {
   @Get()
   findAll(@Query() query: Query{{entityName}}Dto) {
     return this.service.findAll(query);
+  }
+
+  // Đặt trước `:id` để `column-options` không bị hiểu thành id
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.READ })
+  @ApiOperation({ summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác' })
+  @Get('column-options')
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+    );
   }
 
   @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.READ })

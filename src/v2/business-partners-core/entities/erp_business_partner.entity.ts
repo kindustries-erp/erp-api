@@ -12,7 +12,11 @@ export class ErpBusinessPartner {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index({ unique: true })
+  // Chỉ các bản ghi chưa xóa mềm mới giữ mã duy nhất, để mã đã xóa dùng lại được
+  @Index('UQ_erp_business_partners_code_active', ['code'], {
+    unique: true,
+    where: '"is_deleted" = false',
+  })
   @Column({ type: 'varchar', length: 255, name: 'code' })
   code: string;
 

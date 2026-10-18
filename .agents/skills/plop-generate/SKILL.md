@@ -140,6 +140,11 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 - `wire = true`: nối vào `app.module.ts` và `data-source.ts`. Resource RBAC luôn được đăng ký trong `erp-resource.enum.ts`.
 - Input sai bị chặn trước khi ghi file nào.
 - Test generator: `bun test plop-helpers`.
+- Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `api-v2-refactor` mục 2b.
+- Cột `number`/`decimal` được cộng vào `summaries` (SUM trên toàn bộ dòng khớp bộ lọc).
+- Resource RBAC đã có trong enum thì generator không chèn lại (`enumEntryExists`).
+- Entity nullable (`string | null`) được map sang `undefined` trong response.
+- Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `api-v2-refactor` mục 3b.
 
 ---
 

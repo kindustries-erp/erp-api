@@ -3,7 +3,6 @@ import { {{entityName}} } from './entities/{{entityKebab}}.entity';
 import { Create{{entityName}}Dto } from './dto/create-{{entityKebab}}.dto';
 import { Query{{entityName}}Dto } from './dto/query-{{entityKebab}}.dto';
 import { Update{{entityName}}Dto } from './dto/update-{{entityKebab}}.dto';
-import { {{entityName}}ResponseDto } from './dto/{{entityKebab}}-response.dto';
 import { to{{entityName}}Response } from './helpers/{{entityKebab}}.mapper';
 import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
 import { {{entityName}}QueryService } from './services/{{entityKebab}}-query.service';
@@ -18,26 +17,40 @@ export class {{serviceClass}} {
 
   async findAll(dto: Query{{entityName}}Dto) {
     const page = await this.query.findAll(dto);
-    return { ...page, items: page.items.map((item) => to{{entityName}}Response(item)) };
+    return {
+      items: page.items.map((item) => to{{entityName}}Response(item)),
+      total: page.total,
+      page: page.page,
+      pageSize: page.pageSize,
+      totalPages: Math.ceil(page.total / page.pageSize),
+      summaries: page.summaries,
+    };
   }
 
-  async findOne(id: string): Promise<{{entityName}}ResponseDto> {
-    return to{{entityName}}Response(await this.requireById(id));
+  findColumnOptions(column: string, search: string | undefined, page: number, pageSize: number, filters?: string) {
+    return this.query.findColumnOptions(column, search, page, pageSize, filters);
   }
 
-  async create(dto: Create{{entityName}}Dto): Promise<{{entityName}}ResponseDto> {
-    return to{{entityName}}Response(await this.command.create(dto));
-  }
-
-  async update(id: string, dto: Update{{entityName}}Dto): Promise<{{entityName}}ResponseDto> {
+  async findOne(id: string) {
     const entity = await this.requireById(id);
-    return to{{entityName}}Response(await this.command.update(entity, dto));
+    return { message: 'Lấy thông tin thành công', data: to{{entityName}}Response(entity) };
   }
 
-  async remove(id: string): Promise<{ id: string; deleted: true }> {
+  async create(dto: Create{{entityName}}Dto) {
+    const entity = await this.command.create(dto);
+    return { message: 'Tạo thành công', data: to{{entityName}}Response(entity) };
+  }
+
+  async update(id: string, dto: Update{{entityName}}Dto) {
     const entity = await this.requireById(id);
-    await this.command.softDelete(entity);
-    return { id, deleted: true };
+    const saved = await this.command.update(entity, dto);
+    return { message: 'Cập nhật thành công', data: to{{entityName}}Response(saved) };
+  }
+
+  async remove(id: string) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.softDelete(entity);
+    return { message: 'Xóa thành công', data: to{{entityName}}Response(saved) };
   }
 
   private async requireById(id: string): Promise<{{entityName}}> {

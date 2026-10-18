@@ -38,8 +38,8 @@ export class CreateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED', 'CANCELLED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | 'CANCELLED';
 
   @IsString()
   @IsOptional()
@@ -115,8 +115,8 @@ export class UpdateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED', 'CANCELLED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | 'CANCELLED';
 
   @IsString()
   @IsOptional()
@@ -196,13 +196,20 @@ export class KgaraCashflowVoucherResponseDto {
   note?: string | null;
   paymentMethod?: string | null;
   paymentContent?: string | null;
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
+  paymentStatus?:
+    | 'PENDING'
+    | 'APPROVED'
+    | 'PAID'
+    | 'EXPECTED'
+    | 'CANCELLED'
+    | null;
   referenceNumber?: string | null;
   caseId?: string | null;
   erpBankTransactionId?: string | null;
   erpCashVoucherId?: string | null;
   createdBy?: string | null;
   isAutoCommission?: boolean;
+  isAutoExpected?: boolean;
   pnlPeriodYear?: number | null;
   pnlPeriodMonth?: number | null;
   pnlCommissionType?: string | null;
@@ -237,6 +244,7 @@ export function toKgaraCashflowVoucherResponse(
     erpCashVoucherId: entity.erpCashVoucherId ?? null,
     createdBy: entity.createdBy ?? null,
     isAutoCommission: entity.isAutoCommission ?? false,
+    isAutoExpected: entity.isAutoExpected ?? false,
     pnlPeriodYear: entity.pnlPeriodYear ?? null,
     pnlPeriodMonth: entity.pnlPeriodMonth ?? null,
     pnlCommissionType: entity.pnlCommissionType ?? null,
