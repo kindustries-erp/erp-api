@@ -31,6 +31,11 @@ export function buildCashflowKpis(summary: PeriodSummary): DashboardKpi[] {
       note: trendNote(cashflow.received, prev?.received),
     },
     {
+      label: 'DỰ THU TRONG KỲ',
+      value: cashflow.expected,
+      note: trendNote(cashflow.expected, prev?.expected),
+    },
+    {
       label: 'ĐÃ CHI TRONG KỲ',
       value: cashflow.paid,
       note: trendNote(cashflow.paid, prev?.paid),

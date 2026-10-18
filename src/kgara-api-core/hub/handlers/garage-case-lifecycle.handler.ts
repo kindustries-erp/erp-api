@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { KgaraCase } from '../../entities/kgara_case.entity';
 import { GarageCaseForecastService } from '../../services/garage-case-forecast.service';
 import { CaseTransitionEvent, CaseTransitionResult } from '../garage-hub.types';
 
@@ -6,7 +9,37 @@ import { CaseTransitionEvent, CaseTransitionResult } from '../garage-hub.types';
 export class GarageCaseLifecycleHandler {
   private readonly logger = new Logger(GarageCaseLifecycleHandler.name);
 
-  constructor(private readonly forecastService: GarageCaseForecastService) {}
+  constructor(
+    private readonly forecastService: GarageCaseForecastService,
+    @InjectRepository(KgaraCase)
+    private readonly caseRepo: Repository<KgaraCase>,
+  ) {}
+
+  /**
+   * Use Case 2: Phiếu thu/chi của case đã thay đổi (tạo, sửa, xóa). Khi case đang Hoàn tất,
+   * đặt lại Dự thu theo còn phải thu hiện tại để khách thu một phần thì dự thu giảm theo.
+   */
+  async handleReceiptChanged(caseId: string): Promise<CaseTransitionResult> {
+    if (!caseId) {
+      return { caseId: '', handled: false, actionTaken: 'NO_OP' };
+    }
+    const kCase = await this.caseRepo.findOne({ where: { id: caseId } });
+    if (!kCase || kCase.tinhTrangDichVu !== 3) {
+      return { caseId, handled: false, actionTaken: 'NO_OP' };
+    }
+    await this.forecastService.syncCaseForecast({
+      caseId,
+      previousStatus: 3,
+      newStatus: 3,
+      ngayHoanThanhCongViec: kCase.ngayHoanThanhCongViec,
+      tienConPhaiThanhToan: kCase.tienConPhaiThanhToan,
+      tienCoThue: kCase.tienCoThue,
+      khachHangName: kCase.khachHangName,
+      licensePlate: kCase.bienSoXe,
+      soChungTu: kCase.soChungTu,
+    });
+    return { caseId, handled: true, actionTaken: 'UPDATED_EXPECTED' };
+  }
 
   /**
    * Use Case 1: Điều phối vòng đời case khi chuyển trạng thái

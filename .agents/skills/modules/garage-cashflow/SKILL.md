@@ -351,3 +351,27 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - Khóa số tiền khi phiếu đã chuyển sang `PAID` (Đã chi). Nếu P&L tăng thêm, hệ thống tự động sinh thêm phiếu delta ở trạng thái **Dự chi** (`PENDING`).
 - **Settlement Guard**: Cấm cấn trừ công nợ phiếu dịch vụ đối với tất cả các phiếu có nội dung hoa hồng (`isCommissionContent`).
 
+
+## 14. Sổ quỹ xưởng qua Garage Hub & Phân loại dòng tiền (cập nhật 2026-10-18)
+- **Nguồn định nghĩa duy nhất**: `helpers/garage-ledger-classifier.ts` → `classifyVoucher(v)` trả `LedgerCategory`:
+
+| Loại phiếu | paymentStatus | Nhóm | Vào tổng |
+|---|---|---|---|
+| RECEIPT | `EXPECTED` | `EXPECTED_IN` (Dự thu) | Dự thu |
+| RECEIPT | khác `EXPECTED`/`CANCELLED` (kể cả `PAID`, `null`) | `ACTUAL_IN` (Thực thu) | Đã thu |
+| PAYMENT | `PAID` hoặc `null` (phiếu cũ) | `ACTUAL_OUT` (Thực chi) | Đã chi |
+| PAYMENT | `PENDING` / `APPROVED` | `PLANNED_OUT` (Dự chi) | Dự chi — **không** cộng vào Đã chi |
+| bất kỳ | `CANCELLED` | `null` | Loại khỏi mọi tổng và danh sách |
+
+- **Dòng tiền ròng** = Thực thu − Thực chi (không tính dự thu/dự chi).
+- **Hub là cổng đọc sổ quỹ**: `GarageHubService.getPeriodLedger(from, to, branchId)` → `GaragePeriodLedgerHandler.loadLedger` (truy vấn qua `GaragePeriodReportQueries.loadVouchers`, phân loại, cộng tổng `summarizeLedger`). Export Excel theo kỳ (`GaragePeriodReportService`) lấy phiếu kỳ hiện tại và kỳ trước qua Hub; builder (summary, series, cards, chart, sheet Thu chi) chỉ đọc `category`, không tự lọc `type`.
+- **Dashboard Engine web** (`GarageCashflowDashboardEngine`): KPI `totalIn/totalOut` và trend 6 tháng dùng cùng điều kiện SQL (`ACTUAL_IN_SQL`, `ACTUAL_OUT_SQL`) — thay đổi so với trước: `totalOut` không còn gồm phiếu chi Chờ duyệt/Đã duyệt, `totalIn` loại phiếu đã hủy. Breakdown theo nội dung và danh sách top giao dịch chưa đổi.
+- **Excel sheet `Thu chi trong kỳ`**: 4 cột tiền tách theo nhóm (Thu, Dự thu, Chi, Dự chi) và cột `Trạng thái` (Thực tế / Dự thu / Dự chi (Chờ duyệt|Đã duyệt)); mỗi phiếu chỉ rơi vào đúng một cột tiền.
+- **Excel Dashboard `Báo cáo`**: thẻ Thu chi có 5 thẻ (ĐÃ THU, DỰ THU, ĐÃ CHI, DỰ CHI, DÒNG TIỀN RÒNG); chart thu chi có 5 chuỗi (Thu, Dự thu, Chi, Dự chi, Dòng tiền ròng).
+- Test: `helpers/garage-ledger-classifier.spec.ts`, `hub/handlers/garage-period-ledger.handler.spec.ts`, `helpers/garage-period-summary.builder.spec.ts`, `helpers/garage-period-series.helper.spec.ts`.
+- **Plan v2 (2026-10-18)**: `Dự chi` = `PENDING` + `APPROVED` ở mọi nơi (thẻ KPI web `pendingOut*`, `PLANNED_OUT_SQL`, Excel báo cáo kỳ, Excel danh sách Thu chi). `isReceiptSettled` loại `CANCELLED`, nên phiếu thu đã hủy không tạo settlement.
+- **Excel danh sách Thu chi** (`GarageCashflowExcelBuilder`): cột Thu, Dự thu, Chi, Dự chi; chọn Thu/Chi thì tự kèm Dự thu/Dự chi. Nhãn Trạng thái: Đã thu, Dự thu, Đã chi, Dự chi (Chờ duyệt | Đã duyệt), Đã hủy. Phiếu chi không có trạng thái (phiếu cũ) hiện "Đã chi" (trước đây để trống). Phân loại dùng trực tiếp `classifyVoucher`, không gọi Hub (danh sách lọc theo bộ lọc người dùng).
+- **Plan v3 (2026-10-18)**: cột Dự thu/Dự chi trong Excel (sheet `Thu chi trong kỳ`, Excel danh sách Thu chi, Bảng kê phiếu dịch vụ) tô nền amber (`applyForecastColumnStyle` trong `helpers/kgara-excel-style.helper.ts`) để phân biệt với cột thực tế. Dự thu thực tế là phiếu tự sinh `is_auto_expected`.
+- **Đồng bộ Dự thu khi thu một phần**: sau khi tạo, sửa hoặc xóa phiếu gắn phiếu dịch vụ, `GarageCashflowTransactionService` gọi `GarageHubService.handleCaseReceiptChanged(caseId)` (sau commit, lỗi chỉ log). Nếu case đang Hoàn tất, phiếu Dự thu được đặt bằng `max(0, tien_con_phai_thanh_toan)` của case: thu 8tr trên dự thu 10tr thì còn 2tr; về 0 thì phiếu chuyển `CANCELLED`.
+- **Phiếu tự sinh đã Đã thu/Đã duyệt không còn chặn sinh Dự thu**: `GarageCaseForecastService` chỉ cập nhật phiếu `EXPECTED`/`CANCELLED` mới nhất; phần còn lại tạo phiếu mới.
+- Lưu ý: nếu người dùng tự sửa số tiền phiếu Dự thu mà vẫn để trạng thái Dự thu, lần đồng bộ kế tiếp sẽ đặt lại theo còn phải thu.

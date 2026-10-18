@@ -1,7 +1,9 @@
 import type { GarageDebtExportRow } from './garage-debts-export.helper';
+import { classifyVoucher } from './garage-ledger-classifier';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import { summarizePeriod } from './garage-period-summary.builder';
 import {
+  buildCashflowKpis,
   buildPeriodDebtKpis,
   trendNote,
 } from './garage-period-summary-cards.helper';
@@ -22,6 +24,19 @@ const debtRow = (patch: Partial<GarageDebtExportRow>): GarageDebtExportRow => ({
   ...patch,
 });
 
+/** Phiếu đã gắn nhóm dòng tiền như sổ quỹ Hub trả về. */
+const ledger = (
+  type: 'RECEIPT' | 'PAYMENT',
+  amount: number,
+  paymentStatus: string | null = null,
+) =>
+  ({
+    type,
+    amount,
+    paymentStatus,
+    category: classifyVoucher({ voucherType: type, paymentStatus }),
+  }) as GaragePeriodReportData['vouchers'][number];
+
 const data = (
   patch: Partial<GaragePeriodReportData> = {},
 ): GaragePeriodReportData => ({
@@ -30,10 +45,10 @@ const data = (
   asOfDate: new Date(2026, 9, 16),
   pnlMonths: [],
   vouchers: [
-    { type: 'RECEIPT', amount: 700 },
-    { type: 'RECEIPT', amount: 300 },
-    { type: 'PAYMENT', amount: 400 },
-  ] as GaragePeriodReportData['vouchers'],
+    ledger('RECEIPT', 700, 'PAID'),
+    ledger('RECEIPT', 300, 'PAID'),
+    ledger('PAYMENT', 400, 'PAID'),
+  ],
   customerRows: [
     debtRow({ totalAmount: 1000, paidAmount: 400, balanceAmount: 600 }),
     debtRow({ totalAmount: 500, paidAmount: 500, balanceAmount: 0 }),
@@ -53,27 +68,47 @@ describe('summarizePeriod', () => {
   it('thu, chi và dòng tiền ròng trong kỳ', () => {
     expect(summarizePeriod(data()).cashflow).toEqual({
       received: 1000,
+      expected: 0,
       paid: 400,
       net: 600,
       planned: 0,
     });
   });
 
-  it('dự chi = phiếu chi Chờ duyệt + Đã duyệt; Đã chi vẫn cộng mọi phiếu chi', () => {
+  it('phiếu thu dự kiến (EXPECTED) không vào Đã thu mà vào Dự thu', () => {
     const s = summarizePeriod(
       data({
         vouchers: [
-          { type: 'RECEIPT', amount: 1000 },
-          { type: 'PAYMENT', amount: 400, paymentStatus: 'PAID' },
-          { type: 'PAYMENT', amount: 100, paymentStatus: 'PENDING' },
-          { type: 'PAYMENT', amount: 50, paymentStatus: 'APPROVED' },
-        ] as GaragePeriodReportData['vouchers'],
+          ledger('RECEIPT', 1000, 'PAID'),
+          ledger('RECEIPT', 250, 'EXPECTED'),
+        ],
       }),
     );
     expect(s.cashflow).toEqual({
       received: 1000,
-      paid: 550,
-      net: 450,
+      expected: 250,
+      paid: 0,
+      net: 1000,
+      planned: 0,
+    });
+  });
+
+  it('Đã chi chỉ gồm phiếu PAID; Chờ duyệt + Đã duyệt là dự chi và không bị đếm vào Đã chi', () => {
+    const s = summarizePeriod(
+      data({
+        vouchers: [
+          ledger('RECEIPT', 1000, 'PAID'),
+          ledger('PAYMENT', 400, 'PAID'),
+          ledger('PAYMENT', 100, 'PENDING'),
+          ledger('PAYMENT', 50, 'APPROVED'),
+        ],
+      }),
+    );
+    expect(s.cashflow).toEqual({
+      received: 1000,
+      expected: 0,
+      paid: 400,
+      net: 600,
       planned: 150,
     });
   });
@@ -116,7 +151,13 @@ describe('summarizePeriod', () => {
         openSupplierRows: [],
       }),
     );
-    expect(s.cashflow).toEqual({ received: 0, paid: 0, net: 0, planned: 0 });
+    expect(s.cashflow).toEqual({
+      received: 0,
+      expected: 0,
+      paid: 0,
+      net: 0,
+      planned: 0,
+    });
     expect(s.periodReceivable).toEqual({ total: 0, paid: 0, balance: 0 });
     expect(s.receivable.level).toBe('OK');
   });
@@ -154,6 +195,26 @@ describe('card Dashboard', () => {
     expect(trendNote(0, 0)).toBe('Không đổi so với kỳ trước');
     expect(trendNote(50, 0)).toBe('Kỳ trước: 0');
     expect(trendNote(50, undefined)).toBeUndefined();
+  });
+
+  it('thẻ thu chi: có DỰ THU và DỰ CHI tách khỏi ĐÃ THU và ĐÃ CHI', () => {
+    const s = summarizePeriod(
+      data({
+        vouchers: [
+          ledger('RECEIPT', 1000, 'PAID'),
+          ledger('RECEIPT', 250, 'EXPECTED'),
+          ledger('PAYMENT', 400, 'PAID'),
+          ledger('PAYMENT', 100, 'PENDING'),
+        ],
+      }),
+    );
+    expect(buildCashflowKpis(s).map((k) => [k.label, k.value])).toEqual([
+      ['ĐÃ THU TRONG KỲ', 1000],
+      ['DỰ THU TRONG KỲ', 250],
+      ['ĐÃ CHI TRONG KỲ', 400],
+      ['DỰ CHI TRONG KỲ', 100],
+      ['DÒNG TIỀN RÒNG (THU - CHI)', 600],
+    ]);
   });
 
   it('công nợ phát sinh: chỉ thẻ "Phát sinh trong kỳ" của hai phía', () => {

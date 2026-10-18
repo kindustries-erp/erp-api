@@ -1,6 +1,7 @@
 import * as ExcelJS from 'exceljs';
 
 import {
+  DASHBOARD_COLUMNS,
   DASHBOARD_DATA_START_COL,
   chartAnchor,
   columnLetter,
@@ -13,9 +14,11 @@ import {
 } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   CHART_PALETTE,
+  CHART_TINT,
   type XlsxChartSpec,
 } from '../../common/xlsx-charts/xlsx-chart.types';
 import {
+  buildCashSeries,
   buildTimeSeries,
   chooseBucketUnit,
   classificationBreakdown,
@@ -114,6 +117,10 @@ export function buildCasesDashboard(
       value: { formula: `SUM(${col('daThu')})`, result: sums.daThu ?? 0 },
     },
     {
+      label: 'DỰ THU',
+      value: { formula: `SUM(${col('duThu')})`, result: sums.duThu ?? 0 },
+    },
+    {
       label: 'CÒN PHẢI THU',
       value: {
         formula: `SUM(${col('conPhaiThu')})`,
@@ -126,6 +133,10 @@ export function buildCasesDashboard(
         formula: `SUM(${col('conPhaiTra')})`,
         result: sums.conPhaiTra ?? 0,
       },
+    },
+    {
+      label: 'DỰ CHI',
+      value: { formula: `SUM(${col('duChi')})`, result: sums.duChi ?? 0 },
     },
   ];
 
@@ -143,7 +154,9 @@ export function buildCasesDashboard(
     ],
   );
   const chartsRow = writeKpiCards(dashboard, nextRow, kpis);
-  setDashboardPrintArea(dashboard, rowAfterCharts(chartsRow, 2));
+  // 3 hàng chart: thu chi (full), phân loại + top khách, dòng tiền thực tế và dự kiến (full)
+  const footnoteRow = rowAfterCharts(chartsRow, 3);
+  setDashboardPrintArea(dashboard, footnoteRow);
 
   if (rows.length === 0) return [];
 
@@ -152,12 +165,14 @@ export function buildCasesDashboard(
     .filter((d): d is Date => d !== null);
   const unit = chooseBucketUnit(spanInDays(meta.dateFrom, meta.dateTo, dates));
   const series = buildTimeSeries(rows, meta.dateBasis, unit);
+  const cashSeries = buildCashSeries(rows, meta.dateBasis, unit);
   const classes = classificationBreakdown(rows);
   const customers = topCustomersByRevenue(rows, TOP_N);
 
   const tsCol = DASHBOARD_DATA_START_COL;
   const classCol = tsCol + 5;
   const topCol = classCol + 3;
+  const cashCol = topCol + 4;
   const tsTable = writeDataTable(dashboard, {
     startRow: chartsRow,
     startCol: tsCol,
@@ -184,6 +199,22 @@ export function buildCasesDashboard(
     headers: ['Khách hàng', 'Doanh thu', 'Lợi nhuận'],
     rows: customers.map((c) => [c.label, c.revenue, c.profit]),
     numFmts: [undefined, MONEY, MONEY],
+  });
+
+  const cashTable = writeDataTable(dashboard, {
+    startRow: chartsRow,
+    startCol: cashCol,
+    columnWidths: [16, 16, 16, 16, 16],
+    title: `Dữ liệu biểu đồ: Dòng tiền theo ${BUCKET_LABEL[unit]}`,
+    headers: ['Kỳ', 'Đã thu', 'Dự thu', 'Đã trả', 'Dự chi'],
+    rows: cashSeries.map((p) => [
+      p.label,
+      p.received,
+      p.expected,
+      p.paid,
+      p.planned,
+    ]),
+    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY],
   });
 
   const charts: XlsxChartSpec[] = [];
@@ -214,6 +245,42 @@ export function buildCasesDashboard(
           values: series.map((p) => p.profit),
           color: CHART_PALETTE[3],
           kind: 'line',
+        },
+      ],
+    });
+  }
+
+  if (cashSeries.length > 0) {
+    charts.push({
+      type: 'column',
+      title: `Đã thu - Dự thu - Đã trả - Dự chi theo ${BUCKET_LABEL[unit]} (${BASIS_LABEL[meta.dateBasis]})`,
+      anchor: chartAnchor(chartsRow, 4, { fullWidth: true }),
+      categoriesRef: cashTable.ref(0),
+      categories: cashSeries.map((p) => p.label),
+      series: [
+        {
+          name: 'Đã thu',
+          valuesRef: cashTable.ref(1),
+          values: cashSeries.map((p) => p.received),
+          color: CHART_PALETTE[0],
+        },
+        {
+          name: 'Dự thu',
+          valuesRef: cashTable.ref(2),
+          values: cashSeries.map((p) => p.expected),
+          color: CHART_TINT.emerald,
+        },
+        {
+          name: 'Đã trả',
+          valuesRef: cashTable.ref(3),
+          values: cashSeries.map((p) => p.paid),
+          color: CHART_PALETTE[3],
+        },
+        {
+          name: 'Dự chi',
+          valuesRef: cashTable.ref(4),
+          values: cashSeries.map((p) => p.planned),
+          color: CHART_TINT.rose,
         },
       ],
     });
@@ -262,5 +329,30 @@ export function buildCasesDashboard(
     });
   }
 
+  writeCasesFootnote(
+    dashboard,
+    footnoteRow,
+    'Đã thu/đã trả lấy từ thu chi gắn phiếu dịch vụ (settlement). Dự thu là phiếu thu dự kiến chưa thu; dự chi là phiếu chi Chờ duyệt + Đã duyệt gắn phiếu dịch vụ; phiếu đã hủy không tính. Các số này tính theo tập phiếu dịch vụ trong bảng kê nên có thể khác báo cáo kỳ (theo ngày chứng từ thu chi).',
+  );
+
   return charts;
+}
+
+/** Ghi chú nguồn số liệu một dòng cuối Dashboard bảng kê. */
+function writeCasesFootnote(
+  sheet: ExcelJS.Worksheet,
+  row: number,
+  text: string,
+): void {
+  sheet.mergeCells(row, 1, row, DASHBOARD_COLUMNS);
+  const cell = sheet.getCell(row, 1);
+  cell.value = text;
+  cell.font = {
+    name: 'Calibri',
+    size: 9,
+    italic: true,
+    color: { argb: 'FF64748B' },
+  };
+  cell.alignment = { vertical: 'top', wrapText: true };
+  sheet.getRow(row).height = 36;
 }

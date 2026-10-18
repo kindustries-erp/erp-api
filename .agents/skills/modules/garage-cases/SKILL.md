@@ -915,3 +915,8 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - `updateCaseConfig`: gửi `categoryId` falsy + `classification` null/rỗng ("Chưa phân loại") → xóa **cả** `category_id` lẫn `classification` (trước đây `classification` bị giữ lại, UI vẫn hiện phân loại cũ).
 - Migration `20261014150000` backfill `category_id` cho phiếu có `classification` mà `category_id` NULL (70 phiếu trên greenway-production). Invariant: phiếu có `classification` thì phải có `category_id` tương ứng.
 - **Khóa sync (phương án B)**: cột `kgara_cases.classification_manually_cleared` (migration `20261014160000`). `updateCaseConfig` bật `true` khi người dùng chủ động bỏ phân loại, gỡ về `false` khi chọn lại phân loại. `SyncCaseService` (sync hàng loạt và `syncCaseDetail`) chỉ tự gán `classification`/`category_id` từ KGara khi `classification` NULL **và** cờ này `false`. Test sync mới chỉ phủ đường `syncCaseDetail`.
+
+## Bảng kê phiếu dịch vụ: Dự thu / Dự chi (cập nhật 2026-10-18)
+- Sheet `Bảng kê phiếu kết thúc` có 2 cột cuối: **Dự thu (VNĐ)** và **Dự chi (VNĐ)**, lấy qua `GarageHubService.getCaseLedger(caseIds)` → `GarageCaseLedgerHandler` (phiếu thu `EXPECTED` và phiếu chi `PENDING`/`APPROVED` gắn `case_id` của phiếu dịch vụ; phiếu đã hủy không tính). Hai cột đặt cuối để không lệch chữ cột công thức cũ.
+- Đã thu / Đã trả vẫn lấy từ `kgara_case_settlements` (không đổi).
+- Sheet `Dashboard`: thẻ **DỰ THU** (sau ĐÃ THU) và **DỰ CHI** (sau CÒN PHẢI TRẢ); chart mới **Đã thu - Dự thu - Đã trả - Dự chi** theo kỳ (full width, hàng chart thứ 3); bảng dữ liệu `buildCashSeries` (`helpers/garage-cases-dashboard-data.helper.ts`); footnote ghi rõ số có thể khác báo cáo kỳ vì khác tập dữ liệu.

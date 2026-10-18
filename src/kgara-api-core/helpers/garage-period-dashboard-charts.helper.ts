@@ -3,6 +3,7 @@ import * as ExcelJS from 'exceljs';
 import { writeDataTable } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import {
   CHART_PALETTE,
+  CHART_TINT,
   LABEL_MONEY_FMT,
   type XlsxChartSpec,
 } from '../../common/xlsx-charts/xlsx-chart.types';
@@ -27,7 +28,7 @@ export const PERIOD_CHART_BANDS: [number, number][] = [
 ];
 
 const MONEY = '#,##0';
-const COLUMN_WIDTHS = [34, 18, 18, 18, 18];
+const COLUMN_WIDTHS = [34, 18, 18, 18, 18, 18];
 const AGING_LABELS = ['0-30 ngày', '31-60 ngày', '61-90 ngày', 'Trên 90 ngày'];
 const GROUP_LABELS: Record<string, string> = {
   enterprise: 'Doanh nghiệp',
@@ -73,18 +74,25 @@ export function buildDashboardCharts(
   const cashUnit = BUCKET_UNIT_LABEL[cash.unit];
   const cashRows = orEmpty(
     cash.points.map(
-      (p): Row => [p.label, p.thu, p.chi, p.planned, p.thu - p.chi],
+      (p): Row => [p.label, p.thu, p.duThu, p.chi, p.planned, p.thu - p.chi],
     ),
-    5,
+    6,
   );
   const cashTable = writeDataTable(sheet, {
     startRow: chartTop,
     startCol: col,
     columnWidths: COLUMN_WIDTHS,
     title: `Dữ liệu biểu đồ: Thu vs chi theo ${cashUnit}`,
-    headers: ['Mốc thời gian', 'Thu', 'Chi', 'Dự chi', 'Dòng tiền ròng'],
+    headers: [
+      'Mốc thời gian',
+      'Thu',
+      'Dự thu',
+      'Chi',
+      'Dự chi',
+      'Dòng tiền ròng',
+    ],
     rows: cashRows,
-    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY],
+    numFmts: [undefined, MONEY, MONEY, MONEY, MONEY, MONEY],
   });
 
   const agingRows: Row[] = [
@@ -156,21 +164,29 @@ export function buildDashboardCharts(
           color: CHART_PALETTE[0],
         },
         {
-          name: 'Chi',
+          name: 'Dự thu',
           valuesRef: cashTable.ref(2),
           values: column(cashRows, 2),
+          color: CHART_TINT.emerald,
+          dataLabels: false,
+        },
+        {
+          name: 'Chi',
+          valuesRef: cashTable.ref(3),
+          values: column(cashRows, 3),
           color: CHART_PALETTE[3],
         },
         {
           name: 'Dự chi',
-          valuesRef: cashTable.ref(3),
-          values: column(cashRows, 3),
-          color: CHART_PALETTE[6],
+          valuesRef: cashTable.ref(4),
+          values: column(cashRows, 4),
+          color: CHART_TINT.rose,
+          dataLabels: false,
         },
         {
           name: 'Dòng tiền ròng',
-          valuesRef: cashTable.ref(4),
-          values: column(cashRows, 4),
+          valuesRef: cashTable.ref(5),
+          values: column(cashRows, 5),
           color: CHART_PALETTE[2],
           kind: 'line',
           dataLabels: false,

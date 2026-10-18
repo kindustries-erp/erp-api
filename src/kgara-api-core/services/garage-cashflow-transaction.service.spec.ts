@@ -11,7 +11,10 @@ interface HarnessState {
   opex?: any;
 }
 
-function buildHarness(state: HarnessState = {}) {
+function buildHarness(
+  state: HarnessState = {},
+  garageHub?: Record<string, jest.Mock>,
+) {
   const created: Array<{ entity: unknown; data: any }> = [];
   const manager: any = {
     findOne: jest.fn(async (entity: unknown) => {
@@ -52,6 +55,8 @@ function buildHarness(state: HarnessState = {}) {
     {} as any,
     {} as any,
     dataSource,
+    undefined,
+    garageHub as any,
   );
   const createdOf = (entity: unknown) =>
     created.filter((c) => c.entity === entity).map((c) => c.data);
@@ -64,6 +69,31 @@ const baseDto = {
   transDate: '2026-10-05',
   caseId: 'case-1',
 };
+
+describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu phiếu', () => {
+  it('tạo phiếu gắn case thì gọi Hub đặt lại dự thu của case đó sau khi commit', async () => {
+    const hub = {
+      handleCashflowSettled: jest.fn().mockResolvedValue({}),
+      handleCaseReceiptChanged: jest.fn().mockResolvedValue({}),
+    };
+    const h = buildHarness({}, hub);
+    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    expect(h.queryRunner.commitTransaction).toHaveBeenCalled();
+    expect(hub.handleCaseReceiptChanged).toHaveBeenCalledWith('case-1');
+  });
+
+  it('lỗi khi đồng bộ dự thu không làm hỏng việc lưu phiếu', async () => {
+    const hub = {
+      handleCashflowSettled: jest.fn().mockResolvedValue({}),
+      handleCaseReceiptChanged: jest.fn().mockRejectedValue(new Error('boom')),
+    };
+    const h = buildHarness({}, hub);
+    await expect(
+      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+    ).resolves.toBeDefined();
+    expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
+  });
+});
 
 describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
   describe('createVoucher', () => {

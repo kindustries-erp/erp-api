@@ -4,6 +4,11 @@ import { Repository, EntityManager } from 'typeorm';
 import { GarageCaseLifecycleHandler } from './handlers/garage-case-lifecycle.handler';
 import { GarageCashflowSettleHandler } from './handlers/garage-cashflow-settle.handler';
 import { GaragePnlCommissionHandler } from './handlers/garage-pnl-commission.handler';
+import { GaragePeriodLedgerHandler } from './handlers/garage-period-ledger.handler';
+import {
+  GarageCaseLedgerHandler,
+  type CaseLedgerAmounts,
+} from './handlers/garage-case-ledger.handler';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
 import {
@@ -14,6 +19,7 @@ import {
   PnlCommissionEvent,
   PnlCommissionSyncResult,
   GarageHealthOverview,
+  PeriodLedger,
 } from './garage-hub.types';
 
 @Injectable()
@@ -24,6 +30,8 @@ export class GarageHubService {
     private readonly caseLifecycleHandler: GarageCaseLifecycleHandler,
     private readonly cashflowSettleHandler: GarageCashflowSettleHandler,
     private readonly pnlCommissionHandler: GaragePnlCommissionHandler,
+    private readonly periodLedgerHandler: GaragePeriodLedgerHandler,
+    private readonly caseLedgerHandler: GarageCaseLedgerHandler,
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
     @InjectRepository(KgaraOperatingExpense)
@@ -37,6 +45,15 @@ export class GarageHubService {
     event: CaseTransitionEvent,
   ): Promise<CaseTransitionResult> {
     return this.caseLifecycleHandler.handleCaseTransition(event);
+  }
+
+  /**
+   * Use Case 6: Phiếu thu/chi của case vừa tạo, sửa hoặc xóa; đặt lại dự thu theo còn phải thu.
+   */
+  async handleCaseReceiptChanged(
+    caseId: string,
+  ): Promise<CaseTransitionResult> {
+    return this.caseLifecycleHandler.handleReceiptChanged(caseId);
   }
 
   /**
@@ -62,7 +79,28 @@ export class GarageHubService {
   }
 
   /**
-   * Use Case 4: Giám sát toàn vẹn và sức khỏe tài chính xưởng
+   * Use Case 4: Sổ quỹ xưởng trong kỳ (Thực thu, Dự thu, Thực chi, Dự chi). Mọi báo cáo
+   * thu chi đọc số từ đây, không tự phân loại phiếu.
+   */
+  async getPeriodLedger(
+    from?: string,
+    to?: string,
+    branchId?: string,
+  ): Promise<PeriodLedger> {
+    return this.periodLedgerHandler.loadLedger(from, to, branchId);
+  }
+
+  /**
+   * Dự thu và dự chi theo từng phiếu dịch vụ (bảng kê phiếu dịch vụ).
+   */
+  async getCaseLedger(
+    caseIds: string[],
+  ): Promise<Record<string, CaseLedgerAmounts>> {
+    return this.caseLedgerHandler.loadCaseLedger(caseIds);
+  }
+
+  /**
+   * Use Case 5: Giám sát toàn vẹn và sức khỏe tài chính xưởng
    */
   async getHealthOverview(
     targetYear?: number,

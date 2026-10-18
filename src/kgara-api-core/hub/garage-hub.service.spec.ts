@@ -4,6 +4,8 @@ import { GarageHubService } from './garage-hub.service';
 import { GarageCaseLifecycleHandler } from './handlers/garage-case-lifecycle.handler';
 import { GarageCashflowSettleHandler } from './handlers/garage-cashflow-settle.handler';
 import { GaragePnlCommissionHandler } from './handlers/garage-pnl-commission.handler';
+import { GaragePeriodLedgerHandler } from './handlers/garage-period-ledger.handler';
+import { GarageCaseLedgerHandler } from './handlers/garage-case-ledger.handler';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
 
@@ -14,6 +16,7 @@ describe('GarageHubService', () => {
   let pnlCommissionHandler: jest.Mocked<GaragePnlCommissionHandler>;
   let voucherRepo: any;
   let opexRepo: any;
+  let mockLedgerHandler: { loadLedger: jest.Mock };
 
   beforeEach(async () => {
     const mockCaseHandler = {
@@ -21,6 +24,11 @@ describe('GarageHubService', () => {
         caseId: 'c-1',
         handled: true,
         actionTaken: 'CREATED_EXPECTED',
+      }),
+      handleReceiptChanged: jest.fn().mockResolvedValue({
+        caseId: 'c-1',
+        handled: true,
+        actionTaken: 'UPDATED_EXPECTED',
       }),
     };
 
@@ -41,6 +49,19 @@ describe('GarageHubService', () => {
         createdVouchers: 2,
         updatedVouchers: 0,
         deltaVouchers: 0,
+      }),
+    };
+
+    mockLedgerHandler = {
+      loadLedger: jest.fn().mockResolvedValue({
+        vouchers: [],
+        totals: {
+          actualIn: 0,
+          expectedIn: 0,
+          actualOut: 0,
+          plannedOut: 0,
+          net: 0,
+        },
       }),
     };
 
@@ -68,6 +89,18 @@ describe('GarageHubService', () => {
           useValue: mockPnlHandler,
         },
         {
+          provide: GaragePeriodLedgerHandler,
+          useValue: mockLedgerHandler,
+        },
+        {
+          provide: GarageCaseLedgerHandler,
+          useValue: {
+            loadCaseLedger: jest
+              .fn()
+              .mockResolvedValue({ c1: { expectedIn: 1, plannedOut: 2 } }),
+          },
+        },
+        {
           provide: getRepositoryToken(KgaraCashflowVoucher),
           useValue: voucherRepo,
         },
@@ -86,6 +119,29 @@ describe('GarageHubService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('handleCaseReceiptChanged ủy quyền cho lifecycle handler', async () => {
+    const result = await service.handleCaseReceiptChanged('c-1');
+    expect(result).toEqual({
+      caseId: 'c-1',
+      handled: true,
+      actionTaken: 'UPDATED_EXPECTED',
+    });
+  });
+
+  it('getCaseLedger ủy quyền cho handler theo phiếu dịch vụ', async () => {
+    const result = await service.getCaseLedger(['c1']);
+    expect(result).toEqual({ c1: { expectedIn: 1, plannedOut: 2 } });
+  });
+
+  it('getPeriodLedger ủy quyền cho handler sổ quỹ với đúng kỳ và chi nhánh', async () => {
+    await service.getPeriodLedger('2026-10-01', '2026-10-31', 'CN1');
+    expect(mockLedgerHandler.loadLedger).toHaveBeenCalledWith(
+      '2026-10-01',
+      '2026-10-31',
+      'CN1',
+    );
   });
 
   it('should delegate handleCaseTransition to caseLifecycleHandler', async () => {

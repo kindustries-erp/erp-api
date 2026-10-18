@@ -4,7 +4,7 @@ import {
 } from './garage-overdue-warning.helper';
 import type { GarageDebtExportRow } from './garage-debts-export.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
-import { isPlannedPayment } from './garage-period-series.helper';
+import { summarizeLedger } from './garage-ledger-classifier';
 
 /** Công nợ của các phiếu hoàn thành trong kỳ: phát sinh, đã thu/trả và còn lại. */
 export interface PeriodDebtSummary {
@@ -15,8 +15,14 @@ export interface PeriodDebtSummary {
 
 /** Các số tổng của sheet Dashboard báo cáo kỳ; không có số đối tượng. */
 export interface PeriodSummary {
-  /** Đã thu/đã chi/dòng tiền ròng: tổng mọi phiếu trong kỳ. `planned` = phiếu chi Chờ duyệt + Đã duyệt. */
-  cashflow: { received: number; paid: number; net: number; planned: number };
+  /** Thực thu/thực chi/dòng tiền ròng theo nhóm dòng tiền; `expected` = phiếu thu dự kiến, `planned` = phiếu chi Chờ duyệt + Đã duyệt. */
+  cashflow: {
+    received: number;
+    expected: number;
+    paid: number;
+    planned: number;
+    net: number;
+  };
   /** Công nợ phát sinh trong kỳ (phiếu hoàn thành trong kỳ). */
   periodReceivable: PeriodDebtSummary;
   periodPayable: PeriodDebtSummary;
@@ -29,6 +35,7 @@ export interface PeriodSummary {
 
 export interface PeriodComparison {
   received: number;
+  expected: number;
   paid: number;
   planned: number;
   receivableTotal: number;
@@ -51,19 +58,16 @@ const periodDebt = (rows: GarageDebtExportRow[]): PeriodDebtSummary => ({
  * lũy kế (nợ mở đến ngày xuất, tuổi nợ phải thu/phải trả).
  */
 export function summarizePeriod(data: GaragePeriodReportData): PeriodSummary {
-  const received = sum(
-    data.vouchers.filter((v) => v.type === 'RECEIPT'),
-    (v) => v.amount,
-  );
-  const paid = sum(
-    data.vouchers.filter((v) => v.type === 'PAYMENT'),
-    (v) => v.amount,
-  );
-
-  const planned = sum(data.vouchers.filter(isPlannedPayment), (v) => v.amount);
+  const ledger = summarizeLedger(data.vouchers);
 
   return {
-    cashflow: { received, paid, net: received - paid, planned },
+    cashflow: {
+      received: ledger.actualIn,
+      expected: ledger.expectedIn,
+      paid: ledger.actualOut,
+      planned: ledger.plannedOut,
+      net: ledger.net,
+    },
     periodReceivable: periodDebt(data.customerRows),
     periodPayable: periodDebt(data.supplierRows),
     receivable: summarizeOverdue('receivable', data.openCustomerRows),
@@ -78,16 +82,12 @@ export function summarizePeriod(data: GaragePeriodReportData): PeriodSummary {
 function comparisonOf(
   prev: NonNullable<GaragePeriodReportData['previousPeriod']>,
 ) {
+  const ledger = summarizeLedger(prev.vouchers);
   return {
-    received: sum(
-      prev.vouchers.filter((v) => v.type === 'RECEIPT'),
-      (v) => v.amount,
-    ),
-    paid: sum(
-      prev.vouchers.filter((v) => v.type === 'PAYMENT'),
-      (v) => v.amount,
-    ),
-    planned: sum(prev.vouchers.filter(isPlannedPayment), (v) => v.amount),
+    received: ledger.actualIn,
+    expected: ledger.expectedIn,
+    paid: ledger.actualOut,
+    planned: ledger.plannedOut,
     receivableTotal: periodDebt(prev.customerRows).total,
     payableTotal: periodDebt(prev.supplierRows).total,
   };
