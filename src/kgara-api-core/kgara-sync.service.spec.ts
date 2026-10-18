@@ -51,6 +51,7 @@ describe('KgaraSyncService', () => {
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
       upsert: jest.fn().mockResolvedValue({ identifiers: [] }),
       createQueryBuilder: jest.fn().mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
@@ -218,6 +219,7 @@ describe('KgaraSyncService', () => {
       };
 
       caseRepo.createQueryBuilder.mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([mockExistingCase]),
@@ -266,6 +268,7 @@ describe('KgaraSyncService', () => {
 
       const andWhereMock = jest.fn().mockReturnThis();
       caseRepo.createQueryBuilder.mockReturnValue({
+        leftJoin: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: andWhereMock,
         getMany: jest.fn().mockResolvedValue([]),
@@ -274,8 +277,8 @@ describe('KgaraSyncService', () => {
       await service.syncCasesForBranch('br-1', '2026-05-01', '2026-05-31');
 
       expect(andWhereMock).toHaveBeenCalledWith(
-        '(case.classification != :ojNgoai OR case.classification IS NULL)',
-        { ojNgoai: 'OJ_NGOAI' },
+        '(COALESCE(cat.code, case.classification) NOT IN (:...excluded) OR (cat.code IS NULL AND case.classification IS NULL))',
+        { excluded: ['OJ', 'OJ_NGOAI'] },
       );
     });
   });
@@ -409,6 +412,61 @@ describe('KgaraSyncService', () => {
     });
   });
 
+  describe('syncCasesForBranch completion date rule', () => {
+    it('should clear ngayHoanThanhCongViec when a completed case reverts to quotation (1)', async () => {
+      const existingCompletedCase = {
+        id: 'uuid-0022',
+        hdPhieuDichVuId: 'c-0022',
+        tinhTrangDichVu: 3,
+        ngayHoanThanhCongViec: new Date('2026-10-09T15:55:00'),
+      };
+      clientService.getCases.mockResolvedValue({
+        data: [
+          {
+            HdPhieuDichVuID: 'c-0022',
+            SoChungTu: 'GR-PDV2610-0022',
+            TinhTrangDichVu: 1,
+            NgayHoanThanhCongViec: '2026-10-09T15:55:00',
+          },
+        ],
+        pagination: { totalPages: 1 },
+      });
+      caseRepo.findOne.mockResolvedValue(existingCompletedCase);
+
+      await service.syncCasesForBranch('br-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-0022',
+          tinhTrangDichVu: 1,
+          ngayHoanThanhCongViec: null,
+        }),
+      );
+    });
+
+    it('should keep ngayHoanThanhCongViec when the case is completed (3)', async () => {
+      clientService.getCases.mockResolvedValue({
+        data: [
+          {
+            HdPhieuDichVuID: 'c-done',
+            SoChungTu: 'GR-PDV2610-0023',
+            TinhTrangDichVu: 3,
+            NgayHoanThanhCongViec: '2026-10-09T17:01:00',
+          },
+        ],
+        pagination: { totalPages: 1 },
+      });
+      caseRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCasesForBranch('br-1');
+
+      const saved = caseRepo.save.mock.calls.find(
+        ([entity]: any[]) => entity.hdPhieuDichVuId === 'c-done',
+      )?.[0];
+      expect(saved.ngayHoanThanhCongViec).toBeInstanceOf(Date);
+    });
+  });
+
   describe('Preservation of ERP internal fields during sync', () => {
     it('should preserve classification and erpNotes when syncing cases for branch', async () => {
       const existingCaseWithErpData = {
@@ -500,6 +558,37 @@ describe('KgaraSyncService', () => {
           kgaraClassification: 'Nội Bộ PQ',
           kgaraClassificationCode: 'NBPQ',
           classification: 'OJ',
+        }),
+      );
+    });
+
+    it('should NOT auto-map classification when the user manually cleared it', async () => {
+      clientService.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: 'c-cleared-1',
+          SoChungTu: 'SC-CLEARED',
+          NguonGocKhachHangCode: 'NBPQ',
+          NguonGocKhachHangName: 'Nội Bộ PQ',
+          TinhTrangDichVu: 3,
+          TongTienThanhToan: 1000000,
+        },
+      });
+
+      caseRepo.findOne.mockResolvedValue({
+        id: 'case-cleared',
+        hdPhieuDichVuId: 'c-cleared-1',
+        classification: null,
+        categoryId: null,
+        classificationManuallyCleared: true,
+      });
+
+      await service.syncCaseDetail('br-1', 'c-cleared-1');
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kgaraClassificationCode: 'NBPQ',
+          classification: null,
+          categoryId: null,
         }),
       );
     });

@@ -151,15 +151,16 @@ Trong `useCorePermissionsEditor.ts`:
 - Ngược lại, khi đọc `action: "*"`, hệ thống tự động bung ra 4 dấu tích cho cả 4 thao tác.
 
 ### 5.3. Phân nhóm Tài nguyên Giao diện (Permission Resource Groups)
-Các tài nguyên được gom thành 8 nhóm nghiệp vụ chính:
+Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
+- **Tổng quan (`dashboard`)**: `dashboard`.
 - **Bán hàng (`sales`)**: `sales_orders`, `sales_reports`.
 - **Mua hàng (`purchasing`)**: `purchase_orders`, `purchase_requests`, `purchasing_reports`.
 - **Kho & Tồn kho (`inventory`)**: `inventory_items`, `inventory_vouchers`, `goods_receipts`, `goods_issues`, `inventory_adjustments`.
 - **Sản xuất & BOM (`manufacturing`)**: `bom`, `production`.
-- **Garage & Dịch vụ (`garage`)**: `garage`.
+- **Garage & Dịch vụ (`garage`)**: `garage`, `garage_cashflow`.
 - **VinFast & Xe cộ (`vinfast`)**: `vinfast`, `vehicles`.
 - **Kế toán & Dòng tiền (`accounting`)**: `invoices`, `bank_statements`, `cash_statements`, `journal_entries`, `accounting_configs`, `payment_vouchers`, `erp_cashflow_vouchers`.
-- **Quản trị & Hệ thống (`system`)**: `admin_users`, `employees`, `business_partners`, `activity_logs`, `email_ingest`, `sys_tags`.
+- **Quản trị & Hệ thống (`system`)**: `admin_users`, `employees`, `business_partners`, `activity_logs`, `email_ingest`, `sys_tags`, `attachments`.
 
 ---
 
@@ -168,14 +169,22 @@ Các tài nguyên được gom thành 8 nhóm nghiệp vụ chính:
 - **Mọi Controller khác trong `erp-api`**:
   ```typescript
   @UseGuards(JwtAuthGuard, CoreRbacGuard)
-  @RequirePermissions({ resource: ErpResource.INVOICES, action: ErpAction.READ })
+  @RequirePermissions({ resource: ErpResource.DASHBOARD, action: ErpAction.READ })
+  @Get('overview')
+  getOverview() { ... }
+
+  @UseGuards(JwtAuthGuard, CoreRbacGuard)
+  @RequirePermissions({ resource: ErpResource.ATTACHMENTS, action: ErpAction.READ })
   @Get()
   findAll() { ... }
   ```
 - **Frontend Permission Guard**:
   ```typescript
-  const canRead = useHasPermission(ErpResource.ADMIN_USERS, ErpAction.READ);
-  if (!canRead) return <Forbidden />;
+  const canReadDashboard = useHasPermission(ErpResource.DASHBOARD, ErpAction.READ);
+  if (!canReadDashboard) return <Forbidden />;
+
+  const canReadAttachments = useHasPermission(ErpResource.ATTACHMENTS, ErpAction.READ);
+  if (!canReadAttachments) return <Forbidden />;
   ```
 
 ---
@@ -184,11 +193,11 @@ Các tài nguyên được gom thành 8 nhóm nghiệp vụ chính:
 
 - **Unit Test Backend**:
   ```bash
-  cd /home/dev/repos/erp/erp-api
+  cd erp/erp-api
   bunx jest src/rbac-core/rbac-core.service.spec.ts
   ```
 - **CI / Type Check Frontend**:
   ```bash
-  cd /home/dev/repos/erp/erp-web
+  cd erp/erp-web
   bun run check:ci
   ```

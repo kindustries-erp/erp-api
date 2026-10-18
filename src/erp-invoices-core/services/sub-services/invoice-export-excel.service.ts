@@ -21,6 +21,7 @@ import {
   writeDetailedRows,
   writeOverviewRows,
   writeDebtRows,
+  resolveActiveColumns,
 } from './invoice-export-excel-writers.helper';
 
 @Injectable()
@@ -127,7 +128,15 @@ export class InvoiceExportExcelService {
 
     if (needsNetOffJoin) {
       qb.leftJoin(
-        '(SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM erp_invoice_voucher_netoff GROUP BY invoice_id)',
+        `(
+          SELECT invoice_id, SUM(net_off_amount) as net_off_sum FROM (
+            SELECT invoice_id, net_off_amount FROM erp_invoice_voucher_netoff
+            UNION ALL
+            SELECT original_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+            UNION ALL
+            SELECT adjusting_invoice_id as invoice_id, offset_amount as net_off_amount FROM erp_invoice_adjustment_netoff
+          ) unified_netoff GROUP BY invoice_id
+        )`,
         'netoff_agg',
         'netoff_agg.invoice_id = inv.id',
       );
@@ -291,10 +300,21 @@ export class InvoiceExportExcelService {
         partnerItems = items;
       }
 
+      const activeSummaryColumns = resolveActiveColumns(
+        summaryColumns,
+        query.selected_columns,
+      );
+
       // 1. Sheet: Chi tiết HĐ (chỉ dữ liệu hóa đơn này)
       const singleSummarySheet = workbook.addWorksheet('Chi tiết HĐ');
-      initSheetStructure(singleSummarySheet, summaryColumns);
-      writeSummaryRows(singleSummarySheet, items, query.direction, branchMap);
+      initSheetStructure(singleSummarySheet, activeSummaryColumns);
+      writeSummaryRows(
+        singleSummarySheet,
+        items,
+        query.direction,
+        branchMap,
+        activeSummaryColumns,
+      );
 
       // 2. Sheet: Bảng kê HHDV HĐ (chỉ hàng hóa của hóa đơn này)
       const singleDetailedSheet = workbook.addWorksheet('Bảng kê HHDV HĐ');
@@ -338,10 +358,21 @@ export class InvoiceExportExcelService {
       initSheetStructure(partnerDebtSheet, debtColumns);
       writeDebtRows(partnerDebtSheet, partnerItems, query.direction, cumMap);
     } else {
+      const activeSummaryColumns = resolveActiveColumns(
+        summaryColumns,
+        query.selected_columns,
+      );
+
       // 1. Sheet: Bảng kê
       const summarySheet = workbook.addWorksheet('Bảng kê');
-      initSheetStructure(summarySheet, summaryColumns);
-      writeSummaryRows(summarySheet, items, query.direction, branchMap);
+      initSheetStructure(summarySheet, activeSummaryColumns);
+      writeSummaryRows(
+        summarySheet,
+        items,
+        query.direction,
+        branchMap,
+        activeSummaryColumns,
+      );
 
       // 2. Sheet: Tổng quan HHDV (đặt trước Bảng kê HHDV)
       const overviewSheet = workbook.addWorksheet('Tổng quan HHDV');

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   applyMultiKeywordFilter,
@@ -14,6 +14,11 @@ import { resolveSortOrder } from '../common/utils/sort.util';
 import { ErpBusinessPartner } from './entities/erp_business_partner.entity';
 import { CreateBusinessPartnerDto } from './dto/create-business-partner.dto';
 import { UpdateBusinessPartnerDto } from './dto/update-business-partner.dto';
+import {
+  applyPartnerFilterPayload,
+  parseFilterRecord,
+  type PartnerFilterPayload,
+} from './business-partners-query-filter.util';
 
 @Injectable()
 export class BusinessPartnersCoreService {
@@ -42,6 +47,12 @@ export class BusinessPartnersCoreService {
       created_at: "TO_CHAR(bp.createdAt, 'YYYY-MM-DD')",
     };
     return map[column] ?? null;
+  }
+
+  private mapFilterColumnToSqlField(column: string): string | null {
+    if (column === 'createdAt' || column === 'created_at')
+      return 'bp.createdAt';
+    return this.mapColumnToSqlField(column);
   }
 
   async generateNextCode(partnerType?: string): Promise<string> {
@@ -145,70 +156,17 @@ export class BusinessPartnersCoreService {
       );
     }
 
-    // Column search (exact "" and multi-keyword ;)
-    if (query.column_search) {
-      try {
-        const searches: Record<string, string> =
-          typeof query.column_search === 'string'
-            ? JSON.parse(query.column_search)
-            : query.column_search;
-        Object.entries(searches).forEach(([key, val], idx) => {
-          if (val && typeof val === 'string' && val.trim()) {
-            const sqlField = this.mapColumnToSqlField(key);
-            if (sqlField) {
-              applyMultiKeywordFilter(
-                qb,
-                sqlField,
-                val.trim(),
-                `col_search_${idx}`,
-              );
-            }
-          }
-        });
-      } catch (e) {
-        // Ignore JSON parse errors
-      }
-    }
-
-    // Column filters (multi-checkbox and blank option)
-    if (query.column_filters) {
-      try {
-        const filters: Record<string, string[]> =
-          typeof query.column_filters === 'string'
-            ? JSON.parse(query.column_filters)
-            : query.column_filters;
-        Object.entries(filters).forEach(([key, values], idx) => {
-          if (Array.isArray(values) && values.length > 0) {
-            const sqlField = this.mapColumnToSqlField(key);
-            if (sqlField) {
-              const hasBlank = values.includes('__BLANK__');
-              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
-              const pName = `col_filter_${idx}`;
-
-              if (hasBlank && nonBlankValues.length > 0) {
-                qb.andWhere(
-                  new Brackets((sqb) => {
-                    sqb
-                      .where(`${sqlField} IN (:...${pName})`, {
-                        [pName]: nonBlankValues,
-                      })
-                      .orWhere(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-                  }),
-                );
-              } else if (hasBlank) {
-                qb.andWhere(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-              } else {
-                qb.andWhere(`${sqlField} IN (:...${pName})`, {
-                  [pName]: nonBlankValues,
-                });
-              }
-            }
-          }
-        });
-      } catch (e) {
-        // Ignore JSON parse errors
-      }
-    }
+    applyPartnerFilterPayload(
+      qb,
+      {
+        columnSearch: parseFilterRecord(query.column_search),
+        columnFilters: parseFilterRecord(query.column_filters),
+        columnOperators: parseFilterRecord(query.column_operators),
+        dateRanges: parseFilterRecord(query.date_ranges),
+      },
+      (column) => this.mapFilterColumnToSqlField(column),
+      'bp',
+    );
 
     // Date range filters for createdAt
     const dateFrom = (query as any).date_from || (query as any).dateFrom;
@@ -306,36 +264,23 @@ export class BusinessPartnersCoreService {
     // Apply cross-column filters if provided
     if (filtersStr) {
       try {
-        const filters: Record<string, string[]> =
-          typeof filtersStr === 'string' ? JSON.parse(filtersStr) : filtersStr;
-        Object.entries(filters).forEach(([key, values], idx) => {
-          if (key !== column && Array.isArray(values) && values.length > 0) {
-            const sqlField = this.mapColumnToSqlField(key);
-            if (sqlField) {
-              const hasBlank = values.includes('__BLANK__');
-              const nonBlankValues = values.filter((v) => v !== '__BLANK__');
-              const pName = `c_opt_flt_${idx}`;
-
-              if (hasBlank && nonBlankValues.length > 0) {
-                qb.andWhere(
-                  new Brackets((sqb) => {
-                    sqb
-                      .where(`${sqlField} IN (:...${pName})`, {
-                        [pName]: nonBlankValues,
-                      })
-                      .orWhere(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-                  }),
-                );
-              } else if (hasBlank) {
-                qb.andWhere(`(${sqlField} IS NULL OR ${sqlField} = '')`);
-              } else {
-                qb.andWhere(`${sqlField} IN (:...${pName})`, {
-                  [pName]: nonBlankValues,
-                });
-              }
-            }
-          }
-        });
+        const raw = JSON.parse(filtersStr) as
+          | PartnerFilterPayload
+          | Record<string, string[]>;
+        const payload: PartnerFilterPayload =
+          'columnFilters' in raw ||
+          'columnSearch' in raw ||
+          'columnOperators' in raw ||
+          'dateRanges' in raw
+            ? (raw as PartnerFilterPayload)
+            : { columnFilters: raw as Record<string, string[]> };
+        applyPartnerFilterPayload(
+          qb,
+          payload,
+          (key) => this.mapFilterColumnToSqlField(key),
+          'bp_options',
+          column,
+        );
       } catch (e) {
         // Ignore
       }

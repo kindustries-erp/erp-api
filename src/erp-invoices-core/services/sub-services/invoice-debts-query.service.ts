@@ -78,15 +78,29 @@ export class InvoiceDebtsQueryService {
     const partnerTaxExpr =
       direction === 'IN'
         ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
+        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
 
     const rawPartnerNameExpr =
       direction === 'IN'
         ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
 
     const partnerAddressExpr =
-      direction === 'IN' ? `MAX(inv.seller_address)` : `MAX(inv.buyer_address)`;
+      direction === 'IN'
+        ? `MAX(inv.seller_address)`
+        : `COALESCE(MAX(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerAddress'), '')), MAX(inv.buyer_address))`;
+
+    const effBalExpr = `(CASE 
+      WHEN inv.tax_invoice_status = 3 OR CAST(inv.total_amount AS NUMERIC) < 0 THEN
+        CASE 
+          WHEN COALESCE(adj_item.offset_amount, 0) >= ABS(CAST(inv.total_amount AS NUMERIC)) THEN 0
+          ELSE CAST(inv.total_amount AS NUMERIC) + COALESCE(adj_item.offset_amount, 0)
+        END
+      ELSE
+        GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0) - COALESCE(adj_orig.offset_amount, 0))
+    END)`;
+
+    const effPaidExpr = `(COALESCE(netoff.net_off_amount, 0) + COALESCE(adj_orig.offset_amount, 0) + COALESCE(adj_item.offset_amount, 0))`;
 
     let baseQuery = `
       SELECT 
@@ -95,52 +109,52 @@ export class InvoiceDebtsQueryService {
         ${partnerAddressExpr} as "address",
         COUNT(DISTINCT inv.id) as "invoiceCount",
         SUM(CAST(inv.total_amount AS NUMERIC)) as "totalAmount",
-        SUM(COALESCE(netoff.net_off_amount, 0)) as "paidAmount",
-        SUM(GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))) as "balanceAmount",
+        SUM(${effPaidExpr}) as "paidAmount",
+        SUM(${effBalExpr}) as "balanceAmount",
         MAX(
           CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
             THEN GREATEST(0, (CURRENT_DATE - inv.invoice_date::date))
             ELSE 0 
           END
         ) as "maxAgingDays",
         SUM(
           CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 30
-            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            THEN ${effBalExpr}
             ELSE 0 
           END
         ) as "aging0To30",
         SUM(
           CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 30 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 60
-            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            THEN ${effBalExpr}
             ELSE 0 
           END
         ) as "aging31To60",
         SUM(
           CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 60 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 90
-            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            THEN ${effBalExpr}
             ELSE 0 
           END
         ) as "aging61To90",
         SUM(
           CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 90
-            THEN GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))
+            THEN ${effBalExpr}
             ELSE 0 
           END
         ) as "agingOver90",
         COUNT(
           DISTINCT CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 30
             THEN inv.id 
             ELSE NULL 
@@ -148,7 +162,7 @@ export class InvoiceDebtsQueryService {
         ) as "count0To30",
         COUNT(
           DISTINCT CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 30 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 60
             THEN inv.id 
@@ -157,7 +171,7 @@ export class InvoiceDebtsQueryService {
         ) as "count31To60",
         COUNT(
           DISTINCT CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 60 
                  AND (CURRENT_DATE - inv.invoice_date::date) <= 90
             THEN inv.id 
@@ -166,7 +180,7 @@ export class InvoiceDebtsQueryService {
         ) as "count61To90",
         COUNT(
           DISTINCT CASE 
-            WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0 
+            WHEN ${effBalExpr} > 0 
                  AND (CURRENT_DATE - inv.invoice_date::date) > 90
             THEN inv.id 
             ELSE NULL 
@@ -176,11 +190,11 @@ export class InvoiceDebtsQueryService {
           ROUND(
             SUM(
               CASE 
-                WHEN (CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) > 0
-                THEN (GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0)) * GREATEST(0, (CURRENT_DATE - inv.invoice_date::date)))
+                WHEN ${effBalExpr} > 0
+                THEN (${effBalExpr} * GREATEST(0, (CURRENT_DATE - inv.invoice_date::date)))
                 ELSE 0 
               END
-            ) / NULLIF(SUM(GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))), 0)
+            ) / NULLIF(SUM(${effBalExpr}), 0)
           ),
           0
         ) as "weightedAgingDays",
@@ -192,6 +206,16 @@ export class InvoiceDebtsQueryService {
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
+      LEFT JOIN (
+        SELECT original_invoice_id, SUM(offset_amount) as offset_amount
+        FROM erp_invoice_adjustment_netoff
+        GROUP BY original_invoice_id
+      ) adj_orig ON adj_orig.original_invoice_id = inv.id
+      LEFT JOIN (
+        SELECT adjusting_invoice_id, SUM(offset_amount) as offset_amount
+        FROM erp_invoice_adjustment_netoff
+        GROUP BY adjusting_invoice_id
+      ) adj_item ON adj_item.adjusting_invoice_id = inv.id
       WHERE inv.is_deleted = false 
         AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         AND inv.direction = '${direction}'
@@ -563,12 +587,24 @@ export class InvoiceDebtsQueryService {
     const partnerTaxExpr =
       direction === 'IN'
         ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
+        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
 
     const rawPartnerNameExpr =
       direction === 'IN'
         ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+
+    const effBalExpr = `(CASE 
+      WHEN inv.tax_invoice_status = 3 OR CAST(inv.total_amount AS NUMERIC) < 0 THEN
+        CASE 
+          WHEN COALESCE(adj_item.offset_amount, 0) >= ABS(CAST(inv.total_amount AS NUMERIC)) THEN 0
+          ELSE CAST(inv.total_amount AS NUMERIC) + COALESCE(adj_item.offset_amount, 0)
+        END
+      ELSE
+        GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0) - COALESCE(adj_orig.offset_amount, 0))
+    END)`;
+
+    const effPaidExpr = `(COALESCE(netoff.net_off_amount, 0) + COALESCE(adj_orig.offset_amount, 0) + COALESCE(adj_item.offset_amount, 0))`;
 
     let baseQuery = `
       SELECT 
@@ -576,14 +612,24 @@ export class InvoiceDebtsQueryService {
         ${rawPartnerNameExpr} as "partnerName",
         COUNT(DISTINCT inv.id) as "invoiceCount",
         SUM(CAST(inv.total_amount AS NUMERIC)) as "totalAmount",
-        SUM(COALESCE(netoff.net_off_amount, 0)) as "paidAmount",
-        SUM(GREATEST(0, CAST(inv.total_amount AS NUMERIC) - COALESCE(netoff.net_off_amount, 0))) as "balanceAmount"
+        SUM(${effPaidExpr}) as "paidAmount",
+        SUM(${effBalExpr}) as "balanceAmount"
       FROM erp_invoices inv
       LEFT JOIN (
         SELECT invoice_id, SUM(net_off_amount) as net_off_amount
         FROM erp_invoice_voucher_netoff
         GROUP BY invoice_id
       ) netoff ON netoff.invoice_id = inv.id
+      LEFT JOIN (
+        SELECT original_invoice_id, SUM(offset_amount) as offset_amount
+        FROM erp_invoice_adjustment_netoff
+        GROUP BY original_invoice_id
+      ) adj_orig ON adj_orig.original_invoice_id = inv.id
+      LEFT JOIN (
+        SELECT adjusting_invoice_id, SUM(offset_amount) as offset_amount
+        FROM erp_invoice_adjustment_netoff
+        GROUP BY adjusting_invoice_id
+      ) adj_item ON adj_item.adjusting_invoice_id = inv.id
       WHERE inv.is_deleted = false 
         AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         AND inv.direction = '${direction}'

@@ -47,7 +47,7 @@ const CLASSIFICATION_MAP: Record<string, string> = {
   'Sửa chữa chung': 'SUA_CHUA_CHUNG',
   SUA_CHUA_CHUNG: 'SUA_CHUA_CHUNG',
   OJ: 'OJ',
-  OJ_NGOAI: 'OJ_NGOAI',
+  OJ_NGOAI: 'OJ',
   Khác: 'KHAC',
   KHAC: 'KHAC',
 };
@@ -222,6 +222,7 @@ async function run() {
             `UPDATE kgara_cases 
              SET classification = $1, 
                  erp_notes = $2, 
+                 exclude_from_debt = CASE WHEN $1 = 'OJ' THEN true ELSE exclude_from_debt END,
                  updated_at = NOW() 
              WHERE id = $3`,
             [u.newClass, u.newNotes, u.id],

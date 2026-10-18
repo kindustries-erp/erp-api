@@ -51,7 +51,7 @@ export class FilesService {
         file.mimetype,
       );
 
-      // Save metadata to Neon DB
+      // Save metadata to database
       const sysFile = this.fileRepo.create({
         id: fileId,
         filename_download: file.originalname,

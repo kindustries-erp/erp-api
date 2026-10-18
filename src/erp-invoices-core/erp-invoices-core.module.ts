@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ErpInvoice } from './entities/erp_invoice.entity';
+import { ErpEInvoiceSync } from './entities/erp_einvoice_sync.entity';
 import { ErpInvoiceItem } from './entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAdjustmentNetOff } from './entities/erp_invoice_adjustment_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
@@ -48,29 +50,62 @@ import { InvoiceDashboardExportService } from './services/sub-services/invoice-d
 import { InvoiceDashboardAnalyticsService } from './services/sub-services/invoice-dashboard-analytics.service';
 import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-dashboard-horizon.service';
 
+import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
+import { ErpModuleAttributeDef } from '../module-config/entities/erp_module_attribute_def.entity';
+import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
+import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
+import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
+import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
+import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoiceCategoryMemoryService } from './services/sub-services/invoice-category-memory.service';
+import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
+import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
+
+import { InvoiceOriginalPdfController } from './controllers/invoice-original-pdf.controller';
+import { InvoiceOriginalPdfFacade } from './services/original-pdf/invoice-original-pdf.facade';
+import { InvoiceProviderDetectorService } from './services/original-pdf/invoice-provider-detector.service';
+import { InvoiceCaptchaSolverService } from './services/original-pdf/invoice-captcha-solver.service';
+import { InvoicePdfDownloadWorkerService } from './services/original-pdf/invoice-pdf-download-worker.service';
+import { ProviderAdapterRegistry } from './services/adapters/provider-adapter.registry';
+import { VinfastInvoiceAdapter } from './services/adapters/vinfast-invoice.adapter';
+import { EasyInvoiceAdapter } from './services/adapters/easy-invoice.adapter';
+import { MisaInvoiceAdapter } from './services/adapters/misa-invoice.adapter';
+import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapter';
+import { HiloInvoiceAdapter } from './services/adapters/hilo-invoice.adapter';
+import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.adapter';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       ErpInvoice,
+      ErpEInvoiceSync,
       ErpInvoiceItem,
       ErpInvoiceVoucherNetOff,
+      ErpInvoiceAdjustmentNetOff,
       ErpInvoiceAttachment,
       CompanyProfile,
       CorePermission,
       CoreUserRole,
       ErpBranch,
       ErpEntityAttributeValue,
+      ErpModuleCategory,
+      ErpModuleAttributeDef,
+      ErpChartOfAccount,
+      ErpJournalEntry,
+      ErpJournalEntryLine,
     ]),
     R2Module,
     BankTransactionsCoreModule,
     NotificationsModule,
     AccountingCoreModule,
+    AiHubCoreModule,
     ErpAttachmentsCoreModule,
     VinfastPartsModule,
   ],
   controllers: [
     InvoiceDebtsController,
     InvoiceDashboardController,
+    InvoiceOriginalPdfController,
     ErpInvoicesCoreController,
   ],
   providers: [
@@ -96,6 +131,21 @@ import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-
     InvoiceDashboardExportService,
     InvoiceDashboardAnalyticsService,
     InvoiceDashboardHorizonService,
+    InvoiceCategoryAutopostService,
+    InvoiceCategoryMemoryService,
+    InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
+    InvoiceProviderDetectorService,
+    InvoiceCaptchaSolverService,
+    ProviderAdapterRegistry,
+    VinfastInvoiceAdapter,
+    EasyInvoiceAdapter,
+    MisaInvoiceAdapter,
+    ViettelInvoiceAdapter,
+    HiloInvoiceAdapter,
+    CyberbillInvoiceAdapter,
+    InvoicePdfDownloadWorkerService,
+    InvoiceOriginalPdfFacade,
     ErpInvoicesCoreService,
     InvoiceDashboardService,
     ErpInvoicesCronService,
@@ -107,6 +157,11 @@ import { InvoiceDashboardHorizonService } from './services/sub-services/invoice-
     InvoiceSmartNetoffService,
     InvoiceDebtsService,
     InvoiceDebtsExportBackgroundService,
+    InvoiceCategoryAutopostService,
+    InvoiceItemCodeResolverService,
+    InvoiceAdjustmentService,
+    InvoiceOriginalPdfFacade,
+    InvoiceProviderDetectorService,
   ],
 })
 export class ErpInvoicesCoreModule {}

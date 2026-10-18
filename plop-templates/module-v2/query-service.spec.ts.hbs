@@ -1,0 +1,53 @@
+import { Repository } from 'typeorm';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
+import { {{entityName}}QueryService } from './{{entityKebab}}-query.service';
+
+describe('{{entityName}}QueryService', () => {
+  let qb: Record<string, jest.Mock>;
+  let repo: { createQueryBuilder: jest.Mock; findOne: jest.Mock };
+  let service: {{entityName}}QueryService;
+
+  beforeEach(() => {
+    qb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+    repo = { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn() };
+    service = new {{entityName}}QueryService(repo as unknown as Repository<{{entityName}}>);
+  });
+
+  it('excludes soft-deleted rows and paginates', async () => {
+    const result = await service.findAll({ page: 2, pageSize: 10 } as Query{{entityName}}Dto);
+
+    expect(qb.where).toHaveBeenCalledWith('e.isDeleted = :isDeleted', { isDeleted: false });
+    expect(qb.skip).toHaveBeenCalledWith(10);
+    expect(qb.take).toHaveBeenCalledWith(10);
+    expect(result).toEqual({ items: [], total: 0, page: 2, pageSize: 10 });
+  });
+
+{{#if hasSearchColumns}}
+  it('applies the keyword to the searchable columns', async () => {
+    await service.findAll({ search: '  abc ' } as Query{{entityName}}Dto);
+
+    expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), { keyword: '%abc%' });
+  });
+{{else}}
+  it('ignores the keyword when the module has no searchable column', async () => {
+    await service.findAll({ search: 'abc' } as Query{{entityName}}Dto);
+
+    expect(qb.andWhere).not.toHaveBeenCalled();
+  });
+{{/if}}
+
+  it('finds an active row by id', async () => {
+    repo.findOne.mockResolvedValue({ id: 'id-1' });
+
+    await expect(service.findById('id-1')).resolves.toEqual({ id: 'id-1' });
+    expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 'id-1', isDeleted: false } });
+  });
+});

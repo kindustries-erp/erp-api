@@ -5,9 +5,11 @@ describe('AccountingCoreService', () => {
   let chartOfAccountRepo: any;
   let journalEntryRepo: any;
   let journalEntryLineRepo: any;
+  let sequenceRepo: any;
 
   beforeEach(() => {
     chartOfAccountRepo = {};
+    sequenceRepo = {};
 
     journalEntryRepo = {
       createQueryBuilder: jest.fn().mockReturnThis(),
@@ -17,6 +19,9 @@ describe('AccountingCoreService', () => {
       getOne: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation((data) => data),
       save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+      manager: {
+        query: jest.fn().mockResolvedValue([{ current_value: 1 }]),
+      },
     };
 
     journalEntryLineRepo = {
@@ -27,6 +32,7 @@ describe('AccountingCoreService', () => {
       chartOfAccountRepo,
       journalEntryRepo,
       journalEntryLineRepo,
+      sequenceRepo,
     );
   });
 
@@ -122,14 +128,45 @@ describe('AccountingCoreService', () => {
         ],
       });
 
-      expect(result.entryNo).toMatch(/^HĐM-20260717-\d+$/);
+      expect(result.entryNo).toBe('HĐM-20260717-0001');
     });
   });
 
   describe('generateEntryNo', () => {
-    it('increments sequence when same prefix exists in DB', async () => {
+    it('increments sequence atomically using database sequence', async () => {
+      journalEntryRepo.manager.query.mockResolvedValueOnce([
+        { current_value: 5 },
+      ]);
+      const entryNo = await service.generateEntryNo(
+        'INVOICE',
+        new Date('2026-07-17'),
+        'b1',
+        false,
+        'HĐM',
+      );
+      expect(entryNo).toBe('HĐM-20260717-0005');
+    });
+
+    it('starts from 0001 when sequence engine returns 1', async () => {
+      journalEntryRepo.manager.query.mockResolvedValueOnce([
+        { current_value: 1 },
+      ]);
+      const entryNo = await service.generateEntryNo(
+        'INVOICE',
+        new Date('2026-07-17'),
+        'b1',
+        false,
+        'HĐM',
+      );
+      expect(entryNo).toBe('HĐM-20260717-0001');
+    });
+
+    it('falls back to MAX query from journal entries when sequence table query fails', async () => {
+      journalEntryRepo.manager.query.mockRejectedValueOnce(
+        new Error('DB error'),
+      );
       journalEntryRepo.getOne.mockResolvedValueOnce({
-        entryNo: 'HĐM-20260717-03',
+        entryNo: 'HĐM-20260717-0003',
       });
       const entryNo = await service.generateEntryNo(
         'INVOICE',
@@ -138,19 +175,7 @@ describe('AccountingCoreService', () => {
         false,
         'HĐM',
       );
-      expect(entryNo).toBe('HĐM-20260717-04');
-    });
-
-    it('starts from 01 when no previous entry exists', async () => {
-      journalEntryRepo.getOne.mockResolvedValueOnce(null);
-      const entryNo = await service.generateEntryNo(
-        'INVOICE',
-        new Date('2026-07-17'),
-        'b1',
-        false,
-        'HĐM',
-      );
-      expect(entryNo).toBe('HĐM-20260717-01');
+      expect(entryNo).toBe('HĐM-20260717-0004');
     });
   });
 

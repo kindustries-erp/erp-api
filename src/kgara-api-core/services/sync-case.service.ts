@@ -12,6 +12,9 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
+import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -138,6 +141,25 @@ export class SyncCaseService {
     try {
       const updatedCaseDates = new Set<string>();
       const syncedIds = new Set<string>();
+      const categories =
+        typeof this.caseRepo.manager?.find === 'function'
+          ? await this.caseRepo.manager.find(ErpModuleCategory, {
+              where: { moduleKey: 'GARAGE_CASE' },
+            })
+          : [];
+      const categoryMap = new Map<string, string>();
+      for (const cat of categories) {
+        categoryMap.set(cat.code, cat.id);
+        // OJ nhận diện theo semanticKey (code admin sửa được); giữ alias code cũ để tương thích
+        if (
+          cat.semanticKey === GARAGE_CASE_SEMANTIC.OJ ||
+          cat.code === 'OJ_NGOAI' ||
+          cat.code === 'OJ'
+        ) {
+          categoryMap.set('OJ', cat.id);
+          categoryMap.set('OJ_NGOAI', cat.id);
+        }
+      }
       do {
         const response = await this.client.getCases(
           branchExternalId,
@@ -244,7 +266,10 @@ export class SyncCaseService {
           gwCase.ngayPhatSinh =
             parseSafeDate(c.NgayPhatSinhFull) || parseSafeDate(c.NgayPhatSinh);
           gwCase.ngayTiepNhan = parseSafeDate(c.NgayTiepNhan);
-          gwCase.ngayHoanThanhCongViec = parseSafeDate(c.NgayHoanThanhCongViec);
+          gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+            newStatus,
+            parseSafeDate(c.NgayHoanThanhCongViec),
+          );
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           gwCase.soKhung = c.SoKhung;
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
@@ -270,13 +295,30 @@ export class SyncCaseService {
             gwCase.kgaraClassification = kgaraClassification;
             gwCase.kgaraClassificationCode = kgaraClassificationCode;
             if (
-              gwCase.classification === null ||
-              gwCase.classification === undefined
+              (gwCase.classification === null ||
+                gwCase.classification === undefined) &&
+              !gwCase.classificationManuallyCleared
             ) {
               gwCase.classification = mapKgaraClassificationToErp(
                 kgaraClassificationCode,
                 kgaraClassification,
               );
+              if (!gwCase.categoryId && gwCase.classification) {
+                gwCase.categoryId =
+                  categoryMap.get(gwCase.classification) || null;
+              }
+            }
+          }
+
+          if (
+            gwCase.classification === 'OJ' ||
+            gwCase.classification === 'OJ_NGOAI'
+          ) {
+            gwCase.classification = 'OJ';
+            gwCase.excludeFromDebt = true;
+            if (!gwCase.categoryId) {
+              gwCase.categoryId =
+                categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
             }
           }
 
@@ -551,8 +593,9 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayPhatSinhFull) ||
         parseSafeDate(caseData.NgayPhatSinh);
       gwCase.ngayTiepNhan = parseSafeDate(caseData.NgayTiepNhan);
-      gwCase.ngayHoanThanhCongViec = parseSafeDate(
-        caseData.NgayHoanThanhCongViec,
+      gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+        newStatus,
+        parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
       gwCase.soKhung = caseData.SoKhung;
@@ -568,13 +611,64 @@ export class SyncCaseService {
         gwCase.kgaraClassification = detailClassification;
         gwCase.kgaraClassificationCode = detailClassificationCode;
         if (
-          gwCase.classification === null ||
-          gwCase.classification === undefined
+          (gwCase.classification === null ||
+            gwCase.classification === undefined) &&
+          !gwCase.classificationManuallyCleared
         ) {
           gwCase.classification = mapKgaraClassificationToErp(
             detailClassificationCode,
             detailClassification,
           );
+          if (!gwCase.categoryId && gwCase.classification) {
+            const cat =
+              typeof this.caseRepo.manager?.findOne === 'function'
+                ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                    where: [
+                      ...(gwCase.classification === 'OJ'
+                        ? [
+                            {
+                              moduleKey: 'GARAGE_CASE',
+                              semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                            },
+                          ]
+                        : []),
+                      { moduleKey: 'GARAGE_CASE', code: gwCase.classification },
+                      {
+                        moduleKey: 'GARAGE_CASE',
+                        code:
+                          gwCase.classification === 'OJ'
+                            ? 'OJ_NGOAI'
+                            : gwCase.classification,
+                      },
+                    ],
+                  })
+                : null;
+            if (cat) gwCase.categoryId = cat.id;
+          }
+        }
+      }
+
+      if (
+        gwCase.classification === 'OJ' ||
+        gwCase.classification === 'OJ_NGOAI'
+      ) {
+        gwCase.classification = 'OJ';
+        gwCase.excludeFromDebt = true;
+        if (!gwCase.categoryId) {
+          const cat =
+            typeof this.caseRepo.manager?.findOne === 'function'
+              ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
+                  where: [
+                    {
+                      moduleKey: 'GARAGE_CASE',
+                      semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                    },
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ' },
+                    { moduleKey: 'GARAGE_CASE', code: 'OJ_NGOAI' },
+                  ],
+                })
+              : null;
+          if (cat) gwCase.categoryId = cat.id;
         }
       }
 

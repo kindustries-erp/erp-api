@@ -5,6 +5,7 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { format, subMonths } from 'date-fns';
+import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
 
 @Injectable()
 export class GarageDashboardStatsService {
@@ -40,31 +41,49 @@ export class GarageDashboardStatsService {
         'profit',
       )
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
-      .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
+      .addSelect(
+        'SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)',
+        'receivable',
+      )
+      .addSelect(
+        'SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        'tienCoThue',
+      )
+      .addSelect(
+        'SUM(CASE WHEN c.exclude_from_debt = true THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        'excludedDebtAmount',
+      )
+      .addSelect(
+        'COUNT(CASE WHEN c.exclude_from_debt = true THEN c.id END)',
+        'excludedDebtCaseCount',
+      )
+      .addSelect(
+        'SUM(CASE WHEN c.exclude_from_debt = true THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)',
+        'excludedDebtCost',
+      )
       .addSelect('COUNT(c.id)', 'caseCount')
       .addSelect(
-        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueWithInvoice',
       )
       .addSelect(
-        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueNoInvoice',
       )
       .addSelect(
-        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidWithInvoice',
       )
       .addSelect(
-        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidNoInvoice',
       )
       .addSelect(
-        "SUM(CASE WHEN (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableWithInvoice',
       )
       .addSelect(
-        "SUM(CASE WHEN NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableNoInvoice',
       )
       .addSelect(
@@ -93,23 +112,23 @@ export class GarageDashboardStatsService {
       )
       // Classification Breakdowns: Sửa chữa chung
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueSuaChuaChung',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidSuaChuaChung',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableSuaChuaChung',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableWithInvoiceSuaChuaChung',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' AND (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableNoInvoiceSuaChuaChung',
       )
       .addSelect(
@@ -134,23 +153,23 @@ export class GarageDashboardStatsService {
       )
       // Classification Breakdowns: Ký gửi / Nội bộ
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueKyGuiNoiBo',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidKyGuiNoiBo',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableKyGuiNoiBo',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableWithInvoiceKyGuiNoiBo',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') AND (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableNoInvoiceKyGuiNoiBo',
       )
       .addSelect(
@@ -175,23 +194,23 @@ export class GarageDashboardStatsService {
       )
       // Classification Breakdowns: OJ Ngoài
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueOj',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidOj',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableOj',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableWithInvoiceOj',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') AND (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableNoInvoiceOj',
       )
       .addSelect(
@@ -216,23 +235,23 @@ export class GarageDashboardStatsService {
       )
       // Classification Breakdowns: Khác / Chưa phân loại
       .addSelect(
-        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)",
         'tienCoThueOther',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_da_thanh_toan, 0) ELSE 0 END)",
         'paidOther',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI') THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.exclude_from_debt IS NOT TRUE) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableOther',
       )
       .addSelect(
-        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.exclude_from_debt IS NOT TRUE) AND (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableWithInvoiceOther',
       )
       .addSelect(
-        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
+        "SUM(CASE WHEN (c.classification IS NULL OR c.classification NOT IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'SUA_CHUA_CHUNG', 'OJ', 'OJ_NGOAI')) AND (c.exclude_from_debt IS NOT TRUE) AND NOT (c.raw_data->>'TienThueKH' IS NOT NULL AND (c.raw_data->>'TienThueKH') ~ '^[0-9.]+$' AND (c.raw_data->>'TienThueKH')::numeric > 0) THEN COALESCE(c.tien_con_phai_thanh_toan, 0) ELSE 0 END)",
         'receivableNoInvoiceOther',
       )
       .addSelect(
@@ -256,6 +275,7 @@ export class GarageDashboardStatsService {
         'caseCountOther',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
@@ -341,6 +361,7 @@ export class GarageDashboardStatsService {
       )
       .where("s.settlement_type = 'PAYMENT'")
       .andWhere('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
     if (dateFrom) {
@@ -672,6 +693,9 @@ export class GarageDashboardStatsService {
         collectionRateDiff: 0,
         costPaymentRateDiff: 0,
         caseCount: Number(r.caseCount) || 0,
+        excludedDebtAmount: Number(r.excludedDebtAmount) || 0,
+        excludedDebtCaseCount: Number(r.excludedDebtCaseCount) || 0,
+        excludedDebtCost: Number(r.excludedDebtCost) || 0,
         // Invoice breakdowns
         caseCountWithInvoice: Number(r.caseCountWithInvoice) || 0,
         caseCountNoInvoice: Number(r.caseCountNoInvoice) || 0,
@@ -799,12 +823,27 @@ export class GarageDashboardStatsService {
         ? Math.min(100, Math.round((totalPaid / totalBilled) * 1000) / 10)
         : 0;
 
+    const totalExcludedDebtAmount = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + (t.excludedDebtAmount || 0),
+      0,
+    );
+    const totalExcludedDebtCaseCount = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + (t.excludedDebtCaseCount || 0),
+      0,
+    );
+    const totalExcludedDebtCost = effectiveCollectionTrend.reduce(
+      (sum, t) => sum + (t.excludedDebtCost || 0),
+      0,
+    );
+
     const collectionSummary = {
       totalBilled,
       totalTienCoThue,
       totalRevenue,
       totalPaid,
       totalReceivable,
+      totalExcludedDebtAmount,
+      totalExcludedDebtCaseCount,
       collectionRate: overallCollectionRate,
       baselineMonth: '2026-07',
     };
@@ -828,6 +867,7 @@ export class GarageDashboardStatsService {
       totalCost,
       totalPaidCost,
       totalPayableCost,
+      totalExcludedDebtCost,
       paymentRate: overallCostPaymentRate,
       baselineMonth: '2026-07',
     };
@@ -848,6 +888,7 @@ export class GarageDashboardStatsService {
       .addSelect('COUNT(c.id)', 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere(
         'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
@@ -881,16 +922,25 @@ export class GarageDashboardStatsService {
         statusTotalCountByMonth[m] = 0;
         statusTotalRevenueByMonth[m] = 0;
       }
-      statusDistributionByMonth[m].push({
-        statusCode,
-        statusName,
-        count: cnt,
-        revenue: rev,
-      });
+
+      const existingInMonth = statusDistributionByMonth[m].find(
+        (item) => item.statusName === statusName,
+      );
+      if (existingInMonth) {
+        existingInMonth.count += cnt;
+        existingInMonth.revenue += rev;
+      } else {
+        statusDistributionByMonth[m].push({
+          statusCode,
+          statusName,
+          count: cnt,
+          revenue: rev,
+        });
+      }
       statusTotalCountByMonth[m] += cnt;
       statusTotalRevenueByMonth[m] += rev;
 
-      const key = `${statusCode}_${statusName}`;
+      const key = statusName;
       if (!overallStatusMap[key]) {
         overallStatusMap[key] = {
           statusCode,
@@ -936,6 +986,10 @@ export class GarageDashboardStatsService {
       .sort((a, b) => b.revenue - a.revenue);
 
     // 1.4.1 Phễu Chuyển đổi Dịch vụ (Conversion Funnel) theo 4 nhóm Phân loại ERP
+    // Phiếu chưa hoàn thành, chưa hủy: tách thành Báo giá và Đang xử lý
+    const openCase =
+      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+    const quotation = quotationStatusSql('c');
     const funnelQb = this.caseRepo
       .createQueryBuilder('c')
       .select(
@@ -970,14 +1024,23 @@ export class GarageDashboardStatsService {
         'completedAmount',
       )
       .addSelect(
-        'COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN c.id END)',
+        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN c.id END)`,
+        'quotationCount',
+      )
+      .addSelect(
+        `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+        'quotationAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND NOT ${quotation} THEN c.id END)`,
         'inProgressCount',
       )
       .addSelect(
-        'SUM(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
+        `SUM(CASE WHEN ${openCase} AND NOT ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
         'inProgressAmount',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere(
         'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
         { sixMonthsAgo },
@@ -989,6 +1052,7 @@ export class GarageDashboardStatsService {
 
     const buildFunnelObj = () => ({
       totalIntake: { count: 0, amount: 0 },
+      quotation: { count: 0, amount: 0, rate: 0 },
       inProgress: { count: 0, amount: 0, rate: 0 },
       completed: { count: 0, amount: 0, rate: 0 },
       cancelled: { count: 0, amount: 0, rate: 0 },
@@ -997,6 +1061,8 @@ export class GarageDashboardStatsService {
           name: 'Sửa chữa chung',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1010,6 +1076,8 @@ export class GarageDashboardStatsService {
           name: 'Ký gửi / Nội bộ',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1023,6 +1091,8 @@ export class GarageDashboardStatsService {
           name: 'OJ Ngoài',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1036,6 +1106,8 @@ export class GarageDashboardStatsService {
           name: 'Khác',
           totalCount: 0,
           totalAmount: 0,
+          quotationCount: 0,
+          quotationAmount: 0,
           inProgressCount: 0,
           inProgressAmount: 0,
           completedCount: 0,
@@ -1059,6 +1131,8 @@ export class GarageDashboardStatsService {
       const key = f.classificationKey || 'KHAC';
       const totCnt = Number(f.totalCount) || 0;
       const totAmt = Number(f.totalAmount) || 0;
+      const quoCnt = Number(f.quotationCount) || 0;
+      const quoAmt = Number(f.quotationAmount) || 0;
       const inProgCnt = Number(f.inProgressCount) || 0;
       const inProgAmt = Number(f.inProgressAmount) || 0;
       const compCnt = Number(f.completedCount) || 0;
@@ -1074,6 +1148,8 @@ export class GarageDashboardStatsService {
       // Month totals
       mFunnel.totalIntake.count += totCnt;
       mFunnel.totalIntake.amount += totAmt;
+      mFunnel.quotation.count += quoCnt;
+      mFunnel.quotation.amount += quoAmt;
       mFunnel.inProgress.count += inProgCnt;
       mFunnel.inProgress.amount += inProgAmt;
       mFunnel.completed.count += compCnt;
@@ -1086,6 +1162,8 @@ export class GarageDashboardStatsService {
         const c = mFunnel.byClassification[key];
         c.totalCount += totCnt;
         c.totalAmount += totAmt;
+        c.quotationCount += quoCnt;
+        c.quotationAmount += quoAmt;
         c.inProgressCount += inProgCnt;
         c.inProgressAmount += inProgAmt;
         c.completedCount += compCnt;
@@ -1097,6 +1175,8 @@ export class GarageDashboardStatsService {
       // Overall totals
       conversionFunnel.totalIntake.count += totCnt;
       conversionFunnel.totalIntake.amount += totAmt;
+      conversionFunnel.quotation.count += quoCnt;
+      conversionFunnel.quotation.amount += quoAmt;
       conversionFunnel.inProgress.count += inProgCnt;
       conversionFunnel.inProgress.amount += inProgAmt;
       conversionFunnel.completed.count += compCnt;
@@ -1109,6 +1189,8 @@ export class GarageDashboardStatsService {
         const c = conversionFunnel.byClassification[key];
         c.totalCount += totCnt;
         c.totalAmount += totAmt;
+        c.quotationCount += quoCnt;
+        c.quotationAmount += quoAmt;
         c.inProgressCount += inProgCnt;
         c.inProgressAmount += inProgAmt;
         c.completedCount += compCnt;
@@ -1121,6 +1203,8 @@ export class GarageDashboardStatsService {
     // Compute conversion rates
     const computeRates = (target: ReturnType<typeof buildFunnelObj>) => {
       const tot = target.totalIntake.count || 1;
+      target.quotation.rate =
+        Math.round((target.quotation.count / tot) * 1000) / 10;
       target.inProgress.rate =
         Math.round((target.inProgress.count / tot) * 1000) / 10;
       target.completed.rate =
@@ -1156,6 +1240,7 @@ export class GarageDashboardStatsService {
       .addSelect('COUNT(c.id)', 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere('c.ngay_hoan_thanh_cong_viec >= :sixMonthsAgo', {

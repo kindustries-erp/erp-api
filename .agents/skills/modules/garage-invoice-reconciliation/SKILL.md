@@ -90,15 +90,25 @@ flowchart TD
 
 ## 5. Cơ Chế Đồng Bộ 2 Chiều (Bidirectional Net-Off & Settlement Sync)
 
-Khi ghi nhận liên kết `kgara_case_linked_invoice`:
-1. **Hóa Đơn $\rightarrow$ Phiếu Dịch Vụ**:
-   * Quét bảng `erp_invoice_voucher_netoff` lấy toàn bộ giao dịch sao kê đã thanh toán cho Hóa đơn.
-   * Tự động thêm bản ghi tương ứng vào `kgara_case_settlements` (`settlement_type = 'RECEIPT'`, `source_channel = 'ON_SYSTEM'`).
-   * Tự động tính lại `tien_da_thanh_toan` và giảm trừ `tien_con_phai_thanh_toan` trên `kgara_cases`.
-2. **Phiếu Dịch Vụ $\rightarrow$ Hóa Đơn**:
-   * Nếu Phiếu dịch vụ được thêm giao dịch sao kê trước, hệ thống tự động sinh bản ghi `erp_invoice_voucher_netoff` cho các Hóa đơn liên kết tương ứng.
-3. **Khi Gỡ Liên Kết**:
-   * Tự động dọn dẹp các bản ghi settlement kế thừa và hoàn nguyên số dư công nợ của phiếu dịch vụ.
+Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-service-refactor` Pattern C).
+
+1. **Nhận diện liên kết linh hoạt (Dual Linkage)**:
+   * Hỗ trợ cả 2 cơ chế liên kết đồng thời bằng phép `UNION`:
+     - Qua bảng quan hệ đa-đa `kgara_case_linked_invoice` (giữa `caseDbId` và `invoiceId`).
+     - Qua trường tham chiếu mềm `erp_invoices.settlement_order = kgara_cases.so_chung_tu`.
+2. **Hóa Đơn $\rightarrow$ Phiếu Dịch Vụ**:
+   * Khi kế toán cấn trừ sao kê trên Drawer Hóa đơn (`InvoiceLifecycleService.linkVouchersToInvoice` hoặc `TransactionAccountingService.linkInvoiceToTransaction`):
+   * Quét bảng `erp_invoice_voucher_netoff` gom nhóm theo `bank_transaction_id` lấy tổng số tiền đã net-off cho các hóa đơn liên kết với Vụ việc.
+   * Tự động upsert bản ghi tương ứng vào `kgara_case_settlements` (`settlement_type = 'RECEIPT'`, `source_channel = 'ON_SYSTEM'`, `amount = total_net_off`).
+   * Tự động tính lại `tien_da_thanh_toan` và giảm trừ `tien_con_phai_thanh_toan` trên `kgara_cases` theo chuẩn Pure Cashflow.
+3. **Phiếu Dịch Vụ $\rightarrow$ Hóa Đơn**:
+   * Khi Phiếu dịch vụ được thêm giao dịch sao kê trực tiếp trên Tab Tài chính (`KgaraCaseFinancialController.addCaseSettlement`), hệ thống tự động sinh bản ghi `erp_invoice_voucher_netoff` cho các Hóa đơn liên kết.
+4. **Khi Gỡ Cấn Trừ / Gỡ Liên Kết**:
+   * Khi gỡ sao kê khỏi hóa đơn (`removeVoucherFromInvoice`, `unpostInvoice`), gỡ sao kê khỏi giao dịch (`removeInvoiceFromTransaction`), hoặc gỡ hóa đơn khỏi vụ việc (`removeLinkedInvoice`):
+   * Tự động dọn dẹp các bản ghi settlement `ON_SYSTEM` kế thừa bị mồ côi và hoàn nguyên số dư công nợ của phiếu dịch vụ.
+   * Tuyệt đối bảo toàn nguyên vẹn các bản ghi thanh toán ngoài sổ `OFF_SYSTEM_MANUAL`.
+5. **Script Công Cụ Khắc Phục / Đồng Bộ Hàng Loạt**:
+   * `scripts/sync-invoice-netoffs-to-case-settlements.ts`: Cho phép quét và đồng bộ lại toàn bộ vụ việc chưa khớp settlement với cờ `--dry-run` và `--env=production`.
 
 ---
 
@@ -109,7 +119,7 @@ Mỗi khi phát sinh kỳ quyết toán mới hoặc sau khi cấn trừ sao kê
 ### Bước 1: Trích xuất danh sách khớp 100%
 Chạy script đối soát đa chiều:
 ```bash
-bun /home/dev/repos/erp/erp-api/scripts/reconcile-cases-invoices.ts
+bun erp/erp-api/scripts/reconcile-cases-invoices.ts
 ```
 
 ### Bước 2: Kiểm tra Pre-flight
@@ -118,7 +128,7 @@ bun /home/dev/repos/erp/erp-api/scripts/reconcile-cases-invoices.ts
 
 ### Bước 3: Thực thi Transaction liên kết & đồng bộ
 ```bash
-bun /home/dev/repos/erp/erp-api/scripts/execute-case-invoice-links.ts
+bun erp/erp-api/scripts/execute-case-invoice-links.ts
 ```
 
 ### Bước 4: Kiểm toán số dư sau thực thi
@@ -128,3 +138,26 @@ SELECT id, so_chung_tu, tien_co_thue, tien_da_thanh_toan, tien_con_phai_thanh_to
 FROM kgara_cases
 WHERE tien_con_phai_thanh_toan < -0.01;
 ```
+
+---
+
+## 7. Quy Chuẩn Giao Diện Drawer Đối Soát & Dòng Tiền Ngoài Sổ (`erp-web`)
+
+1. **Kiến Trúc Drawer (`CaseLinePaymentDrawer` & `GarageCaseReconciliationDrawer`)**:
+   * Dùng hook `useGarageCaseReconciliationLogic` để quản lý tập trung toàn bộ state đối soát (Hóa đơn đầu vào/ra, Sao kê ngân hàng, Sổ quỹ, Dòng tiền ngoài sổ).
+   * Chuẩn hóa Drawer 2 cột `layout="2-columns"` theo `/standardize-drawer`.
+   * Cấu trúc Atomic Organism chuẩn `/ui-atomic-refactor`: Phân rã thành `src/modules/garage/components/organisms/manual-cashflow-tab-content/` (mọi file < 180 LoC, co-located tests).
+
+2. **Quy Trình Nhập Dòng Tiền Ngoài Sổ (Draft-First, Local Staging & Batch Submit)**:
+   * **Form Nhập Liệu 1 Hàng 3 Cột**: Bỏ visual selector phương thức (mặc định `TIEN_MAT_NGOAI`). 3 trường cốt lõi bố trí trên cùng 1 hàng: Người nộp/nhận, Số tiền (VNĐ) kèm text tiếng Việt, Ngày phát sinh với App component chuẩn `<DatePicker />`.
+   * **Nút "Thêm vào danh sách"**: Chỉ thêm hàng mới vào danh sách chờ lưu (`pendingManualSettlements`) ở client state với `isPending: true`, hiển thị badge `Chờ lưu`, reset form để nhập tiếp, **tuyệt đối không gọi API backend tại bước này**.
+   * **Xóa Tạm Local (Staged Deletion)**: Bấm nút Xóa (Thùng rác đỏ) ở hàng đã lưu trong DB chỉ đưa ID vào `pendingDeletedSettlementIds`, ẩn hàng và trừ tổng tiền tức thì trên client. **Tuyệt đối không gọi API xóa ngay**. Nếu đóng drawer, DB được bảo toàn 100%.
+   * **Nút Submit Footer ("Ghi nhận chi/thu ngoài sổ" / "Lưu thay đổi")**: Kích hoạt khi có thêm tạm, xóa tạm hoặc đang nhập `manualAmount > 0`. Khi bấm, hệ thống thực hiện batch song song: gọi `garageApi.removeCaseSettlement` cho các khoản bị xóa và `garageApi.addCaseSettlement` cho các khoản tạo mới, sau đó mới invalidate cache và đóng drawer.
+
+3. **Chuẩn Hóa Bảng Dòng Tiền Ngoài Sổ (`/standardize-table`)**:
+   * Cột STT: `#`, 40px center, `{idx}` chuẩn (cấm `{idx + 1}`).
+   * **Loại bỏ hoàn toàn cột action tĩnh** (`key: "action"` cố định).
+   * **Floated Action Button**: Kích hoạt qua `rowHoverActions` truyền vào `DataTable` (kết hợp `TableRowHoverActions`). Khi hover chuột vào bất kỳ dòng nào, Floating Action Bar kính mờ hiện ra ở góc phải kèm icon Thùng rác đỏ (`variant: "danger"`), cho phép xóa tạm khỏi memory state hoặc đánh dấu pending delete.
+   * **Chỉ báo tổng số lượng**: Header DrawerSection hiển thị chi tiết số lượng `(X GD, Y chờ lưu)` khi có các khoản pending.
+
+

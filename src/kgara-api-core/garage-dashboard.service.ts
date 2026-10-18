@@ -2,8 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GarageDashboardStatsService } from './services/garage-dashboard-stats.service';
 import { GarageCheckpointService } from './services/garage-checkpoint.service';
 import { GarageCustomerStatsService } from './services/garage-customer-stats.service';
-import { GarageDashboardExportService } from './services/garage-dashboard-export.service';
 import { GaragePnlService } from './services/garage-pnl.service';
+import { GarageMonthlyReceivablesBreakdownService } from './services/garage-monthly-receivables-breakdown.service';
+import { GaragePeriodReportQueries } from './services/garage-period-report-queries.service';
+import {
+  reportMonthOf,
+  toPnlTrendPoint,
+  type PnlTrendPoint,
+} from './helpers/garage-pnl-month.helper';
 import { ListGarageOpexQueryDto } from './dto/garage-opex.dto';
 
 @Injectable()
@@ -14,8 +20,9 @@ export class GarageDashboardService {
     private readonly statsService: GarageDashboardStatsService,
     private readonly checkpointService: GarageCheckpointService,
     private readonly customerStatsService: GarageCustomerStatsService,
-    private readonly exportService: GarageDashboardExportService,
     private readonly pnlService: GaragePnlService,
+    private readonly monthlyReceivablesBreakdownService: GarageMonthlyReceivablesBreakdownService,
+    private readonly periodReportQueries: GaragePeriodReportQueries,
   ) {}
 
   /**
@@ -87,17 +94,28 @@ export class GarageDashboardService {
   }
 
   /**
-   * 5. Xuất báo cáo Excel chuyên nghiệp đa bảng (Multi-sheet Export) theo Ngày hoàn thành
-   */
-  exportExcel(dateFrom?: string, dateTo?: string): Promise<Buffer> {
-    return this.exportService.exportExcel(dateFrom, dateTo);
-  }
-
-  /**
    * 6. Lấy Báo cáo Lợi nhuận (P&L) Garage theo tháng (Doanh thu + Giá vốn + CP vận hành + Hoa hồng -> Lợi nhuận ròng)
    */
   getPnlReport(year?: number, month?: number) {
     return this.pnlService.getPnlReport(year, month);
+  }
+
+  /**
+   * P&L `count` tháng (mặc định 12, tối đa 24) kết thúc ở tháng chọn, cho 2 chart dashboard
+   * (cùng nguồn số liệu với sheet "Báo cáo lợi nhuận" của file Excel).
+   */
+  async getPnlTrend(
+    year?: number,
+    month?: number,
+    count = 12,
+  ): Promise<PnlTrendPoint[]> {
+    const end =
+      year && month
+        ? reportMonthOf(`${year}-${String(month).padStart(2, '0')}`)
+        : reportMonthOf(undefined);
+    const size = Math.min(24, Math.max(1, Math.trunc(count) || 12));
+    const rows = await this.periodReportQueries.loadPnlMonthly(end, size);
+    return rows.map(toPnlTrendPoint);
   }
 
   /**
@@ -119,5 +137,30 @@ export class GarageDashboardService {
    */
   exportPnlExcel(year?: number, month?: number): Promise<Buffer> {
     return this.pnlService.exportPnlExcel(year, month);
+  }
+
+  /**
+   * 8. Lấy chi tiết phân rã Phải thu & Đã thu theo tháng (Thu KH, Thu BH, Từng Công ty Bảo hiểm & Cảnh báo VAT)
+   */
+  getMonthlyReceivablesBreakdown(
+    month?: string,
+    branchId?: string,
+    horizon?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
+    if (horizon || dateFrom || dateTo) {
+      return this.monthlyReceivablesBreakdownService.getMonthlyReceivablesBreakdown(
+        month,
+        branchId,
+        horizon,
+        dateFrom,
+        dateTo,
+      );
+    }
+    return this.monthlyReceivablesBreakdownService.getMonthlyReceivablesBreakdown(
+      month,
+      branchId,
+    );
   }
 }

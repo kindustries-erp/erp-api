@@ -12,7 +12,8 @@ import {
   IsBoolean,
   IsObject,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+import { normalizeUom } from '../helpers/uom.helper';
 
 export class CreateErpInvoiceItemDto {
   @ApiPropertyOptional()
@@ -47,6 +48,9 @@ export class CreateErpInvoiceItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? normalizeUom(value) : value,
+  )
   @IsString()
   unit?: string;
 

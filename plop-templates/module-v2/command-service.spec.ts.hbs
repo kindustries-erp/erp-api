@@ -1,0 +1,49 @@
+import { Repository } from 'typeorm';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { {{entityName}}CommandService } from './{{entityKebab}}-command.service';
+
+describe('{{entityName}}CommandService', () => {
+  let repo: { create: jest.Mock; save: jest.Mock };
+  let service: {{entityName}}CommandService;
+
+  beforeEach(() => {
+    repo = {
+      create: jest.fn((value: object) => value),
+      save: jest.fn((value: object) => Promise.resolve(value)),
+    };
+    service = new {{entityName}}CommandService(repo as unknown as Repository<{{entityName}}>);
+  });
+
+  it('creates an active row from the DTO', async () => {
+    const dto: Create{{entityName}}Dto = {
+{{#each customFields}}
+      {{this.name}}: {{{this.dtoFixture}}},
+{{/each}}
+    };
+
+    const saved = await service.create(dto);
+
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDeleted: false }));
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(saved).toMatchObject({ isDeleted: false });
+  });
+
+  it('keeps existing values when the update DTO is empty', async () => {
+    const entity = { id: 'id-1', isDeleted: false } as {{entityName}};
+
+    await service.update(entity, {});
+
+    expect(Object.keys(entity)).toEqual(['id', 'isDeleted']);
+    expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+
+  it('soft-deletes by flagging isDeleted', async () => {
+    const entity = { id: 'id-1', isDeleted: false } as {{entityName}};
+
+    await service.softDelete(entity);
+
+    expect(entity.isDeleted).toBe(true);
+    expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+});

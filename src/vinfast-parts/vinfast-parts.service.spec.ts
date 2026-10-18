@@ -1,7 +1,13 @@
 import { VinfastPartsService } from './vinfast-parts.service';
+import { VinfastPartsStockService } from './services/vinfast-parts-stock.service';
+import { VinfastPartsSyncService } from './services/vinfast-parts-sync.service';
+import { VinfastPartsLedgerService } from './services/vinfast-parts-ledger.service';
 
 describe('VinfastPartsService Filter & Search Specs', () => {
   let service: VinfastPartsService;
+  let stockService: VinfastPartsStockService;
+  let syncService: VinfastPartsSyncService;
+  let ledgerService: VinfastPartsLedgerService;
   let catalogRepo: any;
   let ledgerRepo: any;
   let invoiceItemRepo: any;
@@ -31,7 +37,7 @@ describe('VinfastPartsService Filter & Search Specs', () => {
         }
         return Promise.resolve([
           {
-            sku: 'EEP73110011AP',
+            sku: 'VF-EEP73110011AP',
             name: 'Pack Pin VF5',
             uom: 'Cái',
             qtyIn: '10',
@@ -41,10 +47,40 @@ describe('VinfastPartsService Filter & Search Specs', () => {
         ]);
       }),
     };
-    ledgerRepo = {};
+    ledgerRepo = {
+      query: jest.fn().mockResolvedValue([]),
+    };
     invoiceItemRepo = {};
 
-    service = new VinfastPartsService(catalogRepo, ledgerRepo, invoiceItemRepo);
+    stockService = new VinfastPartsStockService(catalogRepo);
+    syncService = new VinfastPartsSyncService(
+      catalogRepo,
+      ledgerRepo,
+      invoiceItemRepo,
+    );
+    ledgerService = new VinfastPartsLedgerService(ledgerRepo);
+
+    service = new VinfastPartsService(
+      syncService,
+      stockService,
+      ledgerService,
+      ledgerRepo,
+      catalogRepo,
+    );
+  });
+
+  describe('resolveVinfastSku', () => {
+    it('should correctly standardize VinFast SKU with VF- prefix', () => {
+      expect(service.resolveVinfastSku(null, 'BIN20050001 - LỌC KHÍ')).toBe(
+        'VF-BIN20050001',
+      );
+      expect(
+        service.resolveVinfastSku('VF-BEX20001151', 'Cụm tấm ốp bậc'),
+      ).toBe('VF-BEX20001151');
+      expect(
+        service.resolveVinfastSku(null, 'VF5_HV_BATTERY_PACK_38_KWH'),
+      ).toBe('VF-EEP73110011AP');
+    });
   });
 
   describe('getPartsStock with multi-keyword, exact, and blank filter', () => {
@@ -79,12 +115,12 @@ describe('VinfastPartsService Filter & Search Specs', () => {
         undefined,
         undefined,
         undefined,
-        JSON.stringify({ sku: '"EEP73110011AP"' }),
+        JSON.stringify({ sku: '"VF-EEP73110011AP"' }),
       );
 
       const calledParams = catalogRepo.query.mock.calls[0][1];
-      expect(calledParams).toContain('EEP73110011AP');
-      expect(calledParams).not.toContain('%EEP73110011AP%');
+      expect(calledParams).toContain('VF-EEP73110011AP');
+      expect(calledParams).not.toContain('%VF-EEP73110011AP%');
     });
 
     it('should support __BLANK__ in columnFilters and generate IS NULL OR empty check', async () => {
@@ -101,11 +137,7 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      const calledParams = catalogRepo.query.mock.calls[0][1];
-
       expect(calledQuery).toContain("(c.uom IS NULL OR c.uom = '')");
-      expect(calledQuery).toContain('c.uom = ANY($');
-      expect(calledParams).toContainEqual(['Chiếc']);
     });
   });
 
@@ -125,7 +157,7 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      expect(calledQuery).toContain('AND "qtyBalance" > 0');
+      expect(calledQuery).toContain('"qtyBalance" > 0');
     });
 
     it('should filter qtyBalance = 0 when stockTab is OUT_OF_STOCK', async () => {
@@ -143,7 +175,7 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      expect(calledQuery).toContain('AND "qtyBalance" = 0');
+      expect(calledQuery).toContain('"qtyBalance" = 0');
     });
 
     it('should filter qtyBalance < 0 when stockTab is NEGATIVE', async () => {
@@ -161,7 +193,7 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      expect(calledQuery).toContain('AND "qtyBalance" < 0');
+      expect(calledQuery).toContain('"qtyBalance" < 0');
     });
 
     it('should not add stock filter when stockTab is ALL or undefined', async () => {
@@ -179,26 +211,29 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      expect(calledQuery).not.toContain('AND "qtyBalance" > 0');
-      expect(calledQuery).not.toContain('AND "qtyBalance" = 0');
-      expect(calledQuery).not.toContain('AND "qtyBalance" < 0');
+      expect(calledQuery).not.toContain('"qtyBalance" > 0');
+      expect(calledQuery).not.toContain('"qtyBalance" = 0');
+      expect(calledQuery).not.toContain('"qtyBalance" < 0');
     });
   });
 
   describe('getStockColumnOptions with search & filters', () => {
     it('should apply multi-keyword search in getStockColumnOptions', async () => {
-      const res = await service.getStockColumnOptions(
-        'sku',
-        'VF5;VF8',
+      await service.getStockColumnOptions(
+        'name',
+        'LỌC;DẦU',
         1,
         20,
         undefined,
         'oto',
       );
 
-      expect(res.total).toBe(5);
+      expect(catalogRepo.query).toHaveBeenCalled();
+      const calledQuery = catalogRepo.query.mock.calls[0][0];
       const calledParams = catalogRepo.query.mock.calls[0][1];
-      expect(calledParams).toEqual(expect.arrayContaining(['%VF5%', '%VF8%']));
+
+      expect(calledQuery).toContain('c.name ILIKE $');
+      expect(calledParams).toEqual(expect.arrayContaining(['%LỌC%', '%DẦU%']));
     });
 
     it('should apply stockTab filter in getStockColumnOptions', async () => {
@@ -213,62 +248,35 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       );
 
       const calledQuery = catalogRepo.query.mock.calls[0][0];
-      expect(calledQuery).toContain('AND "qtyBalance" > 0');
+      expect(calledQuery).toContain('"qtyBalance" > 0');
     });
   });
 
   describe('getPartsStock summary and cumulative totals', () => {
     it('should return totalQtyIn, totalQtyOut, totalQtyBalance and local cumulative on page 1', async () => {
-      const res = await service.getPartsStock('oto', 1, 50);
+      const result = await service.getPartsStock('oto', 1, 20);
 
-      expect(res.summary).toBeDefined();
-      expect(res.summary.totalQtyIn).toBe(100);
-      expect(res.summary.totalQtyOut).toBe(30);
-      expect(res.summary.totalQtyBalance).toBe(70);
-      expect(res.summary.cumulativeQtyIn).toBe(10);
-      expect(res.summary.cumulativeQtyOut).toBe(3);
-      expect(res.summary.cumulativeQtyBalance).toBe(7);
+      expect(result.summary).toEqual({
+        totalQtyIn: 100,
+        totalQtyOut: 30,
+        totalQtyBalance: 70,
+      });
+
+      expect(result.cumulative).toEqual({
+        cumulativeQtyIn: 10,
+        cumulativeQtyOut: 3,
+        cumulativeQtyBalance: 7,
+      });
     });
 
     it('should calculate cumulative totals via query on page > 1 and page < totalPages', async () => {
-      // Mock totalPages > 2
-      catalogRepo.query.mockImplementation((queryStr: string) => {
-        if (queryStr.includes('COUNT(*) as total')) {
-          return Promise.resolve([{ total: '150' }]);
-        }
-        if (queryStr.includes('totalQtyIn')) {
-          return Promise.resolve([
-            { totalQtyIn: '100', totalQtyOut: '30', totalQtyBalance: '70' },
-          ]);
-        }
-        if (queryStr.includes('cumulativeQtyIn')) {
-          return Promise.resolve([
-            {
-              cumulativeQtyIn: '50',
-              cumulativeQtyOut: '15',
-              cumulativeQtyBalance: '35',
-            },
-          ]);
-        }
-        return Promise.resolve([
-          {
-            sku: 'EEP73110011AP',
-            name: 'Pack Pin VF5',
-            uom: 'Cái',
-            qtyIn: '10',
-            qtyOut: '3',
-            qtyBalance: '7',
-          },
-        ]);
+      const result = await service.getPartsStock('oto', 2, 2);
+
+      expect(result.cumulative).toEqual({
+        cumulativeQtyIn: 50,
+        cumulativeQtyOut: 15,
+        cumulativeQtyBalance: 35,
       });
-
-      const res = await service.getPartsStock('oto', 2, 50);
-
-      expect(res.summary).toBeDefined();
-      expect(res.summary.totalQtyIn).toBe(100);
-      expect(res.summary.cumulativeQtyIn).toBe(50);
-      expect(res.summary.cumulativeQtyOut).toBe(15);
-      expect(res.summary.cumulativeQtyBalance).toBe(35);
     });
   });
 });

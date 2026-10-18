@@ -62,7 +62,12 @@ Quyền bắt buộc: `@RequirePermissions({ resource: 'vinfast', action: 'read'
 - **Giá vốn (`cogs`)**: Tổng giá vốn xuất kho theo phương pháp FIFO ứng với số lượng đã bán.
 - **Lợi nhuận gộp (`grossProfit`)**: $\text{Gross Profit} = \text{Revenue} - \text{COGS}$.
 - **Giá trị tồn kho (`inventoryValue`)**: Tổng số lượng tồn kho còn lại nhân với đơn giá nhập theo từng lô FIFO.
-- **Phân bổ theo loại xe (`byVehicleType`)**: Tách riêng số liệu thành 2 nhánh con `CAR` và `MOTORBIKE`.
+- **Phân bổ theo loại xe (`byVehicleType`) & Nhận diện Dual SKU**:
+  - Sử dụng hàm `isVinfastCarPartCode(sku)` với `CAR_PART_CODE_SET` tra cứu $O(1)$ tự động nhận diện cả mã có tiền tố `VF-` (`VF-BAT21001011`) lẫn mã gốc (`BAT21001011`).
+  - Tách riêng số liệu thành 2 nhánh con `CAR` (Ô tô) và `MOTORBIKE` (Xe máy).
+- **Tối ưu Hiệu Năng & In-Memory Micro-Cache**:
+  - `calculateVinfastFifo` sử dụng SQL Index PK/FK join trực tiếp `vinfast_parts_catalog.sku = vinfast_parts_ledger.part_sku`.
+  - Cơ chế đệm `fifoCache` 15s TTL giúp các truy vấn song song (`all`, `CAR`, `MOTORBIKE`) hoàn tất trong < 700ms.
 - **Sparklines & Biểu đồ**: Tạo mảng dữ liệu 6 tháng gần nhất (với `groupBy = 'month'`) hoặc 4 tuần gần nhất (với `groupBy = 'week'`).
 
 ### 4.2. Bảng kê Phân tích Hiệu quả SKU (`getVinfastPartsDashboardTable`)

@@ -15,9 +15,9 @@ Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho 
    - Tuyệt đối **NGHIÊM CẤM** sửa code trực tiếp hoặc commit trực tiếp trên các nhánh môi trường/khách hàng (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-production`, `erp-klotus-staging`) mà không xuất phát từ `erp-master`.
 2. **Sử dụng đường dẫn tương đối — Tuyệt đối KHÔNG chạy Git ở root workspace**:
    - Luôn `cd` vào repo con: `./erp-api` (Backend) hoặc `./erp-web` (Frontend).
-3. **🛡️ Test-First Guard**:
-   - **`erp-api`**: **BẮT BUỘC** chạy `bunx jest --forceExit` (hoặc `bun run test`) và `bun run check:ci` pass 100% tests trước khi commit & trước khi push.
-   - **`erp-web`**: **BẮT BUỘC** chạy `bun run test` và `bun run check:ci` pass 100% tests trước khi commit & trước khi push.
+3. **🛡️ Test-First Guard (Kiểm Thử Phân Tầng & Chống Chạy Lặp)**:
+   - **Khi Commit**: Husky `pre-commit` tự động chạy `lint-staged` (< 2s). Chỉ test scoped các file thay đổi (`--findRelatedTests`), TUYỆT ĐỐI KHÔNG chạy full test suite cho mỗi commit nhỏ.
+   - **Khi Push `erp-master`**: chạy `bun run verify:final` đúng một lần trên commit cuối sau `pull --rebase`, sau đó `git push ... --no-verify`. `pre-push` chỉ chạy safety check khi commit chưa có marker Final Gate.
 4. **🛡️ Module Knowledge Sync Guard**:
    - Khi có thay đổi DB Schema, DTOs, API Endpoints, Permissions hoặc Business Logic của module, **BẮT BUỘC** rà soát và cập nhật file `.agents/skills/modules/<module-name>/SKILL.md` trước khi commit.
 5. **Không bao giờ ghi đè / làm mất code (No Override)**:
@@ -58,11 +58,11 @@ git diff
 # Bước 4: Rà soát & cập nhật SKILL.md module tương ứng (nếu có đổi DB/API/Logic)
 # file: .agents/skills/modules/<module-name>/SKILL.md
 
-# Bước 5: Chạy Unit Test (BẮT BUỘC PASS 100%)
+# Bước 5: Test nhanh các file thay đổi (Husky pre-commit đã tự động chạy lint-staged < 2s)
 # Backend:
-bunx jest --forceExit
+bunx jest --findRelatedTests <file>
 # Frontend:
-bun run test
+bunx vitest related <file> --run
 
 # Bước 6: Stage files & Commit chuẩn Conventional Commits
 git add <danh_sach_file>
@@ -137,17 +137,11 @@ fi
 # 3. Kéo code mới nhất về
 git pull --rebase $REMOTE_NAME erp-master
 
-# 4. QC toàn diện (Typecheck + Lint + Format + Unit Tests)
-bun run check:ci
+# 4. QC toàn diện (Build + Lint + Format + Unit Tests), đúng một lần
+bun run verify:final
 
-if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
-  bunx jest --forceExit
-else
-  bun run test
-fi
-
-# 5. Push lên remote erp-master
-git push $REMOTE_NAME erp-master
+# 5. Push lên remote erp-master (Dùng --no-verify vì đã pass full QC ở trên, tránh Husky chạy lặp lần 2)
+git push $REMOTE_NAME erp-master --no-verify
 ```
 
 ---
@@ -163,7 +157,7 @@ graph TD
     M3 --> M4["4. git merge erp-master -m 'Merge erp-master into <target-branch>'"]
     M4 --> M5{"Có Conflict?"}
     M5 -- Có --> M6["5. Resolve conflict (Bảo vệ workflow/deploy configs riêng của nhánh đích)"]
-    M5 -- Không --> M7["6. bun run check:ci && bun run test (Pass 100%)"]
+    M5 -- Không --> M7["6. bun run verify:final (Pass 100%)"]
     M6 --> M7
     M7 --> M8["7. git push github-industries <target-branch>"]
     M8 --> M9["8. git checkout erp-master (Quay lại nhánh chính)"]
@@ -205,7 +199,7 @@ else
 fi
 
 # 7. Đẩy lên remote để trigger CI/CD deployment của nhánh đích
-git push $REMOTE_NAME $TARGET_BRANCH
+git push $REMOTE_NAME $TARGET_BRANCH --no-verify
 
 # 8. Quay lại nhánh chính erp-master
 git checkout erp-master

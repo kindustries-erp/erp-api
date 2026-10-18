@@ -3,6 +3,10 @@ import { InvoicePortalService } from './invoice-portal.service';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
 import { safeDecrypt } from '../../common/utils/encrypt.util';
 
+jest.mock('../../common/utils/delay.util', () => ({
+  sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('InvoicePortalService - Auth & Auto Re-login', () => {
   let service: InvoicePortalService;
   let mockInvoiceRepo: any;
@@ -529,6 +533,85 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           }),
         );
       });
+    });
+  });
+
+  describe('syncFromPortal - GDT 5xx handling', () => {
+    const dto: any = {
+      token: 'tok',
+      dateFrom: '2026-10-01',
+      dateTo: '2026-10-01',
+      type: 'purchase',
+    };
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as any, 'validatePortalTaxpayer')
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, 'preloadBranchCache')
+        .mockResolvedValue(undefined);
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('continues other endpoints when one returns 500 and warns the user', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        Promise.resolve(
+          url.toString().includes('/sco-query/')
+            ? new Response('err', { status: 500 })
+            : new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+        ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('sco-query');
+      expect(result.failedSegments[0]).toContain('01/10/2026');
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'WARNING' }),
+      );
+    });
+
+    it('treats request timeout (AbortError) as a failed segment, not a crash', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        url.toString().includes('/sco-query/')
+          ? Promise.reject(
+              Object.assign(new Error('The operation was aborted.'), {
+                name: 'AbortError',
+              }),
+            )
+          : Promise.resolve(
+              new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+            ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('timeout');
+    });
+
+    it('throws a descriptive error when every request returns 500', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() =>
+          Promise.resolve(new Response('err', { status: 500 })),
+        );
+
+      await expect(service.syncFromPortal(dto, 'user-1', true)).rejects.toThrow(
+        /Cổng thuế liên tục báo lỗi.*HTTP 500/,
+      );
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'ERROR' }),
+      );
     });
   });
 });

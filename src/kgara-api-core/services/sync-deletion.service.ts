@@ -35,11 +35,12 @@ export class SyncDeletionService {
     // Find all cases in ERP for this branch and date range (excluding manual external cases like OJ_NGOAI)
     const qb = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = case.category_id')
       .where('case.branchExternalId = :branchExternalId', { branchExternalId })
       .andWhere('case.kgaraDeletedAt IS NULL')
       .andWhere(
-        '(case.classification != :ojNgoai OR case.classification IS NULL)',
-        { ojNgoai: 'OJ_NGOAI' },
+        '(COALESCE(cat.code, case.classification) NOT IN (:...excluded) OR (cat.code IS NULL AND case.classification IS NULL))',
+        { excluded: ['OJ', 'OJ_NGOAI'] },
       );
 
     if (fromDate) {

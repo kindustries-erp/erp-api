@@ -142,6 +142,26 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     ).toHaveBeenCalledWith('txn-1');
   });
 
+  it('does not trigger garage case settlement sync when linking vouchers (Decoupled)', async () => {
+    repository.findOne.mockResolvedValue({
+      id: 'inv-1',
+      isDeleted: false,
+      branchId: 'branch-a',
+    });
+    repository.manager.find.mockResolvedValue([
+      { id: 'txn-1', branchId: 'branch-a' },
+    ]);
+
+    await service.linkVouchersToInvoice('inv-1', [
+      { bankTransactionId: 'txn-1', netOffAmount: 1000 },
+    ]);
+
+    expect(repository.manager.query).not.toHaveBeenCalledWith(
+      expect.stringContaining('kgara_case_linked_invoice'),
+      expect.anything(),
+    );
+  });
+
   it('skips auto-set when linked statements have empty branch', async () => {
     repository.findOne.mockResolvedValue({
       id: 'inv-1',

@@ -494,6 +494,74 @@ describe('InvoiceQueryService', () => {
     );
   });
 
+  it('exportExcel filters summary sheet columns when selected_columns is provided', async () => {
+    const rawRows = [
+      {
+        id: 'inv-1',
+        invoiceDate: '2026-08-01',
+        serialNo: 'C26TAA',
+        invoiceNo: '0000001',
+        sellerName: 'NCC VinFast',
+        sellerTaxCode: '0108926913',
+        totalAmount: 1100000,
+        preVatAmount: 1000000,
+        vatAmount: 100000,
+        branchId: 'branch-1',
+        items: [],
+      },
+    ];
+
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(rawRows),
+      }),
+      manager: {
+        query: jest.fn().mockResolvedValue([]),
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          leftJoin: jest.fn().mockReturnThis(),
+          from: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          addOrderBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
+        }),
+      },
+    };
+
+    const service = createInvoiceQueryService(repository);
+    const buffer = await service.exportExcel({
+      direction: 'IN',
+      selected_columns: ['invoiceNo', 'partnerName', 'total'],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+
+    const summarySheet = workbook.getWorksheet('Bảng kê');
+    expect(summarySheet).toBeDefined();
+
+    // Headers at row 4
+    const headers = (summarySheet!.getRow(4).values as any[]).filter(Boolean);
+    expect(headers).toEqual([
+      'Số hóa đơn',
+      'Tên đơn vị khách hàng',
+      'Thành tiền',
+    ]);
+
+    // Data at row 5
+    const row1 = summarySheet!.getRow(5);
+    expect(row1.getCell(1).value).toBe('0000001');
+    expect(row1.getCell(2).value).toBe('NCC VinFast');
+    expect(row1.getCell(3).value).toBe(1100000);
+  });
+
   it('findAllItems queries items and returns paginated result with summary', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),
@@ -1065,6 +1133,46 @@ describe('InvoiceQueryService', () => {
     ]);
   });
 
+  it('getColumnOptions supports partnerName alias identically to partner', async () => {
+    const rawRows = [{ value: 'CONG TY ABC', secondary_val: '0123456789' }];
+    const qb: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(rawRows),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { groupBys: [], selects: [], orderBys: {} },
+        orderBy: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ cnt: '1' }),
+      }),
+    };
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+
+    const service = createInvoiceQueryService(repository);
+    const res = await service.getColumnOptions(
+      'partnerName',
+      '',
+      1,
+      20,
+      undefined,
+      'OUT',
+    );
+
+    expect(res.total).toBe(1);
+    expect(res.items).toEqual([
+      { value: '0123456789:::CONG TY ABC', label: 'CONG TY ABC (0123456789)' },
+    ]);
+  });
+
   it('exportExcel generates 6 sheets for single invoice (id specified) including partner aggregated sheets', async () => {
     const singleInvoice = {
       id: 'inv-1',
@@ -1171,5 +1279,69 @@ describe('InvoiceQueryService', () => {
     // Sheet 3: Bảng kê đối tác has 4 top rows + 2 data rows (no bottom summary)
     const partnerSummarySheet = workbook.getWorksheet('Bảng kê đối tác');
     expect(partnerSummarySheet!.rowCount).toBe(6);
+  });
+
+  it('findAll sorts invoiceNo by numeric select alias with NULLS LAST to avoid TypeORM alias splitting error', async () => {
+    const qb: any = {
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      clone: jest.fn().mockReturnValue({
+        expressionMap: { orderBys: {}, selects: [] },
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({}),
+      }),
+    };
+
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: {
+        query: jest.fn().mockResolvedValue([]),
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          leftJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
+        }),
+      },
+    };
+
+    const service = createInvoiceQueryService(repository);
+
+    await service.findAll({
+      direction: 'OUT',
+      sort_by: 'invoiceNo',
+      sort_order: 'desc',
+      page: 1,
+      pageSize: 50,
+    });
+
+    // Must addSelect with numeric regex extracting digits
+    expect(qb.addSelect).toHaveBeenCalledWith(
+      "NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric",
+      'inv_invoice_no_num',
+    );
+
+    // orderBy must use alias instead of raw SQL expression to prevent TypeORM alias split bug
+    expect(qb.orderBy).toHaveBeenCalledWith(
+      'inv_invoice_no_num',
+      'DESC',
+      'NULLS LAST',
+    );
+    expect(qb.addOrderBy).toHaveBeenCalledWith('inv.invoiceNo', 'DESC');
   });
 });

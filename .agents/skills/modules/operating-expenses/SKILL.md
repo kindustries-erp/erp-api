@@ -1,6 +1,6 @@
 ---
 name: operating-expenses
-description: Module tri thức Quản lý Chi phí Vận hành (Operating Expenses), Hạch toán Trích trước & Tất toán Hóa đơn chống Double Chi phí trong erp-api (operating-expenses-core) và erp-web. Chứa toàn bộ database schema (erp_operating_expenses, erp_expense_account_rules), DTOs, API endpoints, logic phân kỳ Tháng/Năm, Động cơ Phát sinh Định kỳ (Recurrence Engine: this vs this_and_future), Smart Account Mapping (Lương 334, BHXH 3383, Thuê nhà 335), giải tỏa tài khoản treo T0003 và tích hợp tự động với Nhật ký chung (accounting-core).
+description: "Module tri thức Quản lý Chi phí Vận hành (Operating Expenses), Hạch toán Trích trước & Tất toán Hóa đơn chống Double Chi phí trong erp-api (operating-expenses-core) và erp-web. Chứa toàn bộ database schema (erp_operating_expenses, erp_expense_account_rules), DTOs, API endpoints, logic phân kỳ Tháng/Năm, Động cơ Phát sinh Định kỳ (Recurrence Engine: this vs this_and_future), Smart Account Mapping (Lương 334, BHXH 3383, Thuê nhà 335), giải tỏa tài khoản treo T0003 và tích hợp tự động với Nhật ký chung (accounting-core)."
 ---
 
 # 📦 Module Tri Thức: Chi Phí Vận Hành & Hạch Toán Tự Động (Operating Expenses Core)
@@ -169,7 +169,7 @@ graph TD
 ### Lệnh Kiểm tra Code & Chạy Test
 ```bash
 # Type check toàn diện backend
-cd /home/dev/repos-dev/erp/erp-api && bun run type:check
+cd erp/erp-api && bun run type:check
 
 # Chạy unit tests cho module chi phí vận hành
 bun test src/operating-expenses-core/operating-expenses-core.service.spec.ts
@@ -181,7 +181,7 @@ bun test src/erp-invoices-core/services/invoice-lifecycle.service.spec.ts
 ```
 
 ### Script Hạch toán Hàng loạt Dữ liệu Lịch sử (2025 - Nay)
-- Script: [`scripts/batch-post-historical.ts`](file:///home/dev/repos-dev/erp/erp-api/scripts/batch-post-historical.ts)
+- Script: [`scripts/batch-post-historical.ts`](erp/erp-api/scripts/batch-post-historical.ts)
 - **Chế độ Dry-Run (Kiểm toán, không ghi DB)**:
   ```bash
   bun scripts/batch-post-historical.ts --dry-run

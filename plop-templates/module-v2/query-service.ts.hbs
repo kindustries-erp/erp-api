@@ -1,0 +1,49 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
+
+/** Cột dùng cho ô tìm kiếm chung (ILIKE). */
+const SEARCH_COLUMNS: string[] = {{{searchColumnsLiteral}}};
+
+export interface {{entityName}}PageResult {
+  items: {{entityName}}[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Đọc dữ liệu: phân trang, tìm kiếm và lấy theo id. Chỉ đọc các dòng chưa xóa mềm. */
+@Injectable()
+export class {{entityName}}QueryService {
+  constructor(
+    @InjectRepository({{entityName}})
+    private readonly repo: Repository<{{entityName}}>,
+  ) {}
+
+  async findAll(query: Query{{entityName}}Dto): Promise<{{entityName}}PageResult> {
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
+    const qb = this.repo
+      .createQueryBuilder('e')
+      .where('e.isDeleted = :isDeleted', { isDeleted: false });
+
+    const keyword = query.search?.trim();
+    if (keyword && SEARCH_COLUMNS.length > 0) {
+      const clause = SEARCH_COLUMNS.map((column) => `e.${column} ILIKE :keyword`).join(' OR ');
+      qb.andWhere(`(${clause})`, { keyword: `%${keyword}%` });
+    }
+
+    const [items, total] = await qb
+      .orderBy('e.createdAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    return { items, total, page, pageSize };
+  }
+
+  findById(id: string): Promise<{{entityName}} | null> {
+    return this.repo.findOne({ where: { id, isDeleted: false } });
+  }
+}

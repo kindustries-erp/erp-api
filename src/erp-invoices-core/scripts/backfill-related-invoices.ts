@@ -1,27 +1,44 @@
 import { Client } from 'pg';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import AdmZip from 'adm-zip';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 async function main() {
-  const connectionString =
-    process.env.DATABASE_URL ||
-    'postgresql://erp_greenway_production_admin:Cg4b6wqHAH3kWVP2pbCismcari9Tz-4ueB4YH_Pd@db.liouni.com:5432/erp_greenway_production?sslmode=disable';
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      '❌ DATABASE_URL is not defined in environment variables or .env file',
+    );
+  }
   const client = new Client({ connectionString });
   await client.connect();
 
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+      '❌ R2 credentials (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY) not found in env',
+    );
+  }
+
   const s3 = new S3Client({
     region: 'us-east-1',
-    endpoint: process.env.R2_ENDPOINT || 'https://s3.liouni.com/',
+    endpoint: process.env.R2_ENDPOINT || undefined,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID || 'nD3H4OwR0K3FWLAbaUi0',
-      secretAccessKey:
-        process.env.R2_SECRET_ACCESS_KEY ||
-        '5pQUBP1xzZbl5Tr6gJuOrG8PLvRMgcp3HOqx0QFS',
+      accessKeyId,
+      secretAccessKey,
     },
     forcePathStyle: true,
   });
 
-  const bucketName = process.env.R2_BUCKET_NAME || 'erp-greenway-production';
+  const bucketName = process.env.R2_BUCKET_NAME;
+  if (!bucketName) {
+    throw new Error(
+      '❌ R2_BUCKET_NAME is not defined in environment variables or .env file',
+    );
+  }
 
   console.log(
     'Fetching invoices with tax_invoice_status in (2, 3) or having XML...',

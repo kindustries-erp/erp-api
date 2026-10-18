@@ -37,18 +37,60 @@ export const INVOICE_TYPE_MAP: Record<string, string> = {
   KHAC: 'Khác',
 };
 
-export const summaryColumns = [
-  { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
-  { header: 'Ký hiệu hóa đơn', key: 'serialNo', width: 15 },
-  { header: 'Số hóa đơn', key: 'invoiceNo', width: 15 },
-  { header: 'Tên đơn vị khách hàng', key: 'partnerName', width: 40 },
-  { header: 'MST khách hàng', key: 'taxCode', width: 15 },
-  { header: 'Địa chỉ khách hàng', key: 'address', width: 50 },
+export interface InvoiceExcelColumnDef {
+  header: string;
+  key: string;
+  width: number;
+  style?: { numFmt?: string };
+  alignment?: Partial<ExcelJS.Alignment>;
+  fill?: ExcelJS.Fill;
+  isSum?: boolean;
+  isCount?: boolean;
+}
+
+export const summaryColumns: InvoiceExcelColumnDef[] = [
+  {
+    header: 'Ngày phát hành',
+    key: 'invoiceDate',
+    width: 15,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Ký hiệu hóa đơn',
+    key: 'serialNo',
+    width: 15,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Số hóa đơn',
+    key: 'invoiceNo',
+    width: 15,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Tên đơn vị khách hàng',
+    key: 'partnerName',
+    width: 40,
+    alignment: { horizontal: 'left', vertical: 'middle' },
+  },
+  {
+    header: 'MST khách hàng',
+    key: 'taxCode',
+    width: 15,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Địa chỉ khách hàng',
+    key: 'address',
+    width: 50,
+    alignment: { horizontal: 'left', vertical: 'middle' },
+  },
   {
     header: 'Chiết khấu',
     key: 'headerDiscountAmount',
     width: 20,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
     isSum: true,
   },
   {
@@ -56,6 +98,7 @@ export const summaryColumns = [
     key: 'preVat',
     width: 20,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
     isSum: true,
   },
   {
@@ -63,12 +106,14 @@ export const summaryColumns = [
     key: 'vatRate',
     width: 15,
     style: { numFmt: '0%' },
+    alignment: { horizontal: 'center', vertical: 'middle' },
   },
   {
     header: 'Thuế GTGT',
     key: 'vat',
     width: 15,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
     isSum: true,
   },
   {
@@ -76,39 +121,95 @@ export const summaryColumns = [
     key: 'total',
     width: 20,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
     isSum: true,
   },
-  { header: 'Biển số xe', key: 'licensePlate', width: 15 },
-  { header: 'Lệnh quyết toán', key: 'wo', width: 30 },
-  { header: 'Diễn giải', key: 'description', width: 50 },
-  { header: 'Trạng thái', key: 'statusName', width: 20 },
-  { header: 'Chi nhánh', key: 'branchName', width: 25 },
+  {
+    header: 'Biển số xe',
+    key: 'licensePlate',
+    width: 15,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Lệnh quyết toán',
+    key: 'wo',
+    width: 30,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Diễn giải',
+    key: 'description',
+    width: 50,
+    alignment: { horizontal: 'left', vertical: 'middle' },
+  },
+  {
+    header: 'Trạng thái',
+    key: 'statusName',
+    width: 20,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+  },
+  {
+    header: 'Chi nhánh',
+    key: 'branchName',
+    width: 25,
+    alignment: { horizontal: 'left', vertical: 'middle' },
+  },
   {
     header: 'Tham chiếu cấn trừ',
     key: 'netOffReferences',
     width: 25,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F9FF' },
+    },
   },
   {
     header: 'Ngày giao dịch',
     key: 'netOffTransDate',
     width: 18,
+    alignment: { horizontal: 'center', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F9FF' },
+    },
   },
   {
     header: 'Nội dung giao dịch',
     key: 'netOffTransDesc',
     width: 45,
+    alignment: { horizontal: 'left', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F9FF' },
+    },
   },
   {
     header: 'Số tiền của tham chiếu',
     key: 'netOffRefAmount',
     width: 25,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F9FF' },
+    },
   },
   {
     header: 'Số tiền cấn trừ',
     key: 'netOffAmount',
     width: 22,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF0F9FF' },
+    },
     isSum: true,
   },
   {
@@ -116,9 +217,47 @@ export const summaryColumns = [
     key: 'remainingAmount',
     width: 22,
     style: { numFmt: '#,##0.00' },
+    alignment: { horizontal: 'right', vertical: 'middle' },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFEFCE8' },
+    },
     isSum: true,
   },
 ];
+
+export function resolveActiveColumns(
+  allColumns: InvoiceExcelColumnDef[],
+  selectedKeys?: string[] | string,
+): InvoiceExcelColumnDef[] {
+  if (!selectedKeys) return allColumns;
+  let keys: string[] = [];
+  if (Array.isArray(selectedKeys)) {
+    keys = selectedKeys.map((k) => String(k).trim()).filter(Boolean);
+  } else if (typeof selectedKeys === 'string' && selectedKeys.trim()) {
+    try {
+      const parsed = JSON.parse(selectedKeys);
+      if (Array.isArray(parsed)) {
+        keys = parsed.map((k) => String(k).trim()).filter(Boolean);
+      } else {
+        keys = selectedKeys
+          .split(',')
+          .map((k) => k.trim())
+          .filter(Boolean);
+      }
+    } catch {
+      keys = selectedKeys
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean);
+    }
+  }
+
+  if (keys.length === 0) return allColumns;
+  const filtered = allColumns.filter((col) => keys.includes(col.key));
+  return filtered.length > 0 ? filtered : allColumns;
+}
 
 export const detailedColumns = [
   { header: 'Ngày phát hành', key: 'invoiceDate', width: 15 },
@@ -317,7 +456,7 @@ export const finalizeSheetLayout = (
     name: 'Calibri',
     size: 10.5,
     bold: true,
-    color: { argb: 'FF0F172A' },
+    color: { argb: 'FF78350F' }, // Amber 900
   };
 
   const subtotalRow = sheet.getRow(2);
@@ -326,7 +465,7 @@ export const finalizeSheetLayout = (
     name: 'Calibri',
     size: 10.5,
     bold: true,
-    color: { argb: 'FF1E40AF' },
+    color: { argb: 'FF0F172A' }, // Slate 900
   };
 
   const blankRow = sheet.getRow(3);
@@ -354,7 +493,7 @@ export const finalizeSheetLayout = (
     cellSum.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFF1F5F9' },
+      fgColor: { argb: 'FFFFFBEB' }, // Amber 50
     };
     cellSum.border = borderThin;
 
@@ -362,7 +501,7 @@ export const finalizeSheetLayout = (
     cellSub.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFEFF6FF' },
+      fgColor: { argb: 'FFF8FAFC' }, // Slate 50
     };
     cellSub.border = {
       top: { style: 'thin', color: { argb: 'FF94A3B8' } },
@@ -380,7 +519,8 @@ export const finalizeSheetLayout = (
     };
     cellHdr.border = borderThin;
 
-    if (c === labelColIndex) {
+    const effectiveLabelCol = Math.min(Math.max(1, labelColIndex), totalCols);
+    if (c === effectiveLabelCol) {
       cellSum.value = 'TỔNG CỘNG (SUM)';
       cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
       cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';

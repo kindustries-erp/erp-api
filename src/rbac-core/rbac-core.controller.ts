@@ -23,7 +23,7 @@ import {
   UpdateCoreRoleUsersDto,
 } from './dto/rbac-core.dto';
 
-@ApiTags('RBAC Core (Neon)')
+@ApiTags('RBAC Core')
 @ApiBearerAuth()
 @Controller('rbac-core')
 @UseGuards(JwtAuthGuard, CoreRbacGuard)

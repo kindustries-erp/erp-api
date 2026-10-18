@@ -54,6 +54,50 @@ export class GarageDashboardController {
   }
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @Get('monthly-receivables-breakdown')
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Định dạng YYYY-MM hoặc MM/YYYY',
+  })
+  @ApiQuery({
+    name: 'horizon',
+    required: false,
+    description:
+      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue30To90, criticalOverdue90Plus...)',
+  })
+  @ApiQuery({
+    name: 'branch_id',
+    required: false,
+    description: 'ID chi nhánh garage',
+  })
+  @ApiQuery({
+    name: 'date_from',
+    required: false,
+    description: 'Ngày bắt đầu (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'date_to',
+    required: false,
+    description: 'Ngày kết thúc (YYYY-MM-DD)',
+  })
+  getMonthlyReceivablesBreakdown(
+    @Query('month') month?: string,
+    @Query('branch_id') branchId?: string,
+    @Query('horizon') horizon?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+  ) {
+    return this.service.getMonthlyReceivablesBreakdown(
+      month,
+      branchId,
+      horizon,
+      dateFrom,
+      dateTo,
+    );
+  }
+
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('checkpoint-cases')
   @ApiQuery({ name: 'date_from', required: true })
   @ApiQuery({ name: 'date_to', required: true })
@@ -122,29 +166,6 @@ export class GarageDashboardController {
       columnSearch,
       columnFilters,
     );
-  }
-
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  @Get('export')
-  @ApiProduces(
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  )
-  @ApiQuery({ name: 'date_from', required: false })
-  @ApiQuery({ name: 'date_to', required: false })
-  async exportExcel(
-    @Res() res: Response,
-    @Query('date_from') dateFrom?: string,
-    @Query('date_to') dateTo?: string,
-  ) {
-    const buffer = await this.service.exportExcel(dateFrom, dateTo);
-    res.set({
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition':
-        'attachment; filename="Garage_Dashboard_Report.xlsx"',
-      'Content-Length': buffer.length,
-    });
-    res.end(buffer);
   }
 
   // ===================== OPERATING EXPENSES (CP VẬN HÀNH) =====================
@@ -234,6 +255,23 @@ export class GarageDashboardController {
     return this.service.getPnlReport(
       year ? parseInt(year, 10) : undefined,
       month ? parseInt(month, 10) : undefined,
+    );
+  }
+
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @Get('pnl-trend')
+  @ApiQuery({ name: 'year', required: false })
+  @ApiQuery({ name: 'month', required: false })
+  @ApiQuery({ name: 'count', required: false })
+  getPnlTrend(
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('count') count?: string,
+  ) {
+    return this.service.getPnlTrend(
+      year ? parseInt(year, 10) : undefined,
+      month ? parseInt(month, 10) : undefined,
+      count ? parseInt(count, 10) : undefined,
     );
   }
 

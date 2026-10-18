@@ -67,12 +67,14 @@ export class TransactionAnalyticsService {
     const groupField =
       "COALESCE(NULLIF(txn.correspondentName, ''), NULLIF(txn.correspondentAccount, ''), 'Khác')";
 
-    if (filter.column_filters) {
+    const rawColumnFilters = filter.column_filters || filter.columnFilters;
+    if (rawColumnFilters) {
       try {
-        const cFilters = JSON.parse(filter.column_filters) as Record<
-          string,
-          string[]
-        >;
+        const cFilters = (
+          typeof rawColumnFilters === 'string'
+            ? JSON.parse(rawColumnFilters)
+            : rawColumnFilters
+        ) as Record<string, string[]>;
         for (const [col, vals] of Object.entries(cFilters)) {
           if (!vals || vals.length === 0) continue;
           if (col === 'correspondentAccount') {
@@ -113,12 +115,14 @@ export class TransactionAnalyticsService {
       } catch (e) {}
     }
 
-    if (filter.column_search) {
+    const rawColumnSearch = filter.column_search || filter.columnSearch;
+    if (rawColumnSearch) {
       try {
-        const cSearch = JSON.parse(filter.column_search) as Record<
-          string,
-          string
-        >;
+        const cSearch = (
+          typeof rawColumnSearch === 'string'
+            ? JSON.parse(rawColumnSearch)
+            : rawColumnSearch
+        ) as Record<string, string>;
         for (const [col, val] of Object.entries(cSearch)) {
           if (!val) continue;
           if (col === 'correspondentAccount') {
@@ -191,17 +195,33 @@ export class TransactionAnalyticsService {
     );
     const total = parseInt(totalRaw[0]?.cnt || '0', 10);
 
-    if (filter.sortBy) {
-      const order = filter.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      if (filter.sortBy === 'correspondentAccount') {
+    let sortBy = filter.sortBy;
+    let sortOrder = filter.sortOrder;
+
+    if (!sortBy && filter.sorts && filter.sorts.length > 0) {
+      const firstSort = filter.sorts[0];
+      if (typeof firstSort === 'string') {
+        if (firstSort.startsWith('-')) {
+          sortBy = firstSort.substring(1);
+          sortOrder = 'DESC';
+        } else {
+          sortBy = firstSort;
+          sortOrder = 'ASC';
+        }
+      }
+    }
+
+    if (sortBy) {
+      const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      if (sortBy === 'correspondentAccount') {
         qb.orderBy('MAX(txn.correspondentAccount)', order);
-      } else if (filter.sortBy === 'correspondentName') {
+      } else if (sortBy === 'correspondentName') {
         qb.orderBy('MAX(txn.correspondentName)', order);
-      } else if (filter.sortBy === 'totalCredit') {
+      } else if (sortBy === 'totalCredit') {
         qb.orderBy('SUM(COALESCE(txn.creditAmount, 0))', order);
-      } else if (filter.sortBy === 'totalDebit') {
+      } else if (sortBy === 'totalDebit') {
         qb.orderBy('SUM(COALESCE(txn.debitAmount, 0))', order);
-      } else if (filter.sortBy === 'transactionCount') {
+      } else if (sortBy === 'transactionCount') {
         qb.orderBy('COUNT(txn.id)', order);
       } else {
         qb.orderBy(

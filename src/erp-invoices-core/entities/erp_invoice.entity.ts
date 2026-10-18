@@ -13,6 +13,7 @@ import { ErpInvoiceItem } from './erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from './erp_invoice_voucher_netoff.entity';
 import { ErpInvoiceAttachment } from './erp_invoice_attachment.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import { ErpEInvoiceSync } from './erp_einvoice_sync.entity';
 
 @Entity({ name: 'erp_invoices' })
 export class ErpInvoice {
@@ -281,6 +282,72 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'xml_import_id', nullable: true })
   xmlImportId: string | null;
 
+  // --- Original Provider & Sync Tracking ---
+  @Column({ type: 'uuid', name: 'sync_id', nullable: true })
+  syncId: string | null;
+
+  @ManyToOne(() => ErpEInvoiceSync, (sync) => sync.invoices, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'sync_id' })
+  sync: ErpEInvoiceSync | null;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'msttcgp',
+    nullable: true,
+  })
+  msttcgp: string | null;
+
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'provider_code',
+    nullable: true,
+  })
+  providerCode: string | null;
+
+  @Column({
+    type: 'text',
+    name: 'lookup_url',
+    nullable: true,
+  })
+  lookupUrl: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'lookup_code',
+    nullable: true,
+  })
+  lookupCode: string | null;
+
+  @Column({
+    type: 'text',
+    name: 'pdf_path',
+    nullable: true,
+  })
+  pdfPath: string | null;
+
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 30,
+    name: 'pdf_source',
+    nullable: true,
+  })
+  pdfSource: string | null;
+
+  @Column({
+    type: 'text',
+    name: 'pdf_error',
+    nullable: true,
+  })
+  pdfError: string | null;
+
   // --- Hạch toán kế toán ---
   @Column({
     type: 'varchar',
@@ -318,4 +385,50 @@ export class ErpInvoice {
     cascade: true,
   })
   attachments: ErpInvoiceAttachment[];
+
+  @Column({ type: 'jsonb', name: 'effective_data', nullable: true })
+  effectiveData: InvoiceEffectiveData | null;
+
+  @OneToMany(
+    'ErpInvoiceAdjustmentNetOff',
+    (netoff: any) => netoff.originalInvoice,
+  )
+  adjustingNetOffs: import('typeorm').Relation<any>[];
+
+  @OneToMany(
+    'ErpInvoiceAdjustmentNetOff',
+    (netoff: any) => netoff.adjustingInvoice,
+  )
+  adjustedByNetOffs: import('typeorm').Relation<any>[];
+}
+
+export interface InvoiceEffectiveData {
+  isAdjusted?: boolean;
+  hasInfoAdjustment?: boolean;
+  adjustingInvoiceId?: string;
+  adjustingInvoiceNo?: string;
+  adjustingSerialNo?: string;
+  adjustedAt?: string;
+  lastAdjustedAt?: string;
+  lastAdjustingInvoiceId?: string;
+  effectiveValues?: {
+    buyerTaxCode?: string;
+    buyerName?: string;
+    buyerAddress?: string;
+    licensePlate?: string;
+    buyerCccd?: string;
+    settlementOrder?: string;
+  };
+  diffLog?: Array<{
+    field: string;
+    fieldNameVi: string;
+    oldValue: string;
+    newValue: string;
+  }>;
+  infoDiffs?: Array<{
+    field: string;
+    fieldNameVi: string;
+    oldValue: string;
+    newValue: string;
+  }>;
 }

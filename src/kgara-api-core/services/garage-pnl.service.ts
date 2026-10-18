@@ -4,8 +4,14 @@ import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
+import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { GarageOpexService } from './garage-opex.service';
 import { ListGarageOpexQueryDto } from '../dto/garage-opex.dto';
+import {
+  PAYMENT_CONTENT_SALE_COMMISSION,
+  PAYMENT_CONTENT_DV_COMMISSION,
+} from '../helpers/garage-cashflow-payment-rules';
 
 @Injectable()
 export class GaragePnlService {
@@ -15,6 +21,10 @@ export class GaragePnlService {
     @InjectRepository(KgaraCase)
     private readonly caseRepo: Repository<KgaraCase>,
     private readonly opexService: GarageOpexService,
+    @InjectRepository(KgaraOperatingExpense)
+    private readonly opexRepo: Repository<KgaraOperatingExpense>,
+    @InjectRepository(KgaraCashflowVoucher)
+    private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
   ) {}
 
   /**
@@ -28,6 +38,7 @@ export class GaragePnlService {
     // 1. Tổng hợp Doanh thu & Chi phí giá vốn từ các vụ việc hoàn thành trong tháng
     const qb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .leftJoin(
         KgaraGrossProfit,
         'gp',
@@ -39,46 +50,47 @@ export class GaragePnlService {
       )
       .addSelect('SUM(COALESCE(gp.chi_phi, c.chi_phi, 0))', 'cogs')
       .addSelect('COUNT(c.id)', 'caseCount')
-      // Mảng Ký gửi / Nội bộ (dựa vào kgara_cases.classification)
+      // Mảng Ký gửi / Nội bộ (dựa vào category code hoặc classification)
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'kyGuiRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'kyGuiCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN c.id END)",
         'kyGuiCaseCount',
       )
       // Mảng Sửa chữa chung
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'suaChuaChungRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'suaChuaChungCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN c.id END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG' THEN c.id END)",
         'suaChuaChungCaseCount',
       )
       // Phân khúc OJ
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0) ELSE 0 END)",
         'ojRevenue',
       )
       .addSelect(
-        "SUM(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
+        "SUM(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN COALESCE(gp.chi_phi, c.chi_phi, 0) ELSE 0 END)",
         'ojCogs',
       )
       .addSelect(
-        "COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)",
+        "COUNT(CASE WHEN COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI') THEN 1 END)",
         'ojCaseCount',
       )
       .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
       .andWhere(
@@ -124,30 +136,67 @@ export class GaragePnlService {
         : 0;
     const kyGuiProfitRatioDecimal = kyGuiProfitRate / 100;
 
-    // 4. Tính toán Hoa hồng tự động theo chuẩn công thức P&L:
-    // Hoa hồng cho Sale (10%): Tính trên 10% của Lợi nhuận ròng theo Tỷ lệ lợi nhuận gộp do ký gửi / tổng lợi nhuận gộp
+    // 4. Tính toán Chi phí bán hàng (Selling Expenses):
+    // Hoa hồng cho Sale (10%): Tính trên 10% của Lợi nhuận trước hoa hồng Sale & DV theo Tỷ lệ lợi nhuận gộp do ký gửi
+    const netProfitBeforeSellingAndOpex = grossProfit - opexSummary.opex.total;
     const saleCommissionRate = 0.1;
     const saleCommission =
-      netProfitBeforeCommission > 0
+      netProfitBeforeSellingAndOpex > 0
         ? Math.round(
-            netProfitBeforeCommission *
+            netProfitBeforeSellingAndOpex *
               kyGuiProfitRatioDecimal *
               saleCommissionRate,
           )
         : 0;
 
-    // Hoa hồng cho DV (10%): Tính trên 10% Lợi nhuận ròng sau khi trừ hoa hồng Sale
+    const sellingItems = [
+      {
+        categoryKey: 'RATE_LAI_GOP_KY_GUI',
+        categoryName: 'Tỷ lệ lãi gộp ký gửi / Lãi gộp',
+        amount: kyGuiProfitRate,
+        ojAmount: 0,
+        note: `Lãi gộp Ký gửi: ${kyGuiGrossProfit.toLocaleString('vi-VN')} đ / Tổng lãi gộp: ${grossProfit.toLocaleString('vi-VN')} đ`,
+      },
+      {
+        categoryKey: 'HOA_HONG_SALE',
+        categoryName: 'Hoa hồng cho Sale (10%)',
+        amount: saleCommission,
+        ojAmount: 0,
+        isAutoCalculated: true,
+        isReadOnly: true,
+        note: 'Tính trên 10% của Lợi nhuận ròng theo Tỷ lệ lợi nhuận gộp do ký gửi / tổng lợi nhuận gộp',
+      },
+    ];
+
+    // HHBH (phiếu chi 4) thuộc mục 4.2 Chi phí bán hàng, không còn nằm trong giá vốn
+    const hhbhTotal = opexSummary.selling.total || 0;
+    const hhbhOjTotal = opexSummary.selling.ojTotal || 0;
+    sellingItems.push({
+      categoryKey: 'HHBH',
+      categoryName: 'HHBH',
+      amount: hhbhTotal,
+      ojAmount: hhbhOjTotal,
+      note: 'Từ phiếu chi nội dung 4. HHBH (Đã duyệt / Đã chi)',
+    });
+
+    const sellingExpenses = {
+      total: saleCommission + hhbhTotal,
+      ojTotal: hhbhOjTotal,
+      items: sellingItems,
+    };
+
+    // 5. Lợi nhuận ròng từ hoạt động kinh doanh (Chuẩn kế toán):
+    // Lợi nhuận ròng = Lợi nhuận gộp - Chi phí bán hàng - Chi phí vận hành (OPEX)
+    const netProfit =
+      grossProfit - sellingExpenses.total - opexSummary.opex.total;
+
+    // 6. Thưởng & Hoa hồng Dịch vụ (Trích lập sau Lợi nhuận ròng):
+    // Hoa hồng cho DV (10%): Tính trên 10% của Lợi nhuận ròng
     const dvCommissionRate = 0.1;
     const dvCommission =
-      netProfitBeforeCommission > 0
-        ? Math.round(
-            (netProfitBeforeCommission - saleCommission) * dvCommissionRate,
-          )
-        : 0;
+      netProfit > 0 ? Math.round(netProfit * dvCommissionRate) : 0;
 
-    const totalAutoCommission = saleCommission + dvCommission;
-
-    // Các khoản hoa hồng nhập tay thủ công khác (như HOA_HONG_KHAC, có thể âm hoặc dương)
+    // Các khoản hoa hồng / điều chỉnh nhập tay thủ công khác (như HOA_HONG_KHAC)
     const manualCommissionItems = (opexSummary.commission?.items || []).filter(
       (item) =>
         item.categoryKey !== 'HOA_HONG_SALE' &&
@@ -162,30 +211,51 @@ export class GaragePnlService {
       0,
     );
 
+    const serviceCommissionTotal = dvCommission + manualCommissionTotal;
+    const serviceCommissionOjTotal = manualCommissionOjTotal;
+
+    const serviceCommission = {
+      total: serviceCommissionTotal,
+      ojTotal: serviceCommissionOjTotal,
+      dvCommission,
+      items: [
+        {
+          categoryKey: 'HOA_HONG_DV',
+          categoryName: 'Hoa hồng cho DV (10%)',
+          amount: dvCommission,
+          ojAmount: 0,
+          isAutoCalculated: true,
+          isReadOnly: true,
+          note: 'Tính trên 10% Lợi nhuận ròng',
+        },
+        ...manualCommissionItems,
+      ],
+    };
+
+    // 7. Lợi nhuận giữ lại của Garage (Sau hoa hồng DV & Thưởng)
+    const netProfitAfterCommission = netProfit - serviceCommissionTotal;
+
+    // Backward compatibility tổng hoa hồng
     const totalCommission =
       saleCommission + dvCommission + manualCommissionTotal;
-    const netProfitAfterCommission =
-      netProfitBeforeCommission - totalCommission;
+    const totalAutoCommission = saleCommission + dvCommission;
 
-    // 5. Tính toán riêng cho phân khúc OJ
+    // 8. Tính toán riêng cho phân khúc OJ
     const ojDirectCostTotal = opexSummary.directCost.ojTotal || 0;
     const ojCogs = ojCogsDirect + ojDirectCostTotal;
     const ojGrossProfit = ojRevenue - ojCogs;
+    const ojSellingExpensesTotal = opexSummary.selling.ojTotal || 0;
     const ojOpexTotal = opexSummary.opex.ojTotal || 0;
-    const ojNetProfitBeforeCommission = ojGrossProfit - ojOpexTotal;
-
-    // Commission cho OJ
-    const ojSaleCommission = 0; // OJ không tính ký gửi
+    const ojNetProfit = ojGrossProfit - ojSellingExpensesTotal - ojOpexTotal;
+    const ojSaleCommission = 0; // OJ không tính hoa hồng ký gửi sale
     const ojDvCommission =
-      ojNetProfitBeforeCommission > 0
-        ? Math.round(ojNetProfitBeforeCommission * dvCommissionRate)
-        : 0;
+      ojNetProfit > 0 ? Math.round(ojNetProfit * dvCommissionRate) : 0;
     const ojCommissionTotal =
       ojSaleCommission + ojDvCommission + manualCommissionOjTotal;
     const ojNetProfitAfterCommission =
-      ojNetProfitBeforeCommission - ojCommissionTotal;
+      ojNetProfit - ojDvCommission - manualCommissionOjTotal;
 
-    return {
+    const result = {
       period: { year: currentYear, month: currentMonth },
       periodStr: `${String(currentMonth).padStart(2, '0')}/${currentYear}`,
       caseCount,
@@ -195,6 +265,40 @@ export class GaragePnlService {
       cogsAdjustment: opexSummary.directCost,
       grossProfit,
       grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+
+      // Doanh thu / giá vốn từ phiếu theo phân loại (cấp 2-3 của báo cáo lợi nhuận);
+      // "Khác" là phần còn lại nên tổng 4 nhóm luôn bằng tổng doanh thu
+      revenueByClassification: [
+        {
+          key: 'KY_GUI',
+          label: 'Ký gửi / Nội bộ',
+          caseCount: kyGuiCaseCount,
+          revenue: kyGuiRevenue,
+          cogs: kyGuiCogs,
+        },
+        {
+          key: 'SUA_CHUA_CHUNG',
+          label: 'Sửa chữa chung',
+          caseCount: suaChuaChungCaseCount,
+          revenue: suaChuaChungRevenue,
+          cogs: suaChuaChungCogs,
+        },
+        {
+          key: 'OJ',
+          label: 'OJ',
+          caseCount: ojCaseCount,
+          revenue: ojRevenue,
+          cogs: ojCogsDirect,
+        },
+        {
+          key: 'KHAC',
+          label: 'Khác',
+          caseCount:
+            caseCount - kyGuiCaseCount - suaChuaChungCaseCount - ojCaseCount,
+          revenue: revenue - kyGuiRevenue - suaChuaChungRevenue - ojRevenue,
+          cogs: cogsDirect - kyGuiCogs - suaChuaChungCogs - ojCogsDirect,
+        },
+      ],
 
       // Chi tiết mảng Ký gửi / Nội bộ (từ kgara_cases.classification)
       kyGui: {
@@ -213,8 +317,11 @@ export class GaragePnlService {
         grossProfit: suaChuaChungGrossProfit,
       },
 
+      sellingExpenses,
       opex: opexSummary.opex,
-      netProfitBeforeCommission,
+      netProfit,
+      netProfitBeforeCommission: netProfitBeforeSellingAndOpex, // Giữ tương thích
+      serviceCommission,
 
       commission: {
         total: totalCommission,
@@ -277,8 +384,11 @@ export class GaragePnlService {
         cogsAdjustmentTotal: ojDirectCostTotal,
         grossProfit: ojGrossProfit,
         grossMarginRate: ojRevenue > 0 ? (ojGrossProfit / ojRevenue) * 100 : 0,
+        sellingExpensesTotal: ojSellingExpensesTotal,
         opexTotal: ojOpexTotal,
-        netProfitBeforeCommission: ojNetProfitBeforeCommission,
+        netProfit: ojNetProfit,
+        netProfitBeforeCommission: ojGrossProfit - ojOpexTotal,
+        serviceCommissionTotal: ojDvCommission + manualCommissionOjTotal,
         commissionTotal: ojCommissionTotal,
         commissionAuto: {
           kyGuiProfitRate: 0,
@@ -290,6 +400,242 @@ export class GaragePnlService {
         netMarginRate:
           ojRevenue > 0 ? (ojNetProfitAfterCommission / ojRevenue) * 100 : 0,
       },
+    };
+
+    // Tự động đồng bộ song song hoa hồng P&L vào OPEX & Cashflow Vouchers (không làm chậm/lỗi báo cáo)
+    this.syncCommissionVouchers(currentYear, currentMonth, result).catch(
+      (err) => {
+        this.logger.error(
+          `Lỗi tự động đồng bộ hoa hồng P&L kỳ ${currentMonth}/${currentYear}: ${err.message}`,
+          err.stack,
+        );
+      },
+    );
+
+    return result;
+  }
+
+  /**
+   * Tự động đồng bộ song song hoa hồng P&L vào OPEX (kgara_operating_expenses)
+   * và Cashflow Vouchers (kgara_cashflow_vouchers)
+   */
+  async syncCommissionVouchers(
+    year: number,
+    month: number,
+    pnlReport?: any,
+  ): Promise<{
+    year: number;
+    month: number;
+    saleCommission: number;
+    dvCommission: number;
+    syncedVouchers: number;
+    createdVouchers: number;
+    updatedVouchers: number;
+    deltaVouchers: number;
+    syncedOpex: number;
+  }> {
+    const pnl = pnlReport || (await this.getPnlReport(year, month));
+    const saleCommission = Number(pnl.commission?.auto?.saleCommission) || 0;
+    const dvCommission = Number(pnl.commission?.auto?.dvCommission) || 0;
+    const kyGuiProfitRate = Number(pnl.commission?.auto?.kyGuiProfitRate) || 0;
+
+    let syncedVouchers = 0;
+    let createdVouchers = 0;
+    let updatedVouchers = 0;
+    let deltaVouchers = 0;
+    let syncedOpex = 0;
+
+    const commissionConfigs = [
+      {
+        type: 'HOA_HONG_SALE' as const,
+        amount: saleCommission,
+        paymentContent: PAYMENT_CONTENT_SALE_COMMISSION,
+        categoryKey: 'HOA_HONG_SALE',
+        categoryName: 'Hoa hồng cho Sale (10%)',
+        calcNote: `10% LN ký gửi (${kyGuiProfitRate.toFixed(1)}% tỷ lệ ký gửi)`,
+      },
+      {
+        type: 'HOA_HONG_DV' as const,
+        amount: dvCommission,
+        paymentContent: PAYMENT_CONTENT_DV_COMMISSION,
+        categoryKey: 'HOA_HONG_DV',
+        categoryName: 'Hoa hồng cho DV (10%)',
+        calcNote: '10% LN ròng sau trừ HH Sale',
+      },
+    ];
+
+    for (const item of commissionConfigs) {
+      // 1. Đồng bộ vào bảng kgara_operating_expenses (bản ghi thật)
+      let opex = await this.opexRepo.findOne({
+        where: {
+          periodYear: year,
+          periodMonth: month,
+          categoryKey: item.categoryKey,
+        },
+      });
+
+      const opexNote = `Tự động tính từ P&L (${item.calcNote})`;
+      if (!opex) {
+        opex = this.opexRepo.create({
+          periodYear: year,
+          periodMonth: month,
+          categoryKey: item.categoryKey,
+          categoryName: item.categoryName,
+          amount: item.amount,
+          ojAmount: 0,
+          note: opexNote,
+        });
+      } else {
+        opex.amount = item.amount;
+        opex.note = opexNote;
+      }
+      await this.opexRepo.save(opex);
+      syncedOpex++;
+
+      // 2. Đồng bộ vào bảng kgara_cashflow_vouchers
+      const existingVouchers = await this.voucherRepo.find({
+        where: {
+          pnlPeriodYear: year,
+          pnlPeriodMonth: month,
+          pnlCommissionType: item.type,
+          isAutoCommission: true,
+        },
+        order: { createdAt: 'ASC' },
+      });
+
+      const paidVouchers = existingVouchers.filter(
+        (v) => v.paymentStatus === 'PAID',
+      );
+      const activePending = existingVouchers.find(
+        (v) => v.paymentStatus === 'PENDING' || v.paymentStatus === 'APPROVED',
+      );
+
+      const periodStr = `${String(month).padStart(2, '0')}/${year}`;
+      let nextMonthYear = year;
+      let nextMonth = month + 1;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextMonthYear += 1;
+      }
+      const defaultTransDate = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-10`;
+
+      if (paidVouchers.length > 0) {
+        // ĐÃ CÓ PHIẾU ĐÃ CHI (PAID): Khóa cứng số tiền đã chi, tính chênh lệch delta
+        const totalPaid = paidVouchers.reduce(
+          (sum, v) => sum + (Number(v.amount) || 0),
+          0,
+        );
+        const delta = item.amount - totalPaid;
+
+        if (delta > 0) {
+          // Cần chi thêm phần chênh lệch tăng
+          const primaryPaid = paidVouchers[0];
+          const deltaNote = `Chênh lệch P&L Tháng ${periodStr} (tăng thêm ${delta.toLocaleString('vi-VN')} đ so với phiếu ${primaryPaid.voucherCode} đã chi)`;
+
+          if (activePending) {
+            activePending.amount = delta;
+            activePending.note = deltaNote;
+            activePending.paymentContent = item.paymentContent;
+            await this.voucherRepo.save(activePending);
+            updatedVouchers++;
+          } else {
+            const dateStr = new Date()
+              .toISOString()
+              .slice(2, 10)
+              .replace(/-/g, '');
+            const randomSeq = Math.floor(Math.random() * 1000)
+              .toString()
+              .padStart(3, '0');
+            const voucherCode = `PC-GARA-${dateStr}-${randomSeq}`;
+
+            const newDeltaVoucher = this.voucherRepo.create({
+              voucherCode,
+              voucherType: 'PAYMENT',
+              amount: delta,
+              transDate: defaultTransDate,
+              paymentContent: item.paymentContent,
+              paymentStatus: 'PENDING',
+              isAutoCommission: true,
+              pnlPeriodYear: year,
+              pnlPeriodMonth: month,
+              pnlCommissionType: item.type,
+              pnlCommissionAnchorId: primaryPaid.id,
+              note: deltaNote,
+              createdBy: 'Hệ thống P&L',
+            });
+            await this.voucherRepo.save(newDeltaVoucher);
+            createdVouchers++;
+            deltaVouchers++;
+          }
+        } else if (delta === 0) {
+          // Khớp số liệu với số đã chi: nếu có phiếu pending thừa thì xóa
+          if (activePending) {
+            await this.voucherRepo.remove(activePending);
+          }
+        } else {
+          // delta < 0: P&L sau điều chỉnh giảm xuống thấp hơn số đã chi
+          if (activePending) {
+            await this.voucherRepo.remove(activePending);
+          }
+          this.logger.warn(
+            `Hoa hồng P&L ${item.type} tháng ${periodStr} (${item.amount}) thấp hơn số đã chi (${totalPaid}), delta: ${delta}`,
+          );
+        }
+      } else {
+        // CHƯA CÓ PHIẾU NÀO ĐÃ CHI (PAID)
+        const note = `${item.paymentContent} Tháng ${periodStr} - ${item.amount.toLocaleString('vi-VN')} đ (${item.calcNote})`;
+
+        if (activePending) {
+          // Cập nhật lại số tiền và ngày cashflow cho phiếu đang chờ duyệt
+          activePending.amount = item.amount;
+          activePending.transDate = defaultTransDate;
+          activePending.paymentContent = item.paymentContent;
+          activePending.note = note;
+          activePending.partnerName = undefined;
+          await this.voucherRepo.save(activePending);
+          updatedVouchers++;
+        } else if (item.amount > 0) {
+          // Tạo phiếu mới ở trạng thái PENDING
+          const dateStr = new Date()
+            .toISOString()
+            .slice(2, 10)
+            .replace(/-/g, '');
+          const randomSeq = Math.floor(Math.random() * 1000)
+            .toString()
+            .padStart(3, '0');
+          const voucherCode = `PC-GARA-${dateStr}-${randomSeq}`;
+
+          const newVoucher = this.voucherRepo.create({
+            voucherCode,
+            voucherType: 'PAYMENT',
+            amount: item.amount,
+            transDate: defaultTransDate,
+            paymentContent: item.paymentContent,
+            paymentStatus: 'PENDING',
+            isAutoCommission: true,
+            pnlPeriodYear: year,
+            pnlPeriodMonth: month,
+            pnlCommissionType: item.type,
+            note,
+            createdBy: 'Hệ thống P&L',
+          });
+          await this.voucherRepo.save(newVoucher);
+          createdVouchers++;
+        }
+      }
+      syncedVouchers++;
+    }
+
+    return {
+      year,
+      month,
+      saleCommission,
+      dvCommission,
+      syncedVouchers,
+      createdVouchers,
+      updatedVouchers,
+      deltaVouchers,
+      syncedOpex,
     };
   }
 
@@ -401,8 +747,19 @@ export class GaragePnlService {
         updatedAt: new Date(),
       };
 
-      // Kiểm tra filter theo query
-      const candidates = [autoSale, autoDv];
+      // Kiểm tra xem DB đã có bản ghi thật cho kỳ này chưa (tránh trùng lặp)
+      const dbKeysForPeriod = new Set(
+        dbResult.data
+          .filter((d) => d.periodYear === p.year && d.periodMonth === p.month)
+          .map((d) => d.categoryKey),
+      );
+      const candidates: any[] = [];
+      if (!dbKeysForPeriod.has('HOA_HONG_SALE')) {
+        candidates.push(autoSale);
+      }
+      if (!dbKeysForPeriod.has('HOA_HONG_DV')) {
+        candidates.push(autoDv);
+      }
       for (const item of candidates) {
         let match = true;
         if (query.column_filters) {
@@ -575,130 +932,249 @@ export class GaragePnlService {
       isChild?: boolean;
       isRate?: boolean;
     }> = [
+      // 1. DOANH THU
       {
-        category: 'I. Doanh Thu',
+        category: '1. Doanh Thu',
         amount: report.revenue,
         ojAmount: report.oj?.revenue || 0,
         isHeader: true,
       },
       {
-        category: '   Doanh Thu Dịch Vụ',
+        category: '   1.1. Doanh Thu Dịch Vụ',
         amount: report.revenue,
         ojAmount: report.oj?.revenue || 0,
         isChild: true,
       },
       {
-        category: 'II. Chi phí (Giá vốn)',
+        category: '      1.1.1. Trong đó: Phát sinh liên quan OJ',
+        amount: report.oj?.revenue || 0,
+        ojAmount: report.oj?.revenue || 0,
+        isChild: true,
+      },
+
+      // 2. CHI PHÍ (GIÁ VỐN)
+      {
+        category: '2. Chi phí (Giá vốn)',
         amount: report.cogs,
         ojAmount: report.oj?.cogs || 0,
         isHeader: true,
       },
       {
-        category: '   Chi phí phụ tùng & Gia công ngoài',
+        category: '   2.1. Chi phí phụ tùng & Gia công ngoài (từ vụ việc)',
         amount: report.cogsDirect,
+        ojAmount: report.oj?.cogsDirect || 0,
+        isChild: true,
+      },
+      {
+        category: '      2.1.1. Trong đó: Phát sinh liên quan OJ',
+        amount: report.oj?.cogsDirect || 0,
         ojAmount: report.oj?.cogsDirect || 0,
         isChild: true,
       },
     ];
 
+    // Chi phí trực tiếp nhập tay (nếu có)
     if (report.cogsAdjustment && report.cogsAdjustment.items.length > 0) {
-      for (const item of report.cogsAdjustment.items) {
+      rowsData.push({
+        category: '   2.2. Chi phí trực tiếp nhập tay (Điều chỉnh giá vốn)',
+        amount: report.cogsAdjustment.total,
+        ojAmount: report.cogsAdjustment.ojTotal || 0,
+        isChild: true,
+      });
+
+      report.cogsAdjustment.items.forEach((item, idx) => {
+        const itemIdx = `2.2.${idx + 1}`;
         rowsData.push({
-          category: `   ${item.categoryName}`,
+          category: `      ${itemIdx}. ${item.categoryName}`,
           amount: item.amount,
           ojAmount: item.ojAmount || 0,
           isChild: true,
         });
-      }
+        if (item.ojAmount && item.ojAmount > 0) {
+          rowsData.push({
+            category: `         ${itemIdx}.1. Trong đó: Phát sinh liên quan OJ`,
+            amount: item.ojAmount,
+            ojAmount: item.ojAmount,
+            isChild: true,
+          });
+        }
+      });
     }
 
+    // 3. LỢI NHUẬN GỘP
     rowsData.push(
       {
-        category: 'III. Lợi nhuận gộp',
+        category: '3. Lợi nhuận gộp',
         amount: report.grossProfit,
         ojAmount: report.oj?.grossProfit || 0,
         isHighlight: true,
       },
       {
-        category: 'IV. Chi phí vận hành',
-        amount: report.opex.total,
-        ojAmount: report.oj?.opexTotal || 0,
+        category: '   3.1. Trong đó: Lợi nhuận gộp mảng OJ',
+        amount: report.oj?.grossProfit || 0,
+        ojAmount: report.oj?.grossProfit || 0,
+        isChild: true,
+      },
+
+      // 4. CHI PHÍ BÁN HÀNG
+      {
+        category: '4. Chi phí bán hàng',
+        amount: report.sellingExpenses.total,
+        ojAmount: report.sellingExpenses.ojTotal || 0,
         isHeader: true,
+      },
+      {
+        category: '   4.1. Hoa hồng cho Sale (10%)',
+        amount: report.commission.auto.saleCommission,
+        ojAmount: report.oj?.commissionAuto?.saleCommission || 0,
+        isChild: true,
+      },
+      {
+        category: '      4.1.1. Tỷ lệ lãi gộp ký gửi / Lãi gộp',
+        amount: `${report.commission.auto.kyGuiProfitRate.toFixed(2)}%`,
+        ojAmount: '0.00%',
+        isChild: true,
+        isRate: true,
+      },
+      {
+        category: '      4.1.2. Hoa hồng Sale từ xe Ký gửi / Nội bộ',
+        amount: report.commission.auto.saleCommission,
+        ojAmount: report.oj?.commissionAuto?.saleCommission || 0,
+        isChild: true,
       },
     );
 
+    if (
+      report.oj?.commissionAuto?.saleCommission &&
+      report.oj.commissionAuto.saleCommission > 0
+    ) {
+      rowsData.push({
+        category: '         4.1.2.1. Trong đó: Phát sinh liên quan OJ',
+        amount: report.oj.commissionAuto.saleCommission,
+        ojAmount: report.oj.commissionAuto.saleCommission,
+        isChild: true,
+      });
+    }
+
+    // 4.2. HHBH (từ phiếu chi 4. HHBH), không ghi tỷ lệ %
+    rowsData.push({
+      category: '   4.2. HHBH',
+      amount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.amount ?? 0,
+      ojAmount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.ojAmount ?? 0,
+      isChild: true,
+    });
+
+    // 5. CHI PHÍ VẬN HÀNH (OPEX)
+    rowsData.push({
+      category: '5. Chi phí vận hành',
+      amount: report.opex.total,
+      ojAmount: report.oj?.opexTotal || 0,
+      isHeader: true,
+    });
+
     if (report.opex.items.length === 0) {
       rowsData.push({
-        category: '   (Chưa nhập chi phí vận hành)',
+        category: '   5.1. (Chưa nhập chi phí vận hành)',
         amount: 0,
         ojAmount: 0,
         isChild: true,
       });
     } else {
-      for (const item of report.opex.items) {
+      report.opex.items.forEach((item, idx) => {
+        const itemIdx = `5.${idx + 1}`;
         rowsData.push({
-          category: `   ${item.categoryName}`,
+          category: `   ${itemIdx}. ${item.categoryName}`,
           amount: item.amount,
           ojAmount: item.ojAmount || 0,
           isChild: true,
         });
-      }
+        if (item.ojAmount && item.ojAmount > 0) {
+          rowsData.push({
+            category: `      ${itemIdx}.1. Trong đó: Phát sinh liên quan OJ`,
+            amount: item.ojAmount,
+            ojAmount: item.ojAmount,
+            isChild: true,
+          });
+        }
+      });
     }
 
-    rowsData.push({
-      category: 'V. Lợi nhuận ròng (trước hoa hồng)',
-      amount: report.netProfitBeforeCommission,
-      ojAmount: report.oj?.netProfitBeforeCommission || 0,
-      isHighlight: true,
-    });
+    // 6. LỢI NHUẬN RÒNG (Chuẩn Kế toán: 6 = 3 - 4 - 5)
+    rowsData.push(
+      {
+        category: '6. Lợi nhuận ròng',
+        amount: report.netProfit,
+        ojAmount: report.oj?.netProfit || 0,
+        isHighlight: true,
+      },
+      {
+        category: '   6.1. Trong đó: Lợi nhuận ròng mảng OJ',
+        amount: report.oj?.netProfit || 0,
+        ojAmount: report.oj?.netProfit || 0,
+        isChild: true,
+      },
 
-    rowsData.push({
-      category: 'VI. Hoa hồng',
-      amount: report.commission.total,
-      ojAmount: report.oj?.commissionTotal || 0,
-      isHeader: true,
-    });
+      // 7. THƯỞNG VÀ HOA HỒNG DỊCH VỤ
+      {
+        category: '7. Thưởng và Hoa hồng Dịch vụ',
+        amount: report.serviceCommission.total,
+        ojAmount: report.serviceCommission.ojTotal || 0,
+        isHeader: true,
+      },
+      {
+        category: '   7.1. Hoa hồng cho DV (10%)',
+        amount: report.serviceCommission.dvCommission,
+        ojAmount: report.oj?.commissionAuto?.dvCommission || 0,
+        isChild: true,
+      },
+      {
+        category: '      7.1.1. Trong đó: Phát sinh liên quan OJ',
+        amount: report.oj?.commissionAuto?.dvCommission || 0,
+        ojAmount: report.oj?.commissionAuto?.dvCommission || 0,
+        isChild: true,
+      },
+    );
 
-    // Các dòng con của Hoa hồng: Tỷ lệ Ký gửi, Hoa hồng Sale, Hoa hồng DV
-    rowsData.push({
-      category: '   Tỷ lệ lãi gộp ký gửi / Lãi gộp',
-      amount: `${report.commission.auto.kyGuiProfitRate.toFixed(2)}%`,
-      ojAmount: '0.00%',
-      isChild: true,
-      isRate: true,
-    });
-
-    rowsData.push({
-      category: '   Hoa hồng cho Sale (10%)',
-      amount: report.commission.auto.saleCommission,
-      ojAmount: report.oj?.commissionAuto?.saleCommission || 0,
-      isChild: true,
-    });
-
-    rowsData.push({
-      category: '   Hoa hồng cho DV (10%)',
-      amount: report.commission.auto.dvCommission,
-      ojAmount: report.oj?.commissionAuto?.dvCommission || 0,
-      isChild: true,
-    });
-
+    // Các khoản hoa hồng thủ công khác (7.2, 7.3...)
     if (report.commission.manual && report.commission.manual.items.length > 0) {
-      for (const item of report.commission.manual.items) {
+      report.commission.manual.items.forEach((item, idx) => {
+        const itemIdx = `7.${idx + 2}`;
         rowsData.push({
-          category: `   ${item.categoryName}`,
+          category: `   ${itemIdx}. ${item.categoryName}`,
           amount: item.amount,
           ojAmount: item.ojAmount || 0,
           isChild: true,
         });
-      }
+        if (item.ojAmount && item.ojAmount > 0) {
+          rowsData.push({
+            category: `      ${itemIdx}.1. Trong đó: Phát sinh liên quan OJ`,
+            amount: item.ojAmount,
+            ojAmount: item.ojAmount,
+            isChild: true,
+          });
+        }
+      });
     }
 
-    rowsData.push({
-      category: 'VII. Lợi nhuận ròng (sau hoa hồng)',
-      amount: report.netProfitAfterCommission,
-      ojAmount: report.oj?.netProfitAfterCommission || 0,
-      isSuccess: true,
-    });
+    // 8. LỢI NHUẬN GIỮ LẠI (SAU HOA HỒNG DV)
+    rowsData.push(
+      {
+        category: '8. Lợi nhuận giữ lại của Garage',
+        amount: report.netProfitAfterCommission,
+        ojAmount: report.oj?.netProfitAfterCommission || 0,
+        isSuccess: true,
+      },
+      {
+        category: '   8.1. Trong đó: Lợi nhuận giữ lại mảng OJ',
+        amount: report.oj?.netProfitAfterCommission || 0,
+        ojAmount: report.oj?.netProfitAfterCommission || 0,
+        isChild: true,
+      },
+    );
 
     for (const r of rowsData) {
       const addedRow = sheet.addRow({

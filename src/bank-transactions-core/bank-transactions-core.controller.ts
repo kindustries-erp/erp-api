@@ -540,6 +540,21 @@ export class BankTransactionsCoreController {
         } as MessageEvent);
       }
 
+      const intervalId = setInterval(() => {
+        subscriber.next({
+          data: JSON.stringify({
+            processId: 'ping',
+            current: 0,
+            total: 100,
+            isRunning: false,
+            completed: false,
+            ready: false,
+            failed: false,
+            message: 'Ping',
+          }),
+        } as MessageEvent);
+      }, 15000);
+
       const sub = this.service.getExportExcelProgressStream().subscribe({
         next: (event) => {
           if (!event.userId || event.userId === req.user?.sub) {
@@ -552,7 +567,10 @@ export class BankTransactionsCoreController {
         complete: () => subscriber.complete(),
       });
 
-      return () => sub.unsubscribe();
+      return () => {
+        clearInterval(intervalId);
+        sub.unsubscribe();
+      };
     });
   }
 }
