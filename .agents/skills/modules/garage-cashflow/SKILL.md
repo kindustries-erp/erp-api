@@ -20,25 +20,26 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
 - `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
-- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 12 options có số thứ tự từ 1 đến 12:
+- `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 13 options có số thứ tự từ 1 đến 13:
   1. `1. KH thanh toán`
   2. `2. Tất toán`
   3. `3. BH thanh toán`
   4. `4. HHBH`
-  5. `5. Ứng trước`
-  6. `6. Cấn trừ`
-  7. `7. Phụ tùng / vật tư` (bỏ chữ "Mua")
-  8. `8. Vật tư tiêu hao` (option mới)
-  9. `9. Chi phí vận hành`
-  10. `10. Hoa hồng / nhân công`
-  11. `11. Hoàn ứng`
-  12. `12. Khác`
-  *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
+  5. `5. HH Bán hàng` (thêm mới ngay sau HHBH)
+  6. `6. HH Thưởng` (đổi từ mục 10. Hoa hồng / nhân công cũ)
+  7. `7. Ứng trước` (trước là 5)
+  8. `8. Cấn trừ` (trước là 6)
+  9. `9. Phụ tùng / vật tư` (trước là 7)
+  10. `10. Vật tư tiêu hao` (trước là 8, ghi nhận tự động vào garage-opex nhóm Giá vốn)
+  11. `11. Chi phí vận hành` (trước là 9)
+  12. `12. Hoàn ứng` (trước là 11)
+  13. `13. Khác` (trước là 12)
+  *(Đã chạy migration `20261018140000-UpdateKgaraCashflowVoucherPaymentContentHhnv` cập nhật toàn bộ chứng từ lịch sử trong DB).*
 - `payment_status` (varchar 30, nullable) - Trạng thái thanh toán của phiếu thu (RECEIPT) và phiếu chi (PAYMENT):
   - **Phiếu chi (PAYMENT)**:
     - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
     - `APPROVED`: "Đã duyệt"
-    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm 4/8)
+    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm OPEX 4/10)
   - **Phiếu thu (RECEIPT)**:
     - `EXPECTED`: "Dự thu" (tiền chưa vào quỹ/tài khoản, **KHÔNG** tạo bản ghi cấn trừ `kgara_case_settlements` và không trừ công nợ của Case)
     - `PAID` (hoặc `NULL` trong dữ liệu lịch sử): "Đã thu" (tiền đã thực thu, tự động tạo `kgara_case_settlements` và tính trừ công nợ của Case)

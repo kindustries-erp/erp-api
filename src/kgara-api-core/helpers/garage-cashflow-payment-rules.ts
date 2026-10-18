@@ -8,7 +8,8 @@ export interface GaragePaymentRuleInput {
 }
 
 export const PAYMENT_CONTENT_HHBH = '4. HHBH';
-export const PAYMENT_CONTENT_CONSUMABLES = '8. Vật tư tiêu hao';
+export const PAYMENT_CONTENT_CONSUMABLES = '10. Vật tư tiêu hao';
+export const PAYMENT_CONTENT_CONSUMABLES_LEGACY = '8. Vật tư tiêu hao';
 
 /** Nội dung chi ghi vào garage-opex (nhóm Giá vốn) thay vì trừ công nợ garage. */
 export const OPEX_ROUTED_PAYMENT_CONTENTS: Record<
@@ -20,6 +21,10 @@ export const OPEX_ROUTED_PAYMENT_CONTENTS: Record<
     categoryName: 'HHBH',
   },
   [PAYMENT_CONTENT_CONSUMABLES]: {
+    categoryKey: 'VAT_TU_TIEU_HAO',
+    categoryName: 'Vật tư tiêu hao',
+  },
+  [PAYMENT_CONTENT_CONSUMABLES_LEGACY]: {
     categoryKey: 'VAT_TU_TIEU_HAO',
     categoryName: 'Vật tư tiêu hao',
   },

@@ -32,7 +32,7 @@ describe('garage-cashflow-payment-rules', () => {
       },
     );
 
-    it.each(['4. HHBH', '8. Vật tư tiêu hao'])(
+    it.each(['4. HHBH', '8. Vật tư tiêu hao', '10. Vật tư tiêu hao'])(
       'không trừ công nợ với nội dung %s dù Đã chi',
       (content) => {
         expect(
@@ -54,7 +54,7 @@ describe('garage-cashflow-payment-rules', () => {
 
   describe('isRecordedToOpex', () => {
     it.each(['APPROVED', 'PAID'])(
-      'ghi opex khi 4/8 ở trạng thái %s',
+      'ghi opex khi 4/8/10 ở trạng thái %s',
       (status) => {
         expect(
           isRecordedToOpex({
@@ -71,17 +71,17 @@ describe('garage-cashflow-payment-rules', () => {
         isRecordedToOpex({
           voucherType: 'PAYMENT',
           paymentStatus: 'PENDING',
-          paymentContent: '8. Vật tư tiêu hao',
+          paymentContent: '10. Vật tư tiêu hao',
         }),
       ).toBe(false);
     });
 
-    it('không ghi opex với nội dung khác 4/8', () => {
+    it('không ghi opex với nội dung khác 4/8/10', () => {
       expect(
         isRecordedToOpex({
           voucherType: 'PAYMENT',
           paymentStatus: 'PAID',
-          paymentContent: '9. Chi phí vận hành',
+          paymentContent: '11. Chi phí vận hành',
         }),
       ).toBe(false);
     });
@@ -104,6 +104,9 @@ describe('garage-cashflow-payment-rules', () => {
       expect(getOpexCategoryForContent('8. Vật tư tiêu hao')?.categoryKey).toBe(
         'VAT_TU_TIEU_HAO',
       );
+      expect(
+        getOpexCategoryForContent('10. Vật tư tiêu hao')?.categoryKey,
+      ).toBe('VAT_TU_TIEU_HAO');
       expect(getOpexCategoryForContent('1. KH thanh toán')).toBeNull();
       expect(getOpexCategoryForContent(undefined)).toBeNull();
     });

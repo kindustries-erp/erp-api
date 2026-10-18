@@ -90,12 +90,12 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(0);
     });
 
-    it('phiếu chi 8. Vật tư tiêu hao Đã chi ghi garage-opex, không trừ công nợ', async () => {
+    it('phiếu chi 10. Vật tư tiêu hao (hoặc 8. Vật tư tiêu hao) Đã chi ghi garage-opex, không trừ công nợ', async () => {
       const h = buildHarness();
       await h.service.createVoucher({
         ...baseDto,
         paymentStatus: 'PAID',
-        paymentContent: '8. Vật tư tiêu hao',
+        paymentContent: '10. Vật tư tiêu hao',
       });
       expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
       const opex = h.createdOf(KgaraOperatingExpense);
