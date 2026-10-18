@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
@@ -12,6 +12,8 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { GarageCaseForecastService } from './garage-case-forecast.service';
+import { GarageHubService } from '../hub/garage-hub.service';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
@@ -43,6 +45,10 @@ export class SyncCaseService {
     private readonly syncRunLogger: SyncRunLoggerService,
     private readonly syncDeletion: SyncDeletionService,
     private readonly syncGrossProfit: SyncGrossProfitService,
+    @Optional()
+    private readonly caseForecaster?: GarageCaseForecastService,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   async syncBranches(): Promise<void> {
@@ -332,6 +338,33 @@ export class SyncCaseService {
           }
 
           await this.caseRepo.save(gwCase);
+
+          if (this.garageHub && gwCase.id) {
+            await this.garageHub.handleCaseTransition({
+              caseId: gwCase.id,
+              previousStatus,
+              newStatus,
+              ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+              tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+              tienCoThue: gwCase.tienCoThue,
+              khachHangName: gwCase.khachHangName,
+              licensePlate: gwCase.bienSoXe,
+              soChungTu: gwCase.soChungTu,
+            });
+          } else if (this.caseForecaster && gwCase.id) {
+            await this.caseForecaster.syncCaseForecast({
+              caseId: gwCase.id,
+              previousStatus,
+              newStatus,
+              ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+              tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+              tienCoThue: gwCase.tienCoThue,
+              khachHangName: gwCase.khachHangName,
+              licensePlate: gwCase.bienSoXe,
+              soChungTu: gwCase.soChungTu,
+            });
+          }
+
           totalRows++;
         }
         page++;
@@ -680,6 +713,32 @@ export class SyncCaseService {
       }
 
       await this.caseRepo.save(gwCase);
+
+      if (this.garageHub && gwCase.id) {
+        await this.garageHub.handleCaseTransition({
+          caseId: gwCase.id,
+          previousStatus,
+          newStatus,
+          ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+          tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+          tienCoThue: gwCase.tienCoThue,
+          khachHangName: gwCase.khachHangName,
+          licensePlate: gwCase.bienSoXe,
+          soChungTu: gwCase.soChungTu,
+        });
+      } else if (this.caseForecaster && gwCase.id) {
+        await this.caseForecaster.syncCaseForecast({
+          caseId: gwCase.id,
+          previousStatus,
+          newStatus,
+          ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+          tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+          tienCoThue: gwCase.tienCoThue,
+          khachHangName: gwCase.khachHangName,
+          licensePlate: gwCase.bienSoXe,
+          soChungTu: gwCase.soChungTu,
+        });
+      }
 
       // Sync Case Services (Lines)
       let linesCount = 0;

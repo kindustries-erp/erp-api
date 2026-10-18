@@ -17,7 +17,13 @@ export interface PeriodVoucherRow {
   transDate: string;
   type: 'RECEIPT' | 'PAYMENT';
   /** Trạng thái duyệt của phiếu chi (chỉ có với PAYMENT). */
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
+  paymentStatus?:
+    | 'PENDING'
+    | 'APPROVED'
+    | 'PAID'
+    | 'EXPECTED'
+    | 'CANCELLED'
+    | null;
   paymentContent: string;
   partnerName: string;
   licensePlate: string;

@@ -19,6 +19,12 @@ import { ErpBankTransaction } from '../../bank-transactions-core/entities/erp_ba
 @Index('IDX_gara_cashflow_payment_method', ['paymentMethod'])
 @Index('IDX_gara_cashflow_payment_content', ['paymentContent'])
 @Index('IDX_gara_cashflow_payment_status', ['paymentStatus'])
+@Index('IDX_gara_cashflow_auto_expected', [
+  'caseId',
+  'voucherType',
+  'paymentStatus',
+  'isAutoExpected',
+])
 export class KgaraCashflowVoucher {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -68,7 +74,21 @@ export class KgaraCashflowVoucher {
     name: 'payment_status',
     nullable: true,
   })
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
+  paymentStatus?:
+    | 'PENDING'
+    | 'APPROVED'
+    | 'PAID'
+    | 'EXPECTED'
+    | 'CANCELLED'
+    | null;
+
+  @Column({
+    type: 'boolean',
+    name: 'is_auto_expected',
+    default: false,
+    nullable: true,
+  })
+  isAutoExpected?: boolean;
 
   @Column({
     type: 'varchar',
