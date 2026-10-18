@@ -471,19 +471,27 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
       expect(result.syncedOpex).toBe(2);
       expect(mockVoucherRepo.save).toHaveBeenCalledTimes(2);
       expect(mockOpexRepo.save).toHaveBeenCalledTimes(2);
+      expect(mockVoucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transDate: '2026-11-10',
+          paymentStatus: 'PENDING',
+        }),
+      );
     });
 
     it('Scenario 2: Cập nhật số tiền phiếu PENDING khi chưa chi và P&L thay đổi', async () => {
-      const pendingSale = {
+      const pendingSale: any = {
         id: 'v-sale',
         amount: 4000000,
+        transDate: '2026-10-01',
         paymentStatus: 'PENDING',
         isAutoCommission: true,
         pnlCommissionType: 'HOA_HONG_SALE',
       };
-      const pendingDv = {
+      const pendingDv: any = {
         id: 'v-dv',
         amount: 7000000,
+        transDate: '2026-10-01',
         paymentStatus: 'PENDING',
         isAutoCommission: true,
         pnlCommissionType: 'HOA_HONG_DV',
@@ -504,7 +512,9 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
 
       expect(result.updatedVouchers).toBe(2);
       expect(pendingSale.amount).toBe(5000000);
+      expect(pendingSale.transDate).toBe('2026-11-10');
       expect(pendingDv.amount).toBe(8000000);
+      expect(pendingDv.transDate).toBe('2026-11-10');
     });
 
     it('Scenario 3: Khi đã có phiếu PAID và P&L tăng -> Giữ nguyên phiếu PAID, tạo phiếu delta PENDING mới', async () => {
@@ -535,6 +545,7 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
       expect(mockVoucherRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           amount: 2000000,
+          transDate: '2026-11-10',
           paymentStatus: 'PENDING',
           pnlCommissionAnchorId: 'paid-1',
           isAutoCommission: true,

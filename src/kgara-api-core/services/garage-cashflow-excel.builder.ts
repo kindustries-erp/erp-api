@@ -139,8 +139,7 @@ export class GarageCashflowExcelBuilder {
         if (item.paymentStatus === 'PAID') paymentStatusText = 'Đã chi';
         else if (item.paymentStatus === 'APPROVED')
           paymentStatusText = 'Đã duyệt';
-        else if (item.paymentStatus === 'PENDING')
-          paymentStatusText = 'Chờ duyệt';
+        else if (item.paymentStatus === 'PENDING') paymentStatusText = 'Dự chi';
       }
 
       const transDateVal = toVietnamExcelDate(item.transDate);

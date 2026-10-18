@@ -314,3 +314,16 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - Tại các hàm `getMethodBreakdown`, `getContentBreakdown` và `getTopTransactions`, điều kiện loại phiếu `v.voucher_type = :type` **BẮT BUỘC phải dùng `qb.andWhere(...)`**.
   - Tuyệt đối không dùng `qb.where(...)` sau khi đã gọi `applyBaseFilters`, vì `where()` của TypeORM sẽ xóa sạch toàn bộ các điều kiện lọc trước đó (`dateFrom`, `dateTo`, `paymentMethod`, `paymentContent`, `branchId`).
 
+## 13. Cơ Chế Bơm Hoa Hồng P&L Tự Động & Trạng Thái "Dự Chi" (Cập nhật 2026-10-18)
+- **Tách biệt hoa hồng**: Phân rã `4. HHBH` thành `5. HH Bán hàng` (`HOA_HONG_SALE`) và đổi `6. HH Thưởng` thành `6. HH Xưởng` (`HOA_HONG_DV`).
+- **5 Cột P&L Commission trong `kgara_cashflow_vouchers`**:
+  - `is_auto_commission` (boolean, default false): Đánh dấu phiếu sinh tự động từ P&L.
+  - `pnl_period_year` (int, nullable), `pnl_period_month` (int, nullable): Kỳ P&L gốc.
+  - `pnl_commission_type` (varchar 50, nullable): `'HOA_HONG_SALE'` hoặc `'HOA_HONG_DV'`.
+  - `pnl_commission_anchor_id` (uuid, nullable): ID phiếu `PAID` gốc làm mốc khi phát sinh chênh lệch (delta).
+- **Ngày Cashflow mặc định (`trans_date`)**: Tính vào **ngày 10 tháng sau** (`nextMonthYear-nextMonth-10`) của kỳ $T$.
+- **Trạng thái "Dự chi" đối ứng với "Dự thu"**:
+  - `paymentStatus = 'PENDING'` hiển thị trên UI bảng, bộ lọc, thẻ KPI, Drawer và file Excel xuất ra dưới nhãn **"Dự chi"** (Badge Amber).
+  - Khóa số tiền khi phiếu đã chuyển sang `PAID` (Đã chi). Nếu P&L tăng thêm, hệ thống tự động sinh thêm phiếu delta ở trạng thái **Dự chi** (`PENDING`).
+- **Settlement Guard**: Cấm cấn trừ công nợ phiếu dịch vụ đối với tất cả các phiếu có nội dung hoa hồng (`isCommissionContent`).
+

@@ -511,7 +511,13 @@ export class GaragePnlService {
       );
 
       const periodStr = `${String(month).padStart(2, '0')}/${year}`;
-      const defaultTransDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      let nextMonthYear = year;
+      let nextMonth = month + 1;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextMonthYear += 1;
+      }
+      const defaultTransDate = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-10`;
 
       if (paidVouchers.length > 0) {
         // ĐÃ CÓ PHIẾU ĐÃ CHI (PAID): Khóa cứng số tiền đã chi, tính chênh lệch delta
@@ -580,8 +586,9 @@ export class GaragePnlService {
         const note = `${item.paymentContent} Tháng ${periodStr} - ${item.amount.toLocaleString('vi-VN')} đ (${item.calcNote})`;
 
         if (activePending) {
-          // Cập nhật lại số tiền cho phiếu đang chờ duyệt
+          // Cập nhật lại số tiền và ngày cashflow cho phiếu đang chờ duyệt
           activePending.amount = item.amount;
+          activePending.transDate = defaultTransDate;
           activePending.paymentContent = item.paymentContent;
           activePending.note = note;
           activePending.partnerName = undefined;
