@@ -34,6 +34,9 @@ export const toSnake = (value) => toKebab(value).replace(/-/g, '_');
  * - `map(name, required)`: biểu thức đổi entity sang giá trị của response DTO.
  * - `fixture`/`dtoFixture`/`responseExpect`/`entityExpect`: literal dùng cho spec sinh ra.
  */
+/** Cột nullable trong entity (`string | null`) thì response trả `undefined` thay vì `null`. */
+const orUndefined = (name, required) => (required ? `entity.${name}` : `entity.${name} ?? undefined`);
+
 const typeRules = {
   string: {
     tsType: 'string',
@@ -42,7 +45,7 @@ const typeRules = {
     validator: '@IsString()',
     column: (extra) => `@Column({ type: 'varchar', length: 255${extra} })`,
     toEntity: (name) => `dto.${name}`,
-    map: (name) => `entity.${name}`,
+    map: (name, required) => orUndefined(name, required),
     fixture: "'sample'",
     dtoFixture: "'sample'",
     responseExpect: "'sample'",
@@ -55,7 +58,7 @@ const typeRules = {
     validator: '@IsString()',
     column: (extra) => `@Column({ type: 'text'${extra} })`,
     toEntity: (name) => `dto.${name}`,
-    map: (name) => `entity.${name}`,
+    map: (name, required) => orUndefined(name, required),
     fixture: "'sample'",
     dtoFixture: "'sample'",
     responseExpect: "'sample'",
@@ -68,7 +71,7 @@ const typeRules = {
     validator: '@IsInt()',
     column: (extra) => `@Column({ type: 'integer'${extra} })`,
     toEntity: (name) => `dto.${name}`,
-    map: (name) => `entity.${name}`,
+    map: (name, required) => orUndefined(name, required),
     fixture: '1',
     dtoFixture: '1',
     responseExpect: '1',
@@ -109,7 +112,7 @@ const typeRules = {
     validator: '@IsDateString()',
     column: (extra) => `@Column({ type: 'timestamptz'${extra} })`,
     toEntity: (name) => `dto.${name} === undefined ? undefined : new Date(dto.${name})`,
-    map: (name) => `entity.${name}`,
+    map: (name, required) => orUndefined(name, required),
     fixture: `new Date(${SAMPLE_DATE})`,
     dtoFixture: SAMPLE_DATE,
     responseExpect: `new Date(${SAMPLE_DATE})`,
@@ -159,6 +162,36 @@ function decorateField(field) {
   };
 }
 
+const TABLE_TYPE_BY_FIELD = {
+  string: 'text',
+  text: 'text',
+  status: 'status',
+  number: 'number',
+  decimal: 'number',
+  date: 'date',
+};
+
+/** Cột lọc/sắp xếp được: createdAt luôn có, còn lại theo kiểu trường (boolean bị bỏ). */
+export function tableColumnsFor(fields) {
+  const columns = [{ name: 'createdAt', type: 'date' }];
+  for (const field of fields) {
+    const type = TABLE_TYPE_BY_FIELD[field.type];
+    if (type) columns.push({ name: field.name, type });
+  }
+  return columns;
+}
+
+/** Literal TypeScript của `TableColumnMap`, khai báo cả key camelCase và snake_case. */
+export function tableColumnsLiteral(columns) {
+  const entry = (key, name, type) =>
+    `  ${JSON.stringify(key)}: { sql: ${JSON.stringify(`e.${name}`)}, type: ${JSON.stringify(type)} },`;
+  const lines = columns.flatMap(({ name, type }) => {
+    const snake = toSnake(name);
+    return snake === name ? [entry(name, name, type)] : [entry(name, name, type), entry(snake, name, type)];
+  });
+  return `{\n${lines.join('\n')}\n}`;
+}
+
 /**
  * Chuẩn hóa input của prompt thành dữ liệu cho template.
  * Ném lỗi sớm (trước khi ghi file) nếu input không hợp lệ.
@@ -196,6 +229,10 @@ export function buildApiV2Data(answers) {
 
   const searchColumns = fields.filter((f) => f.type === 'string' || f.type === 'text').map((f) => f.name);
 
+  // Whitelist cột cho bộ lọc/sắp xếp/tổng. Boolean không lọc được bằng toán tử văn bản nên bị bỏ.
+  const tableColumns = tableColumnsFor(customSpecs);
+  const summaryFields = fields.filter((f) => f.type === 'number' || f.type === 'decimal').map((f) => f.name);
+
   return {
     moduleName,
     moduleClass: toPascal(moduleName),
@@ -212,8 +249,15 @@ export function buildApiV2Data(answers) {
     swaggerImports,
     hasOptionalField,
     searchColumns,
-    searchColumnsLiteral: JSON.stringify(searchColumns),
+    // Biểu thức SQL có alias `e.` để dùng trực tiếp trong query builder
+    searchColumnsLiteral: JSON.stringify(searchColumns.map((name) => `e.${name}`)),
     hasSearchColumns: searchColumns.length > 0,
+    tableColumnsLiteral: tableColumnsLiteral(tableColumns),
+    summaryColumnsLiteral: JSON.stringify(
+      summaryFields.map((name) => ({ key: name, sql: `e.${name}` })),
+    ),
+    hasSummaryColumns: summaryFields.length > 0,
+    summaryColumnsKeys: summaryFields,
     hasStatus: hasStatusApiV2Field(customSpecs),
     statusValues: STATUS_VALUES,
     wire: Boolean(answers.wireInput),

@@ -1,13 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export class CreateBusinessPartnerDto {
+export class CreateErpBusinessPartnerDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   code?: string;
 
   @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   name: string;
 
@@ -17,6 +18,7 @@ export class CreateBusinessPartnerDto {
   displayName?: string;
 
   @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   partnerType: string;
 
@@ -47,7 +49,7 @@ export class CreateBusinessPartnerDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsIn(['ACTIVE', 'INACTIVE'])
   status?: string;
 
   @ApiPropertyOptional()

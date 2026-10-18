@@ -14,7 +14,7 @@ Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.
 ## 🎯 Định nghĩa API v2
 
 ```
-src/<module>-core/
+src/v2/<module>-core/
   entities/<entity>.entity.ts              # TypeORM, cột snake_case, cờ isDeleted
   dto/create-<e>.dto.ts                    # validation (class-validator)
   dto/update-<e>.dto.ts                    # PartialType(Create)
@@ -54,7 +54,7 @@ bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<rou
 - `fieldSpec`: `name:type[:required],...`, type ∈ `string | text | number | decimal | boolean | date | status`. `createdAt` được sinh tự động.
 - `wire = true`: nối module vào `src/app.module.ts` và entity vào `src/db/data-source.ts`. Resource RBAC **luôn** được thêm vào `erp-resource.enum.ts`.
 - Input sai sẽ dừng trước khi ghi file nào.
-- Sau khi sinh: `bunx prettier --write "src/<module>-core/**/*.ts"`.
+- Sau khi sinh: `bunx prettier --write "src/v2/<module>-core/**/*.ts"`.
 
 ### Giai đoạn 3: Nghiệp vụ (làm tay, có test)
 Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sung ở đúng lớp:
@@ -77,8 +77,8 @@ Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sun
 Chạy theo phạm vi thu hẹp trong lúc làm, rồi một lần duy nhất ở commit cuối:
 ```bash
 bun run type:check                                 # tsc --noEmit
-bunx jest src/<module>-core --forceExit            # spec của module
-bunx eslint "src/<module>-core/**/*.ts" --max-warnings=0
+bunx jest src/v2/<module>-core --forceExit            # spec của module
+bunx eslint "src/v2/<module>-core/**/*.ts" --max-warnings=0
 bun run verify:final                               # chỉ một lần, trên commit cuối
 ```
 - Test generator (chỉ khi sửa `plop-helpers/`): `bun test plop-helpers` (jest không chạy các file này vì `rootDir` là `src`).
@@ -91,7 +91,7 @@ bun run verify:final                               # chỉ một lần, trên co
 Không tự động migrate. Chỉ làm khi người dùng ra lệnh cho từng module:
 1. Đọc module hiện tại và liệt kê các endpoint, DTO, và phụ thuộc từ module khác (module khác import service này).
 2. Giữ nguyên hợp đồng: cùng route, cùng hình dạng response, cùng quyền RBAC.
-3. Sinh module v2 song song trong thư mục tạm hoặc đổi tên có kiểm soát, so sánh response với bản cũ (spec hợp đồng).
+3. Lưu bản gốc file cũ ra ngoài repo (scratchpad), xóa file trùng tên với generator, rồi sinh. Không để `*.legacy.ts` trong `src/`, vì tsc sẽ lỗi. Chi tiết: skill `api-v2-refactor` mục 3b. So sánh response với bản gốc bằng spec hợp đồng.
 4. Chuyển controller và module cũ sang facade mới, xóa code cũ sau khi spec pass.
 5. Báo cáo: danh sách endpoint đã kiểm tra và phụ thuộc đã cập nhật.
 

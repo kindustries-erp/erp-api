@@ -5,7 +5,7 @@ import { API_V2_MARKERS } from './apiV2Wiring.mjs';
  * `template` là tên file trong `plop-templates/module-v2/`, `path` là đường dẫn đích từ thư mục gốc của repo.
  */
 export function moduleFileMap(data) {
-  const base = `src/${data.moduleName}`;
+  const base = `src/v2/${data.moduleName}`;
   const e = data.entityKebab;
   const m = data.moduleName;
   return [
@@ -34,9 +34,9 @@ function snippetFor(key, data) {
   const m = data.moduleName;
   const snippets = {
     'rbac-resource': `  ${data.resourceKey} = '${data.permissionResource}',`,
-    'app-imports': `import { ${data.moduleClass}Module } from './${m}/${m}.module';`,
+    'app-imports': `import { ${data.moduleClass}Module } from './v2/${m}/${m}.module';`,
     'app-modules': `    ${data.moduleClass}Module,`,
-    'entity-imports': `import { ${data.entityName} } from '../${m}/entities/${e}.entity';`,
+    'entity-imports': `import { ${data.entityName} } from '@/v2/${m}/entities/${e}.entity';`,
     entities: `  ${data.entityName},`,
   };
   return snippets[key];

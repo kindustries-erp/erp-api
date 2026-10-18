@@ -5,12 +5,20 @@ import { Update{{entityName}}Dto } from '../dto/update-{{entityKebab}}.dto';
 import { {{entityName}}Controller } from './{{entityKebab}}.controller';
 
 describe('{{entityName}}Controller', () => {
-  let service: { findAll: jest.Mock; findOne: jest.Mock; create: jest.Mock; update: jest.Mock; remove: jest.Mock };
+  let service: {
+    findAll: jest.Mock;
+    findColumnOptions: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    remove: jest.Mock;
+  };
   let controller: {{entityName}}Controller;
 
   beforeEach(() => {
     service = {
       findAll: jest.fn(),
+      findColumnOptions: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -25,6 +33,12 @@ describe('{{entityName}}Controller', () => {
     await controller.findAll(query);
 
     expect(service.findAll).toHaveBeenCalledWith(query);
+  });
+
+  it('delegates column options with parsed paging', async () => {
+    await controller.columnOptions('code', 'ab', '2', '50', '{"status":["ACTIVE"]}');
+
+    expect(service.findColumnOptions).toHaveBeenCalledWith('code', 'ab', 2, 50, '{"status":["ACTIVE"]}');
   });
 
   it('delegates detail, create, update and remove with the id and DTO', async () => {

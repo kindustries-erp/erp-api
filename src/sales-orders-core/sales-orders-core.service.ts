@@ -27,7 +27,7 @@ import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecy
 import { ErpGoodsIssue } from '../goods-issues-core/entities/erp_goods_issue.entity';
 import { DocumentDependenciesCoreService } from '../document-dependencies-core/document-dependencies-core.service';
 import { CompanyProfileService } from '../company-profile/company-profile.service';
-import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import * as ExcelJS from 'exceljs';
 import { format } from 'date-fns';

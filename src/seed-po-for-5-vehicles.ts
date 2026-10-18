@@ -3,7 +3,7 @@ import dataSource from './db/data-source';
 import { ErpBom } from './bom-core/entities/erp_bom.entity';
 import { ErpBomLine } from './bom-core/entities/erp_bom_line.entity';
 import { ErpInventoryItem } from './inventory-core/entities/erp_inventory_item.entity';
-import { ErpBusinessPartner } from './business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from './v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpPurchaseOrder } from './purchase-orders-core/entities/erp_purchase_order.entity';
 import { ErpPurchaseOrderLine } from './purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpGoodsReceipt } from './goods-receipts-core/entities/erp_goods_receipt.entity';

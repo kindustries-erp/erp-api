@@ -11,7 +11,7 @@ import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
-import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
+import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';

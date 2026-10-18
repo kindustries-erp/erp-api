@@ -1,12 +1,16 @@
 import { buildApiV2Data } from './plop-helpers/apiV2Data.mjs';
 import { moduleFileMap, rbacPlan, wiringPlan } from './plop-helpers/apiV2Files.mjs';
-import { insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
+import { enumEntryExists, insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
 
 /** Biến một mục wiring thành action `modify` có chèn idempotent tại marker. */
 const toModifyAction = (item) => ({
   type: 'modify',
   path: item.file,
-  transform: (content) => insertAtMarker(content, { marker: item.marker, snippet: item.snippet, tag: item.tag }),
+  // Resource RBAC đã tồn tại (module cũ) thì giữ nguyên, không thêm key trùng
+  transform: (content) =>
+    enumEntryExists(content, item.snippet)
+      ? content
+      : insertAtMarker(content, { marker: item.marker, snippet: item.snippet, tag: item.tag }),
 });
 
 export default function (plop) {

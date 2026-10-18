@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository, ArrayContains } from 'typeorm';
-import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';

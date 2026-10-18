@@ -31,3 +31,17 @@ export const API_V2_MARKERS = [
   { key: 'entity-imports', file: API_V2_WIRING_FILES.dataSource, marker: '// plop:api-v2-entity-imports' },
   { key: 'entities', file: API_V2_WIRING_FILES.dataSource, marker: '// plop:api-v2-entities' },
 ];
+
+/**
+ * Enum entry `KEY = 'value',` đã có trong file chưa, theo key hoặc theo value.
+ * Dùng để không thêm trùng resource RBAC của module cũ (ví dụ BUSINESS_PARTNERS đã có).
+ * Snippet không khớp dạng enum thì trả về false (để luồng chèn thường xử lý).
+ */
+export function enumEntryExists(content, snippet) {
+  const match = /^\s*(\w+)\s*=\s*'([^']+)'/.exec(snippet ?? '');
+  if (!match) return false;
+  const [, key, value] = match;
+  const keyPattern = new RegExp(`^\\s*${key}\\s*=`, 'm');
+  const valuePattern = new RegExp(`=\\s*'${value}'`);
+  return keyPattern.test(content) || valuePattern.test(content);
+}
