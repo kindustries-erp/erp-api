@@ -171,6 +171,56 @@ describe('GarageCaseForecastService', () => {
 
       expect(voucherRepo.save).not.toHaveBeenCalled();
     });
+
+    it('should NOT create an EXPECTED receipt if tienConPhaiThanhToan is 0 or negative', async () => {
+      voucherRepo.findOne.mockResolvedValue(null);
+
+      const input: CaseForecastInput = {
+        caseId: 'case-paid',
+        previousStatus: 2,
+        newStatus: 3,
+        ngayHoanThanhCongViec: new Date('2026-10-10T10:00:00Z'),
+        tienConPhaiThanhToan: 0,
+        khachHangName: 'Đã thanh toán đủ',
+      };
+
+      await service.syncCaseForecast(input);
+
+      expect(voucherRepo.create).not.toHaveBeenCalled();
+      expect(voucherRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should mark existing EXPECTED receipt as CANCELLED if case is fully paid (amount <= 0)', async () => {
+      const existingExpected = {
+        id: 'v-expected',
+        voucherCode: 'DT-GARA-261010-009',
+        voucherType: 'RECEIPT',
+        paymentStatus: 'EXPECTED',
+        isAutoExpected: true,
+        amount: 2000000,
+        caseId: 'case-now-paid',
+      } as KgaraCashflowVoucher;
+
+      voucherRepo.findOne.mockResolvedValue(existingExpected);
+
+      const input: CaseForecastInput = {
+        caseId: 'case-now-paid',
+        previousStatus: 3,
+        newStatus: 3,
+        ngayHoanThanhCongViec: new Date('2026-10-10T10:00:00Z'),
+        tienConPhaiThanhToan: 0,
+      };
+
+      await service.syncCaseForecast(input);
+
+      expect(voucherRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'v-expected',
+          paymentStatus: 'CANCELLED',
+          amount: 0,
+        }),
+      );
+    });
   });
 
   describe('Rule 2: Previous status === 3 and newStatus !== 3', () => {

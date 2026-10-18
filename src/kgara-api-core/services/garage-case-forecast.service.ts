@@ -80,6 +80,31 @@ export class GarageCaseForecastService {
       },
     });
 
+    // Guard: Nếu case đã thu đủ (amount <= 0)
+    if (amount <= 0) {
+      if (existing) {
+        if (
+          existing.paymentStatus === 'PAID' ||
+          existing.paymentStatus === 'APPROVED'
+        ) {
+          return existing;
+        }
+        if (existing.paymentStatus === 'EXPECTED') {
+          existing.paymentStatus = 'CANCELLED';
+          existing.amount = 0;
+          const cancelled = await this.voucherRepo.save(existing);
+          this.logger.log(
+            `Cancelled auto-forecast receipt ${cancelled.voucherCode} for case ${caseId} because remaining debt is 0`,
+          );
+          return cancelled;
+        }
+      }
+      this.logger.log(
+        `Case ${caseId} has 0 remaining debt. Skip auto-forecast creation.`,
+      );
+      return null;
+    }
+
     if (existing) {
       // Bảo vệ: Nếu phiếu đã được thu thực tế (PAID) hoặc đã duyệt (APPROVED) thì không đè/hủy
       if (

@@ -64,10 +64,13 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
    - Khi case chuyển sang Hoàn tất (`newStatus === 3`), hệ thống tự sinh hoặc cập nhật phiếu RECEIPT có mã `DT-GARA-YYMMDD-XXX` với `payment_status = 'EXPECTED'`, `is_auto_expected = true`.
    - `trans_date`: `ngayHoanThanhCongViec + 7 ngày` (nếu null dùng hôm nay + 7 ngày).
    - `amount`: `tienConPhaiThanhToan`.
+   - **Guard đã thu đủ**: Nếu `tienConPhaiThanhToan <= 0` (phiếu đã thanh toán đủ), hệ thống **TUYỆT ĐỐI KHÔNG sinh phiếu dự thu 0 đ**. Nếu case đã có phiếu auto `EXPECTED` trước đó thì tự động chuyển sang `CANCELLED` (amount = 0).
    - Nếu case đã có phiếu dự thu auto trước đó: cập nhật lại số tiền, ngày giao dịch và mở lại `EXPECTED` nếu trước đó đang `CANCELLED`.
    - **Bảo vệ**: Nếu phiếu đã được thực thu (`PAID`) hoặc duyệt (`APPROVED`), hệ thống tuyệt đối không can thiệp.
 2. **Rule 2 — Hủy Dự thu khi Revert khỏi Hoàn tất (previousStatus === 3 && newStatus !== 3)**:
    - Khi case rời khỏi Hoàn tất (ví dụ quay lại Đang sửa, Báo giá hoặc Hủy), toàn bộ phiếu auto có trạng thái `EXPECTED` của case này sẽ tự động chuyển sang `CANCELLED`. Phiếu đã `PAID`/`APPROVED` không bị ảnh hưởng.
+3. **Công cụ Backfill Lịch Sử (`scripts/backfill-garage-forecast.ts`)**:
+   - Hỗ trợ quét và bù phiếu dự thu cho các phiếu hoàn tất trong quá khứ (`--dry-run`, `--env=...`), tự động loại trừ các phiếu đã thu đủ.
 
 
 **Ràng buộc & Index**:
