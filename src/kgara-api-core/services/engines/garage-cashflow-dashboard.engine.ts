@@ -88,7 +88,7 @@ export class GarageCashflowDashboardEngine {
     this.applyBaseFilters(qb, query);
 
     qb.select(
-      `SUM(CASE WHEN v.voucher_type = 'RECEIPT' THEN v.amount ELSE 0 END)`,
+      `SUM(CASE WHEN v.voucher_type = 'RECEIPT' AND (v.payment_status IS NULL OR v.payment_status != 'EXPECTED') THEN v.amount ELSE 0 END)`,
       'totalIn',
     )
       .addSelect(
@@ -96,7 +96,7 @@ export class GarageCashflowDashboardEngine {
         'totalOut',
       )
       .addSelect(
-        `COUNT(CASE WHEN v.voucher_type = 'RECEIPT' THEN 1 END)`,
+        `COUNT(CASE WHEN v.voucher_type = 'RECEIPT' AND (v.payment_status IS NULL OR v.payment_status != 'EXPECTED') THEN 1 END)`,
         'countIn',
       )
       .addSelect(
@@ -110,6 +110,14 @@ export class GarageCashflowDashboardEngine {
       .addSelect(
         `COUNT(CASE WHEN v.voucher_type = 'PAYMENT' AND v.payment_status = 'PENDING' THEN 1 END)`,
         'pendingOutCount',
+      )
+      .addSelect(
+        `SUM(CASE WHEN v.voucher_type = 'RECEIPT' AND v.payment_status = 'EXPECTED' THEN v.amount ELSE 0 END)`,
+        'pendingInAmount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN v.voucher_type = 'RECEIPT' AND v.payment_status = 'EXPECTED' THEN 1 END)`,
+        'pendingInCount',
       );
 
     const raw = await qb.getRawOne();
@@ -128,6 +136,10 @@ export class GarageCashflowDashboardEngine {
       pendingOutCount: Number(
         raw?.pendingOutCount ?? raw?.pendingoutcount ?? 0,
       ),
+      pendingInAmount: Number(
+        raw?.pendingInAmount ?? raw?.pendinginamount ?? 0,
+      ),
+      pendingInCount: Number(raw?.pendingInCount ?? raw?.pendingincount ?? 0),
     };
   }
 

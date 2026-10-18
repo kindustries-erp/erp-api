@@ -129,10 +129,19 @@ export class GarageCashflowExcelBuilder {
       totalChi += chi;
 
       let paymentStatusText = '';
-      if (item.paymentStatus === 'PAID') paymentStatusText = 'Đã chi';
-      else if (item.paymentStatus === 'APPROVED')
-        paymentStatusText = 'Đã duyệt';
-      else if (item.paymentStatus === 'PENDING') paymentStatusText = 'Chờ chi';
+      if (isReceipt) {
+        if (item.paymentStatus === 'EXPECTED') {
+          paymentStatusText = 'Dự thu';
+        } else {
+          paymentStatusText = 'Đã thu';
+        }
+      } else if (isPayment) {
+        if (item.paymentStatus === 'PAID') paymentStatusText = 'Đã chi';
+        else if (item.paymentStatus === 'APPROVED')
+          paymentStatusText = 'Đã duyệt';
+        else if (item.paymentStatus === 'PENDING')
+          paymentStatusText = 'Chờ duyệt';
+      }
 
       const transDateVal = toVietnamExcelDate(item.transDate);
       const createdAtVal = toVietnamExcelDate(item.createdAt);

@@ -38,8 +38,8 @@ export class CreateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
 
   @IsString()
   @IsOptional()
@@ -115,8 +115,8 @@ export class UpdateKgaraCashflowVoucherDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'APPROVED', 'PAID'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID';
+  @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED'])
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
 
   @IsString()
   @IsOptional()
@@ -196,7 +196,7 @@ export class KgaraCashflowVoucherResponseDto {
   note?: string | null;
   paymentMethod?: string | null;
   paymentContent?: string | null;
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
   referenceNumber?: string | null;
   caseId?: string | null;
   erpBankTransactionId?: string | null;
@@ -333,6 +333,8 @@ export class GarageCashflowKpiDto {
   countOut: number;
   pendingOutAmount: number;
   pendingOutCount: number;
+  pendingInAmount?: number;
+  pendingInCount?: number;
 }
 
 export class GarageCashflowBreakdownItemDto {
@@ -368,7 +370,7 @@ export class GarageCashflowTopTransactionItemDto {
   licensePlate?: string | null;
   paymentMethod?: string | null;
   paymentContent?: string | null;
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
   caseCode?: string | null;
   caseId?: string | null;
 }

@@ -34,11 +34,14 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
   11. `11. Hoàn ứng`
   12. `12. Khác`
   *(Đã chạy migration `20261016140000-UpdateKgaraCashflowVoucherPaymentContentClassification` cập nhật toàn bộ chứng từ lịch sử trong DB `erp_greenway_production`).*
-- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán đặc thù của phiếu chi (PAYMENT):
-  - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
-  - `APPROVED`: "Đã duyệt"
-  - `PAID`: "Đã chi" (mặc định backfill cho toàn bộ phiếu chi lịch sử)
-  *(Phiếu thu RECEIPT luôn có giá trị NULL, không áp dụng trường này).*
+- `payment_status` (varchar 30, nullable) - Trạng thái thanh toán của phiếu thu (RECEIPT) và phiếu chi (PAYMENT):
+  - **Phiếu chi (PAYMENT)**:
+    - `PENDING`: "Chờ duyệt" (mặc định khi tạo mới phiếu chi)
+    - `APPROVED`: "Đã duyệt"
+    - `PAID`: "Đã chi" (chỉ khi Đã chi mới tạo settlement trừ công nợ nếu không thuộc nhóm 4/8)
+  - **Phiếu thu (RECEIPT)**:
+    - `EXPECTED`: "Dự thu" (tiền chưa vào quỹ/tài khoản, **KHÔNG** tạo bản ghi cấn trừ `kgara_case_settlements` và không trừ công nợ của Case)
+    - `PAID` (hoặc `NULL` trong dữ liệu lịch sử): "Đã thu" (tiền đã thực thu, tự động tạo `kgara_case_settlements` và tính trừ công nợ của Case)
 - `partner_name` (varchar 255, nullable) - Tên đối tác (auto sync từ case hoặc nhập tay)
 - `erp_bank_transaction_id` (uuid, FK -> `erp_bank_transactions`, nullable) - Tham chiếu sao kê ngân hàng ERP
 - `erp_cash_voucher_id` (uuid, nullable) - Tham chiếu phiếu thu/chi sổ quỹ ERP

@@ -1,5 +1,5 @@
 export type GarageVoucherType = 'RECEIPT' | 'PAYMENT';
-export type GaragePaymentStatus = 'PENDING' | 'APPROVED' | 'PAID';
+export type GaragePaymentStatus = 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED';
 
 export interface GaragePaymentRuleInput {
   voucherType?: GarageVoucherType | string | null;
@@ -36,6 +36,19 @@ export function isDebtOffsetPayment(v: GaragePaymentRuleInput): boolean {
     v.paymentStatus === 'PAID' &&
     !isOpexRoutedContent(v.paymentContent)
   );
+}
+
+/** Phiếu thu trừ công nợ garage khi không phải là Dự thu (EXPECTED). */
+export function isReceiptSettled(v: GaragePaymentRuleInput): boolean {
+  return v.voucherType === 'RECEIPT' && v.paymentStatus !== 'EXPECTED';
+}
+
+/** Phiếu thu có settlement khi không phải Dự thu; phiếu chi chỉ khi Đã chi và không thuộc nhóm 4/8. */
+export function shouldHaveSettlement(v: GaragePaymentRuleInput): boolean {
+  if (v.voucherType === 'RECEIPT') {
+    return isReceiptSettled(v);
+  }
+  return isDebtOffsetPayment(v);
 }
 
 /** Phiếu chi 4/8 đã duyệt hoặc đã chi được ghi vào garage-opex. */

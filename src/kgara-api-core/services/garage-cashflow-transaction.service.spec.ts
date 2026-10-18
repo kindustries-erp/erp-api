@@ -112,7 +112,7 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(0);
     });
 
-    it('phiếu thu luôn tạo settlement RECEIPT', async () => {
+    it('phiếu thu thường hoặc không truyền status tạo settlement RECEIPT', async () => {
       const h = buildHarness();
       await h.service.createVoucher({
         ...baseDto,
@@ -121,6 +121,16 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       const settlements = h.createdOf(KgaraCaseSettlement);
       expect(settlements).toHaveLength(1);
       expect(settlements[0].settlementType).toBe('RECEIPT');
+    });
+
+    it('phiếu thu Dự thu (EXPECTED) không tạo settlement', async () => {
+      const h = buildHarness();
+      await h.service.createVoucher({
+        ...baseDto,
+        voucherType: 'RECEIPT',
+        paymentStatus: 'EXPECTED',
+      });
+      expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
     });
   });
 
@@ -177,6 +187,40 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       });
       expect(h.manager.remove).toHaveBeenCalledWith(settlement);
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(1);
+    });
+
+    it('phiếu thu từ EXPECTED chuyển sang PAID tạo settlement RECEIPT', async () => {
+      const h = buildHarness({
+        voucher: {
+          id: 'v1',
+          voucherCode: 'PT-GARA-1',
+          voucherType: 'RECEIPT',
+          paymentStatus: 'EXPECTED',
+          amount: 500_000,
+          transDate: '2026-10-05',
+          caseId: 'case-1',
+        },
+      });
+      await h.service.updateVoucher('v1', { paymentStatus: 'PAID' });
+      expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(1);
+    });
+
+    it('phiếu thu từ PAID chuyển sang EXPECTED gỡ bỏ settlement', async () => {
+      const settlement = { id: 's1', caseId: 'case-1' };
+      const h = buildHarness({
+        voucher: {
+          id: 'v1',
+          voucherCode: 'PT-GARA-1',
+          voucherType: 'RECEIPT',
+          paymentStatus: 'PAID',
+          amount: 500_000,
+          transDate: '2026-10-05',
+          caseId: 'case-1',
+        },
+        settlement,
+      });
+      await h.service.updateVoucher('v1', { paymentStatus: 'EXPECTED' });
+      expect(h.manager.remove).toHaveBeenCalledWith(settlement);
     });
   });
 

@@ -3,6 +3,8 @@ import {
   isDebtOffsetPayment,
   isPaymentLocked,
   isRecordedToOpex,
+  isReceiptSettled,
+  shouldHaveSettlement,
 } from './garage-cashflow-payment-rules';
 
 describe('garage-cashflow-payment-rules', () => {
@@ -104,6 +106,65 @@ describe('garage-cashflow-payment-rules', () => {
       );
       expect(getOpexCategoryForContent('1. KH thanh toán')).toBeNull();
       expect(getOpexCategoryForContent(undefined)).toBeNull();
+    });
+  });
+
+  describe('isReceiptSettled', () => {
+    it('phiếu thu Đã thu hoặc null đều được tính settlement', () => {
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: 'PAID' }),
+      ).toBe(true);
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: null }),
+      ).toBe(true);
+      expect(isReceiptSettled({ voucherType: 'RECEIPT' })).toBe(true);
+    });
+
+    it('phiếu thu Dự thu (EXPECTED) không được tính settlement', () => {
+      expect(
+        isReceiptSettled({ voucherType: 'RECEIPT', paymentStatus: 'EXPECTED' }),
+      ).toBe(false);
+    });
+  });
+
+  describe('shouldHaveSettlement', () => {
+    it('phiếu thu thường có settlement, phiếu thu dự thu không có settlement', () => {
+      expect(
+        shouldHaveSettlement({ voucherType: 'RECEIPT', paymentStatus: 'PAID' }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({ voucherType: 'RECEIPT', paymentStatus: null }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'RECEIPT',
+          paymentStatus: 'EXPECTED',
+        }),
+      ).toBe(false);
+    });
+
+    it('phiếu chi Đã chi và không phải 4/8 mới có settlement', () => {
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: '7. Phụ tùng / vật tư',
+        }),
+      ).toBe(true);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PENDING',
+          paymentContent: '7. Phụ tùng / vật tư',
+        }),
+      ).toBe(false);
+      expect(
+        shouldHaveSettlement({
+          voucherType: 'PAYMENT',
+          paymentStatus: 'PAID',
+          paymentContent: '4. HHBH',
+        }),
+      ).toBe(false);
     });
   });
 });

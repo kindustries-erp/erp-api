@@ -20,15 +20,13 @@ import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 import {
   isDebtOffsetPayment,
   isPaymentLocked,
+  shouldHaveSettlement,
+  type GaragePaymentStatus,
 } from '../helpers/garage-cashflow-payment-rules';
 import {
   removeOpexForVoucher,
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
-
-/** Phiếu thu luôn có settlement; phiếu chi chỉ khi Đã chi và không thuộc nhóm 4/8. */
-const shouldHaveSettlement = (v: KgaraCashflowVoucher): boolean =>
-  v.voucherType === 'RECEIPT' || isDebtOffsetPayment(v);
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -77,8 +75,12 @@ export class GarageCashflowTransactionService {
         caseRef = kCase;
       }
 
-      const paymentStatus: 'PENDING' | 'APPROVED' | 'PAID' | null =
-        dto.voucherType === 'PAYMENT' ? dto.paymentStatus || 'PENDING' : null;
+      let paymentStatus: GaragePaymentStatus | null = null;
+      if (dto.voucherType === 'PAYMENT') {
+        paymentStatus = dto.paymentStatus || 'PENDING';
+      } else if (dto.voucherType === 'RECEIPT') {
+        paymentStatus = dto.paymentStatus || 'PAID';
+      }
 
       const newVoucher = queryRunner.manager.create(KgaraCashflowVoucher, {
         voucherCode: generatedCode,
@@ -206,11 +208,18 @@ export class GarageCashflowTransactionService {
       if (newType === 'PAYMENT') {
         if (dto.paymentStatus !== undefined) {
           existingVoucher.paymentStatus = dto.paymentStatus;
-        } else if (!existingVoucher.paymentStatus) {
+        } else if (
+          !existingVoucher.paymentStatus ||
+          existingVoucher.paymentStatus === 'EXPECTED'
+        ) {
           existingVoucher.paymentStatus = 'PENDING';
         }
-      } else {
-        existingVoucher.paymentStatus = null;
+      } else if (newType === 'RECEIPT') {
+        if (dto.paymentStatus !== undefined) {
+          existingVoucher.paymentStatus = dto.paymentStatus;
+        } else if (!existingVoucher.paymentStatus) {
+          existingVoucher.paymentStatus = 'PAID';
+        }
       }
       if (
         newCaseId &&

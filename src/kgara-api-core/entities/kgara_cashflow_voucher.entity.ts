@@ -68,7 +68,7 @@ export class KgaraCashflowVoucher {
     name: 'payment_status',
     nullable: true,
   })
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | null;
+  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | null;
 
   @Column({
     type: 'varchar',
