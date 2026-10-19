@@ -5,6 +5,7 @@ import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.enti
 import {
   ListKgaraCashflowVoucherQueryDto,
   KgaraCashflowVoucherResponseDto,
+  ListKgaraCashflowVouchersResponseDto,
   toKgaraCashflowVoucherResponse,
 } from '../../dto/garage-cashflow.dto';
 import { applyMultiKeywordFilter } from '../../../common/utils/query-builder.util';
@@ -337,7 +338,7 @@ export class GarageCashflowQueryEngine {
 
   async listVouchers(
     query: ListKgaraCashflowVoucherQueryDto,
-  ): Promise<{ data: KgaraCashflowVoucherResponseDto[]; total: number }> {
+  ): Promise<ListKgaraCashflowVouchersResponseDto> {
     const qb = this.voucherRepo.createQueryBuilder('voucher');
     qb.leftJoin('voucher.case', 'case');
     qb.addSelect([
@@ -645,12 +646,65 @@ export class GarageCashflowQueryEngine {
         .addOrderBy('voucher.voucherCode', 'DESC');
     }
 
+    // Clone base query builder trước khi phân trang để tính Grand Totals
+    const totalsQb = qb.clone();
+    if (totalsQb.expressionMap) {
+      totalsQb.expressionMap.orderBys = {};
+    }
+    totalsQb
+      .select(
+        "COALESCE(SUM(CASE WHEN voucher.voucher_type = 'RECEIPT' THEN voucher.amount ELSE 0 END), 0)",
+        'totalThu',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN voucher.voucher_type = 'PAYMENT' THEN voucher.amount ELSE 0 END), 0)",
+        'totalChi',
+      );
+
     qb.skip(skip).take(pageSize);
 
     const [data, total] = await qb.getManyAndCount();
+    const totalPages = Math.ceil(total / pageSize) || 1;
+
+    const totalsRaw = await totalsQb.getRawOne();
+    const grandTotalThu = parseFloat(totalsRaw?.totalThu || '0') || 0;
+    const grandTotalChi = parseFloat(totalsRaw?.totalChi || '0') || 0;
+
+    let cumulativeThu = 0;
+    let cumulativeChi = 0;
+
+    if (page === 1) {
+      cumulativeThu = data
+        .filter((d) => d.voucherType === 'RECEIPT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      cumulativeChi = data
+        .filter((d) => d.voucherType === 'PAYMENT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    } else if (page >= totalPages && totalPages > 0) {
+      cumulativeThu = grandTotalThu;
+      cumulativeChi = grandTotalChi;
+    } else {
+      const cumQb = qb.clone();
+      cumQb.skip(0).take(page * pageSize);
+      const cumItems = await cumQb.getMany();
+      cumulativeThu = cumItems
+        .filter((d) => d.voucherType === 'RECEIPT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      cumulativeChi = cumItems
+        .filter((d) => d.voucherType === 'PAYMENT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    }
+
     return {
       data: data.map(toKgaraCashflowVoucherResponse),
       total,
+      totalPages,
+      totals: {
+        grandTotalThu,
+        grandTotalChi,
+        cumulativeThu,
+        cumulativeChi,
+      },
     };
   }
 }

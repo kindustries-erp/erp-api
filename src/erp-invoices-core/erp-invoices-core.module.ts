@@ -22,6 +22,8 @@ import { InvoiceLifecycleService } from './services/invoice-lifecycle.service';
 import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
+import { InvoiceFilesController } from './controllers/invoice-files.controller';
+import { InvoiceBulkDownloadService } from './services/sub-services/invoice-bulk-download.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
 import { InvoiceExportBackgroundService } from './services/invoice-export-background.service';
 import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.service';
@@ -107,12 +109,14 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
     InvoiceDashboardController,
     InvoiceOriginalPdfController,
     ErpInvoicesCoreController,
+    InvoiceFilesController,
   ],
   providers: [
     InvoiceLifecycleService,
     InvoicePortalService,
     InvoiceImportService,
     InvoiceFilesService,
+    InvoiceBulkDownloadService,
     InvoiceQueryService,
     InvoiceListQueryService,
     InvoiceExportExcelService,

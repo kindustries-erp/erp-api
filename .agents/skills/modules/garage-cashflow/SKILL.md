@@ -115,7 +115,7 @@ src/kgara-api-core/
 
 | HTTP Method | Endpoint | Quyền (Action) | Mô tả |
 |-------------|----------|----------------|-------|
-| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Trả về `PaginatedResult<KgaraCashflowVoucherResponseDto>` (Zero-Entity Leaking). |
+| `GET` | `/` | `READ` | Lấy danh sách phiếu thu/chi xưởng (phân trang, filter theo date, type, case_id). Trả về `ListKgaraCashflowVouchersResponseDto` (`data`, `total`, `totalPages`, và `totals: { grandTotalThu, grandTotalChi, cumulativeThu, cumulativeChi }`) theo chuẩn `/standardize-table`. |
 | `GET` | `/column-options` | `READ` | Lấy danh sách giá trị option phân trang cho bộ lọc cột (dynamic column filters). |
 | `GET` | `/dashboard` | `READ` | Thống kê KPI (tổng thu, chi, net, số phiếu), breakdown theo phương thức và nội dung thanh toán, xu hướng 6 tháng gần nhất và Top 5 giao dịch thu/chi lớn nhất. Nhận `GarageCashflowDashboardQueryDto` (`dateFrom`, `dateTo`, `branchId`, `paymentMethod`, `paymentStatus`), trả về `GarageCashflowDashboardResponseDto` (Zero-Entity Leaking). |
 | `POST` | `/` | `CREATE` | Tạo phiếu mới. Nếu có `case_id`, tự động tạo record cấn trừ trong `kgara_case_settlements`. Trả về `KgaraCashflowVoucherResponseDto`. |
@@ -167,14 +167,15 @@ src/modules/garage/components/
 └── organisms/
     ├── garage-cashflow-table/       (Organism Data Table chuẩn, < 180 LoC/file)
     │   ├── index.ts
-    │   ├── GarageCashflowTable.tsx  (Main component, < 100 LoC)
-    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT, Nội dung TT & Cột Trạng thái (phiếu chi), < 180 LoC)
+    │   ├── GarageCashflowTable.tsx  (Main component, tích hợp summaryRow, < 180 LoC)
+    │   ├── GarageCashflowTable.summary.tsx (Xây dựng summaryRow chuẩn /standardize-table qua SubtotalSummaryCell, < 150 LoC)
+    │   ├── GarageCashflowTable.columns.tsx (Cấu hình các cột gồm Cột Phương thức TT, Nội dung TT & Cột Trạng thái, < 180 LoC)
     │   ├── GarageCashflowTable.actions.tsx (Bóc tách Action Column riêng biệt, < 50 LoC)
-    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT, 12 Nội dung TT & Trạng thái thanh toán Chờ duyệt/Đã duyệt/Đã chi, < 120 LoC)
+    │   ├── GarageCashflowTable.paymentCells.tsx (Renderers badge Phương thức TT, Nội dung TT & Trạng thái thanh toán, < 120 LoC)
     │   ├── GarageCashflowTable.helper.tsx (Renderers chung & Date range header, < 160 LoC)
-    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, < 180 LoC)
+    │   ├── GarageCashflowTable.hook.ts (Fetch dữ liệu, filters, sorts, expose totals, < 180 LoC)
     │   ├── GarageCashflowTable.type.ts (Option constants cho Method & Content)
-    │   └── GarageCashflowTable.test.tsx (Co-located Unit Test)
+    │   └── GarageCashflowTable.test.tsx (Co-located Unit Test bao phủ summary row & actions)
     ├── garage-cashflow-drawer/      (Organism Drawer chuẩn Atomic & Top Tabs < 180 LoC)
     │   ├── index.ts
     │   ├── GarageCashflowDrawer.tsx (Khung StandardFormDrawer với Top Navigation Tabs: "Chi tiết" & "Lịch sử & Kiểm duyệt", < 180 LoC)

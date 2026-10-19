@@ -8,6 +8,7 @@ import {
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
   KgaraCashflowVoucherResponseDto,
+  ListKgaraCashflowVouchersResponseDto,
   CheckKgaraCashflowDuplicateQueryDto,
   KgaraCashflowDuplicateResponseDto,
   GarageCashflowDashboardQueryDto,
@@ -74,7 +75,7 @@ export class GarageCashflowService {
 
   async listVouchers(
     query: ListKgaraCashflowVoucherQueryDto,
-  ): Promise<{ data: KgaraCashflowVoucherResponseDto[]; total: number }> {
+  ): Promise<ListKgaraCashflowVouchersResponseDto> {
     return this.queryEngine.listVouchers(query);
   }
 }

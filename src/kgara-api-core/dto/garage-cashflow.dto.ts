@@ -224,6 +224,20 @@ export class KgaraCashflowVoucherResponseDto {
   } | null;
 }
 
+export class KgaraCashflowVoucherTotalsDto {
+  grandTotalThu: number;
+  grandTotalChi: number;
+  cumulativeThu: number;
+  cumulativeChi: number;
+}
+
+export class ListKgaraCashflowVouchersResponseDto {
+  data: KgaraCashflowVoucherResponseDto[];
+  total: number;
+  totalPages?: number;
+  totals?: KgaraCashflowVoucherTotalsDto;
+}
+
 export function toKgaraCashflowVoucherResponse(
   entity: import('../entities/kgara_cashflow_voucher.entity').KgaraCashflowVoucher,
 ): KgaraCashflowVoucherResponseDto {
