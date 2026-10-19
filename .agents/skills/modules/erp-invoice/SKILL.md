@@ -41,7 +41,7 @@ Các nghiệp vụ trọng tâm:
       - `VinfastInvoiceAdapter`: Crawl PDF gốc Vingroup/VinFast qua cookie session + captcha solver + WAF detection.
       - `EasyInvoiceAdapter`: Tải PDF gốc Softdreams EasyInvoice trực tiếp qua Fkey candidate URL.
       - `ViettelInvoiceAdapter`: Tải PDF gốc Viettel S-Invoice qua mã bí mật.
-      - `InvoicePdfDownloadWorkerService`: Worker tải đa luồng nền có concurrency pool (mặc định 3 luồng), lưu trữ S3 RustFS / Cloudflare R2, tạo erp_attachments chính quy và cập nhật tiến trình vào bảng `erp_einvoice_syncs`.
+      - `InvoicePdfDownloadWorkerService`: Worker tải đa luồng nền có concurrency pool (mặc định 3 luồng), lưu trữ S3 RustFS / Cloudflare R2, cập nhật `pdf_file_key`, `pdf_source` trên hóa đơn (KHÔNG tạo `erp_attachments`) và cập nhật tiến trình vào bảng `erp_einvoice_syncs`.
     - `InvoiceQueryService` (Facade ~150 dòng) điều phối:
       - `InvoiceListQueryService`: Phân trang, lọc đa chiều, tính grand & cumulative totals.
       - `InvoiceItemsQueryService`: Chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
@@ -232,12 +232,13 @@ src/erp-invoices-core/
 │   ├── invoice-debts-export-background.service.ts # Quản lý xuất Excel công nợ nền + SSE stream
 │   ├── invoice-query.service.ts               # FACADE: Phân trang, lọc, thống kê & xuất Excel hóa đơn
 │   ├── invoice-export-background.service.ts   # Fingerprint + tên file; ủy quyền job nền/SSE cho ExportJobRunner (common/export-jobs)
-│   ├── invoice-files.service.ts               # Upload/download PDF/XML Cloudflare R2 & nén ZIP stream
+│   ├── invoice-files.service.ts               # FACADE: Upload/download PDF/XML Cloudflare R2; ủy quyền ZIP cho sub-service
 │   ├── invoice-import.service.ts              # Nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
 │   ├── invoice-portal.service.ts              # Sync GDT, auto-relogin, captcha, bulk download XML
 │   ├── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (6 cấp độ)
 │   └── sub-services/                          # SUB-SERVICES: Logic chuyên sâu tuân thủ SRP (< 1000 dòng)
+│       └── invoice-bulk-download.service.ts  # Nén ZIP hàng loạt (theo filter/đã chọn), tải PDF đơn lẻ; chọn đúng loại file
 │       ├── invoice-debts-query.service.ts     # Query danh sách công nợ tổng hợp & options
 │       ├── invoice-debts-detail.service.ts    # Query chi tiết hóa đơn theo đối tác (parameterized SQL)
 │       ├── invoice-debts-export.service.ts    # Xuất Excel công nợ 2 sheet đồng bộ
@@ -332,9 +333,16 @@ src/erp-invoices-core/
 | `POST` | `/erp-invoices/:id/pdfs` | — | — | Upload tệp PDF đính kèm (hỗ trợ nhiều file, phân loại chứng từ) |
 | `POST` | `/erp-invoices/:id/attachments/link`| `invoices` | `update` | Liên kết file đính kèm từ kho chung (`erp_attachments`) |
 | `DELETE`| `/erp-invoices/:id/attachments/:attachmentId`| `invoices` | `update` | Hủy liên kết file đính kèm chung |
-| `GET` | `/erp-invoices/:id/pdfs/zip` | — | — | Tải gói ZIP chứa toàn bộ file PDF đính kèm của 1 hóa đơn |
+| `GET` | `/erp-invoices/:id/pdfs/zip` | — | — | Tải gói ZIP chứa toàn bộ file PDF thật của 1 hóa đơn (không lấy zip NCC) |
 | `POST` | `/erp-invoices/bulk-download-files` | — | — | Nén ZIP và tải về toàn bộ file PDF/XML theo bộ lọc query |
 | `POST` | `/erp-invoices/bulk-download-selected`| — | — | Nén ZIP và tải về các file PDF/XML của danh sách hóa đơn được chọn |
+
+> **Quy tắc chọn file khi xuất ZIP (bulk & từng hóa đơn)**: `types` chỉ gồm loại được chọn.
+> - `pdf`: chỉ lấy PDF thật qua `resolveInvoicePdfFiles` (attachment có mime `application/pdf` hoặc đuôi `.pdf`, `pdf_files`, `pdf_file_key`); không bao giờ lấy zip/xml đính kèm.
+> - `xml`: nếu `xml_file_key` là `.zip` của nhà cung cấp thì bóc các file `.xml` bên trong (`extractXmlFromZip`); nếu là `.xml` thì tải nguyên.
+> - `zip`: tải nguyên gói zip gốc của nhà cung cấp (`resolveInvoiceZipFiles`: zip đính kèm hoặc `xml_file_key` đuôi `.zip`); thiếu → `_FILE_LOI.txt`.
+> - Hóa đơn thiếu loại đã chọn được liệt kê trong `_FILE_LOI.txt` của gói ZIP. Thông báo lỗi liệt kê `(pdf, xml, zip)`.
+> - Controller: các endpoint file nằm ở `controllers/invoice-files.controller.ts` (path giữ nguyên); controller chính `erp-invoices-core.controller.ts`.
 | `GET` | `/erp-invoices/:id/pdfs/:key/content` | — | — | Stream trực tiếp nội dung PDF để xem trước inline |
 | `GET` | `/erp-invoices/:id/pdfs/:key/download-url`| — | — | Lấy URL tải xuống file PDF đính kèm cụ thể |
 | `DELETE`| `/erp-invoices/:id/pdfs/:key` | — | — | Xóa 1 file PDF đính kèm trong danh sách `pdf_files` |
@@ -759,7 +767,7 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
      - **HILO (GSM Xanh SM)**: Tra cứu và tải tự động qua API `GET /Inv/GetPdf?ID={hiloInvId}`.
      - **MISA meInvoice**: Khởi tạo session ASP.NET, gọi `POST /tra-cuu/GetInvoiceDataByTransactionID` lấy token `customData`, sau đó tải PDF gốc có chữ ký điện tử qua `GET /tra-cuu/DownloadHandler.ashx`.
      - **CyberBill (CyberLotus)**: Tự động điều hướng Cluster 1 / Cluster 2 (`bill1app.xcyber.vn` / `bill2app.xcyber.vn`), giải captcha AI Vision bằng `InvoiceCaptchaSolverService`, tra cứu và tải PDF gốc.
-   - Tệp PDF gốc tải về được lưu trữ tại S3 RustFS `invoices/pdf/{id}.pdf`, tự động tạo bản ghi trong `erp_attachments` và liên kết vào `erp_invoice_attachments`.
+   - Tệp PDF gốc tải về được lưu trữ tại S3 RustFS `invoices/pdf/{id}.pdf` và ghi vào `pdf_file_key` (+ `pdf_source`). Worker không tạo bản ghi `erp_attachments`.
 3. **Thực Tế Rào Cản Bảo Mật Từ Các Cổng NCC Khác & Giải Pháp 1-Chạm Trên UI**:
    - **Rào cản WAF/Bot Blocking & Cổng VinFast**: Cổng portal Vingroup (`e-invoice-tt78.vingroup.net`) không hỗ trợ tra cứu hóa đơn trực tiếp chỉ bằng chuỗi Salt trích xuất từ XML của Tổng cục Thuế. File `invoice.html` trong gói ZIP của VinFast là template đại trà của CyberLotus (nền trống đồng, không có logo VinFast cánh chim, không có mã chứng từ SAP), không thay thế được bản PDF gốc từ Vingroup. Người dùng sử dụng giải pháp mở cổng 1-chạm hoặc tải file thủ công.
    - **Giải Pháp 1-Chạm Trực Quan (`ProviderLookupInfoCard`)**:
