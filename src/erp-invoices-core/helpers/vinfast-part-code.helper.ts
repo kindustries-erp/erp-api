@@ -12,6 +12,7 @@
  */
 
 export interface ExtractStandardItemCodeInput {
+  direction?: string | null;
   description?: string | null;
   unit?: string | null;
   sellerName?: string | null;
@@ -41,17 +42,61 @@ export interface StandardItemCodeResult {
 }
 
 /**
+ * MST của Greenway Automotives: nguồn phụ tùng VinFast không có chữ "VinFast" trong tên.
+ * Chỉ nhận dòng có mã VinFast trích xuất được từ diễn giải.
+ */
+export const GREENWAY_AUTOMOTIVES_TAX_CODE = '0318334886';
+
+/**
+ * Nhà cung cấp "ứng viên" phụ tùng VinFast: tên chứa "VinFast" (không phân biệt hoa thường)
+ * hoặc MST Greenway Automotives. Dòng thật sự là phụ tùng còn phải qua extractVinfastItemCode.
+ */
+export function isVinfastCandidateSeller(
+  sellerName: string | null | undefined,
+  sellerTaxCode: string | null | undefined,
+): boolean {
+  if ((sellerName ?? '').toUpperCase().includes('VINFAST')) return true;
+  const baseTaxCode = (sellerTaxCode ?? '').split('-')[0];
+  return baseTaxCode === GREENWAY_AUTOMOTIVES_TAX_CODE;
+}
+
+export interface VinfastCodeContext {
+  direction?: string | null;
+  unit?: string | null;
+  sellerName?: string | null;
+  sellerTaxCode?: string | null;
+}
+
+/** Dòng công/giờ lao động: mã số trên dòng này là mã công, không phải phụ tùng. */
+export function isLabourUnit(unit: string | null | undefined): boolean {
+  return /^(công|cong|giờ|gio)$/.test((unit ?? '').trim().toLowerCase());
+}
+
+/**
+ * Mã phụ tùng VinFast chỉ được nhận trên hóa đơn bán (direction OUT), hoặc trên hóa đơn mua
+ * của nhà cung cấp là ứng viên VinFast. Không có ngữ cảnh thì giữ hành vi cũ (cho phép).
+ */
+function allowsVinfastCode(ctx?: VinfastCodeContext): boolean {
+  if (!ctx || !ctx.direction) return true;
+  if (ctx.direction === 'OUT') return true;
+  return isVinfastCandidateSeller(ctx.sellerName, ctx.sellerTaxCode);
+}
+
+/**
  * Trích xuất mã Part Number gốc của VinFast từ chuỗi diễn giải tên hàng hóa và tự động thêm tiền tố VF-.
+ * Thứ tự: pin cao áp (mã riêng) -> mã đầu diễn giải -> mã số thuần (không phải dòng công)
+ * -> mã trong diễn giải -> bảo hành động cơ (chỉ khi không có mã rõ ràng).
  */
 export function extractVinfastItemCode(
   description: string | null | undefined,
+  ctx?: VinfastCodeContext,
 ): string | null {
   if (!description) return null;
 
   const upperDesc = description.toUpperCase().trim();
   const normalizedKey = upperDesc.replace(/[^A-Z0-9]+/g, '_');
 
-  // 1. Nhận diện các gói pin cao áp đặc thù
+  // 1. Nhận diện các gói pin cao áp đặc thù (mã riêng, không phụ thuộc ngữ cảnh)
   if (
     upperDesc.includes('VF5_HV_BATTERY_PACK_38_KWH') ||
     normalizedKey.includes('VF5_HV_BATTERY_PACK_38_KWH')
@@ -75,32 +120,37 @@ export function extractVinfastItemCode(
     return 'VF-EEP73110011ALL';
   }
 
-  // 2. Nhận diện động cơ điện bảo hành
-  if (upperDesc.includes('ĐỘNG CƠ ĐIỆN') && upperDesc.includes('BẢO HÀNH')) {
-    return 'VF-PVT20030000';
-  }
+  if (!allowsVinfastCode(ctx)) return null;
 
-  // 3. Chuẩn mã phụ tùng VinFast ở đầu chuỗi (ngăn cách bởi dấu cách, gạch nối, hai chấm, phẩy)
-  // Ví dụ: EEP63012001AB, BEX20000923, SVC20000011, CHS30019126, BEXSZT62052AA, BEXTM350503AB, BEXT3050505AA
+  // 2. Chuẩn mã phụ tùng VinFast ở đầu chuỗi (ngăn cách bởi dấu cách, gạch nối, hai chấm, phẩy)
   const prefixMatch = upperDesc.match(
-    /^(?:VF-)?([A-Z]{3,6}[0-9]{5,8}[A-Z0-9]{0,3})(?:[\s\-_:,]|$)/,
+    /^(?:VF-)?([A-Z]{3,6}[0-9]{5,8}[A-Z0-9]{0,6})(?:[\s\-_:,]|$)/,
   );
   if (prefixMatch && prefixMatch[1]) {
     return `VF-${prefixMatch[1].toUpperCase()}`;
   }
 
-  // 4. Mã số thuần 5-10 số (VinFast classic part numbers)
-  const numericMatch = upperDesc.match(/^(?:VF-)?([0-9]{5,10})(?:[\s\-_:,]|$)/);
-  if (numericMatch && numericMatch[1]) {
-    return `VF-${numericMatch[1]}`;
+  // 3. Mã số thuần 5-10 số (VinFast classic part numbers). Dòng công thì số là mã công, bỏ qua.
+  if (!isLabourUnit(ctx?.unit)) {
+    const numericMatch = upperDesc.match(
+      /^(?:VF-)?([0-9]{5,10})(?:[\s\-_:,]|$)/,
+    );
+    if (numericMatch && numericMatch[1]) {
+      return `VF-${numericMatch[1]}`;
+    }
   }
 
-  // 5. Fallback tìm từ mã phụ tùng theo ranh giới từ ở bất kỳ vị trí nào
+  // 4. Mã dạng chữ+số ở vị trí bất kỳ theo ranh giới từ
   const wordBoundaryMatch = upperDesc.match(
-    /\b([A-Z]{3,6}[0-9]{5,8}[A-Z0-9]{0,3})\b/,
+    /\b([A-Z]{3,6}[0-9]{5,8}[A-Z0-9]{0,6})\b/,
   );
   if (wordBoundaryMatch && wordBoundaryMatch[1]) {
     return `VF-${wordBoundaryMatch[1].toUpperCase()}`;
+  }
+
+  // 5. Bảo hành động cơ: phương án cuối khi diễn giải không có mã rõ ràng
+  if (upperDesc.includes('ĐỘNG CƠ ĐIỆN') && upperDesc.includes('BẢO HÀNH')) {
+    return 'VF-PVT20030000';
   }
 
   return null;
@@ -183,6 +233,7 @@ export function normalizePrefix(
     | 'MATERIAL'
     | 'DISCOUNT'
     | 'OTHER' = 'PARTS',
+  ctx?: VinfastCodeContext,
 ): string {
   if (!rawCode || rawCode.trim() === '' || rawCode.toUpperCase() === 'NULL') {
     return fallbackType === 'MATERIAL'
@@ -250,7 +301,7 @@ export function normalizePrefix(
 
   // 3. Mã số thuần (VinFast numeric part number)
   if (/^[0-9]{5,10}$/.test(code)) {
-    return `VF-${code}`;
+    return allowsVinfastCode(ctx) ? `VF-${code}` : `PT-${code}`;
   }
 
   // 4. Các mã OEM khác
@@ -270,6 +321,27 @@ export function extractStandardItemCode(
   const preVat = Number(input.preVatAmount || 0);
   const discount = Number(input.discountAmount || 0);
   const upperDesc = desc.toUpperCase();
+  const ctx: VinfastCodeContext = {
+    direction: input.direction,
+    unit,
+    sellerName: input.sellerName,
+    sellerTaxCode: input.sellerTaxCode,
+  };
+
+  // 0. Công lao động: mã số/VF- trên dòng công là mã công (DV-SUACHUA), không phải phụ tùng
+  const codeOnLine = (input.existingItemCode || input.itemCode || '').trim();
+  const numericOrVfCode =
+    /^(VF-)?\d{5,10}$/i.test(codeOnLine) ||
+    /^VF-/i.test(codeOnLine) ||
+    /^\d{5,10}(?=[\s\-_:,]|$)/.test(desc);
+  if (isLabourUnit(unit) && numericOrVfCode) {
+    return {
+      itemCode: 'DV-SUACHUA',
+      itemType: 'SERVICE',
+      isDiscountDeduction: false,
+      source: 'SERVICE_RULE',
+    };
+  }
 
   // 1. Preserve Guard (với chuẩn hóa tiền tố nếu là mã cũ)
   const codeToPreserve = input.existingItemCode || input.itemCode;
@@ -283,6 +355,7 @@ export function extractStandardItemCode(
     const normalizedCode = normalizePrefix(
       codeToPreserve,
       isDisc ? 'DISCOUNT' : 'PARTS',
+      ctx,
     );
     return {
       itemCode: normalizedCode,
@@ -298,12 +371,19 @@ export function extractStandardItemCode(
     };
   }
 
-  // 2. Chiết khấu / Giảm giá (Deduction)
+  // 2. Chiết khấu / Giảm giá (Deduction). Dòng "điều chỉnh" có mã phụ tùng rõ ràng là điều chỉnh
+  // hàng hóa (số lượng/đơn giá), giữ mã phụ tùng để không làm mất dòng khỏi sổ cái.
+  const leadingPartCode = /^\s*(VF-)?[A-Z]{3,6}[0-9]{5,8}/i.test(desc);
+  const isPartAdjustment =
+    (/điều chỉnh|dieu chinh/i.test(desc) || leadingPartCode) &&
+    !REGEX_CHIET_KHAU.test(desc) &&
+    extractVinfastItemCode(desc, ctx) !== null;
   if (
-    discount > 0 ||
-    preVat < 0 ||
-    REGEX_CHIET_KHAU.test(desc) ||
-    REGEX_CHIET_KHAU.test(unit)
+    !isPartAdjustment &&
+    (discount > 0 ||
+      preVat < 0 ||
+      REGEX_CHIET_KHAU.test(desc) ||
+      REGEX_CHIET_KHAU.test(unit))
   ) {
     let itemCode = 'CK-THUONGMAI';
     if (seller.includes('GRAB') || upperDesc.includes('GRAB')) {
@@ -325,8 +405,26 @@ export function extractStandardItemCode(
     };
   }
 
+  // 2b. Lệnh sửa chữa và chi phí cứu hộ là dịch vụ, chạy trước quy tắc phụ tùng
+  if (/^\s*(sửa xe|sửa chữa xe)(?=[\s:,.-]|$)/i.test(desc)) {
+    return {
+      itemCode: 'DV-SUACHUA',
+      itemType: 'SERVICE',
+      isDiscountDeduction: false,
+      source: 'SUBCONTRACT_RULE',
+    };
+  }
+  if (/^\s*(chi phí cứu hộ|cứu hộ)(?=[\s:,.-]|$)/i.test(desc)) {
+    return {
+      itemCode: 'DV-CUUHO',
+      itemType: 'SERVICE',
+      isDiscountDeduction: false,
+      source: 'RESCUE_RULE',
+    };
+  }
+
   // 3. Phụ tùng VinFast
-  const vfCode = extractVinfastItemCode(desc);
+  const vfCode = extractVinfastItemCode(desc, ctx);
   if (
     vfCode ||
     seller.includes('VINFAST') ||

@@ -781,3 +781,18 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
 ## Quy ước tên file PDF/XML khi xuất
 - Helper `src/erp-invoices-core/utils/invoice-file-name.util.ts`: `buildInvoiceFileName(invoice, ext, index?)` → `{YYYYMMDD}_{KyHieu}_{SoHD}_{SoTienVND}[_{index}].{ext}` (vd `20250315_C25TAA_0001234_12500000.pdf`); thiếu dữ liệu: `KhongNgay` / `KhongKyHieu` / số tiền `0`; sanitize ký tự cấm + `..`. `uniqueName` chống trùng trong ZIP (`_2`, `_3`).
 - Áp dụng: ZIP hàng loạt (`bulkDownloadFilesZip`), ZIP đã chọn (`bulkDownloadSelectedZip`) qua `buildDownloadTasks` (giữ thư mục `{MST} - {Tên đối tác}/`) và tải lẻ `getFileDownloadUrl` (không còn MST trong tên). Không đổi: PDF đính kèm (`getPdfDownloadUrl`, `downloadAllPdfsZip`) vẫn dùng tên gốc.
+
+## Quy tắc gán mã hàng hóa/dịch vụ (`item_code`) theo chiều hóa đơn
+
+Nguồn duy nhất: `extractStandardItemCode` trong `src/erp-invoices-core/helpers/vinfast-part-code.helper.ts`, nhận thêm ngữ cảnh `direction`, `unit`, người bán. Thứ tự chính:
+
+1. Dòng đơn vị **công/giờ** mà mã là số thuần hoặc `VF-<số>` -> `DV-SUACHUA` (mã công VinFast, không phải phụ tùng).
+2. Chiết khấu/giảm giá -> `CK-*`, trừ dòng điều chỉnh hoặc dòng có mã phụ tùng ở đầu diễn giải (hàng trả, đổi trả giữ mã phụ tùng).
+3. Lệnh sửa chữa `SỬA XE ... QT ...` -> `DV-SUACHUA`; `Chi phí cứu hộ` -> `DV-CUUHO`.
+4. Mã phụ tùng VinFast (`extractVinfastItemCode`): hóa đơn bán nhận mọi mẫu; hóa đơn mua chỉ khi người bán là ứng viên VinFast (tên có "VinFast" hoặc MST Greenway `0318334886`). Mã số thuần không áp dụng cho dòng công.
+5. Bảo hành động cơ `VF-PVT20030000` chỉ là phương án cuối khi diễn giải không có mã thật.
+6. Số thuần từ người bán khác -> `PT-<số>`.
+
+Lưu ý: hàm không có ngữ cảnh (gọi từ XML parser, subscriber) vẫn giữ hành vi cũ (cho phép). Tiền tố mã không ảnh hưởng hạch toán tài khoản; ảnh hưởng báo cáo/lọc theo mã và sổ cái phụ tùng VinFast (chỉ mã `VF-`).
+
+Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-codes.ts` (dry-run mặc định, `--target=<tenant>-<stage>`, ghi cần `--apply --confirm=<tên DB> --expect=<số dòng dry-run>`).

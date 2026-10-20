@@ -1096,7 +1096,7 @@ export class InvoicePortalService implements OnModuleInit {
 
     // Trigger Vinfast ledger sync in the background to update any new data
     this.vinfastPartsService
-      .syncLedger()
+      .syncLedger({ invoiceIds: [invoice.id] })
       .catch((e) =>
         this.logger.error(
           `Failed to sync Vinfast ledger for ${invoice.invoiceNo}: ${e.message}`,
@@ -1578,6 +1578,7 @@ export class InvoicePortalService implements OnModuleInit {
           discountAmount: disc,
           sellerName: json.nbten,
           sellerTaxCode: invoice.sellerTaxCode,
+          direction: invoice.direction,
         });
         const itemCode = resolved.itemCode || rawCode || undefined;
 
