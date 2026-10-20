@@ -437,6 +437,10 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
   },
 ];
 
+/** Key hợp lệ cho `selectedColumns` của bảng kê phiếu dịch vụ. */
+export const COMPLETED_CASES_EXPORT_COLUMN_KEYS: string[] =
+  COMPLETED_CASES_COLUMNS.map((column) => column.key);
+
 /**
  * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (15 cột)
  */

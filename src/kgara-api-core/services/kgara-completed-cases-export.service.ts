@@ -39,6 +39,8 @@ export interface CompletedCasesExportParams {
   mode?: 'by-period' | 'by-current-filter';
   filtersStr?: string;
   sorts?: string | string[];
+  /** Key cột Sheet 1 cần xuất; bỏ trống = toàn bộ cột. */
+  selectedColumns?: string[];
 }
 
 @Injectable()
@@ -102,6 +104,7 @@ export class KgaraCompletedCasesExportService {
       settlementsMap,
       serviceLinesMap,
       caseLedgerMap,
+      params.selectedColumns,
     );
 
     buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);

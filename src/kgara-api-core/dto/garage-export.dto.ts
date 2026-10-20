@@ -9,6 +9,8 @@ import {
   MaxLength,
 } from 'class-validator';
 
+import { COMPLETED_CASES_EXPORT_COLUMN_KEYS } from '../helpers/kgara-excel-style.helper';
+
 export const GARAGE_EXPORT_MODES = ['by-period', 'by-current-filter'] as const;
 export type GarageExportMode = (typeof GARAGE_EXPORT_MODES)[number];
 
@@ -166,4 +168,11 @@ export class GarageCasesExportDto {
   @IsString()
   @MaxLength(50000)
   filtersStr?: string;
+
+  /** Key cột Sheet 1 cần xuất; bỏ trống = toàn bộ cột mặc định. */
+  @IsOptional()
+  @Transform(toSortArray)
+  @IsArray()
+  @IsIn(COMPLETED_CASES_EXPORT_COLUMN_KEYS, { each: true })
+  selectedColumns?: string[];
 }

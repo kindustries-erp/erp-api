@@ -93,4 +93,19 @@ describe('GarageCasesExportDto', () => {
     const { errors } = await check(GarageCasesExportDto, { date_type: 'foo' });
     expect(errors.map((e) => e.property)).toEqual(['date_type']);
   });
+
+  it('chuẩn hóa selectedColumns thành mảng và nhận key hợp lệ', async () => {
+    const { instance, errors } = await check(GarageCasesExportDto, {
+      selectedColumns: 'soChungTu',
+    });
+    expect(errors).toHaveLength(0);
+    expect(instance.selectedColumns).toEqual(['soChungTu']);
+  });
+
+  it('chặn key cột không nằm trong danh sách xuất', async () => {
+    const { errors } = await check(GarageCasesExportDto, {
+      selectedColumns: ['soChungTu', 'DROP TABLE'],
+    });
+    expect(errors.map((e) => e.property)).toEqual(['selectedColumns']);
+  });
 });
