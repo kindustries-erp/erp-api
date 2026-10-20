@@ -16,6 +16,7 @@ describe('KgaraCompletedCasesExportService', () => {
 
   const mockCaseRepo = {
     createQueryBuilder: jest.fn().mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoinAndMapOne: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -290,6 +291,7 @@ describe('KgaraCompletedCasesExportService', () => {
   it('should correctly evaluate PnL as "Lãi" with formula and 5-range margin highlight in Theo dõi lãi lỗ', async () => {
     // Giả lập case giống dòng 9 trong ảnh của user: Doanh thu 115M, Chi phí 0, loiNhuan trong DB = 0
     mockCaseRepo.createQueryBuilder.mockReturnValueOnce({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoinAndMapOne: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -383,6 +385,35 @@ describe('KgaraCompletedCasesExportService', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+    });
+
+    it('join danh mục (cat) để bộ lọc Phân loại/Danh mục không lỗi SQL', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        filtersStr: JSON.stringify({ classification: ['OJ'] }),
+      });
+
+      const qb = getQb();
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('case.category', 'cat');
+    });
+
+    it('không có sorts thì dùng thứ tự mặc định của bảng (ngày phát sinh trước)', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        filtersStr: '{}',
+      });
+
+      const qb = getQb();
+      expect(qb.orderBy).toHaveBeenCalledWith(
+        'case.ngayPhatSinh',
+        'DESC',
+        'NULLS LAST',
+      );
+      expect(qb.orderBy).not.toHaveBeenCalledWith(
+        'case.ngayHoanThanhCongViec',
+        'DESC',
+        'NULLS LAST',
+      );
     });
 
     it('bỏ điều kiện "phiếu kết thúc" và lọc kỳ theo ngày phát sinh như bảng', async () => {

@@ -10,7 +10,10 @@ import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
-import { applyCaseListSorts } from '../helpers/kgara-case-sort.helper';
+import {
+  applyCaseListDefaultOrder,
+  applyCaseListSorts,
+} from '../helpers/kgara-case-sort.helper';
 import { createDashboardSheet } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
 import {
@@ -142,6 +145,7 @@ export class KgaraCompletedCasesExportService {
   ): Promise<any[]> {
     const qb = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoinAndSelect('case.category', 'cat')
       .leftJoinAndMapOne(
         'case.grossProfit',
         KgaraGrossProfit,
@@ -227,8 +231,10 @@ export class KgaraCompletedCasesExportService {
       applyCaseListFilters(qb, params.filtersStr);
       if (params.sorts && params.sorts.length > 0) {
         applyCaseListSorts(qb, params.sorts);
-        return qb.getMany();
+      } else {
+        applyCaseListDefaultOrder(qb);
       }
+      return qb.getMany();
     }
 
     qb.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST')

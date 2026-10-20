@@ -13,7 +13,10 @@ import {
   applyCaseOptionFilters,
   applyCaseListFilters,
 } from '../helpers/kgara-case-filter.helper';
-import { applyCaseListSorts } from '../helpers/kgara-case-sort.helper';
+import {
+  applyCaseListDefaultOrder,
+  applyCaseListSorts,
+} from '../helpers/kgara-case-sort.helper';
 import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
@@ -137,11 +140,7 @@ export class KgaraCaseListQueryService {
     if (sorts) {
       applyCaseListSorts(query, sorts);
     } else {
-      query
-        .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
-        .addOrderBy('case.ngayTiepNhan', 'DESC', 'NULLS LAST')
-        .addOrderBy('case.soChungTu', 'DESC')
-        .addOrderBy('case.updatedAt', 'DESC');
+      applyCaseListDefaultOrder(query);
     }
 
     const take = parseInt(String(pageSize), 10) || 20;
