@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { VinfastPartsCatalog } from '../entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from '../entities/vinfast-parts-ledger.entity';
 import { ErpInvoiceItem } from '../../erp-invoices-core/entities/erp_invoice_item.entity';
@@ -216,7 +216,22 @@ export class VinfastPartsSyncService {
 
     const qb = this.invoiceItemRepo
       .createQueryBuilder('ii')
-      .innerJoinAndSelect('ii.invoice', 'i')
+      .innerJoin('ii.invoice', 'i')
+      .select([
+        'ii.id',
+        'ii.itemCode',
+        'ii.description',
+        'ii.unit',
+        'ii.quantity',
+        'ii.unitPrice',
+        'ii.preVatAmount',
+        'i.id',
+        'i.direction',
+        'i.invoiceType',
+        'i.taxInvoiceStatus',
+        'i.invoiceDate',
+        'i.licensePlate',
+      ])
       .where('ii.itemCode IS NOT NULL')
       .andWhere(
         '(i.direction = :outDir OR (i.direction = :inDir AND (UPPER(i.sellerName) LIKE :vinfastName OR i.sellerTaxCode LIKE :greenwayTaxCode)))',
@@ -241,57 +256,63 @@ export class VinfastPartsSyncService {
     }
 
     const invoiceItems = await qb.getMany();
+    const total = invoiceItems.length;
+
+    // Nạp trước theo lô: danh mục và sổ cái hiện có, không truy vấn từng dòng
+    const catalogBySku = new Map<string, { isService: boolean }>(
+      (await this.catalogRepo.find()).map((c) => [c.sku, c]),
+    );
+    const existingByItem = new Map<string, VinfastPartsLedger>();
+    const itemIds = invoiceItems.map((ii) => ii.id);
+    for (let k = 0; k < itemIds.length; k += LEDGER_LOOKUP_BATCH) {
+      const rows = await this.ledgerRepo.find({
+        where: { invoiceItemId: In(itemIds.slice(k, k + LEDGER_LOOKUP_BATCH)) },
+      });
+      rows.forEach((r) => existingByItem.set(r.invoiceItemId, r));
+    }
 
     let processedCount = 0;
     let addedCount = 0;
     let skippedCount = 0;
     let updatedCount = 0;
+    let unchangedCount = 0;
     let deletedCount = 0;
 
-    for (const ii of invoiceItems) {
+    for (let idx = 0; idx < total; idx++) {
+      const ii = invoiceItems[idx];
+      if (options?.progress$ && (idx + 1) % PROGRESS_EVERY === 0) {
+        options.progress$.next({
+          processId: 'vinfast-sync',
+          type: 'ledger',
+          total,
+          current: idx + 1,
+          message: `Đang xử lý Sổ cái: ${idx + 1}/${total} dòng...`,
+          completed: false,
+        });
+      }
+
       const i = ii.invoice;
       if (!i) continue;
+      const existing = existingByItem.get(ii.id);
 
       const sku = this.resolveVinfastSku(ii.itemCode, ii.description);
       if (!sku) {
         // Dòng không còn là phụ tùng: gỡ dòng sổ cái cũ (nếu có) để tồn khớp mã hóa đơn
-        const stale = await this.ledgerRepo.findOne({
-          where: { invoiceItemId: ii.id },
-        });
-        if (stale) {
-          await this.ledgerRepo.remove(stale);
+        if (existing) {
+          await this.ledgerRepo.remove(existing);
+          existingByItem.delete(ii.id);
           deletedCount++;
         }
         continue;
       }
 
       processedCount++;
-      if (options?.progress$ && processedCount % 50 === 0) {
-        options.progress$.next({
-          processId: 'vinfast-sync',
-          type: 'ledger',
-          total: invoiceItems.length,
-          current: processedCount,
-          message: `Đang xử lý Sổ cái: ${processedCount}/${invoiceItems.length} dòng...`,
-          completed: false,
-        });
-      }
 
-      // Make sure the SKU exists in catalog
-      const catalogItem = await this.catalogRepo.findOne({ where: { sku } });
-      if (!catalogItem) {
+      const catalogItem = catalogBySku.get(sku);
+      if (!catalogItem || catalogItem.isService) {
         skippedCount++;
         continue;
       }
-
-      if (catalogItem.isService) {
-        skippedCount++;
-        continue;
-      }
-
-      const existing = await this.ledgerRepo.findOne({
-        where: { invoiceItemId: ii.id },
-      });
 
       const status = i.taxInvoiceStatus;
 
@@ -299,6 +320,7 @@ export class VinfastPartsSyncService {
       if (status === 6) {
         if (existing) {
           await this.ledgerRepo.remove(existing);
+          existingByItem.delete(ii.id);
           deletedCount++;
         } else {
           skippedCount++;
@@ -361,26 +383,33 @@ export class VinfastPartsSyncService {
       };
 
       if (existing) {
+        if (isSameLedgerData(existing, ledgerData)) {
+          unchangedCount++;
+          continue;
+        }
         Object.assign(existing, ledgerData);
         await this.ledgerRepo.save(existing);
         updatedCount++;
       } else {
-        await this.ledgerRepo.save(this.ledgerRepo.create(ledgerData));
+        const created = await this.ledgerRepo.save(
+          this.ledgerRepo.create(ledgerData),
+        );
+        existingByItem.set(ii.id, created);
         addedCount++;
       }
     }
 
     this.logger.log(
-      `Ledger sync completed. Processed: ${processedCount}, Added: ${addedCount}, Updated: ${updatedCount}, Deleted: ${deletedCount}, Skipped: ${skippedCount}`,
+      `Ledger sync completed. Processed: ${processedCount}, Added: ${addedCount}, Updated: ${updatedCount}, Unchanged: ${unchangedCount}, Deleted: ${deletedCount}, Skipped: ${skippedCount}`,
     );
 
     if (options?.progress$) {
       options.progress$.next({
         processId: 'vinfast-sync',
         type: 'ledger',
-        total: invoiceItems.length,
-        current: invoiceItems.length,
-        message: `Hoàn tất Sổ cái (Ledger): Thêm mới ${addedCount}, Cập nhật ${updatedCount}, Xóa ${deletedCount}, Bỏ qua ${skippedCount}.`,
+        total,
+        current: total,
+        message: `Hoàn tất Sổ cái (Ledger): Thêm mới ${addedCount}, Cập nhật ${updatedCount}, Không đổi ${unchangedCount}, Xóa ${deletedCount}, Bỏ qua ${skippedCount}.`,
         completed: true,
       });
     }
@@ -389,8 +418,54 @@ export class VinfastPartsSyncService {
       totalProcessed: processedCount,
       addedCount,
       updatedCount,
+      unchangedCount,
       deletedCount,
       skippedCount,
     };
   }
+}
+
+const LEDGER_LOOKUP_BATCH = 1000;
+const PROGRESS_EVERY = 200;
+
+function sameNumber(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return Math.abs(Number(a) - Number(b)) < 0.0001;
+}
+
+function sameDate(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return new Date(a as any).getTime() === new Date(b as any).getTime();
+}
+
+/** So sánh các trường nghiệp vụ của dòng sổ cái để bỏ qua ghi lại khi không đổi. */
+function isSameLedgerData(
+  existing: VinfastPartsLedger,
+  data: {
+    partSku: string;
+    invoiceId: string;
+    direction: string;
+    qty: number;
+    unitCost: number | null;
+    preVatAmount: number;
+    transactionDate: Date | string;
+    licensePlate: string | null;
+    settlementOrder: string | null;
+    isAdjustment: boolean;
+    adjSign: number;
+  },
+): boolean {
+  return (
+    existing.partSku === data.partSku &&
+    existing.invoiceId === data.invoiceId &&
+    existing.direction === data.direction &&
+    sameNumber(existing.qty, data.qty) &&
+    sameNumber(existing.unitCost, data.unitCost) &&
+    sameNumber(existing.preVatAmount, data.preVatAmount) &&
+    sameDate(existing.transactionDate, data.transactionDate) &&
+    (existing.licensePlate ?? null) === data.licensePlate &&
+    (existing.settlementOrder ?? null) === data.settlementOrder &&
+    existing.isAdjustment === data.isAdjustment &&
+    sameNumber(existing.adjSign, data.adjSign)
+  );
 }
