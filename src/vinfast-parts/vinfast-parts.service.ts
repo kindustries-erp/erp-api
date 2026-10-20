@@ -8,11 +8,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VinfastPartsLedger } from './entities/vinfast-parts-ledger.entity';
 import { VinfastPartsCatalog } from './entities/vinfast-parts-catalog.entity';
+import {
+  VinfastSyncRunSnapshot,
+  VinfastSyncRunState,
+} from './helpers/vinfast-sync-run.state';
 
 @Injectable()
 export class VinfastPartsService {
   private readonly logger = new Logger(VinfastPartsService.name);
   public readonly progress$ = new Subject<any>();
+  private readonly runState = new VinfastSyncRunState();
 
   constructor(
     private readonly syncService: VinfastPartsSyncService,
@@ -22,7 +27,42 @@ export class VinfastPartsService {
     private readonly ledgerRepo: Repository<VinfastPartsLedger>,
     @InjectRepository(VinfastPartsCatalog)
     private readonly catalogRepo: Repository<VinfastPartsCatalog>,
-  ) {}
+  ) {
+    this.progress$.subscribe((event) => this.runState.applyProgress(event));
+  }
+
+  /** Trạng thái lượt đồng bộ hiện tại (để hỏi lại khi SSE không nhận được sự kiện). */
+  getSyncState(): VinfastSyncRunSnapshot {
+    return this.runState.snapshot();
+  }
+
+  /**
+   * Chạy đồng bộ danh mục rồi sổ cái trong nền. Trả started=false nếu đang có lượt chạy.
+   */
+  runFullSync(options: {
+    dateFrom?: string;
+    dateTo?: string;
+    clearDb?: boolean;
+  }): { started: boolean; state: VinfastSyncRunSnapshot } {
+    if (!this.runState.start()) {
+      return { started: false, state: this.runState.snapshot() };
+    }
+    void (async () => {
+      try {
+        await this.syncCatalog({ ...options, progress$: this.progress$ });
+        await this.syncLedger({
+          dateFrom: options.dateFrom,
+          dateTo: options.dateTo,
+          progress$: this.progress$,
+        });
+        this.runState.finish();
+      } catch (e: any) {
+        this.logger.error(`VinFast sync failed: ${e?.message ?? e}`);
+        this.runState.finish(e?.message ?? String(e));
+      }
+    })();
+    return { started: true, state: this.runState.snapshot() };
+  }
 
   public resolveVinfastSku(
     itemCode: string | null | undefined,

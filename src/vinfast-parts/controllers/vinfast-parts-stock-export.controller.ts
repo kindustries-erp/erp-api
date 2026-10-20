@@ -20,6 +20,10 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { ErpAction, ErpResource } from '@/rbac-core/enums';
 import { VinfastPartsService } from '../vinfast-parts.service';
 import { VinfastPartsStockExportBackgroundService } from '../services/vinfast-parts-stock-export-background.service';
+import {
+  applySseHeaders,
+  SSE_PING_INTERVAL_MS,
+} from '../helpers/sse-headers.helper';
 
 @ApiTags('VinFast Parts')
 @ApiBearerAuth()
@@ -102,7 +106,9 @@ export class VinfastPartsStockExportController {
   })
   vinfastPartsStockExportProgressStream(
     @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
   ): Observable<MessageEvent> {
+    applySseHeaders(res);
     return new Observable<MessageEvent>((subscriber) => {
       subscriber.next({
         data: JSON.stringify({
@@ -135,7 +141,7 @@ export class VinfastPartsStockExportController {
             message: 'Ping',
           }),
         } as MessageEvent);
-      }, 15000);
+      }, SSE_PING_INTERVAL_MS);
 
       const subscription = this.exportService.progress$.subscribe({
         next: (data) => {
