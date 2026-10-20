@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
@@ -12,7 +12,11 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { GarageCaseForecastService } from './garage-case-forecast.service';
+import { GarageHubService } from '../hub/garage-hub.service';
+import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -41,6 +45,10 @@ export class SyncCaseService {
     private readonly syncRunLogger: SyncRunLoggerService,
     private readonly syncDeletion: SyncDeletionService,
     private readonly syncGrossProfit: SyncGrossProfitService,
+    @Optional()
+    private readonly caseForecaster?: GarageCaseForecastService,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   async syncBranches(): Promise<void> {
@@ -148,10 +156,13 @@ export class SyncCaseService {
       const categoryMap = new Map<string, string>();
       for (const cat of categories) {
         categoryMap.set(cat.code, cat.id);
-        if (cat.code === 'OJ_NGOAI') {
+        // OJ nhận diện theo semanticKey (code admin sửa được); giữ alias code cũ để tương thích
+        if (
+          cat.semanticKey === GARAGE_CASE_SEMANTIC.OJ ||
+          cat.code === 'OJ_NGOAI' ||
+          cat.code === 'OJ'
+        ) {
           categoryMap.set('OJ', cat.id);
-        }
-        if (cat.code === 'OJ') {
           categoryMap.set('OJ_NGOAI', cat.id);
         }
       }
@@ -261,7 +272,10 @@ export class SyncCaseService {
           gwCase.ngayPhatSinh =
             parseSafeDate(c.NgayPhatSinhFull) || parseSafeDate(c.NgayPhatSinh);
           gwCase.ngayTiepNhan = parseSafeDate(c.NgayTiepNhan);
-          gwCase.ngayHoanThanhCongViec = parseSafeDate(c.NgayHoanThanhCongViec);
+          gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+            newStatus,
+            parseSafeDate(c.NgayHoanThanhCongViec),
+          );
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           gwCase.soKhung = c.SoKhung;
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
@@ -287,8 +301,9 @@ export class SyncCaseService {
             gwCase.kgaraClassification = kgaraClassification;
             gwCase.kgaraClassificationCode = kgaraClassificationCode;
             if (
-              gwCase.classification === null ||
-              gwCase.classification === undefined
+              (gwCase.classification === null ||
+                gwCase.classification === undefined) &&
+              !gwCase.classificationManuallyCleared
             ) {
               gwCase.classification = mapKgaraClassificationToErp(
                 kgaraClassificationCode,
@@ -323,6 +338,33 @@ export class SyncCaseService {
           }
 
           await this.caseRepo.save(gwCase);
+
+          if (this.garageHub && gwCase.id) {
+            await this.garageHub.handleCaseTransition({
+              caseId: gwCase.id,
+              previousStatus,
+              newStatus,
+              ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+              tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+              tienCoThue: gwCase.tienCoThue,
+              khachHangName: gwCase.khachHangName,
+              licensePlate: gwCase.bienSoXe,
+              soChungTu: gwCase.soChungTu,
+            });
+          } else if (this.caseForecaster && gwCase.id) {
+            await this.caseForecaster.syncCaseForecast({
+              caseId: gwCase.id,
+              previousStatus,
+              newStatus,
+              ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+              tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+              tienCoThue: gwCase.tienCoThue,
+              khachHangName: gwCase.khachHangName,
+              licensePlate: gwCase.bienSoXe,
+              soChungTu: gwCase.soChungTu,
+            });
+          }
+
           totalRows++;
         }
         page++;
@@ -584,8 +626,9 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayPhatSinhFull) ||
         parseSafeDate(caseData.NgayPhatSinh);
       gwCase.ngayTiepNhan = parseSafeDate(caseData.NgayTiepNhan);
-      gwCase.ngayHoanThanhCongViec = parseSafeDate(
-        caseData.NgayHoanThanhCongViec,
+      gwCase.ngayHoanThanhCongViec = resolveCompletionDate(
+        newStatus,
+        parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
       gwCase.soKhung = caseData.SoKhung;
@@ -601,8 +644,9 @@ export class SyncCaseService {
         gwCase.kgaraClassification = detailClassification;
         gwCase.kgaraClassificationCode = detailClassificationCode;
         if (
-          gwCase.classification === null ||
-          gwCase.classification === undefined
+          (gwCase.classification === null ||
+            gwCase.classification === undefined) &&
+          !gwCase.classificationManuallyCleared
         ) {
           gwCase.classification = mapKgaraClassificationToErp(
             detailClassificationCode,
@@ -613,6 +657,14 @@ export class SyncCaseService {
               typeof this.caseRepo.manager?.findOne === 'function'
                 ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
                     where: [
+                      ...(gwCase.classification === 'OJ'
+                        ? [
+                            {
+                              moduleKey: 'GARAGE_CASE',
+                              semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                            },
+                          ]
+                        : []),
                       { moduleKey: 'GARAGE_CASE', code: gwCase.classification },
                       {
                         moduleKey: 'GARAGE_CASE',
@@ -640,6 +692,10 @@ export class SyncCaseService {
             typeof this.caseRepo.manager?.findOne === 'function'
               ? await this.caseRepo.manager.findOne(ErpModuleCategory, {
                   where: [
+                    {
+                      moduleKey: 'GARAGE_CASE',
+                      semanticKey: GARAGE_CASE_SEMANTIC.OJ,
+                    },
                     { moduleKey: 'GARAGE_CASE', code: 'OJ' },
                     { moduleKey: 'GARAGE_CASE', code: 'OJ_NGOAI' },
                   ],
@@ -657,6 +713,32 @@ export class SyncCaseService {
       }
 
       await this.caseRepo.save(gwCase);
+
+      if (this.garageHub && gwCase.id) {
+        await this.garageHub.handleCaseTransition({
+          caseId: gwCase.id,
+          previousStatus,
+          newStatus,
+          ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+          tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+          tienCoThue: gwCase.tienCoThue,
+          khachHangName: gwCase.khachHangName,
+          licensePlate: gwCase.bienSoXe,
+          soChungTu: gwCase.soChungTu,
+        });
+      } else if (this.caseForecaster && gwCase.id) {
+        await this.caseForecaster.syncCaseForecast({
+          caseId: gwCase.id,
+          previousStatus,
+          newStatus,
+          ngayHoanThanhCongViec: gwCase.ngayHoanThanhCongViec,
+          tienConPhaiThanhToan: gwCase.tienConPhaiThanhToan,
+          tienCoThue: gwCase.tienCoThue,
+          khachHangName: gwCase.khachHangName,
+          licensePlate: gwCase.bienSoXe,
+          soChungTu: gwCase.soChungTu,
+        });
+      }
 
       // Sync Case Services (Lines)
       let linesCount = 0;

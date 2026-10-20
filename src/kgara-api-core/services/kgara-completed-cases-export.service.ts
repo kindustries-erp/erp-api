@@ -8,6 +8,16 @@ import { KgaraCaseService } from '../entities/kgara_case_service.entity';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { GarageHubService } from '../hub/garage-hub.service';
+import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
+import { applyCaseListSorts } from '../helpers/kgara-case-sort.helper';
+import { createDashboardSheet } from '../../common/xlsx-charts/dashboard-sheet.helper';
+import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
+import {
+  CASES_DASHBOARD_SHEET,
+  buildCasesDashboard,
+} from '../helpers/garage-cases-dashboard.builder';
+import type { DateBasis } from '../helpers/garage-cases-dashboard-data.helper';
 import {
   buildSheet1CompletedCases,
   buildSheet2PnlTracking,
@@ -22,6 +32,13 @@ export interface CompletedCasesExportParams {
   classification?: string;
   status?: string;
   q?: string;
+  /**
+   * `by-current-filter`: bám bảng đang xem (kỳ theo ngày phát sinh, filter cột,
+   * sort, mọi trạng thái). Mặc định `by-period`: bảng kê phiếu kết thúc theo kỳ.
+   */
+  mode?: 'by-period' | 'by-current-filter';
+  filtersStr?: string;
+  sorts?: string | string[];
 }
 
 @Injectable()
@@ -33,6 +50,7 @@ export class KgaraCompletedCasesExportService {
     private readonly caseRepo: Repository<KgaraCase>,
     @InjectRepository(KgaraCaseSettlement)
     private readonly settlementRepo: Repository<KgaraCaseSettlement>,
+    private readonly hub: GarageHubService,
     @Optional()
     @InjectRepository(KgaraCaseService)
     private readonly serviceRepo?: Repository<KgaraCaseService>,
@@ -59,11 +77,13 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceSummaryMap,
       serviceLinesMap,
       settlementsMap,
+      caseLedgerMap,
     ] = await Promise.all([
       this.getBranchNameMap(),
       this.getLinkedInvoiceSummaryMap(caseDbIds),
       this.getServiceLinesMap(hdIds, cases),
       this.getSettlementsMap(caseDbIds),
+      this.hub.getCaseLedger(caseDbIds),
     ]);
 
     const workbook = new ExcelJS.Workbook();
@@ -71,21 +91,44 @@ export class KgaraCompletedCasesExportService {
     workbook.lastModifiedBy = 'Liouni ERP';
     workbook.created = new Date();
 
-    buildSheet1CompletedCases(
+    // Dashboard tạo đầu tiên để nằm đầu file; điền sau khi có số liệu Sheet 1.
+    const dashboard = createDashboardSheet(workbook, CASES_DASHBOARD_SHEET);
+
+    const sheet1 = buildSheet1CompletedCases(
       workbook,
       cases,
       branchNameMap,
       linkedInvoiceSummaryMap,
       settlementsMap,
       serviceLinesMap,
+      caseLedgerMap,
     );
 
     buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);
 
     buildSheet3ItemizedServices(workbook, cases, serviceLinesMap);
 
+    const charts = buildCasesDashboard(dashboard, sheet1, {
+      dateFrom: params.date_from,
+      dateTo: params.date_to,
+      branchLabel: params.branchId
+        ? branchNameMap[params.branchId] || params.branchId
+        : undefined,
+      modeLabel:
+        params.mode === 'by-current-filter'
+          ? 'Theo filter hiện tại của bảng'
+          : 'Theo kỳ',
+      dateBasis: this.resolveDateBasis(params),
+    });
+
     const uint8Array = await workbook.xlsx.writeBuffer();
-    return Buffer.from(uint8Array);
+    return injectCharts(Buffer.from(uint8Array), CASES_DASHBOARD_SHEET, charts);
+  }
+
+  /** Cùng cơ sở ngày với điều kiện lọc kỳ để biểu đồ theo thời gian khớp bộ lọc. */
+  private resolveDateBasis(params: CompletedCasesExportParams): DateBasis {
+    if (params.mode === 'by-current-filter') return 'issued';
+    return params.date_type === 'case_date' ? 'received' : 'completion';
   }
 
   private async queryCompletedCases(
@@ -101,7 +144,12 @@ export class KgaraCompletedCasesExportService {
       )
       .where('case.kgaraDeletedAt IS NULL');
 
-    if (!params.status || params.status.toLowerCase() !== 'all') {
+    const byCurrentFilter = params.mode === 'by-current-filter';
+
+    if (
+      !byCurrentFilter &&
+      (!params.status || params.status.toLowerCase() !== 'all')
+    ) {
       qb.andWhere(
         new Brackets((sub) => {
           sub
@@ -118,8 +166,9 @@ export class KgaraCompletedCasesExportService {
     }
 
     const dateType = params.date_type || 'completion_date';
-    const dateField =
-      dateType === 'case_date'
+    const dateField = byCurrentFilter
+      ? 'case.ngayPhatSinh'
+      : dateType === 'case_date'
         ? 'COALESCE(case.ngayTiepNhan, case.ngayPhatSinh)'
         : 'case.ngayHoanThanhCongViec';
 
@@ -141,12 +190,17 @@ export class KgaraCompletedCasesExportService {
         branchId: params.branchId,
       });
     }
-    if (params.classification) {
+    if (!byCurrentFilter && params.classification) {
       qb.andWhere('case.classification = :classification', {
         classification: params.classification,
       });
     }
     if (params.q) {
+      const qClean = params.q.replace(/[,.]/g, '');
+      const qNumber = Number(qClean);
+      // Khớp số tiền chỉ áp dụng khi bám bảng đang xem (giống ô tìm kiếm của bảng).
+      const matchAmount =
+        byCurrentFilter && !isNaN(qNumber) && qNumber > 0 && qClean.length > 0;
       qb.andWhere(
         new Brackets((sub) => {
           sub
@@ -154,8 +208,21 @@ export class KgaraCompletedCasesExportService {
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${params.q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${params.q}%` })
             .orWhere('case.khachHangCode ILIKE :q', { q: `%${params.q}%` });
+          if (matchAmount) {
+            sub
+              .orWhere('case.tienCoThue = :qNum', { qNum: qNumber })
+              .orWhere('case.chiPhi = :qNum', { qNum: qNumber });
+          }
         }),
       );
+    }
+
+    if (byCurrentFilter) {
+      applyCaseListFilters(qb, params.filtersStr);
+      if (params.sorts && params.sorts.length > 0) {
+        applyCaseListSorts(qb, params.sorts);
+        return qb.getMany();
+      }
     }
 
     qb.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST')

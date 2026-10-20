@@ -12,7 +12,10 @@ export class KgaraSuppliersController {
   constructor(private readonly suppliersService: KgaraSuppliersService) {}
 
   @Get('payables/suppliers-debt')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getSuppliersDebt(
     @BranchId() branchId: string,
     @Query('page') page: string = '1',
@@ -40,7 +43,10 @@ export class KgaraSuppliersController {
   }
 
   @Get('payables/suppliers-debt/column-options')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getSuppliersDebtColumnOptions(
     @BranchId() branchId: string,
     @Query('column') column: string,
@@ -60,7 +66,10 @@ export class KgaraSuppliersController {
   }
 
   @Get('payables/by-supplier/:supplierId/cases')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_DEBTS,
+    action: ErpAction.READ,
+  })
   async getCasesBySupplier(
     @BranchId() branchId: string,
     @Param('supplierId') supplierId: string,

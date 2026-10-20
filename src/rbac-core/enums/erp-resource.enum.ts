@@ -16,6 +16,8 @@ export enum ErpResource {
   EMAIL_INGEST = 'email_ingest',
   JOURNAL_ENTRIES = 'journal_entries',
   GARAGE = 'garage',
+  GARAGE_DEBTS = 'garage_debts',
+  GARAGE_CASHFLOW = 'garage_cashflow',
   ACCOUNTING_CONFIGS = 'accounting_configs',
   INVOICES = 'invoices',
   INVOICE_DEBTS = 'invoice_debts',
@@ -29,4 +31,6 @@ export enum ErpResource {
   VINFAST = 'vinfast',
   DASHBOARD = 'dashboard',
   ATTACHMENTS = 'attachments',
+  CUSTOM_FIELDS = 'custom_fields',
+  // plop:api-v2-resources
 }

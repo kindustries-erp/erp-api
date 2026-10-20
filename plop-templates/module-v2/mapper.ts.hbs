@@ -1,0 +1,31 @@
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { {{entityName}}ResponseDto } from '../dto/{{entityKebab}}-response.dto';
+
+/** Chuyển entity sang response DTO. Hàm thuần, không gọi DB. */
+export function to{{entityName}}Response(entity: {{entityName}}): {{entityName}}ResponseDto {
+  return {
+    id: entity.id,
+{{#each customFields}}
+    {{this.name}}: {{{this.mapExpression}}},
+{{/each}}
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
+  };
+}
+
+/**
+ * Chuyển dữ liệu DTO sang dạng ghi vào entity.
+ * Bỏ các key `undefined` để cập nhật một phần không ghi đè giá trị cũ.
+ */
+export function to{{entityName}}EntityFields(dto: Partial<Create{{entityName}}Dto>): Partial<{{entityName}}> {
+  return omitUndefined<Partial<{{entityName}}>>({
+{{#each customFields}}
+    {{this.name}}: {{{this.toEntityExpression}}},
+{{/each}}
+  });
+}
+
+function omitUndefined<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+}

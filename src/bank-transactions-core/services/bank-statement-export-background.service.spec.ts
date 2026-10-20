@@ -7,6 +7,7 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
   let bankAccountRepoMock: any;
   let cashBookRepoMock: any;
   let transactionQueryServiceMock: any;
+  let excelBuilderMock: any;
 
   beforeEach(() => {
     qbMock = {
@@ -20,6 +21,7 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
           debitAmount: '0',
           balance: '34190355',
           bankAccount: {
+            bankCode: 'TCB',
             bankName: 'Techcombank',
             accountNumber: '111888',
           },
@@ -33,11 +35,29 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
 
     const managerMock = {
       createQueryBuilder: jest.fn().mockReturnValue({
+        innerJoin: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
+        getRawMany: jest.fn().mockResolvedValue([
+          {
+            bankTransactionId: 'txn-1',
+            netOffAmount: '1000000',
+            invoiceId: 'inv-1',
+            invoiceNo: '0001234',
+            serialNo: '1C26TBB',
+            invoiceDate: '2026-09-28',
+            invoiceDescription: 'Dich vu',
+            direction: 'OUT',
+            buyerName: 'Cong ty A',
+            buyerTaxCode: '0312345678',
+            totalAmount: '2000000',
+            invoiceBranchName: 'Chi nhánh Nam Sài Gòn',
+          },
+        ]),
       }),
     };
 
@@ -48,6 +68,7 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
     bankAccountRepoMock = {
       findOne: jest.fn().mockResolvedValue({
         id: 'acc-1',
+        bankCode: 'TCB',
         accountNumber: '111888',
       }),
     };
@@ -60,11 +81,16 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
       buildTransactionQueryBuilder: jest.fn().mockReturnValue(qbMock),
     };
 
+    excelBuilderMock = {
+      build: jest.fn().mockResolvedValue(Buffer.from('mock-xlsx-buffer')),
+    };
+
     service = new BankStatementExportBackgroundService(
       transactionRepoMock as any,
       bankAccountRepoMock as any,
       cashBookRepoMock as any,
       transactionQueryServiceMock as any,
+      excelBuilderMock as any,
     );
   });
 
@@ -104,6 +130,19 @@ describe('BankStatementExportBackgroundService - Column Filter Integration', () 
       }),
     );
     expect(qbMock.getMany).toHaveBeenCalled();
+    expect(excelBuilderMock.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceType: 'BANK',
+        transactions: expect.any(Array),
+        netOffDetails: expect.arrayContaining([
+          expect.objectContaining({
+            bankTransactionId: 'txn-1',
+            invoiceNo: '0001234',
+            invoiceBranchName: 'Chi nhánh Nam Sài Gòn',
+          }),
+        ]),
+      }),
+    );
   });
 
   it('generates distinct query fingerprints when column_filters or column_search differ', () => {

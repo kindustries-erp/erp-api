@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
-import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
 
 @Entity({ name: 'erp_operating_expenses' })
 export class ErpOperatingExpense {

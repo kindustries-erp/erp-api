@@ -171,7 +171,7 @@ export class InvoiceDashboardExportService {
         name: 'Calibri',
         size: 10.5,
         bold: true,
-        color: { argb: 'FF0F172A' },
+        color: { argb: 'FF78350F' }, // Amber 900
       };
 
       const subtotalRow = sheet.getRow(2);
@@ -180,7 +180,7 @@ export class InvoiceDashboardExportService {
         name: 'Calibri',
         size: 10.5,
         bold: true,
-        color: { argb: 'FF1E40AF' },
+        color: { argb: 'FF0F172A' }, // Slate 900
       };
 
       const blankRow = sheet.getRow(3);
@@ -208,7 +208,7 @@ export class InvoiceDashboardExportService {
         cellSum.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFF1F5F9' },
+          fgColor: { argb: 'FFFFFBEB' }, // Amber 50
         };
         cellSum.border = borderThin;
 
@@ -216,7 +216,7 @@ export class InvoiceDashboardExportService {
         cellSub.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: 'FFEFF6FF' },
+          fgColor: { argb: 'FFF8FAFC' }, // Slate 50
         };
         cellSub.border = {
           top: { style: 'thin', color: { argb: 'FF94A3B8' } },

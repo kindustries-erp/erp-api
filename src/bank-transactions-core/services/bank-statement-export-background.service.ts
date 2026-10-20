@@ -9,67 +9,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { Subject } from 'rxjs';
-import { Workbook } from 'exceljs';
-
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { ErpBankAccount } from '../entities/erp_bank_account.entity';
 import { ErpCashBook } from '../entities/erp_cash_book.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
 import { TransactionQueryService } from './transaction-query.service';
+import {
+  BankStatementExcelBuilder,
+  NetOffInvoiceItem,
+} from './bank-statement-excel.builder';
+import type {
+  BankStatementExportProgressEvent,
+  BankStatementExportHistoryItem,
+  BankStatementExportHistoryResult,
+  BankStatementExportJob,
+} from '../types/bank-statement-export.types';
 
-export type BankStatementExportProgressEvent = {
-  processId: 'bank-statement-xlsx-export' | 'ping';
-  userId?: string;
-  jobId?: string;
-  current: number;
-  total: number;
-  isRunning: boolean;
-  completed: boolean;
-  ready: boolean;
-  failed: boolean;
-  message?: string;
-  fileName?: string;
-};
-
-export type BankStatementExportHistoryItem = {
-  jobId: string;
-  fileName: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
-  current: number;
-  total: number;
-  message: string;
-  createdAt: string;
-  finishedAt?: string;
-  expiresAt?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  canDownload: boolean;
-};
-
-export type BankStatementExportHistoryResult = {
-  items: BankStatementExportHistoryItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-};
-
-type BankStatementExportJob = {
-  id: string;
-  userId: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
-  current: number;
-  total: number;
-  message: string;
-  createdAt: number;
-  finishedAt?: number;
-  fileName: string;
-  queryFingerprint: string;
-  dateFrom?: string;
-  dateTo?: string;
-  buffer?: Buffer;
-  error?: string;
-  expiresAt?: number;
+export type {
+  BankStatementExportProgressEvent,
+  BankStatementExportHistoryItem,
+  BankStatementExportHistoryResult,
+  BankStatementExportJob,
 };
 
 @Injectable()
@@ -94,6 +54,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     @InjectRepository(ErpCashBook)
     private readonly cashBookRepo: Repository<ErpCashBook>,
     private readonly transactionQueryService: TransactionQueryService,
+    private readonly excelBuilder: BankStatementExcelBuilder,
   ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
@@ -243,7 +204,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       total: job.total,
       isRunning,
       completed,
-      ready: completed,
+      ready: completed && Boolean(job.buffer),
       failed,
       message: failed ? job.error || job.message : job.message,
       fileName: job.fileName,
@@ -364,304 +325,63 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       `Đã tìm thấy ${transactions.length} giao dịch. Đang tải dữ liệu cấn trừ...`,
     );
 
-    // Load net off amounts
-    let netOffMap: Record<string, number> = {};
+    let netOffDetails: NetOffInvoiceItem[] = [];
     if (transactions.length > 0) {
       const ids = transactions.map((i) => i.id);
-      const netOffs = await this.transactionRepo.manager
+      netOffDetails = await this.transactionRepo.manager
         .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
-        .select('netoff.bank_transaction_id', 'bankTransactionId')
-        .addSelect('SUM(netoff.net_off_amount)', 'sum')
+        .innerJoin('erp_invoices', 'inv', 'inv.id = netoff.invoice_id')
+        .leftJoin('erp_branches', 'inv_branch', 'inv_branch.id = inv.branch_id')
+        .select([
+          'netoff.bank_transaction_id as "bankTransactionId"',
+          'netoff.net_off_amount as "netOffAmount"',
+          'inv.id as "invoiceId"',
+          'inv.invoice_no as "invoiceNo"',
+          'inv.serial_no as "serialNo"',
+          'inv.invoice_date as "invoiceDate"',
+          'inv.description as "invoiceDescription"',
+          'inv.direction as "direction"',
+          'inv.seller_name as "sellerName"',
+          'inv.seller_tax_code as "sellerTaxCode"',
+          'inv.buyer_name as "buyerName"',
+          'inv.buyer_tax_code as "buyerTaxCode"',
+          'inv.total_amount as "totalAmount"',
+          'inv_branch.name as "invoiceBranchName"',
+        ])
         .where('netoff.bank_transaction_id IN (:...ids)', { ids })
-        .groupBy('netoff.bank_transaction_id')
+        .orderBy('inv.invoice_date', 'ASC')
         .getRawMany();
-
-      netOffMap = netOffs.reduce(
-        (acc, curr) => {
-          acc[curr.bankTransactionId] = Number(curr.sum) || 0;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
     }
 
-    onProgress(65, 'Đang tạo bảng tính Excel...');
+    const selectedColumns = this.parseSelectedColumns(query.selected_columns);
 
-    const workbook = new Workbook();
-    const sheetName =
-      query.sourceType === 'CASH' ? 'Sổ quỹ Tiền mặt' : 'Sao kê Ngân hàng';
-    const worksheet = workbook.addWorksheet(sheetName);
-
-    const columns: Array<{
-      header: string;
-      key: string;
-      width: number;
-      style?: { numFmt?: string };
-      isSum?: boolean;
-    }> = [
-      { header: 'STT', key: 'stt', width: 8 },
-      {
-        header: query.sourceType === 'CASH' ? 'Sổ quỹ' : 'Ngân hàng',
-        key: 'account',
-        width: 25,
-      },
-      { header: 'Ngày GD', key: 'transDate', width: 20 },
-      { header: 'Số tham chiếu', key: 'referenceNumber', width: 24 },
-      { header: 'Diễn giải', key: 'description', width: 45 },
-      {
-        header: 'Thu (VND)',
-        key: 'credit',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Chi (VND)',
-        key: 'debit',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Số dư (VND)',
-        key: 'balance',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-      },
-      {
-        header: 'Đã cấn trừ (VND)',
-        key: 'netOffAmount',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Còn lại (VND)',
-        key: 'remainingAmount',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      { header: 'TK đối ứng', key: 'correspondentAccount', width: 18 },
-      { header: 'Tên đối tác', key: 'correspondentName', width: 30 },
-      { header: 'Ngân hàng đối tác', key: 'correspondentBank', width: 22 },
-      { header: 'Chi nhánh', key: 'branchName', width: 22 },
-    ];
-
-    const getColLetter = (colIndex: number): string => {
-      let letter = '';
-      let temp = colIndex;
-      while (temp > 0) {
-        const mod = (temp - 1) % 26;
-        letter = String.fromCharCode(65 + mod) + letter;
-        temp = Math.floor((temp - mod) / 26);
-      }
-      return letter;
-    };
-
-    worksheet.columns = columns.map((c) => ({
-      key: c.key,
-      width: c.width,
-    }));
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-
-    const borderThin = {
-      top: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      bottom: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      left: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      right: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-    };
-
-    let totalCredit = 0;
-    let totalDebit = 0;
-    let totalNetOff = 0;
-    let totalRemaining = 0;
-
-    transactions.forEach((item, index) => {
-      const credit = parseFloat(item.creditAmount as any) || 0;
-      const debit = parseFloat(item.debitAmount as any) || 0;
-      const netOff = netOffMap[item.id] || 0;
-      const remaining = Math.max(0, Math.max(credit, debit) - netOff);
-
-      totalCredit += credit;
-      totalDebit += debit;
-      totalNetOff += netOff;
-      totalRemaining += remaining;
-
-      const accountText =
-        query.sourceType === 'CASH'
-          ? item.cashBook?.name || ''
-          : item.bankAccount
-            ? `${item.bankAccount.bankCode} - ${item.bankAccount.accountNumber}`
-            : '';
-
-      const transDateStr = item.transDate
-        ? new Date(item.transDate).toLocaleString('vi-VN')
-        : '-';
-
-      const row = worksheet.addRow({
-        stt: index + 1,
-        account: accountText,
-        transDate: transDateStr,
-        referenceNumber: item.referenceNumber || '',
-        description: item.description || '',
-        credit,
-        debit,
-        balance: parseFloat(item.balance as any) || 0,
-        netOffAmount: netOff,
-        remainingAmount: remaining,
-        correspondentAccount: item.correspondentAccount || '',
-        correspondentName: item.correspondentName || '',
-        correspondentBank: item.correspondentBank || '',
-        branchName: item.branch?.name || '',
-      });
-
-      row.height = 20;
-      row.font = { name: 'Calibri', size: 10 };
-
-      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(5).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(6).numFmt = '#,##0.00';
-      row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(7).numFmt = '#,##0.00';
-      row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(8).numFmt = '#,##0.00';
-      row.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(9).numFmt = '#,##0.00';
-      row.getCell(10).alignment = { horizontal: 'right', vertical: 'middle' };
-      row.getCell(10).numFmt = '#,##0.00';
-      row.getCell(11).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(12).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(13).alignment = { horizontal: 'left', vertical: 'middle' };
-      row.getCell(14).alignment = { horizontal: 'center', vertical: 'middle' };
-
-      for (let c = 1; c <= 14; c++) {
-        row.getCell(c).border = borderThin;
-      }
+    const buffer = await this.excelBuilder.build({
+      sourceType: query.sourceType,
+      transactions,
+      netOffDetails,
+      selectedColumns,
+      onProgress,
     });
 
-    onProgress(85, 'Đang tổng hợp dữ liệu và hoàn tất file...');
+    onProgress(100, 'Tạo file hoàn tất!');
+    return buffer;
+  }
 
-    const totalCols = columns.length;
-    const startRow = 5;
-    const endRow = Math.max(startRow, worksheet.rowCount);
-    const calculatedSums: Record<string, number> = {
-      credit: totalCredit,
-      debit: totalDebit,
-      netOffAmount: totalNetOff,
-      remainingAmount: totalRemaining,
-    };
-
-    const sumRow = worksheet.getRow(1);
-    sumRow.height = 22;
-    sumRow.font = {
-      name: 'Calibri',
-      size: 10.5,
-      bold: true,
-      color: { argb: 'FF0F172A' },
-    };
-
-    const subtotalRow = worksheet.getRow(2);
-    subtotalRow.height = 22;
-    subtotalRow.font = {
-      name: 'Calibri',
-      size: 10.5,
-      bold: true,
-      color: { argb: 'FF1E40AF' },
-    };
-
-    const blankRow = worksheet.getRow(3);
-    blankRow.height = 10;
-
-    const headerRow = worksheet.getRow(4);
-    headerRow.height = 28;
-    headerRow.font = {
-      name: 'Calibri',
-      size: 11,
-      bold: true,
-      color: { argb: 'FFFFFFFF' },
-    };
-    headerRow.alignment = {
-      vertical: 'middle',
-      horizontal: 'center',
-      wrapText: true,
-    };
-
-    for (let c = 1; c <= totalCols; c++) {
-      const colDef = columns[c - 1];
-      const colLetter = getColLetter(c);
-
-      const cellSum = sumRow.getCell(c);
-      cellSum.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF1F5F9' },
-      };
-      cellSum.border = borderThin;
-
-      const cellSub = subtotalRow.getCell(c);
-      cellSub.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFEFF6FF' },
-      };
-      cellSub.border = {
-        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
-        bottom: { style: 'double', color: { argb: 'FF0F172A' } },
-        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      };
-
-      const cellHdr = headerRow.getCell(c);
-      cellHdr.value = colDef.header;
-      cellHdr.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF334155' },
-      };
-      cellHdr.border = borderThin;
-
-      if (c === 5) {
-        cellSum.value = 'TỔNG CỘNG (SUM)';
-        cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
-        cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';
-        cellSub.alignment = { horizontal: 'left', vertical: 'middle' };
-      }
-
-      if (colDef.isSum) {
-        const sumVal = calculatedSums[colDef.key] || 0;
-        cellSum.value = {
-          formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
-          result: sumVal,
-        };
-        cellSum.alignment = { horizontal: 'right', vertical: 'middle' };
-        cellSum.numFmt = colDef.style?.numFmt || '#,##0.00';
-
-        cellSub.value = {
-          formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
-          result: sumVal,
-        };
-        cellSub.alignment = { horizontal: 'right', vertical: 'middle' };
-        cellSub.numFmt = colDef.style?.numFmt || '#,##0.00';
+  private parseSelectedColumns(raw?: string[] | string): string[] | undefined {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        return raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
     }
-
-    worksheet.views = [{ state: 'frozen', ySplit: 4 }];
-    worksheet.autoFilter = {
-      from: { row: 4, column: 1 },
-      to: { row: endRow, column: totalCols },
-    };
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    onProgress(100, 'Tạo file hoàn tất!');
-    return Buffer.from(buffer);
+    return undefined;
   }
 
   private emitJobProgress(
@@ -765,6 +485,9 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
         typeof rawColumnSearch === 'object'
           ? JSON.stringify(rawColumnSearch)
           : rawColumnSearch || '',
+      selectedColumns: Array.isArray(query.selected_columns)
+        ? [...query.selected_columns].sort().join(',')
+        : query.selected_columns || '',
       sortBy: query.sortBy || '',
       sortOrder: query.sortOrder || '',
     };

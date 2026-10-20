@@ -386,5 +386,37 @@ src/modules/bank-statements/components/BankStatementsTab/
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 
+### 8.7. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+- **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
+  - Gỡ bỏ `PillTabs` thu/chi nổi và vách ngăn thừa ngoài thanh toolbar của `BankStatementSection`.
+  - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
+    - **Nhóm 1 (Trên - Lọc dữ liệu)**: `LOẠI GIAO DỊCH` (`Tất cả`, `Thu (IN)`, `Chi (OUT)`).
+    - **Vách ngăn (Giữa)**: Divider nét mờ.
+    - **Nhóm 2 (Dưới - Chế độ xem cột)**: `CHẾ ĐỘ XEM` (`Tổng quan`, `Kiểm toán / Đối soát`, `View Kế Toán Quỹ`...), kèm nút `+ Tạo chế độ xem mới`.
+  - Nút trigger ngoài hiển thị thông minh: `[ 🎛️ {Tên View Mode} • {Thu/Chi} v ]` (tự ẩn phần loại phát sinh nếu đang ở `Tất cả`).
+- **Cấu Trúc Thư Mục Chuẩn Atomic (L2 Molecule)**:
+  - Thư mục: `src/modules/bank-statements/components/molecules/bank-statement-view-mode-combobox/`.
+  - Đầy đủ các file vệ tinh: `BankStatementViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
+### 8.8. Chuẩn Hóa Xuất Excel Sao Kê Ngân Hàng & Hóa Đơn Cấn Trừ (`BankStatementExcelBuilder`)
+- **Phân rã Kiến Trúc theo `/api-service-refactor`**:
+  - `BankStatementExportBackgroundService`: Quản lý background jobs, SSE progress, fingerprint caching, file streaming (< 500 LoC).
+  - `BankStatementExcelBuilder` (đặt tại `services/bank-statement-excel.builder.ts`): Sub-service độc lập phụ trách 100% logic tạo workbook, 21 cột, styles 2-tone, borders và formulas (< 500 LoC).
+  - Clean DI Constructor: Inject 1 signature duy nhất, không overload, không union type.
+- **Chuẩn Hóa Date Serial Number (Pivot Table Date Grouping)**:
+  - Cột `Ngày GD` (transDate) được convert từ UTC sang ngày giờ GMT+7 (`Asia/Ho_Chi_Minh`) qua `toVietnamExcelDate` trong `src/common/utils/date.util.ts`.
+  - Lưu vào Excel dưới dạng đối tượng `Date` thực tế, kèm `numFmt: 'dd/mm/yyyy hh:mm:ss'`.
+  - Excel Pivot Table tự động nhận diện Date field và hỗ trợ gom nhóm (Grouping) theo Năm / Quý / Tháng / Ngày.
+- **Tích hợp Nhóm Cột Hóa Đơn Cấn Trừ (21 Cột Tổng Cộng)**:
+  - Truy vấn `erp_invoice_voucher_netoff` INNER JOIN `erp_invoices` LEFT JOIN `erp_branches`.
+  - 7 cột HĐ cấn trừ: `[HĐ] Chi nhánh`, `[HĐ] Ngày HĐ` (`dd/mm/yyyy`), `[HĐ] Số HĐ`, `[HĐ] Ký hiệu HĐ`, `[HĐ] Đối tác HĐ` (Tên + MST), `[HĐ] Nội dung HĐ`, `[HĐ] Tổng tiền HĐ (VND)` (`#,##0.00`).
+- **Hệ Thống Phân Biệt Thị Giác 2 Tông Màu (Visual 2-Tone Styling)**:
+  - **Khối 1 (Sao kê ngân hàng - Cột 1–14)**: Header màu Slate `FF334155`, body nền trắng.
+  - **Khối 2 (Hóa đơn cấn trừ - Cột 15–21)**: Header màu Emerald/Teal `FF065F46`, body nền pastel xanh dịu `FFF0FDF4`.
+  - **Đường biên phân cách**: Cột 15 có viền trái nét đôi (`double`) màu `FF065F46` giúp người dùng phân biệt tức thì ranh giới giữa 2 phân hệ trên Excel.
 
-
+### 8.9. Kiến Trúc Tiến Độ Xuất Dữ Liệu Nền Dual-Track Resilience (SSE + Adaptive Polling 2.5s)
+- **Chuẩn Hóa Theo Mẫu `erp-invoices-core`**:
+  - **SSE 15s Heartbeat Ping**: Endpoint `@Sse('export/excel/progress/stream')` trong `bank-transactions-core.controller.ts` chạy `setInterval` gửi event `{ processId: 'ping' }` mỗi 15s, chống rớt socket ngầm qua Nginx proxy và Cloudflare.
+  - **Adaptive Polling Fallback 2.5s**: `historyQuery` trong `BankStatementExportDrawer.hook.ts` tự động bật polling mỗi `2500ms` khi phát hiện có job `RUNNING` hoặc job vừa trigger chưa tải xong. API truy vấn từ RAM (`Map<string, Job>`), zero tải DB PostgreSQL, phản hồi < 2ms.
+  - **Two-Way Store Sync**: `useBankStatementExportSync.ts` đồng bộ ngược trạng thái `COMPLETED` từ lịch sử sang `useBankStatementExportProgressStore` (`current: 100`, `ready: true`) để chuyển Badge thành "Sẵn sàng tải" và tự động kích hoạt download ngay lập tức.
+  - **Manual Refresh**: Drawer tích hợp nút Refresh lịch sử tại `DrawerSection.titleExtra` cho phép người dùng chủ động tải lại danh sách bất kỳ lúc nào.

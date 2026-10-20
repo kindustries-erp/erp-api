@@ -1,0 +1,31 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { Update{{entityName}}Dto } from '../dto/update-{{entityKebab}}.dto';
+import { to{{entityName}}EntityFields } from '../helpers/{{entityKebab}}.mapper';
+
+/** Ghi dữ liệu: tạo, cập nhật, xóa mềm. Việc kiểm tra tồn tại do Facade đảm nhiệm. */
+@Injectable()
+export class {{entityName}}CommandService {
+  constructor(
+    @InjectRepository({{entityName}})
+    private readonly repo: Repository<{{entityName}}>,
+  ) {}
+
+  create(dto: Create{{entityName}}Dto): Promise<{{entityName}}> {
+    const entity = this.repo.create({ ...to{{entityName}}EntityFields(dto), isDeleted: false });
+    return this.repo.save(entity);
+  }
+
+  update(entity: {{entityName}}, dto: Update{{entityName}}Dto): Promise<{{entityName}}> {
+    Object.assign(entity, to{{entityName}}EntityFields(dto));
+    return this.repo.save(entity);
+  }
+
+  softDelete(entity: {{entityName}}): Promise<{{entityName}}> {
+    entity.isDeleted = true;
+    return this.repo.save(entity);
+  }
+}

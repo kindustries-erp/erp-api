@@ -13,7 +13,7 @@ Bất cứ khi nào làm việc với Database liên quan đến migration hay c
 ## 0. Quy tắc Database Connection (Bắt buộc)
 
 - **PostgreSQL Dedicated:** Môi trường hiện tại sử dụng PostgreSQL Dedicated / nội bộ (`db-dev.liouni.com:5433` hoặc local container). Không còn sử dụng Neon DB Cloud.
-- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env.local` hoặc `.env.production`).
+- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env` hoặc `.env.production`).
 - **Fallback `DB_HOST` / `DB_PORT`:** Nếu file `.env` không có `DATABASE_URL` nhưng có cấu hình `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, `DB_SSL`, runner sẽ tự động ghép chuỗi kết nối chuẩn `postgresql://USER:PASS@HOST:PORT/DB?sslmode=...`.
 - **Pooler Compatibility Guard:** Runner vẫn giữ bộ lọc tự động chuẩn hóa URL nếu gặp chuỗi kết nối pooler legacy để đảm bảo an toàn tuyệt đối khi chạy DDL migration.
 
@@ -44,7 +44,7 @@ Dựa vào câu lệnh của User, tự suy luận xem họ đang cần ở Mode
 ## 2. Quy Tắc Bắt Buộc
 
 1. **Luôn Xác Nhận Môi Trường (Env Files):**
-   - Không bao giờ được chạy ngầm. Phải xác định rõ file `.env.*` làm TARGET (ví dụ: `.env.production`, `.env.staging`, `.env.local`).
+   - Không bao giờ được chạy ngầm. Phải xác định rõ file `.env.*` làm TARGET (ví dụ: `.env.production`, `.env.staging`, `.env`).
 2. **Không tự gọi TypeORM trực tiếp:**
    - Bạn **BẮT BUỘC** phải gọi lệnh thông qua file `.agents/skills/db-migrate/scripts/typeorm-runner.sh` để hệ thống tự handle env, backup và pooler guard.
 3. **Ưu tiên Bun:**
@@ -74,16 +74,29 @@ bash .agents/skills/db-migrate/scripts/typeorm-runner.sh run <TARGET_ENV_FILE>
 ### Lệnh Mode 3 (Sync-Schema - CHỈ CẤU TRÚC, GIỮ NGUYÊN DATA)
 ```bash
 bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync-schema <TARGET_ENV_FILE>
-# Ví dụ: bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync-schema .env.local
+# Ví dụ: bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync-schema .env
 ```
 
 ### Lệnh Mode 4 (Sync Toàn bộ - Cảnh báo: Ghi đè DATA)
 ```bash
 bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync <SOURCE_ENV_FILE> <TARGET_ENV_FILE>
-# Ví dụ: bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync .env.production .env.local
+# Ví dụ: bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync .env.production .env
 ```
 
 ---
+
+## 3b. Thứ tự migration (bắt buộc đọc trước khi chạy `migration:run`)
+
+- Repo có 2 kiểu tên: epoch ms 13 số (`1791505856412-...`) và `YYYYMMDDHHmmss` 14 số (`20261013083000-...`). TypeORM mặc định lấy `parseInt(name.substr(-13))`, nên 14 số luôn bị sắp **trước** mọi epoch, sai thứ tự thời gian thật (lỗi Klotus 2026-10-18).
+- Runner hiện tại dùng `src/db/chronological-migration-executor.ts` (kế thừa `MigrationExecutor` của TypeORM, override `getMigrations`): sắp xếp theo ngày thật của cả hai kiểu. Khóa tính trong `src/db/migration-order.ts`.
+- Lệnh:
+  - `bun run migration:show`: liệt kê pending, không ghi.
+  - `bun run migration:run`: áp dụng pending (qua `src/db/run-migrations.ts`).
+  - `bun run migration:run:typeorm`: CLI gốc của TypeORM, chỉ để đối chiếu (dùng thứ tự cũ, không dùng cho pipeline).
+- Pipeline: `typeorm-runner.sh run` dùng `dist/db/run-migrations.js` khi có `dist/`, không có thì `ts-node`.
+- Không sửa tên migration đã chạy trên bất kỳ DB nào. Muốn đổi thứ tự thì thêm cặp vào `src/db/migration-order.repo.spec.ts`, không đổi tên file.
+- Migration mới có thể dùng epoch (`Date.now()`, plop `api-migration`) hoặc 14 số: cả hai đều được sắp đúng.
+- Trước khi chạy trên DB có dữ liệu: backup đầy đủ `pg_dump -Fc` vào `.agents/skills/db-migrate/backups/` (runner chỉ tạo schema `.sql`, không đủ để khôi phục dữ liệu), ghi log lần chạy cùng thư mục, rồi chạy `migration:show` xem danh sách pending.
 
 ## 4. Hướng dẫn Viết Migration EAV Mới (Idempotent Standard)
 

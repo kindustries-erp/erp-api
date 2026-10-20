@@ -11,7 +11,7 @@ import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
-import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
+import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -53,6 +53,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
+// plop:api-v2-imports
 
 @Module({
   imports: [
@@ -162,6 +163,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
     VinfastPartsModule,
     AppConfigModule,
     AiHubCoreModule,
+    // plop:api-v2-modules
   ],
   controllers: [AppController],
   providers: [

@@ -1,10 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GarageCashflowQueryEngine } from './engines/garage-cashflow-query.engine';
+import { GarageCashflowDuplicateEngine } from './engines/garage-cashflow-duplicate.engine';
 import { GarageCashflowTransactionService } from './garage-cashflow-transaction.service';
+import { GarageCashflowDashboardEngine } from './engines/garage-cashflow-dashboard.engine';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
   ListKgaraCashflowVoucherQueryDto,
+  KgaraCashflowVoucherResponseDto,
+  ListKgaraCashflowVouchersResponseDto,
+  CheckKgaraCashflowDuplicateQueryDto,
+  KgaraCashflowDuplicateResponseDto,
+  GarageCashflowDashboardQueryDto,
+  GarageCashflowDashboardResponseDto,
 } from '../dto/garage-cashflow.dto';
 
 @Injectable()
@@ -14,22 +22,39 @@ export class GarageCashflowService {
   constructor(
     private readonly queryEngine: GarageCashflowQueryEngine,
     private readonly transactionService: GarageCashflowTransactionService,
+    private readonly duplicateEngine: GarageCashflowDuplicateEngine,
+    private readonly dashboardEngine: GarageCashflowDashboardEngine,
   ) {}
 
-  async createVoucher(dto: CreateKgaraCashflowVoucherDto) {
-    return this.transactionService.createVoucher(dto);
+  async findPotentialDuplicates(
+    query: CheckKgaraCashflowDuplicateQueryDto,
+  ): Promise<KgaraCashflowDuplicateResponseDto> {
+    return this.duplicateEngine.findPotentialDuplicates(query);
   }
 
-  async updateVoucher(id: string, dto: UpdateKgaraCashflowVoucherDto) {
-    return this.transactionService.updateVoucher(id, dto);
+  async createVoucher(
+    dto: CreateKgaraCashflowVoucherDto,
+    user?: { sub?: string; email?: string },
+  ): Promise<KgaraCashflowVoucherResponseDto> {
+    return this.transactionService.createVoucher(dto, user);
   }
 
-  async deleteVoucher(id: string) {
-    return this.transactionService.deleteVoucher(id);
+  async updateVoucher(
+    id: string,
+    dto: UpdateKgaraCashflowVoucherDto,
+    user?: { sub?: string; email?: string },
+  ): Promise<KgaraCashflowVoucherResponseDto> {
+    return this.transactionService.updateVoucher(id, dto, user);
   }
 
-  async getDashboardStats() {
-    return this.queryEngine.getDashboardStats();
+  async deleteVoucher(id: string, user?: { sub?: string; email?: string }) {
+    return this.transactionService.deleteVoucher(id, user);
+  }
+
+  async getDashboardStats(
+    query: GarageCashflowDashboardQueryDto = {},
+  ): Promise<GarageCashflowDashboardResponseDto> {
+    return this.dashboardEngine.getDashboardStats(query);
   }
 
   async getColumnOptions(
@@ -48,7 +73,9 @@ export class GarageCashflowService {
     );
   }
 
-  async listVouchers(query: ListKgaraCashflowVoucherQueryDto) {
+  async listVouchers(
+    query: ListKgaraCashflowVoucherQueryDto,
+  ): Promise<ListKgaraCashflowVouchersResponseDto> {
     return this.queryEngine.listVouchers(query);
   }
 }

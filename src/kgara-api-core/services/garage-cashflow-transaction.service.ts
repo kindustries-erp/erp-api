@@ -2,20 +2,38 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { AuditCoreService } from '../../audit-core/audit-core.service';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
+  KgaraCashflowVoucherResponseDto,
+  toKgaraCashflowVoucherResponse,
 } from '../dto/garage-cashflow.dto';
 import { extractNetPayableAmount } from '../utils/kgara-parser.util';
+import {
+  isDebtOffsetPayment,
+  isPaymentLocked,
+  shouldHaveSettlement,
+  type GaragePaymentStatus,
+} from '../helpers/garage-cashflow-payment-rules';
+import {
+  removeOpexForVoucher,
+  syncOpexFromVoucher,
+} from '../helpers/garage-cashflow-opex-sync.helper';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GarageCashflowTransactionService {
+  private readonly logger = new Logger(GarageCashflowTransactionService.name);
+
   constructor(
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
@@ -24,11 +42,16 @@ export class GarageCashflowTransactionService {
     @InjectRepository(KgaraCase)
     private readonly caseRepo: Repository<KgaraCase>,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly auditCoreService?: AuditCoreService,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   async createVoucher(
     dto: CreateKgaraCashflowVoucherDto,
-  ): Promise<KgaraCashflowVoucher> {
+    user?: { sub?: string; email?: string },
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -58,20 +81,42 @@ export class GarageCashflowTransactionService {
         caseRef = kCase;
       }
 
+      let paymentStatus: GaragePaymentStatus | null = null;
+      if (dto.voucherType === 'PAYMENT') {
+        paymentStatus = dto.paymentStatus || 'PENDING';
+      } else if (dto.voucherType === 'RECEIPT') {
+        paymentStatus = dto.paymentStatus || 'PAID';
+      }
+
       const newVoucher = queryRunner.manager.create(KgaraCashflowVoucher, {
         voucherCode: generatedCode,
         voucherType: dto.voucherType,
+        paymentStatus,
         amount: dto.amount,
         transDate: dto.transDate || now.toISOString().slice(0, 10),
         caseId: dto.caseId || undefined,
+        licensePlate: dto.licensePlate || caseRef?.bienSoXe || undefined,
+        paymentMethod: dto.paymentMethod || undefined,
+        paymentContent: dto.paymentContent || undefined,
+        partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
         note: dto.note || undefined,
+        createdBy: user?.email || user?.sub || 'Hệ thống',
       });
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
 
-      if (dto.caseId) {
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: savedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
+      }
+
+      if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
         if (dto.paymentMethod === 'Chuyển khoản')
           paymentMethod = 'BANK_TRANSFER';
@@ -97,12 +142,29 @@ export class GarageCashflowTransactionService {
           partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
         await queryRunner.manager.save(newSettlement);
+      }
 
+      if (dto.caseId) {
         await this._recalculateCaseDebt(queryRunner, dto.caseId);
       }
 
       await queryRunner.commitTransaction();
-      return savedVoucher;
+      await this.syncReceiptForecast([dto.caseId]);
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'CREATE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: savedVoucher.id,
+          message: `Khởi tạo ${savedVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${savedVoucher.voucherCode} (${Number(savedVoucher.amount).toLocaleString('vi-VN')} đ)`,
+          afterSnapshot: { ...savedVoucher },
+        });
+      }
+
+      return toKgaraCashflowVoucherResponse(savedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -114,7 +176,8 @@ export class GarageCashflowTransactionService {
   async updateVoucher(
     id: string,
     dto: UpdateKgaraCashflowVoucherDto,
-  ): Promise<KgaraCashflowVoucher> {
+    user?: { sub?: string; email?: string },
+  ): Promise<KgaraCashflowVoucherResponseDto> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -138,7 +201,50 @@ export class GarageCashflowTransactionService {
       const oldType = existingVoucher.voucherType;
       const newType = dto.voucherType !== undefined ? dto.voucherType : oldType;
 
+      if (isPaymentLocked(existingVoucher)) {
+        if (
+          dto.paymentStatus !== undefined &&
+          dto.paymentStatus !== existingVoucher.paymentStatus
+        ) {
+          throw new BadRequestException(
+            'Phiếu chi đã ở trạng thái Đã chi, không thể cập nhật lại trạng thái thanh toán.',
+          );
+        }
+        if (newType !== 'PAYMENT') {
+          throw new BadRequestException(
+            'Phiếu chi đã ở trạng thái Đã chi, không thể đổi loại phiếu.',
+          );
+        }
+      }
+
+      const beforeSnapshot = { ...existingVoucher };
       queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
+      if (newType === 'PAYMENT') {
+        if (dto.paymentStatus !== undefined) {
+          existingVoucher.paymentStatus = dto.paymentStatus;
+        } else if (
+          !existingVoucher.paymentStatus ||
+          existingVoucher.paymentStatus === 'EXPECTED'
+        ) {
+          existingVoucher.paymentStatus = 'PENDING';
+        }
+      } else if (newType === 'RECEIPT') {
+        if (dto.paymentStatus !== undefined) {
+          existingVoucher.paymentStatus = dto.paymentStatus;
+        } else if (!existingVoucher.paymentStatus) {
+          existingVoucher.paymentStatus = 'PAID';
+        }
+      }
+      if (
+        newCaseId &&
+        dto.licensePlate === undefined &&
+        (!existingVoucher.licensePlate || oldCaseId !== newCaseId)
+      ) {
+        const kCase = await queryRunner.manager.findOne(KgaraCase, {
+          where: { id: newCaseId },
+        });
+        if (kCase?.bienSoXe) existingVoucher.licensePlate = kCase.bienSoXe;
+      }
       const updatedVoucher = await queryRunner.manager.save(existingVoucher);
 
       const existingSettlement = await queryRunner.manager.findOne(
@@ -148,8 +254,20 @@ export class GarageCashflowTransactionService {
         },
       );
 
+      if (this.garageHub) {
+        await this.garageHub.handleCashflowSettled(
+          { voucher: updatedVoucher, user },
+          queryRunner.manager,
+        );
+      } else {
+        await syncOpexFromVoucher(queryRunner.manager, updatedVoucher);
+      }
+
+      const wantsSettlement =
+        !!newCaseId && shouldHaveSettlement(updatedVoucher);
+
       if (existingSettlement) {
-        if (newCaseId === null && oldCaseId) {
+        if (!wantsSettlement) {
           await queryRunner.manager.remove(existingSettlement);
         } else {
           existingSettlement.caseId = newCaseId || undefined;
@@ -177,7 +295,7 @@ export class GarageCashflowTransactionService {
           }
           await queryRunner.manager.save(existingSettlement);
         }
-      } else if (newCaseId) {
+      } else if (wantsSettlement) {
         let partnerName: string | undefined = undefined;
         const kCase = await queryRunner.manager.findOne(KgaraCase, {
           where: { id: newCaseId },
@@ -218,8 +336,38 @@ export class GarageCashflowTransactionService {
         await this._recalculateCaseDebt(queryRunner, newCaseId);
       }
 
+      if (updatedVoucher.caseId) {
+        const kCase = await queryRunner.manager.findOne(KgaraCase, {
+          where: { id: updatedVoucher.caseId },
+          select: [
+            'id',
+            'soChungTu',
+            'bienSoXe',
+            'khachHangName',
+            'khachHangCode',
+          ],
+        });
+        if (kCase) updatedVoucher.case = kCase;
+      }
+
       await queryRunner.commitTransaction();
-      return updatedVoucher;
+      await this.syncReceiptForecast([oldCaseId, newCaseId]);
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'UPDATE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: updatedVoucher.id,
+          message: `Cập nhật ${updatedVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${updatedVoucher.voucherCode}`,
+          beforeSnapshot,
+          afterSnapshot: { ...updatedVoucher },
+        });
+      }
+
+      return toKgaraCashflowVoucherResponse(updatedVoucher);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -228,7 +376,10 @@ export class GarageCashflowTransactionService {
     }
   }
 
-  async deleteVoucher(id: string): Promise<void> {
+  async deleteVoucher(
+    id: string,
+    user?: { sub?: string; email?: string },
+  ): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -264,6 +415,7 @@ export class GarageCashflowTransactionService {
         await queryRunner.manager.remove(existingSettlement);
       }
 
+      await removeOpexForVoucher(queryRunner.manager, id);
       await queryRunner.manager.remove(existingVoucher);
 
       if (relatedCaseId) {
@@ -271,11 +423,45 @@ export class GarageCashflowTransactionService {
       }
 
       await queryRunner.commitTransaction();
+      await this.syncReceiptForecast([relatedCaseId]);
+
+      if (this.auditCoreService) {
+        this.auditCoreService.recordAction({
+          actorUserId: user?.sub || null,
+          actorEmail: user?.email || null,
+          actionType: 'DELETE',
+          module: 'garage',
+          entityType: 'garage_cashflow_voucher',
+          entityId: id,
+          message: `Xóa ${existingVoucher.voucherType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${existingVoucher.voucherCode}`,
+          beforeSnapshot: { ...existingVoucher },
+        });
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  /**
+   * Sau khi giao dịch đã lưu: đặt lại dự thu của các phiếu dịch vụ bị ảnh hưởng theo còn phải thu.
+   * Lỗi chỉ ghi log, không làm hỏng thao tác phiếu thu chi của người dùng.
+   */
+  private async syncReceiptForecast(
+    caseIds: (string | null | undefined)[],
+  ): Promise<void> {
+    if (!this.garageHub) return;
+    const ids = new Set(caseIds.filter((id): id is string => !!id));
+    for (const caseId of ids) {
+      try {
+        await this.garageHub.handleCaseReceiptChanged(caseId);
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to sync receipt forecast for case ${caseId}: ${error?.message}`,
+        );
+      }
     }
   }
 

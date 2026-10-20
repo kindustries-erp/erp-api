@@ -15,6 +15,7 @@ import { KgaraCaseService } from '../entities/kgara_case_service.entity';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 describe('KgaraCaseQueryService', () => {
   let service: KgaraCaseQueryService;
@@ -161,6 +162,10 @@ describe('KgaraCaseQueryService', () => {
         {
           provide: getRepositoryToken(KgaraCaseLinkedInvoice),
           useValue: mockLinkedInvoiceRepo,
+        },
+        {
+          provide: GarageHubService,
+          useValue: { getCaseLedger: jest.fn().mockResolvedValue({}) },
         },
       ],
     }).compile();

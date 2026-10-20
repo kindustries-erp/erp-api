@@ -1,11 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
+import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { GarageOpexService } from './garage-opex.service';
 import { ListGarageOpexQueryDto } from '../dto/garage-opex.dto';
+import {
+  PAYMENT_CONTENT_SALE_COMMISSION,
+  PAYMENT_CONTENT_DV_COMMISSION,
+} from '../helpers/garage-cashflow-payment-rules';
+import { GarageHubService } from '../hub/garage-hub.service';
 
 @Injectable()
 export class GaragePnlService {
@@ -15,6 +22,12 @@ export class GaragePnlService {
     @InjectRepository(KgaraCase)
     private readonly caseRepo: Repository<KgaraCase>,
     private readonly opexService: GarageOpexService,
+    @InjectRepository(KgaraOperatingExpense)
+    private readonly opexRepo: Repository<KgaraOperatingExpense>,
+    @InjectRepository(KgaraCashflowVoucher)
+    private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
+    @Optional()
+    private readonly garageHub?: GarageHubService,
   ) {}
 
   /**
@@ -158,9 +171,20 @@ export class GaragePnlService {
       },
     ];
 
+    // HHBH (phiếu chi 4) thuộc mục 4.2 Chi phí bán hàng, không còn nằm trong giá vốn
+    const hhbhTotal = opexSummary.selling.total || 0;
+    const hhbhOjTotal = opexSummary.selling.ojTotal || 0;
+    sellingItems.push({
+      categoryKey: 'HHBH',
+      categoryName: 'HHBH',
+      amount: hhbhTotal,
+      ojAmount: hhbhOjTotal,
+      note: 'Từ phiếu chi nội dung 4. HHBH (Đã duyệt / Đã chi)',
+    });
+
     const sellingExpenses = {
-      total: saleCommission,
-      ojTotal: 0,
+      total: saleCommission + hhbhTotal,
+      ojTotal: hhbhOjTotal,
       items: sellingItems,
     };
 
@@ -223,7 +247,7 @@ export class GaragePnlService {
     const ojDirectCostTotal = opexSummary.directCost.ojTotal || 0;
     const ojCogs = ojCogsDirect + ojDirectCostTotal;
     const ojGrossProfit = ojRevenue - ojCogs;
-    const ojSellingExpensesTotal = 0;
+    const ojSellingExpensesTotal = opexSummary.selling.ojTotal || 0;
     const ojOpexTotal = opexSummary.opex.ojTotal || 0;
     const ojNetProfit = ojGrossProfit - ojSellingExpensesTotal - ojOpexTotal;
     const ojSaleCommission = 0; // OJ không tính hoa hồng ký gửi sale
@@ -234,7 +258,7 @@ export class GaragePnlService {
     const ojNetProfitAfterCommission =
       ojNetProfit - ojDvCommission - manualCommissionOjTotal;
 
-    return {
+    const result = {
       period: { year: currentYear, month: currentMonth },
       periodStr: `${String(currentMonth).padStart(2, '0')}/${currentYear}`,
       caseCount,
@@ -244,6 +268,40 @@ export class GaragePnlService {
       cogsAdjustment: opexSummary.directCost,
       grossProfit,
       grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
+
+      // Doanh thu / giá vốn từ phiếu theo phân loại (cấp 2-3 của báo cáo lợi nhuận);
+      // "Khác" là phần còn lại nên tổng 4 nhóm luôn bằng tổng doanh thu
+      revenueByClassification: [
+        {
+          key: 'KY_GUI',
+          label: 'Ký gửi / Nội bộ',
+          caseCount: kyGuiCaseCount,
+          revenue: kyGuiRevenue,
+          cogs: kyGuiCogs,
+        },
+        {
+          key: 'SUA_CHUA_CHUNG',
+          label: 'Sửa chữa chung',
+          caseCount: suaChuaChungCaseCount,
+          revenue: suaChuaChungRevenue,
+          cogs: suaChuaChungCogs,
+        },
+        {
+          key: 'OJ',
+          label: 'OJ',
+          caseCount: ojCaseCount,
+          revenue: ojRevenue,
+          cogs: ojCogsDirect,
+        },
+        {
+          key: 'KHAC',
+          label: 'Khác',
+          caseCount:
+            caseCount - kyGuiCaseCount - suaChuaChungCaseCount - ojCaseCount,
+          revenue: revenue - kyGuiRevenue - suaChuaChungRevenue - ojRevenue,
+          cogs: cogsDirect - kyGuiCogs - suaChuaChungCogs - ojCogsDirect,
+        },
+      ],
 
       // Chi tiết mảng Ký gửi / Nội bộ (từ kgara_cases.classification)
       kyGui: {
@@ -345,6 +403,252 @@ export class GaragePnlService {
         netMarginRate:
           ojRevenue > 0 ? (ojNetProfitAfterCommission / ojRevenue) * 100 : 0,
       },
+    };
+
+    // Tự động đồng bộ song song hoa hồng P&L vào OPEX & Cashflow Vouchers (không làm chậm/lỗi báo cáo)
+    this.syncCommissionVouchers(currentYear, currentMonth, result).catch(
+      (err) => {
+        this.logger.error(
+          `Lỗi tự động đồng bộ hoa hồng P&L kỳ ${currentMonth}/${currentYear}: ${err.message}`,
+          err.stack,
+        );
+      },
+    );
+
+    return result;
+  }
+
+  /**
+   * Tự động đồng bộ song song hoa hồng P&L vào OPEX (kgara_operating_expenses)
+   * và Cashflow Vouchers (kgara_cashflow_vouchers)
+   */
+  async syncCommissionVouchers(
+    year: number,
+    month: number,
+    pnlReport?: any,
+  ): Promise<{
+    year: number;
+    month: number;
+    saleCommission: number;
+    dvCommission: number;
+    syncedVouchers: number;
+    createdVouchers: number;
+    updatedVouchers: number;
+    deltaVouchers: number;
+    syncedOpex: number;
+  }> {
+    const pnl = pnlReport || (await this.getPnlReport(year, month));
+    const saleCommission = Number(pnl.commission?.auto?.saleCommission) || 0;
+    const dvCommission = Number(pnl.commission?.auto?.dvCommission) || 0;
+    const kyGuiProfitRate = Number(pnl.commission?.auto?.kyGuiProfitRate) || 0;
+
+    if (this.garageHub) {
+      return this.garageHub.handlePnlCommissionSync({
+        year,
+        month,
+        saleCommission,
+        dvCommission,
+        kyGuiProfitRate,
+      });
+    }
+
+    let syncedVouchers = 0;
+    let createdVouchers = 0;
+    let updatedVouchers = 0;
+    let deltaVouchers = 0;
+    let syncedOpex = 0;
+
+    const commissionConfigs = [
+      {
+        type: 'HOA_HONG_SALE' as const,
+        amount: saleCommission,
+        paymentContent: PAYMENT_CONTENT_SALE_COMMISSION,
+        categoryKey: 'HOA_HONG_SALE',
+        categoryName: 'Hoa hồng cho Sale (10%)',
+        calcNote: `10% LN ký gửi (${kyGuiProfitRate.toFixed(1)}% tỷ lệ ký gửi)`,
+      },
+      {
+        type: 'HOA_HONG_DV' as const,
+        amount: dvCommission,
+        paymentContent: PAYMENT_CONTENT_DV_COMMISSION,
+        categoryKey: 'HOA_HONG_DV',
+        categoryName: 'Hoa hồng cho DV (10%)',
+        calcNote: '10% LN ròng sau trừ HH Sale',
+      },
+    ];
+
+    for (const item of commissionConfigs) {
+      // 1. Đồng bộ vào bảng kgara_operating_expenses (bản ghi thật)
+      let opex = await this.opexRepo.findOne({
+        where: {
+          periodYear: year,
+          periodMonth: month,
+          categoryKey: item.categoryKey,
+        },
+      });
+
+      const opexNote = `Tự động tính từ P&L (${item.calcNote})`;
+      if (!opex) {
+        opex = this.opexRepo.create({
+          periodYear: year,
+          periodMonth: month,
+          categoryKey: item.categoryKey,
+          categoryName: item.categoryName,
+          amount: item.amount,
+          ojAmount: 0,
+          note: opexNote,
+        });
+      } else {
+        opex.amount = item.amount;
+        opex.note = opexNote;
+      }
+      await this.opexRepo.save(opex);
+      syncedOpex++;
+
+      // 2. Đồng bộ vào bảng kgara_cashflow_vouchers
+      const existingVouchers = await this.voucherRepo.find({
+        where: {
+          pnlPeriodYear: year,
+          pnlPeriodMonth: month,
+          pnlCommissionType: item.type,
+          isAutoCommission: true,
+        },
+        order: { createdAt: 'ASC' },
+      });
+
+      const paidVouchers = existingVouchers.filter(
+        (v) => v.paymentStatus === 'PAID',
+      );
+      const activePending = existingVouchers.find(
+        (v) => v.paymentStatus === 'PENDING' || v.paymentStatus === 'APPROVED',
+      );
+
+      const periodStr = `${String(month).padStart(2, '0')}/${year}`;
+      let nextMonthYear = year;
+      let nextMonth = month + 1;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextMonthYear += 1;
+      }
+      const defaultTransDate = `${nextMonthYear}-${String(nextMonth).padStart(2, '0')}-10`;
+
+      if (paidVouchers.length > 0) {
+        // ĐÃ CÓ PHIẾU ĐÃ CHI (PAID): Khóa cứng số tiền đã chi, tính chênh lệch delta
+        const totalPaid = paidVouchers.reduce(
+          (sum, v) => sum + (Number(v.amount) || 0),
+          0,
+        );
+        const delta = item.amount - totalPaid;
+
+        if (delta > 0) {
+          // Cần chi thêm phần chênh lệch tăng
+          const primaryPaid = paidVouchers[0];
+          const deltaNote = `Chênh lệch P&L Tháng ${periodStr} (tăng thêm ${delta.toLocaleString('vi-VN')} đ so với phiếu ${primaryPaid.voucherCode} đã chi)`;
+
+          if (activePending) {
+            activePending.amount = delta;
+            activePending.note = deltaNote;
+            activePending.paymentContent = item.paymentContent;
+            await this.voucherRepo.save(activePending);
+            updatedVouchers++;
+          } else {
+            const dateStr = new Date()
+              .toISOString()
+              .slice(2, 10)
+              .replace(/-/g, '');
+            const randomSeq = Math.floor(Math.random() * 1000)
+              .toString()
+              .padStart(3, '0');
+            const voucherCode = `PC-GARA-${dateStr}-${randomSeq}`;
+
+            const newDeltaVoucher = this.voucherRepo.create({
+              voucherCode,
+              voucherType: 'PAYMENT',
+              amount: delta,
+              transDate: defaultTransDate,
+              paymentContent: item.paymentContent,
+              paymentStatus: 'PENDING',
+              isAutoCommission: true,
+              pnlPeriodYear: year,
+              pnlPeriodMonth: month,
+              pnlCommissionType: item.type,
+              pnlCommissionAnchorId: primaryPaid.id,
+              note: deltaNote,
+              createdBy: 'Hệ thống P&L',
+            });
+            await this.voucherRepo.save(newDeltaVoucher);
+            createdVouchers++;
+            deltaVouchers++;
+          }
+        } else if (delta === 0) {
+          // Khớp số liệu với số đã chi: nếu có phiếu pending thừa thì xóa
+          if (activePending) {
+            await this.voucherRepo.remove(activePending);
+          }
+        } else {
+          // delta < 0: P&L sau điều chỉnh giảm xuống thấp hơn số đã chi
+          if (activePending) {
+            await this.voucherRepo.remove(activePending);
+          }
+          this.logger.warn(
+            `Hoa hồng P&L ${item.type} tháng ${periodStr} (${item.amount}) thấp hơn số đã chi (${totalPaid}), delta: ${delta}`,
+          );
+        }
+      } else {
+        // CHƯA CÓ PHIẾU NÀO ĐÃ CHI (PAID)
+        const note = `${item.paymentContent} Tháng ${periodStr} - ${item.amount.toLocaleString('vi-VN')} đ (${item.calcNote})`;
+
+        if (activePending) {
+          // Cập nhật lại số tiền và ngày cashflow cho phiếu đang chờ duyệt
+          activePending.amount = item.amount;
+          activePending.transDate = defaultTransDate;
+          activePending.paymentContent = item.paymentContent;
+          activePending.note = note;
+          activePending.partnerName = undefined;
+          await this.voucherRepo.save(activePending);
+          updatedVouchers++;
+        } else if (item.amount > 0) {
+          // Tạo phiếu mới ở trạng thái PENDING
+          const dateStr = new Date()
+            .toISOString()
+            .slice(2, 10)
+            .replace(/-/g, '');
+          const randomSeq = Math.floor(Math.random() * 1000)
+            .toString()
+            .padStart(3, '0');
+          const voucherCode = `PC-GARA-${dateStr}-${randomSeq}`;
+
+          const newVoucher = this.voucherRepo.create({
+            voucherCode,
+            voucherType: 'PAYMENT',
+            amount: item.amount,
+            transDate: defaultTransDate,
+            paymentContent: item.paymentContent,
+            paymentStatus: 'PENDING',
+            isAutoCommission: true,
+            pnlPeriodYear: year,
+            pnlPeriodMonth: month,
+            pnlCommissionType: item.type,
+            note,
+            createdBy: 'Hệ thống P&L',
+          });
+          await this.voucherRepo.save(newVoucher);
+          createdVouchers++;
+        }
+      }
+      syncedVouchers++;
+    }
+
+    return {
+      year,
+      month,
+      saleCommission,
+      dvCommission,
+      syncedVouchers,
+      createdVouchers,
+      updatedVouchers,
+      deltaVouchers,
+      syncedOpex,
     };
   }
 
@@ -456,8 +760,19 @@ export class GaragePnlService {
         updatedAt: new Date(),
       };
 
-      // Kiểm tra filter theo query
-      const candidates = [autoSale, autoDv];
+      // Kiểm tra xem DB đã có bản ghi thật cho kỳ này chưa (tránh trùng lặp)
+      const dbKeysForPeriod = new Set(
+        dbResult.data
+          .filter((d) => d.periodYear === p.year && d.periodMonth === p.month)
+          .map((d) => d.categoryKey),
+      );
+      const candidates: any[] = [];
+      if (!dbKeysForPeriod.has('HOA_HONG_SALE')) {
+        candidates.push(autoSale);
+      }
+      if (!dbKeysForPeriod.has('HOA_HONG_DV')) {
+        candidates.push(autoDv);
+      }
       for (const item of candidates) {
         let match = true;
         if (query.column_filters) {
@@ -753,6 +1068,18 @@ export class GaragePnlService {
         isChild: true,
       });
     }
+
+    // 4.2. HHBH (từ phiếu chi 4. HHBH), không ghi tỷ lệ %
+    rowsData.push({
+      category: '   4.2. HHBH',
+      amount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.amount ?? 0,
+      ojAmount:
+        report.sellingExpenses.items.find((i) => i.categoryKey === 'HHBH')
+          ?.ojAmount ?? 0,
+      isChild: true,
+    });
 
     // 5. CHI PHÍ VẬN HÀNH (OPEX)
     rowsData.push({

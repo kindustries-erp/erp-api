@@ -494,6 +494,74 @@ describe('InvoiceQueryService', () => {
     );
   });
 
+  it('exportExcel filters summary sheet columns when selected_columns is provided', async () => {
+    const rawRows = [
+      {
+        id: 'inv-1',
+        invoiceDate: '2026-08-01',
+        serialNo: 'C26TAA',
+        invoiceNo: '0000001',
+        sellerName: 'NCC VinFast',
+        sellerTaxCode: '0108926913',
+        totalAmount: 1100000,
+        preVatAmount: 1000000,
+        vatAmount: 100000,
+        branchId: 'branch-1',
+        items: [],
+      },
+    ];
+
+    const repository: any = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(rawRows),
+      }),
+      manager: {
+        query: jest.fn().mockResolvedValue([]),
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          leftJoin: jest.fn().mockReturnThis(),
+          from: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          addOrderBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
+        }),
+      },
+    };
+
+    const service = createInvoiceQueryService(repository);
+    const buffer = await service.exportExcel({
+      direction: 'IN',
+      selected_columns: ['invoiceNo', 'partnerName', 'total'],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+
+    const summarySheet = workbook.getWorksheet('Bảng kê');
+    expect(summarySheet).toBeDefined();
+
+    // Headers at row 4
+    const headers = (summarySheet!.getRow(4).values as any[]).filter(Boolean);
+    expect(headers).toEqual([
+      'Số hóa đơn',
+      'Tên đơn vị khách hàng',
+      'Thành tiền',
+    ]);
+
+    // Data at row 5
+    const row1 = summarySheet!.getRow(5);
+    expect(row1.getCell(1).value).toBe('0000001');
+    expect(row1.getCell(2).value).toBe('NCC VinFast');
+    expect(row1.getCell(3).value).toBe(1100000);
+  });
+
   it('findAllItems queries items and returns paginated result with summary', async () => {
     const itemQb: any = {
       innerJoin: jest.fn().mockReturnThis(),

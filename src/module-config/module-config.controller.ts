@@ -13,6 +13,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { ErpAction, ErpResource } from '../rbac-core/enums';
+import { AuditLog } from '../audit-core/decorators/audit-log.decorator';
+import { EntityValuesPermissionGuard } from './guards/entity-values-permission.guard';
 import { ModuleConfigService } from './module-config.service';
 import { CreateModuleCategoryDto } from './dto/create-module-category.dto';
 import { UpdateModuleCategoryDto } from './dto/update-module-category.dto';
@@ -22,7 +27,7 @@ import { SaveEntityValuesDto } from './dto/save-entity-values.dto';
 
 @ApiTags('erp_module_config')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller(['module-config', 'bom-config'])
 export class ModuleConfigController {
   constructor(private readonly service: ModuleConfigService) {}
@@ -34,11 +39,21 @@ export class ModuleConfigController {
     return this.service.getCategories(moduleKey);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_category' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Post('categories')
   createCategory(@Body() dto: CreateModuleCategoryDto) {
     return this.service.createCategory(dto);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_category' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Patch('categories/:id')
   updateCategory(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -47,6 +62,11 @@ export class ModuleConfigController {
     return this.service.updateCategory(id, dto);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_category' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Delete('categories/:id')
   deleteCategory(@Param('id', new ParseUUIDPipe()) id: string): Promise<any> {
     return this.service.deleteCategory(id);
@@ -72,11 +92,21 @@ export class ModuleConfigController {
     return this.service.getAttributeDefs(categoryId, isGlobalBool, moduleKey);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_attribute_def' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Post('attribute-defs')
   createAttributeDef(@Body() dto: CreateModuleAttrDefDto) {
     return this.service.createAttributeDef(dto);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_attribute_def' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Patch('attribute-defs/:id')
   updateAttributeDef(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -90,6 +120,11 @@ export class ModuleConfigController {
     return this.service.getAttributeOptionsUsage(id);
   }
 
+  @AuditLog({ module: 'module-config', entityType: 'module_attribute_def' })
+  @RequirePermissions({
+    resource: ErpResource.CUSTOM_FIELDS,
+    action: ErpAction.MANAGE,
+  })
   @Delete('attribute-defs/:id')
   deleteAttributeDef(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -107,6 +142,7 @@ export class ModuleConfigController {
     return this.service.getEntityValues(entityType, entityId);
   }
 
+  @UseGuards(EntityValuesPermissionGuard)
   @Put('values/:entityType/:entityId')
   saveEntityValues(
     @Param('entityType') entityType: string,

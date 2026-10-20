@@ -24,6 +24,10 @@ export class ErpModuleCategory {
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;
 
+  /** Khóa nghiệp vụ do code sở hữu (vd OJ, INTERNAL); `code` admin được phép đổi tự do. */
+  @Column({ type: 'varchar', length: 50, name: 'semantic_key', nullable: true })
+  semanticKey: string | null;
+
   @Column({ type: 'varchar', length: 255, name: 'name' })
   name: string;
 

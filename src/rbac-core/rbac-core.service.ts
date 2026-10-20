@@ -490,6 +490,8 @@ export class RbacCoreService {
       { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
       { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
+      { resource: 'garage_debts', label: 'Công nợ Garage' },
+      { resource: 'garage_cashflow', label: 'Thu chi xưởng (Garage Cashflow)' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',

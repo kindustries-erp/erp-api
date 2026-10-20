@@ -2,9 +2,11 @@ import { Logger } from '@nestjs/common';
 
 /**
  * Các mốc giờ đồng bộ chuẩn hóa trong ngày (Múi giờ Asia/Ho_Chi_Minh, GMT+7)
- * 09:15 (Sáng), 15:15 (Chiều), 16:15 (Tiến độ chiều), 17:15 (Chốt ca chiều), 21:15 (Tối)
+ * Chạy mỗi giờ vào phút :15, từ 09:15 đến 21:15 (13 mốc/ngày)
  */
-export const SYNC_HOURS = [9, 15, 16, 17, 21] as const;
+export const SYNC_HOURS = [
+  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+] as const;
 export const SYNC_MINUTE = 15;
 
 /**
@@ -92,7 +94,7 @@ export function getVnDateTimeParts(date: Date = new Date()): {
 
 /**
  * Kiểm tra thời gian hiện tại có nằm trong cửa sổ đồng bộ cho phép hay không:
- * 09:15 - 09:59, 15:15 - 15:59, 16:15 - 16:59, 17:15 - 17:59, 21:15 - 21:59 (Asia/Ho_Chi_Minh timezone, GMT+7)
+ * phút :15 - :59 của mỗi giờ từ 09h đến 21h (Asia/Ho_Chi_Minh timezone, GMT+7)
  */
 export function isWithinSyncWindow(date: Date = new Date()): boolean {
   const { hour, minute } = getVnDateTimeParts(date);
@@ -125,7 +127,7 @@ export function getSyncSlotKey(date: Date = new Date()): {
 }
 
 /**
- * Lấy mốc giờ tiếp theo trong ngày (09:15, 15:15, 16:15, 17:15, 21:15 Asia/Ho_Chi_Minh)
+ * Lấy mốc giờ tiếp theo trong ngày (mỗi giờ :15 từ 09:15 đến 21:15 Asia/Ho_Chi_Minh)
  */
 export function getNextSyncSlot(date: Date = new Date()): {
   nextSlotDate: Date;

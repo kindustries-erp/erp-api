@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
-import { ListKgaraCashflowVoucherQueryDto } from '../../dto/garage-cashflow.dto';
+import {
+  ListKgaraCashflowVoucherQueryDto,
+  KgaraCashflowVoucherResponseDto,
+  ListKgaraCashflowVouchersResponseDto,
+  toKgaraCashflowVoucherResponse,
+} from '../../dto/garage-cashflow.dto';
 import { applyMultiKeywordFilter } from '../../../common/utils/query-builder.util';
 
 @Injectable()
@@ -107,10 +112,26 @@ export class GarageCashflowQueryEngine {
 
     let selectField = '';
     if (column === 'voucherCode') selectField = 'voucher.voucher_code';
-    else if (column === 'partnerName') selectField = 'case.khachHangName';
+    else if (column === 'partnerName')
+      selectField = 'COALESCE(voucher.partner_name, case.khach_hang_name)';
+    else if (column === 'licensePlate')
+      selectField = 'COALESCE(voucher.license_plate, case.bien_so_xe)';
+    else if (column === 'paymentMethod') selectField = 'voucher.payment_method';
+    else if (column === 'paymentContent')
+      selectField = 'voucher.payment_content';
     else if (column === 'note') selectField = 'voucher.note';
-    else if (column === 'caseCode') selectField = 'case.soChungTu';
-    else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+    else if (column === 'caseCode') selectField = 'case.so_chung_tu';
+    else if (column === 'transDate') selectField = 'voucher.trans_date';
+    else if (column === 'thu') {
+      selectField = 'voucher.amount';
+      qb.andWhere("voucher.voucher_type = 'RECEIPT'");
+    } else if (column === 'chi') {
+      selectField = 'voucher.amount';
+      qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+    } else if (column === 'paymentStatus') {
+      selectField = 'voucher.payment_status';
+      qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+    } else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
     qb.select(`DISTINCT ${selectField}`, 'value');
     qb.andWhere(`${selectField} IS NOT NULL`);
@@ -125,6 +146,16 @@ export class GarageCashflowQueryEngine {
             qb.andWhere('voucher.voucher_type IN (:...vtypes)', {
               vtypes: vals,
             });
+          } else if (col === 'transDate') {
+            const range = vals[0].split('..');
+            if (range[0])
+              qb.andWhere('voucher.trans_date >= :vtdFrom', {
+                vtdFrom: range[0],
+              });
+            if (range[1])
+              qb.andWhere('voucher.trans_date <= :vtdTo', {
+                vtdTo: range[1],
+              });
           } else if (col === 'createdAt') {
             const range = vals[0].split('..');
             if (range[0])
@@ -135,20 +166,137 @@ export class GarageCashflowQueryEngine {
               qb.andWhere('voucher.created_at <= :cdTo', {
                 cdTo: range[1] + ' 23:59:59',
               });
+          } else if (col === 'thu') {
+            qb.andWhere("voucher.voucher_type = 'RECEIPT'");
+            if (vals[0]?.includes('..')) {
+              const [f, t] = vals[0].split('..');
+              if (f)
+                qb.andWhere('voucher.amount >= :vthuFrom', {
+                  vthuFrom: Number(f),
+                });
+              if (t)
+                qb.andWhere('voucher.amount <= :vthuTo', {
+                  vthuTo: Number(t),
+                });
+            } else {
+              qb.andWhere('voucher.amount IN (:...vthu)', {
+                vthu: vals.map(Number),
+              });
+            }
+          } else if (col === 'chi') {
+            qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+            if (vals[0]?.includes('..')) {
+              const [f, t] = vals[0].split('..');
+              if (f)
+                qb.andWhere('voucher.amount >= :vchiFrom', {
+                  vchiFrom: Number(f),
+                });
+              if (t)
+                qb.andWhere('voucher.amount <= :vchiTo', {
+                  vchiTo: Number(t),
+                });
+            } else {
+              qb.andWhere('voucher.amount IN (:...vchi)', {
+                vchi: vals.map(Number),
+              });
+            }
           } else if (col === 'caseCode') {
-            qb.andWhere('case.soChungTu IN (:...vcaseCode)', {
-              vcaseCode: vals,
-            });
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(case.soChungTu IN (:...vcaseCode) OR case.soChungTu IS NULL OR case.soChungTu = '')",
+                { vcaseCode: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(case.soChungTu IS NULL OR case.soChungTu = '')");
+            } else {
+              qb.andWhere('case.soChungTu IN (:...vcaseCode)', {
+                vcaseCode: vals,
+              });
+            }
           } else if (col === 'voucherCode') {
             qb.andWhere('voucher.voucher_code IN (:...vvoucherCode)', {
               vvoucherCode: vals,
             });
           } else if (col === 'partnerName') {
-            qb.andWhere('case.khachHangName IN (:...vpartnerName)', {
-              vpartnerName: vals,
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "((voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
+                { vpartnerName: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
+              );
+            } else {
+              qb.andWhere(
+                '(voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName))',
+                {
+                  vpartnerName: vals,
+                },
+              );
+            }
+          } else if (col === 'licensePlate') {
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "((voucher.license_plate IN (:...vlicensePlate) OR case.bien_so_xe IN (:...vlicensePlate)) OR (COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = ''))",
+                { vlicensePlate: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = '')",
+              );
+            } else {
+              qb.andWhere(
+                '(voucher.license_plate IN (:...vlicensePlate) OR case.bien_so_xe IN (:...vlicensePlate))',
+                {
+                  vlicensePlate: vals,
+                },
+              );
+            }
+          } else if (col === 'paymentMethod') {
+            qb.andWhere('voucher.payment_method IN (:...vpaymentMethod)', {
+              vpaymentMethod: vals,
+            });
+          } else if (col === 'paymentContent') {
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.payment_content IN (:...vpaymentContent) OR voucher.payment_content IS NULL OR voucher.payment_content = '')",
+                { vpaymentContent: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(voucher.payment_content IS NULL OR voucher.payment_content = '')",
+              );
+            } else {
+              qb.andWhere('voucher.payment_content IN (:...vpaymentContent)', {
+                vpaymentContent: vals,
+              });
+            }
+          } else if (col === 'paymentStatus') {
+            qb.andWhere('voucher.payment_status IN (:...vpaymentStatus)', {
+              vpaymentStatus: vals,
             });
           } else if (col === 'note') {
-            qb.andWhere('voucher.note IN (:...vnote)', { vnote: vals });
+            const hasBlank = vals.includes('__BLANK__');
+            const nonBlank = vals.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.note IN (:...vnote) OR voucher.note IS NULL OR voucher.note = '')",
+                { vnote: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(voucher.note IS NULL OR voucher.note = '')");
+            } else {
+              qb.andWhere('voucher.note IN (:...vnote)', { vnote: vals });
+            }
           }
         }
       } catch {}
@@ -190,10 +338,22 @@ export class GarageCashflowQueryEngine {
 
   async listVouchers(
     query: ListKgaraCashflowVoucherQueryDto,
-  ): Promise<{ data: KgaraCashflowVoucher[]; total: number }> {
+  ): Promise<ListKgaraCashflowVouchersResponseDto> {
     const qb = this.voucherRepo.createQueryBuilder('voucher');
-    qb.leftJoinAndSelect('voucher.case', 'case');
-    qb.leftJoinAndSelect('voucher.erpBankTransaction', 'erpBankTransaction');
+    qb.leftJoin('voucher.case', 'case');
+    qb.addSelect([
+      'case.id',
+      'case.soChungTu',
+      'case.bienSoXe',
+      'case.khachHangName',
+      'case.khachHangCode',
+    ]);
+    qb.leftJoin('voucher.erpBankTransaction', 'erpBankTransaction');
+    qb.addSelect([
+      'erpBankTransaction.id',
+      'erpBankTransaction.referenceNumber',
+      'erpBankTransaction.seqNo',
+    ]);
 
     if (query.date_from) {
       qb.andWhere('voucher.transDate >= :date_from', {
@@ -222,6 +382,12 @@ export class GarageCashflowQueryEngine {
             qb.andWhere('voucher.voucher_type IN (:...ftypes)', {
               ftypes: arr,
             });
+          } else if (col === 'transDate') {
+            const range = arr[0].split('..');
+            if (range[0])
+              qb.andWhere('voucher.trans_date >= :tFrom', { tFrom: range[0] });
+            if (range[1])
+              qb.andWhere('voucher.trans_date <= :tTo', { tTo: range[1] });
           } else if (col === 'createdAt') {
             const range = arr[0].split('..');
             if (range[0])
@@ -230,20 +396,139 @@ export class GarageCashflowQueryEngine {
               qb.andWhere('voucher.created_at <= :cTo', {
                 cTo: range[1] + ' 23:59:59',
               });
+          } else if (col === 'thu') {
+            qb.andWhere("voucher.voucher_type = 'RECEIPT'");
+            if (arr[0]?.includes('..')) {
+              const [f, t] = arr[0].split('..');
+              if (f)
+                qb.andWhere('voucher.amount >= :fthuFrom', {
+                  fthuFrom: Number(f),
+                });
+              if (t)
+                qb.andWhere('voucher.amount <= :fthuTo', {
+                  fthuTo: Number(t),
+                });
+            } else {
+              qb.andWhere('voucher.amount IN (:...fthu)', {
+                fthu: arr.map(Number),
+              });
+            }
+          } else if (col === 'chi') {
+            qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+            if (arr[0]?.includes('..')) {
+              const [f, t] = arr[0].split('..');
+              if (f)
+                qb.andWhere('voucher.amount >= :fchiFrom', {
+                  fchiFrom: Number(f),
+                });
+              if (t)
+                qb.andWhere('voucher.amount <= :fchiTo', {
+                  fchiTo: Number(t),
+                });
+            } else {
+              qb.andWhere('voucher.amount IN (:...fchi)', {
+                fchi: arr.map(Number),
+              });
+            }
           } else if (col === 'caseCode') {
-            qb.andWhere('case.soChungTu IN (:...fcaseCode)', {
-              fcaseCode: arr,
-            });
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(case.so_chung_tu IN (:...fcaseCode) OR case.so_chung_tu IS NULL OR case.so_chung_tu = '')",
+                { fcaseCode: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(case.so_chung_tu IS NULL OR case.so_chung_tu = '')",
+              );
+            } else {
+              qb.andWhere('case.so_chung_tu IN (:...fcaseCode)', {
+                fcaseCode: arr,
+              });
+            }
           } else if (col === 'voucherCode') {
             qb.andWhere('voucher.voucher_code IN (:...fvoucherCode)', {
               fvoucherCode: arr,
             });
           } else if (col === 'partnerName') {
-            qb.andWhere('case.khachHangName IN (:...fpartnerName)', {
-              fpartnerName: arr,
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "((voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
+                { fpartnerName: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
+              );
+            } else {
+              qb.andWhere(
+                '(voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName))',
+                {
+                  fpartnerName: arr,
+                },
+              );
+            }
+          } else if (col === 'licensePlate') {
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "((voucher.license_plate IN (:...flicensePlate) OR case.bien_so_xe IN (:...flicensePlate)) OR (COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = ''))",
+                { flicensePlate: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(COALESCE(voucher.license_plate, case.bien_so_xe) IS NULL OR COALESCE(voucher.license_plate, case.bien_so_xe) = '')",
+              );
+            } else {
+              qb.andWhere(
+                '(voucher.license_plate IN (:...flicensePlate) OR case.bien_so_xe IN (:...flicensePlate))',
+                {
+                  flicensePlate: arr,
+                },
+              );
+            }
+          } else if (col === 'paymentMethod') {
+            qb.andWhere('voucher.payment_method IN (:...fpaymentMethod)', {
+              fpaymentMethod: arr,
+            });
+          } else if (col === 'paymentContent') {
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.payment_content IN (:...fpaymentContent) OR voucher.payment_content IS NULL OR voucher.payment_content = '')",
+                { fpaymentContent: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere(
+                "(voucher.payment_content IS NULL OR voucher.payment_content = '')",
+              );
+            } else {
+              qb.andWhere('voucher.payment_content IN (:...fpaymentContent)', {
+                fpaymentContent: arr,
+              });
+            }
+          } else if (col === 'paymentStatus') {
+            qb.andWhere('voucher.payment_status IN (:...fpaymentStatus)', {
+              fpaymentStatus: arr,
             });
           } else if (col === 'note') {
-            qb.andWhere('voucher.note IN (:...fnote)', { fnote: arr });
+            const hasBlank = arr.includes('__BLANK__');
+            const nonBlank = arr.filter((v) => v !== '__BLANK__');
+            if (hasBlank && nonBlank.length > 0) {
+              qb.andWhere(
+                "(voucher.note IN (:...fnote) OR voucher.note IS NULL OR voucher.note = '')",
+                { fnote: nonBlank },
+              );
+            } else if (hasBlank) {
+              qb.andWhere("(voucher.note IS NULL OR voucher.note = '')");
+            } else {
+              qb.andWhere('voucher.note IN (:...fnote)', { fnote: arr });
+            }
           }
         });
       } catch {}
@@ -265,16 +550,37 @@ export class GarageCashflowQueryEngine {
           if (col === 'partnerName')
             applyMultiKeywordFilter(
               qb,
-              'case.khachHangName',
+              'COALESCE(voucher.partner_name, case.khach_hang_name)',
               searchStr,
               'spartnerName',
+            );
+          if (col === 'licensePlate')
+            applyMultiKeywordFilter(
+              qb,
+              'COALESCE(voucher.license_plate, case.bien_so_xe)',
+              searchStr,
+              'slicensePlate',
+            );
+          if (col === 'paymentMethod')
+            applyMultiKeywordFilter(
+              qb,
+              'voucher.payment_method',
+              searchStr,
+              'spaymentMethod',
+            );
+          if (col === 'paymentContent')
+            applyMultiKeywordFilter(
+              qb,
+              'voucher.payment_content',
+              searchStr,
+              'spaymentContent',
             );
           if (col === 'note')
             applyMultiKeywordFilter(qb, 'voucher.note', searchStr, 'snote');
           if (col === 'caseCode')
             applyMultiKeywordFilter(
               qb,
-              'case.soChungTu',
+              'case.so_chung_tu',
               searchStr,
               'scaseCode',
             );
@@ -286,19 +592,25 @@ export class GarageCashflowQueryEngine {
     const pageSize = query.pageSize || 20;
     const skip = (page - 1) * pageSize;
 
-    if (query.sorts) {
-      const sortsArr = Array.isArray(query.sorts)
-        ? query.sorts
-        : query.sorts.split(',');
+    const rawSorts = query.sorts || query['sorts[]'];
+
+    if (rawSorts) {
+      const sortsArr = Array.isArray(rawSorts)
+        ? rawSorts
+        : typeof rawSorts === 'string'
+          ? rawSorts.split(',')
+          : [];
 
       let hasSort = false;
       sortsArr.forEach((s) => {
-        if (!s) return;
+        if (!s || typeof s !== 'string') return;
+        const trimmed = s.trim();
+        if (!trimmed) return;
         let direction: 'ASC' | 'DESC' = 'ASC';
-        let field = s;
-        if (s.startsWith('-')) {
+        let field = trimmed;
+        if (trimmed.startsWith('-')) {
           direction = 'DESC';
-          field = s.substring(1);
+          field = trimmed.substring(1);
         }
 
         let dbField = '';
@@ -308,7 +620,10 @@ export class GarageCashflowQueryEngine {
         else if (field === 'caseCode') dbField = 'case.soChungTu';
         else if (field === 'transDate') dbField = 'voucher.transDate';
         else if (field === 'voucherType') dbField = 'voucher.voucherType';
-        else if (field === 'partnerName') dbField = 'case.khachHangName';
+        else if (field === 'partnerName') dbField = 'voucher.partnerName';
+        else if (field === 'licensePlate') dbField = 'voucher.licensePlate';
+        else if (field === 'paymentMethod') dbField = 'voucher.paymentMethod';
+        else if (field === 'paymentContent') dbField = 'voucher.paymentContent';
 
         if (dbField) {
           qb.addOrderBy(dbField, direction);
@@ -316,15 +631,80 @@ export class GarageCashflowQueryEngine {
         }
       });
       if (!hasSort) {
-        qb.orderBy('voucher.createdAt', 'DESC');
+        qb.orderBy('voucher.transDate', 'DESC')
+          .addOrderBy('voucher.createdAt', 'DESC')
+          .addOrderBy('voucher.voucherCode', 'DESC');
+      } else {
+        qb.addOrderBy('voucher.createdAt', 'DESC').addOrderBy(
+          'voucher.voucherCode',
+          'DESC',
+        );
       }
     } else {
-      qb.orderBy('voucher.createdAt', 'DESC');
+      qb.orderBy('voucher.transDate', 'DESC')
+        .addOrderBy('voucher.createdAt', 'DESC')
+        .addOrderBy('voucher.voucherCode', 'DESC');
     }
+
+    // Clone base query builder trước khi phân trang để tính Grand Totals
+    const totalsQb = qb.clone();
+    if (totalsQb.expressionMap) {
+      totalsQb.expressionMap.orderBys = {};
+    }
+    totalsQb
+      .select(
+        "COALESCE(SUM(CASE WHEN voucher.voucher_type = 'RECEIPT' THEN voucher.amount ELSE 0 END), 0)",
+        'totalThu',
+      )
+      .addSelect(
+        "COALESCE(SUM(CASE WHEN voucher.voucher_type = 'PAYMENT' THEN voucher.amount ELSE 0 END), 0)",
+        'totalChi',
+      );
 
     qb.skip(skip).take(pageSize);
 
     const [data, total] = await qb.getManyAndCount();
-    return { data, total };
+    const totalPages = Math.ceil(total / pageSize) || 1;
+
+    const totalsRaw = await totalsQb.getRawOne();
+    const grandTotalThu = parseFloat(totalsRaw?.totalThu || '0') || 0;
+    const grandTotalChi = parseFloat(totalsRaw?.totalChi || '0') || 0;
+
+    let cumulativeThu = 0;
+    let cumulativeChi = 0;
+
+    if (page === 1) {
+      cumulativeThu = data
+        .filter((d) => d.voucherType === 'RECEIPT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      cumulativeChi = data
+        .filter((d) => d.voucherType === 'PAYMENT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    } else if (page >= totalPages && totalPages > 0) {
+      cumulativeThu = grandTotalThu;
+      cumulativeChi = grandTotalChi;
+    } else {
+      const cumQb = qb.clone();
+      cumQb.skip(0).take(page * pageSize);
+      const cumItems = await cumQb.getMany();
+      cumulativeThu = cumItems
+        .filter((d) => d.voucherType === 'RECEIPT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      cumulativeChi = cumItems
+        .filter((d) => d.voucherType === 'PAYMENT')
+        .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    }
+
+    return {
+      data: data.map(toKgaraCashflowVoucherResponse),
+      total,
+      totalPages,
+      totals: {
+        grandTotalThu,
+        grandTotalChi,
+        cumulativeThu,
+        cumulativeChi,
+      },
+    };
   }
 }

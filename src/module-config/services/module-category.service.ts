@@ -202,6 +202,24 @@ export class ModuleCategoryService {
       throw new NotFoundException(`Không tìm thấy danh mục ID ${id}`);
     }
 
+    // Category có semantic_key được logic nghiệp vụ tham chiếu (vd OJ) → không cho xóa, chỉ ngừng hoạt động
+    if (category.semanticKey) {
+      throw new ConflictException(
+        `Danh mục "${category.code}" là danh mục hệ thống (${category.semanticKey}), không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động.`,
+      );
+    }
+
+    // Check if category is used by any Garage case
+    const caseCount = await this.dataSource.query(
+      `SELECT COUNT(*)::int as count FROM kgara_cases WHERE category_id = $1`,
+      [id],
+    );
+    if (caseCount?.[0]?.count > 0) {
+      throw new ConflictException(
+        `Danh mục đang được sử dụng trong ${caseCount[0].count} vụ việc Garage, không thể xóa. Vui lòng chuyển sang trạng thái Ngừng hoạt động.`,
+      );
+    }
+
     // Check if category is used by any BOM
     const bomCount = await this.dataSource.query(
       `SELECT COUNT(*)::int as count FROM erp_boms WHERE category_id = $1 AND is_deleted = false`,

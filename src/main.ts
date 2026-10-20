@@ -3,6 +3,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import * as pg from 'pg';
@@ -11,8 +12,12 @@ import * as pg from 'pg';
 pg.types.setTypeParser(1114, (str) => new Date(str + 'Z'));
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const logger = new Logger('Bootstrap');
+
+  // Cho phép body kích thước lớn lên đến 10MB cho ERP payloads
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   // Global prefix: tất cả route sẽ có dạng /api/v1/...
   app.setGlobalPrefix('api/v1');

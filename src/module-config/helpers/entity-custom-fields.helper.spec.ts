@@ -123,3 +123,52 @@ describe('EntityCustomFieldsHelper', () => {
     });
   });
 });
+
+describe('EntityCustomFieldsHelper.enrichMany registry view', () => {
+  it('GARAGE_CASE: thêm builtin + custom.byCode, loại def system/legacy khỏi custom', async () => {
+    const ds: any = {
+      query: jest.fn().mockResolvedValue([
+        {
+          id: 'v1',
+          entityId: 'c1',
+          attrDefId: 'd1',
+          valueText: 'abc',
+          attrCode: 'ghi_chu',
+          fieldType: 'TEXT',
+          isSystem: false,
+        },
+        {
+          id: 'v2',
+          entityId: 'c1',
+          attrDefId: 'd2',
+          valueText: 'true',
+          attrCode: 'exclude_from_debt',
+          fieldType: 'CHECKBOX',
+          isSystem: true,
+        },
+      ]),
+    };
+    const item: any = {
+      id: 'c1',
+      categoryId: 'cat',
+      excludeFromReports: false,
+      excludeFromDebt: true,
+    };
+    await EntityCustomFieldsHelper.enrichMany(ds, 'GARAGE_CASE', [item]);
+    expect(item.builtin).toEqual({
+      categoryId: 'cat',
+      excludeFromReports: false,
+      excludeFromDebt: true,
+    });
+    expect(item.custom).toEqual({ byCode: { ghi_chu: 'abc' } });
+    expect(item.customAttributes.ghi_chu).toBe('abc');
+  });
+
+  it('module không có registry: không thêm builtin/custom', async () => {
+    const ds: any = { query: jest.fn().mockResolvedValue([]) };
+    const item: any = { id: 'x1' };
+    await EntityCustomFieldsHelper.enrichMany(ds, 'BOM', [item]);
+    expect(item.builtin).toBeUndefined();
+    expect(item.custom).toBeUndefined();
+  });
+});

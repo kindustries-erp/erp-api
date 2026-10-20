@@ -131,6 +131,43 @@ describe('GarageDebtsAnalyticsService', () => {
     expect(res.topPayableSuppliers).toHaveLength(1);
   });
 
+  it('phải trả trừ cấn trừ PAYMENT: SQL có join PAYMENT, trend cashOut = đã chi, cho phép âm', async () => {
+    mockCaseRepo.manager.query
+      .mockResolvedValueOnce([
+        { totalReceivable: '0', remainingReceivable: '0' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          totalPayable: '1000000',
+          paidPayable: '1200000',
+          remainingPayable: '-200000',
+          aging0To30: '-200000',
+        },
+      ])
+      .mockResolvedValueOnce([
+        { month: '2026-07', cashIn: '500000', cashOut: '1200000' },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const res = await service.getDebtsAnalytics();
+
+    const calls = mockCaseRepo.manager.query.mock.calls.map(
+      (c: any[]) => c[0] as string,
+    );
+    const [, payableSql, trendSql, , suppSql] = calls;
+    for (const sql of [payableSql, trendSql, suppSql]) {
+      expect(sql).toContain(`"settlement_type" = 'PAYMENT'`);
+    }
+    expect(payableSql).toContain('<> 0');
+    expect(res.summary.paidPayable).toBe(1200000);
+    expect(res.summary.remainingPayable).toBe(-200000);
+    expect(res.summary.netBalance).toBe(200000);
+    expect(res.summary.paymentRate).toBe(120);
+    expect(res.cashTrend[0].cashOut).toBe(1200000);
+    expect(res.cashTrend[0].netCash).toBe(-700000);
+  });
+
   it('should return time horizon cases correctly for drawer', async () => {
     mockCaseRepo.manager.query
       .mockResolvedValueOnce([{ total: 1 }])
@@ -171,5 +208,49 @@ describe('GarageDebtsAnalyticsService', () => {
     expect(res.items).toHaveLength(1);
     expect(res.summary.receivableAmount).toBe(500000);
     expect(res.summary.topPartners).toHaveLength(1);
+  });
+
+  describe('chỉ tính phiếu hoàn thành (tình trạng 3)', () => {
+    const STATUS_CONDITION = '"c"."tinh_trang_dich_vu" = 3';
+
+    it('phải thu, phải trả, trend và top đối tác đều lọc tình trạng = 3, không lấy dòng lãi gộp không có phiếu', async () => {
+      mockCaseRepo.manager.query
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.getDebtsAnalytics();
+
+      const calls = mockCaseRepo.manager.query.mock.calls.map(
+        (c: any[]) => c[0] as string,
+      );
+      expect(calls).toHaveLength(5);
+      for (const sql of calls) {
+        expect(sql).toContain(STATUS_CONDITION);
+      }
+      const payableSql = calls[1];
+      expect(payableSql).toContain('"c"."id" IS NOT NULL');
+      expect(payableSql).not.toContain('"c"."id" IS NULL OR');
+    });
+
+    it('danh sách theo mốc thời gian cũng lọc tình trạng = 3', async () => {
+      mockCaseRepo.manager.query
+        .mockResolvedValueOnce([{ total: 0 }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{}])
+        .mockResolvedValueOnce([]);
+
+      await service.getTimeHorizonCases('overdue30To90');
+
+      const calls = mockCaseRepo.manager.query.mock.calls.map(
+        (c: any[]) => c[0] as string,
+      );
+      expect(calls.length).toBeGreaterThan(0);
+      for (const sql of calls) {
+        expect(sql).toContain(STATUS_CONDITION);
+      }
+    });
   });
 });

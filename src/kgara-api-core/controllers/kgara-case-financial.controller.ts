@@ -53,6 +53,7 @@ export class KgaraCaseFinancialController {
   @Get('cases/:id/linked-invoices')
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
     { resource: ErpResource.INVOICES, action: ErpAction.READ },
     { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
   )
@@ -89,6 +90,8 @@ export class KgaraCaseFinancialController {
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
     { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.CREATE },
     { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
   )
   async addLinkedInvoice(
@@ -140,7 +143,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('invoices/:invoiceId/linked-cases')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getLinkedCases(@Param('invoiceId') invoiceId: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -159,6 +165,8 @@ export class KgaraCaseFinancialController {
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
     { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
     { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
   )
   async removeLinkedInvoice(
@@ -188,7 +196,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/traceability-graph')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getCaseTraceabilityGraph(@Param('id') id: string, @Req() req: any) {
     return this.traceabilityService.getGarageCaseTraceabilityGraph(
       id,
@@ -197,7 +208,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/financial-summary')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getCaseFinancialSummary(@Param('id') id: string) {
     const c = await this.caseRepo.findOne({
       where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
@@ -303,6 +317,7 @@ export class KgaraCaseFinancialController {
   @Get('cases/:id/settlements')
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
     { resource: ErpResource.INVOICES, action: ErpAction.READ },
     { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
   )
@@ -363,6 +378,8 @@ export class KgaraCaseFinancialController {
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
     { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
     { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
     { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
     { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
@@ -406,6 +423,8 @@ export class KgaraCaseFinancialController {
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
     { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
     { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
     { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
     { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
@@ -434,6 +453,7 @@ export class KgaraCaseFinancialController {
   @Patch('cases/:id/settlements/:settlementId')
   @RequireAnyPermissions(
     { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
     { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
     { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
     { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },

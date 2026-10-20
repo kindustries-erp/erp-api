@@ -1,6 +1,6 @@
 ---
 name: garage-opex
-description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vốn nhập tay & Hoa hồng Garage trong erp-api (kgara-api-core). Chứa toàn bộ database schema (kgara_operating_expenses), categories chuẩn (NHAN_SU, THUE_MAT_BANG, VAT_TU_TIEU_HAO, BAO_TRI, KHAU_HAO, HOA_HONG_*), DTOs, API endpoints, logic phát sinh định kỳ (Recurrence Engine), tích hợp báo cáo P&L và kết nối frontend drawer/table.
+description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vốn nhập tay & Hoa hồng Garage trong erp-api (kgara-api-core). Chứa toàn bộ database schema (kgara_operating_expenses), categories chuẩn (NHAN_SU, THUE_MAT_BANG, DIEN_NUOC, BAO_TRI, KHAU_HAO, HOA_HONG_*), DTOs, API endpoints, logic phát sinh định kỳ (Recurrence Engine), tích hợp báo cáo P&L và kết nối frontend drawer/table.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Chi Phí Vận Hành Garage (Garage OPEX & Direct Costs) - Backend (`erp-api`)
@@ -11,8 +11,8 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 
 ### Các nghiệp vụ trọng tâm:
 - **3 Nhóm Chi Phí Cốt Lõi (`CostGroupType`)**:
-  1. **Chi phí Vận hành (`OPEX`)**: Các chi phí định phí và biến phí vận hành xưởng (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì thiết bị, Khấu hao tài sản, Khác).
-  2. **Chi phí Giá vốn Nhập tay (`COGS`)**: Các chi phí giá vốn phát sinh ngoài phiếu dịch vụ hoặc chi phí đối tác trực tiếp (`HOA_HONG_TRUC_TIEP`, `CHI_PHI_TRUC_TIEP_KHAC`).
+  1. **Chi phí Vận hành (`OPEX`)**: Các chi phí định phí và biến phí vận hành xưởng (Nhân sự, Thuê mặt bằng, Điện nước, Bảo trì thiết bị, Khấu hao tài sản, Khác).
+  2. **Chi phí Giá vốn Nhập tay (`COGS`)**: Các chi phí giá vốn phát sinh ngoài phiếu dịch vụ hoặc chi phí đối tác trực tiếp (`HOA_HONG_TRUC_TIEP`, `CHI_PHI_TRUC_TIEP_KHAC`, `VAT_TU_TIEU_HAO`). `HHBH` là khoản Hoa hồng hiện ở mục 4.2 (Chi phí bán hàng) của P&L (bucket `selling`), không thuộc giá vốn.
   3. **Hoa hồng Xưởng (`COMMISSION`)**: Các khoản trích thưởng hoa hồng kinh doanh và dịch vụ (`HOA_HONG_SALE`, `HOA_HONG_DV`, `HOA_HONG_KHAC`).
 - **Lưu trữ & Phân kỳ theo Tháng (`period_year`, `period_month`)**: Quản lý chi phí chi tiết theo từng tháng báo cáo tài chính.
 - **Tách bạch Chi phí Phân bổ Cho Dòng Xe Ngoài (`oj_amount`)**: Cho phép ghi nhận số tiền chi phí phân bổ riêng cho nhánh dịch vụ Omoda/Jaecoo (`OJ`) để đối soát biên lợi nhuận riêng.
@@ -66,7 +66,6 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 │ • NHAN_SU             │ • HOA_HONG_TRUC_TIEP     │ • HOA_HONG_SALE          │
 │ • THUE_MAT_BANG       │ • CHI_PHI_TRUC_TIEP_KHAC │ • HOA_HONG_DV            │
 │ • DIEN_NUOC           │                          │ • HOA_HONG_KHAC          │
-│ • VAT_TU_TIEU_HAO     │                          │                          │
 │ • BAO_TRI             │                          │                          │
 │ • KHAU_HAO            │                          │                          │
 │ • KHAC                │                          │                          │
@@ -80,11 +79,12 @@ Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc l�
 | **OPEX** | `NHAN_SU` | Nhân sự | Tiền lương, thưởng, phụ cấp thợ & kỹ thuật viên |
 | **OPEX** | `THUE_MAT_BANG` | Thuê mặt bằng & điện nước | Chi phí thuê xưởng, hạ tầng |
 | **OPEX** | `DIEN_NUOC` | Điện nước | Chi phí tiền điện, tiền nước vận hành |
-| **OPEX** | `VAT_TU_TIEU_HAO`| Vật tư tiêu hao | Giẻ lau, dầu bóng, băng keo, hóa chất phụ |
 | **OPEX** | `BAO_TRI` | Bảo trì | Bảo dưỡng cầu nâng, máy nén khí, phòng sơn |
 | **OPEX** | `KHAU_HAO` | Khấu hao máy móc & thiết bị | Khấu hao thiết bị sửa chữa xưởng |
 | **OPEX** | `KHAC` | Khác | Chi phí quản lý xưởng phát sinh khác |
 | **COGS** | `HOA_HONG_TRUC_TIEP` | Hoa hồng trực tiếp | Chi phí hoa hồng tính thẳng vào giá vốn dịch vụ |
+| **COGS** | `VAT_TU_TIEU_HAO` | Vật tư tiêu hao | Ghi nhận từ phiếu chi nội dung 8. Vật tư tiêu hao (Đã duyệt / Đã chi) |
+| **COMMISSION** | `HHBH` | HHBH | Ghi nhận từ phiếu chi nội dung 4. HHBH; P&L hiển thị ở mục 4.2 (Chi phí bán hàng), không ghi %|
 | **COGS** | `CHI_PHI_TRUC_TIEP_KHAC`| Chi phí trực tiếp khác | Gia công tiện phay ngoài, thuê đồ gá đặc thù |
 | **COMMISSION** | `HOA_HONG_SALE` | Hoa hồng cho Sale | Trích thưởng doanh số bán hàng/dịch vụ |
 | **COMMISSION** | `HOA_HONG_DV` | Hoa hồng cho KTV DV | Trích thưởng hiệu suất cố vấn dịch vụ / KTV |
@@ -100,10 +100,12 @@ src/kgara-api-core/
 │   └── kgara_operating_expense.entity.ts # Entity TypeORM bảng kgara_operating_expenses
 ├── dto/
 │   └── garage-opex.dto.ts                # CreateGarageOpexDto, UpdateGarageOpexDto, ApplyRecurringOpexDto, ListGarageOpexQueryDto
+├── helpers/
+│   └── garage-opex-query.builder.ts      # Pure Query Builder Engine (< 300 LoC) theo Pattern C (/api-service-refactor)
 ├── services/
-│   ├── garage-opex.service.ts            # Logic nghiệp vụ CRUD, lọc đa chiều, Recurrence engine, P&L aggregation
-│   └── garage-opex.service.spec.ts       # Bộ kiểm thử Unit test cho OPEX
-├── garage-dashboard.controller.ts        # Endpoints REST API (/greenway/dashboard/opex)
+│   ├── garage-opex.service.ts            # Logic nghiệp vụ CRUD, Recurrence engine, P&L aggregation (< 500 LoC)
+│   └── garage-opex.service.spec.ts       # Bộ kiểm thử Unit test cho OPEX (10 tests)
+├── garage-dashboard.controller.ts        # Endpoints REST API (/greenway/dashboard/opex) (< 300 LoC)
 └── scripts/
     └── seed-garage-opex.ts               # Script nạp dữ liệu chi phí vận hành từ bảng tính
 ```
@@ -126,7 +128,7 @@ src/kgara-api-core/
 
 ## 6. Logic Nghiệp Vụ Trọng Tâm & Frontend Integration
 
-### 6.0. Chuẩn Bảng Dữ Liệu Frontend (`GarageOpex.tsx`)
+### 6.0. Chuẩn Bảng Dữ Liệu Frontend (`GarageOpex.tsx`) & Atomic Drawer 5 Tầng
 - Tích hợp `<SpreadsheetPageTemplate>` với `tableId="garage-opex-table"`.
 - Toolbar `<PillTabs>` lọc nhanh 4 nhóm chi phí (`ALL`, `OPEX`, `COGS`, `COMMISSION`) qua query param `cost_group`, cách ly độc lập với column filters.
 - 100% tiêu đề cột căn giữa (`headerClassName: "text-center"`, `align: "center"`).
@@ -134,6 +136,16 @@ src/kgara-api-core/
 - Cột **Số tiền** có filter popover tự động format phân tách hàng nghìn `đ`.
 - Cột **Loại chi phí** gắn icon xem chi tiết Drawer (`TableText` with `onDetailClick`).
 - Bổ sung 2 cột: **Chu kỳ lặp** (`recurrenceType`) và **Hạn kết thúc** (`recurrenceUntil`).
+- **Chuẩn Hóa Drawer Form (`GarageOpexDrawer`) theo `/ui-atomic-refactor 5 tầng`**:
+  - Tách từ file nguyên khối cũ (888 LoC) thành thư mục Organism chuẩn `src/modules/garage/components/organisms/garage-opex-drawer/`:
+    - `GarageOpexDrawer.tsx` (Organism < 150 LoC): Container bọc `StandardFormDrawer`, footer buttons, trigger.
+    - `GarageOpexDrawerForm.tsx` (Molecule < 180 LoC): Các ô nhập liệu (Kỳ, Loại CP, Số tiền, Phân bổ OJ, Ghi chú, Chu kỳ lặp).
+    - `garage-opex-drawer.hook.ts` (< 180 LoC): Toàn bộ form state, mutation, prefill logic và validation.
+    - `garage-opex-drawer.constants.ts` (< 100 LoC): Category presets (đã loại bỏ hoàn toàn `VAT_TU_TIEU_HAO`).
+    - `garage-opex-drawer.helper.ts` (< 100 LoC): Hàm chuyển số tiền thành chữ tiếng Việt (`amountToVietnameseWords`) và định dạng số.
+    - `garage-opex-drawer.type.ts` (< 80 LoC): Types và Props interfaces.
+    - `GarageOpexDrawer.test.tsx`: Co-located Vitest unit test.
+  - Giữ shim re-export tại `src/modules/garage/components/GarageOpexDrawer.tsx` (8 LoC) đảm bảo tương thích ngược 100%.
 
 ---
 
@@ -142,7 +154,8 @@ src/kgara-api-core/
 ### 6.1. Thuật toán Tổng hợp Chi phí theo Kỳ (`getSummaryByPeriod`)
 ```typescript
 // Phân loại tự động dựa trên category_key
-if (item.categoryKey === 'HOA_HONG_TRUC_TIEP' || item.categoryKey === 'CHI_PHI_TRUC_TIEP_KHAC') {
+if (COGS_GROUP_CATEGORIES.includes(item.categoryKey)) { // HOA_HONG_TRUC_TIEP, CHI_PHI_TRUC_TIEP_KHAC, VAT_TU_TIEU_HAO
+  // ... HHBH đi vào bucket selling trước nhánh HOA_HONG_*
   directCostItems.push(row);
   totalDirectCost += item.amount;
   ojTotalDirectCost += item.ojAmount;
@@ -175,3 +188,34 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
   ```bash
   bun test src/kgara-api-core/services/garage-opex.service.spec.ts
   ```
+
+## Dòng opex sinh từ phiếu chi garage (cập nhật 2026-10-17)
+- Bảng `kgara_operating_expenses` có thêm `source_cashflow_voucher_id` (uuid, nullable, FK → `kgara_cashflow_vouchers.id` `ON DELETE CASCADE`, index `idx_kgara_opex_source_voucher`). Có giá trị = khoản chi ghi nhận từ phiếu chi 4. HHBH / 8. Vật tư tiêu hao (xem `garage-cashflow/SKILL.md`).
+- `GarageOpexService.update`, `applyRecurring`, `delete` từ chối dòng có `source_cashflow_voucher_id` (chỉ sửa/xóa qua phiếu chi gốc). List/detail trả thêm `sourceCashflowVoucherId`; web coi dòng này là chỉ đọc.
+
+## 8. Chuẩn Hóa Giao Diện Web (Cập nhật 2026-10-17)
+- **Toolbar Combobox Dropdown**: Thay thế thanh ngang `PillTabs` bằng `GarageViewModeCombobox` (kế thừa `ViewModeCombobox` từ `@/shared/components/ViewModeCombobox`) gọn gàng trên `SpreadsheetPageTemplate`:
+  - **Tầng 1 (Filter Group - Nhóm chi phí)**: `Tất cả` (`ALL`), `CP Vận hành` (`OPEX`), `Giá vốn (COGS)` (`COGS`), `Hoa hồng` (`COMMISSION`).
+  - **Tầng 2 (Chế độ xem cột - View Presets)**: `Tổng quan` (`overview`), `Đầy đủ` (`all_columns`), lưu cấu hình vào `useUserPreferencesStore` (`garage-opex-column-views`).
+
+## 9. Background Export Runner & GarageOpexExportDrawer (Cập nhật 2026-10-17)
+- **Kiến trúc Xuất File Nền (Background Export Engine)**:
+  - Runner process ID: `garage-opex-xlsx-export` quản lý bởi `GarageExportJobsService`.
+  - Service tạo workbook: `GarageOpexExportService` (dùng `exceljs`, hỗ trợ tái sử dụng job trong 10 phút, stream tiến độ SSE).
+- **Cấu trúc 3 Sheets trong file Excel OPEX**:
+  - **Sheet 1 (`Dashboard`)**: Dashboard & KPI Overview với chart scheme màu theo chuẩn báo cáo tổng quan `garage-cases?tab=overview` (Tổng chi phí, phân bổ theo nhóm OPEX/COGS/COMMISSION, tỷ trọng %, chi phí theo tháng).
+  - **Sheet 2 (`Chi tiết chi phí`)**: Bảng kê chi tiết chi phí chuẩn layout tài chính kế toán như `erp-invoice` (Hàng 1 SUM, Hàng 2 SUBTOTAL, Hàng 4 Header tô màu xanh ngọc/emerald, Freeze 4 hàng đầu, AutoFilter, format số tiền `#,,0`).
+  - **Sheet 3 (`Báo cáo P&L`)**: Báo cáo Lợi nhuận P&L tháng tích hợp (`GarageDashboardPnlService`), liên kết Doanh thu, Giá vốn, Chi phí vận hành và Lợi nhuận ròng.
+- **Hệ thống Endpoints API**:
+  - `POST /api/v1/greenway/opex/export/background`: Tạo job xuất file nền.
+  - `GET /api/v1/greenway/opex/export/background/history`: Lấy lịch sử 10 job trong 24h.
+  - `GET /api/v1/greenway/opex/export/background/:jobId/download`: Tải file `.xlsx`.
+  - `GET /api/v1/greenway/opex/export/progress/stream`: Stream SSE tiến độ thời gian thực.
+  - Bảo vệ bởi `@RequirePermissions(ErpResource.GARAGE, ErpAction.VIEW)`.
+- **Frontend Component `GarageOpexExportDrawer`**:
+  - Kiến trúc `StandardFormDrawer` kích thước `size="lg"`, bố cục 2 cột (`layout="2-columns"`).
+  - Cột trái: `GarageExportHistoryPanel` (bảng lịch sử tải lại trong 24h, hiển thị % tiến độ và nút tải).
+  - Cột phải: Toàn bộ controls lựa chọn (Nhóm chi phí `Combobox`, Chế độ xuất `ExportModeSelector`, Bộ chọn kỳ `ExportPeriodPicker` / Xem trước bộ lọc `GarageExportFilterPreview`, Ghi chú và Nút bấm bắt đầu xuất `Button w-full`) được gom trọn vào **duy nhất 1 `DrawerSection` mang tiêu đề "Điều kiện xuất dữ liệu"** (`collapsible`, `defaultCollapsed={false}`), đồng bộ 100% với giao diện của `garage-debts`.
+- **Chuẩn Main Action Button & Dropdown Menu**:
+  - Áp dụng chuẩn `SpreadsheetPageTemplate` tương tự `garage-cases?tab=cases`: Render **Split Button** với nút chính "Thêm chi phí" (`createLabel`, `createIcon`, `onCreate={openCreate}`) và Action Dropdown Menu (`createActions`) chứa nhóm "Báo cáo & Xuất file" ("Xuất Excel chi phí (Bảng kê)", "Tải báo cáo P&L (Lợi nhuận Garage)").
+

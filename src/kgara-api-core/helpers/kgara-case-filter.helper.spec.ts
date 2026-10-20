@@ -7,9 +7,18 @@ import {
   applyCaseListFilters,
   applySingleCaseServiceColumnFilter,
   applyCaseServiceFilters,
+  quotationStatusSql,
 } from './kgara-case-filter.helper';
 
 describe('kgara-case-filter.helper', () => {
+  describe('quotationStatusSql', () => {
+    it('dùng alias được truyền và giữ đúng điều kiện Báo giá', () => {
+      expect(quotationStatusSql('c')).toBe(
+        `("c"."tinh_trang_dich_vu" = 1 OR "c"."ten_tinh_trang_dich_vu" ILIKE '%báo giá%' OR "c"."ten_tinh_trang_dich_vu" ILIKE '%nháp%' OR "c"."ten_tinh_trang_dich_vu" ILIKE '%chờ%')`,
+      );
+    });
+  });
+
   describe('getCaseColumnSelectExpr', () => {
     it('should map standard case columns to SQL expressions with so_chung_tu as single source of truth', () => {
       // Fix triệt để: caseCode trỏ trực tiếp về "case"."so_chung_tu", không ghép chuỗi lỏng lẻo

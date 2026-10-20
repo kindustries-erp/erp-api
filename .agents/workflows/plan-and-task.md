@@ -19,13 +19,13 @@ graph LR
     E --> F["6. Knowledge-Sync"]
 ```
 
-1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local; dừng kiểm tra `.env.local` và không dùng Cloud/Neon).
+1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local; không dùng Cloud/Neon; dừng kiểm tra `.env.local`).
 2. **Delivery Sequence Bắt Buộc**: `Database (Phase 1)` ➔ `API Backend (Phase 2)` ➔ `QC & Security (Phase 3)`.
 3. **Task Breakdown 3 Cấp (`X.Y.Z`) & Scoped DoD Verification**: Đánh số `Phase.Group.Task` (ví dụ `1.1.1`, `2.2.1`, `3.1.2`). Mỗi task nhỏ gọn (1–2 files), bắt buộc có **Definition of Done (DoD)** và **Verification Command thu hẹp (Scoped Test < 10s)**:
    - *Quy tắc Lập Plan (Zero Execution)*: Mã lệnh trong mục `Verification` chỉ là **ĐẶC TẢ VĂN BẢN (Text Specification)** để cam kết tiêu chí hoàn thành, **TUYỆT ĐỐI KHÔNG ĐƯỢC CHẠY** trong lúc lập Plan. Lệnh này CHỈ ĐƯỢC CHẠY ở Phase 5 sau khi User đã duyệt Plan.
    - *Test Runner Duy Nhất*: Trong `erp-api`, test runner duy nhất là **`jest`** (`bunx jest <spec>`, `bunx jest --findRelatedTests <file>`) hoặc `bunx tsc --noEmit`. **TUYỆT ĐỐI CẤM GÕ LỆNH `vitest` TRONG `erp-api`**.
    - *Atomic Task (`Z`)*: BẮT BUỘC dùng Scoped Test nhanh (< 5–10s). **TUYỆT ĐỐI CẤM** chạy full test suite (`bunx jest`, `bun run test`, `bun run check:ci`) ở từng task nhỏ để tránh nghẽn CPU.
-   - *Final Gate (Phase 3)*: Chỉ chạy full test suite và `bun run check:ci` DUY NHẤT một lần ở Task 3.1.1 trước khi nghiệm thu.
+   - *Final Gate (Phase 3)*: Chỉ chạy `bun run verify:final` DUY NHẤT một lần ở Task 3.1.1 trên commit cuối trước khi nghiệm thu/push.
 4. **Real-time Tracking & Test-First Tick**: Tại mỗi thời điểm **chỉ có duy nhất 1 task** ở trạng thái `[/] In Progress`. Tuyệt đối không tick `[x]` nếu lệnh kiểm thử chưa PASS 100%. Cập nhật tiến độ vào file `implementation_plan.md` ngay sau mỗi task.
 5. **Session Checkpoint Protocol (Pause & Resume)**: Hỗ trợ tạm dừng và tiếp tục mượt mà. Khi tạm dừng, bắt buộc ghi log vào mục `## ⏸️ Session Checkpoint`. Khi tiếp tục, Agent đọc lại Checkpoint để xác định chính xác task đang dang dở và bắt đầu làm tiếp ngay mà không phải hỏi lại từ đầu.
 6. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
@@ -78,7 +78,7 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 | **Service Logic / Spec** | `bunx jest src/modules/<path>/<file>.spec.ts` | **CẤM gõ `vitest`** |
 | **File mã nguồn thay đổi** | `bunx jest --findRelatedTests src/modules/<path>/<file>.ts` | **CẤM gõ `vitest`** |
 | **Controller & RBAC** | `bunx jest src/modules/<path>/<file>.controller.spec.ts` | **CẤM gõ `vitest`** |
-| **Final Gate (Task 3.1.1)** | `bun run check:ci && bunx jest --forceExit` | Chạy DUY NHẤT ở Phase 3 trước nghiệm thu |
+| **Final Gate (Task 3.1.1)** | `bun run verify:final` | Chạy DUY NHẤT ở Phase 3 trên commit cuối |
 
 #### Cấu trúc một Task chuẩn:
 ```markdown
@@ -128,7 +128,7 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 4. **Thực thi liền mạch**: Bắt tay làm tiếp ngay từ đúng bước trong checkpoint mà không làm lại từ đầu.
 
 #### 4. Nghiệm thu, Cập nhật Tri thức & Báo cáo (Walkthrough & Knowledge Sync)
-- **Nghiệm thu cuối cùng (Final Gate)**: Chạy full check DUY NHẤT một lần ở cuối toàn bộ kế hoạch: `bun run check:ci && bunx jest --forceExit`.
+- **Nghiệm thu cuối cùng (Final Gate)**: Chạy `bun run verify:final` DUY NHẤT một lần ở cuối toàn bộ kế hoạch; sau đó push bằng `--no-verify`.
 - **Knowledge & Skill Sync (Bắt buộc kiểm tra & cập nhật liền sau khi xong task)**:
   - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
   - Nếu là module hoàn toàn mới: tạo file skill mới tại `.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `liouni-erp-api-current-truth`.
@@ -215,7 +215,7 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 - [ ] **Task 3.1.1: Chạy Full Unit Test Suite & Pre-commit Check**
   - **Phân hệ**: `QC` | **Ưu tiên**: `P0`
   - **DoD**: 100% test suites pass, không có lỗi ESLint, Prettier và TypeScript.
-  - **Verification**: `bun run check:ci && bunx jest --forceExit`
+  - **Verification**: `bun run verify:final`
 
 #### 3.2 Knowledge & Skill Sync
 - [ ] **Task 3.2.1: Cập nhật Module Skill & Current-Truth**

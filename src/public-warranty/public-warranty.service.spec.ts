@@ -5,7 +5,7 @@ import { PublicWarrantyService } from './public-warranty.service';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
 import { ErpSerialLifecycle } from '../inventory-core/entities/erp_serial_lifecycle.entity';
-import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
 import {
   findUnverifiedVehicle,
   getAllUnverifiedVehicles,

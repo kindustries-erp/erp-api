@@ -157,7 +157,7 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
 - **Mua hàng (`purchasing`)**: `purchase_orders`, `purchase_requests`, `purchasing_reports`.
 - **Kho & Tồn kho (`inventory`)**: `inventory_items`, `inventory_vouchers`, `goods_receipts`, `goods_issues`, `inventory_adjustments`.
 - **Sản xuất & BOM (`manufacturing`)**: `bom`, `production`.
-- **Garage & Dịch vụ (`garage`)**: `garage`.
+- **Garage & Dịch vụ (`garage`)**: `garage`, `garage_cashflow`.
 - **VinFast & Xe cộ (`vinfast`)**: `vinfast`, `vehicles`.
 - **Kế toán & Dòng tiền (`accounting`)**: `invoices`, `bank_statements`, `cash_statements`, `journal_entries`, `accounting_configs`, `payment_vouchers`, `erp_cashflow_vouchers`.
 - **Quản trị & Hệ thống (`system`)**: `admin_users`, `employees`, `business_partners`, `activity_logs`, `email_ingest`, `sys_tags`, `attachments`.

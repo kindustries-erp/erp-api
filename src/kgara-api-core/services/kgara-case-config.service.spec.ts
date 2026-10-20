@@ -6,6 +6,7 @@ import { KgaraCaseConfigService } from './kgara-case-config.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
+import { StrictCustomFieldsHelper } from '../../module-config/helpers/strict-custom-fields.helper';
 
 describe('KgaraCaseConfigService', () => {
   let service: KgaraCaseConfigService;
@@ -54,7 +55,7 @@ describe('KgaraCaseConfigService', () => {
     };
 
     jest
-      .spyOn(EntityCustomFieldsHelper, 'saveInTx')
+      .spyOn(StrictCustomFieldsHelper, 'saveInTx')
       .mockResolvedValue(undefined as any);
     jest
       .spyOn(EntityCustomFieldsHelper, 'enrichOne')
@@ -156,15 +157,7 @@ describe('KgaraCaseConfigService', () => {
       expect(result.excludeFromDebt).toBe(true);
       expect(result.erpNotes).toBe('Updated notes');
       expect(mockManager.save).toHaveBeenCalled();
-      expect(EntityCustomFieldsHelper.saveInTx).toHaveBeenCalledWith(
-        mockManager,
-        'GARAGE_CASE',
-        existingCase.id,
-        expect.objectContaining({
-          exclude_from_reports: true,
-          exclude_from_debt: true,
-        }),
-      );
+      expect(StrictCustomFieldsHelper.saveInTx).not.toHaveBeenCalled();
       expect(EntityCustomFieldsHelper.enrichOne).toHaveBeenCalled();
     });
 
@@ -199,13 +192,75 @@ describe('KgaraCaseConfigService', () => {
       expect(result.classification).toBe('OJ');
       expect(result.excludeFromDebt).toBe(true);
       expect(result.categoryId).toBe('cat-oj-id');
-      expect(EntityCustomFieldsHelper.saveInTx).toHaveBeenCalledWith(
+      // 2 cờ là built-in (cột), không còn ghi đôi vào EAV
+      expect(StrictCustomFieldsHelper.saveInTx).not.toHaveBeenCalled();
+    });
+
+    it('should clear both categoryId and classification when client sends null/null (Chưa phân loại)', async () => {
+      const existingCase = { ...mockCase } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        categoryId: null,
+        classification: null,
+      });
+
+      expect(result.categoryId).toBeNull();
+      expect(result.classification).toBeNull();
+      expect(result.classificationManuallyCleared).toBe(true);
+    });
+
+    it('should release the sync lock when the user picks a category again', async () => {
+      const existingCase = {
+        ...mockCase,
+        classification: null,
+        categoryId: null,
+        classificationManuallyCleared: true,
+      } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+      categoryRepo.findOne.mockResolvedValue({
+        ...mockCategory,
+      } as ErpModuleCategory);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        categoryId: 'cat-uuid-2',
+      });
+
+      expect(result.classification).toBe('KY_GUI_NOI_BO');
+      expect(result.classificationManuallyCleared).toBe(false);
+    });
+
+    it('should detect OJ by semanticKey even when admin renamed the category code', async () => {
+      const existingCase = { ...mockCase, excludeFromDebt: false } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+      categoryRepo.findOne.mockResolvedValue({
+        id: 'cat-oj-id',
+        code: 'XE_NGOAI_MOI',
+        semanticKey: 'OJ',
+        moduleKey: 'GARAGE_CASE',
+      } as ErpModuleCategory);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        categoryId: 'cat-oj-id',
+      });
+
+      expect(result.classification).toBe('OJ');
+      expect(result.excludeFromDebt).toBe(true);
+    });
+
+    it('should save only custom attributes via StrictCustomFieldsHelper', async () => {
+      const existingCase = { ...mockCase } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      await service.updateCaseConfig(existingCase.id, {
+        customAttributes: { ghi_chu_xe: 'abc' },
+      });
+
+      expect(StrictCustomFieldsHelper.saveInTx).toHaveBeenCalledWith(
         mockManager,
         'GARAGE_CASE',
         existingCase.id,
-        expect.objectContaining({
-          exclude_from_debt: true,
-        }),
+        { ghi_chu_xe: 'abc' },
       );
     });
   });

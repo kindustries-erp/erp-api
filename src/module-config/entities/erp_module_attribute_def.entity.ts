@@ -39,6 +39,14 @@ export type ModuleAttributeOption = BomAttributeOption;
 
 @Entity({ name: 'erp_module_attribute_defs' })
 @Index(['categoryId', 'code'], { unique: true })
+@Index(
+  'uq_erp_module_attribute_defs_global_code',
+  ['moduleKeyGlobal', 'code'],
+  {
+    unique: true,
+    where: '"category_id" IS NULL AND "is_global" = true',
+  },
+)
 export class ErpModuleAttributeDef {
   @PrimaryGeneratedColumn('uuid')
   id: string;

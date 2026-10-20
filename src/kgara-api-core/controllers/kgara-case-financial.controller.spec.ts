@@ -14,6 +14,8 @@ describe('KgaraCaseFinancialController RBAC Permissions', () => {
     expect(perms).toEqual(
       expect.arrayContaining([
         { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+        { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+        { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.CREATE },
         { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
       ]),
     );
@@ -42,6 +44,8 @@ describe('KgaraCaseFinancialController RBAC Permissions', () => {
     expect(perms).toEqual(
       expect.arrayContaining([
         { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
+        { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.DELETE },
+        { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
         { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
         { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
       ]),
@@ -56,6 +60,7 @@ describe('KgaraCaseFinancialController RBAC Permissions', () => {
     expect(perms).toEqual(
       expect.arrayContaining([
         { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+        { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
         { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
         { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
       ]),

@@ -9,7 +9,7 @@ Backend cho lane ERP active hiện tại (`erp-master`) — thuần **PostgreSQL
 | Branch        | `erp-master`                                                                                                         |
 | Stack         | _xem runtime/deploy contract hiện hành trong docs canonical; README này không còn là source of truth cho stack path_ |
 | Port          | _xem runtime/deploy contract hiện hành_                                                                              |
-| DB            | PostgreSQL Dedicated (`DATABASE_URL` trong stack `.env` / `.env.local`: `db-dev.liouni.com:5433` hoặc local)         |
+| DB            | PostgreSQL Dedicated (`DATABASE_URL` trong stack `.env`: `db-dev.liouni.com:5433` hoặc local)         |
 | Auth          | Local JWT (`JWT_SECRET`, `JWT_EXPIRES_IN`)                                                                           |
 | Image         | `ghcr.io/kindustries-erp/erp-api:<sha>`                                                                              |
 | CI/CD         | GitHub Actions (trigger branch active: `erp-master`)                                                                 |

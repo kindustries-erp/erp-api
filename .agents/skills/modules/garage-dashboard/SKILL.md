@@ -14,7 +14,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - **CHỈ tính** doanh thu, chi phí, lãi gộp và số vụ việc cho các phiếu dịch vụ **ĐÃ CÓ ngày hoàn thành công việc** (`c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
   - Bỏ qua các phiếu bị xóa trên KGara (`c.kgara_deleted_at IS NULL`) hoặc phiếu hủy (`c.tinh_trang_dich_vu != 9`).
 - **Quản lý Chi phí vận hành (OPEX), Giá vốn nhập tay & Hoa hồng**:
-  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, vật tư tiêu hao, bảo trì, khấu hao, khác), giá vốn trực tiếp (hoa hồng trực tiếp DV, chi phí trực tiếp khác) và hoa hồng (sale, dịch vụ).
+  - Nhập tay chi phí vận hành hàng tháng (nhân sự, thuê mặt bằng, điện nước, bảo trì, khấu hao, khác), giá vốn trực tiếp (hoa hồng trực tiếp DV, chi phí trực tiếp khác) và hoa hồng (sale, dịch vụ).
   - Phân loại qua `category_key` theo 3 nhóm chi phí: `OPEX` (CP Vận hành), `COGS` (Giá vốn), `COMMISSION` (Hoa hồng), lưu trữ theo `(period_year, period_month)`.
   - Hỗ trợ phát sinh định kỳ lặp lại theo chu kỳ tháng (`monthly`) với cơ chế áp dụng linh hoạt chuẩn Google Calendar (`this` vs `this_and_future`).
   - Hỗ trợ xem danh sách bảng chuẩn `/greenway/dashboard/opex` theo đúng quy chuẩn `standardize-table-page` & `standardize-table`:
@@ -22,20 +22,55 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - Cột Kỳ báo cáo (`period`) tích hợp `<DateRangeColumnSlot>` lọc khoảng ngày/tháng và các quick presets.
     - Context Menu (Row Actions) 4 thao tác chuẩn hóa: **Xem chi tiết** (`Eye`), **Chỉnh sửa** (`Pencil`), **Nhân đôi** (`Copy` - prefill toàn bộ dữ liệu vào form tạo mới), **Xóa** (`Trash2`).
     - Xem/sửa/nhân đôi qua 1-column StandardFormDrawer (`GarageOpexDrawer.tsx`) tích hợp xem trước số tiền bằng chữ (Vietnamese Currency Words) và định dạng số.
-- **Tiến độ Dòng tiền & Công nợ Dịch vụ (`GaragePaymentProgressCard.tsx` & `GarageMonthDetailDrawer.tsx`)**:
+- **Tiến độ Dòng tiền & Công nợ Dịch vụ (`garage-payment-progress-card` & `GarageMonthDetailDrawer.tsx`)**:
+  - **Vị trí hiển thị**: Đã được di dời sang tab **Tổng quan Công nợ** (`/garage-debts?tab=overview`, bên trong `GarageDebtsDashboardTab.tsx`), đặt ngay bên dưới khối biểu đồ phân tích tuổi nợ và trên các drawer. Đồng thời, tab mặc định của màn hình phiếu dịch vụ xưởng (`/garage-cases`) được chuẩn hóa từ `?tab=dashboard` thành `?tab=overview`.
+  - **Kiến trúc Atomic 5 tầng (Organism L3)**: Nằm tại `src/modules/garage/components/organisms/garage-payment-progress-card/`, toàn bộ 100% files khống chế < 180 LoC, co-located vitest test `GaragePaymentProgressCard.test.tsx`, hỗ trợ self-fetching React Query tự động khi không truyền props.
   - Tích hợp bảng chuẩn ERP `<DataTable>` (Spreadsheet variant) hiển thị chi tiết theo từng tháng từ mốc đối soát dòng tiền (`2026-07` trở đi).
   - Switch chuyển Tab pill bo tròn gọn gàng chuẩn Dashboard Tổng quan với 2 lựa chọn: **Phải Thu** & **Phải Trả**.
   - Tiêu đề cột tinh gọn & đồng bộ, độ rộng 200px cho toàn bộ các cột tiền tệ, bố cục chuẩn hóa:
-    - Tab **Phải Thu**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Doanh Thu` (200px) | `Tổng Phải Thu` (200px) | `Đã Thu` (200px) | `Còn Phải Thu` (200px, nền neutral) | `Còn Phải Thu Có HĐ` (200px) | `Còn Phải Thu Không HĐ` (200px).
-    - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (200px) | `Đã Trả` (200px) | `Còn Phải Trả` (200px, nền neutral) | `Còn Phải Trả Có HĐ` (200px) | `Còn Phải Trả Không HĐ` (200px).
-  - Hàng tổng cộng (`summaryRow`): Hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
+    - Tab **Phải Thu**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Doanh Thu` (180px) | `Tổng Phải Thu` (190px) | `Đã Thu` (180px) | `Còn Phải Thu` (180px, nền neutral) | `Còn Phải Thu Có HĐ` (170px) | `Còn Phải Thu Không HĐ` (170px) | `Không Theo Dõi Công Nợ` (170px).
+    - Tab **Phải Trả**: `#` (40px) | `Tháng` (120px) | `Số vụ việc` (110px) | `Tổng Phải Trả` (190px) | `Đã Trả` (180px) | `Còn Phải Trả` (180px, nền neutral) | `Còn Phải Trả Có HĐ` (170px) | `Còn Phải Trả Không HĐ` (170px) | `Không Theo Dõi Công Nợ` (170px).
+  - Hàng tổng cộng (`summaryRow`): Phân rã thành `receiptSummaryRow.tsx` và `paymentSummaryRow.tsx`, hiển thị trực tiếp các phần tử số liệu văn bản chuẩn kế toán (`font-mono tabular-nums font-bold text-right`), không dùng popover tương tác thừa.
   - Hỗ trợ Context Menu chuột phải trên từng dòng tháng mở **`GarageMonthDetailDrawer.tsx`** (2-column StandardFormDrawer layout):
-    - **Cột Trái (Main Content)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) với 8 cột chuẩn hóa: `#` (40px), `Loại nghiệp vụ` (200px), `Tổng phát sinh` (140px), `Đã thu/chi` (150px kèm thanh tiến độ), `Còn phải thu/trả` (140px), `Còn phải thu/trả có HĐ` (150px), `Còn phải thu/trả không HĐ` (150px), `Tỷ trọng (%)` (90px) và dòng tổng cộng `Σ`. Bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`), loại bỏ outer wrapper div chống double-border và đồng nhất nút `Xóa bộ lọc (N)` nằm bên trái cạnh tiêu đề section.
-    - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
-  - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng và từng nhóm Phân loại Nghiệp vụ.
+    - **Cột Trái (Main Content)**: Xếp chồng dọc 2 `DrawerSection` độc lập (`collapsible={true}`):
+      - **Section 1 (Nằm TRÊN)**: Bảng chuẩn `standardize-table` phân rã theo Nghiệp vụ (`Sửa chữa chung`, `Ký gửi / Nội bộ`, `OJ Ngoài`, `Khác`) với 8 cột chuẩn hóa: `#` (40px), `Loại nghiệp vụ` (200px), `Tổng phát sinh` (140px), `Đã thu/chi` (150px kèm thanh tiến độ), `Còn phải thu/trả` (140px), `Còn phải thu/trả có HĐ` (150px), `Còn phải thu/trả không HĐ` (150px), `Tỷ trọng (%)` (90px) và dòng tổng cộng `Σ`. Bảng tích hợp 100% Header Filters & Sorting (`createColumnHeaderFilter`).
+      - **Section 2 (Nằm DƯỚI)**: Bảng chi tiết phân rã đối tượng theo **Ma trận 3x3 (3 Nhóm Đối Tượng × 3 Trạng Thái Hóa Đơn)**:
+        - **Phân tách 3 Nhóm Đối Tượng Độc Lập**:
+          1. 🏢 **Khách hàng Doanh nghiệp / Tổ chức** (`ENTERPRISE`): Nhận diện qua MST (`taxCode`) hoặc tên pháp nhân (`CÔNG TY CP`, `TNHH`, `DNTN`, `Chi nhánh`, `HTX`...).
+          2. 👤 **Khách hàng Cá nhân** (`INDIVIDUAL`): Khách lẻ, chủ xe cá nhân không có MST.
+          3. 🛡️ **Bảo hiểm** (`INSURANCE`): Các công ty bảo hiểm xe cơ giới duyệt bồi thường (Bảo Long, Bảo Việt, MIC, PTI, AAA, PVI, VBI...).
+        - **Phân rã theo Đối Tượng & Từng Phiếu/Xe (`MonthPartnerCategorizedSection` & `MonthInvoicePartnerTable`)**:
+          - **Tách chi tiết theo từng phiếu & từng xe**: Bảng hiển thị dạng phẳng (`MonthInvoiceCaseRow[]`) từ mảng `cases` của API backend, mỗi dòng đại diện cho 1 phiếu dịch vụ và 1 xe cụ thể.
+          - **Cột Số chứng từ chuẩn hóa 2 dòng (`GarageCaseCodeCell`)**:
+            - Dòng 1: Icon con mắt (click mở trực tiếp `GarageCaseStandaloneDrawer`) + Mã phiếu (`soChungTu`, text xanh đậm `text-primary`, click mở chi tiết) + Nút Copy.
+            - Dòng 2: Icon xe hơi (`Car`) + Biển số xe (`bienSoXe`, font mono) + Nút Copy biển số.
+          - **Quy tắc bố cục theo Toolbar Filter & Switch Phải thu / Phải trả**:
+            - **Cụm nút Phải thu / Phải trả (`CustomerDetailDebtSwitch`)**: Nằm trực tiếp trong prop `rightExtra` của thanh `PillTabs` bộ lọc đối tượng, căn phải tự nhiên, đảm bảo vừa khít 100% container và không sinh ra bất kỳ thanh cuộn ngang (scrollbar) nào.
+            - **Chuyển đổi thông số Chi phí & Phải trả khi chọn "Phải trả" (`debtType = "payables"`)**:
+              - Backend truy vấn cả `settlement_type IN ('RECEIPT', 'PAYMENT')` hỗ trợ cả `s.case_id` và `s.gross_profit_id`.
+              - Giá vốn thực tế (`cost`) được bóc tách từ bảng **`kgara_gross_profit.chi_phi`** (qua `hd_phieu_dich_vu_id` hoặc `vu_viec_code`, thay vì phụ thuộc `kgara_cases.chi_phi` vốn là NULL trong KGara), tính toán `paidCost` (đã thanh toán chi phí từ settlements PAYMENT) và `remainingCost` (`Math.max(0, cost - paidCost)`).
+              - Các cột bảng tự động cập nhật tiêu đề tài chính: `CHI PHÍ` (thay vì `PHÁT SINH`), `ĐÃ CHI` (thay vì `ĐÃ THU`), `CÒN PHẢI CHI` (thay vì `CÒN PHẢI THU`), `LOẠI CHI` (thay vì `LOẠI THU`), tỷ trọng (%) tính theo tổng chi phí.
+            - **Badge Cột Hóa đơn & VAT**: Các phiếu không có hóa đơn và không phát sinh thuế GTGT hiển thị badge chuẩn hóa **`"Không VAT"`** (thay vì `"Chưa xuất HĐ (K.Thuế)"`), phong cách outline slate/neutral.
+            - Khi ở Tab **Tất cả đối tượng** (`all`): Mỗi nhóm (Doanh nghiệp, Cá nhân, Bảo hiểm) chỉ chứa **1 TABLE TỔNG HỢP DUY NHẤT** (`categorized.all`), không chia nhỏ thành các sub-section hóa đơn.
+            - Khi ở **3 Tab con** (`enterprise`, `individual`, `insurance`): Chia thành **3 DRAWER SECTION ĐỘC LẬP** riêng biệt (`Đã xuất hóa đơn`, `Chưa xuất hóa đơn - Có VAT`, `Không xuất hóa đơn`).
+          - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+            - `MonthInvoiceCaseRow.type.ts` (< 80 LoC), `MonthInvoiceCaseRow.helper.ts` (< 150 LoC kèm co-located test), `MonthInvoiceCaseTable.cells.tsx` (< 80 LoC), `MonthInvoiceCaseTable.columns.tsx` (< 165 LoC), `MonthInvoicePartnerTable.tsx` (< 170 LoC), `MonthPartnerCategorizedSection.tsx` (< 150 LoC).
+            - Tuân thủ 100% No Blue Mandate và giới hạn cứng < 180 LoC.
+        - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
+        - **2 Thẻ KPI Tương phản (`MonthPayerKpiGrid`)**: Phân tách rõ rệt nguồn thu từ Khách hàng và từng khoản duyệt bồi thường từ Bảo hiểm.
+    - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Cơ cấu Thu KH vs Thu BH, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
+  - **Đồng bộ hóa Giao diện & Kiến trúc Drawer Chi tiết Mốc Thời Gian Tuổi Nợ (`GarageTimeHorizonDetailDrawer.tsx`)**:
+    - **Áp dụng toàn bộ UI & Layout của Tháng (`GarageMonthDetailDrawer`)**: Drawer chi tiết của các card tuổi nợ (`criticalOverdue90Plus`, `overdue30To90`, `currentMonth`, `futureReceivable`) sử dụng chuẩn 2-columns `StandardFormDrawer` với 3 tabs:
+      1. Tab 1: **Phân loại Nghiệp vụ** (`TimeHorizonClassificationTab.tsx`): Bảng tổng hợp nhóm nghiệp vụ (Sửa chữa chung, Ký gửi / Nội bộ, OJ Ngoài, Khác).
+      2. Tab 2: **Phân loại theo đối tượng** (`TimeHorizonPartnerTab.tsx`): Ma trận 3 nhóm đối tượng (Doanh nghiệp, Cá nhân, Bảo hiểm) tích hợp công tắc Phải thu / Phải trả, click drilldown vào `GaragePartnerMonthDetailDrawer`.
+      3. Tab 3: **Danh sách vụ việc** (`TimeHorizonCasesTab.tsx`): Bảng danh sách phiếu dịch vụ chi tiết với STT chuẩn 1-based, pagination server-side và mở chi tiết `GarageCaseStandaloneDrawer`.
+    - **Cột phải (`TimeHorizonRightPanel.tsx`)**: Tích hợp cảnh báo hóa đơn VAT chưa xuất (`ReceivablesVatWarningSummary`), cơ cấu Thu KH vs Thu BH (`MonthPayerKpiGrid`), chi phí phát sinh & phải trả (`MonthCostPayableKpiCard`), và đánh giá rủi ro mốc thời gian.
+    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/api-service-refactor` (`garage-receivables-classification.helper.ts`).
+  - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
-  - Đặt vị trí ưu tiên nằm ngay trên Section Tiến độ Dòng tiền với badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
+  - Bố trí tại `GarageDashboard` (`garage-cases?tab=overview` / `?tab=dashboard`) nằm ở **Section 2** (ngay dưới `GarageStatsCards`), nằm TRÊN **Section 3** (`GarageConversionFunnelCard` - Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ).
+  - Badge header phong cách đồng bộ (`Báo cáo Lợi nhuận (P&L)`).
   - Nút **Quản lý CP vận hành** đặt tại góc trên bên phải Section Header.
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
   - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
@@ -50,6 +85,9 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - **Hàng 1 (Main Amount)**: Số tiền chính căn phải, font mono, `whitespace-nowrap` (tuyệt đối không bị rớt dòng đơn vị `đ`).
     - **Hàng 2 (Sub-text %)**: Căn phải ngay dưới số tiền với font nhỏ (`text-[10px]`), gồm **Delta %** (so sánh với tháng liền kề trước, xanh lá nếu tốt, đỏ nếu chi phí tăng/doanh thu giảm) và **% Doanh thu (% DT)** của chính tháng đó.
     - **Cột Danh Mục**: Loại bỏ các badge % lẻ tẻ để giữ cột Danh mục thoáng đãng, thuần túy tên khoản mục; toàn bộ % DT được hiển thị chuẩn xác ở Hàng 2 của từng cột tháng tương ứng.
+  - **Quy chuẩn Numeric Style Level 3 Bảng P&L**:
+    - Toàn bộ dòng con Level 3 (bao gồm các dòng `Trong đó: Phát sinh liên quan OJ` 1.1.1, 2.1.1, 3.1, 5.x.1, 6.1, 7.1.1, 7.x.1, 8.1, 2.2.x.1 và chi tiết ký gửi 4.1.1, 4.1.2) đồng nhất 100% text style `text-[11px] font-mono tabular-nums text-muted-foreground font-normal` trên cả 3 cột tháng.
+    - Tái sử dụng `PnlAmountCell` với `hideDelta={true}`, `hideRate={true}` để hiển thị 1 dòng phẳng compact, không lệch màu, không lệch bold và không phát sinh delta/rate badge phụ ở cấp con.
   - Tự động ghép nối và đối soát dòng con chi tiết giữa 3 tháng liên tiếp (`mergePnlItems`), hiển thị đầy đủ số tiền và tỷ lệ biến động (delta) giữa các kỳ tháng.
   - Khung Card giao diện sử dụng `bg-surface border border-border rounded-xl p-5 card-shadow overflow-hidden min-w-0` đồng bộ hoàn toàn hiệu ứng đổ bóng `card-shadow` trên Dashboard.
   - **Tổng hợp tự động 8 chỉ mục tài chính phân cấp (Số La Mã I → VIII)**:
@@ -84,9 +122,21 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
       - Donut Chart Phân Bổ Trạng Thái Phiếu DV (Hoàn tất, Đang xử lý, Báo giá, Tiếp nhận, Hủy).
     - **Tầng 3**: Bảng `<DataTable variant="spreadsheet">` chi tiết 4 phân loại ERP chuẩn `/standardize-table` (STT `#` 40px center, No Blue Mandate, SubtotalSummaryCell footer).
   - Dữ liệu tính toán độc lập tại `conversionFunnel` & `conversionFunnelByMonth` trong `garage-dashboard.service.ts`, phản hồi tức thì theo kỳ tháng được chọn.
-- **Xuất Báo Cáo Excel Chuyên Nghiệp**:
-  - `exportExcel`: Báo cáo Tổng quan Garage 2 sheets (Tổng quan tháng & Chi tiết phiếu dịch vụ).
-  - `exportPnlExcel`: Báo cáo P&L theo tháng chi tiết từng dòng doanh thu, chi phí, OPEX, hoa hồng và lợi nhuận ròng.
+- **Thu chi trong báo cáo kỳ (cập nhật 2026-10-18)**: thẻ và chart thu chi lấy số từ sổ quỹ Hub (`getPeriodLedger`), gồm **DỰ THU** (phiếu thu `EXPECTED`) và **DỰ CHI** (phiếu chi Chờ duyệt/Đã duyệt) tách khỏi ĐÃ THU / ĐÃ CHI. Chi tiết phân loại xem `garage-cashflow/SKILL.md` mục 14.
+- **Xuất Báo Cáo Excel Theo Kỳ (cập nhật 2026-10-16)**:
+  - Nút **Xuất Excel** ở tab Tổng quan mở drawer xuất nền (cùng cơ chế xuất công nợ: job nền `ExportJobRunner`, lịch sử + tải lại trong 24 giờ, SSE tiến trình). Endpoint cũ `GET /greenway/dashboard/export` và `GarageDashboardExportService` đã **xóa**.
+  - Endpoint nền (`GarageDashboardExportController`, quyền `GARAGE:READ` **và** `GARAGE_DEBTS:READ` vì file chứa công nợ): `POST /api/v1/greenway/dashboard/export/background` (body `{ from?, to?, reportType? }`, `reportType` ∈ `all` \| `business` \| `cashflow-debts` \| `overdue`, mặc định `all`), `GET .../background/history`, `GET .../background/:jobId/download`, `SSE .../progress/stream`. Runner `garage-dashboard-xlsx-export` trong `GarageExportJobsService.startDashboardExport`; file `Bao_cao_Garage_<từ>-<đến>_<timestamp>.xlsx` cho `all`; các loại khác thêm nhãn sau tiền tố: `Bao_cao_Garage_Hoat_dong_kinh_doanh_…`, `…_Thu_chi_cong_no_…`, `…_No_qua_han_…`. Fingerprint gồm `reportType` (đã chuẩn hóa `undefined` → `all`) nên reuse-window 10 phút không lẫn giữa các loại.
+  - **Loại báo cáo kỳ (cập nhật 2026-10-17)**: `helpers/garage-period-report-sections.helper.ts` map `reportType` → tập section (`dashboard`, `pnl`, `debts`, `overdue`, `cashflow`): `all` = cả 5; `business` = `pnl` (P&L kèm 2 chart); `cashflow-debts` = `dashboard` + `debts` + `cashflow`; `overdue` = `overdue`. `GaragePeriodReportService` chỉ chạy query mà section cần (dashboard kéo theo công nợ trong kỳ, nợ còn mở và phiếu thu chi), `buildGaragePeriodReport` chỉ dựng sheet khi section có mặt và chỉ còn inject chart cho sheet `Báo cáo lợi nhuận`.
+  - **Sheet "Báo cáo" (tên cũ "Dashboard", `PERIOD_REPORT_SHEET` / `PERIOD_REPORT_COLUMNS` = 18 cột, cập nhật 2026-10-17)**: 3 cột đều nhau 6 cột có tiêu đề riêng. Cột 1 thu chi (đã thu, đã chi, dự chi, dòng tiền ròng, mỗi thẻ có ±% kỳ trước); cột 2 tuổi nợ lũy kế (phải thu còn mở, phải trả còn mở, nợ trên 60 ngày của mỗi phía); cột 3 hai thẻ phát sinh nằm trên chart nhóm khách. Mỗi nhóm có nền riêng (`CardGroupTheme`: thu chi emerald, tuổi nợ hổ phách, phát sinh theo nhóm khách violet; tiêu đề cỡ 13). Thẻ luôn giữ dòng ghi chú (`reserveNote`) để ba cột thẳng hàng. Chart nhóm khách tách Có VAT / Không VAT theo `hasVat` của hồ sơ. Vùng in ≤ 34 dòng (test kiểm tra). Xuất chọn mục bằng `reportSections` (multi-select web); `reportType` cũ vẫn dùng được, ưu tiên `reportSections`. Sheet công nợ phải thu và phải trả tách theo section `receivables` / `payables`.
+  - **Quy tắc gom thời gian** (`helpers/garage-period-bucket.helper.ts`, `resolveBucketUnit`): kỳ ≤ 27 ngày → ngày, 28-60 ngày → tuần (thứ Hai - Chủ nhật), > 60 ngày → tháng; thiếu kỳ → tháng. Nên tuần trọn → ngày, tháng trọn (28-31 ngày) → tuần, quý/năm → tháng. `aggregateByBucket` điền mốc trống bằng 0; `garage-period-series.helper.ts` dựng chuỗi thu chi / doanh thu / công nợ cho chart. Dữ liệu theo ngày lấy từ `GaragePeriodTimelineQueries` (`services/garage-period-timeline-queries.service.ts`): `loadRevenueTimeline` (cùng điều kiện lọc `getPnlReport`, **không lọc chi nhánh** để khớp P&L) và `loadDebtTimeline` (phải thu từ `tien_co_thue`/`tien_da_thanh_toan`, phải trả dùng `PAYMENT_BY_CASE_JOIN` + `buildPayableExprs` như `garage-debts-analytics.service.ts`; chỉ tính từ mốc 01/07/2026). Service chỉ chạy timeline mà section cần (`pnl` → doanh thu, `dashboard` → công nợ).
+  - **Sheet Báo cáo lợi nhuận 3 cấp**: `garage-period-pnl-table.helper.ts` (`buildPnlTableRows`, `writePnlTable`, `level` 1-3, đánh số 1 / 1.1 / 1.1.1). 1. Doanh thu → phân loại (Ký gửi/Nội bộ, Sửa chữa chung, OJ, Khác) → số phiếu; 2. Chi phí → giá vốn từ phiếu (cấp 3 theo phân loại) và điều chỉnh giá vốn nhập tay (cấp 3 từng dòng, kèm ghi chú); 4. Chi phí vận hành → hạng mục (cộng các dòng cùng khóa) → từng dòng nhập (nhãn lấy từ ghi chú, mặc định "Khoản chi"); 6. Hoa hồng **gồm cả HHBH** (`commissionTotal + hhbhTotal`) nên V − VI = VII. `getPnlReport` thêm `revenueByClassification` (tổng 4 nhóm = doanh thu), `toPnlMonthRow` thêm `cogsDirect`, `cogsAdjustmentItems`, `revenueSegments`, `hhbhTotal`, `note` của dòng nhập. Chart thứ nhất (theo kỳ, gom ngày/tuần/tháng; giá vốn chỉ gồm giá vốn từ phiếu) đứng trên 2 chart 12 tháng; bảng dữ liệu chart dời xuống dưới các chart.
+  - Dữ liệu do `GaragePeriodReportService` gom: công nợ trong kỳ + phân nhóm (tái dùng `GarageDebtsExportService.loadCustomerRows/loadSupplierRows/loadCustomerGroups`), nợ còn mở từ 01/07/2026 không giới hạn kỳ (cho cảnh báo quá hạn), phiếu thu chi xưởng `kgara_cashflow_vouchers` theo `trans_date` (`GaragePeriodReportQueries.loadVouchers`) và P&L 12 tháng (`loadPnlMonthly`, gọi `GaragePnlService.getPnlReport` từng tháng, tối đa 3 yêu cầu song song, lỗi một tháng làm lỗi cả job). Tháng báo cáo = tháng chứa `min(to, hôm nay)` (`reportMonthOf` trong `garage-pnl-month.helper.ts`).
+  - File gồm các sheet: `Báo cáo` (thu chi & công nợ) → `Báo cáo lợi nhuận` (P&L) → `Nợ quá hạn phải thu` → `Nợ quá hạn phải chi` → từng nhóm phải thu (`Thu Khách hàng Doanh nghiệp/Cá nhân/Bảo hiểm`) → `Công nợ phải trả` → `Thu chi trong kỳ`. Chart thu chi: Thu/Chi màu đậm có nhãn số; Dự thu/Dự chi màu nhạt cùng họ (emerald/rose), không nhãn.
+  - **Dashboard** (xem mục Sheet Dashboard ở trên là nguồn chuẩn cho layout hiện tại): thu chi 4 thẻ, công nợ phát sinh 2 thẻ, cảnh báo lũy kế 4 thẻ (61-90 và trên 90 ngày của hai phía), 2 chart một hàng, ghi chú nguồn ở cuối. Thu vs chi: ≤14 ngày có phiếu vẽ theo ngày, nhiều hơn gộp theo tuần thứ Hai - Chủ nhật (`bucketCashflow` trong `garage-period-cashflow-bucket.helper.ts`). Builder: `garage-period-dashboard.builder.ts`.
+  - **Báo cáo lợi nhuận** (`garage-period-pnl.builder.ts`, `garage-period-pnl-table.helper.ts`): bảng P&L của tháng báo cáo ở cột A:C gồm Danh mục | tháng này | tháng trước; 1 Doanh thu, 2 Chi phí, 3 Lợi nhuận gộp, 4 Chi phí bán hàng (4.1 tỷ lệ ký gửi, 4.2 Hoa hồng Sale 10%, 4.3 HHBH), 5 Chi phí vận hành, 6 Lợi nhuận ròng trước hoa hồng DV = GP − CPBH − OPEX, 7 Hoa hồng DV (DV và nhập tay), 8 Lợi nhuận ròng sau hoa hồng DV; chart waterfall thay chart tỷ trọng trước đây (tháng trước là `months[last-1]`, không có thì để trống). Các dòng đánh số thứ bậc 1. / 1.1 / 1.1.1 (`numberRows`), mỗi dòng có khóa ổn định (`key`) để ghép với tháng trước; `zeroIfMissing` thì coi thiếu là 0 (tổng, phân loại, hạng mục), dòng chi tiết nhập tay thiếu thì để trống. Hai chart 12 tháng: combo doanh thu/chi phí/lợi nhuận gộp + % lợi nhuận gộp trên trục phụ, và waterfall "Từ doanh thu đến lợi nhuận ròng" của tháng báo cáo (dựng bằng cột chồng với series "Nền" ẩn, `helpers/garage-period-pnl-waterfall.helper.ts`; tuỳ chọn `hidden`/`showLegend` của bộ vẽ); chart và bảng dữ liệu nằm từ cột E, vùng in `A1:N…`. Đã bỏ chart doanh thu/giá vốn/lãi gộp theo tuần và toàn bộ `revenueTimeline`/`loadRevenueTimeline`/`buildRevenueSeries`. **Kỳ lợi nhuận (cập nhật 2026-10-18)**: `helpers/garage-pnl-period.helper.ts` (`resolvePnlPeriod`, `groupPnlPeriods`, `pnlPeriodLabel`) cộng các tháng trong kỳ: 1 tháng → tháng, quý trọn → quý, nhiều tháng khác → "Kỳ MM–MM/YYYY"; kỳ trước cùng độ dài liền trước. Sheet có 4 chart: xu hướng theo kỳ, tỷ trọng trên 100% doanh thu (có Chi phí bán hàng), và hai waterfall (kỳ này, kỳ trước) với mỗi nhóm chi phí một màu; nhãn trục ở đáy (`categoryLabelsLow`).
+  - Bộ vẽ chart (`common/xlsx-charts`) hỗ trợ: `stacked` (cột chồng), `secondaryAxis` + `secondaryNumFmt`/`secondaryMin`/`secondaryMax` (series đường của `combo` trên trục phụ bên phải), nhãn số theo chart hoặc theo series (`dataLabels`, `labelNumFmt`, `labelFontSize`; vị trí tự chọn: cột ghép `outEnd`, cột chồng `ctr`, đường `t`), giá trị `null` là ô trống (đường ngắt quãng). Hằng nhãn: `LABEL_MONEY_FMT` (`tr`/`k`, ẩn 0 và dưới 1.000) và `LABEL_PERCENT_FMT` (ẩn dưới 3%). `writeAlertCards` dựng card 3 dòng có màu riêng, `chartAnchorRow` chia đều 16 cột cho 2-3 chart một hàng.
+  - Mốc thời gian: doanh thu/giá vốn theo ngày hoàn thành phiếu; đã thu/đã chi theo `trans_date` phiếu thu chi; số dư và tuổi nợ tính đến ngày xuất (ghi ở dòng `Kỳ:`). "Đã thu" trên Dashboard (từ phiếu thu chi) có thể lệch "Đã thu" trong sheet nhóm công nợ (từ cấn trừ phiếu dịch vụ).
+  - `exportPnlExcel`: Báo cáo P&L theo tháng chi tiết từng dòng doanh thu, chi phí, OPEX, hoa hồng và lợi nhuận ròng (không đổi).
 
 ---
 
@@ -145,7 +195,8 @@ src/kgara-api-core/
 │   ├── garage-dashboard-stats.service.ts # Thống kê xu hướng tháng, doanh thu, giá vốn, lãi gộp, tiến độ thu/chi & phễu
 │   ├── garage-checkpoint.service.ts    # Chỉ số KPI Checkpoints (Tháng/Tuần/Hôm nay), Sparklines & Drill-down ca
 │   ├── garage-customer-stats.service.ts # Phân tích khách hàng, doanh thu, lãi gộp & tuổi nợ
-│   ├── garage-dashboard-export.service.ts # Xuất báo cáo Excel 2 sheet (Tổng quan tháng & Chi tiết ca)
+│   ├── garage-period-report.service.ts    # Báo cáo Excel theo kỳ (gom công nợ, nợ quá hạn, thu chi, P&L 12 tháng)
+│   ├── garage-period-report-queries.service.ts # Query phiếu thu chi xưởng + P&L theo tháng
 │   ├── garage-pnl.service.ts           # Báo cáo P&L, hoa hồng tự động Sale 10%/DV 10% & xuất Excel P&L
 │   └── garage-pnl.spec.ts              # Unit tests P&L & hoa hồng tự động (Pass 100%)
 ├── garage-dashboard.controller.ts      # REST Controller (Dashboard, Checkpoint, OPEX, P&L, ApplyRecurring)
@@ -168,7 +219,7 @@ Resource RBAC: `garage`
 | `GET` | `/checkpoint-kpis` | `{ resource: 'garage', action: 'read' }` | — | KPIs Sparkline Tháng/Tuần/Hôm nay |
 | `GET` | `/checkpoint-cases` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `page`, `pageSize` | Danh sách vụ việc chi tiết theo checkpoint |
 | `GET` | `/customers` | `{ resource: 'garage', action: 'read' }` | Query pagination, filters, sort | Danh sách khách hàng kèm doanh thu, lãi gộp & nợ |
-| `GET` | `/export` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to` | Xuất file Excel báo cáo tổng quan 2 sheets |
+| `POST` | `/export/background` | `garage:read` + `garage_debts:read` | body `{ from?, to?, reportType? }` | Tạo job nền xuất báo cáo Garage theo kỳ (kèm `GET /export/background/history`, `GET /export/background/:jobId/download`, `SSE /export/progress/stream`). Thay endpoint cũ `GET /export` đã xóa |
 | `GET` | `/opex` | `{ resource: 'garage', action: 'read' }` | `year`, `month`, `page`, `pageSize`, `sorts`, `columnFilters`, `columnSearch` | Danh sách chi phí vận hành có phân trang, sort, filter |
 | `GET` | `/opex/column-options`| `{ resource: 'garage', action: 'read' }` | `column`, `search`, `page`, `pageSize`, `filtersStr` | Danh sách giá trị phân biệt phục vụ Header Filter |
 | `GET` | `/opex/:id` | `{ resource: 'garage', action: 'read' }` | `id` (uuid) | Chi tiết một khoản chi phí vận hành |
@@ -177,7 +228,9 @@ Resource RBAC: `garage`
 | `POST`| `/opex/:id/apply-recurring` | `{ resource: 'garage', action: 'update' }`| `ApplyRecurringOpexDto` | Áp dụng thay đổi định kỳ (This vs This and Future) |
 | `DELETE`| `/opex/:id` | `{ resource: 'garage', action: 'delete' }`| `id` (uuid) | Xóa khoản chi phí vận hành |
 | `GET` | `/pnl-report` | `{ resource: 'garage', action: 'read' }` | `year`, `month` | Báo cáo Lợi nhuận P&L theo tháng kèm `cogsAdjustment` |
+| `GET` | `/pnl-trend` | `{ resource: 'garage', action: 'read' }` | `year`, `month`, `count` (mặc định 12, kẹp 1..24) | P&L nhiều tháng cũ→mới cho 2 chart web: `PnlTrendPoint[]` `{year, month, label, revenue, cogs, grossProfit, grossMarginRatio (null khi DT=0), ratios{cogs,nhanSu,matBang,vatTu,baoTri,khauHao,khac}}`; cùng nguồn `loadPnlMonthly` + `bucketOpex` với sheet Excel (`toPnlTrendPoint` trong `garage-pnl-month.helper.ts`, `GarageDashboardService.getPnlTrend`) |
 | `GET` | `/pnl-report/export` | `{ resource: 'garage', action: 'read' }`| `year`, `month` | Xuất file Excel Báo cáo P&L theo tháng |
+| `GET` | `/monthly-receivables-breakdown` | `{ resource: 'garage', action: 'read' }` | `month`, `branch_id` | Phân rã chi tiết Phải thu & Đã thu theo tháng: Thu KH, Thu BH, Từng Công ty Bảo hiểm & Cảnh báo VAT chưa xuất HĐ |
 | `GET` | `/debts-analytics` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Phân tích tổng hợp công nợ KH vs NCC, mốc thời gian & dự báo IFRS 9 |
 | `GET` | `/time-horizons/:horizon/cases` | `{ resource: 'garage', action: 'read' }` | `horizon`, `date_from`, `date_to`, `branch_id`, pagination | Danh sách vụ việc chi tiết theo mốc thời gian cho Drawer |
 
@@ -202,7 +255,7 @@ Resource RBAC: `garage`
      $$\text{Comm}_{sale} = \begin{cases} \text{round}((GP - OPEX) \times R_{kg} \times 10\%) & \text{khi } (GP - OPEX) > 0 \\ 0 & \text{ngược lại} \end{cases}$$
    - $SE = \text{Comm}_{sale} + \sum \text{Selling Expenses nhập tay}$
 5. **5. Chi phí vận hành ($OPEX$)**:
-   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Vật tư tiêu hao, Bảo trì, Khấu hao, Chi phí khác).
+   Tổng `amount` các bản ghi trong `kgara_operating_expenses` thuộc nhóm chi phí vận hành (Nhân sự, Thuê mặt bằng, Điện nước, Bảo trì, Khấu hao, Chi phí khác).
 6. **6. Lợi nhuận ròng ($NP$)**:
    $$NP = GP - SE - OPEX$$
 7. **7. Thưởng và Hoa hồng Dịch vụ ($COMM_{dv}$)**:
@@ -226,8 +279,12 @@ Resource RBAC: `garage`
   - Pages & Components (Chuẩn `/ui-atomic-refactor`):
     - [`pages/GarageDashboard/`](erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
-    - [`components/GarageConversionFunnelCard/`](erp/erp-web/src/modules/garage/components/GarageConversionFunnelCard/) (Phễu chuyển đổi 3 tầng, 3 biểu đồ song song & bảng phân loại ERP)
-    - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 7 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+    - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 8 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
+      - **Quy chuẩn Design Tokens phân cấp theo Number Level (4 Tầng)**:
+        - **Level 1 (Số La Mã: I → VIII)**: `py-2.5 px-4`, `font-bold text-foreground text-[13px]`, numeric month 0 `font-bold text-foreground`.
+        - **Level 2 (`X.Y`: 1.1, 2.1, 2.2, 3.1, 4.1, 4.2, 5.x, 6.1, 7.1, 7.x, 8.1)**: Thụt lề `py-2 px-8`, chữ `font-medium text-slate-700 dark:text-slate-300 text-xs`, numeric month 0 `py-2 px-4 font-semibold text-foreground` (hoặc `font-medium`), đồng bộ màu sắc và độ đậm không phân biệt module.
+        - **Level 3 (`X.Y.Z`: 1.1.1, 2.1.1, 2.2.x, 4.1.1, 4.1.2, 5.x.1, 7.x.1)**: Thụt lề `py-1.5 pl-14 pr-4`, chữ `text-[11px] text-muted-foreground`, numeric cells `py-1.5 px-4 text-[11px] text-muted-foreground font-normal`.
+        - **Level 4 (`X.Y.Z.W`: 2.2.x.1)**: Thụt lề `py-1.5 pl-20 pr-4`, chữ `text-[11px] italic text-muted-foreground`, numeric cells `py-1.5 px-4 text-[11px] text-muted-foreground font-normal`.
     - [`components/GaragePaymentProgressCard/`](erp/erp-web/src/modules/garage/components/GaragePaymentProgressCard/) (Tiến độ thu/chi & công nợ dịch vụ theo tháng)
     - [`GarageOpex.tsx`](erp/erp-web/src/modules/garage/pages/GarageOpex.tsx) (Trang danh sách Chi phí vận hành dạng Spreadsheet, Combobox filter, sort/filter server-side)
     - [`GarageOpexDrawer.tsx`](erp/erp-web/src/modules/garage/components/GarageOpexDrawer.tsx) (1-column StandardFormDrawer tạo/sửa chi phí với Combobox)
@@ -239,3 +296,7 @@ Resource RBAC: `garage`
 1. **TypeCheck & Linting**: Chạy `bun run check:ci` trong `erp-api/` và `erp-web/`.
 2. **Backend Unit Tests**: Chạy `bunx jest src/kgara-api-core/ --forceExit` (bắt buộc pass 100%).
 3. **Web Build**: Chạy `bun run build` trong `erp-web/` (bắt buộc pass 100%).
+
+> **Bảng màu chart Excel (2026-10-17)**: `CHART_PALETTE` (`src/common/xlsx-charts/xlsx-chart.types.ts`) đổi sang tông chart Dòng tiền web: `059669, EA580C, 475569, E11D48, 7C3AED, 0D9488, CA8A04` (+3 màu dự phòng). Đường `% Lợi nhuận gộp` ở sheet Báo cáo lợi nhuận dùng slot teal `[5]`. Mọi sheet có chart dùng chung bảng này.
+
+> **Phễu chuyển đổi (2026-10-17)**: `conversionFunnel` / `conversionFunnelByMonth` (`garage-dashboard-stats.service.ts`) có thêm `quotation {count, amount, rate}` và `byClassification.*.quotationCount/quotationAmount`. Báo giá = phiếu chưa hoàn thành, chưa hủy và thỏa `quotationStatusSql(alias)` (`helpers/kgara-case-filter.helper.ts`, cùng điều kiện tab Báo giá của danh sách vụ việc); `inProgress*` chỉ còn phiếu chưa hoàn thành không phải báo giá.
