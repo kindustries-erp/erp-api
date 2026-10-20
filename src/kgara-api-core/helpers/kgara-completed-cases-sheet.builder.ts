@@ -7,6 +7,7 @@ import {
   borderThin,
   styleMarginCell,
   getExcelColumnLetter,
+  applyColumnGroupStyles,
   COMPLETED_CASES_COLUMNS,
   COMPLETED_CASES_ALL_COLUMNS,
   CASE_PNL_COLUMNS,
@@ -23,28 +24,27 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   KHAC: 'Khác',
 };
 
-export function formatDisplayDate(d?: Date | string | null): string {
-  if (!d) return '—';
-  try {
-    const dt = typeof d === 'string' ? new Date(d) : d;
-    if (isNaN(dt.getTime())) return String(d);
-    const day = String(dt.getDate()).padStart(2, '0');
-    const month = String(dt.getMonth() + 1).padStart(2, '0');
-    const year = dt.getFullYear();
-    return `${day}/${month}/${year}`;
-  } catch {
-    return String(d);
-  }
-}
-
-/** Ngày giờ `dd/MM/yyyy HH:mm`, dùng cho các cột thời điểm hệ thống. */
-export function formatDisplayDateTime(d?: Date | string | null): string {
-  if (!d) return '—';
-  const dt = typeof d === 'string' ? new Date(d) : d;
-  if (isNaN(dt.getTime())) return String(d);
-  const hh = String(dt.getHours()).padStart(2, '0');
-  const mi = String(dt.getMinutes()).padStart(2, '0');
-  return `${formatDisplayDate(dt)} ${hh}:${mi}`;
+/**
+ * Ngày làm giá trị ô Excel (kiểu ngày thật, để lọc/nhóm/pivot). Lấy ngày/giờ theo getter
+ * local, cùng cách hiển thị cũ, rồi dựng Date theo thành phần UTC để ExcelJS ghi đúng
+ * ngày giờ đó. `null` khi trống để ô để trống.
+ */
+export function toExcelWallClockDate(
+  value: Date | string | null | undefined,
+  withTime = false,
+): Date | null {
+  if (!value) return null;
+  const dt = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(dt.getTime())) return null;
+  return new Date(
+    Date.UTC(
+      dt.getFullYear(),
+      dt.getMonth(),
+      dt.getDate(),
+      withTime ? dt.getHours() : 0,
+      withTime ? dt.getMinutes() : 0,
+    ),
+  );
 }
 
 /** Mô tả quy tắc loại trừ; không loại trừ thì trả về `—`. */
@@ -391,8 +391,8 @@ export function buildSheet1CompletedCases(
       khachHangName: c.khachHangName || '—',
       tenTinhTrangDichVu: c.tenTinhTrangDichVu || 'Đã kết thúc',
       classification: classLabel,
-      ngayTiepNhan: formatDisplayDate(c.ngayTiepNhan || c.ngayPhatSinh),
-      ngayHoanThanhCongViec: formatDisplayDate(c.ngayHoanThanhCongViec),
+      ngayTiepNhan: toExcelWallClockDate(c.ngayTiepNhan || c.ngayPhatSinh),
+      ngayHoanThanhCongViec: toExcelWallClockDate(c.ngayHoanThanhCongViec),
       phaiThuBaoHiem,
       phaiThuKhachHang,
       phaiThu: formulaOrValue(
@@ -445,9 +445,9 @@ export function buildSheet1CompletedCases(
       duChi,
       vatAmount,
       exclusionRules: formatExclusionRules(c),
-      createdAt: formatDisplayDateTime(c.createdAt),
-      updatedAt: formatDisplayDateTime(c.updatedAt),
-      dataAsOf: formatDisplayDateTime(c.dataAsOf),
+      createdAt: toExcelWallClockDate(c.createdAt, true),
+      updatedAt: toExcelWallClockDate(c.updatedAt, true),
+      dataAsOf: toExcelWallClockDate(c.dataAsOf, true),
     };
 
     const row = sheet.addRow(
@@ -506,6 +506,7 @@ export function buildSheet1CompletedCases(
     sumRow: marginSum && hasColumn('margin') ? { margin: marginSum } : {},
     subtotalRow: marginSub && hasColumn('margin') ? { margin: marginSub } : {},
   });
+  applyColumnGroupStyles(sheet, columns, SHEET1_FIRST_DATA_ROW);
   for (const key of ['duThu', 'duChi']) {
     const forecastIdx = columns.findIndex((c) => c.key === key);
     if (forecastIdx >= 0) applyForecastColumnStyle(sheet, forecastIdx + 1);
@@ -606,7 +607,7 @@ export function buildSheet2PnlTracking(
       bienSoXe: c.bienSoXe || '—',
       khachHangName: c.khachHangName || '—',
       classification: classLabel,
-      ngayHoanThanhCongViec: formatDisplayDate(c.ngayHoanThanhCongViec),
+      ngayHoanThanhCongViec: toExcelWallClockDate(c.ngayHoanThanhCongViec),
       doanhThuDichVu: dtDv,
       doanhThuPhuTung: dtPt,
       doanhThu: { formula: `G${rowIdx}+H${rowIdx}`, result: rev },

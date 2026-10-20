@@ -147,7 +147,9 @@ describe('cột tùy chọn của Sheet 1', () => {
     ]);
     expect(sheet.getRow(5).getCell(1).value).toBe(1800000);
     expect(sheet.getRow(5).getCell(2).value).toBe('Loại khỏi báo cáo');
-    expect(sheet.getRow(5).getCell(3).value).toBe('02/03/2026 08:30');
+    const created = sheet.getRow(5).getCell(3);
+    expect(created.value).toEqual(new Date(Date.UTC(2026, 2, 2, 8, 30)));
+    expect(created.numFmt).toBe('dd/mm/yyyy hh:mm');
     expect(summary.sums.vatAmount).toBe(1800000);
   });
 
@@ -208,8 +210,67 @@ describe('cột tùy chọn của Sheet 1', () => {
     expect(summary.sums.vatAmount).toBe(156000);
   });
 
-  it('dataAsOf rỗng hiển thị dấu gạch', () => {
+  it('dataAsOf rỗng để ô trống', () => {
     const { sheet } = buildOptional(['dataAsOf']);
-    expect(sheet.getRow(5).getCell(1).value).toBe('—');
+    expect(sheet.getRow(5).getCell(1).value).toBeNull();
+  });
+});
+
+describe('Sheet 1: cột ngày thật và màu nhóm', () => {
+  const build = () => {
+    const workbook = new ExcelJS.Workbook();
+    const summary = buildSheet1CompletedCases(
+      workbook,
+      [
+        {
+          ...sampleCase,
+          ngayTiepNhan: new Date(2026, 2, 1),
+          ngayHoanThanhCongViec: null,
+        },
+      ],
+      {},
+      {},
+      {},
+      undefined,
+      {},
+    );
+    const sheet = workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet;
+    const colOf = (key: string) =>
+      summary.columns.findIndex((c) => c.key === key) + 1;
+    const argbOf = (cell: ExcelJS.Cell) =>
+      (cell.fill as ExcelJS.FillPattern).fgColor?.argb;
+    return { sheet, colOf, argbOf };
+  };
+
+  it('ngày tiếp nhận là kiểu ngày thật với định dạng dd/mm/yyyy', () => {
+    const { sheet, colOf } = build();
+    const cell = sheet.getRow(5).getCell(colOf('ngayTiepNhan'));
+    expect(cell.value).toBeInstanceOf(Date);
+    expect(cell.numFmt).toBe('dd/mm/yyyy');
+    expect((cell.value as Date).getUTCDate()).toBe(1);
+    expect((cell.value as Date).getUTCMonth()).toBe(2);
+  });
+
+  it('ngày hoàn thành trống để ô trống', () => {
+    const { sheet, colOf } = build();
+    expect(
+      sheet.getRow(5).getCell(colOf('ngayHoanThanhCongViec')).value,
+    ).toBeNull();
+  });
+
+  it('header theo nhóm: Phải thu lục, Phải trả hồng, Doanh thu tím', () => {
+    const { sheet, colOf, argbOf } = build();
+    expect(argbOf(sheet.getRow(4).getCell(colOf('phaiThu')))).toBe('FF047857');
+    expect(argbOf(sheet.getRow(4).getCell(colOf('chiPhiNhanCong')))).toBe(
+      'FFBE123C',
+    );
+    expect(argbOf(sheet.getRow(4).getCell(colOf('doanhThu')))).toBe('FF6D28D9');
+  });
+
+  it('ghi chú giữ nền kem, không bị ghi đè bởi màu nhóm Phải thu', () => {
+    const { sheet, colOf, argbOf } = build();
+    expect(argbOf(sheet.getRow(5).getCell(colOf('ghiChuThu')))).toBe(
+      'FFFFFBEB',
+    );
   });
 });
