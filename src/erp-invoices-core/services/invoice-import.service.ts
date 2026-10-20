@@ -21,7 +21,10 @@ import {
   resolveInInvoiceBranchCode,
 } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
-import { extractStandardItemCode } from '../helpers/vinfast-part-code.helper';
+import {
+  extractStandardItemCode,
+  isVinfastCandidateSeller,
+} from '../helpers/vinfast-part-code.helper';
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -430,6 +433,7 @@ export class InvoiceImportService {
                 discountAmount: item.discountAmount,
                 sellerName: existingInvoice.sellerName,
                 sellerTaxCode: existingInvoice.sellerTaxCode,
+                direction: existingInvoice.direction,
               });
 
               return this.repository.manager.create(ErpInvoiceItem, {
@@ -624,6 +628,7 @@ export class InvoiceImportService {
               discountAmount: item.discountAmount,
               sellerName: savedInvoice.sellerName,
               sellerTaxCode: savedInvoice.sellerTaxCode,
+              direction: savedInvoice.direction,
             });
 
             return this.repository.manager.create(ErpInvoiceItem, {
@@ -646,22 +651,20 @@ export class InvoiceImportService {
 
         // 3.5. VinFast Parts Catalog & Ledger Auto-sync
         if (this.vinfastPartsService && savedInvoice.direction === 'IN') {
-          const sellerMst = savedInvoice.sellerTaxCode ?? '';
-          const sellerName = (savedInvoice.sellerName ?? '').toUpperCase();
-          const isVinfast =
-            sellerMst === '0108926276' ||
-            sellerMst === '0108926276-001' ||
-            sellerName.includes('VINFAST');
+          const isVinfast = isVinfastCandidateSeller(
+            savedInvoice.sellerName,
+            savedInvoice.sellerTaxCode,
+          );
 
           if (isVinfast && parsed.items && parsed.items.length > 0) {
             await this.vinfastPartsService
-              .syncCatalog({})
+              .syncCatalog({ invoiceIds: [savedInvoice.id] })
               .catch((e) =>
                 this.logger.warn(`Vinfast catalog sync error: ${e.message}`),
               );
 
             await this.vinfastPartsService
-              .syncLedger({})
+              .syncLedger({ invoiceIds: [savedInvoice.id] })
               .catch((e) =>
                 this.logger.warn(`Vinfast ledger sync error: ${e.message}`),
               );

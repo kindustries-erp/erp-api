@@ -9,6 +9,7 @@ import {
 } from '../../helpers/vinfast-part-code.helper';
 
 export interface ResolveLineItemInput {
+  direction?: string | null;
   id?: string;
   lineIndex?: number;
   description?: string | null;
@@ -179,6 +180,7 @@ export class InvoiceItemCodeResolverService {
           unit: origItem?.unit,
           sellerName: origItem?.sellerName,
           sellerTaxCode: origItem?.sellerTaxCode,
+          direction: origItem?.direction,
           discountAmount: Number(origItem?.discountAmount || 0),
           preVatAmount: Number(origItem?.preVatAmount || 0),
         });

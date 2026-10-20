@@ -7,6 +7,11 @@ import {
   isVinfastCarPartCode,
 } from './vinfast-car-part-codes';
 import {
+  VINFAST_LEDGER_ORDER_SQL,
+  VINFAST_VALID_STATUS_SQL,
+} from '../vinfast-parts/helpers/vinfast-ledger-rules.helper';
+import { buildVinfastFifoPeriodMetrics } from './helpers/vinfast-fifo-period-metrics.helper';
+import {
   VinfastPartsExportBackgroundService,
   type VinfastPartsExportHistoryResult,
   type VinfastPartsExportProgressEvent,
@@ -99,7 +104,8 @@ export class ReportsCoreService {
       params.push(dateTo);
     }
     const query = `
-      SELECT 
+      SELECT
+        l.id,
         l.part_sku,
         l.direction,
         l.qty::numeric as qty,
@@ -112,108 +118,13 @@ export class ReportsCoreService {
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
       LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
-      WHERE i.tax_invoice_status IN (1, 3) ${dateFilter}
-      ORDER BY l.transaction_date ASC, l.created_at ASC
+      WHERE i.tax_invoice_status IN ${VINFAST_VALID_STATUS_SQL}
+        AND COALESCE(c.is_service, false) = false ${dateFilter}
+      ORDER BY ${VINFAST_LEDGER_ORDER_SQL}
     `;
     const ledgers = await this.dataSource.query(query, params);
+    const result = buildVinfastFifoPeriodMetrics(ledgers, groupInterval);
 
-    const skuFifoMap: Record<string, { qty: number; unitCost: number }[]> = {};
-    const monthMetrics: Record<string, any> = {};
-
-    for (const t of ledgers) {
-      const sku = t.part_sku;
-      // Truncate to YYYY-MM
-      const d = new Date(t.transaction_date);
-      const year = d.getFullYear();
-      const mStr = String(d.getMonth() + 1).padStart(2, '0');
-      let dateKey = `${year}-${mStr}`;
-      if (groupInterval === 'day') {
-        dateKey = `${year}-${mStr}-${String(d.getDate()).padStart(2, '0')}`;
-      } else if (groupInterval === 'week') {
-        const tempD = new Date(d.getTime());
-        const day = tempD.getDay();
-        const diff = tempD.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(tempD.setDate(diff));
-        const mYear = monday.getFullYear();
-        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
-        const mDay = String(monday.getDate()).padStart(2, '0');
-        dateKey = `${mYear}-${mMonth}-${mDay}`;
-      } else if (groupInterval === 'year') {
-        dateKey = `${year}-01-01`;
-      }
-
-      const key = `${sku}_${dateKey}`;
-
-      if (!skuFifoMap[sku]) skuFifoMap[sku] = [];
-      if (!monthMetrics[key]) {
-        monthMetrics[key] = {
-          month: dateKey,
-          itemCode: sku,
-          itemName: t.item_name || '',
-          qtyBought: 0,
-          qtySold: 0,
-          amountBought: 0,
-          amountSold: 0,
-          totalCogs: 0,
-        };
-      }
-
-      const m = monthMetrics[key];
-      let qty = Number(t.qty || 0);
-      let amount = Number(t.pre_vat_amount || 0);
-
-      if (t.is_adjustment && t.adj_sign === -1) {
-        qty = -qty;
-        amount = -amount;
-      }
-
-      if (t.direction === 'IN') {
-        m.qtyBought += qty;
-        m.amountBought += amount;
-        if (qty > 0) {
-          skuFifoMap[sku].push({ qty, unitCost: Number(t.unit_cost || 0) });
-        } else if (qty < 0) {
-          let qToReverse = Math.abs(qty);
-          while (qToReverse > 0 && skuFifoMap[sku].length > 0) {
-            const batch = skuFifoMap[sku][0];
-            if (batch.qty <= qToReverse) {
-              qToReverse -= batch.qty;
-              skuFifoMap[sku].shift();
-            } else {
-              batch.qty -= qToReverse;
-              qToReverse = 0;
-            }
-          }
-        }
-      } else {
-        m.qtySold += qty;
-        m.amountSold += amount;
-        let cogsForThisOut = 0;
-        if (qty > 0) {
-          let qNeeded = qty;
-          while (qNeeded > 0) {
-            if (skuFifoMap[sku].length === 0) {
-              cogsForThisOut += qNeeded * 0;
-              break;
-            }
-            const batch = skuFifoMap[sku][0];
-            if (batch.qty <= qNeeded) {
-              cogsForThisOut += batch.qty * batch.unitCost;
-              qNeeded -= batch.qty;
-              skuFifoMap[sku].shift();
-            } else {
-              cogsForThisOut += qNeeded * batch.unitCost;
-              batch.qty -= qNeeded;
-              qNeeded = 0;
-            }
-          }
-        } else if (qty < 0) {
-          cogsForThisOut = 0;
-        }
-        m.totalCogs += cogsForThisOut;
-      }
-    }
-    const result = Object.values(monthMetrics);
     this.fifoCache.set(cacheKey, {
       data: result,
       expiresAt: Date.now() + 15000,

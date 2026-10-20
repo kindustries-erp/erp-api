@@ -34,6 +34,7 @@ export class VinfastPartsService {
   async syncCatalog(options?: {
     dateFrom?: string;
     dateTo?: string;
+    invoiceIds?: string[];
     progress$?: any;
     clearDb?: boolean;
   }) {
@@ -46,6 +47,7 @@ export class VinfastPartsService {
   async syncLedger(options?: {
     dateFrom?: string;
     dateTo?: string;
+    invoiceIds?: string[];
     progress$?: any;
   }) {
     return this.syncService.syncLedger({

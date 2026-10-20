@@ -74,7 +74,11 @@ src/vinfast-parts/
 │   ├── vinfast-parts-ledger.service.ts                   # Sub-service quản lý lịch sử sổ cái, FIFO unit rows
 │   ├── vinfast-parts-sync.service.ts                     # Sub-service quản lý SKU resolve, sync catalog & ledger
 │   └── vinfast-parts-stock-export-background.service.ts  # Service quản lý job xuất Excel ngầm, SSE progress, TTL 24h
-├── vinfast-parts.controller.ts                           # Controller định tuyến API, SSE streams, Swagger, Guard
+├── controllers/
+│   ├── vinfast-parts-sync.controller.ts                  # sync-catalog, sync-ledger, SSE sync/progress (RBAC: VINFAST UPDATE/READ)
+│   ├── vinfast-parts-stock.controller.ts                 # stock, stock/column-options (RBAC: VINFAST READ)
+│   ├── vinfast-parts-ledger.controller.ts                # ledger/:sku, fifo-rows/:sku (RBAC: VINFAST READ)
+│   └── vinfast-parts-stock-export.controller.ts          # export Excel nền, history, download, SSE progress (RBAC: VINFAST READ)
 ├── vinfast-parts.service.ts                              # Facade Service tinh gọn, Clean DI Constructor
 └── vinfast-parts.module.ts                               # Module NestJS đăng ký TypeORM, Sub-services & Background Service
 ```
@@ -84,7 +88,7 @@ src/vinfast-parts/
 ## 4. Danh sách API Endpoints & RBAC Contract
 
 Controller Base Route: `/api/v1/vinfast-parts`  
-Guards: `@UseGuards(JwtAuthGuard)`  
+Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)` + `@RequirePermissions({ resource: ErpResource.VINFAST, action })` trên từng handler (ghi/sync = `UPDATE`, đọc/xuất = `READ`)  
 Tags: `VinFast Parts`
 
 | Method | Endpoint | Mô tả |
@@ -130,6 +134,23 @@ Tags: `VinFast Parts`
 4. Ghép cặp tuần tự: Đơn vị `IN` đầu tiên được gán cho đơn vị `OUT` đầu tiên phát sinh sau đó.
 5. Nếu đơn vị `IN` chưa được ghép với bất kỳ đơn vị `OUT` nào -> Trạng thái `IN_STOCK` (Tồn kho), đơn giá tồn là đơn giá nhập của chính đơn vị đó.
 6. Tính số ngày lưu kho: `transactionDate(OUT) - transactionDate(IN)` hoặc `now() - transactionDate(IN)`.
+7. Trạng thái đơn vị: `IN_STOCK` (còn kho), `SOLD`, `RETURNED` (đã bán rồi trả về kho, vẫn tính tồn tới khi bán lại), `ADJUSTMENT` (lô nhập bị điều chỉnh giảm), `SHORTAGE` (xuất vượt tồn, không có giá vốn). Invariant: `Σ(IN_STOCK + RETURNED) − Σ(SHORTAGE) = qtyBalance`.
+8. Hàng trả (OUT qty âm do điều chỉnh `adj_sign=-1`): đảo các lần bán gần nhất, đưa đơn vị về kho với giá vốn cũ; COGS dòng trả là âm.
+9. **Một lõi duy nhất**: `runFifo(entries)` trong `engines/vinfast-fifo.engine.ts` trả `{ unitRows, metrics }`. `calculateFifoUnitRows` (bảng kê) và `calculateLedgerHistoryCogs` (lịch sử sổ cái) đều lấy từ lõi này, không còn hàng đợi thứ hai.
+10. Lịch sử `GET /vinfast-parts/ledger/:sku` trả thêm cho mỗi dòng: `calculatedCogs`, `calculatedUnitCost`, `balanceQty` (tồn lũy kế, có thể âm), `balanceValue`, `shortageQty` (tổng thiếu hàng lũy kế). Dòng cuối của mỗi SKU khớp `qtyBalance` của bảng tồn (đã đối chiếu 1.042 SKU trên DB, 0 lệch).
+11. Dashboard `reports-core` (`calculateVinfastFifo`) dùng cùng lõi: `buildVinfastFifoPeriodMetrics` (`reports-core/helpers/vinfast-fifo-period-metrics.helper.ts`) gọi `calculateLedgerHistoryCogs`. Hình dạng kết quả không đổi. So với bản inline cũ trên DB: doanh thu và số lượng bán khớp, giá vốn giảm 13,4 triệu ở 14 SKU có hàng trả (hàng trả được hoàn kho theo giá vốn cũ).
+12. Quy tắc dịch vụ khi nạp danh mục (`syncCatalog`, chỉ đọc hóa đơn mua vào): chỉ theo tiền tố `EEH/EMT/LFP/QTS/XSH` (`isVinfastServicePrefix`). Mã số thuần (`isVinfastLabourCode`) trên hóa đơn mua vẫn là phụ tùng. Mã công lao động chỉ xuất hiện trên hóa đơn bán nên không vào danh mục.
+
+### 5.3b. Quy tắc dùng chung (`helpers/vinfast-ledger-rules.helper.ts`)
+- **Trạng thái hóa đơn tính vào tồn/FIFO**: `tax_invoice_status IN (1, 2, 3, 5)`. Loại `4` (HĐ gốc đã bị thay thế, trùng với HĐ thay thế) và `6` (hủy). Dùng `VINFAST_VALID_STATUS_SQL` và `VINFAST_VALID_LEDGER_SUBQUERY_SQL` (qty đã nhân `adj_sign`) cho bảng tồn, lịch sử, FIFO và dashboard `reports-core`.
+- **Điều chỉnh**: số lượng âm = trả hàng (`adj_sign=-1`); số lượng dương chỉ tính khi diễn giải có "tăng số lượng"; điều chỉnh đơn giá không có số lượng = `qty 0`.
+- **Thứ tự ghi sổ**: `VINFAST_LEDGER_ORDER_SQL` — cùng ngày, nhập trước xuất, rồi theo số hóa đơn và `created_at`.
+- **Dịch vụ / công lao động** (`isVinfastServiceSku`): mã số thuần `VF-\d{5,10}` và tiền tố `LFP/EEH/EMT/QTS/XSH` không phải phụ tùng; cờ `is_service=true` loại khỏi tồn.
+
+### 5.6. Nhà cung cấp phụ tùng VinFast (`isVinfastCandidateSeller`)
+- Ứng viên: tên người bán chứa "VinFast" (không phân biệt hoa thường), hoặc MST `0318334886` (Greenway Automotives; chỉ nhận dòng có mã VinFast trích được từ diễn giải).
+- Mã phụ tùng chỉ lấy từ diễn giải/mã hàng bằng `extractVinfastItemCode` (mẫu VinFast). Không đoán mã từ chuỗi bất kỳ, nên không còn SKU như `VF-MMX30`, `VF-CAT6`.
+- Sync theo hóa đơn: `syncCatalog`/`syncLedger` nhận `invoiceIds`; luồng nhập hóa đơn chỉ sync đúng hóa đơn vừa xử lý.
 
 ### 5.4. Cơ chế Xuất Báo Cáo Chạy Ngầm (`VinfastPartsStockExportBackgroundService`)
 - Lưu trữ memory map `jobs` với TTL = 24 giờ.
@@ -159,3 +180,8 @@ Khi chỉnh sửa `vinfast-parts`:
 1. Chạy Type-check: `bun run check:ci`
 2. Chạy Unit test: `bunx jest src/vinfast-parts/ --forceExit`
 3. Kiểm tra tính toàn vẹn khóa ngoại trong migration `1786406852396-VinfastPartsSchema.ts` và `1786414442074-LedgerCascade.ts`.
+
+## Đồng bộ dựa trên mã hóa đơn (giai đoạn 5)
+- `resolveVinfastSku(itemCode, description)`: nếu dòng hóa đơn đã có `item_code`, chỉ `VF-*` là phụ tùng; mã khác (`DV-`, `PT-`, `VT-`, `CK-`) không vào sổ cái. Chỉ khi chưa có mã mới trích từ mô tả.
+- `syncLedger` gỡ dòng sổ cái cũ của dòng hóa đơn không còn là phụ tùng (đếm vào `deletedCount`).
+- Dashboard `reports-core` (`calculateVinfastFifo`) loại SKU dịch vụ (`catalog.is_service = true`).
