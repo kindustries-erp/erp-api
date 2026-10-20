@@ -1,8 +1,11 @@
 import {
   Body,
+  ConflictException,
   Controller,
+  Get,
   MessageEvent,
   Post,
+  Res,
   Sse,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +16,11 @@ import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/rbac-core/enums';
 import { VinfastPartsService } from '../vinfast-parts.service';
+import {
+  applySseHeaders,
+  SSE_PING_INTERVAL_MS,
+} from '../helpers/sse-headers.helper';
+import type { Response } from 'express';
 
 @ApiTags('VinFast Parts')
 @ApiBearerAuth()
@@ -40,29 +48,35 @@ export class VinfastPartsSyncController {
   async syncLedger(
     @Body() body: { dateFrom?: string; dateTo?: string; clearDb?: boolean },
   ) {
-    // Chạy nền để SSE client nhận tiến độ qua progress$
-    this.vinfastPartsService
-      .syncCatalog({
-        progress$: this.vinfastPartsService.progress$,
-        dateFrom: body.dateFrom,
-        dateTo: body.dateTo,
-        clearDb: body.clearDb,
-      })
-      .then(() =>
-        this.vinfastPartsService.syncLedger({
-          progress$: this.vinfastPartsService.progress$,
-          dateFrom: body.dateFrom,
-          dateTo: body.dateTo,
-        }),
-      )
-      .catch((e) => console.error('Sync failed', e));
+    const { started, state } = this.vinfastPartsService.runFullSync({
+      dateFrom: body.dateFrom,
+      dateTo: body.dateTo,
+      clearDb: body.clearDb,
+    });
+    if (!started) {
+      throw new ConflictException({
+        message: 'Đang có lượt đồng bộ chạy, vui lòng chờ hoàn tất',
+        state,
+      });
+    }
+    return { message: 'Sync started', state };
+  }
 
-    return { message: 'Sync started' };
+  @Get('sync/status')
+  @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
+  @ApiOperation({
+    summary: 'Get state of the current or last VinFast sync run',
+  })
+  getSyncStatus() {
+    return this.vinfastPartsService.getSyncState();
   }
 
   @Sse('sync/progress')
   @RequirePermissions({ resource: ErpResource.VINFAST, action: ErpAction.READ })
-  progress(): Observable<MessageEvent> {
+  progress(
+    @Res({ passthrough: true }) res: Response,
+  ): Observable<MessageEvent> {
+    applySseHeaders(res);
     const keepAlive$ = new Observable<MessageEvent>((subscriber) => {
       subscriber.next({
         data: JSON.stringify({
@@ -84,7 +98,7 @@ export class VinfastPartsSyncController {
             completed: false,
           }),
         } as MessageEvent);
-      }, 15000);
+      }, SSE_PING_INTERVAL_MS);
 
       const subscription = this.vinfastPartsService.progress$.subscribe({
         next: (data) =>

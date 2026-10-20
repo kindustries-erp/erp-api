@@ -185,3 +185,9 @@ Khi chỉnh sửa `vinfast-parts`:
 - `resolveVinfastSku(itemCode, description)`: nếu dòng hóa đơn đã có `item_code`, chỉ `VF-*` là phụ tùng; mã khác (`DV-`, `PT-`, `VT-`, `CK-`) không vào sổ cái. Chỉ khi chưa có mã mới trích từ mô tả.
 - `syncLedger` gỡ dòng sổ cái cũ của dòng hóa đơn không còn là phụ tùng (đếm vào `deletedCount`).
 - Dashboard `reports-core` (`calculateVinfastFifo`) loại SKU dịch vụ (`catalog.is_service = true`).
+
+## Trạng thái và tiến trình đồng bộ (giai đoạn 6)
+- `GET /vinfast-parts/sync/status`: trạng thái lượt đồng bộ hiện tại hoặc gần nhất (`running`, `startedAt`, `finishedAt`, `phase`, `current`, `total`, `message`, `lastError`). Drawer web hỏi định kỳ (2 giây khi đang chạy) và không phụ thuộc SSE.
+- `POST /vinfast-parts/sync-ledger` trả 409 khi đang có lượt chạy (chặn chạy trùng trong một tiến trình API). Lượt chạy là `runFullSync`: danh mục rồi sổ cái.
+- `syncLedger` nạp trước sổ cái và danh mục theo lô, bỏ qua dòng không đổi, tiến trình theo vị trí (mỗi 200 dòng).
+- Hai luồng SSE (`sync/progress`, `stock/export/excel/progress/stream`) đặt `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform`, nhịp ping 10 giây (`helpers/sse-headers.helper.ts`).
