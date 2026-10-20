@@ -232,3 +232,67 @@ export class KgaraCaseFinancialParserHelper {
     };
   }
 }
+
+/** Dòng dịch vụ đủ để suy ra thuế GTGT. */
+export interface VatSourceLine {
+  tienCoThue?: number | string | null;
+  tienChuaThue?: number | string | null;
+}
+
+/** Phiếu đủ để suy ra thuế GTGT: tổng có thuế và rawData đồng bộ. */
+export interface VatSourceCase {
+  tienCoThue?: number | string | null;
+  rawData?: Record<string, any> | null;
+}
+
+/** Thuế suất chuẩn được chấp nhận khi suy ra từ chênh lệch tổng và dòng. */
+const STANDARD_VAT_RATES = [5, 8, 10];
+
+const toPositiveNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+const roundMoney = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * Thuế GTGT của phiếu dịch vụ. Bỏ qua giá trị 0/thiếu và thử nguồn tiếp theo:
+ * 1. `rawData.TienThue`; 2. `TienThueKH + TienThueBH`;
+ * 3. Tổng `(tienCoThue - tienChuaThue)` các dòng;
+ * 4. Chênh lệch `tienCoThue - Σ tienChuaThue`, chỉ khi khớp thuế suất chuẩn 5/8/10%.
+ */
+export function resolveCaseVatAmount(
+  caseRow: VatSourceCase,
+  lines: VatSourceLine[] = [],
+): number {
+  const raw = caseRow.rawData ?? {};
+
+  const fromTotal = toPositiveNumber(raw.TienThue);
+  if (fromTotal) return fromTotal;
+
+  const fromParts =
+    toPositiveNumber(raw.TienThueKH) + toPositiveNumber(raw.TienThueBH);
+  if (fromParts) return roundMoney(fromParts);
+
+  const fromLines = lines.reduce(
+    (sum, line) =>
+      sum + Number(line.tienCoThue ?? 0) - Number(line.tienChuaThue ?? 0),
+    0,
+  );
+  if (fromLines > 0) return roundMoney(fromLines);
+
+  const net = lines.reduce(
+    (sum, line) => sum + Number(line.tienChuaThue ?? 0),
+    0,
+  );
+  const diff = Number(caseRow.tienCoThue ?? 0) - net;
+  if (net > 0 && diff > 0) {
+    const matchesStandardRate = STANDARD_VAT_RATES.some((rate) => {
+      const expected = (net * rate) / 100;
+      return Math.abs(diff - expected) <= expected * 0.001 + 1;
+    });
+    if (matchesStandardRate) return roundMoney(diff);
+  }
+
+  return 0;
+}

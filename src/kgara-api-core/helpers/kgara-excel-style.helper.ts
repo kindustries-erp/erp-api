@@ -229,6 +229,83 @@ export function applyStandardExcelReportLayout(
  * Header đậm, dòng tổng và dữ liệu nhạt, chữ nghiêng nâu; giữ nguyên định dạng số và viền.
  * `columnIndex` là chỉ số cột 1-based; dòng 1-2 là tổng, dòng 4 là tiêu đề.
  */
+/** Màu theo nhóm cột của Sheet 1: header, dòng SUM/SUBTOTAL và thân bảng (ARGB). */
+export interface ColumnGroupPalette {
+  header: string;
+  summary: string;
+  body: string;
+}
+
+/** Nhóm cột Sheet 1; cột không thuộc nhóm nào giữ màu mặc định. */
+export const COMPLETED_CASES_COLUMN_GROUPS: Record<
+  'receivable' | 'payable' | 'profit',
+  { palette: ColumnGroupPalette; keys: string[] }
+> = {
+  receivable: {
+    palette: { header: 'FF047857', summary: 'FFD1FAE5', body: 'FFECFDF5' },
+    keys: [
+      'phaiThuBaoHiem',
+      'phaiThuKhachHang',
+      'phaiThu',
+      'daThu',
+      'conPhaiThu',
+      'ghiChuThu',
+    ],
+  },
+  payable: {
+    palette: { header: 'FFBE123C', summary: 'FFFFE4E6', body: 'FFFFF1F2' },
+    keys: [
+      'chiPhiNhanCong',
+      'chiPhiPhuTung',
+      'phaiTra',
+      'daTra',
+      'conPhaiTra',
+      'ghiChuTra',
+    ],
+  },
+  profit: {
+    palette: { header: 'FF6D28D9', summary: 'FFEDE9FE', body: 'FFF5F3FF' },
+    keys: ['doanhThu', 'chiPhi', 'loiNhuan', 'margin'],
+  },
+};
+
+/**
+ * Tô màu header, dòng SUM/SUBTOTAL và thân bảng theo nhóm cột. Thân chỉ tô ô chưa có
+ * nền để không ghi đè ghi chú, dải Biên LN và ô trạng thái đã tô trước đó.
+ * Cột không có trong `columns` (đã bị bỏ khi chọn cột) được bỏ qua.
+ */
+export function applyColumnGroupStyles(
+  sheet: ExcelJS.Worksheet,
+  columns: ExcelReportColumnDef[],
+  firstDataRow = 5,
+): void {
+  const solid = (argb: string): ExcelJS.Fill => ({
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb },
+  });
+  const endRow = Math.max(firstDataRow, sheet.rowCount);
+  const hasFill = (cell: ExcelJS.Cell) =>
+    Boolean(cell.fill) && (cell.fill as ExcelJS.FillPattern).pattern !== 'none';
+
+  for (const group of Object.values(COMPLETED_CASES_COLUMN_GROUPS)) {
+    for (const key of group.keys) {
+      const idx = columns.findIndex((c) => c.key === key);
+      if (idx < 0) continue;
+      const col = idx + 1;
+
+      sheet.getRow(4).getCell(col).fill = solid(group.palette.header);
+      sheet.getRow(1).getCell(col).fill = solid(group.palette.summary);
+      sheet.getRow(2).getCell(col).fill = solid(group.palette.summary);
+
+      for (let rowNo = firstDataRow; rowNo <= endRow; rowNo++) {
+        const cell = sheet.getRow(rowNo).getCell(col);
+        if (!hasFill(cell)) cell.fill = solid(group.palette.body);
+      }
+    }
+  }
+}
+
 export function applyForecastColumnStyle(
   sheet: ExcelJS.Worksheet,
   columnIndex: number,
@@ -281,12 +358,19 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     align: 'center',
   },
   { header: 'Phân loại', key: 'classification', width: 18, align: 'center' },
-  { header: 'Ngày tiếp nhận', key: 'ngayTiepNhan', width: 16, align: 'center' },
+  {
+    header: 'Ngày tiếp nhận',
+    key: 'ngayTiepNhan',
+    width: 16,
+    align: 'center',
+    style: { numFmt: 'dd/mm/yyyy' },
+  },
   {
     header: 'Ngày hoàn thành',
     key: 'ngayHoanThanhCongViec',
     width: 18,
     align: 'center',
+    style: { numFmt: 'dd/mm/yyyy' },
   },
   {
     header: 'Phải thu BH (VNĐ)',
@@ -438,6 +522,58 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
 ];
 
 /**
+ * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 29 cột).
+ * Khớp các cột "Tất cả cột" của bảng garage-cases.
+ */
+export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
+  {
+    header: 'Thuế GTGT (VNĐ)',
+    key: 'vatAmount',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Quy tắc loại trừ',
+    key: 'exclusionRules',
+    width: 26,
+    align: 'left',
+  },
+  {
+    header: 'Ngày tạo',
+    key: 'createdAt',
+    width: 18,
+    align: 'center',
+    style: { numFmt: 'dd/mm/yyyy hh:mm' },
+  },
+  {
+    header: 'Ngày cập nhật',
+    key: 'updatedAt',
+    width: 18,
+    align: 'center',
+    style: { numFmt: 'dd/mm/yyyy hh:mm' },
+  },
+  {
+    header: 'Dữ liệu lúc',
+    key: 'dataAsOf',
+    width: 18,
+    align: 'center',
+    style: { numFmt: 'dd/mm/yyyy hh:mm' },
+  },
+];
+
+/** Toàn bộ cột có thể xuất: mặc định 29 cột + cột tùy chọn. */
+export const COMPLETED_CASES_ALL_COLUMNS: ExcelReportColumnDef[] = [
+  ...COMPLETED_CASES_COLUMNS,
+  ...COMPLETED_CASES_OPTIONAL_COLUMNS,
+];
+
+/** Key hợp lệ cho `selectedColumns` của bảng kê phiếu dịch vụ. */
+export const COMPLETED_CASES_EXPORT_COLUMN_KEYS: string[] =
+  COMPLETED_CASES_ALL_COLUMNS.map((column) => column.key);
+
+/**
  * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (15 cột)
  */
 export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
@@ -451,6 +587,7 @@ export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
     key: 'ngayHoanThanhCongViec',
     width: 18,
     align: 'center',
+    style: { numFmt: 'dd/mm/yyyy' },
   },
   {
     header: 'Doanh thu Công DV (VNĐ)',
