@@ -21,6 +21,8 @@ import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 import {
   fetchWithRetry,
+  GdtNonJsonResponseError,
+  parseGdtJson,
   resolvePortalVatRate,
   parsePortalIsoDate,
   buildInvoiceR2Key,
@@ -614,13 +616,43 @@ export class InvoicePortalService implements OnModuleInit {
                   failedSegments.push(segment);
                   break;
                 }
-                succeededRequests++;
-
-                const payload = (await response!.json()) as {
+                let payload: {
                   datas?: any[];
                   total?: number;
                   state?: string;
-                };
+                } | null = null;
+                let parseError: string | null = null;
+                for (let attempt = 0; attempt <= 2 && !payload; attempt++) {
+                  if (attempt > 0) {
+                    await sleep(2000 * attempt);
+                    try {
+                      response = await fetchWithRetry(url, {
+                        headers: fetchHeaders,
+                      });
+                    } catch (err: any) {
+                      parseError = String(err?.message ?? err);
+                      break;
+                    }
+                    if (!response.ok) break;
+                  }
+                  try {
+                    payload = await parseGdtJson(response!);
+                  } catch (err) {
+                    if (!(err instanceof GdtNonJsonResponseError)) throw err;
+                    parseError = err.message;
+                    this.logger.warn(
+                      `Cổng thuế trả non-JSON (lần ${attempt + 1}/3) ${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}: ${err.snippet}`,
+                    );
+                  }
+                }
+
+                if (!payload) {
+                  const segment = `${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}${currentTtxly !== null ? ` (ttxly=${currentTtxly})` : ''} ngày ${formattedDate} trang ${pathPagesFetched + 1}: ${parseError ?? `HTTP ${response?.status}`}`;
+                  this.logger.warn(`Portal request failed - ${segment}`);
+                  failedSegments.push(segment);
+                  break;
+                }
+                succeededRequests++;
 
                 if (pathPagesFetched === 0) {
                   totalFromPortal += payload.total ?? 0;
@@ -1295,7 +1327,16 @@ export class InvoicePortalService implements OnModuleInit {
         return null;
       }
 
-      const json = await res.json();
+      let json: any;
+      try {
+        json = await parseGdtJson(res);
+      } catch (err) {
+        if (!(err instanceof GdtNonJsonResponseError)) throw err;
+        this.logger.warn(
+          `Relative invoice ${invoice.invoiceNo} trả non-JSON: ${err.snippet}`,
+        );
+        return null;
+      }
       if (!json || json.shdgoc == null || String(json.shdgoc).trim() === '') {
         return null;
       }

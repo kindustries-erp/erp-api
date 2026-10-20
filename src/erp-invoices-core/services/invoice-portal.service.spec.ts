@@ -366,6 +366,26 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
         globalFetchSpy.mockRestore();
       });
+
+      it('should return null without throwing when GDT answers 200 with an HTML page (non-JSON)', async () => {
+        const inv: any = {
+          invoiceNo: '999',
+          serialNo: 'C26TGA',
+          sellerTaxCode: '0318334886',
+          taxInvoiceStatus: 2,
+        };
+
+        const globalFetchSpy = jest
+          .spyOn(global, 'fetch')
+          .mockResolvedValue(
+            new Response('<html>Bảo trì</html>', { status: 200 }),
+          );
+
+        const result = await service.fetchRelativeInvoice(inv, 'token');
+        expect(result).toBeNull();
+
+        globalFetchSpy.mockRestore();
+      });
     });
 
     describe('syncRelatedInvoiceStatus', () => {
@@ -596,6 +616,44 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
       expect(result.failedSegments).toHaveLength(1);
       expect(result.failedSegments[0]).toContain('timeout');
+    });
+
+    it('treats an HTML 200 body as a failed segment and keeps syncing other endpoints', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        Promise.resolve(
+          url.toString().includes('/sco-query/')
+            ? new Response('<!DOCTYPE html><html>Bảo trì</html>', {
+                status: 200,
+              })
+            : new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+        ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('sco-query');
+      expect(result.failedSegments[0]).toContain('không phải JSON');
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'WARNING' }),
+      );
+    });
+
+    it('throws a descriptive error when every request returns HTML instead of JSON', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() =>
+          Promise.resolve(
+            new Response('<html>Bảo trì</html>', { status: 200 }),
+          ),
+        );
+
+      await expect(service.syncFromPortal(dto, 'user-1', true)).rejects.toThrow(
+        /Cổng thuế liên tục báo lỗi.*không phải JSON/,
+      );
     });
 
     it('throws a descriptive error when every request returns 500', async () => {
