@@ -13,6 +13,7 @@ import {
   COMPLETED_CASE_SERVICES_COLUMNS,
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
+import { resolveCaseVatAmount } from './kgara-case-financial-parser.helper';
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
@@ -44,21 +45,6 @@ export function formatDisplayDateTime(d?: Date | string | null): string {
   const hh = String(dt.getHours()).padStart(2, '0');
   const mi = String(dt.getMinutes()).padStart(2, '0');
   return `${formatDisplayDate(dt)} ${hh}:${mi}`;
-}
-
-/** Tiền thuế GTGT: cùng thứ tự ưu tiên với `extractVatAmount` phía web. */
-export function extractVatAmount(item: Record<string, any>): number {
-  const candidates = [
-    item.vatAmount,
-    item.tienThueKh,
-    item.tienThue,
-    item.rawData?.TienThueKH,
-    item.rawData?.TienThue,
-  ];
-  for (const value of candidates) {
-    if (value != null && !Number.isNaN(Number(value))) return Number(value);
-  }
-  return 0;
 }
 
 /** Mô tả quy tắc loại trừ; không loại trừ thì trả về `—`. */
@@ -323,6 +309,7 @@ export function buildSheet1CompletedCases(
     const lines = c.hdPhieuDichVuId
       ? serviceLinesMap?.get(c.hdPhieuDichVuId) || []
       : [];
+    const vatAmount = resolveCaseVatAmount(c, lines);
     let gvPt = 0;
     for (const line of lines) {
       const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';
@@ -367,7 +354,7 @@ export function buildSheet1CompletedCases(
     sums.loiNhuan += profit;
     sums.duThu += duThu;
     sums.duChi += duChi;
-    sums.vatAmount += extractVatAmount(c);
+    sums.vatAmount += vatAmount;
 
     const branchName =
       branchNameMap[c.branchExternalId] || c.branchExternalId || '—';
@@ -453,7 +440,7 @@ export function buildSheet1CompletedCases(
       branchName,
       duThu,
       duChi,
-      vatAmount: extractVatAmount(c),
+      vatAmount,
       exclusionRules: formatExclusionRules(c),
       createdAt: formatDisplayDateTime(c.createdAt),
       updatedAt: formatDisplayDateTime(c.updatedAt),
