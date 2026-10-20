@@ -7,7 +7,7 @@ import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
-import { ErpBusinessPartner } from '../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -29,8 +29,10 @@ import { ErpSalesOrderLine } from '../sales-orders-core/entities/erp_sales_order
 import { ErpProductionOrder } from '../production-core/entities/erp_production_order.entity';
 import { ErpProductionOrderMaterial } from '../production-core/entities/erp_production_order_material.entity';
 import { ErpInvoice } from '../erp-invoices-core/entities/erp_invoice.entity';
+import { ErpEInvoiceSync } from '../erp-invoices-core/entities/erp_einvoice_sync.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from '../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoiceAdjustmentNetOff } from '../erp-invoices-core/entities/erp_invoice_adjustment_netoff.entity';
 import { CompanyProfile } from '../company-profile/entities/company-profile.entity';
 import { SysFile } from '../files/entities/sys-file.entity';
 import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inventory_tracking_serial.entity';
@@ -60,6 +62,7 @@ import { GwSyncRun } from '../kgara-api-core/entities/kgara_sync_run.entity';
 import { KgaraGrossProfit } from '../kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../kgara-api-core/entities/kgara_case_settlement.entity';
 import { KgaraOperatingExpense } from '../kgara-api-core/entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from '../kgara-api-core/entities/kgara_cashflow_voucher.entity';
 import { ErpChartOfAccount } from '../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
@@ -77,6 +80,10 @@ import { VinfastPartsCatalog } from '../vinfast-parts/entities/vinfast-parts-cat
 import { VinfastPartsLedger } from '../vinfast-parts/entities/vinfast-parts-ledger.entity';
 import { ErpOperatingExpense } from '../operating-expenses-core/entities/erp_operating_expense.entity';
 import { ErpSystemOperation } from '../system-operations-core/entities/erp_system_operation.entity';
+import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
+import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
+import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
+// plop:api-v2-entity-imports
 const entities = [
   CoreUser,
   CoreUserPreference,
@@ -85,6 +92,9 @@ const entities = [
   CorePermission,
   CoreUserRole,
   ErpSystemOperation,
+  ErpAiConfig,
+  ErpAiLog,
+  ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
   ErpOperatingExpense,
@@ -109,8 +119,10 @@ const entities = [
   ErpProductionOrder,
   ErpProductionOrderMaterial,
   ErpInvoice,
+  ErpEInvoiceSync,
   ErpInvoiceItem,
   ErpInvoiceVoucherNetOff,
+  ErpInvoiceAdjustmentNetOff,
   CompanyProfile,
   SysFile,
   ErpInventoryTrackingSerial,
@@ -139,6 +151,7 @@ const entities = [
   KgaraGrossProfit,
   KgaraCaseSettlement,
   KgaraOperatingExpense,
+  KgaraCashflowVoucher,
   GwSyncRun,
   ErpChartOfAccount,
   ErpJournalEntry,
@@ -155,6 +168,7 @@ const entities = [
   ErpEmailAttachment,
   VinfastPartsCatalog,
   VinfastPartsLedger,
+  // plop:api-v2-entities
 ];
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -173,8 +187,8 @@ export default new DataSource(
         schema: 'public',
         entities,
         migrations: [
-          __dirname + '/migrations/**/*{.ts,.js}',
-          __dirname + '/../migrations/**/*{.ts,.js}',
+          __dirname + '/migrations/**/!(*.spec){.ts,.js}',
+          __dirname + '/../migrations/**/!(*.spec){.ts,.js}',
         ],
         synchronize: false,
         ssl: isSslDisabled ? false : { rejectUnauthorized: false },
@@ -190,8 +204,8 @@ export default new DataSource(
         schema: 'public',
         entities,
         migrations: [
-          __dirname + '/migrations/**/*{.ts,.js}',
-          __dirname + '/../migrations/**/*{.ts,.js}',
+          __dirname + '/migrations/**/!(*.spec){.ts,.js}',
+          __dirname + '/../migrations/**/!(*.spec){.ts,.js}',
         ],
         synchronize: false,
         ssl:

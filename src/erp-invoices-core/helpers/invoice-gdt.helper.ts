@@ -50,7 +50,10 @@ export async function fetchWithRetry(
           gdtLogger.warn(
             `GDT API rate limit or server error (${res.status}) on ${url}, retrying ${i + 1}/${retries}...`,
           );
-          const delay = res.status === 429 ? 5000 * (i + 1) : 1000 * (i + 1);
+          const delay =
+            res.status === 429
+              ? 5000 * (i + 1)
+              : 2000 * (i + 1) ** 2 + Math.round(Math.random() * 1000);
           await sleep(delay);
           continue;
         }
@@ -69,6 +72,29 @@ export async function fetchWithRetry(
     }
   }
   throw new Error('Unreachable code');
+}
+
+export class GdtNonJsonResponseError extends Error {
+  constructor(readonly snippet: string) {
+    super(
+      `Cổng thuế trả về nội dung không phải JSON (có thể đang bảo trì hoặc bị chặn): ${snippet}`,
+    );
+    this.name = 'GdtNonJsonResponseError';
+  }
+}
+
+/**
+ * parseGdtJson — parses a GDT response body as JSON.
+ * GDT sometimes answers HTTP 200 with an HTML page (maintenance/WAF/login),
+ * which must not crash the whole sync run.
+ */
+export async function parseGdtJson<T = any>(res: Response): Promise<T> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new GdtNonJsonResponseError(text.trim().slice(0, 200));
+  }
 }
 
 /**

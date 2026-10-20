@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { OperatingExpensesCoreService } from './operating-expenses-core.service';
 import { ErpOperatingExpense } from './entities/erp_operating_expense.entity';
+import { SmartAccountMappingService } from './services/smart-account-mapping.service';
+import { AccountingCoreService } from '../accounting-core/services/accounting-core.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('OperatingExpensesCoreService', () => {
@@ -60,6 +62,27 @@ describe('OperatingExpensesCoreService', () => {
       },
     };
 
+    const mockSmartAccountMappingService = {
+      resolveExpenseAccounts: jest.fn().mockResolvedValue({
+        debitAccountId: 'acc-6422',
+        debitAccountCode: '6422',
+        creditAccountId: 'acc-335',
+        creditAccountCode: '335',
+        vatAccountId: 'acc-1331',
+        vatAccountCode: '1331',
+      }),
+      findAccountByCode: jest
+        .fn()
+        .mockResolvedValue({ id: 'acc-t0003', accountCode: 'T0003' }),
+    };
+
+    const mockAccountingCoreService = {
+      createJournalEntry: jest
+        .fn()
+        .mockResolvedValue({ id: 'je-1', entryNo: 'PKT-01' }),
+      deleteJournalEntryBySource: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OperatingExpensesCoreService,
@@ -70,6 +93,14 @@ describe('OperatingExpensesCoreService', () => {
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: SmartAccountMappingService,
+          useValue: mockSmartAccountMappingService,
+        },
+        {
+          provide: AccountingCoreService,
+          useValue: mockAccountingCoreService,
         },
       ],
     }).compile();
@@ -242,6 +273,156 @@ describe('OperatingExpensesCoreService', () => {
       expect(res.message).toBe('Xóa khoản chi thành công');
       expect(repo.save).toHaveBeenCalledWith(
         expect.objectContaining({ isDeleted: true }),
+      );
+    });
+  });
+
+  describe('postExpense and unpostExpense', () => {
+    it('posts expense and updates postingStatus to POSTED', async () => {
+      const expense = {
+        id: 'exp-1',
+        expenseNo: 'EXP-202609-001',
+        branchId: 'branch-1',
+        totalAmount: 10000000,
+        categoryKey: 'THUE_MAT_BANG',
+        accrualMode: 'ACCRUED',
+        postingStatus: 'UNPOSTED',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      const result = await service.postExpense('exp-1');
+
+      expect(result.message).toBe('Hạch toán ghi sổ thành công');
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          postingStatus: 'POSTED',
+          journalEntryId: 'je-1',
+        }),
+      );
+    });
+
+    it('throws BadRequestException if expense is already POSTED', async () => {
+      const expense = {
+        id: 'exp-1',
+        postingStatus: 'POSTED',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      await expect(service.postExpense('exp-1')).rejects.toThrow(
+        'Khoản chi này đã được ghi sổ rồi.',
+      );
+    });
+
+    it('unposts expense and updates postingStatus to UNPOSTED', async () => {
+      const expense = {
+        id: 'exp-1',
+        postingStatus: 'POSTED',
+        accrualMode: 'NONE',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      const result = await service.unpostExpense('exp-1');
+
+      expect(result.message).toBe('Đã hủy ghi sổ khoản chi thành công');
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          postingStatus: 'UNPOSTED',
+          journalEntryId: null,
+        }),
+      );
+    });
+  });
+
+  describe('settleExpenseWithInvoice and unsettleExpense', () => {
+    it('throws if expense is already SETTLED (anti-double guard)', async () => {
+      const expense = {
+        id: 'exp-settled',
+        accrualMode: 'SETTLED',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      await expect(
+        service.settleExpenseWithInvoice('exp-settled', { invoiceId: 'inv-1' }),
+      ).rejects.toThrow('Khoản chi phí này đã được tất toán rồi.');
+    });
+
+    it('throws if expense was not ACCRUED', async () => {
+      const expense = {
+        id: 'exp-none',
+        accrualMode: 'NONE',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      await expect(
+        service.settleExpenseWithInvoice('exp-none', { invoiceId: 'inv-1' }),
+      ).rejects.toThrow(
+        'Chỉ có thể tất toán hóa đơn cho khoản chi phí đã trích trước (ACCRUED).',
+      );
+    });
+
+    it('settles accrued expense with invoice successfully', async () => {
+      const expense = {
+        id: 'exp-accrued',
+        expenseNo: 'EXP-202609-001',
+        branchId: 'branch-1',
+        totalAmount: 10000000,
+        categoryKey: 'THUE_MAT_BANG',
+        accrualMode: 'ACCRUED',
+        postingStatus: 'POSTED',
+        isDeleted: false,
+      };
+      repo.findOne
+        .mockResolvedValueOnce(expense as any) // find expense
+        .mockResolvedValueOnce(null); // find other linked
+
+      (dataSource as any).query = jest.fn().mockResolvedValueOnce([
+        {
+          id: 'inv-1',
+          invoice_no: '0000123',
+          total_amount: 11000000,
+          vat_amount: 1000000,
+          direction: 'IN',
+        },
+      ]);
+
+      const result = await service.settleExpenseWithInvoice('exp-accrued', {
+        invoiceId: 'inv-1',
+      });
+
+      expect(result.message).toBe(
+        'Đã gắn hóa đơn và tất toán trích trước thành công',
+      );
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accrualMode: 'SETTLED',
+          linkedInvoiceId: 'inv-1',
+        }),
+      );
+    });
+
+    it('unsettles expense and reverts accrualMode to ACCRUED', async () => {
+      const expense = {
+        id: 'exp-settled',
+        accrualMode: 'SETTLED',
+        linkedInvoiceId: 'inv-1',
+        isDeleted: false,
+      };
+      repo.findOne.mockResolvedValue(expense as any);
+
+      const result = await service.unsettleExpense('exp-settled');
+
+      expect(result.message).toBe('Đã gỡ hóa đơn tất toán thành công');
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accrualMode: 'ACCRUED',
+          linkedInvoiceId: null,
+          settledAt: null,
+        }),
       );
     });
   });

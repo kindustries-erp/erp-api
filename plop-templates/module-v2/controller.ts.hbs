@@ -1,0 +1,85 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
+import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
+import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
+import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
+import { {{serviceClass}} } from '../{{moduleName}}.service';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
+import { Update{{entityName}}Dto } from '../dto/update-{{entityKebab}}.dto';
+
+@ApiTags('{{routePath}}')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@Controller('{{routePath}}')
+export class {{entityName}}Controller {
+  constructor(private readonly service: {{serviceClass}}) {}
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.READ })
+  @ApiOperation({ summary: 'Danh sách {{entityName}} (phân trang, tìm kiếm)' })
+  @Get()
+  findAll(@Query() query: Query{{entityName}}Dto) {
+    return this.service.findAll(query);
+  }
+
+  // Đặt trước `:id` để `column-options` không bị hiểu thành id
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.READ })
+  @ApiOperation({ summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác' })
+  @Get('column-options')
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+    );
+  }
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.READ })
+  @ApiOperation({ summary: 'Chi tiết {{entityName}}' })
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.findOne(id);
+  }
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.CREATE })
+  @ApiOperation({ summary: 'Tạo mới {{entityName}}' })
+  @Post()
+  create(@Body() dto: Create{{entityName}}Dto) {
+    return this.service.create(dto);
+  }
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.UPDATE })
+  @ApiOperation({ summary: 'Cập nhật {{entityName}}' })
+  @Patch(':id')
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: Update{{entityName}}Dto) {
+    return this.service.update(id, dto);
+  }
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.DELETE })
+  @ApiOperation({ summary: 'Xóa mềm {{entityName}}' })
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.remove(id);
+  }
+}

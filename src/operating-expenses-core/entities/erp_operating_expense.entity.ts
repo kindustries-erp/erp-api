@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
-import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
 
 @Entity({ name: 'erp_operating_expenses' })
 export class ErpOperatingExpense {
@@ -145,6 +145,31 @@ export class ErpOperatingExpense {
 
   @Column({ type: 'uuid', name: 'recurrence_anchor_id', nullable: true })
   recurrenceAnchorId: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'posting_status',
+    default: 'UNPOSTED',
+  })
+  postingStatus: string;
+
+  @Column({ type: 'uuid', name: 'journal_entry_id', nullable: true })
+  journalEntryId: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'accrual_mode',
+    default: 'NONE',
+  })
+  accrualMode: string;
+
+  @Column({ type: 'uuid', name: 'linked_invoice_id', nullable: true })
+  linkedInvoiceId: string | null;
+
+  @Column({ type: 'timestamptz', name: 'settled_at', nullable: true })
+  settledAt: Date | null;
 
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;

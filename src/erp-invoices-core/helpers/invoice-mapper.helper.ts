@@ -12,6 +12,31 @@ export function parseVatRateForDisplay(val: any): number | string {
 }
 
 /**
+ * Format a numeric/string VAT rate stored in DB to a percentage string for Excel export.
+ * e.g. "0.08" or 8 or "8" -> "8%", 0.1 -> "10%", 0 -> "0%", "KCT" -> "KCT", null -> ""
+ */
+export function formatVatRate(val: any): string {
+  if (val == null || val === '') return '';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return '';
+    if (trimmed.endsWith('%')) return trimmed;
+    const num = Number(trimmed);
+    if (isNaN(num)) return trimmed;
+    const rate =
+      Math.abs(num) <= 1 && num !== 0 ? Math.round(num * 10000) / 100 : num;
+    return `${rate}%`;
+  }
+  if (typeof val === 'number') {
+    if (isNaN(val)) return '';
+    const rate =
+      Math.abs(val) <= 1 && val !== 0 ? Math.round(val * 10000) / 100 : val;
+    return `${rate}%`;
+  }
+  return String(val);
+}
+
+/**
  * Map an ErpInvoice entity (possibly with a computed netOffAmount) to a safe DTO
  * where all numeric columns are serialised as strings to prevent precision loss.
  */

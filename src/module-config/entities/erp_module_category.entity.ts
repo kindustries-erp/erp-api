@@ -3,11 +3,14 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import type { ErpModuleAttributeDef } from './erp_module_attribute_def.entity';
+import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_module_categories' })
 @Index(['moduleKey', 'code'], { unique: true })
@@ -21,6 +24,10 @@ export class ErpModuleCategory {
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;
 
+  /** Khóa nghiệp vụ do code sở hữu (vd OJ, INTERNAL); `code` admin được phép đổi tự do. */
+  @Column({ type: 'varchar', length: 50, name: 'semantic_key', nullable: true })
+  semanticKey: string | null;
+
   @Column({ type: 'varchar', length: 255, name: 'name' })
   name: string;
 
@@ -29,6 +36,13 @@ export class ErpModuleCategory {
 
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
+
+  @Column({ type: 'uuid', name: 'default_debit_account_id', nullable: true })
+  defaultDebitAccountId: string | null;
+
+  @ManyToOne(() => ErpChartOfAccount, { nullable: true, eager: false })
+  @JoinColumn({ name: 'default_debit_account_id' })
+  defaultDebitAccount: ErpChartOfAccount | null;
 
   @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive: boolean;

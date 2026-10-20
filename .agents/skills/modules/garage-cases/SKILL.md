@@ -14,11 +14,12 @@ Các nghiệp vụ trọng tâm:
 - **Chi tiết Dòng Dịch vụ & Phụ tùng (`kgara_case_services`)**: Bóc tách chi tiết từng dòng công việc trong phiếu dịch vụ, phân biệt rõ dòng công lao động (`tien_dich_vu`, `so_gio_cong_lam`) và dòng phụ tùng vật tư (`tien_phu_tung`, `gia_von_phu_tung`, `kho_code`).
 - **Đồng bộ Dữ liệu Tự động & Tăng dần (Incremental Watermark Sync)**: Kết nối với API KGara bằng cơ chế Bearer Token tự động làm mới, hỗ trợ đồng bộ theo dải ngày (`from`, `to`) hoặc đồng bộ tăng dần (`updatedSince`) với bộ đệm lùi thời gian (10 phút) tránh mất mát dữ liệu.
 - **Phát hiện & Quản lý Xóa mềm Vụ việc (Soft-delete & Deletion Counter)**: Thuật toán kiểm đếm số lần vắng mặt (`kgara_delete_count`). Khi vụ việc không còn tồn tại trên KGara qua 2 lần quét liên tiếp, hệ thống sẽ đánh dấu xóa mềm (`kgara_deleted_at`). Nếu vụ việc xuất hiện trở lại, hệ thống tự động phục hồi.
-- **Cảnh báo Thông minh & Giám sát Tự động (Hourly Scheduler & Notifications)**: Cron job chạy hàng giờ kiểm tra tính toàn vẹn dữ liệu cho từng chi nhánh (quét 2 tháng gần nhất từ ngày chạy), tự động gửi thông báo (`NotificationsService`) tới tài khoản Admin nếu phát hiện phiếu bị xóa, đặc biệt cảnh báo nghiêm ngặt các phiếu đang có chứng từ hóa đơn liên kết.
+- **Cảnh báo Thông minh & Giám sát Tự động (5-Slot Heartbeat Scheduler & Notifications)**: Scheduler chạy tự động tại 5 mốc giờ (`09:15`, `15:15`, `16:15`, `17:15`, `21:15` Asia/Ho_Chi_Minh) theo cơ chế Heartbeat 30s kết hợp `@Cron` dự phòng, quét dữ liệu 2 tháng gần nhất cho từng chi nhánh, tự động nạp chi tiết phụ tùng/công thợ (`syncCaseDetailsBatch`), và gửi thông báo an toàn qua RBAC (`CorePermission`/`CoreUserRole`) tới tài khoản có quyền khi phát hiện phiếu bị xóa hoặc có cảnh báo.
 - **Tổng hợp & Báo cáo Lợi Nhuận Gộp Vụ Việc (`kgara_gross_profit`)**: Bóc tách chỉ số tài chính $\text{Lợi Nhuận Gộp (LoiNhuan)} = \text{Doanh Thu (DoanhThu)} - \text{Chi Phí / Giá Vốn (ChiPhi)}$ theo từng vụ việc, tính tổng hợp kỳ báo cáo (`TongCong: { DoanhThu, ChiPhi, LaiGop }`), waterfall sync các tháng có phát sinh và đối soát với hóa đơn thuế GTGT.
 - **Liên kết Hóa đơn Điện tử & Sổ sách ERP (`kgara_case_linked_invoice`)**: Hỗ trợ liên kết 2 chiều giữa vụ việc dịch vụ / bản ghi lợi nhuận gộp với hóa đơn điện tử (`erp_invoices`) phục vụ công tác đối soát kế toán và quyết toán chi phí.
 - **Truy xuất Báo cáo Chi tiết & Sổ Nhật ký KGara (Gross Profit Journal Proxy)**: Tích hợp proxy gọi trực tiếp sang API báo cáo sổ nhật ký chi tiết (`/reports/gross-profit-detail/journal`) của KGara để kiểm tra từng bút toán chi phí gốc.
 - **Quản lý Sổ Công nợ Phải thu & Phải trả (`kgara_receivables`, `kgara_payables`)**: Đồng bộ và lưu trữ sổ công nợ khách hàng (phải thu theo vụ việc) và công nợ nhà cung cấp phụ tùng/đối tác theo tài khoản kế toán 331.
+- **Tự động Điều phối Dự Thu Dòng Tiền (`GarageCaseForecastService` qua `GarageHubService`)**: Khi vụ việc chuyển sang Hoàn tất (`tinh_trang_dich_vu = 3`), hệ thống tự động sinh hoặc cập nhật phiếu dự thu `DT-GARA-YYMMDD-XXX` (`payment_status = 'EXPECTED'`, `is_auto_expected = true`) với hạn thu `ngay_hoan_thanh_cong_viec + 7 ngày` cho số tiền còn lại. Nếu phiếu đã thu đủ (`tien_con_phai_thanh_toan <= 0`), hệ thống bỏ qua không sinh phiếu dự thu 0 đ. Nếu vụ việc đổi trạng thái không còn là Hoàn tất, hệ thống tự động chuyển trạng thái phiếu dự thu sang `CANCELLED` (bảo vệ tuyệt đối các phiếu đã `PAID` hoặc `APPROVED`). Hỗ trợ công cụ backfill lịch sử qua `scripts/backfill-garage-forecast.ts`.
 
 ---
 
@@ -49,7 +50,10 @@ Các nghiệp vụ trọng tâm:
 | `so_khung` | `varchar(100)` | YES | `NULL` | Số khung / VIN của phương tiện |
 | `branch_external_id` | `varchar(100)` | YES | `NULL` | Mã chi nhánh KGara quản lý (**Index**) |
 | `data_as_of` | `timestamptz` | YES | `NULL` | Dấu mốc thời gian phản hồi từ máy chủ KGara |
-| `classification` | `varchar(100)` | YES | `NULL` | Phân loại nghiệp vụ ERP: `'KY_GUI_NOI_BO'`, `'SUA_CHUA_CHUNG'`, `'OJ'`, `'OJ_NGOAI'`, `'KHAC'` (**Index**) |
+| `category_id` | `uuid` | YES | `NULL` | Khóa ngoại danh mục phân loại (`FK -> erp_module_categories.id`) (**Index**) |
+| `classification` | `varchar(100)` | YES | `NULL` | Mã phân loại nghiệp vụ ERP: `'SUA_CHUA_CHUNG'`, `'KY_GUI_NOI_BO'`, `'OJ'`, `'KHAC'` (**Index**). Đã chuẩn hóa toàn bộ `'OJ_NGOAI'` về `'OJ'`. |
+| `exclude_from_reports` | `boolean` | NO | `false` | Cờ loại trừ khỏi báo cáo P&L xưởng & Dashboard (**Index**) |
+| `exclude_from_debt` | `boolean` | NO | `false` | Cờ loại trừ khỏi tính toán công nợ khách hàng (**Index**). Khi phân loại là `'OJ'`, hệ thống tự động kích hoạt `exclude_from_debt = true`. |
 | `erp_notes` | `varchar` | YES | `NULL` | Ghi chú nghiệp vụ nội bộ trên ERP |
 | `kgara_deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm đánh dấu phiếu bị xóa trên KGara (**Index**) |
 | `kgara_delete_count` | `integer` | NO | `0` | Bộ đếm số lần vắng mặt trong các kỳ sync (**Index**) |
@@ -212,6 +216,11 @@ src/kgara-api-core/
 │   └── branch-id.decorator.ts              # Custom parameter decorator @BranchId()
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
+├── helpers/
+│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, COMPLETED_CASES_COLUMNS, CASE_PNL_COLUMNS & buildGarageCaseExportFileName)
+│   ├── kgara-completed-cases-sheet.builder.ts # Sheet Builders cho file xuất Excel đa sheets (Sheet 1: Thu/Trả P1, Sheet 2: Theo dõi PnL, Sheet 3: Chi tiết DV/PT)
+│   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
+│   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
 ├── kgara-api-core.controller.ts            # Controller gốc quản lý lifecycle onModuleInit & re-export @BranchId()
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
@@ -220,12 +229,25 @@ src/kgara-api-core/
 ├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
+    ├── kgara-case-export.service.ts        # Facade Service (< 50 LoC) điều phối xuất Excel theo chuẩn api-service-refactor
+    ├── kgara-completed-cases-export.service.ts # Sub-Service chuyên trách xuất file Excel 3 Sheets bảng kê phiếu kết thúc, theo dõi PnL và chi tiết DV/PT (< 300 LoC)
+    ├── kgara-case-services-export.service.ts # Sub-Service chuyên trách xuất riêng bảng kê chi tiết dịch vụ & phụ tùng (< 150 LoC)
+    ├── garage-export-jobs.service.ts       # Giữ 3 `ExportJobRunner` (cases, công nợ KH, công nợ NCC); fingerprint gồm branchId; reuse file ≤ 10 phút
+    ├── garage-debts-export.service.ts      # Xuất Excel công nợ phải thu (KH) / phải trả (NCC), 1 sheet, dòng SUM/SUBTOTAL
+    ├── kgara-customers-debt-query.service.ts # SQL công nợ KH (gom theo biển số xe), dùng chung list + export (`unpaged`); hằng `GARAGE_DEBT_BASELINE_DATE`
+    ├── (helpers/) garage-debts-export.helper.ts # Sheet `Dashboard` + sheet chi tiết công nợ (đã bỏ cột Chi nhánh); `buildGarageDebtReport`
+    ├── (helpers/) garage-cases-dashboard.builder.ts # Dashboard bảng kê phiếu: KPI công thức tham chiếu Sheet 1 + 3 chart
+    ├── (helpers/) garage-cases-dashboard-data.helper.ts # Hàm thuần: `chooseBucketUnit`, `bucketOf`, `buildTimeSeries`, phân loại, top khách hàng
+    ├── (helpers/) kgara-case-sort.helper.ts # `applyCaseListSorts` dùng chung list + export
+    ├── kgara-case-list-query.service.ts    # Sub-Service chuyên trách tìm kiếm danh sách vụ việc, phân trang, lọc distinct options theo số chứng từ / biển số xe và báo cáo lãi gộp
     ├── sync-case.service.ts                # Sub-Service đồng bộ chi nhánh, danh sách vụ việc, chi tiết dòng dịch vụ
     ├── sync-gross-profit.service.ts        # Sub-Service đồng bộ báo cáo lãi gộp
     ├── sync-debt.service.ts                # Sub-Service đồng bộ sổ nợ phải thu (AR) & phải trả NCC 331 (AP)
     ├── sync-deletion.service.ts            # Sub-Service thuật toán phát hiện và đánh dấu xóa mềm
     ├── sync-run-logger.service.ts          # Sub-Service quản lý audit log (GwSyncRun) & incremental watermark
-    ├── kgara-case-query.service.ts         # Query engine & recalculateCaseSettlementSummary helper
+    ├── kgara-case-query.service.ts         # Facade Query engine & recalculateCaseSettlementSummary helper (< 300 LoC)
+    ├── kgara-case-config.service.ts        # Sub-Service quản lý phân loại danh mục, cờ loại trừ (báo cáo, công nợ) & EAV custom fields
+    ├── kgara-case-config.service.spec.ts   # Unit test cho KgaraCaseConfigService
     ├── garage-smart-settlement.service.ts  # Thuật toán gợi ý cấn trừ sao kê ERP thông minh cho Vụ việc (Số chứng từ, Biển số xe, Đối tác)
     └── garage-smart-settlement.service.spec.ts # Unit tests cho gợi ý cấn trừ vụ việc
 ```
@@ -241,13 +263,14 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
-| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell |
-| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 2 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, hỗ trợ multi-tier loader tự động bóc tách và làm giàu dữ liệu dòng từ DB, rawData và live API |
-| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
+| `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell. `totals.grandTotalPaidCost` và `grandTotalRemainingPayable` (Còn phải trả) lấy từ `KgaraSuppliersDebtQueryEngine.getSuppliersDebt` cùng phạm vi và công thức sàn 0 theo vụ việc với Dashboard công nợ NCC (`buildPayableExprs`), không còn cộng từ danh sách hiển thị |
+| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 3 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & công nợ hai chiều Thu/Trả, `Theo dõi PnL` phân tích lợi nhuận gộp/biên LN/đánh giá sinh lời, và `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, gắn công thức Excel động tự động tính cấn trừ Phải - Đã |
+| `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `caseCode` ghép Số chứng từ + Biển số xe, `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
-| `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu`) | Tra cứu vụ việc theo số chứng từ (tự động fetch detail từ KGara nếu thiếu dòng) |
+| `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
 | `GET` | `/cases/external/:externalId` | `externalId` (`hd_phieu_dich_vu_id`), `branchId` | Tra cứu vụ việc theo ID KGara (tự động kích hoạt sync detail nếu chưa có trong DB) |
-| `PATCH`| `/cases/:id/config` | `id`, Body: `{ classification?: string \| null, erpNotes?: string \| null }` | Cập nhật phân loại nghiệp vụ và ghi chú nội bộ của ERP cho vụ việc |
+| `PATCH`| `/cases/:id/lines-cost` | `id`, Body: `{ lines: [{ detailId, giaVonPhuTung }] }` | Cập nhật giá vốn thủ công cho từng dòng phụ tùng của vụ việc (lưu vào `kgara_case_services` và `rawData`) |
+| `PATCH`| `/cases/:id/config` | `id`, Body: `UpdateCaseConfigDto` (`categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt`, `erpNotes`, `customAttributes`, `attributes`, `globalAttributes`) | Cập nhật phân loại danh mục Module Config, 2 cờ loại trừ (báo cáo, công nợ), ghi chú và thuộc tính động cho vụ việc |
 | `PATCH`| `/cases/:id/erp-notes` | `id`, Body: `{ erpNotes: string \| null }` | Cập nhật ghi chú nghiệp vụ nội bộ của ERP cho vụ việc (Legacy alias) |
 | `GET` | `/cases/:id/services` | `id` (`hd_phieu_dich_vu_id`) | Lấy danh sách chi tiết các dòng công việc và phụ tùng của vụ việc |
 | `GET` | `/cases/:id/payments` | `id` (`hd_phieu_dich_vu_id`) | Lấy lịch sử thanh toán của vụ việc (trả về mảng rỗng do KGara V2 quản lý qua receivable) |
@@ -269,7 +292,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/cases/gross-profit-report` | `@BranchId()`, Query: `from`, `to` | Lấy báo cáo tổng hợp lợi nhuận gộp kèm chi tiết từng vụ việc và tính tổng hợp (`TongCong`), sắp xếp `ngayPhatSinh DESC` |
-| `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc |
+| `GET` | `/cases/by-code/:code/gross-profit` | `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu nhanh chỉ số Doanh thu / Chi phí / Lợi nhuận theo mã vụ việc hoặc UUID (xử lý qua `KgaraCaseLookupService`) |
 | `POST`| `/sync/gross-profit` | `@BranchId()`, Query/Body: `from`, `to` | Kích hoạt tác vụ đồng bộ lợi nhuận gộp từ KGara theo chi nhánh và khoảng ngày |
 | `GET` | `/reports/gross-profit-detail` | `@BranchId()`, Query: `from`, `to` | Proxy gọi trực tiếp API báo cáo chi tiết lợi nhuận gộp từ máy chủ KGara |
 | `GET` | `/reports/gross-profit-detail/journal` | `@BranchId()`, Query: `from`, `to`, `vuViecID` | Proxy lấy sổ nhật ký hạch toán chi phí/doanh thu chi tiết của vụ việc |
@@ -280,6 +303,10 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 ### 4.3. Nhóm Đồng Bộ & Sổ Kế Toán
 | Method | Endpoint | Tham số / Header | Mô tả Nghiệp vụ |
 | :--- | :--- | :--- | :--- |
+| `GET` | `/cases/services` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `serviceType` (`ALL` \| `DV` \| `PT`), `filtersStr`, `sorts` | Lấy danh sách dòng chi tiết phụ tùng & công dịch vụ phân trang toàn hệ thống, lọc theo phân hệ `serviceType`, tính tổng cộng Grand Total và tổng lũy kế Cumulative |
+| `GET` | `/cases/services/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr`, `serviceType` | Lấy danh sách options phân trang distinct cho bộ lọc cột của bảng Chi tiết dòng dịch vụ & Phụ tùng |
+| `GET` | `/cases/services/export/excel` | `branchId`, `from`, `to`, `serviceType`, `filtersStr`, `sorts`, `q` | Xuất file Excel bảng kê chi tiết phụ tùng và công thợ dịch vụ (`Chi_tiet_phieu_dich_vu_YYYYMMDD_HHmmss.xlsx`) |
+| `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency` | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP |
 | `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
@@ -292,7 +319,39 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/payables` | `@BranchId()` | Lấy danh sách công nợ phải trả đã đồng bộ |
 | `GET` | `/dashboard` | `@BranchId()`, `from`, `to` | Lấy dữ liệu tổng quan dashboard vụ việc trực tiếp từ KGara |
 
+### 4.4. Nhóm Sổ Thu Chi Xưởng (Garage Cashflow)
+Base Route: `/api/v1/greenway/cashflow`
+| Method | Endpoint | Tham số / Body | Mô tả Nghiệp vụ |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Query: `page`, `pageSize`, `search`, `statusTab` (`all`, `receipt`, `payment`, `with_bank`, `no_bank`), `filtersStr`, `sorts`, `dateFrom`, `dateTo` | Lấy danh sách giao dịch thu/chi phát sinh thực tế tại xưởng kèm liên kết số phiếu dịch vụ và sao kê ngân hàng, tính stats (totalReceipts, totalPayments, netCashflow) |
+| `GET` | `/column-options` | Query: `column`, `search`, `page`, `pageSize`, `filtersStr`, `statusTab` | Lấy danh sách distinct options phân trang cho popover lọc từng cột của bảng hoặc static master options |
+| `POST`| `/` | Body: `CreateGarageCashflowDto` | Ghi nhận giao dịch thu/chi mới, tự động chuẩn hóa kênh nguồn `ON_SYSTEM` / `OFF_SYSTEM_MANUAL`, cập nhật tổng hợp vụ việc nếu có `caseId` |
+| `PATCH`| `/:id` | `id`, Body: `UpdateGarageCashflowDto` | Cập nhật khoản thu/chi, tự động tính lại tổng thanh toán vụ việc cũ và mới |
+| `DELETE`| `/:id` | `id` | Xóa giao dịch thu/chi và tính lại tổng thanh toán vụ việc |
+
 ---
+
+### 4.5. Xuất Excel nền (Background Export Jobs)
+Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runner.ts`), cùng lớp với xuất Excel hóa đơn: job chạy **in-memory** (mất khi restart, không chia sẻ giữa nhiều replica), mỗi user tối đa 1 job `RUNNING` trên mỗi runner, file giữ 24 giờ, SSE tiến độ lọc theo `userId`. Body bắt buộc đúng DTO (`forbidNonWhitelisted`) — xem `dto/garage-export.dto.ts`.
+
+| Method | Path | RBAC | Mô tả |
+|:---|:---|:---|:---|
+| `POST` | `/cases/export/excel/background` | `GARAGE:READ` | Body `GarageCasesExportDto`: `mode` (`by-period` \| `by-current-filter`), `date_from/date_to/date_type/classification/status/q/sorts/filtersStr`. `by-current-filter` bỏ điều kiện "phiếu kết thúc", lọc kỳ theo `ngay_phat_sinh`, áp `filtersStr` + `sorts` như bảng (`applyCaseListFilters`, `applyCaseListSorts`) |
+| `GET` | `/cases/export/excel/background/history` · `/:jobId/download` · SSE `/cases/export/excel/progress/stream` | `GARAGE:READ` | Lịch sử phân trang, tải file, tiến độ |
+| `POST` | `/cases/customers-debt/export/background` (+ `/history`, `/:jobId/download`, SSE `/cases/customers-debt/export/progress/stream`) | `GARAGE_DEBTS:READ` | Body `GarageDebtsExportDto`: `mode`, `from/to` (kỳ) và khi `by-current-filter` thêm `q/sorts/filtersStr/column_filters/column_search` |
+| `POST` | `/payables/suppliers-debt/export/background` (+ `/history`, `/:jobId/download`, SSE `/payables/suppliers-debt/export/progress/stream`) | `GARAGE_DEBTS:READ` | Tương tự cho công nợ NCC |
+
+- Chế độ `by-period` của công nợ chỉ giữ kỳ; `normalizeFilters` loại mọi filter/sort khác. Chi nhánh lấy từ header `x-greenway-branch-id`, **luôn nằm trong fingerprint**.
+- File công nợ: `Cong_no_phai_thu_khach_hang_*.xlsx` / `Cong_no_phai_tra_nha_cung_cap_*.xlsx`, gom theo biển số xe, cột tuổi nợ 4 mức. Endpoint đồng bộ `GET /cases/export/excel` vẫn giữ để tương thích.
+- Tab Tổng quan và Hoạt động garage dùng **chung một drawer xuất** trên web; khi chọn loại báo cáo kỳ, web gọi `POST /greenway/dashboard/export/background` với `reportType` (xem skill `garage-dashboard`), còn "Bảng kê phiếu dịch vụ" vẫn dùng endpoint cases ở trên (không đổi).
+- Sorts của bảng cases dùng chung helper `kgara-case-sort.helper.ts` (`applyCaseListSorts`) giữa danh sách và export.
+
+**Dashboard + chart gốc Excel (sheet đầu của cả 2 report)**
+- Thư viện dùng chung `src/common/xlsx-charts/`: `injectCharts(buffer, sheetName, charts)` chèn chart OOXML bằng `jszip` (exceljs 4.4 không hỗ trợ chart; `jszip` là dependency trực tiếp), loại chart `column | bar | line | doughnut | combo`, tham chiếu ô của chính sheet Dashboard (numCache điền sẵn), `reverseCategories` để cột ngang Top N hiển thị lớn nhất ở trên. `dashboard-sheet.helper.ts` dựng khung (tiêu đề + kỳ + chi nhánh + chế độ, thẻ KPI, `chartAnchor`, `writeDataTable`).
+- Luồng: tạo sheet `Dashboard` **đầu tiên** → dựng các sheet chi tiết → `buildXxxDashboard` ghi KPI/bảng dữ liệu → `writeBuffer` → `injectCharts`. KPI là **công thức Excel** tham chiếu sheet chi tiết (có `result`), nên luôn khớp tổng ở sheet đó. Bảng "Dữ liệu biểu đồ" nằm bên phải vùng in (từ cột R); vùng in A–P, in ngang vừa khổ.
+- **Công nợ** (KH/NCC): KPI tổng/đã thu(trả)/còn lại/tỷ lệ/số xe/số phiếu/nợ >90/tuổi nợ max; chart doughnut cơ cấu tuổi nợ, bar Top 10 còn nợ, column đã thu vs còn lại (Top 10). **Đã bỏ cột "Chi nhánh"** ở file công nợ; chi nhánh vẫn lọc theo header và ghi ở tiêu đề Dashboard (tên lấy qua `KgaraBranch`).
+- **Cases**: sheet thứ tự `Dashboard`, Bảng kê, Theo dõi lãi lỗ, Chi tiết DV & Phụ tùng. `buildSheet1CompletedCases` trả `{ sums, rows }` (số liệu chuẩn hóa dùng chung, không nhân đôi công thức). Chart: combo Doanh thu/Chi phí/Lợi nhuận theo thời gian (bucket: ≤31 ngày → ngày, ≤120 → tuần ISO, còn lại → tháng; cơ sở ngày: `by-current-filter` → ngày phát sinh, `case_date` → ngày tiếp nhận, mặc định → ngày kết thúc), doughnut doanh thu theo phân loại, bar Top 10 khách hàng. Chỉ vẽ các kỳ có dữ liệu.
+- Kiểm chứng render: xuất file mẫu rồi `soffice --headless --convert-to pdf` (LibreOffice có sẵn trên máy dev).
 
 ## 5. Logic Nghiệp vụ Trọng tâm
 
@@ -308,18 +367,23 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.3. Thuật toán Phát hiện Xóa Mềm Vụ việc (`detectAndMarkDeletedCases`)
 1. Khi đồng bộ theo khoảng ngày (`from`, `to`), hệ thống lấy toàn bộ danh sách `hd_phieu_dich_vu_id` trả về từ API KGara đưa vào tập hợp `syncedIds`.
-2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`), **loại trừ các bản ghi có phân loại nghiệp vụ ghi nhận ngoài (`classification = 'OJ_NGOAI'`)** để bảo vệ dữ liệu nội bộ không bị xóa nhầm.
+2. Truy vấn các vụ việc trong DB của ERP cùng chi nhánh và khoảng ngày chưa bị đánh dấu xóa mềm (`kgara_deleted_at IS NULL`), **loại trừ các bản ghi có phân loại nghiệp vụ ghi nhận ngoài (`classification IN ('OJ', 'OJ_NGOAI')`)** để bảo vệ dữ liệu nội bộ không bị xóa nhầm.
 3. Xác định các vụ việc có trong ERP nhưng không xuất hiện trong `syncedIds`.
 4. Tăng bộ đếm `kgara_delete_count += 1`.
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.
 6. Nếu một vụ việc đã bị xóa mềm sau đó xuất hiện trở lại trong danh sách sync: Hệ thống tự động đặt lại `kgara_deleted_at = null` và `kgara_delete_count = 0` (Restoration).
 
-### 5.4. Lịch Quét Tự động Hàng Giờ 2 Tháng Gần Nhất & Cảnh báo Admin (`KgaraSyncScheduler`)
-- Chạy tự động vào mỗi đầu giờ (`@Cron(CronExpression.EVERY_HOUR)`).
-- **Cửa sổ đồng bộ nâng cao**: Quét dữ liệu trong phạm vi **2 tháng gần nhất tính từ thời điểm chạy** (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh đang hoạt động.
-- Nếu phát hiện vụ việc bị xóa mềm:
-  - Tự động kiểm tra liên kết hóa đơn trong `kgara_case_linked_invoice`.
-  - Gửi thông báo loại `WARNING` tới tất cả Admin nếu vụ việc bị xóa đang có hóa đơn liên kết; gửi thông báo loại `INFO` nếu không có hóa đơn liên kết.
+### 5.4. Lịch Quét Tự Động 5 Mốc Giờ 2 Tháng Gần Nhất & Cảnh Báo An Toàn (`KgaraSyncScheduler`)
+- Chạy tự động tại 5 mốc thời gian cố định: **`09:15`**, **`15:15`**, **`16:15`**, **`17:15`**, **`21:15`** (Asia/Ho_Chi_Minh).
+- **Cơ chế lập lịch kép (Heartbeat 30s + @Cron)**:
+  - Heartbeat `setInterval` (30s) trong `onModuleInit()` kiểm tra `isWithinSyncWindow()` với cửa sổ 45 phút giúp bù giờ nếu server khởi động lại trễ.
+  - Decorator `@Cron('0 15 9,15,16,17,21 * * *')` làm lớp kích hoạt dự phòng song song với khóa slot `lastExecutedSlotKey` chống chạy lặp.
+- **Cửa sổ đồng bộ 2 tháng gần nhất & Kéo chi tiết**:
+  - Quét dữ liệu trong phạm vi 2 tháng gần nhất tính từ thời điểm chạy (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh.
+  - Tự động gọi `syncCaseDetailsBatch` (`force: false`) nạp dòng phụ tùng & công thợ cho các vụ việc chưa có chi tiết.
+- **Cảnh báo Thông minh Zero-Crash**:
+  - Tra cứu người nhận thông báo an toàn thông qua quyền RBAC `CorePermission` (`resource IN ('garage', '*')`) và `CoreUserRole`. Bọc `try/catch` độc lập không làm gián đoạn luồng sync DB chính.
+  - Gửi thông báo loại `WARNING` tới người dùng có quyền nếu vụ việc bị xóa đang có hóa đơn liên kết; gửi thông báo loại `INFO` nếu không có hóa đơn liên kết.
 
 ### 5.5. Thuật toán Tổng Hợp Báo Cáo Lợi Nhuận Gộp (`getGrossProfitReport`)
 1. Truy vấn toàn bộ bản ghi trong bảng `kgara_gross_profit` theo `branchExternalId` và dải ngày `reportFrom >= from`, `reportTo <= to`.
@@ -337,12 +401,28 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 
 ### 5.7. Đối Soát & Kiểm Tra Hóa Đơn Thuế Gắn Kèm (`kgara_case_linked_invoice`)
 - Phân loại 2 chiều:
-  - `linkType = 'IN'`: Hóa đơn mua phụ tùng, dầu nhớt, vật tư tiêu hao đầu vào cấu thành nên chi phí vụ việc.
-  - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng tương ứng với doanh thu dịch vụ.
+  - `linkType = 'IN'`: Hóa đơn mua phụ tùng, dầu nhớt, vật tư tiêu hao đầu vào cấu thành nên chi phí vụ việc (gắn với Bảng Chi Phí Vụ Việc).
+  - `linkType = 'OUT'`: Hóa đơn điện tử VAT xuất cho khách hàng hoặc bên bảo hiểm tương ứng với doanh thu dịch vụ (gắn với Bảng Phải Thu & Phân Bổ).
+- **Cột "HĐ đã cấn trừ" trên 2 Bảng Tài Chính**:
+  - `QuoteReceivablesTable` (Phải thu KH & BH) và `QuoteCostTable` (Chi phí NCC & Thợ) đều hiển thị cột **"HĐ đã cấn trừ"** (`linkedInvoices`).
+  - Mỗi badge hóa đơn hiển thị số HĐ kèm dot trạng thái:
+    - 🟢 **Xanh lá (`Đã khớp sao kê`)**: Khi hóa đơn đã có cấn trừ dòng tiền thực tế qua sao kê ngân hàng / tiền mặt (`hasBankNetOff === true` hoặc `bankSettledAmount > 0`).
+    - 🟡 **Vàng hổ phách (`Chưa khớp sao kê`)**: Hóa đơn đã gắn với vụ việc nhưng bản thân hóa đơn chưa được cấn trừ với giao dịch sao kê nào.
+  - Khi chưa có HĐ nào cấn trừ: hiển thị dấu gạch ngang mờ (`—`).
 - Ràng buộc toàn vẹn: Khi bản ghi `kgara_gross_profit` hoặc `kgara_cases` bị xóa, các dòng liên kết hóa đơn tương ứng sẽ tự động bị xóa theo (`onDelete: 'CASCADE'`), đảm bảo không để lại bản ghi mồ côi.
 
 ### 5.8. Quy tắc Quản lý Dòng tiền & Công nợ 100% trên ERP (`kgara_case_settlements` & `bank_transactions`)
 - **Nguyên tắc nghiệp vụ dòng tiền**: Không sử dụng các trường thanh toán cũ trên máy chủ KGara để theo dõi thu/chi, vì trên thực tế KGara không quản lý tài khoản thu/chi thực tế của doanh nghiệp.
+- **Preset Tab Priority Router khi Mở Drawer Thu/Chi Tiền (`CaseLinePaymentDrawer`)**:
+  - Khi người dùng click nút Thu tiền hoặc Chi tiền trên từng dòng vụ việc:
+    - **Ưu tiên 1 (`linked`)**: Nếu đã có hóa đơn cấn trừ cho dòng này (`linkedCount > 0`) ➔ Mở ngay tab **"Đã cấn trừ"** (`linked`).
+    - **Ưu tiên 2 (`suggestions`)**: Nếu chưa có cấn trừ nhưng có hóa đơn gợi ý khớp (`suggestionsCount > 0`) ➔ Mở tab **"Gợi ý khớp"** (`suggestions`).
+    - **Ưu tiên 3 (`all`)**: Chỉ khi không có cấn trừ và không có gợi ý (`linkedCount === 0 && suggestionsCount === 0`) ➔ Mới mở tab **"Tất cả"** (`all`).
+    - **Lưu lựa chọn người dùng**: Khi người dùng tự tay click chọn preset tab khác (`setViewPreset`), trạng thái được ghi nhớ qua `userSelectedPresetRef` và không bị ghi đè bởi auto router.
+- **Right Panel Cấn Trừ (`CaseLinePaymentRightPanel`)**:
+  - Gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán, và **Số tiền cần cấn trừ** (`targetAmount`).
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng/Dòng xe, Trạng thái, Ngày tiếp nhận/phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) kế thừa trực tiếp từ `caseData`.
 - **Theo dõi 2 chiều dòng tiền thực tế thuần túy trên ERP (Pure Cashflow Standard)**:
   - **Tiến độ thanh toán & Công nợ (Đã thực chi, Đã thu thực tế, Còn phải chi trả, Còn phải thu)** **CHỈ TÍNH DUY NHẤT DỰA TRÊN CÁC GIAO DỊCH DÒNG TIỀN THỰC TẾ** trong bảng `kgara_case_settlements` (Sao kê ERP `ON_SYSTEM` và Tiền mặt sổ quỹ `OFF_SYSTEM_MANUAL`).
   - **Hóa đơn VAT liên kết (`erp_invoices`)**: Là chứng từ kế toán/thuế, **tuyệt đối KHÔNG cộng dồn tiền hóa đơn vào dòng tiền thực thu/thực chi** nếu không có giao dịch dòng tiền tương ứng.
@@ -354,10 +434,13 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.
      - Còn phải chi trả: `Math.max(0, targetCost - totalPaid)`.
-- **Ma trận Quyền hạn Thao tác trên Dòng tiền**:
+- **Ma trận Quyền hạn Thao tác trên Dòng tiền & Chế độ Chỉnh sửa (RBAC Matrix)**:
   - `OFF_SYSTEM_MANUAL` (Sổ ngoài / Tiền mặt): Cho phép **Thêm**, **Sửa** (qua `PATCH /cases/:id/settlements/:settlementId`), và **Xóa**.
   - `ON_SYSTEM` (Sao kê ngân hàng / Sổ quỹ ERP): Cho phép **Thêm** và **Xóa**; **Chặn Sửa** trực tiếp (nút Sửa hiển thị mờ kèm Tooltip giải thích; Backend guard trả về `400 BadRequestException`).
   - `isViaInvoice` (Cấn trừ tự động từ Hóa đơn): **Khóa hoàn toàn** không cho Sửa/Xóa trực tiếp; hiển thị icon Khóa kèm Tooltip: _"Cấn trừ tự động từ hóa đơn liên kết. Để gỡ, hãy xóa liên kết hóa đơn tương ứng."_
+  - **Quyền Thao tác Thu / Chi tiền (`canEditFinancial`)**: Các nút **"Thu tiền"** ("Thu KH", "Thu BH" trong bảng Phải thu) và **"Chi tiền"** (trong bảng Phụ tùng và Dịch vụ) chỉ hiển thị và cho phép click khi user có quyền sửa Hóa đơn (`INVOICES:update`) hoặc Sao kê / Sổ quỹ (`BANK_STATEMENTS:update` / `CASH_STATEMENTS:update`). Nếu không có quyền, cột hiển thị dấu gạch ngang (`---`) và chặn mọi trigger thanh toán.
+  - **Quyền Bật/Tắt Chế độ Chỉnh sửa Vụ việc (`canUpdateGarage`)**: Chỉ người dùng có quyền `GARAGE:update` mới có thể chuyển đổi trạng thái chỉnh sửa (`editMode`), hiển thị nút "Chỉnh sửa" trên header Drawer hoặc kích hoạt edit mode từ các trigger ngoài bảng. Nếu thiếu quyền, Drawer luôn ở chế độ xem (`view`), nút "Chỉnh sửa" bị ẩn, và mọi lời gọi `startEdit()` đều bị chặn an toàn kèm thông báo lỗi.
+  - **Bảo vệ Backend (`KgaraCaseFinancialController`)**: Áp dụng decorator `@RequireAnyPermissions` trên tất cả endpoints liên kết hóa đơn (`POST/DELETE linked-invoices`: `GARAGE:update` || `INVOICES:update`) và dòng tiền vụ việc (`POST/DELETE/PATCH settlements`: `GARAGE:create`/`update` || `INVOICES:update` || `BANK_STATEMENTS:update` || `CASH_STATEMENTS:update`).
 - **API Tra cứu Lợi nhuận gộp theo mã (`GET /cases/by-code/:code/gross-profit`)**:
   - Trả về `ChiPhi`, `DoanhThu`, `LoiNhuan`, `BienLoiNhuan` (%), cùng các khoản phân rã (`GiaVonPhuTung`, `ChiPhiGiaCongNgoai`, `ChiPhiHoaHongGDV`, `ChiPhiHoaHongMG`).
   - Tự động fallback sang bảng `kgara_cases` để tính toán doanh thu/chi phí nếu vụ việc chưa có bản ghi gross profit riêng, đảm bảo UI Drawer và Bản in luôn có số liệu chuẩn xác.
@@ -378,7 +461,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Tự động `LEFT JOIN` kiểm tra `already_settled` để sao kê đã là cấn trừ của vụ việc hiện tại luôn xuất hiện trong gợi ý (kèm cờ `alreadySettledForThisCase = true`, badge `ĐÃ CẤN TRỪ` và nút `Chọn lại cấn trừ`).
 
 ### 5.10. Quy tắc Gỡ liên kết Chứng từ trên Giao diện (Client-side Staging & Batch Save)
-- Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](file:///home/dev/repos/erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
+- Trong đồ thị mạng lưới chứng từ ([`DrawerDocumentTraceability`](erp/erp-web/src/shared/components/drawer/DrawerDocumentTraceability/DrawerDocumentTraceability.tsx)), khi người dùng ở chế độ Chỉnh sửa (`editMode`) và bấm "Gỡ liên kết":
   - Hành động gỡ được ghi nhận vào trạng thái pending trên client (`pendingDeletedInvoiceIds`, `pendingDeletedSettlementIds`).
   - Cập nhật lạc quan trên đồ thị (xóa node và edge khỏi state cục bộ) và tính toán lại số tiền đã cấn trừ.
   - **Tuyệt đối không gọi API xóa ngay lập tức**; chỉ khi người dùng bấm **"Lưu thay đổi"** thì hệ thống mới gọi API gỡ bỏ hàng loạt.
@@ -396,22 +479,29 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
       - `'completed'`: Hoàn tất / Đã giao xe (`tinh_trang_dich_vu = 3` hoặc tên chứa `'kết thúc'`, `'hoàn tất'`, `'hoàn thành'`, `'giao xe'`, `'xong'`, `'đã thanh toán'`).
     - **Ngày tiếp nhận (`caseDate` / `ngayTiepNhan`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker dải ngày từ - đến.
     - **Ngày kết thúc (`ngayHoanThanhCongViec`)**: Tích hợp Searchbox + Options distinct phân trang + Date Range Picker + Tùy chọn `(blank)` để lọc phiếu chưa kết thúc.
-    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu", "case"."tien_co_thue")`, định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
+    - **Doanh thu (`doanhThu`)**: Tự động `LEFT JOIN` với bảng `kgara_gross_profit`, áp dụng `COALESCE("case"."doanh_thu", "gp"."doanh_thu")` (không fallback về `tien_co_thue` để tránh sai lệch doanh thu khi chưa hoàn thành), định dạng tiền tệ VNĐ và lọc `__BLANK__` (0 đ / Chưa có).
     - **Chi phí (`chiPhi`)**: Áp dụng `COALESCE("case"."chi_phi", "gp"."chi_phi")`, định dạng tiền tệ và lọc `__BLANK__`.
     - **Lợi nhuận (`loiNhuan`)**: Áp dụng `COALESCE("case"."loi_nhuan", "gp"."loi_nhuan", DoanhThu - ChiPhi)`, định dạng tiền tệ và lọc `__BLANK__`.
     - **Biên LN (`margin`)**: Tính toán tỷ lệ % margin tức thời và hỗ trợ 4 phân khúc chọn nhanh: `'HIGH'` ($\ge 50\%$), `'MID'` ($20\% - 50\%$), `'LOW'` ($0\% - 20\%$), `'NEGATIVE'` ($< 0\%$) cùng lọc `__BLANK__`.
   - **Cascading Column Options**: Endpoint `/cases/column-options` và `/cases/customers-debt/column-options` nhận tham số `filtersStr` để động hóa danh sách options phụ thuộc vào các cột khác đang được lọc.
   - **Float Action Bar & Quick Actions**: Cả bảng Phiếu dịch vụ (`GarageCases.tsx`) và bảng Danh sách phiếu dịch vụ trong Drawer Hồ sơ công nợ (`GarageCustomerDetailDrawer.tsx`) đều bố trí các Quick Actions thuận tiện:
-    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View.
+    - 👁️ **Xem chi tiết** (`Eye` icon) $\rightarrow$ Mở Drawer ở chế độ View (`initialEditMode: false`, `quote_details`).
     - ✏️ **Chỉnh sửa** (`Pencil` icon) $\rightarrow$ Mở Drawer trực tiếp ở chế độ Edit (`initialEditMode: true`).
+    - ⚖️ **Đối soát** (`Scale` icon trong Context Menu dòng bảng `GarageCasesTable`, `GarageCasePartnerTab`, `GarageCaseServicesSection`) $\rightarrow$ Mở Drawer chuyển thẳng vào tab **Tài chính (`financials`)** và kích hoạt sẵn chế độ chỉnh sửa (`editMode: true`), cho phép đối soát cấn trừ hóa đơn và dòng tiền tức thời.
+    - 🔗 **Liên kết hóa đơn trong Mã CT** (`Link2` icon trong `GarageCaseCodeCell`) $\rightarrow$ Mở tab Tài chính ở chế độ xem (`editMode: false`) để tra cứu.
     - 🔄 **Đồng bộ từ KGara** (`RefreshCw` icon) $\rightarrow$ Kích hoạt đồng bộ chi tiết vụ việc trực tiếp từ KGara.
-    - ⚖️ **Cấn trừ sao kê** (`Scale` icon) $\rightarrow$ Mở modal cấn trừ giao dịch ngân hàng/sổ quỹ vào vụ việc.
     - 🔗 **Liên kết hóa đơn** (`Link2` icon) $\rightarrow$ Mở Drawer chọn và liên kết hóa đơn điện tử VAT đầu ra/đầu vào vào vụ việc ngay ngoài bảng.
 
-### 5.12. Xử lý An Toàn ID Tạm Thời (Temporary ID Guard for Settlements & Invoices)
-- Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
-  - **Client-side (`useGarageCaseEditForm.ts`)**: Lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
-  - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
+### 5.12. Xử lý An Toàn ID Tạm Thời & Luồng Staging Thu/Chi Ngoài Sổ Sách (Off-System Manual Cashflow Staging)
+- **Luồng Ghi nhận Thu/Chi Ngoài Sổ sách (`OFF_SYSTEM_MANUAL`) trong Tab Tài chính Drawer**:
+  - Khi ở chế độ Chỉnh sửa (`editMode`), form "Ghi nhận Dòng tiền Ngoài sổ sách" cho phép nhập số tiền, kênh (Tiền mặt ngoài, CK Cá nhân, Khác), người nộp/nhận và ghi chú.
+  - Nút **"Thêm vào danh sách"** (`handleAddManualToDraft`) đẩy giao dịch vào mảng bản nháp `pendingAddedSettlements` với `isPending: true`, tiền tố `tmp-...`, đồng thời tự động cập nhật ngay số dư công nợ/tiền đã thu trên client preview (`getActiveFinancialSummary`).
+  - Giao diện bảng danh sách đã ghi nhận hiển thị badge trực quan **"Chờ lưu"** và cho phép xóa/hủy trước khi lưu.
+  - Khi có ít nhất 1 khoản chờ lưu hoặc chỉnh sửa thuộc tính, nút chính **"Lưu thay đổi"** (`handleSaveAll`) ở footer drawer được kích hoạt (`totalHasPendingChanges = true`). Khi bấm lưu, hệ thống gọi batch `POST /cases/:id/settlements` để ghi nhận toàn bộ vào cơ sở dữ liệu.
+- **Xử lý An toàn ID Tạm thời**:
+  - Khi người dùng thêm mới giao dịch thu chi hoặc liên kết hóa đơn trên giao diện nhưng sau đó hủy hoặc gỡ bỏ trước khi lưu (ID có tiền tố `tmp-...` hoặc `manual-tmp-...`):
+    - **Client-side (`useGarageCaseEditForm.ts`)**: Hàm `createClientId()` luôn sinh tiền tố `tmp-...`. Khi xóa item tạm thời, hàm `removeSettlement` và `removeLinkedInvoice` lọc bỏ các ID tạm thời, không bao giờ đẩy vào `pendingDeletedSettlementIds` hoặc `pendingDeletedInvoiceIds`.
+    - **Backend-side (`kgara-api-core.controller.ts`)**: Các endpoint `DELETE /cases/:id/settlements/:settlementId` và `DELETE /cases/:id/linked-invoices/:invoiceId` tích hợp kiểm tra định dạng UUID regex (`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`). Nếu nhận được ID không phải UUID (ví dụ ID tạm), backend tự động bỏ qua an toàn và trả về `{ success: true, message: 'Ignored non-persisted temporary ID' }` thay vì gây lỗi 500 QueryFailedError của Postgres.
 
 ### 5.13. Quản Lý Công Nợ Đối Tác Garage (Khách Hàng & Nhà Cung Cấp) từ 07/2026
 - **Mốc thời gian theo dõi**: Toàn bộ nghiệp vụ theo dõi công nợ đối tác xưởng Garage áp dụng mốc chặn dưới từ tháng 07/2026 (`>= 2026-07-01`).
@@ -423,13 +513,14 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
   - Tự động làm giàu dữ liệu và đồng bộ số dư `tien_da_thanh_toan`, `tien_con_phai_thanh_toan` từ bảng `kgara_case_settlements` khi thêm/xóa giao dịch cấn trừ và khi khởi tạo module (`onModuleInit`).
   - Bảo toàn số tiền đã cấn trừ trên ERP khi đồng bộ dữ liệu định kỳ từ KGara (`kgara-sync.service.ts`).
   - Giao diện Drawer "Hồ sơ công nợ khách hàng" (`GarageCustomerDetailDrawer.tsx`) chuẩn hóa theo `/standardize-table`, `variant="spreadsheet"`, kích thước cột tỉ lệ chuẩn kèm `minWidth={1210}`, các `DrawerSection` hỗ trợ collapsible, giới hạn chiều cao `max-h` kèm thanh cuộn mượt mà, và cột Tuổi nợ (Aging) trực quan đồng bộ 100% với trang `/garage-customers`.
+- **Xuất Excel công nợ**: server-side qua job nền (mục 4.5), thay cho CSV phía client (đã gỡ). SQL công nợ KH nằm ở `KgaraCustomersDebtQueryService` (controller chỉ ủy quyền).
 - **Công nợ Nhà cung cấp (`GET /payables/suppliers-debt`)**:
   - Dữ liệu được nhóm và tổng hợp từ sổ công nợ phải trả `kgara_payables` (tài khoản theo dõi 331) theo `doi_tac_id`.
   - Tính toán số dư đầu kỳ (`dk_no`, `dk_co`), số phát sinh trong kỳ (`ps_no`: đã thanh toán, `ps_co`: mua hàng/dịch vụ), số dư cuối kỳ (`ck_co - ck_no` = `balance_amount`) và tuổi nợ.
   - Endpoint `GET /payables/suppliers-debt/column-options`: Phục vụ bộ lọc popover cho mã/tên nhà cung cấp và tài khoản.
   - Endpoint `GET /payables/by-supplier/:supplierId/cases`: Lấy chi tiết các bút toán phát sinh và tự động kết nối với các phiếu dịch vụ `kgara_cases` liên đới qua mã chứng từ `maSoVuViec = soChungTu`.
 
-### 5.13. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
+### 5.14. Chuẩn hóa Parse Ngày An toàn & Sắp xếp Thứ tự Vụ việc (`parseSafeDate` & Order Logic)
 - **Hàm tiện ích `parseSafeDate`**:
   - Nhận diện và chuyển đổi an toàn các định dạng ngày từ KGara (`ISO`, `DD/MM/YYYY`, `DD-MM-YYYY`, `number timestamp`).
   - Tự động bỏ qua các chuỗi không hợp lệ như `"0001-01-01T00:00:00"`, `"1900-01-01"`, `"0NaN"`, `"null"`, `"undefined"`, trả về `null` thay vì `Invalid Date` để chống lỗi `500 QueryFailedError (0NaN-NaN-NaNTNaN:NaN:NaN.NaN+NaN:NaN)` khi TypeORM ghi xuống Postgres.
@@ -438,7 +529,38 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
     $$\text{case.ngayPhatSinh DESC (NULLS LAST)} \longrightarrow \text{case.ngayTiepNhan DESC (NULLS LAST)} \longrightarrow \text{case.soChungTu DESC} \longrightarrow \text{case.updatedAt DESC}$$
   - Hỗ trợ tham số query `sorts` linh hoạt đa cột (`+col` / `-col`).
 
+### 5.15. Chuẩn Hóa Bóc Tách Chỉ Số Tài Chính & Lợi Nhuận Dự Kiến Phiếu Dịch Vụ (`KgaraCaseFinancialParserHelper` & `GarageCasePreview`)
+- **Tập hợp 18 Chỉ số Tài chính bóc tách chuẩn xác từ `raw_data` JSONB**:
+  - `driverName` (`TenLaiXe`): Họ tên lái xe/người giao dịch đưa xe vào xưởng.
+  - `discountPercent` (`TyLeChietKhau`): Tỷ lệ chiết khấu thương mại chung của phiếu (%).
+  - `discountAmount` (`TienChietKhau`): Số tiền chiết khấu thương mại tương ứng.
+  - `deductibleAmount` (`TienKhauTru`): Số tiền khấu trừ bảo hiểm quy định (ví dụ 500,000 đ).
+  - `sanctionAmount` (`TienCheTai`): Số tiền chế tài bảo hiểm (nếu có).
+  - `afterSanctionAmount` (`TienSauCheTai`): Giá trị tiền sau chế tài (phần doanh thu trước thuế mà công ty bảo hiểm chịu).
+  - `vatRate` (`ThueSuat`): Thuế suất GTGT áp dụng cho phiếu dịch vụ (ví dụ 8% hoặc 10%).
+  - `customerPayAmount` (`TienKhachTra`): Số tiền Khách hàng thực tế phải thanh toán sau thuế và khấu trừ.
+  - `insurancePayAmount` (`TienBaoHiemTra`): Số tiền Công ty Bảo hiểm thực tế phải thanh toán sau thuế.
+  - `commissionGdv` (`TienHoaHongGDV`): Hoa hồng giám định viên bảo hiểm (không ẩn khi bằng 0).
+  - `commissionMg` (`TienHoaHongMG`): Hoa hồng môi giới khách hàng (không ẩn khi bằng 0).
+  - `outsourceCostGcn` (`GiaCongNgoai` / `GCN`): Chi phí gia công ngoài trích xuất từ cột dịch vụ hoặc header phiếu.
+  - `estimatedProfit` (`LaiTamTinh`): Lợi nhuận tạm tính trước thuế = Doanh thu sau chiết khấu - Hoa hồng GĐV - Hoa hồng MG - Chi phí giá vốn phụ tùng & gia công ngoài.
+  - `estimatedProfitAfterTax` (`LaiTamTinhCoThue`): Lợi nhuận tạm tính sau thuế = Lãi tạm tính + Tiền thuế VAT.
+- **Tiêu chuẩn Kiến trúc Phân tầng 5 Tầng UI (`/ui-atomic-refactor`) & Pattern C Clean DI (`/api-service-refactor`)**:
+  - `KgaraCaseFinancialParserHelper`: Pure Static Helper độc lập, 0 dependency TypeORM, Clean DI constructor giữ nguyên trong `KgaraCaseLookupService`.
+  - Phân rã `QuoteDocumentSummary` thành các Molecules con: `QuoteBillingBlock`, `QuoteCommissionBlock`, `QuoteProfitBlock` đều dưới 120 LoC (chuẩn < 180 LoC).
+  - Cột `GCN` (Gia công ngoài) hiển thị rõ ràng trên bảng hạng mục dịch vụ `QuoteServicesDocumentTable` và dòng tổng cộng.
+  - 100% bản dịch song ngữ `vi.ts` / `en.ts`, tuân thủ No Blue Mandate và Co-located Testing Vitest/Jest.
+
 ---
+
+### 5.16. Quy tắc Ngày Hoàn Thành & Công nợ Chỉ Tính Phiếu Kết Thúc (`resolveCompletionDate`)
+- **Ngày hoàn thành chỉ hợp lệ khi tình trạng = 3**: Kgara vẫn trả `NgayHoanThanhCongViec` khi phiếu quay về Báo giá/Đang làm/Hủy (đã xác minh trên GR-PDV2610-0022). `SyncCaseService` (`syncCasesForBranch` và `syncCaseDetail`) gọi `resolveCompletionDate(status, date)` trong `helpers/kgara-completion-date.helper.ts`, trả `null` nếu tình trạng khác 3. `raw_data` vẫn giữ nguyên payload gốc của Kgara.
+- **Công nợ chỉ tính phiếu Kết thúc (`tinh_trang_dich_vu = 3`)** ở mọi màn hình `garage-debts`:
+  - Tổng quan và danh sách theo mốc (`GarageDebtsAnalyticsService.getDebtsAnalytics`, `getTimeHorizonCases`): phải thu, trend, top khách hàng.
+  - Phải trả (analytics và `KgaraSuppliersDebtQueryEngine`): dòng `kgara_gross_profit` chỉ được tính khi ghép được phiếu ERP có tình trạng 3. Dòng lãi gộp không có phiếu ERP bị loại (trước đây đi qua `c.id IS NULL`). Báo cáo lãi gộp của Kgara vẫn có thể trả dòng cho phiếu chưa kết thúc, nên điều kiện này nằm ở truy vấn.
+  - Tab Phải thu (`/cases/customers-debt`) đã lọc tình trạng 3 từ trước.
+- **Phải trả không có chi phí nhân công**: `kgara_gross_profit.chi_phi` = `ChiPhiVon` (giá vốn), `ChiPhiKhac` = 0. Phải thu `tien_co_thue` đã gồm tiền công (dòng `DV`).
+- Test: `kgara-completion-date.helper.spec.ts`, `kgara-sync.service.spec.ts` (mục *completion date rule*), `garage-debts-analytics.service.spec.ts`, `kgara-suppliers-debt-query.engine.spec.ts`.
 
 ## 6. Tích hợp Liên Module
 
@@ -457,3 +579,344 @@ Khi chỉnh sửa `kgara-api-core`:
 2. Chạy Unit test: `bunx jest src/kgara-api-core/ --forceExit`
 3. Xác minh migration `1780000000000-AddKgaraGrossProfit.ts`, `1785128452000-AddKgaraColumns.ts` và `1786414442074-LedgerCascade.ts`.
 
+---
+
+## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
+
+### 8.1. Cấu Trúc Facade & Sub-Services
+Module tuân thủ nghiêm ngặt tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor (1 signature duy nhất, không overload, không union type):
+- **Query Facade (`KgaraCaseQueryService`)**: Service facade giữ nguyên 100% method signatures, delegate sang các Sub-services.
+- **Export Facade (`KgaraCaseExportService` - 42 dòng)**: Service facade tinh gọn điều phối xuất Excel, delegate sang các Sub-services:
+  - `KgaraCompletedCasesExportService` (~250 dòng): Quản lý truy vấn dữ liệu vụ việc, sổ thanh toán thực tế (`kgara_case_settlements`), hóa đơn liên kết và dòng chi tiết để xây dựng workbook 3 sheets chuyên nghiệp.
+  - `KgaraCaseServicesExportService` (~140 dòng): Chuyên trách xuất bảng kê chi tiết dịch vụ & phụ tùng độc lập (`exportCaseServicesExcel`).
+  - `GarageExportJobsService` + `GarageDebtsExportService`: chạy export nền qua `ExportJobRunner` (mục 4.5); `KgaraCompletedCasesExportService` nhận thêm `mode`, `filtersStr`, `sorts`.
+- **Pure Helpers & Sheet Builders (Pattern C)**:
+  - `kgara-case-financial-parser.helper.ts`: Pure parser engine bóc tách 18 chỉ số tài chính, hoa hồng, bảo hiểm, khấu trừ, chế tài, GCN và lợi nhuận dự kiến từ raw_data JSONB của phiếu dịch vụ.
+  - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
+  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
+  - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
+
+### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (3 Sheets & 6 Dải Màu Biên LN Tương Phản Cao)
+Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
+- **Sheet 1: `Bảng kê phiếu kết thúc` (23 cột - 2 Cột Ghi chú Thu & Trả riêng biệt & Phân tầng màu Biên LN)**:
+  - Cụm Phải thu: `Phải thu (VNĐ)` (J), `Đã thu (VNĐ)` (K), `Còn lại phải thu (VNĐ)` (L, formula `=J{r}-K{r}`).
+  - **Cột Ghi chú thu (M)**: Nằm ngay bên phải cột Còn lại phải thu, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ khách hàng (chờ bảo hiểm duyệt, đối soát...).
+  - Cụm Phải trả: `Phải trả (VNĐ)` (N), `Đã trả (VNĐ)` (O), `Còn lại phải trả (VNĐ)` (P, formula `=N{r}-O{r}`).
+  - **Cột Ghi chú trả (Q)**: Nằm ngay bên phải cột Còn lại phải trả, fill background màu kem/pastel amber dịu mắt (`#FFFFFBEB`), phục vụ ghi chú lý do công nợ thợ/nhà cung cấp (chờ hóa đơn đầu vào, bảo hành...).
+  - Cụm P&L nhanh: `Doanh thu (VNĐ)` (R), `Chi phí / Giá vốn (VNĐ)` (S), `Lợi nhuận gộp (VNĐ)` (T, formula `=R{r}-S{r}`).
+  - **Biên LN (%) (U)**: Formula `=IF(R{r}>0, T{r}/R{r}, 0)`, tự động áp dụng hàm `styleMarginCell` đồng bộ 6 dải màu tương phản cao như Sheet 2.
+  - Tham chiếu: `Hóa đơn VAT liên kết` (V), `Chi nhánh` (W).
+- **Sheet 2: `Theo dõi lãi lỗ` (15 cột - Phân 6 Dải Màu Biên LN Tương Phản Cao)**:
+  - Bóc tách: Doanh thu Công DV (G), Doanh thu Phụ tùng (H), Tổng Doanh thu (I, formula `=G{r}+H{r}`), Giá vốn Phụ tùng (J), Chi phí thợ / Khác (K), Tổng Chi phí (L, formula `=J{r}+K{r}`), Lợi nhuận gộp (M, formula `=I{r}-L{r}`).
+  - **Biên LN (%) (N)**: Formula `=IF(I{r}>0, M{r}/I{r}, 0)`, tự động phân bổ 6 dải màu tương phản cao, triệt tiêu na ná màu:
+    1. Lỗ ($< 0\%$): Đỏ Red-200 (`#FECACA` / chữ đỏ đậm `#991B1B`).
+    2. Hòa vốn / Rất thấp ($0\% - 20\%$): Cam hổ phách Orange-200 (`#FED7AA` / chữ cam đất `#9A3412`).
+    3. Trung bình ($20\% - 40\%$): Xanh da trời tươi Sky-200 (`#BAE6FD` / chữ xanh dương `#0369A1`).
+    4. Khá / Tốt ($40\% - 60\%$): Xanh lá mạ Green-200 (`#BBF7D0` / chữ xanh lá đậm `#15803D`).
+    5. Rất cao ($60\% - 80\%$): Xanh mòng két Teal-200 (`#99F6E4` / chữ xanh đậm `#0F766E`).
+    6. Xuất sắc / Siêu LN ($\ge 80\%$): Tím phong lan Purple-200 (`#E9D5FF` / chữ tím đậm `#6B21A8`).
+  - Tham chiếu: `Chi nhánh` (O) - Đã loại bỏ cột O Đánh giá PnL riêng biệt.
+- **Sheet 3: `Chi tiết DV & Phụ tùng` (20 cột)**: Bảng kê chi tiết từng dòng công việc và phụ tùng theo vụ việc.
+- **Hàng Tổng**:
+  - **Row 1**: `TỔNG CỘNG (SUM)` với công thức `=SUM(...)` trên toàn bộ tập dữ liệu.
+  - **Row 2**: `TỔNG THEO BỘ LỌC (SUBTOTAL)` với công thức `=SUBTOTAL(9, ...)` tự động tính lại khi lọc cột trong Excel.
+  - **Views**: Frozen 4 dòng đầu (`ySplit: 4`), kích hoạt `autoFilter` từ Row 4.
+
+---
+
+## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
+
+### 9.1. Phân Tầng Tab Tài Chính & Khối Chuẩn Hóa (`QuoteFinancialsTabContent` & Right Panel)
+Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, Unified Financial Tree, `/standardize-table` và `/ui-atomic-refactor`:
+
+1. **Bảng 1: Phải thu & Cấn trừ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `1. Bảng Phải thu & Cấn trừ` (icon `Landmark`, text-primary).
+   - **Kiến trúc Unified Financial Tree**: Dùng chung các component nguyên tử với Bảng 2 (`FinancialTreeParentRow`, `FinancialTreeChildRow` từ `financial-tree-rows`).
+   - Dòng cha mục tiêu: Hiển thị Tổng phải thu vụ việc, số tiền đã thu, còn lại và nút `[Thu tiền]` (hoặc tách `[Thu KH]` / `[Thu BH]` nếu có bảo hiểm duyệt).
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu ra (OUT) và phiếu thu tiền / sao kê ngân hàng.
+   - **Kiểm soát nút Xóa theo Edit Mode**: Nút Xóa (thùng rác) chỉ active khi ở Chế độ chỉnh sửa (`editMode === true` và có đủ quyền). Khi ở chế độ xem, nút Xóa bị **Inactive / Disabled** (`opacity-30 cursor-not-allowed`) kèm tooltip *"Cần bật Chế độ chỉnh sửa để thao tác."*.
+
+2. **Bảng 2: Phải trả & Cấn trừ (`QuoteCostTable` / `QuoteCostSummarySection`)**:
+   - **DrawerSection**: Tiêu đề chuẩn hóa `2. Bảng Phải trả & Cấn trừ` (icon `Wallet`, text-amber-600).
+   - **Trích xuất giá trị trường Chi phí mục tiêu**: Lấy trực tiếp từ field `ChiPhi` (`caseData?.chiPhi ?? caseData?.rawData?.ChiPhi ?? grossProfit?.ChiPhi ?? 0`), **tuyệt đối không cộng dồn giá vốn phụ tùng + nhân công**.
+   - Dòng cha mục tiêu: Tiêu đề chuẩn hóa `Tổng phải trả vụ việc`, hiển thị số tiền mục tiêu, số tiền đã chi, còn lại và nút `[Chi tiền]`.
+   - Các dòng con cấn trừ `↳`: Hiển thị hóa đơn đầu vào (IN) và phiếu chi tiền / sao kê ngân hàng.
+   - Nút Xóa ở các dòng con cấn trừ đồng bộ hành vi: chỉ active khi ở Chế độ chỉnh sửa (`editMode === true`).
+
+3. **Cột Phải Drawer Tinh Giản & Đồng Bộ Hoàn Hảo (`GarageCaseFinancialsRightPanel`)**:
+   - **Section 1: Thông tin chung**: Bổ sung icon chuẩn trung tính `<Info className="w-3.5 h-3.5 text-muted-foreground" />` (không màu mè, đồng bộ ở cả `ReconciliationRightPanel` và `GarageCaseGeneralInfoSection`).
+   - **Section 2: Hiệu quả kinh doanh & Lợi nhuận (`GarageCaseBusinessPerformanceSection`)**: Thay thế hoàn toàn section "Hiệu quả lợi nhuận gộp" cũ bằng `GarageCaseBusinessPerformanceSection` (kế thừa trực tiếp cấu trúc từ tab Chi tiết, nhận `caseData` và `grossProfit`). Header bổ sung icon `<TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />` không màu mè. Hiển thị đầy đủ Doanh thu (chưa thuế), Tổng chi phí vụ việc (kèm breakdown giá vốn, gia công, hoa hồng nếu có), Lợi nhuận gộp và Biên lợi nhuận.
+   - Tuân thủ **No Blue Mandate**: Toàn bộ UI tuân thủ hệ màu chuẩn `primary`, `slate`, `amber`, `emerald` và `rose`.
+
+### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
+- Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
+  - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
+  - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị:
+    - Badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
+    - Nút **"Đang chọn" (`CaseLinePaymentSelectedButton`)**: Tách biệt khỏi PillTabs, hiển thị ngay trên header cùng hàng bên phải tiêu đề khi `selectedCount > 0` (ẩn khi = 0 theo Phương án A). Hỗ trợ click toggle kích hoạt bộ lọc xem các mục đang chọn.
+  - Cột trái: Hệ thống 2 Sub-Tabs điều hướng linh hoạt theo chiều nghiệp vụ:
+    - **Tab 1: "1. HĐ Đầu ra" (Thu tiền) / "1. HĐ Đầu vào" (Chi tiền)**: Tích hợp bảng HĐ điện tử kèm bộ lọc `PillTabs` (`CaseLinePaymentPresetBar`) với 3 tabs thuần túy phân loại nguồn dữ liệu: `Đã cấn trừ` (`linked`) ➔ `Gợi ý khớp` (`suggestions`) ➔ `Tất cả` (`all`). Thứ tự ưu tiên auto-active tự động chọn tab đầu tiên có dữ liệu.
+    - **Tab 2: "2. Thu ngoài sổ" / "2. Chi ngoài sổ" (`ManualCashflowTabContent`)**: Cho phép ghi nhận thu/chi tiền mặt hoặc ngoài sổ trực tiếp.
+  - Cột phải: `CaseLinePaymentRightPanel` gồm 2 Section chuẩn hóa (`DrawerSection`, `DrawerRow`):
+    - **Section 1: "Khoản mục cấn trừ"**: Phân loại, Mã, Tên, Bên thanh toán / chịu phí, và **Số tiền cần cấn trừ**.
+    - **Section 2: "Thông tin sổ báo giá"**: Thông tin tổng quan vụ việc/báo giá (Số chứng từ, Biển số xe, Khách hàng, Hãng / Dòng xe, Trạng thái, Ngày phát sinh, Tổng tiền báo giá, Khách hàng TT / Bảo hiểm TT) dùng `DrawerSection` (collapsible, icon `FileSpreadsheet`).
+  - **Cơ chế Draft-First Frontend Save Flow**:
+    - Khi người dùng chọn HĐ cấn trừ hoặc nhập thu/chi ngoài sổ và bấm "Lưu cấn trừ" / "Ghi nhận", hệ thống **CHỈ LƯU VÀO STATE Ở FRONTEND** (`useGarageCaseEditForm` thông qua callbacks `onAddInvoice`, `onRemoveInvoice`, `onAddSettlement`, `onRemoveSettlement`), đóng drawer con mà **không gọi API và không invalidate queries**.
+    - Chỉ khi người dùng bấm **"Lưu thay đổi"** tại Drawer Sổ báo giá (`GarageCaseStandaloneDrawer`), toàn bộ thay đổi mới được gọi API batch save xuống cơ sở dữ liệu.
+  - **Phân rã Atomic Kiến trúc (< 180 LoC per file)**:
+    - `CaseLinePaymentDrawer.tsx` (112 LoC)
+    - `useCaseLinePaymentTabs.tsx` (118 LoC)
+    - `useCaseLinePaymentActions.ts` (75 LoC)
+    - `CaseLinePaymentSelectedButton.tsx` (55 LoC)
+    - `CaseLinePaymentPresetBar.tsx` (67 LoC)
+    - 100% co-located Vitest tests pass và No Blue Mandate.
+
+
+### 9.3. Tối Giản Tab Chi Tiết & Bổ Sung Thông Tin Bảo Hiểm (`GarageCasePreview`)
+- Tab Chi tiết chuyển hẳn sang chế độ **Document Mode** (bản in PDF báo giá kỹ thuật số):
+  - Loại bỏ hoàn toàn switch `Bảng dữ liệu` / `Bản in` khỏi tab Chi tiết (vì bảng dữ liệu đã chuyển sang Tab Tài chính).
+  - Khối bảng in tài liệu (`QuoteDocumentTables`): Tự động phát hiện khi vụ việc có bảo hiểm (`hasInsuranceParts` / `hasInsuranceServices`), tự động bổ sung cột **BH duyệt** và hàng tổng kết **Tổng BH duyệt chi trả** riêng biệt cho từng khối phụ tùng và nhân công.
+
+### 9.4. Cơ Chế Làm Giàu Giá Vốn Phụ Tùng (Cost Enrichment) & Phân Rã Kiến Trúc Atomic Bảng Sổ Báo Giá
+
+#### 1. Thách thức kỹ thuật từ KGara API
+- Endpoint `/api/v1/gr/cases/detail` của KGara trả về `GiaVonPhuTung = 0` trên 100% dòng (ngay cả các ca đã kết thúc và phát sinh giá vốn lớn như `GR-PDV2609-0056` hay `GR-PDV2609-0074`).
+- Tuy nhiên, KGara lưu trữ chi tiết hạch toán giá vốn trong **Sổ nhật ký chi phí** (`/api/v1/gr/reports/gross-profit-detail/journal`).
+
+#### 2. Thuật toán làm giàu giá vốn 3 tầng (`KgaraCostEnricherHelper`)
+- Khi người dùng mở xem vụ việc trên ERP (`findCaseByCodeOrId`), nếu vụ việc đã hoàn tất hoặc có số liệu lãi gộp:
+  1. Hệ thống tự động fetch Sổ nhật ký chi phí (`journal items`) của vụ việc.
+  2. **Tầng 1 - Vốn Phụ tùng Xuất kho (`TK 1541 / TK 152`)**: Bóc tách từ các Phiếu xuất kho (`GR-PX...`). Tự động chuẩn hóa chuỗi tên (loại bỏ tag biển số xe `[51M80574] - [...]`), khớp tên và số lượng với từng dòng phụ tùng, tự động tính:
+     $$\text{GiaVonPhuTung} = \text{round}\left(\frac{\text{ChiPhi}}{\text{SoLuong}}\right), \quad \text{TongVon} = \text{ChiPhi}$$
+  3. **Tầng 2 - Vốn Gia công / Dịch vụ Mua ngoài (`TK 1542 / TK 331`)**: Gom vào `outsourceCost`.
+  4. **Tầng 3 - Hoa hồng Môi giới / Chi phí khác (`TK 1543 / TK 335`)**: Gom vào `commissionCost`.
+  5. Tự động cập nhật `giaVonPhuTung` vào `rawData.ListPhieuDichVuChiTiet` và lưu trữ trong bảng `kgara_case_services`.
+
+#### 3. Phân rã kiến trúc Atomic Bảng Sổ Báo Giá (`/ui-atomic-refactor`)
+Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue Mandate, 100% i18n, Co-located Vitest), file `QuoteDocumentTables.tsx` (trước đây 321 LoC) đã được phân rã thành:
+1. **`QuotePartsDocumentTable`** (`quote-parts-document-table/`):
+   - Kích thước: ~136 LoC.
+   - Hiển thị đầy đủ cột **ĐG vốn** và **Tổng vốn**. Nếu có giá vốn xuất kho: hiển thị `formatNumber(row.unitCost)`; nếu chưa phân bổ (do mua ngoài gộp): hiển thị `---`.
+   - Footer: Dòng cộng tổng tiền bán, tổng vốn phụ tùng, và dòng **Lãi gộp phụ tùng** ($\text{Doanh thu PT} - \text{Vốn PT}$) kèm biên lợi nhuận %.
+2. **`QuoteServicesDocumentTable`** (`quote-services-document-table/`):
+   - Kích thước: ~104 LoC.
+   - Hiển thị bảng công thợ / dịch vụ kèm kỹ thuật viên phụ trách và tổng cộng.
+3. **`QuoteDocumentCostSummary`** (`quote-document-cost-summary/`):
+   - Kích thước: ~60 LoC.
+   - Hiển thị khối đối soát 3 tầng chi phí minh bạch đối ứng với Sổ chi phí KGara:
+     - 1. Phụ tùng kho (1541)
+     - 2. Mua ngoài/DV (1542)
+     - 3. Hoa hồng/Khác (1543)
+     - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
+4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
+
+### 9.5. Kiến Trúc Cây Phân Cấp (Tree Table) Cho Bảng Phải Thu & Bảng Chi Phí Vụ Việc (`/ui-atomic-refactor`)
+
+Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất giữa thu và chi theo luồng Draft-First:
+1. **Thống Nhất Mô Hình 1 Dòng Cha Mục Tiêu (Unified Parent Target Row)**:
+   - **Bảng Phải Thu (`QuoteReceivablesTable`)**: Thay vì hiển thị tách 2 dòng độc lập, bảng hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng phải thu vụ việc` (`tienCoThue`).
+     - Khi vụ việc có bảo hiểm (`tienThanhToanBh > 0`): Dòng cha hiển thị subtitle tag phân bổ `(KH: ... ₫ • BH: ... ₫)` và cung cấp 2 nút thanh toán `[Thu KH]` và `[Thu BH]`.
+     - Khi vụ việc không có bảo hiểm: Hiển thị nút thanh toán duy nhất `[+ Thu tiền]`.
+   - **Bảng Chi Phí (`QuoteCostTable` / `QuoteCostSummarySection`)**: Hiển thị duy nhất 1 dòng cha tổng mục tiêu `Tổng chi phí vụ việc` (`totalCost`), hiển thị tiến độ Đã chi vs Còn lại, cùng nút hành động `[+ Chi tiền]`.
+2. **Các Dòng Con Thụt Lề Cấn Trừ (Indented Child Rows `↳`)**:
+   - Khi có hóa đơn liên kết hoặc phiếu thanh toán/sao kê đã cấn trừ, các dòng con sẽ tự động hiển thị bên dưới dòng cha với icon cong `↳` (`CornerDownRight`).
+   - Cột `% Tổng` trực quan: Thể hiện tỷ lệ phần trăm từng dòng cấn trừ so với số tiền mục tiêu của dòng cha.
+   - Icon nhận diện loại chứng từ: Hóa đơn điện tử (🧾), Tiền mặt (💵), Chuyển khoản sao kê (🏦).
+   - Tag trạng thái `Chờ lưu` cho các khoản vừa gán nháp ở client.
+   - Nút Thùng rác đỏ xóa/gỡ cấn trừ trực tiếp trên từng dòng con khi ở chế độ chỉnh sửa.
+3. **Phân Rã Atomic & Tuân Thủ Chuẩn Mực (`/ui-atomic-refactor`)**:
+   - Tầng Molecules dùng chung trong `components/tables/financial-tree-rows/`:
+     - `FinancialTreeParentRow.tsx` (159 LoC) & `FinancialTreeParentRow.test.tsx` (112 LoC).
+     - `FinancialTreeChildRow.tsx` (108 LoC) & `FinancialTreeChildRow.test.tsx` (57 LoC).
+   - Tầng Business Helpers:
+     - `FinancialTreeReceivables.helper.ts` (121 LoC) & tests (147 LoC).
+     - `FinancialTreeCost.helper.ts` (96 LoC).
+   - Tầng Organisms & Sections:
+     - `QuoteReceivablesTable.tsx` (123 LoC) & tests (171 LoC).
+     - `QuoteCostTable.tsx` (87 LoC) & `QuoteCostSummarySection.tsx` (66 LoC).
+   - 100% file < 160 LoC (đảm bảo khống chế < 180 LoC), 0 vi phạm No Blue Mandate, 100% i18n qua `t()`, 100% unit tests pass.
+
+### 9.6. Chuẩn Hóa Cột Bảng Phiếu Dịch Vụ: Tách Cột Phải Thu KH / BH & Sắp Xếp Nhóm Tài Chính (`GarageCasesTable`)
+
+Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế toán và phân tách nguồn tiền thanh toán giữa Khách hàng và Đơn vị Bảo hiểm:
+1. **Tách 2 Cột Phải Thu Riêng Biệt (`phaiThuKhachHang` & `phaiThuBaoHiem`)**:
+   - **Phải thu Khách hàng (`phaiThuKhachHang`)**: Tiền dịch vụ/phụ tùng khách hàng chịu trách nhiệm thanh toán (`TienThanhToanKH`). Nếu xe không làm bảo hiểm (`XeLamBaoHiem = false`), toàn bộ tiền có thuế (`tienCoThue`) được tính cho khách hàng. Nếu xe làm bảo hiểm (`XeLamBaoHiem = true`), số tiền = $\max(0, \text{tienCoThue} - \text{bh})$.
+   - **Phải thu Bảo hiểm (`phaiThuBaoHiem`)**: Tiền do công ty bảo hiểm duyệt chi trả (`TienThanhToanBH` hoặc fallback `TienBaoHiemDuyet`). Nếu xe không làm bảo hiểm, mặc định bằng 0.
+   - Hỗ trợ đầy đủ: Định dạng tiền tệ `money(...)`, lọc giá trị distinct options server-side, sắp xếp sort 2 chiều và dòng cộng tổng kết trang/lũy kế (`SubtotalSummaryCell`).
+2. **Cấu Hình Preset & Tách Cột Mặc Định Cả 2 View**:
+   - Cả hai chế độ xem **Tổng quan** (`overview`) và **Đối soát** (`audit`) đều mặc định hiển thị 2 cột tách biệt `phaiThuKhachHang: true` và `phaiThuBaoHiem: true`, đồng thời ẩn cột gộp `collectionProgress: false`. Người dùng vẫn có thể chủ động bật lại cột gộp trong Drawer *Tùy chỉnh cột* khi cần xem thanh tiến độ tổng.
+3. **Thứ Tự Cột Động Theo Chế Độ Xem (Dynamic Column Order)**:
+   - **View Tổng quan (`overview`)**: Nhóm kết quả kinh doanh (**Doanh thu**, **Chi phí**, **Lợi nhuận**, **Biên LN**) được ưu tiên hiển thị **PHÍA TRƯỚC** các cột phải thu/phải trả:
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN}$$
+     $$\rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
+   - **View Đối soát (`audit`) (và các view khác)**: Khối tiến độ thu/trả được ưu tiên hiển thị **TRƯỚC**, các cột kết quả kinh doanh nằm phía sau cột Còn phải trả (`tienConPhaiChi`):
+     $$\text{STT} \rightarrow \text{Ngày tiếp nhận} \rightarrow \dots \rightarrow \text{Chi nhánh} \rightarrow \mathbf{Phải\ thu\ KH} \rightarrow \mathbf{Phải\ thu\ BH} \rightarrow \text{Còn phải thu} \rightarrow \text{Tổng phải trả} \rightarrow \text{Còn phải trả}$$
+     $$\rightarrow \mathbf{Doanh\ thu} \rightarrow \mathbf{Chi\ phí} \rightarrow \mathbf{Lợi\ nhuận} \rightarrow \mathbf{Biên\ LN} \rightarrow \text{Cờ BH} \rightarrow \text{Cờ HĐ VAT}$$
+
+
+
+
+4. **Bật Cột Ngày Tiếp Nhận & Ngày Kết Thúc trong View Đối Soát (`audit`)**:
+   - Mặc định bật `caseDate: true` và `ngayHoanThanhCongViec: true` trong `AUDIT_GARAGE_CASE_COLUMN_VISIBILITY` tại `garageCaseViewPresets.ts`. Hiển thị ở đầu bảng ngay sau cột STT `#`.
+5. **Chuẩn Hóa Kích Thước Cột (`Column Sizes`) & App Tooltip Chống Tràn Chữ**:
+   - `caseDate` (Ngày tiếp nhận): `130px`.
+   - `ngayHoanThanhCongViec` (Ngày kết thúc): `130px`.
+   - `caseCode` (Số chứng từ): `180px`.
+   - `customer` (Khách hàng): `200px`.
+   - `kgaraClassification` (Phân loại KGara): `150px` (bọc `Tooltip` chống tràn nội dung).
+   - `classification` (Phân loại nghiệp vụ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `exclusionRules` (Quy tắc loại trừ): `150px` (button trigger `w-[136px]` + `Tooltip`).
+   - `statusName` (Trạng thái dịch vụ): `130px`.
+   - Các cột số tiền (`doanhThu`, `chiPhi`, `loiNhuan`, `collectionProgress`, `phaiThuKhachHang`, `phaiThuBaoHiem`, `tienConPhaiThanhToan`, `costProgress`, `tienConPhaiChi`): đồng bộ `140px`.
+6. **Di Chuyển Icon Liên Kết Hóa Đơn (`Link2`) sang Cột HĐ VAT (`hasInvoice`)**:
+   - Gỡ bỏ icon `Link2` khỏi `GarageCaseCodeCell` để ô số chứng từ hiển thị gọn gàng, không bị nghẽn thông tin.
+   - Đưa vào cột `hasInvoice` (`100px`): Khi `totalLinked > 0`, render button `Link2` kèm Tooltip chi tiết (`x HĐ bán ra, y HĐ mua vào`) và click mở Drawer đối soát HĐ (`onOpenFinancials`). Khi có cờ VAT, hiển thị song song cả `FileCheck` và `Link2`.
+7. **Tuân Thủ Tuyệt Đối `/ui-atomic-refactor`**:
+   - 100% files liên quan kiểm soát chặt chẽ dưới ngưỡng **< 180 LoC** (`GarageCaseCodeCell`: 98 LoC, `financial-columns`: 172 LoC, `general-columns`: 175 LoC, `date-columns`: 62 LoC, `progress-columns`: 158 LoC, `classification-dropdown`: 176 LoC, `exclusion-dropdown`: 166 LoC). 100% i18n, No Blue Mandate và 56/56 test files phân hệ Garage đạt PASS.
+
+### 9.7. Chuẩn Hóa Hiển Thị Tài Chính Mới: Pro Data 2 Hàng (Tổng Thu/Trả), Ngày Kết Thúc KGara, Cột Thuế GTGT & 6 Dải Màu Biên LN
+
+1. **Hiển Thị Pro Data 2 Hàng (`GarageCaseProgressCell`)**:
+   - Loại bỏ hoàn toàn thanh thước ngang progress bar cũ trên cả 2 cột **Tổng phải thu** (`collectionProgress`) và **Tổng phải trả** (`costProgress`).
+   - **Hàng 1 (Hàng trên - Thực thu / Thực chi)**: Số tiền đã thanh toán (`paid`) kèm tỷ lệ `%` hoàn thành (`text-xs font-semibold tabular-nums font-mono`). Màu sắc phân cấp rõ nét: `emerald` (khi hoàn thành 100% hoặc đã thu), `amber` (cho chi phí vật tư/phụ tùng), `muted-foreground` (khi 0%).
+   - **Hàng 2 (Hàng dưới - Mục tiêu tổng)**: Số tiền tổng phát sinh (`total`) định dạng font-mono phụ trợ (`text-[11px] font-mono tabular-nums text-muted-foreground leading-tight`).
+   - Giữ trọn vẹn Tooltip chi tiết khi hover chuột (hiển thị Đã thu/trả, Còn phải thu/trả, và Tổng).
+2. **Quy Tắc Ngày Kết Thúc 100% Dựa Vào KGara (`ngayHoanThanhCongViec`)**:
+   - Cột **Ngày kết thúc** (`completionDate` / `ngayHoanThanhCongViec`) chỉ lấy dữ liệu hoàn thành công việc từ KGara (`item.ngayHoanThanhCongViec` / `item.rawData?.NgayHoanThanhCongViec`).
+   - **Tuyệt đối KHÔNG fallback sang ngày tiếp nhận** (`ngayTiepNhan`) hay ngày phát sinh (`ngayPhatSinh`). Phiếu chưa hoàn tất trên xưởng sẽ hiển thị placeholder `—`.
+3. **Đổi Tên Cột "HĐ VAT" Thành "Thuế GTGT"**:
+   - Cột `hasInvoice` đổi nhãn header và hiển thị thành **"Thuế GTGT"** (i18n VI: `"Thuế GTGT"`, EN: `"VAT"`).
+4. **Atom `GarageMarginBadge` Phân 6 Dải Màu Chuẩn Xuất Excel**:
+   - Cột **Biên LN** (`margin`) tích hợp Atom `GarageMarginBadge` phân chia trực quan theo 6 dải màu chuẩn mực:
+     - Dải 1 (`< 0%` - Âm): Rose nhạt (`bg-rose-100 text-rose-800 border-rose-200/60 dark:bg-rose-950/60 dark:text-rose-300`).
+     - Dải 2 (`0% - < 20%` - Thấp): Amber nhạt (`bg-amber-100 text-amber-800 border-amber-200/60 dark:bg-amber-950/60 dark:text-amber-300`).
+     - Dải 3 (`20% - < 40%` - Trung bình): Sky nhạt (`bg-sky-100 text-sky-800 border-sky-200/60 dark:bg-sky-950/60 dark:text-sky-300`).
+     - Dải 4 (`40% - < 60%` - Khá): Emerald nhạt (`bg-emerald-100 text-emerald-800 border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-300`).
+     - Dải 5 (`60% - < 80%` - Tốt): Teal nhạt (`bg-teal-100 text-teal-800 border-teal-200/60 dark:bg-teal-950/60 dark:text-teal-300`).
+     - Dải 6 (`>= 80%` - Xuất sắc): Purple nhạt (`bg-purple-100 text-purple-800 border-purple-200/60 dark:bg-purple-950/60 dark:text-purple-300`).
+     - Khi chưa có doanh thu hoặc `doanhThu <= 0`: Hiển thị `—`.
+5. **Kiểm Soát Kiến Trúc `/ui-atomic-refactor` & `/api-service-refactor`**:
+   - 100% UI files kiểm soát dưới **< 180 LoC** (`GarageMarginBadge`: 77 LoC, `GarageCaseProgressCell`: 82 LoC, `progress-columns`: 163 LoC, `financial-columns`: 141 LoC, `date-columns`: 73 LoC, `general-columns`: 176 LoC).
+   - Co-located tests 100% pass, No Blue Mandate bảo toàn, 100% i18n.
+
+### 9.8. Tinh Chỉnh UI Pro Data Nâng Cao, Thứ Tự Cột Trạng Thái & Bóc Tách 4 Cột Excel Sheet 1
+
+1. **Vị Trí Cột Trạng Thái (`statusName`)**:
+   - Trong cả 2 chế độ xem **Tổng quan** (`overview`) và **Đối soát** (`audit`), cột **Trạng thái** (`statusName`) được di chuyển sang nằm **ngay bên phải cột Khách hàng** (`customer`).
+   - Thứ tự logic chuẩn: `# -> Ngày tiếp nhận -> Ngày kết thúc -> Số chứng từ -> Khách hàng -> Trạng thái -> ...`.
+   - Đồng bộ trong cả `GarageCasesTable.general-columns.tsx`, `DEFAULT_GARAGE_CASE_COLUMN_VISIBILITY`, `AUDIT_GARAGE_CASE_COLUMN_VISIBILITY` và `GARAGE_CASE_COLUMN_GROUPS`.
+
+2. **Tinh Chỉnh UI Pro Data (`GarageCaseProgressCell`)**:
+   - **Micro-labels**:
+     - Hàng 1: Hiển thị nhãn `Đã thu:` (cho receivable) hoặc `Đã trả:` (cho payable) bằng `text-[10px] text-muted-foreground` bên cạnh số tiền đã thanh toán.
+     - Hàng 2: Hiển thị nhãn `Tổng:` bằng `text-[10px] text-muted-foreground/70` bên cạnh số tiền tổng phát sinh.
+   - **Mini Badge Pill `{rate}%`**:
+     - Thay thế định dạng text trong ngoặc đơn cũ bằng mini badge pill có viền:
+       - 100% (Hoàn thành): `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20`.
+       - 0% (Chưa thu/trả): `bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700`.
+       - Đang thực hiện: `bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20` (payable) hoặc `bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20` (receivable).
+   - **Độ rộng cột**: Nâng từ `140px` lên `155px` cho cả 2 cột `collectionProgress` và `costProgress` để bảo đảm số tiền hàng trăm triệu và nhãn không bị tràn.
+
+3. **Bóc Tách 4 Cột Thu/Chi Mới trong Sheet 1 Xuất Excel Bảng Kê Phiếu Kết Thúc (`COMPLETED_CASES_COLUMNS`)**:
+   - Mở rộng Sheet 1 từ 23 lên 27 cột:
+     - **Cột 10 (J)**: `Phải thu BH (VNĐ)` (`phaiThuBaoHiem`) - lấy từ `TienThanhToanBH` hoặc `TienBaoHiemDuyet`.
+     - **Cột 11 (K)**: `Phải thu KH (VNĐ)` (`phaiThuKhachHang`) - lấy từ `TienThanhToanKH` hoặc `phaiThu - phaiThuBaoHiem`.
+     - **Cột 12 (L)**: `Phải thu (VNĐ)` (`phaiThu`) - sử dụng công thức động Excel: `=SUM(J{row}:K{row})`.
+     - **Cột 16 (P)**: `Chi phí nhân công (VNĐ)` (`chiPhiNhanCong`) - lấy từ `Math.max(0, phaiTra - gvPt)`.
+     - **Cột 17 (Q)**: `Chi phí phụ tùng (VNĐ)` (`chiPhiPhuTung`) - lấy từ giá vốn phụ tùng `gvPt` của các dòng chi tiết `serviceLinesMap`.
+     - **Cột 18 (R)**: `Phải trả (VNĐ)` (`phaiTra`) - sử dụng công thức động Excel: `=SUM(P{row}:Q{row})`.
+   - Cập nhật toàn bộ các công thức phụ thuộc:
+     - `Còn lại phải thu`: `=L{row}-M{row}`
+     - `Còn lại phải trả`: `=R{row}-S{row}`
+     - `Lợi nhuận gộp`: `=V{row}-W{row}`
+     - `Biên LN (%)`: `=IF(V{row}>0, X{row}/V{row}, 0)`
+     - Dòng `SUM` và `SUBTOTAL` cập nhật margin tham chiếu cột `V` (Doanh thu) và `X` (Lợi nhuận).
+
+### 9.9. Chuẩn Hóa Bóc Tách Journal Items (1541, 1542, 1543, 521), Đồng Bộ Đối Soát Lợi Nhuận Gộp & Tái Cấu Trúc UI Atomic 5 Nhóm Sổ Báo Giá
+
+1. **Bóc Tách Chi Phí & Chiết Khấu Từ `journal_items` (Backend `erp-api`)**:
+   - **Vấn đề cốt lõi**: Trong KGara, một số khoản chi phí gia công ngoài (TK `1542`), hoa hồng (TK `1543`), và chiết khấu (TK `521`) không xuất hiện trên dòng dịch vụ đơn lẻ mà được hạch toán dưới dạng các bút toán trong `journal_items` của payload `kgara_gross_profit.raw_data`:
+     - TK `1541`: Chi phí nguyên vật liệu / phụ tùng xuất kho (`inventoryPartCost`).
+     - TK `1542`: Chi phí mua ngoài / gia công ngoài GCN (`outsourceCost`).
+     - TK `1543`: Chi phí hoa hồng giám định viên & môi giới (`commissionCost`).
+     - TK `521`: Chiết khấu thương mại giảm trừ doanh thu (`discountCost`).
+   - **Chuẩn hóa Helper `KgaraCaseFinancialParserHelper`** (Pattern C Pure Helper, < 200 LoC):
+     - `totalAmount` = Lấy chính xác Doanh thu trước chiết khấu (`TienChuaThue`).
+     - `subtotalAfterDiscount` = Doanh thu sau chiết khấu (`TongTienHang`).
+     - `parseJournalCostBreakdown(journalItems)`: Bóc tách chính xác từng nhóm tài khoản 1541, 1542, 1543, 521.
+     - `calculateEstimatedProfit()`:
+       $$\text{Lãi tạm tính (trước thuế)} = \text{Doanh thu sau CK} - \sum \text{Chi phí (1541 + 1542 + 1543)}$$
+       $$\text{Lãi có thuế} = \text{Lãi tạm tính} + \text{VAT}$$
+     - Kết quả đối soát: Khớp **100%** giữa Lợi nhuận gộp trên Thẻ bên phải, Thẻ trên cùng và Lãi tạm tính trong Sổ báo giá (ví dụ phiếu `GR-PDV2606-0025`: $1.275.000 - 200.000 - 220.000 = \mathbf{855.000\text{ đ}}$, Biên LN $= +57.0\%$, Lãi có thuế $= \mathbf{957.000\text{ đ}}$).
+   - Tích hợp trường `costBreakdown` vào response của `KgaraCaseLookupService.findGrossProfitByCodeOrId`.
+
+2. **Tái Cấu Trúc UI Atomic 5 Tầng Sổ Báo Giá (`QuoteDocumentSummary`)**:
+   - **Bố cục 2 cột đối xứng responsive (`grid-cols-1 lg:grid-cols-2 gap-3`) chia thành 5 Nhóm Nghiệp Vụ Riêng Biệt**:
+     - **Cột 1 (Doanh thu & Phân bổ)**:
+       - **Nhóm 1 (`QuoteRevenueSection`)**: Doanh thu trước CK $\rightarrow$ Chiết khấu $\rightarrow$ **Subtotal Doanh thu sau CK**.
+       - **Nhóm 2 (`QuoteSettlementSection`)**: Khấu trừ $\rightarrow$ Sau chế tài $\rightarrow$ Thuế VAT $\rightarrow$ Phân bổ 2 cột Khách hàng TT & Bảo hiểm TT $\rightarrow$ **Subtotal Tổng thanh toán sau VAT**.
+     - **Cột 2 (Chi phí & Lợi nhuận)**:
+       - **Nhóm 3 (`QuoteCommissionSection`)**: Hoa hồng GĐV $\rightarrow$ Hoa hồng MG $\rightarrow$ **Subtotal Tổng hoa hồng**.
+       - **Nhóm 4 (`QuoteDirectCostSection`)**: Chi phí phụ tùng $\rightarrow$ Gia công ngoài GCN $\rightarrow$ **Subtotal Tổng giá vốn**.
+       - **Nhóm 5 (`QuoteProfitHighlightSection`)**: Callout Card nổi bật thể hiện **Lãi tạm tính trước thuế** (Margin %) và **Lãi có thuế**.
+   - **Sổ Chi Phí 4 Ô (`QuoteDocumentCostSummary`)**: Hiển thị đồng bộ $1541: 0\text{ đ} + 1542: 220.000\text{ đ} + 1543: 200.000\text{ đ} + 521: 225.000\text{ đ} = 645.000\text{ đ}$, Lãi gộp $855.000\text{ đ}$ ($57.0\%$).
+   - **Tuân thủ Tuyệt đối `/ui-atomic-refactor` & `/api-service-refactor`**:
+     - 100% files mới hoặc sửa đổi `< 110 LoC` (vượt xa chuẩn < 180 LoC).
+     - 0 vi phạm No Blue Mandate (sử dụng `emerald`, `amber`, `muted-foreground`).
+     - 100% i18n VI/EN qua hook `useI18n`.
+     - 15/15 test files (46/46 unit tests) phân hệ `garage-case-preview` pass 100%. Type-check TypeScript sạch 100%.
+
+## 9.10. RBAC Tách Công Nợ khỏi Vụ Việc
+
+- Resource `garage` bảo vệ màn hình/API vụ việc; resource `garage_debts` (`ErpResource.GARAGE_DEBTS`) bảo vệ analytics, danh sách phải thu/phải trả, column options và chi tiết đối tác công nợ.
+- Migration `20261013100000-SeparateGarageDebtsPermissions` backfill toàn bộ action hiện có từ `garage` sang `garage_debts` trên `erp_local`; `down()` là no-op để không xóa quyền debts được cấp độc lập.
+- Các endpoint financial dùng chung cho case drawer và debts detail dùng `RequireAnyPermissions` với `GARAGE`/`GARAGE_DEBTS` cùng các resource accounting hiện có; endpoint cập nhật cấu hình vụ việc vẫn yêu cầu `GARAGE`.
+- Khi thêm endpoint debts mới, dùng `GARAGE_DEBTS` trực tiếp và tạo controller spec co-located kiểm tra metadata RBAC.
+- Export nền công nợ (`garage-debts-export.controller.ts`) dùng `GARAGE_DEBTS:READ` cho cả SSE; export cases (`garage-cases-export.controller.ts`) dùng `GARAGE:READ`. Spec `garage-export.controller.spec.ts` kiểm tra metadata mọi route.
+
+## 9.11. Chuẩn Hóa Bộ Lọc Cột (Header Filter) & Bảo Toàn Checked Options Khi Searchbox Active
+
+1. **Chuẩn Hóa Cấu Hình Bảng `GarageCasesTable` Theo `/standardize-table`**:
+   - Cột STT: Cấu hình chuẩn `size: 40`, `headerClassName: "text-center w-[40px] min-w-[40px]"`, `className: "text-center w-[40px] min-w-[40px] font-mono text-xs text-muted-foreground"`, hiển thị `{idx}`.
+   - Cô lập Cache Query Key: Gắn kèm `branchId` (`garage-case-column-options-${branchId || "all"}`) vào `commonOptionProps` trong `GarageCasesTable.columns.tsx` để tránh dùng nhầm cache options giữa các chi nhánh khác nhau.
+
+2. **Cơ Chế Bảo Toàn Options Đã Checked Khi Searchbox Active (Header Filter & FilterPanel)**:
+   - **Ghim Checked Options Lên Đầu**: Trong `TableColumnHeaderFilter.tsx` và `ColumnOptionList.tsx`, khi ô searchbox có từ khóa tìm kiếm, toàn bộ options đang được tick chọn (`pendingFilters`) được ghim lên đầu danh sách `finalOptions` cho cả Server Mode (`fetchOptions`) và Client Mode (`filterOptions`), kèm nhãn hiển thị đầy đủ thông qua cache nhãn `knownLabelsRef`.
+   - **Chống Lọc Kép (Double-Filtering Prevention)**:
+     - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
+     - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
+
+### 9.10. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải nghiệm người dùng với các module Hóa đơn và Sao kê:
+1. **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
+   - Gỡ bỏ `GarageCaseStatusTabs` dạng viên nhộng nổi và vách ngăn thừa ngoài thanh toolbar của `GarageCasesTable`.
+   - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
+     - **Nhóm 1 (Trên - Lọc dữ liệu)**: `TRẠNG THÁI PHIẾU` (`Tất cả`, `Báo giá`, `Đang làm`, `Kết thúc`).
+     - **Vách ngăn (Giữa)**: Divider nét mờ.
+     - **Nhóm 2 (Dưới - Chế độ xem cột)**: `CHẾ ĐỘ XEM` (`Tổng quan`, `Tiến độ tài chính`, `Kiểm toán`, `Tất cả cột`...), kèm nút `+ Tạo chế độ xem mới`.
+   - Nút trigger ngoài hiển thị thông minh: `[ 🎛️ {Tên View Mode} • {Trạng thái} v ]` (tự ẩn phần trạng thái nếu đang ở `Tất cả`).
+2. **Cấu Trúc Thư Mục Chuẩn Atomic (L2 Molecule)**:
+   - Thư mục: `src/modules/garage/components/molecules/garage-case-view-mode-combobox/`.
+   - Đầy đủ các file vệ tinh: `GarageCaseViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
+   - Giới hạn cứng: 100% file < 180 LoC, No Blue Mandate, 100% i18n qua `useTranslation`.
+
+---
+
+## 10. Thuộc tính Mặc định vs Tùy chỉnh (từ 2026-10-14)
+
+- **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi.
+- **Tùy chỉnh**: EAV qua `StrictCustomFieldsHelper` (xem skill `module-config` mục 10).
+- `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → tự bật `excludeFromDebt` nếu client không gửi.
+- `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`).
+- Response case thêm `builtin` + `custom.byCode` (giữ alias `customAttributes`/`attributes`/`attributeValues` 1 release).
+- `PUT /module-config/values/GARAGE_CASE/:id` bị từ chối (400); chỉ dùng `PATCH /cases/:id/config` (`GARAGE:UPDATE`).
+
+### 10.1. Bỏ phân loại & backfill (2026-10-14)
+- `updateCaseConfig`: gửi `categoryId` falsy + `classification` null/rỗng ("Chưa phân loại") → xóa **cả** `category_id` lẫn `classification` (trước đây `classification` bị giữ lại, UI vẫn hiện phân loại cũ).
+- Migration `20261014150000` backfill `category_id` cho phiếu có `classification` mà `category_id` NULL (70 phiếu trên greenway-production). Invariant: phiếu có `classification` thì phải có `category_id` tương ứng.
+- **Khóa sync (phương án B)**: cột `kgara_cases.classification_manually_cleared` (migration `20261014160000`). `updateCaseConfig` bật `true` khi người dùng chủ động bỏ phân loại, gỡ về `false` khi chọn lại phân loại. `SyncCaseService` (sync hàng loạt và `syncCaseDetail`) chỉ tự gán `classification`/`category_id` từ KGara khi `classification` NULL **và** cờ này `false`. Test sync mới chỉ phủ đường `syncCaseDetail`.
+
+## Bảng kê phiếu dịch vụ: Dự thu / Dự chi (cập nhật 2026-10-18)
+- Sheet `Bảng kê phiếu kết thúc` có 2 cột cuối: **Dự thu (VNĐ)** và **Dự chi (VNĐ)**, lấy qua `GarageHubService.getCaseLedger(caseIds)` → `GarageCaseLedgerHandler` (phiếu thu `EXPECTED` và phiếu chi `PENDING`/`APPROVED` gắn `case_id` của phiếu dịch vụ; phiếu đã hủy không tính). Hai cột đặt cuối để không lệch chữ cột công thức cũ.
+- Đã thu / Đã trả vẫn lấy từ `kgara_case_settlements` (không đổi).
+- Sheet `Dashboard`: thẻ **DỰ THU** (sau ĐÃ THU) và **DỰ CHI** (sau CÒN PHẢI TRẢ); chart mới **Đã thu - Dự thu - Đã trả - Dự chi** theo kỳ (full width, hàng chart thứ 3); bảng dữ liệu `buildCashSeries` (`helpers/garage-cases-dashboard-data.helper.ts`); footnote ghi rõ số có thể khác báo cáo kỳ vì khác tập dữ liệu.

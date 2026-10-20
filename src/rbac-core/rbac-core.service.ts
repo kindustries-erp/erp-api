@@ -490,11 +490,17 @@ export class RbacCoreService {
       { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
       { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
       { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
+      { resource: 'garage_debts', label: 'Công nợ Garage' },
+      { resource: 'garage_cashflow', label: 'Thu chi xưởng (Garage Cashflow)' },
       {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
       },
       { resource: 'invoices', label: 'Hóa đơn' },
+      {
+        resource: 'invoice_debts',
+        label: 'Công nợ (Khách hàng & Nhà cung cấp)',
+      },
       { resource: 'sales_reports', label: 'Sales Reports' },
       { resource: 'purchasing_reports', label: 'Purchasing Reports' },
       { resource: 'sys_tags', label: 'Tags' },
@@ -515,6 +521,8 @@ export class RbacCoreService {
         resource: 'vinfast',
         label: 'Vinfast (Phụ tùng & Xưởng)',
       },
+      { resource: 'dashboard', label: 'Dashboard / Tổng quan hệ thống' },
+      { resource: 'attachments', label: 'Attachments / Quản lý tài liệu' },
     ];
   }
 }

@@ -23,6 +23,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       message = exception.getResponse();
+    } else if (
+      (exception as any)?.type === 'PayloadTooLargeError' ||
+      (exception as any)?.status === 413 ||
+      (exception as any)?.statusCode === 413
+    ) {
+      status = HttpStatus.PAYLOAD_TOO_LARGE;
+      message = {
+        statusCode: status,
+        message: (exception as Error).message || 'Request entity too large',
+        type: 'PayloadTooLargeError',
+      };
+      this.logger.warn(`Payload Too Large: ${(exception as Error).message}`);
     } else if (exception instanceof TypeORMError) {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = {

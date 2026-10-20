@@ -42,7 +42,7 @@ interface MonthlyOpexEntry {
 
 // ── Master data extracted from Greenway Garage P&L report sheet ──────────────
 const OPEX_DATA: MonthlyOpexEntry[] = [
-  // ── 01/2026 (Total: 112,000,000 đ) ─────────────────────────────────────────
+  // ── 01/2026 (Total: 97,000,000 đ) ──────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 1,
@@ -56,13 +56,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     categoryKey: 'THUE_MAT_BANG',
     categoryName: 'Thuê mặt bằng & điện nước',
     amount: 30_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 1,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
   },
   {
     periodYear: 2026,
@@ -79,7 +72,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 02/2026 (Total: 106,000,000 đ) ─────────────────────────────────────────
+  // ── 02/2026 (Total: 91,000,000 đ) ──────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 2,
@@ -97,19 +90,12 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 2,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 2,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
   },
 
-  // ── 03/2026 (Total: 106,000,000 đ) ─────────────────────────────────────────
+  // ── 03/2026 (Total: 91,000,000 đ) ──────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 3,
@@ -127,13 +113,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 3,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 3,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -146,7 +125,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 04/2026 (Total: 125,500,000 đ) ─────────────────────────────────────────
+  // ── 04/2026 (Total: 110,500,000 đ) ─────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 4,
@@ -164,13 +143,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 4,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 4,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -183,7 +155,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 05/2026 (Total: 125,500,000 đ) ─────────────────────────────────────────
+  // ── 05/2026 (Total: 110,500,000 đ) ─────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 5,
@@ -201,13 +173,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 5,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 5,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -220,7 +185,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 06/2026 (Total: 125,500,000 đ) ─────────────────────────────────────────
+  // ── 06/2026 (Total: 110,500,000 đ) ─────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 6,
@@ -238,13 +203,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 6,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 6,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -257,7 +215,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 07/2026 (Total: 137,500,000 đ) ─────────────────────────────────────────
+  // ── 07/2026 (Total: 122,500,000 đ) ─────────────────────────────────────────
   {
     periodYear: 2026,
     periodMonth: 7,
@@ -275,13 +233,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 7,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 7,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -294,7 +245,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 08/2026 (Replicated from 07/2026 - Total: 137,500,000 đ) ────────────────
+  // ── 08/2026 (Replicated from 07/2026 - Total: 122,500,000 đ) ────────────────
   {
     periodYear: 2026,
     periodMonth: 8,
@@ -312,13 +263,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 8,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 8,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -331,7 +275,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 09/2026 (Replicated from 07/2026 - Total: 137,500,000 đ) ────────────────
+  // ── 09/2026 (Replicated from 07/2026 - Total: 122,500,000 đ) ────────────────
   {
     periodYear: 2026,
     periodMonth: 9,
@@ -349,13 +293,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 9,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 9,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -368,7 +305,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 10/2026 (Replicated from 07/2026 - Total: 137,500,000 đ) ────────────────
+  // ── 10/2026 (Replicated from 07/2026 - Total: 122,500,000 đ) ────────────────
   {
     periodYear: 2026,
     periodMonth: 10,
@@ -386,13 +323,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 10,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 10,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -405,7 +335,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 11/2026 (Replicated from 07/2026 - Total: 137,500,000 đ) ────────────────
+  // ── 11/2026 (Replicated from 07/2026 - Total: 122,500,000 đ) ────────────────
   {
     periodYear: 2026,
     periodMonth: 11,
@@ -423,13 +353,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
   {
     periodYear: 2026,
     periodMonth: 11,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 11,
     categoryKey: 'BAO_TRI',
     categoryName: 'Bảo trì',
     amount: 10_000_000,
@@ -442,7 +365,7 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     amount: 6_000_000,
   },
 
-  // ── 12/2026 (Replicated from 07/2026 - Total: 137,500,000 đ) ────────────────
+  // ── 12/2026 (Replicated from 07/2026 - Total: 122,500,000 đ) ────────────────
   {
     periodYear: 2026,
     periodMonth: 12,
@@ -456,13 +379,6 @@ const OPEX_DATA: MonthlyOpexEntry[] = [
     categoryKey: 'THUE_MAT_BANG',
     categoryName: 'Thuê mặt bằng & điện nước',
     amount: 30_000_000,
-  },
-  {
-    periodYear: 2026,
-    periodMonth: 12,
-    categoryKey: 'VAT_TU_TIEU_HAO',
-    categoryName: 'Vật tư tiêu hao',
-    amount: 15_000_000,
   },
   {
     periodYear: 2026,

@@ -1,16 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GarageDashboardService } from '../garage-dashboard.service';
+import { GaragePnlService } from './garage-pnl.service';
+import { GarageDashboardStatsService } from './garage-dashboard-stats.service';
+import { GarageCheckpointService } from './garage-checkpoint.service';
+import { GarageCustomerStatsService } from './garage-customer-stats.service';
+import { GarageMonthlyReceivablesBreakdownService } from './garage-monthly-receivables-breakdown.service';
+import { GaragePeriodReportQueries } from './garage-period-report-queries.service';
 import { GarageOpexService } from './garage-opex.service';
 import { KgaraCase } from '../entities/kgara_case.entity';
-import { KgaraCaseService } from '../entities/kgara_case_service.entity';
-import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
-import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
+import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
+import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 
-describe('GarageDashboardService - PnL Commission Calculation', () => {
+describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation', () => {
   let service: GarageDashboardService;
+  let pnlService: GaragePnlService;
   let mockCaseRepo: any;
   let mockOpexService: any;
+  let mockOpexRepo: any;
+  let mockVoucherRepo: any;
 
   beforeEach(async () => {
     mockCaseRepo = {
@@ -21,33 +29,62 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
       getSummaryByPeriod: jest.fn(),
     };
 
+    mockOpexRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto) => ({ ...dto, id: 'mock-opex-id' })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+    };
+
+    mockVoucherRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto) => ({ ...dto, id: 'mock-voucher-id' })),
+      save: jest.fn((entity) => Promise.resolve(entity)),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GarageDashboardService,
+        GaragePnlService,
+        {
+          provide: GarageDashboardStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageCheckpointService,
+          useValue: {},
+        },
+        {
+          provide: GarageCustomerStatsService,
+          useValue: {},
+        },
+        {
+          provide: GarageMonthlyReceivablesBreakdownService,
+          useValue: {},
+        },
+        { provide: GaragePeriodReportQueries, useValue: {} },
         {
           provide: getRepositoryToken(KgaraCase),
           useValue: mockCaseRepo,
         },
         {
-          provide: getRepositoryToken(KgaraCaseService),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraGrossProfit),
-          useValue: {},
-        },
-        {
-          provide: getRepositoryToken(KgaraCaseSettlement),
-          useValue: {},
-        },
-        {
           provide: GarageOpexService,
           useValue: mockOpexService,
+        },
+        {
+          provide: getRepositoryToken(KgaraOperatingExpense),
+          useValue: mockOpexRepo,
+        },
+        {
+          provide: getRepositoryToken(KgaraCashflowVoucher),
+          useValue: mockVoucherRepo,
         },
       ],
     }).compile();
 
     service = module.get<GarageDashboardService>(GarageDashboardService);
+    pnlService = module.get<GaragePnlService>(GaragePnlService);
   });
 
   it('Scenario 1: Net Profit > 0 and No Consignment (Ky Gui = 0) -> Matching User Screenshot', async () => {
@@ -78,6 +115,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     // 2. Mock OPEX Summary (OPEX = 146.500.000, DirectCost = 0, Commission = 0)
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: {
         total: 146500000,
         ojTotal: 0,
@@ -89,8 +127,8 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
             amount: 30000000,
           },
           {
-            categoryKey: 'VAT_TU_TIEU_HAO',
-            categoryName: 'Vật tư tiêu hao',
+            categoryKey: 'DIEN_NUOC',
+            categoryName: 'Điện nước',
             amount: 15000000,
           },
           { categoryKey: 'BAO_TRI', categoryName: 'Bảo trì', amount: 10000000 },
@@ -110,14 +148,37 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     expect(report.revenue).toBe(444218804);
     expect(report.cogs).toBe(241508218);
     expect(report.grossProfit).toBe(202710586);
+    expect(report.sellingExpenses.total).toBe(0);
     expect(report.opex.total).toBe(146500000);
+    expect(report.netProfit).toBe(56210586);
     expect(report.netProfitBeforeCommission).toBe(56210586);
 
     // Auto commission breakdown
     expect(report.commission.auto.kyGuiProfitRate).toBe(0);
     expect(report.commission.auto.saleCommission).toBe(0);
     expect(report.commission.auto.dvCommission).toBe(5621059);
+    expect(report.serviceCommission.dvCommission).toBe(5621059);
     expect(report.commission.total).toBe(5621059);
+
+    // Doanh thu theo phân loại: tổng 4 nhóm luôn bằng doanh thu
+    const segments = report.revenueByClassification;
+    expect(segments.map((x: any) => x.key)).toEqual([
+      'KY_GUI',
+      'SUA_CHUA_CHUNG',
+      'OJ',
+      'KHAC',
+    ]);
+    expect(segments.reduce((sum: number, x: any) => sum + x.revenue, 0)).toBe(
+      444218804,
+    );
+    expect(segments.reduce((sum: number, x: any) => sum + x.caseCount, 0)).toBe(
+      15,
+    );
+    expect(segments.find((x: any) => x.key === 'KHAC')).toMatchObject({
+      caseCount: 0,
+      revenue: 0,
+      cogs: 0,
+    });
     expect(report.netProfitAfterCommission).toBe(50589527);
   });
 
@@ -147,6 +208,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -157,12 +219,17 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     expect(report.kyGui.grossProfit).toBe(40000000);
     expect(report.kyGui.grossProfitRatio).toBe(40); // 40%
 
-    expect(report.netProfitBeforeCommission).toBe(50000000); // 100M - 50M
+    // Selling Expenses = 50M * 40% * 10% = 2.000.000
+    expect(report.sellingExpenses.total).toBe(2000000);
+    expect(report.opex.total).toBe(50000000);
 
-    // Sale HH = 50M * 40% * 10% = 2.000.000
+    // Lợi nhuận ròng = 100M (GP) - 2M (Selling) - 50M (OPEX) = 48.000.000
+    expect(report.netProfit).toBe(48000000);
+
+    // DV HH = 48M * 10% = 4.800.000
     expect(report.commission.auto.saleCommission).toBe(2000000);
-    // DV HH = (50M - 2M) * 10% = 4.800.000
     expect(report.commission.auto.dvCommission).toBe(4800000);
+    expect(report.serviceCommission.dvCommission).toBe(4800000);
     expect(report.commission.total).toBe(6800000);
     expect(report.netProfitAfterCommission).toBe(43200000);
   });
@@ -194,6 +261,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     // OPEX (50M) > GP (20M) -> Net Profit = -30M
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -235,6 +303,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 20000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -256,7 +325,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
         cogs: '100000000',
         caseCount: '10',
         kyGuiRevenue: '80000000',
-        kyGuiCogs: '40000000',
+        kyGuiCogs: '40000000', // Ky Gui GP = 40.000.000
         kyGuiCaseCount: '3',
         suaChuaChungRevenue: '120000000',
         suaChuaChungCogs: '60000000',
@@ -271,6 +340,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     // Mock DB having HOA_HONG_KHAC = -500,000 (giảm trừ)
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: {
         total: -500000,
@@ -347,6 +417,7 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
 
     mockOpexService.getSummaryByPeriod.mockResolvedValue({
       directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
       opex: { total: 50000000, ojTotal: 0, items: [] },
       commission: { total: 0, ojTotal: 0, items: [] },
     });
@@ -371,5 +442,151 @@ describe('GarageDashboardService - PnL Commission Calculation', () => {
     expect(dvItem.isAutoCalculated).toBe(true);
     expect(dvItem.isReadOnly).toBe(true);
     expect(dvItem.amount).toBe(4800000);
+  });
+
+  describe('syncCommissionVouchers()', () => {
+    const mockPnlReport = {
+      commission: {
+        auto: {
+          saleCommission: 5000000,
+          dvCommission: 8000000,
+          kyGuiProfitRate: 25.5,
+        },
+      },
+    };
+
+    it('Scenario 1: Tạo mới 2 phiếu PENDING và 2 bản ghi OPEX khi chưa có phiếu nào', async () => {
+      mockVoucherRepo.find.mockResolvedValue([]);
+      mockOpexRepo.findOne.mockResolvedValue(null);
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.createdVouchers).toBe(2);
+      expect(result.updatedVouchers).toBe(0);
+      expect(result.deltaVouchers).toBe(0);
+      expect(result.syncedOpex).toBe(2);
+      expect(mockVoucherRepo.save).toHaveBeenCalledTimes(2);
+      expect(mockOpexRepo.save).toHaveBeenCalledTimes(2);
+      expect(mockVoucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transDate: '2026-11-10',
+          paymentStatus: 'PENDING',
+        }),
+      );
+    });
+
+    it('Scenario 2: Cập nhật số tiền phiếu PENDING khi chưa chi và P&L thay đổi', async () => {
+      const pendingSale: any = {
+        id: 'v-sale',
+        amount: 4000000,
+        transDate: '2026-10-01',
+        paymentStatus: 'PENDING',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      const pendingDv: any = {
+        id: 'v-dv',
+        amount: 7000000,
+        transDate: '2026-10-01',
+        paymentStatus: 'PENDING',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_DV',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE')
+          return Promise.resolve([pendingSale]);
+        if (where.pnlCommissionType === 'HOA_HONG_DV')
+          return Promise.resolve([pendingDv]);
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.updatedVouchers).toBe(2);
+      expect(pendingSale.amount).toBe(5000000);
+      expect(pendingSale.transDate).toBe('2026-11-10');
+      expect(pendingDv.amount).toBe(8000000);
+      expect(pendingDv.transDate).toBe('2026-11-10');
+    });
+
+    it('Scenario 3: Khi đã có phiếu PAID và P&L tăng -> Giữ nguyên phiếu PAID, tạo phiếu delta PENDING mới', async () => {
+      const paidVoucher = {
+        id: 'paid-1',
+        voucherCode: 'PC-GARA-001',
+        amount: 3000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE') {
+          return Promise.resolve([paidVoucher]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      // Sale có 1 delta voucher mới (5M - 3M = 2M); DV tạo 1 voucher mới (8M)
+      expect(result.deltaVouchers).toBe(1);
+      expect(paidVoucher.amount).toBe(3000000); // KHÔNG sửa số tiền của phiếu đã chi!
+      expect(mockVoucherRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 2000000,
+          transDate: '2026-11-10',
+          paymentStatus: 'PENDING',
+          pnlCommissionAnchorId: 'paid-1',
+          isAutoCommission: true,
+        }),
+      );
+    });
+
+    it('Scenario 4: Khi đã có phiếu PAID và số tiền P&L khớp đúng số đã chi -> Không tạo thêm delta', async () => {
+      const paidSale = {
+        id: 'paid-sale',
+        voucherCode: 'PC-GARA-SALE',
+        amount: 5000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_SALE',
+      };
+      const paidDv = {
+        id: 'paid-dv',
+        voucherCode: 'PC-GARA-DV',
+        amount: 8000000,
+        paymentStatus: 'PAID',
+        isAutoCommission: true,
+        pnlCommissionType: 'HOA_HONG_DV',
+      };
+      mockVoucherRepo.find.mockImplementation(({ where }) => {
+        if (where.pnlCommissionType === 'HOA_HONG_SALE')
+          return Promise.resolve([paidSale]);
+        if (where.pnlCommissionType === 'HOA_HONG_DV')
+          return Promise.resolve([paidDv]);
+        return Promise.resolve([]);
+      });
+
+      const result = await pnlService.syncCommissionVouchers(
+        2026,
+        10,
+        mockPnlReport,
+      );
+
+      expect(result.deltaVouchers).toBe(0);
+      expect(result.createdVouchers).toBe(0);
+      expect(result.updatedVouchers).toBe(0);
+    });
   });
 });

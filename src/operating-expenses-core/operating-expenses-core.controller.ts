@@ -13,22 +13,37 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OperatingExpensesCoreService } from './operating-expenses-core.service';
+import { SmartAccountMappingService } from './services/smart-account-mapping.service';
 import { CreateOperatingExpenseDto } from './dto/create-operating-expense.dto';
 import {
   ApplyRecurringOperatingExpenseDto,
   ListOperatingExpensesQueryDto,
 } from './dto/operating-expense-query.dto';
+import { PostExpenseDto, SettleInvoiceDto } from './dto/settle-invoice.dto';
 
 @ApiTags('operating-expenses')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('operating-expenses')
 export class OperatingExpensesCoreController {
-  constructor(private readonly service: OperatingExpensesCoreService) {}
+  constructor(
+    private readonly service: OperatingExpensesCoreService,
+    private readonly smartAccountMappingService: SmartAccountMappingService,
+  ) {}
 
   @Get()
   findAll(@Query() query: ListOperatingExpensesQueryDto) {
     return this.service.findAll(query);
+  }
+
+  @Get('account-rules')
+  getAccountRules() {
+    return this.smartAccountMappingService.getAllRules();
+  }
+
+  @Patch('account-rules/:id')
+  updateAccountRule(@Param('id') id: string, @Body() dto: any) {
+    return this.smartAccountMappingService.updateRule(id, dto);
   }
 
   @Get('column-options')
@@ -64,6 +79,29 @@ export class OperatingExpensesCoreController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: any) {
     return this.service.update(id, dto);
+  }
+
+  @Post(':id/post')
+  postExpense(@Param('id') id: string, @Body() dto: PostExpenseDto) {
+    return this.service.postExpense(id, dto);
+  }
+
+  @Post(':id/unpost')
+  unpostExpense(@Param('id') id: string) {
+    return this.service.unpostExpense(id);
+  }
+
+  @Post(':id/settle-invoice')
+  settleExpenseWithInvoice(
+    @Param('id') id: string,
+    @Body() dto: SettleInvoiceDto,
+  ) {
+    return this.service.settleExpenseWithInvoice(id, dto);
+  }
+
+  @Post(':id/unsettle-invoice')
+  unsettleExpense(@Param('id') id: string) {
+    return this.service.unsettleExpense(id);
   }
 
   @Post(':id/apply-recurring')

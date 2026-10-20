@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AccountingCoreService } from '../services/accounting-core.service';
 import { ApiTags } from '@nestjs/swagger';
+import { UpdateJournalEntryDto } from '../dto/update-journal-entry.dto';
 
 @ApiTags('AccountingCore')
 @Controller({
@@ -47,6 +48,15 @@ export class AccountingCoreController {
   async getJournalEntryById(@Param('id') id: string) {
     const data = await this.accountingCoreService.getJournalEntryById(id);
     return { data };
+  }
+
+  @Patch('journal-entries/:id')
+  async updateJournalEntry(
+    @Param('id') id: string,
+    @Body() dto: UpdateJournalEntryDto,
+  ) {
+    const data = await this.accountingCoreService.updateJournalEntry(id, dto);
+    return { message: 'Updated', data };
   }
 
   @Get('chart-of-accounts')

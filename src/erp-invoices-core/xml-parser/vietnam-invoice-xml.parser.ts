@@ -6,6 +6,12 @@
  * Không dùng thư viện ngoài — sử dụng Node.js built-in DOMParser.
  */
 
+import {
+  extractVinfastItemCode,
+  extractStandardItemCode,
+} from '../helpers/vinfast-part-code.helper';
+import { normalizeUom } from '../helpers/uom.helper';
+
 export interface ParsedVietnamInvoiceItem {
   itemCode?: string | null;
   description: string;
@@ -347,8 +353,17 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
     doc.getElementsByTagName('NMua')[0];
   const buyerName = getTextIn(nmua ?? null, 'Ten', 'ten') ?? null;
   const buyerPersonalName =
-    getTextIn(nmua ?? null, 'HoTen', 'hoten', 'TNNMua', 'tnnmua', 'TenNMua') ??
-    null;
+    getTextIn(
+      nmua ?? null,
+      'HVTNMHang',
+      'hvtnmhang',
+      'HoTen',
+      'hoten',
+      'TNNMua',
+      'tnnmua',
+      'TenNMua',
+      'NMuaHVTNMHang',
+    ) ?? null;
   const buyerCccd =
     getTextIn(nmua ?? null, 'CCCD', 'cccd', 'CMND', 'cmnd', 'HoChieu') ?? null;
   const buyerTaxCode = getTextIn(nmua ?? null, 'MST', 'mst') ?? null;
@@ -384,7 +399,7 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
   for (let i = 0; i < hhdvus.length; i++) {
     const el = hhdvus[i];
     const stt = toNum(getTextIn(el, 'STT', 'stt')) || i + 1;
-    const itemCode =
+    const rawItemCode =
       getTextIn(
         el,
         'MHHDVu',
@@ -399,7 +414,12 @@ function parseTT78(doc: Document): ParsedVietnamInvoice | null {
         'ma_vt',
       ) ?? null;
     const desc = getTextIn(el, 'THHDVu', 'thhhdvu', 'Ten', 'ten') ?? '';
-    const unit = getTextIn(el, 'DVTinh', 'dvtinh') ?? null;
+    const itemCode =
+      rawItemCode ||
+      extractStandardItemCode({ description: desc, itemCode: rawItemCode })
+        .itemCode ||
+      null;
+    const unit = normalizeUom(getTextIn(el, 'DVTinh', 'dvtinh'));
     const quantity = getTextIn(el, 'SLuong', 'sluong')
       ? toNum(getTextIn(el, 'SLuong', 'sluong'))
       : null;
@@ -599,10 +619,15 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
     getTextIn(root, 'Description', 'ItemDescription', 'GoodName') ?? null;
 
   const items: ParsedVietnamInvoiceItem[] = [];
-  const lines = root.getElementsByTagName('InvoiceLine');
+  const lines =
+    root.getElementsByTagName('InvoiceLine').length > 0
+      ? root.getElementsByTagName('InvoiceLine')
+      : root.getElementsByTagName('Row').length > 0
+        ? root.getElementsByTagName('Row')
+        : root.getElementsByTagName('Item');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const itemCode =
+    const rawItemCode =
       getTextIn(
         line,
         'ItemCode',
@@ -614,7 +639,12 @@ function parseVinfast(doc: Document): ParsedVietnamInvoice | null {
         'ProductCode',
       ) ?? null;
     const desc = getTextIn(line, 'ItemName', 'Description') ?? '';
-    const unit = getTextIn(line, 'UnitName', 'Unit') ?? null;
+    const itemCode =
+      rawItemCode ||
+      extractStandardItemCode({ description: desc, itemCode: rawItemCode })
+        .itemCode ||
+      null;
+    const unit = normalizeUom(getTextIn(line, 'UnitName', 'Unit'));
     const quantity = getTextIn(line, 'Quantity')
       ? toNum(getTextIn(line, 'Quantity'))
       : null;

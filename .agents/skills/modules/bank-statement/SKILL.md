@@ -22,10 +22,15 @@ Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung t
   - Phân loại rõ `sourceType`: `'BANK'` hoặc `'CASH'`.
   - Phân loại luồng tiền: `IN` (Tiền vào / `creditAmount`) vs `OUT` (Tiền ra / `debitAmount`).
   - Gắn nhãn phân loại chi phí/thu nhập (`sys_entity_tags`).
-- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting)**:
+- **Đối soát & Định khoản Kế toán Kép (Double-entry Posting & Zero-Accounting UX)**:
   - Hạch toán trực tiếp sang Sổ Nhật ký Chung (`erp_journal_entries` & `erp_journal_entry_lines`).
-  - Đối soát và cấn trừ thanh toán với Hóa đơn điện tử (`erp_invoice_voucher_netoff`).
-  - Tự động phân tách và làm mới bút toán khi 1 giao dịch ngân hàng cấn trừ cho nhiều hóa đơn của các đối tượng khác nhau.
+  - **Tài khoản Treo Mặc định `T0001`**: Mọi giao dịch sao kê ngân hàng / tiền mặt khi chưa có tài khoản đối ứng cụ thể sẽ tự động dùng tài khoản treo `T0001` (hoặc alias `0001`).
+  - **Tự động Chuyển Đổi Đối ứng khi Cấn trừ (Smart Net-Off Accounting)**:
+    - Khi cấn trừ với Hóa đơn Mua vào (`IN`): Chiều đối ứng `T0001` tự động biến đổi thành `331` (Phải trả NCC).
+    - Khi cấn trừ với Hóa đơn Bán ra (`OUT`): Chiều đối ứng `T0001` tự động biến đổi thành `131` (Phải thu KH).
+    - Khi tháo gỡ cấn trừ: Chiều đối ứng tự động hoàn nguyên về `T0001`.
+    - Phần tiền còn lại (nếu có): Tiếp tục treo ở `T0001`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Hệ thống kiểm tra biến môi trường; nếu chưa bật và giao dịch chưa từng có bút toán trước đó, hệ thống sẽ không tự tiện ghi live vào Nhật ký chung nhằm phục vụ an toàn trong giai đoạn backfill số liệu lịch sử.
 
 ---
 
@@ -210,7 +215,10 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
      $$|\sum \text{debit} - \sum \text{credit}| < 0.01$$
   4. Tạo hoặc cập nhật chứng từ `erp_journal_entries` với mã tham chiếu nguồn `sourceId = txn.id`, `sourceType = 'BANK'` hoặc `'CASH'`.
 
-### 5.3. Thuật toán Bộ Lọc Nâng Cao & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+### 5.3. Thuật toán Bộ Lọc Nâng Cao, Sắp Xếp Tự Động & Xử Lý Giá Trị Trống (`TransactionQueryService`)
+- **Sắp xếp Tự động Server-Side (Default Server-side Sorting)**:
+  - Khi không có tham số sắp xếp từ FE, backend mặc định sắp xếp: `txn.transDate DESC, txn.createdAt DESC`.
+  - Hỗ trợ đầy đủ dictionary 14+ cột sort (`transDate`, `thu`, `chi`, `balance`, `netOffAmount`, `remainingAmount`, `account`, `referenceNumber`, `description`, `correspondentName`, `branch`,...) kèm tie-breaker `txn.createdAt DESC`.
 - **Lọc Khoảng Ngày Múi Giờ Việt Nam (Timezone-Aware Date Range Filter)**:
   - Do `trans_date` trong database PostgreSQL lưu theo mốc UTC, khi lọc theo khoảng ngày (`startDate` - `endDate`), hệ thống áp dụng chuyển đổi múi giờ chuẩn trong SQL:
     ```sql
@@ -236,6 +244,14 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
   - Khi xuất tất cả tài khoản ngân hàng: `Sao_ke_tat_ca_tai_khoan_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất sổ quỹ tiền mặt cụ thể: `So_quy_[TenSoQuy]_[YYYYMMDD_HHmm].xlsx`.
   - Khi xuất tất cả sổ quỹ: `So_quy_tat_ca_[YYYYMMDD_HHmm].xlsx`.
+- **Quy Chuẩn Trình Bày Bảng Tính & Bố Cục**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức `=SUM(Col5:ColN)`, nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động nhảy số theo bộ lọc, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng phân cách trống (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng bold 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Diễn giải căn trái, Số tiền căn phải định dạng `#,##0.00`.
+  - **Freeze Panes & AutoFilter**: Cố định cuộn và đặt dropdown lọc chính xác tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **Chân bảng**: Đã loại bỏ dòng tổng cộng cuối bảng.
 - **API Endpoints Xuất Excel**:
   - `POST /api/v1/bank-transactions-core/export/excel/background`: Khởi tạo tiến trình xuất ngầm.
   - `GET /api/v1/bank-transactions-core/export/excel/background/history`: Lấy danh sách lịch sử các file đã xuất theo phân trang.
@@ -285,17 +301,57 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 ```text
 src/modules/bank-statements/components/BankStatementsTab/
 ├── utils.ts                                     # Preset configs, column groups, default visibility
-├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync)
-├── BankStatementsTab.tsx                        # Main view (SpreadsheetPageTemplate + PillTabs)
+├── useBankStatementsTabLogic.tsx                # Orchestrator Hook (state, query, URL sync, < 170 LoC)
+├── BankStatementsTab.tsx                        # Main view coordinator (< 120 LoC)
+├── BankStatementSection.tsx                     # Presentational spreadsheet view (< 170 LoC)
 ├── index.tsx                                    # Re-export entry
+├── hooks/
+│   └── useBankStatementFilters.ts               # Filter state management (noDefaultPeriod: true)
 ├── components/
-│   ├── BankStatementColumns.tsx                 # 15+ column definitions với createColumnHeaderFilter
+│   ├── BankStatementCellRenderers.tsx           # Atomic cell renderers (< 130 LoC)
+│   ├── BankStatementColumns.tsx                 # 15+ column definitions (< 180 LoC)
 │   ├── BankStatementViewModeCombobox.tsx         # Dropdown chọn / quản lý View Preset
 │   ├── BankStatementViewConfigDrawer.tsx         # Drawer cấu hình cột theo nhóm
-│   └── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+│   ├── BankStatementDrawers.tsx                 # Gom cụm 6 drawers chức năng
+│   └── bank-statement-export-drawer/            # Drawer xuất Excel 2 chế độ (< 180 LoC, No Blue Mandate)
+│       ├── components/
+│       │   ├── CustomRadioIndicator.tsx         # [Atom L1] Vòng tròn radio neutral (0% blue)
+│       │   ├── FilterConditionBadge.tsx         # [Atom L1] Badge hiển thị điều kiện lọc cột & chi nhánh
+│       │   ├── BankStatementExportModeSelector.tsx # [Molecule L2] Chọn 2 chế độ (0% outline khi active)
+│       │   ├── BankStatementExportFilterPreview.tsx # [Molecule L2] Tóm tắt filter bảng sao kê & lọc cột
+│       │   └── BankStatementExportConditionSection.tsx # [Molecule L2] Right panel điều kiện xuất
+│       ├── BankStatementExportDrawer.tsx        # [Organism L3] Container mỏng StandardFormDrawer
+│       ├── BankStatementExportDrawer.form.hook.ts # [Hook] State form chọn kỳ, dates, account, txType
+│       ├── BankStatementExportDrawer.hook.ts    # [Hook] State exportMode, submit export & download
+│       ├── BankStatementExportDrawer.sync.hook.ts # [Hook] SSE background tracking & auto-download
+│       ├── BankStatementExportDrawer.columns.tsx # [Hook] Columns bảng lịch sử xuất (amber badge)
+│       ├── BankStatementExportDrawer.helper.tsx # Helper formatters ngày, text overflow & getColumnLabel
+│       ├── BankStatementExportDrawer.type.ts    # Props, BankStatementColumnFilterItem & FilterSummary types
+│       └── BankStatementExportDrawer.test.tsx   # Co-located Vitest tests
 └── __tests__/
-    └── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox (3 tests)
+    ├── BankStatementViewModeCombobox.test.tsx    # Unit tests ViewModeCombobox
+    ├── BankStatementsTabSummaryCell.test.tsx    # Unit tests SubtotalSummaryCell
+    └── BankStatementsTabUnified.test.tsx        # Unit tests tab coordinator
 ```
+
+### 8.6. Drawer Xuất Excel Sao Kê Ngân Hàng (`bank-statement-export-drawer`)
+- **Hai chế độ xuất dữ liệu linh hoạt (`exportMode`)**:
+  - `by-period` (Theo kỳ - Mặc định): Cho phép chọn theo kỳ định sẵn hoặc tùy chỉnh khoảng ngày `dateFrom` - `dateTo`, lọc theo tài khoản ngân hàng / sổ quỹ và loại giao dịch.
+  - `by-current-filter` (Theo filter hiện tại): Giữ nguyên toàn bộ các điều kiện lọc và tìm kiếm đang xem trên bảng (`search`, `startDate`, `endDate`, `bankAccountId`, `cashBookId`, `transactionType`, `branchId`, `column_filters`, `column_search`, `sortBy`, `sortOrder`).
+- **Trích Xuất Bộ Lọc Cột Tự Động (Header Filter Extraction)**:
+  - Tự động quét cả `tableState.columnFilters` (danh sách checkbox chọn) và `tableState.columnSearch` (tìm kiếm từ khóa trên từng cột).
+  - Tích hợp `COLUMN_LABEL_MAP` & `getColumnLabel(colKey)` để chuyển mã cột kỹ thuật (ví dụ `description`, `referenceNumber`, `transactionType`, ...) thành nhãn tiếng Việt chuẩn (`Nội dung giao dịch`, `Số tham chiếu`, `Loại giao dịch`, ...).
+  - Khi không có ngày bắt đầu / ngày kết thúc, giao diện hiển thị rõ ràng `Tất cả thời gian` thay vì `📅 -`.
+- **Kiến Trúc UI Atomic 5 Tầng Chuẩn Mực (< 180 LoC)**:
+  - **Atom L1**: `CustomRadioIndicator.tsx` (radio indicator phẳng), `FilterConditionBadge.tsx` (badge điều kiện lọc với tooltip thông minh khi text vượt quá 28 ký tự).
+  - **Molecule L2**: `BankStatementExportModeSelector.tsx`, `BankStatementExportFilterPreview.tsx` (render lưới thẻ tóm tắt và danh sách badge lọc cột), `BankStatementExportConditionSection.tsx`.
+  - **Organism L3**: `BankStatementExportDrawer.tsx` (form drawer điều phối).
+  - Khống chế cứng 100% file mã nguồn < 175 LoC, độc lập tầng và co-located test.
+- **Tác vụ nền & Auto-Download**: Hỗ trợ Server-Sent Events (SSE) theo dõi tiến độ nền, cơ chế tự động tải file khi sẵn sàng và bảng lịch sử có thể resize cột.
+- **Đồng Nhất Bộ Lọc Backend (Unified Query Architecture)**:
+  - `BankStatementExportBackgroundService` inject và tái sử dụng trực tiếp `TransactionQueryService.buildTransactionQueryBuilder(query)` thay vì tự viết query riêng.
+  - Đảm bảo 100% các điều kiện lọc nâng cao (`column_filters` bao gồm `__ALL_MATCHING__`, `column_search`, `tagIds`, `sorts`) được áp dụng chính xác tuyệt đối vào file Excel xuất ra, đồng nhất hoàn toàn với kết quả hiển thị trên bảng.
+  - Cơ chế `buildQueryFingerprint` nhận diện đầy đủ biến thể `column_filters`, `column_search` và `tagIds` để chống cache sai khi điều kiện lọc thay đổi.
 
 ### 8.4. Chuẩn Hóa Cột Bảng & Infinite Scroll (`BankStatementColumns.tsx`)
 - Toàn bộ cột bảng được xây dựng thông qua **`createColumnHeaderFilter`**:
@@ -323,12 +379,44 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `description`: Nhãn `Tổng cộng:` (variant `label`).
   - `thu`: Hiển thị tổng Tiền vào / Thu (`variantType="amount"`, `text-emerald-600 font-bold`).
   - `chi`: Hiển thị tổng Tiền ra / Chi (`variantType="amount"`, `text-[#ea580c] font-bold`).
-  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`).
-  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`).
+  - `netOffAmount`: Hiển thị tổng Đã cấn trừ (`variantType="amount"`, `text-indigo-600 font-bold`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` tính toán từ backend API).
+  - `remainingAmount`: Hiển thị tổng Còn lại (`variantType="amount"`, tính toán an toàn `amount - netOff`, hỗ trợ `cumulativeAmount` và `grandTotalAmount` từ API).
 - **Quy chuẩn Popover Chi tiết**:
-  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, ...) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
+  - **Header**: Tích hợp trực tiếp tên chỉ số (`Tiền vào (Thu)`, `Tiền ra (Chi)`, `Đã cấn trừ`, `Còn lại`) kèm icon tương ứng và badge `Trang X/Y`, loại bỏ các hàng sub-header thừa.
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 
+### 8.7. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+- **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
+  - Gỡ bỏ `PillTabs` thu/chi nổi và vách ngăn thừa ngoài thanh toolbar của `BankStatementSection`.
+  - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
+    - **Nhóm 1 (Trên - Lọc dữ liệu)**: `LOẠI GIAO DỊCH` (`Tất cả`, `Thu (IN)`, `Chi (OUT)`).
+    - **Vách ngăn (Giữa)**: Divider nét mờ.
+    - **Nhóm 2 (Dưới - Chế độ xem cột)**: `CHẾ ĐỘ XEM` (`Tổng quan`, `Kiểm toán / Đối soát`, `View Kế Toán Quỹ`...), kèm nút `+ Tạo chế độ xem mới`.
+  - Nút trigger ngoài hiển thị thông minh: `[ 🎛️ {Tên View Mode} • {Thu/Chi} v ]` (tự ẩn phần loại phát sinh nếu đang ở `Tất cả`).
+- **Cấu Trúc Thư Mục Chuẩn Atomic (L2 Molecule)**:
+  - Thư mục: `src/modules/bank-statements/components/molecules/bank-statement-view-mode-combobox/`.
+  - Đầy đủ các file vệ tinh: `BankStatementViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
+### 8.8. Chuẩn Hóa Xuất Excel Sao Kê Ngân Hàng & Hóa Đơn Cấn Trừ (`BankStatementExcelBuilder`)
+- **Phân rã Kiến Trúc theo `/api-service-refactor`**:
+  - `BankStatementExportBackgroundService`: Quản lý background jobs, SSE progress, fingerprint caching, file streaming (< 500 LoC).
+  - `BankStatementExcelBuilder` (đặt tại `services/bank-statement-excel.builder.ts`): Sub-service độc lập phụ trách 100% logic tạo workbook, 21 cột, styles 2-tone, borders và formulas (< 500 LoC).
+  - Clean DI Constructor: Inject 1 signature duy nhất, không overload, không union type.
+- **Chuẩn Hóa Date Serial Number (Pivot Table Date Grouping)**:
+  - Cột `Ngày GD` (transDate) được convert từ UTC sang ngày giờ GMT+7 (`Asia/Ho_Chi_Minh`) qua `toVietnamExcelDate` trong `src/common/utils/date.util.ts`.
+  - Lưu vào Excel dưới dạng đối tượng `Date` thực tế, kèm `numFmt: 'dd/mm/yyyy hh:mm:ss'`.
+  - Excel Pivot Table tự động nhận diện Date field và hỗ trợ gom nhóm (Grouping) theo Năm / Quý / Tháng / Ngày.
+- **Tích hợp Nhóm Cột Hóa Đơn Cấn Trừ (21 Cột Tổng Cộng)**:
+  - Truy vấn `erp_invoice_voucher_netoff` INNER JOIN `erp_invoices` LEFT JOIN `erp_branches`.
+  - 7 cột HĐ cấn trừ: `[HĐ] Chi nhánh`, `[HĐ] Ngày HĐ` (`dd/mm/yyyy`), `[HĐ] Số HĐ`, `[HĐ] Ký hiệu HĐ`, `[HĐ] Đối tác HĐ` (Tên + MST), `[HĐ] Nội dung HĐ`, `[HĐ] Tổng tiền HĐ (VND)` (`#,##0.00`).
+- **Hệ Thống Phân Biệt Thị Giác 2 Tông Màu (Visual 2-Tone Styling)**:
+  - **Khối 1 (Sao kê ngân hàng - Cột 1–14)**: Header màu Slate `FF334155`, body nền trắng.
+  - **Khối 2 (Hóa đơn cấn trừ - Cột 15–21)**: Header màu Emerald/Teal `FF065F46`, body nền pastel xanh dịu `FFF0FDF4`.
+  - **Đường biên phân cách**: Cột 15 có viền trái nét đôi (`double`) màu `FF065F46` giúp người dùng phân biệt tức thì ranh giới giữa 2 phân hệ trên Excel.
 
-
+### 8.9. Kiến Trúc Tiến Độ Xuất Dữ Liệu Nền Dual-Track Resilience (SSE + Adaptive Polling 2.5s)
+- **Chuẩn Hóa Theo Mẫu `erp-invoices-core`**:
+  - **SSE 15s Heartbeat Ping**: Endpoint `@Sse('export/excel/progress/stream')` trong `bank-transactions-core.controller.ts` chạy `setInterval` gửi event `{ processId: 'ping' }` mỗi 15s, chống rớt socket ngầm qua Nginx proxy và Cloudflare.
+  - **Adaptive Polling Fallback 2.5s**: `historyQuery` trong `BankStatementExportDrawer.hook.ts` tự động bật polling mỗi `2500ms` khi phát hiện có job `RUNNING` hoặc job vừa trigger chưa tải xong. API truy vấn từ RAM (`Map<string, Job>`), zero tải DB PostgreSQL, phản hồi < 2ms.
+  - **Two-Way Store Sync**: `useBankStatementExportSync.ts` đồng bộ ngược trạng thái `COMPLETED` từ lịch sử sang `useBankStatementExportProgressStore` (`current: 100`, `ready: true`) để chuyển Badge thành "Sẵn sàng tải" và tự động kích hoạt download ngay lập tức.
+  - **Manual Refresh**: Drawer tích hợp nút Refresh lịch sử tại `DrawerSection.titleExtra` cho phép người dùng chủ động tải lại danh sách bất kỳ lúc nào.

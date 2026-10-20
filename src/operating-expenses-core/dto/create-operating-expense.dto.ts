@@ -249,4 +249,12 @@ export class CreateOperatingExpenseDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsString()
+  accrual_mode?: string;
+
+  @IsOptional()
+  @IsString()
+  accrualMode?: string;
 }

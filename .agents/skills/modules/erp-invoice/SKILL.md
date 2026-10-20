@@ -1,5 +1,5 @@
 ---
-name: erp-invoice
+name: erp-invoice-api
 description: Module tri thức Quản lý Hóa đơn Điện tử & Hóa đơn Thuế (ERP Invoices) trong erp-api (erp-invoices-core). Chứa toàn bộ database schema, entities, DTOs, API endpoints, logic đồng bộ GDT tự động, multi-strategy XML parser, hạch toán kế toán kép, cấn trừ sổ quỹ/ngân hàng và lưu trữ Cloudflare R2.
 ---
 
@@ -11,14 +11,57 @@ Phân hệ Quản lý Hóa đơn Điện tử (`erp-invoices-core`) là trung t�
 
 Các nghiệp vụ trọng tâm:
 - **Đồng bộ Hóa đơn Thuế GDT (Tổng cục Thuế)**: Tự động hoặc thủ công kết nối Cổng Thông tin Hóa đơn Điện tử (`hoadondientu.gdt.gov.vn`) qua API token/cookie và giải captcha để tải danh sách hóa đơn và tệp XML gốc.
-- **Tiến trình Đồng bộ Tự động Định kỳ (Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts` (mặc định tạm khóa/tắt để setup mật khẩu mới và bảo trì). Khi được kích hoạt, cron chỉ chạy trong khung giờ 00:00 - 03:59 (Asia/Ho_Chi_Minh). Hệ thống tích hợp cơ chế chống khóa tài khoản: nếu Cổng Thuế GDT hoặc Viettel SInvoice trả về lỗi HTTP 401/403 ở lần đăng nhập đầu tiên, tiến trình lập tức dừng retry.
-- **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu.
-- **Trích xuất Metadata Tự động & Subscribers**: Tự động nhận diện biển số xe (`license_plate`), số lệnh quyết toán / sửa chữa (`settlement_order`), mã phụ tùng VinFast (`BAT21001011`, `EEP73110011AP`,...) qua `ErpInvoiceItemSubscriber`.
-- **Hạch toán Kế toán Kép (Post / Unpost Journal Entries)**: Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
-- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`) và tự động gán chi nhánh nếu hóa đơn chưa có.
+- **Tiến trình Đồng bộ Tự động Định kỳ (Hourly Heartbeat Cron Auto-Sync)**: `ErpInvoicesCronService` được kiểm soát bởi helper `isGdtInvoiceCronEnabled()` và `isInvoiceCronEnabled()` trong `cron.util.ts`. Chạy tự động tại **mỗi giờ vào phút :15 từ 09:15 đến 21:15, 13 mốc/ngày (Asia/Ho_Chi_Minh), dùng chung `SYNC_HOURS` với Sinvoice và KGara** thông qua runner chuẩn hóa `runSafeCronJob()`. Hệ thống tích hợp cơ chế chống khóa tài khoản (Zero-Lockout Guard): nếu Cổng Thuế GDT trả về lỗi HTTP 401/403 hoặc sai mật khẩu, tiến trình lập tức dừng retry, đặt cờ tạm dừng qua `GdtCronStateHelper` và gửi notification cho Kế toán. Khi người dùng lưu mật khẩu mới, hệ thống tự động mở khóa tiếp tục chu kỳ. Khi Cổng thuế trả HTTP 200 nhưng body là HTML (bảo trì/WAF, thông báo "JSON Parse error: Unrecognized token '<'"), `parseGdtJson()` (`invoice-gdt.helper.ts`) ném `GdtNonJsonResponseError`: luồng `syncFromPortal` retry tối đa 2 lần, nếu vẫn lỗi thì ghi nhận segment vào `failedSegments` và sync tiếp các segment khác (thông báo WARNING "chưa đầy đủ"); chỉ khi mọi request đều lỗi mới báo "Cổng thuế liên tục báo lỗi" (ERROR). `fetchRelativeInvoice` trả `null` khi gặp HTML.
+- **Multi-Strategy XML Parser**: Bộ phân tích cú pháp XML đa nguồn tự phát triển (không dùng thư viện ngoài) hỗ trợ chuẩn TT78 (VNPT, Viettel SInvoice v2, VinFast Latin format, Generic fallback) trích xuất chi tiết từng dòng hàng hóa, thuế suất, mã tra cứu, và nhận diện đầy đủ họ tên người mua hàng cá nhân qua thẻ `<HVTNMHang>` (kèm script backfill tự động `backfill-personal-invoices.ts` cho toàn bộ hóa đơn cá nhân).
+- **Hạch toán Kế toán Kép & Tài khoản Treo Trung gian (Transit Accounts T0002 / T0003)**:
+  - Tích hợp với `AccountingCoreService` để tạo chứng từ sổ cái (`HĐM` cho hóa đơn mua, `HĐB` cho hóa đơn bán), kiểm tra chặt chẽ cân bằng Nợ = Có ($\sum \text{Debit} = \sum \text{Credit}$).
+  - **Hóa đơn Mua vào (`IN`)**: Hạch toán vào `Nợ T0003 (tiền hàng)` + `Nợ 1331 (thuế)` / `Có 331 (tổng tiền)`, **tuyệt đối không phỏng đoán chi phí 642/632**. Khi phát sinh chi phí thực tế (OPEX, vật tư...), hệ thống giải tỏa `T0003` sang tài khoản chi phí tương ứng để chống double chi phí.
+  - **Hóa đơn Bán ra (`OUT`)**: Hạch toán vào `Nợ 131 (tổng tiền)` / `Có T0002 (doanh thu treo)` + `Có 33311 (thuế đầu ra)`.
+  - **Guard An Toàn `ENABLE_LIVE_AUTO_POSTING`**: Chặn tự động sinh bút toán sống khi chưa bật biến môi trường để phục vụ rà soát đối chiếu dữ liệu lịch sử an toàn.
+  - **Vô hiệu hóa Auto-post ngầm trên UI**: Gỡ bỏ lời gọi ngầm `autoPostStandard` khi lưu form hóa đơn để tránh sinh rác dữ liệu ngoài ý muốn.
+  - **Đồng bộ 2 Chiều & Mã Tham Chiếu Chuẩn**: `InvoiceCategoryAutopostService` tự động sinh và duy trì mã tham chiếu `reference = [Số HĐ]-[Ký hiệu HĐ]` cùng `source_id = invoice.id` sang Sổ cái (`erp_journal_entries`) cho cả luồng tạo mới và tái hạch toán In-Place khi đổi danh mục.
+- **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
-- **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream`.
-- **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`) và xuất Excel đối soát.
+- **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream` và `/debts/export/excel/progress/stream`.
+- **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`), phân tích chân trời tài chính (`InvoiceDashboardHorizonService`) và xuất Excel đối soát.
+- **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture - Pattern A & B)**:
+  - **Sub-Controllers REST (Pattern A)**:
+    - `ErpInvoicesCoreController`: Thin Controller quản lý CRUD, sync GDT, R2 files, hạch toán Post/Unpost.
+    - `InvoiceDebtsController`: Sub-controller chuyên trách Báo cáo & Chi tiết công nợ đối tác (`/api/v1/erp-invoices/debts`).
+    - `InvoiceDashboardController`: Sub-controller chuyên trách Dashboard, KPI & Phân tích chân trời tài chính (`/api/v1/erp-invoices/dashboard`).
+    - `InvoiceOriginalPdfController`: Sub-controller chuyên trách Đồng bộ Nâng cao & Tải PDF Gốc Nhà Cung Cấp (`/api/v1/erp-invoices/original-pdf`).
+  - **Sub-Services & Facades (Pattern B)**:
+    - `InvoiceOriginalPdfFacade` (Facade ~147 dòng) điều phối:
+      - `InvoiceProviderDetectorService`: Nhận diện NCC & bóc tách mã tra cứu từ XML chuẩn TT78 (VinFast, EasyInvoice, MISA, Viettel, VNPT, BKAV, Thái Sơn, CyberBill, FPT, M-Invoice...).
+      - `InvoiceCaptchaSolverService`: Giải mã captcha tự động qua 9router Vision AI (`ag/gemini-3.8-flash`).
+      - `ProviderAdapterRegistry`: Đăng ký & điều phối các adapter tải PDF theo NCC có rate limiting.
+      - `HiloInvoiceAdapter`: Tải PDF gốc HILO / GSM Xanh SM trực tiếp qua session token và SearchKey.
+      - `MisaInvoiceAdapter`: Tải PDF gốc MISA meInvoice qua ASP.NET session và TransactionID.
+      - `CyberbillInvoiceAdapter`: Tải PDF gốc CyberBill (CyberLotus) qua AI Vision Captcha Solver, hỗ trợ đa cluster (bill1app / bill2app) và tự động fallback.
+      - `VinfastInvoiceAdapter`: Crawl PDF gốc Vingroup/VinFast qua cookie session + captcha solver + WAF detection.
+      - `EasyInvoiceAdapter`: Tải PDF gốc Softdreams EasyInvoice trực tiếp qua Fkey candidate URL.
+      - `ViettelInvoiceAdapter`: Tải PDF gốc Viettel S-Invoice qua mã bí mật.
+      - `InvoicePdfDownloadWorkerService`: Worker tải đa luồng nền có concurrency pool (mặc định 3 luồng), lưu trữ S3 RustFS / Cloudflare R2, cập nhật `pdf_file_key`, `pdf_source` trên hóa đơn (KHÔNG tạo `erp_attachments`) và cập nhật tiến trình vào bảng `erp_einvoice_syncs`.
+    - `InvoiceQueryService` (Facade ~150 dòng) điều phối:
+      - `InvoiceListQueryService`: Phân trang, lọc đa chiều, tính grand & cumulative totals.
+      - `InvoiceItemsQueryService`: Chi tiết dòng hàng hóa đơn (`findAllItems`, `getItemColumnOptions`).
+      - `InvoiceItemCodeResolverService`: Phân loại & gán Mã Hàng chuẩn hóa AI-First (9router) ➔ Rule-based Regex ➔ Preserve Guard.
+      - `InvoiceStatsService`: Thống kê KPI, top mặt hàng, filter options.
+      - `InvoiceExportExcelService` & `InvoiceItemsExportService`: Xuất Excel trực tiếp đa sheet.
+      - `InvoiceCategoryAutopostService`: Tự động đồng bộ hạch toán sổ cái khi đổi danh mục.
+      - Helpers: `invoice-query-helpers.ts`, `invoice-items-query-helpers.ts`, `invoice-export-excel-columns.helper.ts`, `invoice-export-excel-writers.helper.ts`.
+    - `InvoiceDebtsService` (Facade ~140 dòng) điều phối:
+      - `InvoiceDebtsQueryService`: Báo cáo công nợ tổng hợp thời gian thực theo đối tác (`getDebts`, `getColumnOptions`).
+      - `InvoiceDebtsDetailService`: Chi tiết hóa đơn theo đối tác (`getPartnerInvoices` parameterized SQL).
+      - `InvoiceDebtsExportService`: Xuất file Excel công nợ đồng bộ 2 sheet kèm helper styles `invoice-debts-export-styles.helper.ts`.
+      - `InvoiceDebtsExportBackgroundService`: Xuất Excel công nợ tác vụ nền qua SSE.
+    - `InvoiceDashboardService` (Facade ~120 dòng) điều phối:
+      - `InvoiceDashboardStatsService`: Thống kê tổng hợp số lượng & doanh thu/thuế.
+      - `InvoiceDashboardPartnersService`: Cơ cấu đối tác & nhà cung cấp trọng yếu.
+      - `InvoiceDashboardHorizonService`: Phân tích dòng tiền & dự báo chân trời tài chính.
+      - `InvoiceDashboardAnalyticsService`: Phân tích sâu xu hướng hóa đơn.
+      - `InvoiceDashboardExportService`: Xuất báo cáo Dashboard đa sheet.
+      - `invoice-dashboard-helpers.ts`: Các hàm thuần túy tính toán tỷ trọng & format.
 
 ---
 
@@ -70,16 +113,43 @@ Các nghiệp vụ trọng tâm:
 | `created_by` | `uuid` | YES | `NULL` | ID người tạo / import |
 | `license_plate` | `varchar(50)` | YES | `NULL` | Biển số xe được trích xuất tự động |
 | `settlement_order` | `varchar(100)` | YES | `NULL` | Số quyết toán / số lệnh sửa chữa trích xuất tự động |
-| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file PDF chính |
+| `sync_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_einvoice_syncs.id` |
+| `msttcgp` | `varchar(20)` | YES | `NULL` | Mã số thuế nhà cung cấp giải pháp HĐĐT (MISA, Viettel...) |
+| `provider_code` | `varchar(50)` | YES | `NULL` | Mã định danh NCC: `VINFAST`, `EASYINVOICE`, `MISA`, `VIETTEL`, `VNPT`, `BKAV`, `THAISON`, `CYBERBILL`, `FPT`, `MINVOICE` |
+| `lookup_url` | `text` | YES | `NULL` | Đường dẫn cổng tra cứu chính thức của bên bán |
+| `lookup_code` | `varchar(255)` | YES | `NULL` | Mã tra cứu / Fkey / Mã bí mật / Salt của hóa đơn |
+| `pdf_path` | `text` | YES | `NULL` | Đường dẫn lưu trữ tệp trên disk máy chủ cục bộ |
+| `pdf_source` | `varchar(30)` | YES | `NULL` | Nguồn gốc tệp PDF: `provider_original` (PDF gốc chính thức), `manual_upload`, `failed` |
+| `pdf_error` | `text` | YES | `NULL` | Thông tin chi tiết lỗi nếu tải PDF gốc từ NCC thất bại |
+| `pdf_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2/S3 file PDF chính |
 | `pdf_files` | `jsonb` | YES | `NULL` | Danh sách các file PDF đính kèm: `[{ fileKey, originalName, fileSize, uploadedAt, documentType, ... }]` |
 | `xml_file_key` | `varchar(512)` | YES | `NULL` | Đường dẫn R2 file XML gốc |
 | `xml_import_id` | `uuid` | YES | `NULL` | Mã batch XML import nếu có |
 | `posting_status` | `varchar(20)` | NO | `'UNPOSTED'` | Trạng thái hạch toán: `UNPOSTED`, `POSTED` |
 | `posting_date` | `date` | YES | `NULL` | Ngày hạch toán sổ cái |
 | `journal_entry_id` | `uuid` | YES | `NULL` | FK tham chiếu `accounting_journal_entries.id` |
+| `effective_data` | `jsonb` | YES | `NULL` | Lưu trữ dữ liệu hiệu lực sau điều chỉnh: `{ isAdjusted, adjustingInvoiceId, adjustingInvoiceNo, adjustingSerialNo, adjustedAt, effectiveValues: { licensePlate, settlementOrder, totalAmount, ... }, diffLog: [] }` |
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.2. Bảng `erp_einvoice_syncs` (Quản Lý Tiến Trình Đồng Bộ & Tải PDF Gốc Hóa Đơn)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `company_tax_code` | `varchar(20)` | NO | — | Mã số thuế của doanh nghiệp được đồng bộ |
+| `sync_type` | `varchar(20)` | NO | — | Chiều đồng bộ: `purchase` (mua vào) hoặc `sold` (bán ra) |
+| `query_type` | `varchar(20)` | NO | — | Loại tra cứu: `query` (HĐ thông thường), `sco-query` (máy tính tiền), `all` |
+| `from_date` | `timestamptz` | NO | — | Thời điểm bắt đầu khoảng ngày tra cứu |
+| `to_date` | `timestamptz` | NO | — | Thời điểm kết thúc khoảng ngày tra cứu |
+| `total_found` | `int` | NO | `0` | Tổng số lượng hóa đơn tìm thấy từ GDT |
+| `total_pdf_success` | `int` | NO | `0` | Số lượng hóa đơn đã tải thành công PDF gốc từ NCC |
+| `total_pdf_failed` | `int` | NO | `0` | Số lượng hóa đơn thất bại khi tải PDF gốc |
+| `status` | `varchar(30)` | NO | `'in_progress'` | Trạng thái tiến trình: `in_progress`, `completed`, `failed` |
+| `error_message` | `text` | YES | `NULL` | Thông điệp lỗi tổng quan nếu tác vụ thất bại |
+| `created_by` | `uuid` | YES | `NULL` | ID người dùng kích hoạt tiến trình |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm khởi tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
 ### 2.2. Bảng `erp_invoice_items` (Chi Tiết Mặt Hàng Hóa Đơn)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
@@ -110,7 +180,18 @@ Các nghiệp vụ trọng tâm:
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
 
-### 2.4. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
+### 2.4. Bảng `erp_invoice_adjustment_netoff` (Cấn Trừ Hóa Đơn Điều Chỉnh & Hóa Đơn Gốc)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `original_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn bị điều chỉnh) |
+| `adjusting_invoice_id` | `uuid` | NO | — | FK tham chiếu `erp_invoices.id` (Hóa đơn điều chỉnh) |
+| `offset_amount` | `numeric(18,2)` | NO | `0` | Số tiền cấn trừ (giá trị tuyệt đối của phần điều chỉnh giảm) |
+| `notes` | `text` | YES | `NULL` | Ghi chú đối soát cấn trừ |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật cuối |
+
+### 2.5. Bảng `erp_invoice_attachments` (Tệp Đính Kèm Chung)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
@@ -124,6 +205,8 @@ Các nghiệp vụ trọng tâm:
 
 ```text
 src/erp-invoices-core/
+├── controllers/
+│   └── invoice-debts.controller.ts            # Sub-controller Báo cáo & Chi tiết công nợ đối tác (/debts)
 ├── dto/
 │   ├── create-erp-invoice.dto.ts              # DTO tạo hóa đơn + nested items
 │   ├── update-erp-invoice.dto.ts              # DTO cập nhật hóa đơn (PartialType)
@@ -137,6 +220,7 @@ src/erp-invoices-core/
 │   └── erp_invoice_attachment.entity.ts       # TypeORM Entity bảng erp_invoice_attachments
 ├── helpers/
 │   ├── gdt-captcha-solver.helper.ts           # Helper giải mã Captcha cổng thuế GDT
+│   ├── gdt-cron-state.helper.ts               # Helper quản lý trạng thái tạm dừng/mở khóa Cron GDT
 │   ├── gdt-session.helper.ts                  # Helper quản lý Cookie Jar và khởi tạo phiên WAF GDT (F5 BIG-IP)
 │   ├── invoice-branch.helper.ts               # Helper tự động suy diễn Chi nhánh từ MST/cấu hình
 │   ├── invoice-gdt.helper.ts                  # Helper gọi HTTP API sang Cổng thuế GDT
@@ -144,25 +228,50 @@ src/erp-invoices-core/
 │   ├── invoice-metadata.helper.ts             # Helper regex trích xuất Biển số xe & Lệnh sửa chữa
 │   └── out-invoice-display.helper.ts          # Helper phân loại nghiệp vụ dòng hóa đơn đầu ra
 ├── services/
-│   ├── invoice-export-background.service.ts   # Quản lý hàng đợi xuất Excel nền + SSE stream
-│   ├── invoice-files.service.ts               # Xử lý upload/download PDF/XML trên Cloudflare R2 & nén ZIP
-│   ├── invoice-import.service.ts              # Xử lý nhập hàng loạt XML/PDF/ZIP hỗn hợp
+│   ├── invoice-debts.service.ts               # FACADE: Báo cáo công nợ & chi tiết theo đối tác
+│   ├── invoice-debts-export-background.service.ts # Quản lý xuất Excel công nợ nền + SSE stream
+│   ├── invoice-query.service.ts               # FACADE: Phân trang, lọc, thống kê & xuất Excel hóa đơn
+│   ├── invoice-export-background.service.ts   # Fingerprint + tên file; ủy quyền job nền/SSE cho ExportJobRunner (common/export-jobs)
+│   ├── invoice-files.service.ts               # FACADE: Upload/download PDF/XML Cloudflare R2; ủy quyền ZIP cho sub-service
+│   ├── invoice-import.service.ts              # Nhập hàng loạt XML/PDF/ZIP hỗn hợp
 │   ├── invoice-lifecycle.service.ts           # CRUD, Post/Unpost Kế toán, Net-Off, Branch/Notes
-│   ├── invoice-portal.service.ts              # Xử lý sync GDT, login, captcha, bulk download XML
-│   ├── invoice-query.service.ts               # Query phân trang, lọc đa cột, thống kê KPI, export Excel trực tiếp
-│   └── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (Strict Match Rule & Xếp hạng 6 cấp độ)
+│   ├── invoice-portal.service.ts              # Sync GDT, auto-relogin, captcha, bulk download XML
+│   ├── invoice-smart-netoff.service.ts        # Thuật toán gợi ý cấn trừ sao kê thông minh (6 cấp độ)
+│   └── sub-services/                          # SUB-SERVICES: Logic chuyên sâu tuân thủ SRP (< 1000 dòng)
+│       └── invoice-bulk-download.service.ts  # Nén ZIP hàng loạt (theo filter/đã chọn), tải PDF đơn lẻ; chọn đúng loại file
+│       ├── invoice-debts-query.service.ts     # Query danh sách công nợ tổng hợp & options
+│       ├── invoice-debts-detail.service.ts    # Query chi tiết hóa đơn theo đối tác (parameterized SQL)
+│       ├── invoice-debts-export.service.ts    # Xuất Excel công nợ 2 sheet đồng bộ
+│       ├── invoice-debts-export-styles.helper.ts # Styling helper Excel công nợ
+│       ├── invoice-list-query.service.ts      # Query phân trang, lọc đa cột, grand & cumulative totals
+│       ├── invoice-items-query.service.ts     # Query chi tiết dòng hàng hóa đơn
+│       ├── invoice-items-query-helpers.ts     # Helpers lọc & phân loại dòng hàng
+│       ├── invoice-stats.service.ts           # Thống kê KPI, top mặt hàng, options phân quyền
+│       ├── invoice-export-excel.service.ts    # Xuất Excel trực tiếp bảng hóa đơn
+│       ├── invoice-items-export.service.ts    # Xuất Excel trực tiếp bảng chi tiết dòng hàng
+│       ├── invoice-export-excel-columns.helper.ts # Định nghĩa cột Excel
+│       ├── invoice-export-excel-writers.helper.ts # Writer format số liệu Excel
+│       ├── invoice-query-helpers.ts           # Helpers SQL query & filters
+│       ├── invoice-item-code-resolver.service.ts # Phân giải mã hàng chuẩn hóa AI-First 9router
+│       ├── invoice-category-autopost.service.ts # Tự động hạch toán sổ cái khi đổi danh mục
+│       ├── invoice-dashboard-stats.service.ts # Thống kê số lượng, doanh thu, thuế Dashboard
+│       ├── invoice-dashboard-partners.service.ts # Cơ cấu đối tác & nhà cung cấp Dashboard
+│       ├── invoice-dashboard-horizon.service.ts # Phân tích dòng tiền & chân trời tài chính
+│       ├── invoice-dashboard-analytics.service.ts # Phân tích sâu xu hướng hóa đơn
+│       ├── invoice-dashboard-export.service.ts # Xuất báo cáo Dashboard đa sheet
+│       └── invoice-dashboard-helpers.ts      # Helpers tính tỷ trọng & format số Dashboard
 ├── subscribers/
 │   └── erp-invoice-item.subscriber.ts         # TypeORM Subscriber tự nhận diện mã phụ tùng VinFast
 ├── utils/
 │   └── normalize-invoice-no.ts                # Chuẩn hóa chuỗi số hóa đơn
 ├── xml-parser/
 │   └── vietnam-invoice-xml.parser.ts          # Bộ phân tích XML hóa đơn Việt Nam độc lập
-├── erp-invoices-core.controller.ts            # REST Controller chính cho CRUD, sync GDT, files, hạch toán
-├── erp-invoices-core.service.ts               # Facade Service điều phối các subservices
-├── erp-invoices-cron.service.ts               # Background Cron tự động đồng bộ GDT định kỳ
-├── erp-invoices-core.module.ts                # NestJS Module đăng ký DI
-├── invoice-dashboard.controller.ts            # Controller báo cáo thống kê Dashboard hóa đơn
-└── invoice-dashboard.service.ts               # Service tổng hợp số liệu Dashboard và báo cáo đối tác
+├── erp-invoices-core.controller.ts            # Thin REST Controller CRUD, sync GDT, files, hạch toán
+├── erp-invoices-core.service.ts               # Master Facade Service điều phối lifecycle, portal, files
+├── erp-invoices-cron.service.ts               # Background Hourly Heartbeat Cron (09:15-21:15) đồng bộ GDT định kỳ
+├── erp-invoices-core.module.ts                # NestJS Module đăng ký DI sạch theo clean constructor
+├── invoice-dashboard.controller.ts            # Sub-controller báo cáo thống kê Dashboard hóa đơn
+└── invoice-dashboard.service.ts               # FACADE: Tổng hợp số liệu Dashboard và báo cáo đối tác
 ```
 
 ---
@@ -175,10 +284,10 @@ src/erp-invoices-core/
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/erp-invoices` | `invoices` | `read` | Lấy danh sách hóa đơn phân trang, tìm kiếm đa trường, lọc ngày, lọc chiều (`IN`/`OUT`) |
 | `GET` | `/erp-invoices/items` | `invoices` | `read` | Lấy danh sách chi tiết các dòng diễn giải mặt hàng hóa đơn phân trang, tìm kiếm đa trường, lọc theo phân loại dòng (`invoice_subcategory`), lọc ngày, đối tác và thống kê KPI dòng tiền/thuế |
-| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện |
+| `GET` | `/erp-invoices/column-options` | `invoices` | `read` | Lấy danh sách giá trị distinct của cột phục vụ bộ lọc nâng cao trên giao diện (hỗ trợ alias `partner` / `partnerName` định dạng composite kèm MST, `invoiceNo`, các cột số tiền, `licensePlate`...) |
 | `GET` | `/erp-invoices/stats` | `invoices` | `read` | Thống kê số lượng, tổng tiền trước thuế, thuế VAT, chiết khấu và tổng cộng |
-| `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn |
-| `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
+| `POST` | `/erp-invoices/bulk-net-offs` | `invoices` | `read` | Lấy thông tin cấn trừ phiếu chi/thu cho danh sách ID hóa đơn (HTTP 200 OK) |
+| `POST` | `/erp-invoices/smart-net-off-suggestions` | `invoices` | `read` | Gợi ý đối soát sao kê thông minh từ DB (HTTP 200 OK, Strict match Tiền + Số HĐ + Đối tác, 6 cấp độ) |
 | `GET` | `/erp-invoices/:idOrCode` | `invoices` | `read` | Lấy chi tiết một hóa đơn kèm items, cấn trừ ngân hàng và tệp đính kèm (hỗ trợ tra cứu theo UUID, `serialNo_invoiceNo`, `invoiceNo_serialNo`, hoặc `invoiceNo`) |
 | `POST` | `/erp-invoices` | `invoices` | `create` | Tạo mới thủ công một hóa đơn |
 | `PATCH` | `/erp-invoices/:id` | `invoices` | `update` | Cập nhật thông tin hóa đơn và các dòng chi tiết |
@@ -224,9 +333,16 @@ src/erp-invoices-core/
 | `POST` | `/erp-invoices/:id/pdfs` | — | — | Upload tệp PDF đính kèm (hỗ trợ nhiều file, phân loại chứng từ) |
 | `POST` | `/erp-invoices/:id/attachments/link`| `invoices` | `update` | Liên kết file đính kèm từ kho chung (`erp_attachments`) |
 | `DELETE`| `/erp-invoices/:id/attachments/:attachmentId`| `invoices` | `update` | Hủy liên kết file đính kèm chung |
-| `GET` | `/erp-invoices/:id/pdfs/zip` | — | — | Tải gói ZIP chứa toàn bộ file PDF đính kèm của 1 hóa đơn |
+| `GET` | `/erp-invoices/:id/pdfs/zip` | — | — | Tải gói ZIP chứa toàn bộ file PDF thật của 1 hóa đơn (không lấy zip NCC) |
 | `POST` | `/erp-invoices/bulk-download-files` | — | — | Nén ZIP và tải về toàn bộ file PDF/XML theo bộ lọc query |
 | `POST` | `/erp-invoices/bulk-download-selected`| — | — | Nén ZIP và tải về các file PDF/XML của danh sách hóa đơn được chọn |
+
+> **Quy tắc chọn file khi xuất ZIP (bulk & từng hóa đơn)**: `types` chỉ gồm loại được chọn.
+> - `pdf`: chỉ lấy PDF thật qua `resolveInvoicePdfFiles` (attachment có mime `application/pdf` hoặc đuôi `.pdf`, `pdf_files`, `pdf_file_key`); không bao giờ lấy zip/xml đính kèm.
+> - `xml`: nếu `xml_file_key` là `.zip` của nhà cung cấp thì bóc các file `.xml` bên trong (`extractXmlFromZip`); nếu là `.xml` thì tải nguyên.
+> - `zip`: tải nguyên gói zip gốc của nhà cung cấp (`resolveInvoiceZipFiles`: zip đính kèm hoặc `xml_file_key` đuôi `.zip`); thiếu → `_FILE_LOI.txt`.
+> - Hóa đơn thiếu loại đã chọn được liệt kê trong `_FILE_LOI.txt` của gói ZIP. Thông báo lỗi liệt kê `(pdf, xml, zip)`.
+> - Controller: các endpoint file nằm ở `controllers/invoice-files.controller.ts` (path giữ nguyên); controller chính `erp-invoices-core.controller.ts`.
 | `GET` | `/erp-invoices/:id/pdfs/:key/content` | — | — | Stream trực tiếp nội dung PDF để xem trước inline |
 | `GET` | `/erp-invoices/:id/pdfs/:key/download-url`| — | — | Lấy URL tải xuống file PDF đính kèm cụ thể |
 | `DELETE`| `/erp-invoices/:id/pdfs/:key` | — | — | Xóa 1 file PDF đính kèm trong danh sách `pdf_files` |
@@ -301,9 +417,10 @@ src/erp-invoices-core/
 - Tự động gắn tiền tố mã hóa đơn (`invoiceNo-serialNo_...`) vào diễn giải từng dòng định khoản.
 - Khi gọi `unpostInvoice`: Tự động xóa bút toán `JournalEntry` tương ứng và xóa sạch các bản ghi cấn trừ `erp_invoice_voucher_netoff`.
 
-### 5.4. Trích xuất Metadata Tự động & Subscribers
-- **Biển số xe (`license_plate`)**: Helper `invoice-metadata.helper.ts` nhận diện các định dạng biển số xe Việt Nam (vd: `51G-123.45`, `30H 987.65`, `BS: 29A-11223`) trong nội dung diễn giải.
-- **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `Lệnh SC...`.
+### 5.4. Trích xuất Metadata Tự động, AI Backfill & Subscribers
+- **Biển số xe (`license_plate`)**: Helper `invoice-metadata.helper.ts` tự động nhận diện các định dạng biển số xe Việt Nam (vd: `51G-123.45`, `50F-090.80`, `50H-319.73`, `30H 987.65`, `50E82434`) từ `description`, `notes` và dòng hàng hóa `items.description`.
+- **AI Backfill CLI Tool (`scripts/backfill-invoice-license-plates.ts`)**: Công cụ CLI tự động trích xuất và cập nhật biển số xe cho hóa đơn bán ra lịch sử bằng AI (`AiHubCoreModule` qua định dạng TOON và Gemini 3.7 Flash Tier `low`), hỗ trợ `--dry-run`, lọc theo `--branch=<branchCode>`, và `--force`.
+- **Lệnh sửa chữa / Quyết toán (`settlement_order`)**: Nhận diện các mẫu mã sửa chữa như `RO-...`, `QTO-...`, `GR-...`, `-WO-...`, `Lệnh SC...`.
 - **Subscriber Phụ tùng VinFast (`ErpInvoiceItemSubscriber`)**: Tự động bắt sự kiện `beforeInsert` và `beforeUpdate` trên `ErpInvoiceItem` để trích xuất mã linh kiện chuẩn (3 chữ cái in hoa + 8 chữ số + 0-2 ký tự) hoặc các trường hợp đặc thù như pin cao áp (`BAT21001011`, `EEP73110011AP`) và động cơ điện bảo hành.
 
 ### 5.5. Tích hợp Thuộc tính Động & Thuộc tính Chung (Dynamic Custom & Global Attributes)
@@ -318,6 +435,16 @@ src/erp-invoices-core/
 
 ### 5.6. Tự động Định khoản Kế toán theo Mã Số Thuế & Phụ tùng VinFast (`invoice-tax-code-accounting.helper.ts`)
 - **Nguyên tắc phân loại tài khoản Nợ khi hạch toán Hóa đơn mua vào (`direction = 'IN'`)**:
+
+### 5.7. Bộ Lọc Cột Nâng Cao, Composite Options & Chế độ Chọn Tất Cả (`__ALL_MATCHING__`)
+- **Composite Column Options (`getColumnOptions` & `getItemColumnOptions`)**:
+  - Đối với cột `invoiceNo`: sinh `value = invoice_no:::serial_no` và `label = invoice_no (serial_no)` (hoặc `(serial_no)` khi chưa có số HĐ).
+  - Đối với cột `partner`: sinh `value = tax_code:::partner_name` và `label = partner_name (tax_code)`.
+  - Giúp phân biệt duy nhất các bản ghi trùng số hóa đơn nhưng khác ký hiệu, tránh hiện tượng tick nhầm checkbox giữa các hóa đơn khác nhau.
+- **Xử lý Filter `_applyColumnFilters`**:
+  - Tự động bóc tách chuỗi `:::` để match chính xác cặp `(invoice_no, serial_no)` hoặc `(tax_code, partner_name)`.
+  - **Hỗ trợ `__ALL_MATCHING__`**: Khi nhận `vals = ["__ALL_MATCHING__", keyword]`, backend áp dụng bộ lọc đa từ khóa (`applyMultiKeywordFilter` / `applyMultiKeywordMultiFieldFilter`) trên các trường tương ứng của cột thay vì điều kiện `IN (...)`.
+  - **Hỗ trợ tìm kiếm nâng cao**: Nhận diện tìm chính xác `"..."` và tìm nhiều từ khóa theo `;` (OR logic).
   1. **Tài khoản `632` (Giá vốn hàng bán / Giá vốn dịch vụ)**:
      - Các mã số thuế phụ tùng VinFast hoặc mã chỉ định: `3703030236`, `0304980826`, `0313189917`, `0315735600`.
      - Hóa đơn có chứa mã linh kiện phụ tùng VinFast trong mô tả hoặc chi tiết mặt hàng.
@@ -340,11 +467,11 @@ src/erp-invoices-core/
 
 ### 5.7. Bộ lọc & Tìm kiếm Đa trường Hóa đơn (Multi-field Column Search & Dynamic Options)
 - **`InvoiceQueryService.getColumnOptions`**:
-  - Đối với cột `invoiceNo`: Truy vấn distinct các cặp `(invoice_no, serial_no)`, hỗ trợ tìm kiếm kết hợp đa từ khóa trên cả 2 trường `['inv.invoice_no', 'inv.serial_no']` qua `applyMultiKeywordMultiFieldFilter`, format label trả về dạng `Số HĐ (Ký hiệu)` (vd: `0001234 (1C26TGA)`).
-  - Đối với cột `partner`: Truy vấn distinct các cặp Tên đối tác và MST theo chiều (`IN` $\to$ `seller_name`, `seller_tax_code`; `OUT` $\to$ `buyer_name`, `buyer_tax_code`), hỗ trợ tìm kiếm đa từ khóa trên cả tên và mã số thuế đồng thời, format label trả về dạng `Tên đối tác (MST)`.
+  - Đối với cột `invoiceNo`: Truy vấn distinct các cặp `(invoice_no, serial_no)`, hỗ trợ tìm kiếm kết hợp đa từ khóa trên cả 2 trường `['inv.invoice_no', 'inv.serial_no']` qua `applyMultiKeywordMultiFieldFilter`. Giá trị `value` trả về theo format định danh kép composite `"${invoice_no}:::${serial_no}"` và `label` trả về dạng `Số HĐ (Ký hiệu)` (vd: `0001234 (1C26TGA)`). Đếm total chuẩn xác cho Infinite Scroll bằng cách clone query và bỏ groupBy.
+  - Đối với cột `partner`: Truy vấn distinct các cặp Tên đối tác và MST theo chiều (`IN` $\to$ `seller_name`, `seller_tax_code`; `OUT` $\to$ `buyer_name`, `buyer_tax_code`), hỗ trợ tìm kiếm đa từ khóa trên cả tên và mã số thuế đồng thời. Giá trị `value` trả về theo format định danh kép composite `"${tax_code}:::${name}"` và `label` trả về dạng `Tên đối tác (MST)`.
 - **`InvoiceQueryService._applyColumnSearch` & `_applyColumnFilters`**:
-  - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`.
-  - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD).
+  - `invoiceNo`: Tìm kiếm và lọc mảng đồng thời trên cả `inv.invoice_no` và `inv.serial_no`. Tự động bóc tách composite value dạng `invoiceNo:::serialNo` để so khớp chính xác từng hóa đơn, tránh xung đột giữa các hóa đơn có cùng số nhưng khác ký hiệu.
+  - `partner`: Tìm kiếm và lọc mảng đồng thời trên cả Tên đơn vị và Mã số thuế (MST/CCCD). Tự động bóc tách composite value dạng `taxCode:::partnerName` để lọc chính xác theo từng đối tác.
 
 ### 5.8. Quản lý, Bộ lọc & Tự động Tính toán Dòng Hàng Hóa Đơn (`findAllItems`, `getItemColumnOptions`)
 - **Truy vấn Dòng hàng (`findAllItems`)**:
@@ -379,6 +506,60 @@ src/erp-invoices-core/
     - **Backfill Dòng Hàng (`items`)**: Nếu DB chưa có dòng hàng, tự động lưu mảng dòng hàng từ XML vào `erp_invoice_items`.
     - **Backfill Chi nhánh (`branch_id`)**: Nếu DB chưa có chi nhánh, tự động suy diễn và cập nhật.
     - **Safe Skip**: Nếu hóa đơn đã đầy đủ thông tin (đã có XML, PDF, items, chi nhánh), hệ thống an toàn bỏ qua (`skippedCount++`) mà không ghi đè dữ liệu kế toán/đối soát hiện có.
+
+### 5.10. Xuất Báo Cáo Excel Đa Sheet Chuẩn Mực (`exportInvoicesExcel` / `exportExcel`)
+- **Cấu trúc Bảng Tính & Bố Cục Chuẩn**:
+  - **Hàng 1 (Row 1 - SUM)**: Công thức Excel sống `=SUM(Col5:ColN)` (kèm `result` fallback), nền `#F1F5F9`, font Calibri 10.5pt Bold `#0F172A`, height `22pt`, nhãn `"TỔNG CỘNG (SUM)"`.
+  - **Hàng 2 (Row 2 - SUBTOTAL)**: Công thức sống `=SUBTOTAL(9,Col5:ColN)` tự động cập nhật khi người dùng lọc dữ liệu, nền xanh pastel `#EFF6FF`, font Calibri 10.5pt Bold `#1E40AF`, height `22pt`, nhãn `"TỔNG THEO BỘ LỌC (SUBTOTAL)"`.
+  - **Hàng 3 (Row 3)**: Dòng trống phân cách trang nhã (height `10pt`).
+  - **Hàng 4 (Row 4 - Header Table)**: Nền Dark Slate duy nhất `#334155`, chữ trắng in đậm 11pt, height `28pt`, căn giữa.
+  - **Hàng 5 trở đi**: Dữ liệu chi tiết. STT/Mã/Ngày căn giữa, Tên/Mô tả căn trái, Số tiền/SL căn phải.
+  - **Freeze Panes**: Cố định cuộn tại Hàng 4 (`views = [{ state: 'frozen', ySplit: 4 }]`).
+  - **AutoFilter**: Đặt tại Hàng 4 từ cột đầu đến cột cuối.
+  - **Chân bảng**: Loại bỏ dòng tổng cộng cuối bảng (vì đã có SUM & SUBTOTAL cố định ở đầu trang).
+- **Quy chuẩn Thứ tự & Tên Sheet**:
+  - **Xuất Tổng (Batch Export)** gồm 4 Sheet:
+    1. `Bảng kê`: Bảng kê danh sách tất cả hóa đơn & tham chiếu cấn trừ (hỗ trợ tùy chọn cột động qua `selected_columns`).
+    2. `Tổng quan HHDV`: Bảng tổng quan tổng hợp theo mã hàng, sản lượng, đơn giá bình quân, thành tiền *(đặt trước Bảng kê HHDV)*.
+    3. `Bảng kê HHDV`: Bảng kê chi tiết từng dòng hàng hóa/dịch vụ của toàn bộ hóa đơn.
+    4. `Công nợ theo đối tượng`: Bảng tổng hợp công nợ & số dư lũy kế theo đối tác.
+  - **Xuất Đơn lẻ theo Hóa đơn từ Drawer (`id`)** gồm 6 Sheet:
+    1. `Chi tiết HĐ`: Thông tin chi tiết của riêng hóa đơn đang chọn kèm cấn trừ và số dư còn lại.
+    2. `Bảng kê HHDV HĐ`: Chi tiết các dòng hàng hóa của riêng hóa đơn đang chọn.
+    3. `Bảng kê đối tác`: Bảng kê toàn bộ các hóa đơn đã phát sinh của đối tác đó.
+    4. `Tổng quan HHDV đối tác`: Tổng hợp sản lượng và đơn giá bình quân theo mã hàng của đối tác đó.
+    5. `Bảng kê HHDV đối tác`: Bảng kê chi tiết tất cả dòng hàng hóa trong các hóa đơn của đối tác.
+    6. `Công nợ đối tác`: Bảng tổng hợp công nợ & dư nợ lũy kế của đối tác đó.
+- **Tùy Chọn Cột Động (`selected_columns`) & Dynamic Sheet Layout**:
+  - **Tham số `selected_columns`**: `ErpInvoiceQuery` chấp nhận `selected_columns` dạng mảng `string[]` hoặc chuỗi phân tách bằng dấu phẩy `string` (ví dụ: `stt,invoice_no,seller_name,total_amount`).
+  - **Helper `resolveActiveColumns`** (`invoice-export-excel-columns.helper.ts`): Ánh xạ danh sách cột được chọn từ 22 cột mặc định của Sheet `Bảng kê`. Luôn đảm bảo cột `stt` tồn tại để giữ tính toàn vẹn cấu trúc. Mỗi cột được định nghĩa đầy đủ cấu hình alignment, fill, numFmt và width.
+  - **Duyệt và Style Động** (`invoice-export-excel-writers.helper.ts`): Hàm `writeSummaryRows` duyệt trực tiếp qua `activeColumns` (index thực tế `1..activeColumns.length`) thay vì hardcode cell index cố định, tự động tính toán lại công thức `SUM`, `SUBTOTAL`, và căn chỉnh nhãn hàng tổng cộng an toàn theo `effectiveLabelCol`.
+  - **Cache Fingerprint Chống Trùng**: `InvoiceExportBackgroundService.buildQueryFingerprint()` chuẩn hóa và sắp xếp mảng `selected_columns`, rồi dựng chuỗi JSON ổn định (`stableStringify`, **không băm SHA-256**) để phân biệt file kết quả giữa các yêu cầu xuất khác bộ cột. Job nền, SSE, lịch sử và reuse nằm ở `ExportJobRunner` dùng chung (`src/common/export-jobs/export-job-runner.ts`, in-memory: mất khi restart, không chia sẻ giữa replica); service invoice chỉ dựng fingerprint/tên file và truyền producer `exportExcel`.
+- **Cột Chi nhánh & Cấn trừ & Thuế suất**:
+  - **Vị trí Cột Chi nhánh**: Nằm ngay bên phải cột *Trạng thái* trên cả sheet `Bảng kê` và sheet `Bảng kê HHDV`.
+  - **Cụm Cột Tham Chiếu Cấn Trừ**: Gom 5 cột tham chiếu cấn trừ (*Tham chiếu*, *Ngày giao dịch*, *Nội dung giao dịch*, *Số tiền tham chiếu*, *Số tiền cấn trừ*) với màu nền pastel xanh nhạt (`#F0F9FF` / `#DCEEFB`).
+  - **Cột Còn lại**: Nổi bật với màu vàng hổ phách nhạt (`#FEFCE8` / `#FFFDE68A`) thể hiện số dư còn lại của hóa đơn sau cấn trừ.
+  - **Cột Mã hàng hóa (`itemCode`)**: Đặt ngay bên trái cột *Tên hàng hóa, dịch vụ* trên cả sheet `Bảng kê HHDV` và sheet `Tổng quan HHDV`.
+  - **Cột Thuế suất (`vatRate`)**: Định dạng `%` chuẩn mực qua helper `formatVatRate` (`8%`, `10%`, `0%`, `5.25%`, `KCT`, `KKKNT`, ...).
+  - **Định dạng Số liệu & Đơn vị tính**:
+    - Chuẩn hóa toàn bộ cột số lượng và số tiền theo định dạng `#,##0.00`.
+    - Toàn bộ Đơn vị tính (UOM) được chuyển đổi sang chữ in hoa (`UPPERCASE`).
+
+### 5.11. Cơ chế Sắp xếp & Phân trang QueryBuilder (Sorting & Pagination Gotchas)
+- **Sắp xếp theo Số hóa đơn (`invoiceNo`)**:
+  - Cột `invoice_no` lưu dưới dạng `varchar(128)`. Khi người dùng yêu cầu sắp xếp theo `invoiceNo`, hệ thống trích xuất phần số qua biểu thức POSIX regex PostgreSQL: `NULLIF(regexp_replace(inv.invoice_no, '\D', '', 'g'), '')::numeric`.
+  - **TypeORM Gotcha khi kết hợp Collection Joins và Pagination (`skip`/`take`)**:
+    - Khi truy vấn `findAll` thực hiện `leftJoinAndSelect` với quan hệ mảng (`items`, `attachments`) cùng `skip` / `take`, TypeORM sẽ tách thành 2 bước thực thi (subquery lấy danh sách IDs phân trang).
+    - **Tuyệt đối không truyền biểu thức raw SQL chứa dấu chấm hoặc ngoặc trực tiếp vào `qb.orderBy(...)`** (ví dụ `qb.orderBy("NULLIF(regexp_replace(inv.invoice_no...))")`). TypeORM regex parser sẽ tách chuỗi tại dấu chấm `.` đầu tiên và nhận định phần trước dấu chấm là tên table alias (`"NULLIF(regexp_replace(inv"`), gây lỗi sập hệ thống `TypeORMError: "..." alias was not found. Maybe you forgot to join it?`.
+    - **Quy chuẩn xử lý**:
+      1. Đăng ký alias tường minh qua `qb.addSelect("NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric", 'inv_invoice_no_num')`.
+      2. Gọi `qb.orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')`.
+      3. Gọi `addOrderBy('inv.invoiceNo', orderDirection)` làm tiêu chí thứ cấp ổn định thứ tự các số hóa đơn có cùng phần số hoặc chuỗi ký tự thuần.
+
+### 5.x Xử lý lỗi 5xx của Cổng thuế khi `syncFromPortal`
+- `fetchWithRetry` retry 5xx tối đa 3 lần với backoff `2s·n² + jitter` (429: `5s·n`).
+- Nếu một segment (endpoint × ngày × trang) vẫn trả non-OK: ghi vào `failedSegments` (`<endpoint> (ttxly=N) ngày dd/mm/yyyy trang N: HTTP <status>`), bỏ qua segment đó, tiếp tục segment còn lại.
+- Cuối tiến trình, nếu có `failedSegments`: trả về trong kết quả + gửi notification `WARNING` "Đồng bộ hóa đơn chưa đầy đủ". Nếu mọi request đều lỗi (không request nào OK): throw `BadRequestException` kèm segment lỗi đầu tiên → notification `ERROR`.
 
 ---
 
@@ -436,93 +617,71 @@ bun run check:ci
 
 ## 8. Kiến trúc Frontend & Cấu trúc Atomic (`erp-web`)
 
-Thư mục: `src/modules/erp-invoices-core/components/ErpInvoicesTab/`
+> [!NOTE]
+> Đặc tả chi tiết đầy đủ về giao diện, route, components và tương tác UX của phân hệ Hóa đơn được tài liệu hóa chuyên sâu tại skill:
+> 👉 [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md)
 
-Toàn bộ UI và Logic của tab hóa đơn được module hóa theo chuẩn **`erp-atomic-refactor`** đảm bảo tách biệt rõ ràng giữa View, Logic, Sub-hooks, và Atomic Cells:
+### 8.1. Trang Hợp Nhất 6 Tabs (`/erp-invoices`)
+Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route trung tâm duy nhất:
+- **Container Page**: `src/pages/ErpInvoicesPage.tsx`
+- **Legacy Routing**: Các route cũ (`/erp-invoices-in`, `/erp-invoices-out`, `/erp-invoices-draft`, `/invoice-dashboard`) đều tự động forward hoặc render `ErpInvoicesPage` với prop `initialTab` tương ứng.
+- **Hệ thống 6 Tabs trong `ErpInvoicesTab`**:
+  1. `tab=dashboard`: **Tổng quan** (mount trực tiếp component `<InvoiceDashboard />` - View 0, phân tích KPI, xu hướng dòng tiền, thuế VAT, công nợ).
+  2. `tab=in` (mặc định): **Hóa đơn mua vào** (Header Table chiều `IN`, bộ lọc `tax_tab` `[ Tất cả | Mới | Thay thế | Điều chỉnh ]` + `view_mode` Combobox).
+  3. `tab=in-lines`: **Chi tiết mua vào** (Lines Table chiều `IN`, bộ lọc `subcat` `[ Tất cả dòng | Hàng hóa | Chiết khấu ]`).
+  4. `tab=out`: **Hóa đơn bán ra** (Header Table chiều `OUT`, bộ lọc `tax_tab` + `view_mode` Combobox).
+  5. `tab=out-lines`: **Chi tiết bán ra** (Lines Table chiều `OUT`, bộ lọc `subcat`).
+  6. `tab=draft`: **Hóa đơn nháp** (`ErpInvoicesDraftPage` - Quản lý hóa đơn SInvoice Viettel nháp).
 
+### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-atomic-refactor`)
+Toàn bộ source code frontend của module nằm tại `src/modules/erp-invoices-core/` và tuân thủ nghiêm ngặt chuẩn Atomic 3 tầng:
+
+```text
+src/modules/erp-invoices-core/components/
+├── atoms/                                      # TẦNG 1: NGUYÊN TỬ CƠ BẢN
+│   └── invoice-status-badge/                   # Reusable Badges (Trạng thái GDT, Hạch toán, KQ Kiểm tra)
+├── molecules/                                  # TẦNG 2: PHÂN TỬ GIAO DIỆN
+│   ├── coming-soon-tab-content/                # Placeholder tab đang hoàn thiện
+│   ├── erp-invoice-pdf-preview/                # Khung xem trước file PDF inline
+│   ├── invoice-attachments-cell/               # Cột icon XML + popover danh sách PDF
+│   ├── invoice-items-popover/                  # Popover bảng 15 cột chi tiết mặt hàng
+│   ├── invoice-no-cell/                        # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono)
+│   ├── invoice-partner-cell/                   # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono)
+│   ├── invoice-view-mode-combobox/             # Dropdown chọn chế độ xem (Tổng quan, Kiểm toán, Custom)
+│   ├── settlement-progress-card/               # KPI theo dõi tiến độ thanh toán & nợ còn lại
+│   ├── settlement-voucher-list/                # Danh sách chứng từ thanh toán/thu tiền đã cấn trừ
+│   ├── voucher-netoff-input/                   # Input nhập số tiền cấn trừ có format
+│   └── ...                                     # XML upload, preview frames, date slots
+└── organisms/                                  # TẦNG 3: KHỐI CHỨC NĂNG HOÀN CHỈNH (39 Organisms)
+    ├── erp-invoices-tab/                       # Container chính (/erp-invoices)
+    │   ├── ErpInvoicesTab.tsx                  # Main View nhúng SpreadsheetPageTemplate & InvoiceDashboard (View 0)
+    │   ├── ErpInvoicesTab.hook.tsx             # Orchestrator Hook quản lý tabs, sync SSE, dynamic columns
+    │   ├── ErpInvoicesTab.helper.ts            # Helper tính toán & định dạng
+    │   ├── ErpInvoicesTabHeaderSection.tsx     # Header Toolbar, PillTabs thuế, Search, Action buttons
+    │   ├── ErpInvoicesTabColumns.tsx           # Khai báo cấu hình cột
+    │   ├── ErpInvoicesTabDrawers.tsx           # Gom cụm các Drawer xem & xử lý hóa đơn
+    │   └── ErpInvoicesTabBulkModals.tsx        # Gom cụm các Modal/Drawer thao tác hàng loạt
+    ├── erp-invoice-items-section/              # Lines Table (/erp-invoices?tab=in-lines / out-lines)
+    ├── erp-invoice-detail-drawer/              # Drawer Chi Tiết Hóa Đơn Chuẩn Hóa 7 Tabs (StandardFormDrawer)
+    ├── erp-invoice-partner-tab/                # Tab Giao dịch 2 cột trong Drawer Chi tiết
+    ├── erp-invoice-settlement-tab/             # Tab Tài chính & Đối soát trong Drawer Chi tiết
+    ├── voucher-netoff-selection-modal/         # Drawer Đối soát Dòng tiền (Sao kê & Sổ quỹ)
+    └── ...                                     # 33 Organisms khác (Import XML, Bulk Net-off, Traceability Graph...)
 ```
-src/modules/erp-invoices-core/components/ErpInvoicesTab/
-├── index.tsx                                    # Entry export backward-compatible
-├── ErpInvoicesTab.tsx                           # Main View: SpreadsheetPageTemplate + Drawers + Modals
-├── useErpInvoicesTabLogic.tsx                   # Orchestrator Hook kết hợp các sub-hooks chuyên biệt
-├── utils.ts                                     # Pure functions, formatters & constants
-├── hooks/
-│   ├── useInvoiceBulkActions.tsx                # Quản lý selection, bulk download ZIP, bulk edit/posting/netoff
-│   ├── useInvoiceTableHandlers.ts               # Sort state, column search/filter, dynamic column options
-│   ├── useInvoiceSummary.tsx                    # Tính toán dòng tổng cộng Footer Summary Row
-│   └── useInvoiceModals.ts                      # Quản lý state mở/đóng 12 Drawers, Preview PDF, Export, Sync
-└── components/
-    ├── InvoiceViewModeCombobox.tsx              # Dropdown chọn/chỉnh sửa chế độ xem (Tổng quan, Kiểm toán, Custom)
-    ├── InvoiceViewConfigDrawer.tsx              # Drawer cấu hình cột hiển thị & Reset về mặc định
-    ├── InvoiceColumns.tsx                       # Orchestrator Hook ghép nối và định vị thứ tự 14+ cột bảng dữ liệu
-    ├── InvoiceDrawers.tsx                       # Gom cụm 10 Drawer/Modal xem & xử lý hóa đơn
-    ├── InvoiceBulkModals.tsx                    # Gom cụm các Modal/Drawer thao tác hàng loạt
-    ├── cells/
-    │   ├── InvoiceNoCell.tsx                    # Cột Số HĐ (120px) 2 tầng: Số HĐ (11px bold) + Ký hiệu (11px mono)
-    │   ├── InvoicePartnerCell.tsx               # Cột Đối tác (250px) 2 tầng: Tên đối tác (11px bold) + MST (11px mono)
-    │   ├── InvoiceAttachmentsCell.tsx           # Icon XML + Popover quản lý danh sách file PDF
-    │   ├── InvoiceItemsPopover.tsx              # Popover bảng chi tiết mặt hàng 15 cột trong ô Diễn giải
-    │   └── InvoiceStatusBadge.tsx               # Reusable Badges (Trạng thái GDT, KQ Kiểm tra, Hạch toán, Hợp lệ)
-    └── columns/
-        ├── generalColumns.tsx                   # Nhóm cột chung (Ngày HĐ, Số/Ký hiệu HĐ, Bên bán/mua & MST, Chi nhánh,...)
-        ├── taxColumns.tsx                       # Nhóm cột thuế (Loại HĐ, Trạng thái GDT, KQ Kiểm tra, HĐ hợp lệ)
-        └── amountColumns.tsx                    # Nhóm cột số tiền (Diễn giải 2 dòng 250px, Chiết khấu, Tiền trước VAT, VAT, Tổng tiền, Thuế suất, Cấn trừ,...)
-```
 
-### 8.1. Thứ tự & Bố cục Cột Chuẩn Hóa
+### 8.3. Thứ tự & Bố cục Cột Chuẩn Hóa
 Bảng hóa đơn được tối ưu hóa hiển thị với thứ tự trực quan:
 `Ngày HĐ` $\to$ `Số / Ký hiệu HĐ` (120px) $\to$ `Bên bán / MST` (250px) $\to$ `Loại HĐ` $\to$ `Diễn giải` (250px, 2 dòng) $\to$ `Trước GTGT` $\to$ `Thuế GTGT` $\to$ `Thành tiền` $\to$ **`Chiết khấu`** $\to$ **`Thuế suất GTGT`** $\to$ **`Trạng thái (GDT)`** $\to$ **`KQ Kiểm tra`** $\to$ `Cấn trừ` $\to$ `Còn lại` $\to$ `Hạch toán` $\to$ `Chi nhánh` $\to$ `Chứng từ`.
 
-### 8.2. Drawer Chi Tiết Hóa Đơn (`ErpInvoiceInternalDrawer`) & Thứ Tự 7 Top Tabs
+### 8.4. Drawer Chi Tiết Hóa Đơn (`ErpInvoiceDetailDrawer`) & Thứ Tự 7 Top Tabs
 Drawer chi tiết hóa đơn sử dụng `StandardFormDrawer` với 7 Tabs điều hướng trên cùng (`resolvedDrawerTabs`):
 1. **`invoice_details`** (`t("tabDetails", "Chi tiết")` - icon `FileText`): Form hóa đơn & Template xem trước XML/PDF chi tiết.
-2. **`partner`** (`t("tabTransactions", "Giao dịch")` - icon `Building2`, `hideRightPanel: true`): Hồ sơ đối tác & Bảng danh sách hóa đơn liên quan dạng 2 cột.
+2. **`partner`** (`t("tabTransactions", "Giao dịch")` - icon `Building2`, `hideRightPanel: true`): Hồ sơ đối tác & Bảng danh sách hóa đơn liên quan dạng 2 cột (`ErpInvoicePartnerTab`).
 3. **`financials`** (`t("tabFinancials", "Tài chính")` - icon `Wallet`): Cấn trừ sao kê ngân hàng & Sổ quỹ tiền mặt (`ErpInvoiceSettlementTab`).
 4. **`linked_docs`** (`t("tabLinkedDocs", "Chứng từ liên kết")` - icon `Link2`, `hideRightPanel: true`): Sơ đồ mạng lưới chứng từ liên kết đa chặng Canvas Graph (`DrawerDocumentTraceability`).
 5. **`attachments`** (`t("tabAttachments", "Tài liệu đính kèm")` - icon `Paperclip`): Quản lý danh sách file PDF đính kèm & Tải lên tệp mới (`ErpInvoicePdfUpload`).
 6. **`accounting`** (`t("tabAccounting", "Hạch toán kế toán")` - icon `BookOpen`): Bút toán sổ cái & Định khoản kế toán kép (`PostingSection`).
 7. **`history`** (`t("tabHistory", "Lịch sử & Kiểm duyệt")` - icon `History`): Nhật ký kiểm toán & Timeline trạng thái (`DrawerAuditTimeline`).
-
-### 8.3. Cấu Trúc Tab "Giao dịch" (`ErpInvoicePartnerTab`) - Layout 2 Cột
-Component `ErpInvoicePartnerTab` được thiết kế theo layout 2 cột tối ưu không gian và không bị nested scroll:
-- **Cột Trái (Main Content)**:
-  - Bọc bằng `<DrawerSection title={t("partnerInvoicesList", "Danh sách hóa đơn")} collapsible fitViewportHeight className="mb-0 h-full flex flex-col">`.
-  - Bên trong là `<StandardTable variant="spreadsheet" minWidth={550}>` hiển thị 4 cột tinh gọn: `Ngày HĐ`, `Số HĐ & Ký hiệu` (`InvoiceNoCell`), `Tổng tiền`, `Diễn giải`.
-  - Tự động kích hoạt thanh cuộn dọc nội bộ của bảng, không bị tràn ra ngoài Drawer Section.
-- **Cột Phải (Sidebar ~340px, Sticky)**:
-  - Section 1: `<DrawerSection title={t("partnerProfile", "Hồ sơ đối tác")} collapsible>` (Tên đối tác + copy, Role badge, MST + copy, Địa chỉ, Ngân hàng).
-  - Section 2: `<DrawerSection title={t("cashTrendOverview", "Tổng quan Dòng tiền")} collapsible>` (2 Badge KPI Thu/Chi + Compact `BarChart` ~140px).
-
-### 8.4. Cấu Trúc Atomic Tab "Tài chính" (`ErpInvoiceSettlementTab`) & Drawer Đối Soát Dòng Tiền (`VoucherNetoffSelectionModal`)
-Module Tài chính & Cấn trừ dòng tiền được module hóa theo chuẩn `erp-atomic-refactor`:
-
-```
-src/modules/erp-invoices-core/components/
-├── ErpInvoiceSettlementTab/                     # Tab Tài chính trong Drawer Chi tiết HĐ
-│   ├── index.ts                                 # Barrel export
-│   ├── types.ts                                 # Types & ActiveVoucherItem
-│   ├── ErpInvoiceSettlementTab.tsx              # Main Container (< 60 LoC)
-│   ├── hooks/useErpInvoiceSettlementLogic.ts    # Logic tính toán tiến độ, nợ còn lại, link/unlink voucher
-│   └── components/
-│       ├── SettlementProgressCard.tsx           # KPI theo dõi tiến độ thanh toán & nợ còn lại
-│       └── SettlementVoucherList.tsx            # Danh sách chứng từ thanh toán/thu tiền đã cấn trừ
-│
-└── VoucherNetoffSelectionModal/                 # Drawer Đối soát Dòng tiền (Sao kê & Sổ quỹ)
-    ├── index.ts                                 # Barrel export
-    ├── types.ts                                 # Enums (SettlementType, ManualCategory, TabKey)
-    ├── utils.ts                                 # Pure calculation helpers (Net-off sum, remaining debt)
-    ├── VoucherNetoffSelectionModal.tsx          # Main Container (< 120 LoC)
-    ├── hooks/
-    │   ├── useVoucherNetoffSelectionLogic.ts    # State multi-select, query sao kê, smart suggestions, submit
-    │   └── useVoucherNetoffTabs.tsx             # Cấu trúc DrawerTopTabBar (Tab 1: Sao kê, Tab 2: Sổ quỹ Sắp ra mắt)
-    └── components/
-        ├── AllBankTransactionsTable.tsx         # Bảng danh sách sao kê ngân hàng & bộ lọc đa chiều
-        ├── SelectedBankTransactionsTable.tsx    # Bảng giao dịch đã chọn (STT 1-based, 100% i18n keys)
-        ├── NetOffRightPanel.tsx                 # Cột phải 4 section (Chiều đối soát, Tiến độ tài chính, Gợi ý, Lịch sử)
-        ├── OffSystemManualSection.tsx           # Form ghi nhận dòng tiền ngoài sổ sách
-        ├── ComingSoonTabContent.tsx             # Placeholder Sắp ra mắt cho tab Sổ quỹ
-        └── NetOffInput.tsx                      # Input số tiền cấn trừ có kiểm soát validation
-```
 
 ### 8.5. Cơ chế Gợi Ý Đối Soát Sao Kê Thông Minh (Smart Net-Off Engine)
 `InvoiceSmartNetOffService` (`POST /erp-invoices/smart-net-off-suggestions`) sử dụng thuật toán tính điểm đa tín hiệu (Multi-Signal Scoring):
@@ -540,6 +699,85 @@ Tab danh sách hóa đơn (`ErpInvoicesTab`) và hook `useInvoiceSummary` tích 
   - `variantType="amount"`, truyền `subtotalAmount` (tổng trang), `cumulativeAmount` (tổng lũy kế từ API `totals.cumulative*`), `grandTotalAmount` (tổng toàn bộ từ API `totals.grandTotal*`).
   - Popover hiển thị 3 tầng dữ liệu chuẩn: `Trang X:`, `↳ Lũy kế (T1 → TX):`, `Tổng toàn bộ (Y trang):`.
   - Thanh tiến độ tỷ trọng và nhãn tỷ trọng trực quan theo tỷ lệ tích lũy: **`Tỷ trọng lũy kế: X%`** (`(cumulativeAmount / grandTotalAmount) * 100%`).
-- **Hợp đồng API Response (`InvoiceQueryService.findAll`)**:
-  - Trả về trường `totals`: `{ grandTotalPreVat, grandTotalVat, grandTotalDiscount, grandTotalAmount, grandTotalNetOff, grandTotalRemaining, cumulativePreVat, cumulativeVat, cumulativeDiscount, cumulativeTotal, cumulativeNetOff, cumulativeRemaining }` được tính toán trực tiếp từ cơ sở dữ liệu đồng bộ với toàn bộ bộ lọc active.
+### 8.7. Tự Động Phân Loại AI 9router & Hạch Toán Kép Theo Thông Tư 99/2025/TT-BTC
+Phân hệ Hóa đơn tích hợp engine AI 9router và tự động hạch toán kép theo chế độ kế toán mới nhất:
+1. **14 Nhóm Danh Mục Chi Phí Chuẩn TT 99**:
+   - `VF_PARTS` $\to$ **TK `1561`** (Hàng hóa VinFast): Áp dụng khi MST người bán $\in$ `{'0108926276', '0202357718'}` (Khớp trực tiếp whitelist 100%, 0 token AI).
+   - `COMMERCIAL_VEHICLES` $\to$ **TK `1562`** (Mua xe ô tô thương mại / Xe lướt).
+   - `OEM_OTHER_PARTS` $\to$ **TK `1563`** (Phụ tùng OEM & Hãng khác: Michelin, Pirelli, Varta, GS, Duy Phát,...).
+   - `WORKSHOP_CONSUMABLES` $\to$ **TK `152`** (Nguyên vật liệu tiêu hao: sơn lót, keo bóng 2K, dung môi, dầu nhớt).
+   - `GARAGE_SUBCONTRACT` $\to$ **TK `632`** (Gia công ngoài & Thầu phụ: sửa vỏ pin EV, phục hồi mâm TNT/Krish, đồng sơn ngoài).
+   - `GARAGE_TOOLS_EQUIPMENT` $\to$ **TK `153`** (Máy móc, thiết bị & CCDC xưởng: máy nén khí, súng siết, cẩu 2 tấn).
+   - `OFFICE_IT_FACILITIES` $\to$ **TK `153`** (Thiết bị CNTT, camera, nội thất văn phòng).
+   - `OPEX_LOGISTICS` $\to$ **TK `6427`** (Giao nhận & Vận chuyển: Grab Express, Cứu hộ 911, Viettel Post).
+   - `OPEX_SECURITY_CLEANING` $\to$ **TK `6427`** (Bảo vệ Hoàng Thiên Hổ, vệ sinh Trí Đức, rác thải Lê Mai, thuê xưởng).
+   - `OPEX_BANK_FEES` $\to$ **TK `635`** (Phí ngân hàng Techcombank, phí POS, lãi vay).
+   - `OPEX_ADMIN` $\to$ **TK `6422`** (Hành chính, VPP, nước khoáng 19L).
+   - `OPEX_LEGAL_CONSULTING` $\to$ **TK `6427`** (Tư vấn luật Wellspring, kế toán BCTC W&A).
+   - `OPEX_IT_SOFTWARE` $\to$ **TK `6427`** (Bản quyền KGARA, email doanh nghiệp, internet cáp quang, 4G).
+   - `OPEX_MARKETING` $\to$ **TK `6428`** (Tiếp thị, video khai trương Hydra, quà tặng tri ân).
+2. **Cơ chế Fallback An Toàn vào TK Tạm `T0003`** (chủ ý của kế toán: không phân loại được thì đẩy vào T0003, sau đó dò tay và hạch toán lại):
+   - Khi 9router AI timeout, lỗi mạng, hoặc confidence < 0.7 $\to$ Hạch toán tạm vào `Nợ T0003 / Nợ 1331 / Có 331`.
+   - Mô tả bút toán được gắn marker `[T0003_FALLBACK:<lý do>]` với lý do `AI_ERROR` (AI lỗi/không parse được), `LOW_CONFIDENCE`, `INVALID_CODE` (helper `invoice-fallback-marker.helper.ts`). Khi hóa đơn được phân loại lại thì marker bị gỡ.
+   - Khi người dùng chọn lại phân loại trên UI, hệ thống tự động cập nhật *in-place* dòng Nợ của bút toán sang tài khoản đích.
+3. **Tra tài khoản Nợ 3 tầng** (`autoPostInvoiceByCategory`): (1) cấu hình trong DB (`ErpModuleAttributeDef` option `accountCode`, rồi `category.defaultDebitAccount`) → (2) bảng tĩnh `CATEGORY_TO_DEBIT_ACCOUNT_MAP` → (3) `T0003`.
+4. **Bộ nhớ theo người bán** (`InvoiceCategoryMemoryService`): MST đã có ≥ 3 hóa đơn đã phân loại và ≥ 90% cùng một danh mục thì dùng lại danh mục đó, không gọi AI (`fromMemory`). Tắt bằng `INVOICE_CATEGORY_MEMORY=off` hoặc cờ `--no-memory` của script. Lưu ý: dữ liệu học gồm cả phân loại cũ do AI, nên cần soát khi một người bán bị gán sai nhiều lần.
+5. **Số chứng từ nguyên tử** (`AccountingCoreService.generateEntryNo`): bộ đếm theo `(prefix, period=YYYYMMDD, branch_id)` trong bảng `erp_document_sequences`, upsert một câu `ON CONFLICT (prefix, period, COALESCE(branch_id, '000…'::uuid))` nên **bắt buộc** có unique index theo biểu thức `uq_erp_document_sequences_prefix_period_branch`. Migration `CreateDocumentSequences20261010150000` tạo bảng + index và seed bộ đếm từ số chuẩn `PREFIX-YYYYMMDD-0001` đã cấp; idempotent: DB có sẵn bảng (greenway-staging/production) thì chỉ bảo đảm index, không seed lại; nếu có index trùng tên khác định nghĩa thì dừng và báo. Số chứng từ chỉ duy nhất theo từng chi nhánh (nhiều chi nhánh có thể cùng `HĐM-20260925-0001`). Nếu bảng thiếu, service rơi về `MAX+1` (không nguyên tử).
+6. **Script backfill chuẩn**: `scripts/backfill-invoice-categories-autopost.ts` (`bun run backfill:categories -- .env --limit=10`) dựng thẳng `InvoiceCategoryAutopostService`. Chế độ `--mode=new` (mặc định) | `retry-fallback` (chỉ HĐ chưa danh mục, bút toán còn nằm hoàn toàn ở T0003/1331 — HĐ đã sửa tay sang tài khoản khác không bị chọn) | `unposted`. Mặc định dry-run, `--apply` để ghi, DB production cần `--confirm=<tên DB>`; `--model=` chọn model 9router. Script cũ `backfill-unclassified-invoices.ts` đã xóa (lệch bảng tài khoản và cách đánh số chứng từ so với app).
+   - Script `src/erp-invoices-core/scripts/backfill-invoice-item-codes.ts` (mã hàng dòng hóa đơn) cũng dùng loader env + `classifyInvoiceLineItemsWithAi`; AI lỗi cả batch thì không ghi mã (chạy lại để xử lý tiếp).
+### 8.8. Chuẩn Hóa Mã Hàng Dòng Hóa Đơn Đầu Vào Theo Hệ Thống Tiền Tố (Prefix Taxonomy)
+Toàn bộ chi tiết từng dòng mặt hàng hóa đơn đầu vào (`erp_invoice_items` với `direction = 'IN'`) được phân giải và gán mã chuẩn hóa có tiền tố phân cấp rõ ràng:
+1. **Phụ Tùng VinFast (`VF-<PART_NO>`)**: Trích xuất Part Number chính hãng kèm tiền tố `VF-` (VD: `VF-BEX20001151`, `VF-BAT21001011`, `VF-PWT73011010AC`, `VF-106206`).
+2. **Phụ Tùng OEM & Hãng khác (`PT-<PART_NO>`)**: Trích xuất Part Number nhà sản xuất kèm tiền tố `PT-` (VD: `PT-0K95K15909`, `PT-214432B020`, `PT-225/60R17`, `PT-A2055018201`, `PT-97701-Q6400`, `PT-CHUNG`).
+3. **Vật Tư Tiêu Hao Xưởng (`VT-*`)**:
+   - `VT-SON`: Sơn lót, sơn màu, bóng 2K, chất đóng rắn, dung môi pha sơn.
+   - `VT-GAS`: Gas lạnh điều hòa R134a, R1234yf.
+   - `VT-DAU-NHOT`: Dầu động cơ, dầu hộp số, nhớt, mỡ bôi trơn.
+   - `VT-KEO`: Keo dán kính, keo silicon A500, keo AB.
+   - `VT-HOACHAT`: Nước làm mát động cơ, chất tẩy sơn, nước rửa kính.
+   - `VT-TIEU-HAO`: Toàn bộ vật tư tiêu hao phụ xưởng (giấy nhám P180-P1200, giẻ lau, băng keo 3M, bạt nilong phủ xe, phễu lọc sơn, lon pha, găng tay nitrile, quần áo thợ, điện nước xưởng).
+4. **Dịch Vụ & Thầu Phụ (`DV-*`)**:
+   - `DV-CUUHO`: Toàn bộ dịch vụ cứu hộ, cẩu kéo chở xe tai nạn về garage (Vân Sơn, 911, địa phương).
+   - `DV-GIACONG`: Gia công tiện mâm lazang (`DV-GIACONG-MAM`), phục hồi thước lái (`DV-GIACONG-THUOCLAI`), tiện đĩa thắng.
+   - `DV-SUACHUA`: Thuê ngoài sửa củ đề, phục hồi vỏ pin, công thợ sửa chữa.
+   - `DV-VANCHUYEN`: Cước giao nhận phụ tùng Grab Express, chuyển phát nhanh Viettel Post.
+   - `DV-BAOVE`, `DV-VESINH`, `DV-TUVAN`, `DV-IT`, `DV-INAN`: Các dịch vụ vận hành tiện ích.
+5. **Chiết Khấu & Giảm Trừ (`CK-*`)**:
+   - `CK-GSM`, `CK-GRAB`, `CK-THUONGMAI` (`isDiscountDeduction: true`, tự động cấn trừ công nợ và giảm giá trị mua).
+6. **Công Cụ Dụng Cụ (`CCDC-*`)**:
+   - `CCDC-XUONG`: Súng siết bulong, cuộn rulo ống khí, cẩu móc máy, máy nén khí.
+   - `CCDC-VP`: Thiết bị mạng TP-Link, camera quan sát, máy in.
+7. **Hành Chính & VPP (`HC-*`)**:
+   - `HC-NUOC`: Nước uống tiếp khách/thợ (Biwase, Viva, Lavie, Aquafina, Ion Life).
+   - `HC-VPP`: Giấy in A4, bìa còng, giấy in bill.
 
+### 8.9. Cơ Chế Quản Lý, Bóc Tách Metadata & Tải PDF Gốc Từ Nhà Cung Cấp (Original Provider PDF Pipeline)
+Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và tải tệp PDF gốc trực tiếp từ cổng nhà cung ứng:
+1. **Bóc Tách Metadata Tra Cứu Từ XML GDT (`extractInvoiceMetadataFromXml`)**:
+   - Khi XML được tải từ GDT hoặc người dùng import, hệ thống phân tích XML chuẩn TT78 để trích xuất `provider_code`, `lookup_code`, `lookup_url`, `msttcgp`, `seller_tax_code`.
+   - **HILO / GSM (Taxi Xanh SM)**: Bóc tách mã tra cứu từ thẻ `<TTruong>Hilo-SearchKey</TTruong>` trong `<TTKhac>`, nhận diện cổng tra cứu `https://gsm-einvoice.hilo.com.vn/`.
+   - **VinFast / Vingroup**: Trích xuất chuỗi mã Salt tra cứu từ metadata/chữ ký mở rộng.
+   - **MISA meInvoice**: Trích xuất `transactionId`.
+   - **EasyInvoice**: Trích xuất `fkey` và cổng tra cứu của bên bán.
+   - **Viettel S-Invoice**: Trích xuất cổng tra cứu `https://sinvoice.viettel.vn/tracuuhoadon`.
+2. **Cơ Chế Adapter Tải Trực Tiếp Từ Cổng Nhà Cung Cấp (`IProviderAdapter`)**:
+   - Hệ thống không sử dụng cơ chế convert máy nội bộ mà kết nối trực tiếp tới API/cổng tra cứu chính thức của từng NCC (`HiloInvoiceAdapter`, `MisaInvoiceAdapter`, `VinfastInvoiceAdapter`, `ViettelInvoiceAdapter`, `EasyInvoiceAdapter`).
+   - Chi tiết kỹ thuật & kịch bản vận hành CLI tham khảo skill: 👉 [download-provider-invoice-pdf](erp/erp-api/.agents/skills/download-provider-invoice-pdf/SKILL.md).
+   - **Đã hỗ trợ tự động 100%**:
+     - **HILO (GSM Xanh SM)**: Tra cứu và tải tự động qua API `GET /Inv/GetPdf?ID={hiloInvId}`.
+     - **MISA meInvoice**: Khởi tạo session ASP.NET, gọi `POST /tra-cuu/GetInvoiceDataByTransactionID` lấy token `customData`, sau đó tải PDF gốc có chữ ký điện tử qua `GET /tra-cuu/DownloadHandler.ashx`.
+     - **CyberBill (CyberLotus)**: Tự động điều hướng Cluster 1 / Cluster 2 (`bill1app.xcyber.vn` / `bill2app.xcyber.vn`), giải captcha AI Vision bằng `InvoiceCaptchaSolverService`, tra cứu và tải PDF gốc.
+   - Tệp PDF gốc tải về được lưu trữ tại S3 RustFS `invoices/pdf/{id}.pdf` và ghi vào `pdf_file_key` (+ `pdf_source`). Worker không tạo bản ghi `erp_attachments`.
+3. **Thực Tế Rào Cản Bảo Mật Từ Các Cổng NCC Khác & Giải Pháp 1-Chạm Trên UI**:
+   - **Rào cản WAF/Bot Blocking & Cổng VinFast**: Cổng portal Vingroup (`e-invoice-tt78.vingroup.net`) không hỗ trợ tra cứu hóa đơn trực tiếp chỉ bằng chuỗi Salt trích xuất từ XML của Tổng cục Thuế. File `invoice.html` trong gói ZIP của VinFast là template đại trà của CyberLotus (nền trống đồng, không có logo VinFast cánh chim, không có mã chứng từ SAP), không thay thế được bản PDF gốc từ Vingroup. Người dùng sử dụng giải pháp mở cổng 1-chạm hoặc tải file thủ công.
+   - **Giải Pháp 1-Chạm Trực Quan (`ProviderLookupInfoCard`)**:
+     - Nằm tại sidebar Drawer chi tiết hóa đơn, hiển thị tên NCC, mã tra cứu.
+     - Tích hợp nút **"Chép mã"** (1-click copy) và **"Mở Cổng Tra Cứu"**: Khi người dùng nhấn nút, trình duyệt mở thẳng portal chính thức của bên bán với thông tin điền sẵn, giúp kế toán tra cứu và tải PDF gốc trực tiếp trên trình duyệt cá nhân mà không bị WAF của NCC chặn.
+
+
+
+
+
+## Quy ước tên file PDF/XML khi xuất
+- Helper `src/erp-invoices-core/utils/invoice-file-name.util.ts`: `buildInvoiceFileName(invoice, ext, index?)` → `{YYYYMMDD}_{KyHieu}_{SoHD}_{SoTienVND}[_{index}].{ext}` (vd `20250315_C25TAA_0001234_12500000.pdf`); thiếu dữ liệu: `KhongNgay` / `KhongKyHieu` / số tiền `0`; sanitize ký tự cấm + `..`. `uniqueName` chống trùng trong ZIP (`_2`, `_3`).
+- Áp dụng: ZIP hàng loạt (`bulkDownloadFilesZip`), ZIP đã chọn (`bulkDownloadSelectedZip`) qua `buildDownloadTasks` (giữ thư mục `{MST} - {Tên đối tác}/`) và tải lẻ `getFileDownloadUrl` (không còn MST trong tên). Không đổi: PDF đính kèm (`getPdfDownloadUrl`, `downloadAllPdfsZip`) vẫn dùng tên gốc.

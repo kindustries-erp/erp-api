@@ -15,6 +15,11 @@ Phân hệ `erp-inventory-stock` (gồm `inventory-stock-core` và `erp_inventor
   - `qtyReserved`: Số lượng tồn kho đã được giữ chỗ (Reserved) cho các Lệnh sản xuất (`CONFIRMED`) hoặc Đơn bán hàng chờ giao.
   - `qtyAvailable`: Số lượng tồn kho khả dụng có thể xuất bán hoặc sử dụng ngay:
     $$\text{qtyAvailable} = \text{qtyOnHand} - \text{qtyReserved}$$
+  - **Công thức Nhập - Xuất - Điều Chỉnh Nhất Quán**:
+    - `received_qty`: Tổng `qty_in` từ các giao dịch kho thực tế (loại trừ `ADJUSTMENT` và `ADJUSTMENT_CANCEL`).
+    - `issued_qty`: Tổng `qty_out` từ các giao dịch kho thực tế (loại trừ `ADJUSTMENT` và `ADJUSTMENT_CANCEL`).
+    - `adjusted_qty`: Tổng `qty_in - qty_out` từ các phiếu điều chỉnh kiểm kê (`ADJUSTMENT` và `ADJUSTMENT_CANCEL`).
+    - Đảm bảo công thức toán học hiển thị chuẩn: $\text{qtyOnHand} = \text{received\_qty} - \text{issued\_qty} + \text{adjusted\_qty}$.
 - **Định giá Tồn kho theo Giá vốn Bình quân Gia quyền (Moving Weighted Average Cost)**:
   - Tự động cập nhật lại `avgUnitCost` ngay khi có phiếu Nhập kho (`GOODS_RECEIPT`) hoặc Điều chỉnh tăng kho (`ADJUSTMENT_IN`).
   - Giá trị tồn kho danh nghĩa:

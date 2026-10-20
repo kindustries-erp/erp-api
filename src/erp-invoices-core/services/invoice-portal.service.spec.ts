@@ -3,6 +3,10 @@ import { InvoicePortalService } from './invoice-portal.service';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
 import { safeDecrypt } from '../../common/utils/encrypt.util';
 
+jest.mock('../../common/utils/delay.util', () => ({
+  sleep: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('InvoicePortalService - Auth & Auto Re-login', () => {
   let service: InvoicePortalService;
   let mockInvoiceRepo: any;
@@ -362,6 +366,26 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
         globalFetchSpy.mockRestore();
       });
+
+      it('should return null without throwing when GDT answers 200 with an HTML page (non-JSON)', async () => {
+        const inv: any = {
+          invoiceNo: '999',
+          serialNo: 'C26TGA',
+          sellerTaxCode: '0318334886',
+          taxInvoiceStatus: 2,
+        };
+
+        const globalFetchSpy = jest
+          .spyOn(global, 'fetch')
+          .mockResolvedValue(
+            new Response('<html>Bảo trì</html>', { status: 200 }),
+          );
+
+        const result = await service.fetchRelativeInvoice(inv, 'token');
+        expect(result).toBeNull();
+
+        globalFetchSpy.mockRestore();
+      });
     });
 
     describe('syncRelatedInvoiceStatus', () => {
@@ -529,6 +553,123 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           }),
         );
       });
+    });
+  });
+
+  describe('syncFromPortal - GDT 5xx handling', () => {
+    const dto: any = {
+      token: 'tok',
+      dateFrom: '2026-10-01',
+      dateTo: '2026-10-01',
+      type: 'purchase',
+    };
+
+    beforeEach(() => {
+      jest
+        .spyOn(service as any, 'validatePortalTaxpayer')
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, 'preloadBranchCache')
+        .mockResolvedValue(undefined);
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('continues other endpoints when one returns 500 and warns the user', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        Promise.resolve(
+          url.toString().includes('/sco-query/')
+            ? new Response('err', { status: 500 })
+            : new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+        ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('sco-query');
+      expect(result.failedSegments[0]).toContain('01/10/2026');
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'WARNING' }),
+      );
+    });
+
+    it('treats request timeout (AbortError) as a failed segment, not a crash', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        url.toString().includes('/sco-query/')
+          ? Promise.reject(
+              Object.assign(new Error('The operation was aborted.'), {
+                name: 'AbortError',
+              }),
+            )
+          : Promise.resolve(
+              new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+            ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('timeout');
+    });
+
+    it('treats an HTML 200 body as a failed segment and keeps syncing other endpoints', async () => {
+      jest.spyOn(global, 'fetch').mockImplementation((url: any) =>
+        Promise.resolve(
+          url.toString().includes('/sco-query/')
+            ? new Response('<!DOCTYPE html><html>Bảo trì</html>', {
+                status: 200,
+              })
+            : new Response(JSON.stringify({ datas: [], total: 0 }), {
+                status: 200,
+              }),
+        ),
+      );
+
+      const result: any = await service.syncFromPortal(dto, 'user-1', true);
+
+      expect(result.failedSegments).toHaveLength(1);
+      expect(result.failedSegments[0]).toContain('sco-query');
+      expect(result.failedSegments[0]).toContain('không phải JSON');
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'WARNING' }),
+      );
+    });
+
+    it('throws a descriptive error when every request returns HTML instead of JSON', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() =>
+          Promise.resolve(
+            new Response('<html>Bảo trì</html>', { status: 200 }),
+          ),
+        );
+
+      await expect(service.syncFromPortal(dto, 'user-1', true)).rejects.toThrow(
+        /Cổng thuế liên tục báo lỗi.*không phải JSON/,
+      );
+    });
+
+    it('throws a descriptive error when every request returns 500', async () => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() =>
+          Promise.resolve(new Response('err', { status: 500 })),
+        );
+
+      await expect(service.syncFromPortal(dto, 'user-1', true)).rejects.toThrow(
+        /Cổng thuế liên tục báo lỗi.*HTTP 500/,
+      );
+      expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ type: 'ERROR' }),
+      );
     });
   });
 });

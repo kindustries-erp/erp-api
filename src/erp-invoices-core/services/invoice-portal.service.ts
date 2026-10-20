@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,8 +18,11 @@ import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
+import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 import {
   fetchWithRetry,
+  GdtNonJsonResponseError,
+  parseGdtJson,
   resolvePortalVatRate,
   parsePortalIsoDate,
   buildInvoiceR2Key,
@@ -39,6 +43,12 @@ import {
   authenticateGdtWithSession,
 } from '../helpers/gdt-session.helper';
 import { encryptText, safeDecrypt } from '../../common/utils/encrypt.util';
+import {
+  extractVinfastItemCode,
+  extractStandardItemCode,
+} from '../helpers/vinfast-part-code.helper';
+
+import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -69,6 +79,8 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly vinfastPartsService: VinfastPartsService,
+    @Optional()
+    private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -248,6 +260,7 @@ export class InvoicePortalService implements OnModuleInit {
       }
     }
     await this.companyProfileRepo.save(profile);
+    GdtCronStateHelper.resume();
   }
 
   async autoReloginWithRetry(
@@ -262,14 +275,22 @@ export class InvoicePortalService implements OnModuleInit {
       return null;
     }
 
+    this.logger.log(
+      `Bắt đầu quy trình tự động đăng nhập Cổng Thuế cho MST ${config.username}...`,
+    );
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      this.logger.log(
-        `Bắt đầu tự động đăng nhập lại Cổng Thuế GDT (lần ${attempt}/${maxRetries})...`,
-      );
       try {
+        this.logger.log(
+          `Lấy Captcha để đăng nhập Cổng Thuế (Lần thử ${attempt}/${maxRetries})...`,
+        );
         const captcha = await this.getCaptcha();
+
         if (!captcha?.text || !captcha?.key) {
-          throw new Error('Không thể lấy hoặc giải mã Captcha');
+          this.logger.warn(
+            `Không thể giải Captcha ở lần thử ${attempt}. Bỏ qua lượt này.`,
+          );
+          continue;
         }
 
         const loginRes = await this.loginWithCaptcha({
@@ -294,19 +315,26 @@ export class InvoicePortalService implements OnModuleInit {
           `Tự động đăng nhập lại lần ${attempt} thất bại: ${err?.message || err}`,
         );
 
-        // Chặn retry nếu gặp lỗi 401/403 Unauthorized để tránh bị Cổng Thuế khóa tài khoản
+        // Chặn retry nếu gặp lỗi 401/403 Unauthorized hoặc thông báo sai mật khẩu/tài khoản
+        const errMsg = (err?.message || '').toLowerCase();
         const isAuthError =
           err?.status === 401 ||
           err?.status === 403 ||
           err instanceof UnauthorizedException ||
-          err?.message?.includes('401') ||
-          err?.message?.includes('403');
+          errMsg.includes('401') ||
+          errMsg.includes('403') ||
+          errMsg.includes('mật khẩu') ||
+          errMsg.includes('tài khoản') ||
+          errMsg.includes('password') ||
+          errMsg.includes('credentials') ||
+          errMsg.includes('gdt_auth_failed');
 
         if (isAuthError) {
+          GdtCronStateHelper.pauseDueToAuthError();
           this.logger.error(
-            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
+            `Đăng nhập Cổng Thuế trả về lỗi xác thực (${err?.status || '401/403'}: ${err?.message}). Dừng retry ngay lập tức để tránh khóa tài khoản.`,
           );
-          break;
+          return null;
         }
 
         if (attempt < maxRetries) {
@@ -500,6 +528,8 @@ export class InvoicePortalService implements OnModuleInit {
         let pagesFetched = 0;
         const maxPages = 50;
         let isFirstRequest = true;
+        const failedSegments: string[] = [];
+        let succeededRequests = 0;
 
         for (
           let d = new Date(startDate);
@@ -549,37 +579,80 @@ export class InvoicePortalService implements OnModuleInit {
                 };
                 if (cookies) fetchHeaders['Cookie'] = cookies;
 
-                let response = await fetchWithRetry(url, {
-                  headers: fetchHeaders,
-                });
-                if (
-                  !response.ok &&
-                  (response.status === 401 || response.status === 403)
-                ) {
-                  this.logger.warn(
-                    `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
-                  );
-                  const reAuth = await this.autoReloginWithRetry();
-                  if (reAuth) {
-                    token = reAuth.token;
-                    cookies = reAuth.cookies;
-                    fetchHeaders.Authorization = `Bearer ${token}`;
-                    if (cookies) fetchHeaders['Cookie'] = cookies;
-                    response = await fetchWithRetry(url, {
-                      headers: fetchHeaders,
-                    });
+                let response: Response | null = null;
+                let fetchError: string | null = null;
+                try {
+                  response = await fetchWithRetry(url, {
+                    headers: fetchHeaders,
+                  });
+                  if (
+                    !response.ok &&
+                    (response.status === 401 || response.status === 403)
+                  ) {
+                    this.logger.warn(
+                      `Token hết hạn khi tải trang (HTTP ${response.status}). Đang tự động đăng nhập lại...`,
+                    );
+                    const reAuth = await this.autoReloginWithRetry();
+                    if (reAuth) {
+                      token = reAuth.token;
+                      cookies = reAuth.cookies;
+                      fetchHeaders.Authorization = `Bearer ${token}`;
+                      if (cookies) fetchHeaders['Cookie'] = cookies;
+                      response = await fetchWithRetry(url, {
+                        headers: fetchHeaders,
+                      });
+                    }
                   }
+                } catch (err: any) {
+                  if (err?.message === 'GDT_TOKEN_EXPIRED') throw err;
+                  fetchError =
+                    err?.name === 'AbortError'
+                      ? 'timeout (cổng thuế không phản hồi)'
+                      : String(err?.message ?? err);
                 }
-                if (!response.ok)
-                  throw new BadRequestException(
-                    `Portal request failed with status ${response.status}`,
-                  );
-
-                const payload = (await response.json()) as {
+                if (!response?.ok) {
+                  const segment = `${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}${currentTtxly !== null ? ` (ttxly=${currentTtxly})` : ''} ngày ${formattedDate} trang ${pathPagesFetched + 1}: ${fetchError ?? `HTTP ${response?.status}`}`;
+                  this.logger.warn(`Portal request failed - ${segment}`);
+                  failedSegments.push(segment);
+                  break;
+                }
+                let payload: {
                   datas?: any[];
                   total?: number;
                   state?: string;
-                };
+                } | null = null;
+                let parseError: string | null = null;
+                for (let attempt = 0; attempt <= 2 && !payload; attempt++) {
+                  if (attempt > 0) {
+                    await sleep(2000 * attempt);
+                    try {
+                      response = await fetchWithRetry(url, {
+                        headers: fetchHeaders,
+                      });
+                    } catch (err: any) {
+                      parseError = String(err?.message ?? err);
+                      break;
+                    }
+                    if (!response.ok) break;
+                  }
+                  try {
+                    payload = await parseGdtJson(response!);
+                  } catch (err) {
+                    if (!(err instanceof GdtNonJsonResponseError)) throw err;
+                    parseError = err.message;
+                    this.logger.warn(
+                      `Cổng thuế trả non-JSON (lần ${attempt + 1}/3) ${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}: ${err.snippet}`,
+                    );
+                  }
+                }
+
+                if (!payload) {
+                  const segment = `${cfg.basePath.replace(InvoicePortalService.GDT_API_BASE_URL, '')}${currentTtxly !== null ? ` (ttxly=${currentTtxly})` : ''} ngày ${formattedDate} trang ${pathPagesFetched + 1}: ${parseError ?? `HTTP ${response?.status}`}`;
+                  this.logger.warn(`Portal request failed - ${segment}`);
+                  failedSegments.push(segment);
+                  break;
+                }
+                succeededRequests++;
 
                 if (pathPagesFetched === 0) {
                   totalFromPortal += payload.total ?? 0;
@@ -600,6 +673,12 @@ export class InvoicePortalService implements OnModuleInit {
               } while (state && pathPagesFetched < maxPages);
             }
           }
+        }
+
+        if (failedSegments.length > 0 && succeededRequests === 0) {
+          throw new BadRequestException(
+            `Cổng thuế liên tục báo lỗi, không lấy được dữ liệu. Chi tiết: ${failedSegments[0]}`,
+          );
         }
 
         // Pre-scan DB branches before classification
@@ -778,6 +857,19 @@ export class InvoicePortalService implements OnModuleInit {
           );
         }
 
+        if (failedSegments.length > 0) {
+          this.logger.warn(
+            `Portal sync thiếu ${failedSegments.length} phần: ${failedSegments.slice(0, 5).join('; ')}`,
+          );
+          if (userId) {
+            await this.notificationsService.createForUser(userId, {
+              title: 'Đồng bộ hóa đơn chưa đầy đủ',
+              message: `Cổng thuế báo lỗi ở ${failedSegments.length} phần nên chưa lấy được. Vui lòng đồng bộ lại sau. Ví dụ: ${failedSegments[0]}`,
+              type: 'WARNING',
+            });
+          }
+        }
+
         return {
           totalItemsFetched: rawItems.length,
           totalFromPortal,
@@ -786,6 +878,7 @@ export class InvoicePortalService implements OnModuleInit {
           skipped,
           direction,
           errors,
+          failedSegments,
           xmlDownloadQueued: backgroundSyncIds.length,
         };
       } catch (err) {
@@ -1010,6 +1103,17 @@ export class InvoicePortalService implements OnModuleInit {
         ),
       );
 
+    // Trigger AI classification & auto-post for input invoices
+    if (this.categoryAutopostService && invoice.direction === 'IN') {
+      this.categoryAutopostService
+        .classifyAndAutoPost(invoice.id)
+        .catch((e) =>
+          this.logger.warn(
+            `AI classify and auto-post error for invoice ${invoice.invoiceNo}: ${e?.message}`,
+          ),
+        );
+    }
+
     return (await this.lifecycleService.findOne(id)).data as ErpInvoice;
   }
 
@@ -1148,6 +1252,17 @@ export class InvoicePortalService implements OnModuleInit {
         );
       }
     }
+
+    // Trigger AI classification & auto-post for input invoices in background sync
+    if (this.categoryAutopostService && invoice.direction === 'IN') {
+      this.categoryAutopostService
+        .classifyAndAutoPost(invoice.id)
+        .catch((e) =>
+          this.logger.warn(
+            `AI classify and auto-post error for invoice ${invoice.invoiceNo}: ${e?.message}`,
+          ),
+        );
+    }
   }
 
   /**
@@ -1212,7 +1327,16 @@ export class InvoicePortalService implements OnModuleInit {
         return null;
       }
 
-      const json = await res.json();
+      let json: any;
+      try {
+        json = await parseGdtJson(res);
+      } catch (err) {
+        if (!(err instanceof GdtNonJsonResponseError)) throw err;
+        this.logger.warn(
+          `Relative invoice ${invoice.invoiceNo} trả non-JSON: ${err.snippet}`,
+        );
+        return null;
+      }
       if (!json || json.shdgoc == null || String(json.shdgoc).trim() === '') {
         return null;
       }
@@ -1445,7 +1569,20 @@ export class InvoicePortalService implements OnModuleInit {
         const disc = i.stckhau != null ? Number(i.stckhau) : 0;
         const total = preVat + vatAmt - disc;
 
+        const rawCode = i.mhhdvu || i.mhang || i.ma || undefined;
+        const resolved = extractStandardItemCode({
+          description: i.ten,
+          itemCode: rawCode,
+          unit: i.dvtinh,
+          preVatAmount: preVat,
+          discountAmount: disc,
+          sellerName: json.nbten,
+          sellerTaxCode: invoice.sellerTaxCode,
+        });
+        const itemCode = resolved.itemCode || rawCode || undefined;
+
         return {
+          itemCode,
           description: i.ten,
           unit: i.dvtinh,
           quantity: i.sluong != null ? Number(i.sluong) : undefined,

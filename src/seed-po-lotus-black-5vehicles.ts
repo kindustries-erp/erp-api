@@ -5,7 +5,7 @@ import { ErpPurchaseOrder } from './purchase-orders-core/entities/erp_purchase_o
 import { ErpPurchaseOrderLine } from './purchase-orders-core/entities/erp_purchase_order_line.entity';
 import { ErpGoodsReceipt } from './goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from './goods-receipts-core/entities/erp_goods_receipt_line.entity';
-import { ErpBusinessPartner } from './business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from './v2/business-partners-core/entities/erp_business_partner.entity';
 
 const BOM_CODE = 'K LOTUS-SX-BM-01-04-DEN';
 const NUM_VEHICLES = 5;

@@ -169,6 +169,50 @@ export class KgaraSyncController {
     return this.syncService.syncCaseDetail(branchId, id);
   }
 
+  @Post('sync/case-details')
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
+  async syncCaseDetailsBatch(
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId?: string,
+    @Query('from') queryFrom?: string,
+    @Query('to') queryTo?: string,
+    @Query('force') queryForce?: string,
+    @Body()
+    body?: {
+      branchId?: string;
+      from?: string;
+      to?: string;
+      force?: boolean;
+      concurrency?: number;
+    },
+  ) {
+    const effectiveBranchId =
+      body?.branchId || queryBranchId || headerBranchId || undefined;
+    const from = body?.from || queryFrom;
+    const to = body?.to || queryTo;
+    const force = body?.force ?? (queryForce === 'true' || queryForce === '1');
+    const concurrency = body?.concurrency;
+
+    const result = await this.syncService.syncCaseDetailsBatch(
+      effectiveBranchId,
+      {
+        from,
+        to,
+        force,
+        concurrency,
+      },
+    );
+
+    return {
+      success: true,
+      data: result,
+      message: `Đã đồng bộ chi tiết cho ${result.totalCasesProcessed} phiếu dịch vụ (${result.totalLinesSynced} dòng chi tiết).`,
+    };
+  }
+
   @Post('sync/receivables')
   @RequirePermissions({
     resource: ErpResource.GARAGE,

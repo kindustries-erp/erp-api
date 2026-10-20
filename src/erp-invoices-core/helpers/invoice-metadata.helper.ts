@@ -7,7 +7,7 @@ export function extractInvoiceMetadata(invoice: any): void {
   const fullDesc = [
     invoice.description,
     invoice.notes,
-    ...(invoice.items || []).map((i) => i.description),
+    ...(invoice.items || []).map((i: any) => i?.description),
   ]
     .filter(Boolean)
     .join(' | ');
@@ -22,9 +22,11 @@ export function extractInvoiceMetadata(invoice: any): void {
     invoice.settlementOrder = wo;
   }
 
-  // Extract Biển số xe (e.g. 50E82434, 50H-38666, 89A-482.19, etc.)
-  const plateMatch = fullDesc.match(/\d{2}[A-ZĐ][A-Z0-9]?[-.\s]?\d{4,5}/i);
+  // Extract Biển số xe (e.g. 50E82434, 50H-38666, 89A-482.19, 50F-090.80, 50H-319.73, etc.)
+  const plateMatch = fullDesc.match(
+    /\b\d{2}[A-ZĐ][A-Z0-9]?[-.\s]?(?:\d{4,5}|\d{2,3}[-.\s]\d{2,3})\b/i,
+  );
   if (plateMatch) {
-    invoice.licensePlate = plateMatch[0];
+    invoice.licensePlate = plateMatch[0].trim().replace(/\.$/, '');
   }
 }

@@ -53,7 +53,7 @@ Các nghiệp vụ trọng tâm:
 
 ### 3.1. Backend (`erp-api`)
 ```text
-src/business-partners-core/
+src/v2/business-partners-core/ (đã chuyển sang v2, xem business-partners-core)
 ├── dto/
 │   ├── create-business-partner.dto.ts   # DTO tạo mới đối tác
 │   └── update-business-partner.dto.ts   # DTO cập nhật thông tin đối tác
@@ -142,5 +142,15 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
    - Backend: `cd erp-api && bun run type:check` (0 errors).
    - Frontend: `cd erp-web && bun run type:check` (0 errors).
 2. **Unit test**:
-   - Backend: `cd erp-api && bunx jest src/business-partners-core/ --forceExit` (100% passing).
+   - Backend: `cd erp-api && bunx jest src/v2/business-partners-core/ --forceExit` (100% passing).
    - Frontend: `cd erp-web && bun run test` (100% passing).
+
+---
+
+## 8. Hợp đồng bộ lọc cho ERP Web V2
+
+- Endpoint danh sách nhận thêm `column_operators` và `date_ranges` dưới dạng JSON string; request V1 không gửi hai trường này vẫn hoạt động như trước.
+- Cột và SQL expression luôn được ánh xạ qua whitelist trong service. Toán tử text gồm `contains`, `not_contains`, `starts_with`, `ends_with`, `equals`, `not_equals`, `is_empty`, `is_not_empty`; riêng `createdAt` hỗ trợ ngày `eq`, `before`, `after`, `between` theo biên ngày GMT+7.
+- `column_filters` hỗ trợ `__BLANK__` và `__ALL_MATCHING__`. Giá trị all-matching dùng kết quả tìm kiếm của chính cột thay vì tạo điều kiện từ input tự do.
+- `column-options` nhận cả payload filter phẳng của V1 và payload V2 `{ columnFilters, columnSearch, columnOperators, dateRanges }`; khi lấy options của một cột, service chỉ áp dụng bộ lọc chéo từ các cột còn lại.
+- Kiểm chứng DB phải lấy `DATABASE_URL` trực tiếp từ `erp-api/.env`, chạy `SELECT current_database()` trước truy vấn và chỉ đọc schema/list trên production.

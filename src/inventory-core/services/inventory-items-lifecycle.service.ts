@@ -364,6 +364,12 @@ export class InventoryItemsLifecycleService {
     const productionOrderIds = txns
       .filter((t) => t.documentType === 'PRODUCTION_ORDER' && t.documentId)
       .map((t) => t.documentId);
+    const purchaseOrderIds = txns
+      .filter((t) => t.documentType === 'PURCHASE_ORDER' && t.documentId)
+      .map((t) => t.documentId);
+    const salesOrderIds = txns
+      .filter((t) => t.documentType === 'SALES_ORDER' && t.documentId)
+      .map((t) => t.documentId);
 
     const docNoMap: Record<string, string> = {};
 
@@ -372,7 +378,7 @@ export class InventoryItemsLifecycleService {
         `SELECT id, receipt_no FROM public.erp_goods_receipts WHERE id = ANY($1)`,
         [receiptIds],
       );
-      receipts.forEach((r) => (docNoMap[r.id] = r.receipt_no));
+      receipts.forEach((r: any) => (docNoMap[r.id] = r.receipt_no));
     }
 
     if (issueIds.length > 0) {
@@ -380,7 +386,7 @@ export class InventoryItemsLifecycleService {
         `SELECT id, issue_no FROM public.erp_goods_issues WHERE id = ANY($1)`,
         [issueIds],
       );
-      issues.forEach((i) => (docNoMap[i.id] = i.issue_no));
+      issues.forEach((i: any) => (docNoMap[i.id] = i.issue_no));
     }
 
     if (adjustmentIds.length > 0) {
@@ -388,15 +394,31 @@ export class InventoryItemsLifecycleService {
         `SELECT id, adjustment_no FROM public.erp_inventory_adjustments WHERE id = ANY($1)`,
         [adjustmentIds],
       );
-      adjustments.forEach((a) => (docNoMap[a.id] = a.adjustment_no));
+      adjustments.forEach((a: any) => (docNoMap[a.id] = a.adjustment_no));
     }
 
     if (productionOrderIds.length > 0) {
-      const pos = await this.dataSource.query(
-        `SELECT id, po_no FROM public.erp_production_orders WHERE id = ANY($1)`,
+      const mos = await this.dataSource.query(
+        `SELECT id, reference_no FROM public.erp_production_orders WHERE id = ANY($1)`,
         [productionOrderIds],
       );
-      pos.forEach((p) => (docNoMap[p.id] = p.po_no));
+      mos.forEach((p: any) => (docNoMap[p.id] = p.reference_no));
+    }
+
+    if (purchaseOrderIds.length > 0) {
+      const pos = await this.dataSource.query(
+        `SELECT id, po_no FROM public.erp_purchase_orders WHERE id = ANY($1)`,
+        [purchaseOrderIds],
+      );
+      pos.forEach((p: any) => (docNoMap[p.id] = p.po_no));
+    }
+
+    if (salesOrderIds.length > 0) {
+      const sos = await this.dataSource.query(
+        `SELECT id, so_no FROM public.erp_sales_orders WHERE id = ANY($1)`,
+        [salesOrderIds],
+      );
+      sos.forEach((s: any) => (docNoMap[s.id] = s.so_no));
     }
 
     let running = 0;

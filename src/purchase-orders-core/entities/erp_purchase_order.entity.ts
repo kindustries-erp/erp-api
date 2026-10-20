@@ -10,7 +10,7 @@ import {
   OneToMany,
 } from 'typeorm';
 
-import { ErpBusinessPartner } from '../../business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
 import { ErpPurchaseOrderLine } from './erp_purchase_order_line.entity';
 
 @Entity({ name: 'erp_purchase_orders' })

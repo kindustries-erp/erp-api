@@ -68,3 +68,84 @@ export function extractNetPayableAmount(item: any): number {
 
   return isNaN(tienCoThue) ? 0 : tienCoThue;
 }
+
+/**
+ * Trích xuất trường Phân loại xe (NguonGocKhachHangName / NguonGocKhachHangCode) từ payload KGara
+ */
+export function extractKgaraClassification(item: any): {
+  kgaraClassification: string | null;
+  kgaraClassificationCode: string | null;
+} {
+  if (!item)
+    return { kgaraClassification: null, kgaraClassificationCode: null };
+  const raw = item.rawData || item;
+
+  const code =
+    (
+      raw.NguonGocKhachHangCode ??
+      raw.nguonGocKhachHangCode ??
+      item.kgaraClassificationCode ??
+      ''
+    )
+      ?.toString()
+      .trim() || null;
+  const name =
+    (
+      raw.NguonGocKhachHangName ??
+      raw.nguonGocKhachHangName ??
+      item.kgaraClassification ??
+      ''
+    )
+      ?.toString()
+      .trim() || null;
+
+  return {
+    kgaraClassification: name,
+    kgaraClassificationCode: code,
+  };
+}
+
+/**
+ * Ánh xạ giá trị NguonGocKhachHang từ KGara → ERP classification.
+ * Quy tắc:
+ * 1. NBPQ (Nội Bộ PQ) -> 'OJ'
+ * 2. Sales tặng -> 'KHAC'
+ * 3. Tất cả các phân loại còn lại từ KGara (Xe ký gửi, Ký gửi NSG, KG-NB...) -> 'KY_GUI_NOI_BO'
+ * 4. Không có dữ liệu (null/rỗng) -> null (chờ user phân loại trên ERP)
+ *
+ * Chú ý: Kết quả này CHỈ dùng để tự động điền khi classification trong DB đang là NULL.
+ * Không bao giờ dùng để ghi đè classification đã có trên ERP.
+ */
+export function mapKgaraClassificationToErp(
+  nguonGocCode?: string | null,
+  nguonGocName?: string | null,
+): string | null {
+  const normCode = (nguonGocCode || '').trim().toUpperCase();
+  const normName = (nguonGocName || '').trim().toUpperCase();
+
+  // Không có thông tin từ KGara -> giữ null
+  if (!normCode && !normName) {
+    return null;
+  }
+
+  // 1. NBPQ (Nội Bộ Phú Quốc) -> OJ
+  if (
+    normCode === 'NBPQ' ||
+    normName.includes('NỘI BỘ PQ') ||
+    normName.includes('NOI BO PQ')
+  ) {
+    return 'OJ';
+  }
+
+  // 2. Sales tặng -> KHAC
+  if (
+    normCode.includes('SALES') ||
+    normName.includes('SALES TẶNG') ||
+    normName.includes('SALES TANG')
+  ) {
+    return 'KHAC';
+  }
+
+  // 3. Tất cả các trường hợp còn lại có phân loại từ KGara -> KY_GUI_NOI_BO
+  return 'KY_GUI_NOI_BO';
+}

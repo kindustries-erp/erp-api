@@ -194,9 +194,9 @@ const { isActionBlocked } = useSystemOperationLock({ module: "INVENTORY" });
 Khi sửa đổi module `system-operations-core`, bắt buộc thực thi:
 ```bash
 # 1. Chạy Unit Test Backend
-cd /home/dev/repos/erp/erp-api && bunx jest src/system-operations-core/system-operations-core.service.spec.ts --verbose
+cd erp/erp-api && bunx jest src/system-operations-core/system-operations-core.service.spec.ts --verbose
 
 # 2. Chạy CI Quality Gate Backend & Frontend
-cd /home/dev/repos/erp/erp-api && bun run check:ci
-cd /home/dev/repos/erp/erp-web && bun run check:ci
+cd erp/erp-api && bun run check:ci
+cd erp/erp-web && bun run check:ci
 ```

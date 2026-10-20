@@ -202,6 +202,74 @@ describe('GarageOpexService', () => {
     );
   });
 
+  describe('dòng opex sinh từ phiếu chi garage', () => {
+    const sourced = {
+      id: 'uuid-src',
+      periodYear: 2026,
+      periodMonth: 10,
+      categoryKey: 'CHI_PHI_TRUC_TIEP_KHAC',
+      categoryName: 'Chi phí trực tiếp khác (Tính vào Giá vốn)',
+      amount: 1200000,
+      ojAmount: 0,
+      sourceCashflowVoucherId: 'voucher-1',
+      createdAt: new Date(),
+    };
+
+    it('tính vào directCost (Giá vốn), không vào opex', async () => {
+      opexRepo.find.mockResolvedValue([sourced]);
+      const summary = await service.getSummaryByPeriod(2026, 10);
+      expect(summary.directCost.total).toBe(1200000);
+      expect(summary.directCost.items).toHaveLength(1);
+      expect(summary.opex.total).toBe(0);
+    });
+
+    it('HHBH vào selling (Chi phí bán hàng), không vào giá vốn hay opex', async () => {
+      opexRepo.find.mockResolvedValue([
+        {
+          ...sourced,
+          id: 'uuid-hhbh',
+          categoryKey: 'HHBH',
+          categoryName: 'HHBH',
+          amount: 900000,
+          ojAmount: 100000,
+        },
+      ]);
+      const summary = await service.getSummaryByPeriod(2026, 10);
+      expect(summary.selling.total).toBe(900000);
+      expect(summary.selling.ojTotal).toBe(100000);
+      expect(summary.selling.items).toHaveLength(1);
+      expect(summary.directCost.total).toBe(0);
+      expect(summary.commission.total).toBe(0);
+      expect(summary.opex.total).toBe(0);
+    });
+
+    it('VAT_TU_TIEU_HAO vào directCost (Giá vốn)', async () => {
+      opexRepo.find.mockResolvedValue([
+        { ...sourced, categoryKey: 'VAT_TU_TIEU_HAO', amount: 300000 },
+      ]);
+      const summary = await service.getSummaryByPeriod(2026, 10);
+      expect(summary.directCost.total).toBe(300000);
+      expect(summary.selling.total).toBe(0);
+    });
+
+    it('chặn sửa, xóa và áp dụng định kỳ thủ công', async () => {
+      opexRepo.findOne.mockResolvedValue({ ...sourced });
+      await expect(service.update('uuid-src', { amount: 1 })).rejects.toThrow(
+        'phiếu chi garage',
+      );
+      await expect(service.delete('uuid-src')).rejects.toThrow(
+        'phiếu chi garage',
+      );
+      await expect(
+        service.applyRecurring('uuid-src', {
+          applyScope: 'this',
+          amount: 1,
+        }),
+      ).rejects.toThrow('phiếu chi garage');
+      expect(opexRepo.remove).not.toHaveBeenCalled();
+    });
+  });
+
   it('should throw BadRequestException when trying to edit auto commission virtual id', async () => {
     await expect(
       service.update('auto-sale-2026-08', {

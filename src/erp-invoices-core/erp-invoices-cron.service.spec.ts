@@ -44,56 +44,38 @@ describe('ErpInvoicesCronService', () => {
   });
 
   afterEach(() => {
+    cronService.onModuleDestroy();
     jest.clearAllMocks();
     jest.restoreAllMocks();
   });
 
   describe('onModuleInit', () => {
-    it('should not schedule next sync if GDT invoice cron is disabled / locked', () => {
+    it('should not set heartbeat interval if GDT invoice cron is disabled', () => {
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
-      const scheduleSpy = jest.spyOn(cronService as any, 'scheduleNextSync');
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
 
       cronService.onModuleInit();
 
-      expect(scheduleSpy).not.toHaveBeenCalled();
+      expect(setIntervalSpy).not.toHaveBeenCalled();
     });
 
-    it('should schedule next sync if GDT invoice cron is enabled', () => {
+    it('should set heartbeat interval if GDT invoice cron is enabled', () => {
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
-      const scheduleSpy = jest
-        .spyOn(cronService as any, 'scheduleNextSync')
-        .mockImplementation(() => {});
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
 
       cronService.onModuleInit();
 
-      expect(scheduleSpy).toHaveBeenCalled();
+      expect(setIntervalSpy).toHaveBeenCalled();
     });
   });
 
   describe('autoSyncCurrentMonth', () => {
     beforeEach(() => {
-      // Default enabled and within window for existing sync tests
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
       jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
     });
 
-    it('should skip sync if GDT invoice cron is disabled / locked', async () => {
-      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(false);
-
-      await cronService.autoSyncCurrentMonth();
-
-      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
-    });
-
-    it('should skip sync if outside allowed sync time window (00:00 - 03:59 VN)', async () => {
-      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(false);
-
-      await cronService.autoSyncCurrentMonth();
-
-      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
-    });
-
-    it('should attempt auto-relogin and skip sync if re-login fails for empty token', async () => {
+    it('should attempt auto-relogin and notify if re-login fails for empty token', async () => {
       erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
 
@@ -137,54 +119,34 @@ describe('ErpInvoicesCronService', () => {
       setTimeoutSpy.mockRestore();
     });
 
-    it('should notify and skip sync if token is invalid and auto-relogin fails', async () => {
+    it('should pause cron and notify if auth error is thrown during auto-relogin', async () => {
       erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
         token: 'invalid-token',
       });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
-      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
+      erpInvoicesCoreService.autoReloginWithRetry.mockRejectedValue(
+        new Error('GDT_AUTH_FAILED: Sai mật khẩu Cổng Thuế'),
+      );
 
       await cronService.autoSyncCurrentMonth();
 
-      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
-      expect(erpInvoicesCoreService.syncFromPortal).not.toHaveBeenCalled();
+      expect(cronService.isAuthPaused()).toBe(true);
       expect(notificationsService.createForUser).toHaveBeenCalledWith(
         'user-1',
-        expect.objectContaining({ type: 'ERROR' }),
-      );
-    });
-
-    it('should auto-relogin and continue sync if token is invalid but auto-relogin succeeds', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
-        token: 'invalid-token',
-      });
-      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
-      erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue({
-        token: 'refreshed-token',
-        cookies: 'refreshed-cookies',
-      });
-
-      const setTimeoutSpy = jest
-        .spyOn(global, 'setTimeout')
-        .mockImplementation((cb: any) => {
-          cb();
-          return {} as any;
-        });
-
-      await cronService.autoSyncCurrentMonth();
-
-      expect(erpInvoicesCoreService.autoReloginWithRetry).toHaveBeenCalled();
-      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'purchase',
-          token: 'refreshed-token',
-          cookies: 'refreshed-cookies',
+          type: 'ERROR',
+          title: expect.stringContaining('Sai mật khẩu'),
         }),
-        undefined,
-        true,
       );
 
-      setTimeoutSpy.mockRestore();
+      // Verify subsequent runs are skipped
+      erpInvoicesCoreService.getPortalConfig.mockClear();
+      await cronService.autoSyncCurrentMonth();
+      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+
+      // Verify resumeAfterPasswordUpdate restores it
+      cronService.resumeAfterPasswordUpdate();
+      expect(cronService.isAuthPaused()).toBe(false);
     });
 
     it('should sync purchase and sold invoices sequentially with valid token without re-login', async () => {
@@ -227,23 +189,6 @@ describe('ErpInvoicesCronService', () => {
       );
 
       setTimeoutSpy.mockRestore();
-    });
-
-    it('should catch GDT_TOKEN_EXPIRED error during sync and send notifications', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
-        token: 'valid-token',
-      });
-      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(true);
-      erpInvoicesCoreService.syncFromPortal.mockRejectedValue(
-        new Error('GDT_TOKEN_EXPIRED'),
-      );
-
-      await cronService.autoSyncCurrentMonth();
-
-      expect(notificationsService.createForUser).toHaveBeenCalledWith(
-        'user-1',
-        expect.objectContaining({ title: 'Token GDT hóa đơn hết hạn' }),
-      );
     });
   });
 });

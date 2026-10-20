@@ -11,7 +11,7 @@ import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
-import { BusinessPartnersCoreModule } from './business-partners-core/business-partners-core.module';
+import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -37,7 +37,6 @@ import { ErpAttachmentsCoreModule } from './erp-attachments-core/erp-attachments
 import { CompanyProfileModule } from './company-profile/company-profile.module';
 import { FilesModule } from './files/files.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { isCronEnabled } from './common/utils/cron.util';
 import { CommonModule } from './common/common.module';
 import { TagsCoreModule } from './tags-core/tags-core.module';
 import { BankTransactionsCoreModule } from './bank-transactions-core/bank-transactions-core.module';
@@ -53,10 +52,12 @@ import { OperatingExpensesCoreModule } from './operating-expenses-core/operating
 import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
+import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
+// plop:api-v2-imports
 
 @Module({
   imports: [
-    ...(isCronEnabled() ? [ScheduleModule.forRoot()] : []),
+    ScheduleModule.forRoot(),
     SystemOperationsCoreModule,
     ReportsCoreModule,
     CommonModule,
@@ -161,6 +162,8 @@ import { SystemOperationsCoreModule } from './system-operations-core/system-oper
     OperatingExpensesCoreModule,
     VinfastPartsModule,
     AppConfigModule,
+    AiHubCoreModule,
+    // plop:api-v2-modules
   ],
   controllers: [AppController],
   providers: [

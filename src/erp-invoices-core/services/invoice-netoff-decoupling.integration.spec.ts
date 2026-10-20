@@ -128,12 +128,17 @@ function setupFixture() {
     ),
   };
 
+  const transactionAccountingService = {
+    refreshJournalEntriesForBankTransaction: jest.fn(async () => undefined),
+  };
+
   const service = new InvoiceLifecycleService(
     repository,
     { find: jest.fn(async () => []) } as any,
     { deleteObject: jest.fn() } as any,
     bankTransactionsCoreService as any,
     accountingCoreService as any,
+    transactionAccountingService as any,
   );
 
   return {
@@ -143,6 +148,7 @@ function setupFixture() {
     repository,
     bankTransactionsCoreService,
     accountingCoreService,
+    transactionAccountingService,
   };
 }
 

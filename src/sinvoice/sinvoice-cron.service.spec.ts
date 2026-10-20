@@ -19,7 +19,7 @@ describe('SinvoiceCronService', () => {
       }),
     };
     notificationsService = {
-      createForUser: jest.fn(),
+      createForUser: jest.fn().mockResolvedValue({}),
     };
     permissionRepo = {
       find: jest.fn().mockResolvedValue([{ roleId: 'role-1' }]),
@@ -46,29 +46,26 @@ describe('SinvoiceCronService', () => {
   });
 
   afterEach(() => {
+    cronService.onModuleDestroy();
     jest.clearAllMocks();
     jest.restoreAllMocks();
   });
 
   describe('onModuleInit', () => {
-    it('should not schedule next sync if invoice cron is disabled', () => {
+    it('should not set heartbeat interval if invoice cron is disabled', () => {
       jest.spyOn(cronUtil, 'isInvoiceCronEnabled').mockReturnValue(false);
-      const scheduleSpy = jest.spyOn(cronService as any, 'scheduleNextSync');
 
       cronService.onModuleInit();
 
-      expect(scheduleSpy).not.toHaveBeenCalled();
+      expect((cronService as any).intervalId).toBeUndefined();
     });
 
-    it('should schedule next sync if invoice cron is enabled', () => {
+    it('should set heartbeat interval if invoice cron is enabled', () => {
       jest.spyOn(cronUtil, 'isInvoiceCronEnabled').mockReturnValue(true);
-      const scheduleSpy = jest
-        .spyOn(cronService as any, 'scheduleNextSync')
-        .mockImplementation(() => {});
 
       cronService.onModuleInit();
 
-      expect(scheduleSpy).toHaveBeenCalled();
+      expect((cronService as any).intervalId).toBeDefined();
     });
   });
 
@@ -93,7 +90,7 @@ describe('SinvoiceCronService', () => {
       );
     });
 
-    it('should catch 401/403 Unauthorized error and log error without throwing or retrying', async () => {
+    it('should pause cron, notify admins and set auth pause flag on 401/403 Unauthorized error', async () => {
       jest.spyOn(cronUtil, 'isInvoiceCronEnabled').mockReturnValue(true);
       sinvoiceService.syncDraftsFromViettel.mockRejectedValue(
         new UnauthorizedException('HTTP 401 Unauthorized'),
@@ -102,12 +99,18 @@ describe('SinvoiceCronService', () => {
       await cronService.autoSyncDrafts();
 
       expect(sinvoiceService.syncDraftsFromViettel).toHaveBeenCalled();
-      expect((cronService as any).logger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Đăng nhập Viettel trả về lỗi xác thực (401/403)',
-        ),
-        expect.anything(),
+      expect(cronService.isAuthPaused()).toBe(true);
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          type: 'ERROR',
+          title: expect.stringContaining('Sai mật khẩu'),
+        }),
       );
+
+      // Verify resume
+      cronService.resumeAfterPasswordUpdate();
+      expect(cronService.isAuthPaused()).toBe(false);
     });
   });
 });

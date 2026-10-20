@@ -1,6 +1,6 @@
 ---
 name: erp-gate-0-precheck
-description: Gate 0 DB precheck cho ERP: xác minh schema, field, constraint và relation trực tiếp từ Postgres runtime thật qua DATABASE_URL trước khi code API hoặc UI.
+description: "Gate 0 DB precheck cho ERP: xác minh schema, field, constraint và relation trực tiếp từ Postgres runtime thật qua DATABASE_URL trước khi code API hoặc UI."
 ---
 
 # Kỹ năng Gate 0 DB Precheck (ERP)

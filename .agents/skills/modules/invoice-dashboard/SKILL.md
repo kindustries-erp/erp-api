@@ -9,6 +9,12 @@ description: Module tri thức Dashboard & Báo cáo Phân tích Hóa đơn (Inv
 
 Module `invoice-dashboard` (được triển khai tại `src/erp-invoices-core/invoice-dashboard.service.ts` và `src/erp-invoices-core/invoice-dashboard.controller.ts`) là trung tâm dữ liệu phân tích hóa đơn tài chính và đối soát công nợ VAT trong hệ thống Liouni ERP.
 
+> [!IMPORTANT]
+> **Phân định Ranh giới Kiến trúc & Đồng bộ Hệ Thống**:
+> - **Backend (`erp-api`)**: Skill này tập trung 100% vào nghiệp vụ xử lý API, Facade & 5 Sub-services tính toán tài chính (`invoice-dashboard.service.ts`).
+> - **Frontend (`erp-web`)**: Dashboard này đã được cấu trúc thành **Organism (Tầng L3)** nằm trong **Tab 0 ("Tổng quan" - `?tab=overview`)** của trang trung tâm `/erp-invoices` (Page L5). Toàn bộ đặc tả giao diện được quản lý thống nhất tại [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md) nhằm tránh phân mảnh tri thức. Không tồn tại sự trùng lặp (duplicate) giữa hai skills.
+> - **Vị trí điều hướng**: Nằm trong Menu Nhóm **"Hóa đơn"** (`InvoiceNavGroup`) > Sub-menu **"Hóa đơn"** (`/erp-invoices?tab=overview`).
+
 ### 1.1. Các tính năng cốt lõi:
 - **Biểu đồ Xu hướng Hóa đơn theo Tháng (`cashTrend` & VAT Stats)**:
   - `cashIn`: Tổng doanh thu từ hóa đơn đầu ra (`direction = 'OUT'`).
@@ -62,13 +68,21 @@ erp_invoices (Hóa đơn điện tử / Thuế)
 
 ```text
 src/erp-invoices-core/
-├── invoice-dashboard.controller.ts     # Controller khai báo endpoints, Swagger & RBAC guard
-├── invoice-dashboard.service.ts        # Service xử lý aggregation SQL, tính công nợ & xuất ExcelJS
-├── erp-invoices-core.module.ts         # Đăng ký Controller & Service, exports cho module khác
+├── invoice-dashboard.controller.ts            # Controller khai báo endpoints, Swagger & RBAC guard
+├── invoice-dashboard.service.ts               # FACADE: Chuyển tiếp calls tới 5 sub-services chuyên biệt
+├── erp-invoices-core.module.ts                # Đăng ký Controller & Providers
 ├── entities/
-│   ├── erp_invoice.entity.ts           # Entity hóa đơn chính
-│   └── erp_invoice_voucher_netoff.entity.ts # Entity cấn trừ hóa đơn - sao kê
-└── dto/                                # DTOs dùng chung cho invoice module
+│   ├── erp_invoice.entity.ts                  # Entity hóa đơn chính
+│   └── erp_invoice_voucher_netoff.entity.ts   # Entity cấn trừ hóa đơn - sao kê
+├── services/
+│   └── sub-services/
+│       ├── invoice-dashboard-helpers.ts       # Helpers: buildKeywordSqlClause, normalizeEffectiveDateTo, getExcelColLetter
+│       ├── invoice-dashboard-stats.service.ts # Sub-Service: getDashboardStats, getPartnerStats
+│       ├── invoice-dashboard-partners.service.ts # Sub-Service: getDashboardPartners
+│       ├── invoice-dashboard-export.service.ts # Sub-Service: exportExcel (5 worksheets), getDetailedInvoices
+│       ├── invoice-dashboard-analytics.service.ts # Sub-Service: getDebtsAnalytics (Aging & IFRS 9 ECL)
+│       └── invoice-dashboard-horizon.service.ts # Sub-Service: getTimeHorizonInvoices (CTE partner_lag, timelines, ticket sizes)
+└── dto/                                       # DTOs dùng chung cho invoice module
 ```
 
 ---
@@ -77,11 +91,13 @@ src/erp-invoices-core/
 
 Base Path: `/api/v1/erp-invoices/dashboard`  
 Guards: `JwtAuthGuard`, `CoreRbacGuard`  
-Resource RBAC: `invoices`
+Resource RBAC: `invoices` (stats, partners, export), `invoice_debts` (debts-analytics, time-horizons)
 
 | Method | Endpoint | Quyền yêu cầu | Query Parameters | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/stats` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Lấy biểu đồ xu hướng hóa đơn theo tháng (`cashIn`, `cashOut`, `vatIn`, `vatOut`) |
+| `GET` | `/debts-analytics` | `{ resource: 'invoice_debts', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Tổng quan tài chính công nợ, phân tầng tuổi nợ, dự báo dòng tiền thuật toán (`forecastHorizons`) & Top đối tác |
+| `GET` | `/time-horizons/:horizon/invoices` | `{ resource: 'invoice_debts', action: 'read' }` | `horizon` (param), `page`, `pageSize`, `search`, `direction`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách hóa đơn chi tiết theo từng mốc tuổi nợ / dự báo (`forecastNext7Days`, `forecastNext30Days`, `expectedCashflow`, `defaultRiskProvision`) kèm độ trễ TB & ngày dự kiến về tiền |
 | `GET` | `/partners` | `{ resource: 'invoices', action: 'read' }` | `page`, `pageSize`, `search`, `date_from`, `date_to`, `branch_id`, `sortBy`, `sortOrder`, `column_search`, `column_filters` | Danh sách phân trang tổng hợp doanh thu/chi phí và công nợ phải thu/phải trả theo đối tác |
 | `GET` | `/partners/:taxCode/stats` | `{ resource: 'invoices', action: 'read' }` | `taxCode` (param), `date_from`, `date_to` | Biểu đồ xu hướng doanh thu/chi phí riêng của một đối tác theo MST |
 | `GET` | `/export` | `{ resource: 'invoices', action: 'read' }` | `date_from`, `date_to`, `branch_id` | Xuất file báo cáo Excel 5 worksheets (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) |
@@ -143,9 +159,14 @@ Sử dụng thư viện `ExcelJS` dựng workbook với định dạng bảng ch
 - **`bank-transactions-core`**: Dữ liệu thanh toán sổ quỹ & sao kê qua bảng cấn trừ `erp_invoice_voucher_netoff`.
 - **`dashboard-core`**: `DashboardCoreService` có thể tích hợp dữ liệu hóa đơn vào overview điều hành chung.
 - **Frontend (`erp-web`)**:
-  - API Client: `src/modules/erp-invoices-core/api/erpInvoiceDashboardApi.ts`
-  - Màn hình chính: `src/pages/InvoiceDashboard.tsx`
-  - Drawers & Biểu đồ: `PartnerInvoiceDrawer.tsx`, `BranchVatChart.tsx`, `BranchInvoiceChart.tsx`.
+  - **API Client**: `src/modules/erp-invoices-core/api/erpInvoiceDashboardApi.ts`
+  - **Vị trí hiển thị trên giao diện**:
+    - **Tab 0 trên Trang Trung tâm**: Được tích hợp làm Tab **"Tổng quan"** (`tab=dashboard`) trong `organisms/erp-invoices-tab/ErpInvoicesTab.tsx` tại route `/erp-invoices`.
+    - **Page Wrapper**: `src/pages/ErpInvoicesPage.tsx` (`initialTab="dashboard"`).
+    - **Component gốc**: `src/pages/InvoiceDashboard.tsx` (nhúng nội bộ vào `ErpInvoicesTab`, điều khiển qua `currentTabKey === 'dashboard'`).
+    - **Legacy Route Wire**: Trong `App.tsx`, route `"invoice-dashboard": () => <ErpInvoicesPage initialTab="dashboard" />`.
+  - **Biểu đồ & Atomic Components**: `BranchVatChart.tsx`, `BranchInvoiceChart.tsx`, `InvoiceStatsCards.tsx`, `PartnerInvoiceDrawer.tsx`.
+  - **Skill Frontend tham chiếu**: [`erp-invoice-web`](erp/erp-web/.agents/skills/modules/erp-invoice/SKILL.md).
 
 ---
 

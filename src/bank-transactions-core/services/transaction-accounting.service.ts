@@ -255,7 +255,7 @@ export class TransactionAccountingService {
     });
     if (!txn) return;
 
-    const [apAccountRes, arAccountRes] = await Promise.all([
+    const [apAccountRes, arAccountRes, t0001Res] = await Promise.all([
       this.dataSource.query(
         `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
         ['331'],
@@ -264,9 +264,20 @@ export class TransactionAccountingService {
         `SELECT id FROM erp_chart_of_accounts WHERE account_code = $1 AND is_deleted = false LIMIT 1`,
         ['131'],
       ),
+      this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code IN ('T0001', '0001') AND is_deleted = false ORDER BY account_code DESC LIMIT 1`,
+      ),
     ]);
     const apAccountId = apAccountRes.length > 0 ? apAccountRes[0].id : null;
     const arAccountId = arAccountRes.length > 0 ? arAccountRes[0].id : null;
+    let t0001AccountId = t0001Res.length > 0 ? t0001Res[0].id : null;
+
+    if (!t0001AccountId) {
+      const fallbackRes = await this.dataSource.query(
+        `SELECT id FROM erp_chart_of_accounts WHERE account_code IN ('T000', '000') AND is_deleted = false ORDER BY account_code DESC LIMIT 1`,
+      );
+      if (fallbackRes.length > 0) t0001AccountId = fallbackRes[0].id;
+    }
 
     let defaultAccountId: string | null = null;
     if (txn.sourceType === 'BANK') {
@@ -315,11 +326,14 @@ export class TransactionAccountingService {
     };
     const groups: Group[] = [];
 
+    const defaultCounterpart =
+      txn.correspondentAccountingAccountId || t0001AccountId;
+
     if (netOffRows.length === 0) {
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
-        counterpartAccountId: txn.correspondentAccountingAccountId,
+        counterpartAccountId: defaultCounterpart,
         branchId: txn.branchId,
         description: baseDescription,
       });
@@ -332,11 +346,12 @@ export class TransactionAccountingService {
             ? row.seller_name || null
             : row.buyer_name || null;
 
-        let counterpartAccountId = txn.correspondentAccountingAccountId;
-        if (row.direction === 'IN' && apAccountId)
+        let counterpartAccountId = defaultCounterpart;
+        if (row.direction === 'IN' && apAccountId) {
           counterpartAccountId = apAccountId;
-        if (row.direction === 'OUT' && arAccountId)
+        } else if (row.direction === 'OUT' && arAccountId) {
           counterpartAccountId = arAccountId;
+        }
 
         const branchId = txn.branchId;
 
@@ -373,7 +388,7 @@ export class TransactionAccountingService {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
-          counterpartAccountId: txn.correspondentAccountingAccountId,
+          counterpartAccountId: defaultCounterpart,
           branchId: txn.branchId,
           description: baseDescription,
         });
@@ -384,8 +399,17 @@ export class TransactionAccountingService {
       `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
       [txn.id, txn.sourceType],
     );
+
+    // GUARD: Nếu chưa bật live auto-posting và chưa từng có bút toán trước đó, bỏ qua việc tự sinh
+    if (
+      process.env.ENABLE_LIVE_AUTO_POSTING !== 'true' &&
+      existingEntries.length === 0
+    ) {
+      return;
+    }
+
     const postingDate =
-      existingEntries.length > 0 ? existingEntries[0].date : new Date();
+      existingEntries.length > 0 ? existingEntries[0].date : txn.transDate;
 
     await this.accountingCoreService.deleteJournalEntryBySource(
       txn.id,
@@ -481,70 +505,6 @@ export class TransactionAccountingService {
       );
     }
 
-    // Bi-directional sync: Đồng bộ cấn trừ sang các Phiếu dịch vụ Garage đang liên kết với Hóa đơn này
-    try {
-      const linkedCases = await this.dataSource.query(
-        `SELECT l."caseDbId", l."linkType", c.id, c.tien_co_thue, c.doanh_thu
-         FROM kgara_case_linked_invoice l
-         JOIN kgara_cases c ON c.id = l."caseDbId"
-         WHERE l."invoiceId" = $1`,
-        [payload.invoiceId],
-      );
-
-      for (const lc of linkedCases) {
-        const caseId = lc.caseDbId || lc.id;
-        const isOut = (lc.linkType || invRow.direction) === 'OUT';
-        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-
-        const existingCaseSettlement = await this.dataSource.query(
-          `SELECT id FROM kgara_case_settlements WHERE case_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-          [caseId, txnId],
-        );
-
-        if (existingCaseSettlement && existingCaseSettlement.length > 0) {
-          await this.dataSource.query(
-            `UPDATE kgara_case_settlements SET amount = $1, updated_at = now() WHERE id = $2`,
-            [netOffAmount, existingCaseSettlement[0].id],
-          );
-        } else {
-          await this.dataSource.query(
-            `INSERT INTO kgara_case_settlements (id, case_id, bank_transaction_id, settlement_type, source_channel, amount, trans_date, partner_name, note, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, 'ON_SYSTEM', $4, $5, $6, $7, now(), now())`,
-            [
-              caseId,
-              txnId,
-              targetSettlementType,
-              netOffAmount,
-              txn.transDate || null,
-              txn.correspondentName ||
-                invRow.buyer_name ||
-                invRow.seller_name ||
-                null,
-              `Cấn trừ tự động từ hóa đơn ${invRow.invoice_no || ''}`.trim(),
-            ],
-          );
-        }
-
-        // Cập nhật lại công nợ phiếu dịch vụ
-        await this.dataSource.query(
-          `WITH sums AS (
-             SELECT COALESCE(SUM(amount), 0) as total_receipts
-             FROM kgara_case_settlements
-             WHERE case_id = $1 AND settlement_type = 'RECEIPT'
-           )
-           UPDATE kgara_cases
-           SET tien_da_thanh_toan = sums.total_receipts,
-               tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
-               updated_at = now()
-           FROM sums
-           WHERE id = $1`,
-          [caseId],
-        );
-      }
-    } catch (caseSyncErr) {
-      // Non-blocking
-    }
-
     // Refresh journal entries if needed
     try {
       await this.refreshJournalEntriesForBankTransaction(txnId);
@@ -566,8 +526,12 @@ export class TransactionAccountingService {
       [txnId, invoiceIdOrNetOffId],
     );
 
-    const affectedInvoiceIds = Array.from(
-      new Set(affectedNetOffs.map((r: any) => r.invoice_id).filter(Boolean)),
+    const affectedInvoiceIds: string[] = Array.from(
+      new Set(
+        affectedNetOffs
+          .map((r: any) => (r.invoice_id ? String(r.invoice_id) : ''))
+          .filter(Boolean),
+      ),
     );
 
     // 2. Xóa bản ghi net-off
@@ -576,42 +540,6 @@ export class TransactionAccountingService {
        WHERE bank_transaction_id = $1 AND (invoice_id = $2 OR id = $2)`,
       [txnId, invoiceIdOrNetOffId],
     );
-
-    // 3. Bi-directional cascade delete: Tự động xóa cấn trừ sao kê ở các Phiếu dịch vụ kết nối
-    try {
-      for (const invId of affectedInvoiceIds) {
-        const linkedCases = await this.dataSource.query(
-          `SELECT DISTINCT "caseDbId" FROM kgara_case_linked_invoice WHERE "invoiceId" = $1`,
-          [invId],
-        );
-
-        for (const lc of linkedCases) {
-          const caseId = lc.caseDbId;
-          await this.dataSource.query(
-            `DELETE FROM kgara_case_settlements WHERE case_id = $1 AND bank_transaction_id = $2`,
-            [caseId, txnId],
-          );
-
-          // Cập nhật lại công nợ phiếu dịch vụ
-          await this.dataSource.query(
-            `WITH sums AS (
-               SELECT COALESCE(SUM(amount), 0) as total_receipts
-               FROM kgara_case_settlements
-               WHERE case_id = $1 AND settlement_type = 'RECEIPT'
-             )
-             UPDATE kgara_cases
-             SET tien_da_thanh_toan = sums.total_receipts,
-                 tien_con_phai_thanh_toan = GREATEST(0, COALESCE(tien_co_thue, 0) - sums.total_receipts),
-                 updated_at = now()
-             FROM sums
-             WHERE id = $1`,
-            [caseId],
-          );
-        }
-      }
-    } catch (caseDelSyncErr) {
-      // Non-blocking
-    }
 
     // Refresh journal entries if needed
     try {

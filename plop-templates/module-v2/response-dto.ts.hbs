@@ -1,0 +1,18 @@
+import { ApiProperty{{#if hasOptionalField}}, ApiPropertyOptional{{/if}} } from '@nestjs/swagger';
+
+/** Hình dạng dữ liệu trả ra API. Không trả entity trực tiếp. */
+export class {{entityName}}ResponseDto {
+  @ApiProperty()
+  id: string;
+
+{{#each customFields}}
+  {{{this.responseSwagger}}}
+  {{this.name}}{{{this.nullableMark}}}: {{{this.responseType}}};
+
+{{/each}}
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
+}

@@ -85,6 +85,22 @@ export class KgaraSyncService {
     return this.syncCaseService.syncCaseDetail(branchExternalId, caseId);
   }
 
+  async syncCaseDetailsBatch(
+    branchExternalId?: string,
+    options?: {
+      from?: string;
+      to?: string;
+      force?: boolean;
+      concurrency?: number;
+    },
+  ): Promise<{
+    totalCasesProcessed: number;
+    totalLinesSynced: number;
+    errorsCount: number;
+  }> {
+    return this.syncCaseService.syncCaseDetailsBatch(branchExternalId, options);
+  }
+
   async getIncrementalWatermark(
     branchExternalId: string,
     endpoint: string,

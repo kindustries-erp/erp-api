@@ -5,24 +5,14 @@ import { ErpAttachmentsCoreService } from '../../erp-attachments-core/erp-attach
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { R2Service } from '../../r2/r2.service';
-import { BadRequestException, NotFoundException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-
-const archiveMocks = {
-  on: jest.fn(),
-  pipe: jest.fn(),
-  append: jest.fn(),
-  finalize: jest.fn().mockResolvedValue(undefined),
-};
-
-jest.mock('archiver', () => {
-  return jest.fn(() => archiveMocks);
-});
+import { NotFoundException } from '@nestjs/common';
+import { InvoiceBulkDownloadService } from './sub-services/invoice-bulk-download.service';
 
 describe('InvoiceFilesService', () => {
   let service: InvoiceFilesService;
   let repository: any;
   let r2Service: any;
+  let bulkDownload: any;
 
   beforeEach(async () => {
     repository = {
@@ -40,10 +30,11 @@ describe('InvoiceFilesService', () => {
       uploadBuffer: jest.fn(),
     };
 
-    Object.values(archiveMocks).forEach((mockFn: any) => {
-      if (mockFn?.mockReset) mockFn.mockReset();
-    });
-    archiveMocks.finalize.mockResolvedValue(undefined);
+    bulkDownload = {
+      downloadAllPdfsZip: jest.fn().mockResolvedValue(Buffer.from('zip')),
+      bulkDownloadFilesZip: jest.fn().mockResolvedValue(undefined),
+      bulkDownloadSelectedZip: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,15 +63,13 @@ describe('InvoiceFilesService', () => {
           },
         },
         {
-          provide: ConfigService,
-          useValue: { get: jest.fn() },
+          provide: InvoiceBulkDownloadService,
+          useValue: bulkDownload,
         },
-        Logger,
       ],
     }).compile();
 
     service = module.get<InvoiceFilesService>(InvoiceFilesService);
-    (service as any).createZipArchive = jest.fn(() => archiveMocks);
   });
 
   describe('deletePdf', () => {
@@ -151,62 +140,36 @@ describe('InvoiceFilesService', () => {
     });
   });
 
-  describe('bulkDownloadSelectedZip', () => {
-    it('should throw when ids are empty', async () => {
-      await expect(
-        service.bulkDownloadSelectedZip({ ids: [], types: ['pdf'] }, {}),
-      ).rejects.toThrow(BadRequestException);
-    });
+  describe('bulk ZIP delegation (Facade)', () => {
+    it('delegates bulkDownloadSelectedZip to the sub-service with the same args', async () => {
+      const payload = { ids: ['a'], types: ['pdf'] };
+      const res = {};
 
-    it('should throw when ids exceed limit', async () => {
-      const ids = Array.from({ length: 501 }, (_, i) => `id-${i}`);
-      await expect(
-        service.bulkDownloadSelectedZip({ ids, types: ['pdf'] }, {}),
-      ).rejects.toThrow('Tối đa 500 hóa đơn mỗi lần tải');
-    });
+      await service.bulkDownloadSelectedZip(payload, res);
 
-    it('should append files and include _FILE_LOI report for missing files', async () => {
-      repository.find.mockResolvedValue([
-        {
-          id: 'inv-1',
-          invoiceNo: '0001',
-          direction: 'IN',
-          sellerName: 'Cty A',
-          sellerTaxCode: '0101',
-          buyerName: 'B',
-          buyerTaxCode: '0202',
-          attachments: [
-            { attachment: { fileKey: 'k1', fileName: 'hoa_don_1.pdf' } },
-          ],
-          pdfFileKey: null,
-          xmlFileKey: null,
-        },
-      ]);
-      r2Service.downloadStream.mockResolvedValue('stream-data');
-
-      const res = {
-        headersSent: false,
-        status: jest.fn().mockReturnThis(),
-        send: jest.fn(),
-      };
-
-      await service.bulkDownloadSelectedZip(
-        { ids: ['inv-1'], types: ['pdf', 'xml'] },
+      expect(bulkDownload.bulkDownloadSelectedZip).toHaveBeenCalledWith(
+        payload,
         res,
       );
+    });
 
-      expect(repository.find).toHaveBeenCalled();
-      expect(r2Service.downloadStream).toHaveBeenCalledWith('k1');
-      expect(archiveMocks.append).toHaveBeenCalledWith('stream-data', {
-        name: expect.stringContaining('0001.pdf'),
-      });
-      expect(archiveMocks.append).toHaveBeenCalledWith(
-        expect.stringContaining('không có file XML'),
-        {
-          name: '_FILE_LOI.txt',
-        },
+    it('delegates bulkDownloadFilesZip to the sub-service', async () => {
+      const payload = { query: { direction: 'IN' }, types: ['xml'] };
+      const res = {};
+
+      await service.bulkDownloadFilesZip(payload, res);
+
+      expect(bulkDownload.bulkDownloadFilesZip).toHaveBeenCalledWith(
+        payload,
+        res,
       );
-      expect(archiveMocks.finalize).toHaveBeenCalled();
+    });
+
+    it('delegates downloadAllPdfsZip to the sub-service', async () => {
+      const buf = await service.downloadAllPdfsZip('inv-9');
+
+      expect(bulkDownload.downloadAllPdfsZip).toHaveBeenCalledWith('inv-9');
+      expect(buf).toEqual(Buffer.from('zip'));
     });
   });
 });

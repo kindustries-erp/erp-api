@@ -1,0 +1,44 @@
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { to{{entityName}}EntityFields, to{{entityName}}Response } from './{{entityKebab}}.mapper';
+
+describe('{{entityName}} mapper', () => {
+  const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  const entity = {
+    id: 'id-1',
+{{#each customFields}}
+    {{this.name}}: {{{this.fixture}}},
+{{/each}}
+    isDeleted: false,
+    createdAt,
+    updatedAt: createdAt,
+  } as {{entityName}};
+
+  it('maps the entity to the response DTO without isDeleted', () => {
+    expect(to{{entityName}}Response(entity)).toEqual({
+      id: 'id-1',
+{{#each customFields}}
+      {{this.name}}: {{{this.responseExpect}}},
+{{/each}}
+      createdAt,
+      updatedAt: createdAt,
+    });
+  });
+
+  it('converts DTO input to entity fields', () => {
+    expect(
+      to{{entityName}}EntityFields({
+{{#each customFields}}
+        {{this.name}}: {{{this.dtoFixture}}},
+{{/each}}
+      }),
+    ).toEqual({
+{{#each customFields}}
+      {{this.name}}: {{{this.entityExpect}}},
+{{/each}}
+    });
+  });
+
+  it('keeps only the keys that were provided', () => {
+    expect(to{{entityName}}EntityFields({})).toEqual({});
+  });
+});

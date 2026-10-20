@@ -11,6 +11,13 @@ import {
   UpdateGarageOpexDto,
   ListGarageOpexQueryDto,
 } from '../dto/garage-opex.dto';
+import {
+  applyOpexListFilters,
+  applyOpexListSorting,
+  buildOpexColumnOptionsQuery,
+  COGS_GROUP_CATEGORIES,
+  SELLING_COMMISSION_CATEGORIES,
+} from '../helpers/garage-opex-query.builder';
 
 @Injectable()
 export class GarageOpexService {
@@ -28,299 +35,8 @@ export class GarageOpexService {
 
     const qb = this.opexRepo.createQueryBuilder('opex');
 
-    // Filter year / month
-    if (query.year) {
-      qb.andWhere('opex.period_year = :year', { year: Number(query.year) });
-    }
-    if (query.month) {
-      qb.andWhere('opex.period_month = :month', {
-        month: Number(query.month),
-      });
-    }
-
-    // Filter date_from / date_to (Period range)
-    if (query.date_from) {
-      const fromParts = query.date_from.split('-').map(Number);
-      const fromYear = fromParts[0];
-      const fromMonth = fromParts[1] || 1;
-      const fromPeriodInt = fromYear * 100 + fromMonth;
-      qb.andWhere(
-        '(opex.period_year * 100 + opex.period_month) >= :fromPeriodInt',
-        {
-          fromPeriodInt,
-        },
-      );
-    }
-    if (query.date_to) {
-      const toParts = query.date_to.split('-').map(Number);
-      const toYear = toParts[0];
-      const toMonth = toParts[1] || 12;
-      const toPeriodInt = toYear * 100 + toMonth;
-      qb.andWhere(
-        '(opex.period_year * 100 + opex.period_month) <= :toPeriodInt',
-        {
-          toPeriodInt,
-        },
-      );
-    }
-
-    // Filter cost_group (OPEX | COGS | COMMISSION)
-    if (query.cost_group && query.cost_group !== 'ALL') {
-      if (query.cost_group === 'OPEX') {
-        qb.andWhere('opex.category_key NOT IN (:...cogsAndComm)', {
-          cogsAndComm: [
-            'HOA_HONG_TRUC_TIEP',
-            'CHI_PHI_TRUC_TIEP_KHAC',
-            'HOA_HONG_SALE',
-            'HOA_HONG_DV',
-            'HOA_HONG_KHAC',
-          ],
-        });
-      } else if (query.cost_group === 'COGS') {
-        qb.andWhere('opex.category_key IN (:...cogs)', {
-          cogs: ['HOA_HONG_TRUC_TIEP', 'CHI_PHI_TRUC_TIEP_KHAC'],
-        });
-      } else if (query.cost_group === 'COMMISSION') {
-        qb.andWhere('opex.category_key IN (:...comm)', {
-          comm: ['HOA_HONG_SALE', 'HOA_HONG_DV', 'HOA_HONG_KHAC'],
-        });
-      }
-    }
-
-    // Column Filters
-    if (query.column_filters) {
-      try {
-        const filters = JSON.parse(query.column_filters) as Record<
-          string,
-          string[]
-        >;
-        for (const [col, values] of Object.entries(filters)) {
-          if (!values || values.length === 0) continue;
-
-          if (values[0] === '__ALL_MATCHING__') {
-            const searchVal = (values[1] || '').trim();
-            if (!searchVal) continue;
-            if (col === 'categoryKey') {
-              qb.andWhere('opex.category_key ILIKE :catKeySearch', {
-                catKeySearch: `%${searchVal}%`,
-              });
-            } else if (col === 'categoryName') {
-              qb.andWhere('opex.category_name ILIKE :catNameSearch', {
-                catNameSearch: `%${searchVal}%`,
-              });
-            } else if (col === 'note') {
-              qb.andWhere('opex.note ILIKE :noteSearch', {
-                noteSearch: `%${searchVal}%`,
-              });
-            }
-            continue;
-          }
-
-          if (col === 'categoryKey') {
-            qb.andWhere('opex.category_key IN (:...catKeys)', {
-              catKeys: values,
-            });
-          } else if (col === 'categoryName') {
-            qb.andWhere('opex.category_name IN (:...catNames)', {
-              catNames: values,
-            });
-          } else if (col === 'costGroup') {
-            const opexGroupCats = [
-              'NHAN_SU',
-              'THUE_MAT_BANG',
-              'DIEN_NUOC',
-              'VAT_TU_TIEU_HAO',
-              'BAO_TRI',
-              'KHAU_HAO',
-              'KHAC',
-            ];
-            const cogsGroupCats = [
-              'HOA_HONG_TRUC_TIEP',
-              'CHI_PHI_TRUC_TIEP_KHAC',
-            ];
-            const commGroupCats = [
-              'HOA_HONG_SALE',
-              'HOA_HONG_DV',
-              'HOA_HONG_KHAC',
-            ];
-            const targetCats: string[] = [];
-            if (values.includes('OPEX')) targetCats.push(...opexGroupCats);
-            if (values.includes('COGS')) targetCats.push(...cogsGroupCats);
-            if (values.includes('COMMISSION'))
-              targetCats.push(...commGroupCats);
-            if (targetCats.length > 0) {
-              qb.andWhere('opex.category_key IN (:...cgCats)', {
-                cgCats: targetCats,
-              });
-            }
-          } else if (col === 'amount') {
-            const numAmounts = values
-              .map(Number)
-              .filter((n) => !Number.isNaN(n));
-            if (numAmounts.length > 0) {
-              qb.andWhere('opex.amount IN (:...numAmounts)', { numAmounts });
-            }
-          } else if (col === 'recurrenceType') {
-            const hasBlank = values.includes('__BLANK__');
-            const cleanValues = values.filter((v) => v !== '__BLANK__');
-            if (hasBlank && cleanValues.length > 0) {
-              qb.andWhere(
-                "(opex.recurrence_type IN (:...recTypes) OR opex.recurrence_type IS NULL OR opex.recurrence_type = '')",
-                { recTypes: cleanValues },
-              );
-            } else if (hasBlank) {
-              qb.andWhere(
-                "(opex.recurrence_type IS NULL OR opex.recurrence_type = '')",
-              );
-            } else if (cleanValues.length > 0) {
-              qb.andWhere('opex.recurrence_type IN (:...recTypes)', {
-                recTypes: cleanValues,
-              });
-            }
-          } else if (col === 'note') {
-            const hasBlank = values.includes('__BLANK__');
-            const cleanValues = values.filter((v) => v !== '__BLANK__');
-            if (hasBlank && cleanValues.length > 0) {
-              qb.andWhere(
-                "(opex.note IN (:...notes) OR opex.note IS NULL OR opex.note = '')",
-                { notes: cleanValues },
-              );
-            } else if (hasBlank) {
-              qb.andWhere("(opex.note IS NULL OR opex.note = '')");
-            } else if (cleanValues.length > 0) {
-              qb.andWhere('opex.note IN (:...notes)', { notes: cleanValues });
-            }
-          } else if (col === 'period') {
-            // format MM/YYYY
-            const periodConditions = values.map((p, idx) => {
-              const [m, y] = p.split('/').map(Number);
-              return `(opex.period_month = :pMonth_${idx} AND opex.period_year = :pYear_${idx})`;
-            });
-            const periodParams = values.reduce(
-              (acc, p, idx) => {
-                const [m, y] = p.split('/').map(Number);
-                acc[`pMonth_${idx}`] = m;
-                acc[`pYear_${idx}`] = y;
-                return acc;
-              },
-              {} as Record<string, number>,
-            );
-            if (periodConditions.length > 0) {
-              qb.andWhere(`(${periodConditions.join(' OR ')})`, periodParams);
-            }
-          } else if (col === 'recurrenceUntil') {
-            const hasBlank = values.includes('__BLANK__');
-            const validPeriods = values.filter((v) => v !== '__BLANK__');
-            const untilConditions = validPeriods.map((p, idx) => {
-              const [m, y] = p.split('/').map(Number);
-              return `(opex.recurrence_until_month = :ruMonth_${idx} AND opex.recurrence_until_year = :ruYear_${idx})`;
-            });
-            const untilParams = validPeriods.reduce(
-              (acc, p, idx) => {
-                const [m, y] = p.split('/').map(Number);
-                acc[`ruMonth_${idx}`] = m;
-                acc[`ruYear_${idx}`] = y;
-                return acc;
-              },
-              {} as Record<string, number>,
-            );
-            if (hasBlank && untilConditions.length > 0) {
-              qb.andWhere(
-                `(${untilConditions.join(' OR ')} OR opex.recurrence_until_year IS NULL OR opex.recurrence_until_month IS NULL)`,
-                untilParams,
-              );
-            } else if (hasBlank) {
-              qb.andWhere(
-                '(opex.recurrence_until_year IS NULL OR opex.recurrence_until_month IS NULL)',
-              );
-            } else if (untilConditions.length > 0) {
-              qb.andWhere(`(${untilConditions.join(' OR ')})`, untilParams);
-            }
-          }
-        }
-      } catch (err) {
-        // ignore parse error
-      }
-    }
-
-    // Column Search
-    if (query.column_search) {
-      try {
-        const searches = JSON.parse(query.column_search) as Record<
-          string,
-          string
-        >;
-        for (const [col, val] of Object.entries(searches)) {
-          if (!val || !val.trim()) continue;
-          const searchVal = `%${val.trim()}%`;
-          if (col === 'categoryKey') {
-            qb.andWhere('opex.category_key ILIKE :cSearchKey', {
-              cSearchKey: searchVal,
-            });
-          } else if (col === 'categoryName') {
-            qb.andWhere('opex.category_name ILIKE :cSearchName', {
-              cSearchName: searchVal,
-            });
-          } else if (col === 'amount') {
-            qb.andWhere('CAST(opex.amount AS TEXT) ILIKE :cSearchAmt', {
-              cSearchAmt: searchVal,
-            });
-          } else if (col === 'note') {
-            qb.andWhere('opex.note ILIKE :cSearchNote', {
-              cSearchNote: searchVal,
-            });
-          } else if (col === 'recurrenceType') {
-            qb.andWhere('opex.recurrence_type ILIKE :cSearchRec', {
-              cSearchRec: searchVal,
-            });
-          }
-        }
-      } catch (err) {
-        // ignore parse error
-      }
-    }
-
-    // Sorting
-    const sortList = Array.isArray(query.sorts)
-      ? query.sorts
-      : query.sorts
-        ? [query.sorts]
-        : [];
-    if (sortList.length > 0) {
-      for (const s of sortList) {
-        const isDesc = s.startsWith('-');
-        const field = isDesc ? s.substring(1) : s;
-        const direction = isDesc ? 'DESC' : 'ASC';
-
-        if (field === 'period' || field === 'periodYear') {
-          qb.addOrderBy('opex.period_year', direction);
-          qb.addOrderBy('opex.period_month', direction);
-        } else if (field === 'categoryKey') {
-          qb.addOrderBy('opex.category_key', direction);
-        } else if (field === 'categoryName') {
-          qb.addOrderBy('opex.category_name', direction);
-        } else if (field === 'amount') {
-          qb.addOrderBy('opex.amount', direction);
-        } else if (field === 'recurrenceType') {
-          qb.addOrderBy('opex.recurrence_type', direction);
-        } else if (
-          field === 'recurrenceUntil' ||
-          field === 'recurrenceUntilYear'
-        ) {
-          qb.addOrderBy('opex.recurrence_until_year', direction);
-          qb.addOrderBy('opex.recurrence_until_month', direction);
-        } else if (field === 'note') {
-          qb.addOrderBy('opex.note', direction);
-        } else if (field === 'createdAt') {
-          qb.addOrderBy('opex.created_at', direction);
-        }
-      }
-    } else {
-      // Default sorting: periodYear DESC, periodMonth DESC, createdAt DESC
-      qb.orderBy('opex.period_year', 'DESC')
-        .addOrderBy('opex.period_month', 'DESC')
-        .addOrderBy('opex.created_at', 'DESC');
-    }
+    applyOpexListFilters(qb, query);
+    applyOpexListSorting(qb, query.sorts);
 
     const [rawItems, total] = await qb
       .skip((page - 1) * pageSize)
@@ -357,51 +73,12 @@ export class GarageOpexService {
     const safePageSize = Math.max(Number(pageSize) || 20, 1);
 
     const qb = this.opexRepo.createQueryBuilder('opex');
-
-    if (filtersStr) {
-      try {
-        const filters = JSON.parse(filtersStr) as Record<string, string[]>;
-        for (const [col, values] of Object.entries(filters)) {
-          if (col === columnKey || !values || values.length === 0) continue;
-          if (col === 'categoryKey') {
-            qb.andWhere('opex.category_key IN (:...filterCatKeys)', {
-              filterCatKeys: values,
-            });
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    let distinctField = 'opex.category_name';
-    let fieldAlias = 'value';
-
-    if (columnKey === 'categoryKey') {
-      distinctField = 'opex.category_key';
-    } else if (columnKey === 'categoryName') {
-      distinctField = 'opex.category_name';
-    } else if (columnKey === 'period') {
-      distinctField = `LPAD(opex.period_month::text, 2, '0') || '/' || opex.period_year::text`;
-    } else if (columnKey === 'recurrenceType') {
-      distinctField = 'opex.recurrence_type';
-    } else if (columnKey === 'recurrenceUntil') {
-      distinctField = `LPAD(opex.recurrence_until_month::text, 2, '0') || '/' || opex.recurrence_until_year::text`;
-    } else if (columnKey === 'amount') {
-      distinctField = 'opex.amount::text';
-    } else if (columnKey === 'note') {
-      distinctField = 'opex.note';
-    }
-
-    qb.select(`DISTINCT (${distinctField})`, fieldAlias);
-
-    if (search && search.trim()) {
-      qb.andWhere(`${distinctField} ILIKE :search`, {
-        search: `%${search.trim()}%`,
-      });
-    }
-
-    qb.orderBy(fieldAlias, 'ASC');
+    const { fieldAlias } = buildOpexColumnOptionsQuery(
+      qb,
+      columnKey,
+      search,
+      filtersStr,
+    );
 
     const allOptions = await qb.getRawMany();
     const values = allOptions
@@ -520,6 +197,8 @@ export class GarageOpexService {
       );
     }
 
+    this.assertNotVoucherSourced(item);
+
     if (dto.periodYear !== undefined) item.periodYear = Number(dto.periodYear);
     if (dto.periodMonth !== undefined)
       item.periodMonth = Number(dto.periodMonth);
@@ -579,6 +258,8 @@ export class GarageOpexService {
         'Hoa hồng tự động không hỗ trợ thiết lập chi phí định kỳ.',
       );
     }
+
+    this.assertNotVoucherSourced(item);
 
     if (dto.amount !== undefined) item.amount = Number(dto.amount) || 0;
     if (dto.ojAmount !== undefined) item.ojAmount = Number(dto.ojAmount) || 0;
@@ -706,8 +387,18 @@ export class GarageOpexService {
     if (!item) {
       throw new NotFoundException(`Chi phí vận hành ${id} không tồn tại`);
     }
+    this.assertNotVoucherSourced(item);
     await this.opexRepo.remove(item);
     return { success: true, id };
+  }
+
+  /** Dòng opex sinh từ phiếu thu chi garage chỉ được sửa/xóa qua phiếu gốc. */
+  private assertNotVoucherSourced(item: KgaraOperatingExpense) {
+    if (item.sourceCashflowVoucherId) {
+      throw new BadRequestException(
+        'Khoản chi này được ghi nhận từ phiếu chi garage, vui lòng chỉnh sửa tại Thu chi garage.',
+      );
+    }
   }
 
   /**
@@ -743,6 +434,15 @@ export class GarageOpexService {
       note?: string | null;
     }> = [];
 
+    const sellingItems: Array<{
+      id: string;
+      categoryKey: string;
+      categoryName: string;
+      amount: number;
+      ojAmount: number;
+      note?: string | null;
+    }> = [];
+
     const directCostItems: Array<{
       id: string;
       categoryKey: string;
@@ -758,6 +458,8 @@ export class GarageOpexService {
     let ojTotalCommission = 0;
     let totalDirectCost = 0;
     let ojTotalDirectCost = 0;
+    let totalSelling = 0;
+    let ojTotalSelling = 0;
 
     for (const item of items) {
       const amt = Number(item.amount) || 0;
@@ -779,13 +481,14 @@ export class GarageOpexService {
         continue;
       }
 
-      if (
-        item.categoryKey === 'HOA_HONG_TRUC_TIEP' ||
-        item.categoryKey === 'CHI_PHI_TRUC_TIEP_KHAC'
-      ) {
+      if (COGS_GROUP_CATEGORIES.includes(item.categoryKey)) {
         directCostItems.push(row);
         totalDirectCost += amt;
         ojTotalDirectCost += ojAmt;
+      } else if (SELLING_COMMISSION_CATEGORIES.includes(item.categoryKey)) {
+        sellingItems.push(row);
+        totalSelling += amt;
+        ojTotalSelling += ojAmt;
       } else if (item.categoryKey.startsWith('HOA_HONG_')) {
         commissionItems.push(row);
         totalCommission += amt;
@@ -802,6 +505,11 @@ export class GarageOpexService {
         total: totalDirectCost,
         ojTotal: ojTotalDirectCost,
         items: directCostItems,
+      },
+      selling: {
+        total: totalSelling,
+        ojTotal: ojTotalSelling,
+        items: sellingItems,
       },
       opex: {
         total: totalOpex,

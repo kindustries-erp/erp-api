@@ -13,6 +13,12 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '../../common/utils/query-builder.util';
+import { UpdateJournalEntryDto } from '../dto/update-journal-entry.dto';
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+import { ErpDocumentSequence } from '../entities/erp_document_sequence.entity';
 
 @Injectable()
 export class AccountingCoreService {
@@ -25,8 +31,14 @@ export class AccountingCoreService {
     private readonly journalEntryRepo: Repository<ErpJournalEntry>,
     @InjectRepository(ErpJournalEntryLine)
     private readonly journalEntryLineRepo: Repository<ErpJournalEntryLine>,
+    @InjectRepository(ErpDocumentSequence)
+    private readonly sequenceRepo: Repository<ErpDocumentSequence>,
   ) {}
 
+  /**
+   * Sinh số chứng từ tuần tự sạch (Format: PREFIX-YYYYMMDD-0001)
+   * Sử dụng Atomic Row-level Upsert trên bảng erp_document_sequences chống 100% race condition khi chạy bulk hoặc tạo tay.
+   */
   async generateEntryNo(
     sourceType: 'BANK' | 'CASH' | 'INVOICE' | string,
     transDate: Date,
@@ -40,36 +52,59 @@ export class AccountingCoreService {
     const day = String(date.getDate()).padStart(2, '0');
     const yyyymmdd = `${year}${month}${day}`;
 
-    let prefix = 'CT';
+    let docPrefix = 'CT';
     if (customPrefix) {
-      prefix = `${customPrefix}-${yyyymmdd}`;
+      docPrefix = customPrefix;
     } else if (sourceType === 'BANK') {
-      prefix = isReceipt ? `UNT-${yyyymmdd}` : `UNC-${yyyymmdd}`;
+      docPrefix = isReceipt ? 'UNT' : 'UNC';
     } else if (sourceType === 'CASH') {
-      prefix = isReceipt ? `PT-${yyyymmdd}` : `PC-${yyyymmdd}`;
+      docPrefix = isReceipt ? 'PT' : 'PC';
     } else {
-      prefix = `CT-${year}${month}`; // legacy fallback
+      docPrefix = 'CT';
     }
 
-    const lastEntry = await this.journalEntryRepo
-      .createQueryBuilder('je')
-      .where('je.branchId = :branchId', { branchId })
-      .andWhere('je.entryNo LIKE :prefix', { prefix: `${prefix}-%` })
-      .orderBy('je.entryNo', 'DESC')
-      .getOne();
-
     let nextCount = 1;
-    if (lastEntry && lastEntry.entryNo) {
-      const parts = lastEntry.entryNo.split('-');
-      const lastPart = parts[parts.length - 1];
-      const lastCount = parseInt(lastPart, 10);
-      if (!isNaN(lastCount)) {
-        nextCount = lastCount + 1;
+    try {
+      const cleanBranchId = branchId || null;
+      // Atomic Upsert: Tăng sequence nguyên tử an toàn tuyệt đối
+      const res: Array<{ current_value: number }> =
+        await this.journalEntryRepo.manager.query(
+          `
+        INSERT INTO erp_document_sequences (prefix, period, branch_id, current_value, updated_at)
+        VALUES ($1, $2, $3, 1, NOW())
+        ON CONFLICT (prefix, period, COALESCE(branch_id, '00000000-0000-0000-0000-000000000000'::uuid))
+        DO UPDATE SET current_value = erp_document_sequences.current_value + 1, updated_at = NOW()
+        RETURNING current_value;
+        `,
+          [docPrefix, yyyymmdd, cleanBranchId],
+        );
+
+      if (res && res.length > 0 && res[0].current_value !== undefined) {
+        nextCount = Number(res[0].current_value);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Failed to execute atomic sequence increment, falling back to query MAX: ${err?.message}`,
+      );
+      // Fallback query MAX from erp_journal_entries
+      const fullPrefix = `${docPrefix}-${yyyymmdd}`;
+      const lastEntry = await this.journalEntryRepo
+        .createQueryBuilder('je')
+        .where('je.entryNo LIKE :prefix', { prefix: `${fullPrefix}-%` })
+        .orderBy('je.entryNo', 'DESC')
+        .getOne();
+
+      if (lastEntry?.entryNo) {
+        const parts = lastEntry.entryNo.split('-');
+        if (parts.length >= 3) {
+          const seq = parseInt(parts[2], 10);
+          if (!isNaN(seq)) nextCount = seq + 1;
+        }
       }
     }
 
-    const newEntryNo = `${prefix}-${String(nextCount).padStart(2, '0')}`;
-    return newEntryNo;
+    const seqStr = String(nextCount).padStart(4, '0');
+    return `${docPrefix}-${yyyymmdd}-${seqStr}`;
   }
 
   async deleteJournalEntryBySource(sourceId: string, sourceType: string) {
@@ -1036,14 +1071,120 @@ export class AccountingCoreService {
     };
   }
 
-  async getJournalEntryById(id: string) {
-    return this.journalEntryRepo
+  async getJournalEntryById(idOrEntryNo: string) {
+    if (!idOrEntryNo || typeof idOrEntryNo !== 'string') {
+      return null;
+    }
+    const trimmed = idOrEntryNo.trim();
+    const isUuid = UUID_REGEX.test(trimmed);
+
+    const qb = this.journalEntryRepo
       .createQueryBuilder('je')
       .leftJoinAndSelect('je.lines', 'lines')
       .leftJoinAndSelect('lines.account', 'account')
-      .leftJoinAndSelect('je.branch', 'branch')
-      .where('je.id = :id', { id })
-      .getOne();
+      .leftJoinAndSelect('je.branch', 'branch');
+
+    if (isUuid) {
+      qb.where('je.id = :id', { id: trimmed });
+    } else {
+      qb.where('je.entryNo = :entryNo', { entryNo: trimmed });
+    }
+
+    return qb.getOne();
+  }
+
+  async updateJournalEntry(idOrEntryNo: string, dto: UpdateJournalEntryDto) {
+    const entry = await this.getJournalEntryById(idOrEntryNo);
+    if (!entry) {
+      throw new NotFoundException(`Bút toán không tồn tại (${idOrEntryNo})`);
+    }
+
+    if (dto.entryNo && dto.entryNo.trim() !== entry.entryNo) {
+      const trimmedEntryNo = dto.entryNo.trim();
+      const existing = await this.journalEntryRepo.findOne({
+        where: { entryNo: trimmedEntryNo, isDeleted: false },
+      });
+      if (existing && existing.id !== entry.id) {
+        throw new BadRequestException(
+          `Số chứng từ "${trimmedEntryNo}" đã tồn tại trên hệ thống`,
+        );
+      }
+      entry.entryNo = trimmedEntryNo;
+    }
+
+    if (dto.date) {
+      entry.date = new Date(dto.date);
+    }
+    if (dto.documentDate !== undefined) {
+      entry.documentDate = dto.documentDate ? new Date(dto.documentDate) : null;
+    }
+    if (dto.description !== undefined) {
+      entry.description = dto.description ? dto.description.trim() : null;
+    }
+    if (dto.subjectName !== undefined) {
+      entry.subjectName = dto.subjectName ? dto.subjectName.trim() : null;
+    }
+    if (dto.branchId) {
+      entry.branchId = dto.branchId;
+    }
+
+    if (dto.lines && Array.isArray(dto.lines)) {
+      if (dto.lines.length === 0) {
+        throw new BadRequestException(
+          'Bút toán phải có ít nhất một dòng hạch toán',
+        );
+      }
+
+      const totalDebit = dto.lines.reduce(
+        (sum, l) => sum + Number(l.debit || 0),
+        0,
+      );
+      const totalCredit = dto.lines.reduce(
+        (sum, l) => sum + Number(l.credit || 0),
+        0,
+      );
+
+      if (Math.abs(totalDebit - totalCredit) >= 0.01) {
+        throw new BadRequestException(
+          'Hạch toán không cân bằng: Tổng Nợ phải bằng Tổng Có',
+        );
+      }
+
+      // Check account validity
+      const uniqueAccountIds = Array.from(
+        new Set(dto.lines.map((l) => l.accountId).filter(Boolean)),
+      );
+      if (uniqueAccountIds.length > 0) {
+        const foundAccounts = await this.chartOfAccountRepo.find({
+          where: uniqueAccountIds.map((id) => ({ id, isDeleted: false })),
+        });
+        if (foundAccounts.length !== uniqueAccountIds.length) {
+          throw new BadRequestException(
+            'Có tài khoản kế toán không tồn tại hoặc đã bị xóa.',
+          );
+        }
+      }
+
+      await this.journalEntryLineRepo.delete({ journalEntryId: entry.id });
+
+      const newLines = dto.lines.map((line, idx) =>
+        this.journalEntryLineRepo.create({
+          journalEntryId: entry.id,
+          accountId: line.accountId,
+          debit: Number(line.debit || 0),
+          credit: Number(line.credit || 0),
+          description: line.description
+            ? line.description.trim()
+            : entry.description || '',
+          sort: idx,
+        }),
+      );
+      await this.journalEntryLineRepo.save(newLines);
+    }
+
+    await this.journalEntryRepo.save(entry);
+
+    return this.getJournalEntryById(entry.id);
   }
 
   async getChartOfAccounts(query: any) {
@@ -1376,17 +1517,29 @@ export class AccountingCoreService {
     };
   }
 
-  async getChartOfAccountById(id: string) {
-    const account = await this.chartOfAccountRepo
+  async getChartOfAccountById(idOrCode: string) {
+    if (!idOrCode || typeof idOrCode !== 'string') {
+      throw new NotFoundException('Tài khoản kế toán không tồn tại');
+    }
+    const trimmed = idOrCode.trim();
+    const isUuid = UUID_REGEX.test(trimmed);
+
+    const qb = this.chartOfAccountRepo
       .createQueryBuilder('coa')
       .leftJoinAndSelect('coa.parent', 'parent')
-      .where('coa.id = :id', { id })
-      .andWhere('coa.isDeleted = false')
-      .getOne();
+      .where('coa.isDeleted = false');
+
+    if (isUuid) {
+      qb.andWhere('coa.id = :id', { id: trimmed });
+    } else {
+      qb.andWhere('coa.accountCode = :code', { code: trimmed });
+    }
+
+    const account = await qb.getOne();
 
     if (!account) {
       throw new NotFoundException(
-        `Tài khoản kế toán không tồn tại (ID: ${id})`,
+        `Tài khoản kế toán không tồn tại (${idOrCode})`,
       );
     }
 

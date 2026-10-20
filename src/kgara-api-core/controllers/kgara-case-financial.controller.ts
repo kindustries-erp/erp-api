@@ -25,7 +25,10 @@ import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
 import { extractNetPayableAmount } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
-import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -48,7 +51,12 @@ export class KgaraCaseFinancialController {
   ) {}
 
   @Get('cases/:id/linked-invoices')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+    { resource: ErpResource.INVOICES, action: ErpAction.READ },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+  )
   async getLinkedInvoices(@Param('id') id: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -59,7 +67,17 @@ export class KgaraCaseFinancialController {
               i.total_amount as "totalAmount",
               i.pre_vat_amount as "preVatAmount",
               i.vat_amount as "vatAmount",
-              i.description as "description"
+              i.description as "description",
+              COALESCE((
+                SELECT SUM(no.net_off_amount) 
+                FROM erp_invoice_voucher_netoff no 
+                WHERE no.invoice_id = l."invoiceId"
+              ), 0)::numeric as "bankSettledAmount",
+              EXISTS(
+                SELECT 1 
+                FROM erp_invoice_voucher_netoff no 
+                WHERE no.invoice_id = l."invoiceId"
+              ) as "hasBankNetOff"
        FROM kgara_case_linked_invoice l
        LEFT JOIN erp_invoices i ON l."invoiceId" = i.id
        WHERE l."caseDbId"::text = $1
@@ -69,10 +87,13 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/linked-invoices')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.CREATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.CREATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+  )
   async addLinkedInvoice(
     @Param('id') id: string,
     @Body()
@@ -116,83 +137,16 @@ export class KgaraCaseFinancialController {
       if (link) {
         results.push(link);
       }
-
-      // Auto-sync 2 chiều khi liên kết Hóa đơn <-> Phiếu dịch vụ:
-      try {
-        const isOut = item.linkType === 'OUT';
-        const targetSettlementType = isOut ? 'RECEIPT' : 'PAYMENT';
-
-        // 1. Chiều Case -> Invoice: Nếu Case đã có sao kê ON_SYSTEM, cấn trừ sang Hóa đơn
-        const settlements = await this.settlementRepo.find({
-          where: {
-            caseId: id,
-            sourceChannel: 'ON_SYSTEM',
-            settlementType: targetSettlementType,
-          },
-        });
-
-        for (const s of settlements) {
-          if (s.bankTransactionId) {
-            const netOff = await this.settlementRepo.manager.query(
-              `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-              [item.invoiceId, s.bankTransactionId],
-            );
-            if (!netOff || netOff.length === 0) {
-              await this.settlementRepo.manager.query(
-                `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-                 VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-                [item.invoiceId, s.bankTransactionId, Number(s.amount || 0)],
-              );
-            }
-          }
-        }
-
-        // 2. Chiều Invoice -> Case: Nếu Hóa đơn đã có cấn trừ sao kê sẵn, cấn trừ sang Phiếu dịch vụ
-        const invoiceNetOffs = await this.settlementRepo.manager.query(
-          `SELECT n.bank_transaction_id, n.net_off_amount, t.trans_date, t.correspondent_name, t.description
-           FROM erp_invoice_voucher_netoff n
-           LEFT JOIN erp_bank_transactions t ON t.id = n.bank_transaction_id
-           WHERE n.invoice_id = $1`,
-          [item.invoiceId],
-        );
-
-        for (const no of invoiceNetOffs) {
-          if (!no.bank_transaction_id) continue;
-          const existingCaseSettlement = await this.settlementRepo.findOne({
-            where: {
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-            },
-          });
-
-          if (!existingCaseSettlement) {
-            const newSettlement = this.settlementRepo.create({
-              caseId: id,
-              bankTransactionId: no.bank_transaction_id,
-              settlementType: targetSettlementType,
-              sourceChannel: 'ON_SYSTEM',
-              amount: Number(no.net_off_amount || 0),
-              transDate: no.trans_date,
-              partnerName: no.correspondent_name,
-              note: `Đồng bộ cấn trừ từ hóa đơn liên kết`,
-            });
-            await this.settlementRepo.save(newSettlement);
-          }
-        }
-
-        await this.caseQueryService.recalculateCaseSettlementSummary(id);
-      } catch (syncErr) {
-        this.logger.warn(
-          `Could not sync bi-directional settlements and netoff: ${syncErr}`,
-        );
-      }
     }
 
     return Array.isArray(body) || (body as any)?.items ? results : results[0];
   }
 
   @Get('invoices/:invoiceId/linked-cases')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getLinkedCases(@Param('invoiceId') invoiceId: string) {
     return this.linkedInvoiceRepo.query(
       `SELECT l.*, 
@@ -208,10 +162,13 @@ export class KgaraCaseFinancialController {
   }
 
   @Delete('cases/:id/linked-invoices/:linkedId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.DELETE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+  )
   async removeLinkedInvoice(
     @Param('id') id: string,
     @Param('linkedId') linkedId: string,
@@ -232,30 +189,17 @@ export class KgaraCaseFinancialController {
       where: { id: linkedId, caseDbId: id },
     });
     if (link) {
-      try {
-        const settlements = await this.settlementRepo.find({
-          where: { caseId: id, sourceChannel: 'ON_SYSTEM' },
-        });
-        const txnIds = settlements
-          .map((s) => s.bankTransactionId)
-          .filter((tid): tid is string => !!tid);
-        if (txnIds.length > 0) {
-          await this.linkedInvoiceRepo.manager.query(
-            `DELETE FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = ANY($2::uuid[])`,
-            [link.invoiceId, txnIds],
-          );
-        }
-      } catch (delSyncErr) {
-        this.logger.warn(`Could not clean up invoice netoff: ${delSyncErr}`);
-      }
+      // Chỉ gỡ liên kết tham chiếu (Reference-only), không xóa settlement và không can thiệp net-off
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
-      await this.caseQueryService.recalculateCaseSettlementSummary(id);
     }
     return { success: true };
   }
 
   @Get('cases/:id/traceability-graph')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getCaseTraceabilityGraph(@Param('id') id: string, @Req() req: any) {
     return this.traceabilityService.getGarageCaseTraceabilityGraph(
       id,
@@ -264,7 +208,10 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/financial-summary')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+  )
   async getCaseFinancialSummary(@Param('id') id: string) {
     const c = await this.caseRepo.findOne({
       where: [{ id }, { soChungTu: id }, { hdPhieuDichVuId: id }],
@@ -368,7 +315,12 @@ export class KgaraCaseFinancialController {
   }
 
   @Get('cases/:id/settlements')
-  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.READ },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.READ },
+    { resource: ErpResource.INVOICES, action: ErpAction.READ },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+  )
   async getCaseSettlements(@Param('id') id: string) {
     return this.settlementRepo.query(
       `SELECT s.id::text as "id", 
@@ -423,10 +375,15 @@ export class KgaraCaseFinancialController {
   }
 
   @Post('cases/:id/settlements')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.CREATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.CREATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async addCaseSettlement(
     @Param('id') id: string,
     @Body()
@@ -458,51 +415,20 @@ export class KgaraCaseFinancialController {
     });
     const saved = await this.settlementRepo.save(settlement);
 
-    // Auto-cấn trừ 2 chiều: Nếu giao dịch là ON_SYSTEM (Sao kê ngân hàng / Sổ quỹ)
-    // Tự động tìm hóa đơn liên kết của vụ việc có hướng tương ứng và cấn trừ vào Hóa đơn
-    if (sourceChannel === 'ON_SYSTEM' && body.bankTransactionId) {
-      try {
-        const isOut = body.settlementType === 'RECEIPT';
-        const targetDirection = isOut ? 'OUT' : 'IN';
-        const linkedInvoices = await this.linkedInvoiceRepo.query(
-          `SELECT DISTINCT i.id, i.total_amount as "totalAmount"
-           FROM erp_invoices i
-           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
-           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
-             AND (i.direction = $2 OR l."linkType" = $2)
-             AND i.is_deleted = false`,
-          [id, targetDirection],
-        );
-
-        for (const inv of linkedInvoices) {
-          const netOff = await this.settlementRepo.manager.query(
-            `SELECT id FROM erp_invoice_voucher_netoff WHERE invoice_id = $1 AND bank_transaction_id = $2 LIMIT 1`,
-            [inv.id, body.bankTransactionId],
-          );
-          if (!netOff || netOff.length === 0) {
-            await this.settlementRepo.manager.query(
-              `INSERT INTO erp_invoice_voucher_netoff (id, invoice_id, bank_transaction_id, net_off_amount, created_at, updated_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, now(), now())`,
-              [inv.id, body.bankTransactionId, Number(body.amount || 0)],
-            );
-          }
-        }
-      } catch (syncErr) {
-        this.logger.warn(
-          `Could not sync case settlement to invoice netoff: ${syncErr}`,
-        );
-      }
-    }
-
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
     return saved;
   }
 
   @Delete('cases/:id/settlements/:settlementId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.DELETE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.DELETE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async removeCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,
@@ -519,44 +445,19 @@ export class KgaraCaseFinancialController {
       return { success: true, message: 'Ignored non-persisted temporary ID' };
     }
 
-    const settlement = await this.settlementRepo.findOne({
-      where: { id: settlementId, caseId: id },
-    });
-
-    if (settlement && settlement.bankTransactionId) {
-      try {
-        const linkedInvoices = await this.linkedInvoiceRepo.query(
-          `SELECT DISTINCT i.id
-           FROM erp_invoices i
-           LEFT JOIN kgara_case_linked_invoice l ON l."invoiceId" = i.id
-           WHERE (l."caseDbId"::text = $1 OR i.settlement_order = $1)
-             AND i.is_deleted = false`,
-          [id],
-        );
-        const invIds = linkedInvoices.map((i: any) => i.id).filter(Boolean);
-        if (invIds.length > 0) {
-          await this.settlementRepo.manager.query(
-            `DELETE FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = $1 AND invoice_id = ANY($2::uuid[])`,
-            [settlement.bankTransactionId, invIds],
-          );
-        }
-      } catch (delSyncErr) {
-        this.logger.warn(
-          `Could not clean up invoice netoff on settlement delete: ${delSyncErr}`,
-        );
-      }
-    }
-
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
     return { success: true };
   }
 
   @Patch('cases/:id/settlements/:settlementId')
-  @RequirePermissions({
-    resource: ErpResource.GARAGE,
-    action: ErpAction.UPDATE,
-  })
+  @RequireAnyPermissions(
+    { resource: ErpResource.GARAGE, action: ErpAction.UPDATE },
+    { resource: ErpResource.GARAGE_DEBTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.INVOICES, action: ErpAction.UPDATE },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.UPDATE },
+  )
   async updateCaseSettlement(
     @Param('id') id: string,
     @Param('settlementId') settlementId: string,

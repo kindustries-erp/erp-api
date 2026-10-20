@@ -11,6 +11,7 @@ Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (E
 1. **Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
    - Khởi tạo sẵn các trường cốt lõi của từng phân hệ chuẩn hóa theo mã `category` (VD: `category` cho `INVOICE_IN`, `INVOICE_OUT`, `GOODS_RECEIPT`, `GOODS_ISSUE`, `INVENTORY_ADJUSTMENT`; cùng các thuộc tính chuyên biệt như `is_valid`, `color`, `version`, `type_production_order`).
    - Tự động map 2 chiều (Dual-Key / Alias Mapping) giữa mã chuẩn `category` và các mã alias cũ (`type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`).
+   - Đồng bộ danh mục `category` cho `INVOICE` / `INVOICE_IN` theo 14 nhóm chi phí Thông tư 99/2025/TT-BTC (`VF_PARTS`, `COMMERCIAL_VEHICLES`, `OEM_OTHER_PARTS`, `WORKSHOP_CONSUMABLES`, `GARAGE_SUBCONTRACT`, `GARAGE_TOOLS_EQUIPMENT`, `OFFICE_IT_FACILITIES`, `OPEX_LOGISTICS`, `OPEX_SECURITY_CLEANING`, `OPEX_BANK_FEES`, `OPEX_ADMIN`, `OPEX_LEGAL_CONSULTING`, `OPEX_IT_SOFTWARE`, `OPEX_MARKETING`).
    - Cố định trường `code` và `fieldType`, được bảo vệ an toàn chống xóa nhầm (`is_system = true`). Admin chỉ có thể đổi nhãn hiển thị (`name`, `name_en`), bật/tắt bắt buộc (`isRequired`), hoặc chỉnh sửa danh sách tùy chọn (`options`). Không được xóa các mã cốt lõi nghiệp vụ.
 2. **Thuộc tính Tùy chỉnh Linh hoạt (`is_system = false`)**:
    - Cho phép Quản trị viên tự do tạo thêm các trường động mới theo nhu cầu doanh nghiệp (hỗ trợ kiểu `TEXT`, `NUMBER`, `SELECT`, `DATE`, `CHECKBOX`).
@@ -90,10 +91,12 @@ erDiagram
 | `name` | `varchar(255)` | NO | | Tên hiển thị danh mục (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên hiển thị tiếng Anh |
 | `description` | `text` | YES | | Mô tả chi tiết danh mục |
+| `default_debit_account_id` | `uuid` | YES | `FK -> erp_chart_of_accounts(id) ON DELETE SET NULL` | TK Nợ mặc định khi hạch toán hóa đơn theo danh mục (Dynamic Account Linking) |
 | `is_active` | `boolean` | NO | Default `true` | Trạng thái kích hoạt |
 | `is_deleted` | `boolean` | NO | Default `false` | Cờ xóa mềm |
 | `created_at` | `timestamptz` | NO | Default `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | Default `now()` | Thời điểm cập nhật |
+
 
 ### B. Bảng Định nghĩa Thuộc tính: `erp_module_attribute_defs`
 | Tên cột | Kiểu dữ liệu | Nullable | Ràng buộc / Mặc định | Mô tả |
@@ -107,7 +110,7 @@ erDiagram
 | `name` | `varchar(255)` | NO | | Tên thuộc tính hiển thị (Fallback Tiếng Việt) |
 | `name_en` | `varchar(255)` | YES | | Tên thuộc tính Tiếng Anh |
 | `field_type` | `varchar(50)` | NO | `'TEXT'`, `'NUMBER'`, `'SELECT'`, `'DATE'`, `'CHECKBOX'` | Kiểu dữ liệu thuộc tính |
-| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string>, parentValue?: string }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ và cascading theo option cha) |
+| `options` | `jsonb` | YES | Array of `{ value: string, label: string, labelEn?: string, labels?: Record<string, string>, parentValue?: string, accountCode?: string, defaultDebitAccountId?: string }` | Danh sách options khi `field_type = 'SELECT'` (hỗ trợ đa ngôn ngữ, cascading theo option cha, và liên kết tài khoản kế toán tự động theo TT99) |
 | `sort_order` | `int` | NO | Default `0` | Thứ tự sắp xếp trên giao diện |
 | `is_system` | `boolean` | NO | Default `false` | Cờ thuộc tính mặc định hệ thống (không thể xóa) |
 | `is_required` | `boolean` | NO | Default `false` | Bắt buộc nhập liệu trước khi lưu (hiển thị `*`) |
@@ -150,8 +153,12 @@ src/module-config/
 ├── helpers/
 │   ├── entity-custom-fields.helper.ts     # Shared Helper saveInTx & enrichOne/enrichMany
 │   └── entity-custom-fields.helper.spec.ts
+├── services/                              # Sub-Services chuẩn theo /api-service-refactor
+│   ├── module-category.service.ts         # Quản lý CRUD Danh mục
+│   ├── module-attribute-def.service.ts    # Quản lý Định nghĩa thuộc tính & Options usage guard
+│   └── module-entity-value.service.ts     # Quản lý Giá trị thực thể & Transactions
 ├── module-config.controller.ts            # Alias router ['module-config', 'bom-config']
-├── module-config.service.ts
+├── module-config.service.ts               # Facade Service (< 120 LoC, Clean DI)
 ├── module-config.service.spec.ts
 └── module-config.module.ts
 ```
@@ -164,7 +171,7 @@ Base URL: `/api/v1/module-config` (Hỗ trợ alias `/api/v1/bom-config`, yêu c
 
 | Method | Endpoint | Payload / Params | Mô tả |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/categories` | `query: { moduleKey?: string }` | Lấy danh sách danh mục theo module (kèm thuộc tính & usageCount) |
+| `GET` | `/categories` | `query: { moduleKey?: string }` | Lấy danh sách danh mục theo module (kèm thuộc tính & usageCount). Hỗ trợ alias phân hệ (`INVOICE_IN`/`INVOICE_OUT` tự động query cả `INVOICE` và khử trùng lặp theo `code`). |
 | `POST` | `/categories` | `CreateModuleCategoryDto` | Tạo mới danh mục thuộc module (`moduleKey`, `code`, `name`, `description`) |
 | `PATCH` | `/categories/:id` | `UpdateModuleCategoryDto` | Cập nhật thông tin danh mục |
 | `DELETE` | `/categories/:id` | `id: UUID` | Xóa mềm danh mục (chặn xóa nếu đang có dữ liệu thực thể liên kết) |
@@ -181,7 +188,7 @@ Base URL: `/api/v1/module-config` (Hỗ trợ alias `/api/v1/bom-config`, yêu c
 
 ## 6. Shared Helper: `EntityCustomFieldsHelper`
 
-Mọi module backend chỉ cần sử dụng [EntityCustomFieldsHelper](file:///home/dev/repos/erp/erp-api/src/module-config/helpers/entity-custom-fields.helper.ts) để lưu và đọc dữ liệu:
+Mọi module backend chỉ cần sử dụng [EntityCustomFieldsHelper](erp/erp-api/src/module-config/helpers/entity-custom-fields.helper.ts) để lưu và đọc dữ liệu:
 
 ### 6.1. Lưu dữ liệu trong Transaction (`saveInTx`)
 ```typescript
@@ -259,7 +266,7 @@ Trên giao diện Drawer 2 cột (`erp-web`), toàn bộ thông tin đối tư�
     </DrawerField>
   </DrawerSection>
 
-  {/* Tầng 3: THUỘC TÍNH TÙY CHỈNH (ModuleEntityCustomFieldsSection: Category & Dynamic Custom Attributes) */}
+  {/* Tầng 3: THUỘC TÍNH TÙY CHỈNH (ModuleEntityCustomFieldsSection: src/shared/features/custom-fields/) */}
   <ModuleEntityCustomFieldsSection
     moduleKey="SALES_ORDER"
     entityId={entity?.id}
@@ -278,16 +285,55 @@ Trên giao diện Drawer 2 cột (`erp-web`), toàn bộ thông tin đối tư�
 
 ---
 
-## 8. Quality Control & Testing Commands
+## 8. Frontend Custom Fields Management Page (`/custom-fields`)
+
+Trang quản lý Master Data các trường tùy chỉnh và danh mục động:
+- **Location**: `src/pages/CustomFieldsPage.tsx` (ERP Web)
+- **Route Key**: `custom-fields` (Đường dẫn: `/custom-fields`)
+- **Kiến trúc UI**:
+  - `SpreadsheetPageTemplate` với Header Domain Tabs (`ALL`, `FINANCE`, `INVENTORY`, `PRODUCTION`, `COMMERCE`, `GARAGE`).
+  - Toolbar PillTabs lọc theo từng Phân hệ con (chỉ hiển thị khi đã chọn 1 Khối cụ thể, tự động ẩn khi ở tab Tất cả để giữ toolbar gọn gàng).
+  - 12 Cột DataTable chuẩn hóa: STT 1-based (`#`), Khối nghiệp vụ (`domain`), Phân hệ (`moduleKey`), Mã trường (`code`), Tên hiển thị (`name`), Kiểu dữ liệu (`fieldType`), Phạm vi (`scope`), Nguồn gốc (`isSystem`), Bắt buộc (`isRequired`), Sử dụng (`usageCount`), Thứ tự (`sortOrder`), Trạng thái (`isActive`).
+  - `CustomFieldFormDrawer.tsx`: StandardFormDrawer 2-columns hỗ trợ Tạo mới / Xem / Chỉnh sửa, đa ngôn ngữ VI/EN, quản lý options SELECT và tích hợp Live Preview simulator.
+
+---
+
+## 9. Quality Control & Testing Commands
 
 ```bash
 # 1. Backend tests
-cd /home/dev/repos/erp/erp-api && bun test src/module-config
+cd erp/erp-api && bun test src/module-config
 
 # 2. Backend CI checks (Type, Lint, Prettier)
-cd /home/dev/repos/erp/erp-api && bun run check:ci
+cd erp/erp-api && bun run check:ci
 
 # 3. Frontend Type check & Tests
-cd /home/dev/repos/erp/erp-web && bun run type:check && bun run test
+cd erp/erp-web && bun run type:check && bun run test
 ```
 
+
+---
+
+## 10. Built-in vs Custom (Registry) & Checklist Module Mới có "Mặc định + Tùy chỉnh"
+
+**Nguyên tắc (áp dụng từ 2026-10-14, pilot `GARAGE_CASE`):**
+- **Built-in (mặc định)** = field do code sở hữu, lưu **cột typed** trên bảng thực thể (nguồn sự thật duy nhất), khai báo trong `src/module-config/registry/module-field-registry.ts` (`MODULE_FIELD_REGISTRY`). KHÔNG ghi vào EAV.
+- **Custom (tùy chỉnh)** = EAV `erp_entity_attribute_values`, chỉ def `is_system = false`. Ghi bằng `StrictCustomFieldsHelper.saveInTx` (`helpers/strict-custom-fields.helper.ts`): validate theo `field_type` (NUMBER/DATE/CHECKBOX/SELECT), key lạ → 400, upsert theo def (rỗng → xóa riêng def đó, def không có trong payload giữ nguyên), bỏ qua key built-in/legacy.
+- `EntityCustomFieldsHelper.saveInTx` (cũ, xóa-rồi-chèn) vẫn dùng cho các module chưa có registry.
+- `enrichOne`/`enrichMany`: module có registry được thêm `builtin` (từ cột) và `custom.byCode` (EAV tùy chỉnh) bên cạnh alias cũ `customAttributes`/`attributes`/`attributeValues`. **TODO dọn alias** khi mọi module chuyển xong (đã chốt giữ alias 1 release).
+- `PUT /module-config/values/:entityType/:id` với module có registry → 400; ghi qua endpoint riêng của module (vd `PATCH /cases/:id/config`).
+
+**Category `semantic_key`** (cột `erp_module_categories.semantic_key`, migration `20261014120000`): khóa nghiệp vụ do code sở hữu (GARAGE_CASE: `GENERAL`, `INTERNAL`, `OJ`, `OTHER`, hằng `GARAGE_CASE_SEMANTIC`). Logic nghiệp vụ dựa vào `semantic_key`, KHÔNG dựa vào `code` (admin sửa tự do). Category có `semantic_key` hoặc đang được `kgara_cases` dùng → `deleteCategory` trả 409 (chỉ cho ngừng hoạt động).
+
+**Unique def global**: partial unique index `uq_erp_module_attribute_defs_global_code (module_key_global, code) WHERE category_id IS NULL AND is_global` (migration `20261014121000`).
+
+**RBAC** (`module-config.controller.ts`): GET giữ `JwtAuthGuard` (form các module cần dropdown); ghi category/attribute-def cần `custom_fields:manage` (resource `ErpResource.CUSTOM_FIELDS`, cấp cho role có `accounting_configs`, migration `20261014140000`); `PUT values` qua `EntityValuesPermissionGuard` (map `entityType` → resource, cần `update`; entityType lạ → `custom_fields:manage`). Ghi định nghĩa gắn `@AuditLog({ module: 'module-config', entityType: 'module_category' | 'module_attribute_def' })`.
+
+### Checklist thêm module mới có "mặc định + tùy chỉnh"
+1. Đặt field mặc định thành **cột typed** trên bảng thực thể (migration có `up()`/`down()`), không tạo def `is_system` ghi đôi vào EAV.
+2. Đăng ký module trong `MODULE_FIELD_REGISTRY` (builtin + `legacySystemCodes` nếu có).
+3. Nếu nghiệp vụ phân nhánh theo category: thêm `semantic_key` + backfill, so sánh theo `semantic_key`.
+4. Service ghi: cột built-in + `StrictCustomFieldsHelper.saveInTx` trong CÙNG transaction.
+5. Thêm `entityType → resource` vào `ENTITY_TYPE_RESOURCE` (`guards/entity-values-permission.guard.ts`).
+6. FE đọc `builtin` / `custom.byCode`, không đọc alias cũ.
+7. Cập nhật SKILL của module + mục này.
