@@ -194,6 +194,7 @@ export function buildSheet1CompletedCases(
   serviceLinesMap?: Map<string, any[]>,
   caseLedgerMap: Record<string, CaseLedgerAmounts> = {},
   selectedColumns?: string[],
+  linkedInvoiceVatMap: Record<string, number> = {},
 ): Sheet1Summary {
   const sheet = workbook.addWorksheet(SHEET1_NAME);
   const dashboardRows: CaseDashboardRow[] = [];
@@ -309,7 +310,9 @@ export function buildSheet1CompletedCases(
     const lines = c.hdPhieuDichVuId
       ? serviceLinesMap?.get(c.hdPhieuDichVuId) || []
       : [];
-    const vatAmount = resolveCaseVatAmount(c, lines);
+    // Ưu tiên VAT của hóa đơn đầu ra liên kết; không có thì dùng nguồn dự phòng.
+    const vatAmount =
+      linkedInvoiceVatMap[c.id] ?? resolveCaseVatAmount(c, lines);
     let gvPt = 0;
     for (const line of lines) {
       const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';

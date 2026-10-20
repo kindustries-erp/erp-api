@@ -179,6 +179,35 @@ describe('cột tùy chọn của Sheet 1', () => {
     expect(summary.sums.vatAmount).toBe(156000);
   });
 
+  it('VAT hóa đơn liên kết (map) ưu tiên hơn nguồn dự phòng từ dòng dịch vụ', () => {
+    const workbook = new ExcelJS.Workbook();
+    const serviceLinesMap = new Map([
+      ['hd-gr-0046', [{ tienCoThue: 1950000, tienChuaThue: 1950000 }]],
+    ]);
+    const summary = buildSheet1CompletedCases(
+      workbook,
+      [
+        {
+          ...sampleCase,
+          hdPhieuDichVuId: 'hd-gr-0046',
+          tienCoThue: 2106000,
+          rawData: {},
+        },
+      ],
+      {},
+      {},
+      {},
+      serviceLinesMap,
+      {},
+      ['vatAmount'],
+      { [sampleCase.id]: 156000 },
+    );
+    const sheet = workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet;
+
+    expect(sheet.getRow(5).getCell(1).value).toBe(156000);
+    expect(summary.sums.vatAmount).toBe(156000);
+  });
+
   it('dataAsOf rỗng hiển thị dấu gạch', () => {
     const { sheet } = buildOptional(['dataAsOf']);
     expect(sheet.getRow(5).getCell(1).value).toBe('—');

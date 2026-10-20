@@ -577,4 +577,48 @@ describe('KgaraCompletedCasesExportService', () => {
       );
     });
   });
+  it('getLinkedInvoiceVatMap: cộng VAT hóa đơn riêng, bỏ phiếu có hóa đơn dùng chung và hóa đơn thiếu VAT', async () => {
+    const queryBuilder = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          caseDbId: 'case-1',
+          invoiceId: 'inv-1',
+          vatAmount: '156000',
+          sharedCaseCount: '1',
+        },
+        {
+          caseDbId: 'case-1',
+          invoiceId: 'inv-4',
+          vatAmount: '50',
+          sharedCaseCount: '1',
+        },
+        {
+          caseDbId: 'case-2',
+          invoiceId: 'inv-2',
+          vatAmount: '100',
+          sharedCaseCount: '2',
+        },
+        {
+          caseDbId: 'case-3',
+          invoiceId: 'inv-3',
+          vatAmount: null,
+          sharedCaseCount: '1',
+        },
+      ]),
+    };
+    mockLinkedInvoiceRepo.createQueryBuilder.mockReturnValueOnce(queryBuilder);
+
+    const map = await service['getLinkedInvoiceVatMap']([
+      'case-1',
+      'case-2',
+      'case-3',
+    ]);
+
+    expect(map).toEqual({ 'case-1': 156050 });
+  });
 });
