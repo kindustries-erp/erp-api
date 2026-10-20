@@ -8,6 +8,7 @@ import {
   styleMarginCell,
   getExcelColumnLetter,
   COMPLETED_CASES_COLUMNS,
+  COMPLETED_CASES_ALL_COLUMNS,
   CASE_PNL_COLUMNS,
   COMPLETED_CASE_SERVICES_COLUMNS,
   type ExcelReportColumnDef,
@@ -33,6 +34,40 @@ export function formatDisplayDate(d?: Date | string | null): string {
   } catch {
     return String(d);
   }
+}
+
+/** Ngày giờ `dd/MM/yyyy HH:mm`, dùng cho các cột thời điểm hệ thống. */
+export function formatDisplayDateTime(d?: Date | string | null): string {
+  if (!d) return '—';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(dt.getTime())) return String(d);
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mi = String(dt.getMinutes()).padStart(2, '0');
+  return `${formatDisplayDate(dt)} ${hh}:${mi}`;
+}
+
+/** Tiền thuế GTGT: cùng thứ tự ưu tiên với `extractVatAmount` phía web. */
+export function extractVatAmount(item: Record<string, any>): number {
+  const candidates = [
+    item.vatAmount,
+    item.tienThueKh,
+    item.tienThue,
+    item.rawData?.TienThueKH,
+    item.rawData?.TienThue,
+  ];
+  for (const value of candidates) {
+    if (value != null && !Number.isNaN(Number(value))) return Number(value);
+  }
+  return 0;
+}
+
+/** Mô tả quy tắc loại trừ; không loại trừ thì trả về `—`. */
+export function formatExclusionRules(item: Record<string, any>): string {
+  const rules = [
+    item.excludeFromReports ? 'Loại khỏi báo cáo' : null,
+    item.excludeFromDebt ? 'Loại khỏi công nợ' : null,
+  ].filter(Boolean);
+  return rules.length ? rules.join('; ') : '—';
 }
 
 export function highlightStatusCell(
@@ -150,7 +185,7 @@ export function resolveCompletedCasesColumns(
 ): ExcelReportColumnDef[] {
   if (!selectedKeys?.length) return COMPLETED_CASES_COLUMNS;
   const picked = new Set(selectedKeys);
-  const columns = COMPLETED_CASES_COLUMNS.filter((c) => picked.has(c.key));
+  const columns = COMPLETED_CASES_ALL_COLUMNS.filter((c) => picked.has(c.key));
   return columns.length ? columns : COMPLETED_CASES_COLUMNS;
 }
 
@@ -227,6 +262,7 @@ export function buildSheet1CompletedCases(
     margin: 0,
     duThu: 0,
     duChi: 0,
+    vatAmount: 0,
   };
 
   cases.forEach((c: any, idx: number) => {
@@ -331,6 +367,7 @@ export function buildSheet1CompletedCases(
     sums.loiNhuan += profit;
     sums.duThu += duThu;
     sums.duChi += duChi;
+    sums.vatAmount += extractVatAmount(c);
 
     const branchName =
       branchNameMap[c.branchExternalId] || c.branchExternalId || '—';
@@ -416,6 +453,11 @@ export function buildSheet1CompletedCases(
       branchName,
       duThu,
       duChi,
+      vatAmount: extractVatAmount(c),
+      exclusionRules: formatExclusionRules(c),
+      createdAt: formatDisplayDateTime(c.createdAt),
+      updatedAt: formatDisplayDateTime(c.updatedAt),
+      dataAsOf: formatDisplayDateTime(c.dataAsOf),
     };
 
     const row = sheet.addRow(

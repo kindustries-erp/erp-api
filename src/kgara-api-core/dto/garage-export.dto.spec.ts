@@ -102,6 +102,13 @@ describe('GarageCasesExportDto', () => {
     expect(instance.selectedColumns).toEqual(['soChungTu']);
   });
 
+  it('nhận các cột tùy chọn (thuế GTGT, ngày tạo, quy tắc loại trừ)', async () => {
+    const { errors } = await check(GarageCasesExportDto, {
+      selectedColumns: ['vatAmount', 'createdAt', 'exclusionRules'],
+    });
+    expect(errors).toHaveLength(0);
+  });
+
   it('chặn key cột không nằm trong danh sách xuất', async () => {
     const { errors } = await check(GarageCasesExportDto, {
       selectedColumns: ['soChungTu', 'DROP TABLE'],

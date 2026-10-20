@@ -437,9 +437,39 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
   },
 ];
 
+/**
+ * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 29 cột).
+ * Khớp các cột "Tất cả cột" của bảng garage-cases.
+ */
+export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
+  {
+    header: 'Thuế GTGT (VNĐ)',
+    key: 'vatAmount',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Quy tắc loại trừ',
+    key: 'exclusionRules',
+    width: 26,
+    align: 'left',
+  },
+  { header: 'Ngày tạo', key: 'createdAt', width: 18, align: 'center' },
+  { header: 'Ngày cập nhật', key: 'updatedAt', width: 18, align: 'center' },
+  { header: 'Dữ liệu lúc', key: 'dataAsOf', width: 18, align: 'center' },
+];
+
+/** Toàn bộ cột có thể xuất: mặc định 29 cột + cột tùy chọn. */
+export const COMPLETED_CASES_ALL_COLUMNS: ExcelReportColumnDef[] = [
+  ...COMPLETED_CASES_COLUMNS,
+  ...COMPLETED_CASES_OPTIONAL_COLUMNS,
+];
+
 /** Key hợp lệ cho `selectedColumns` của bảng kê phiếu dịch vụ. */
 export const COMPLETED_CASES_EXPORT_COLUMN_KEYS: string[] =
-  COMPLETED_CASES_COLUMNS.map((column) => column.key);
+  COMPLETED_CASES_ALL_COLUMNS.map((column) => column.key);
 
 /**
  * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (15 cột)

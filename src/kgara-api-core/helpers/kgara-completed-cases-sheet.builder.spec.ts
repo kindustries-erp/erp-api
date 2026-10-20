@@ -96,3 +96,63 @@ describe('buildSheet1CompletedCases với selectedColumns', () => {
     expect(typeof receivableCell).toBe('number');
   });
 });
+
+describe('cột tùy chọn của Sheet 1', () => {
+  const optionalCase = {
+    ...sampleCase,
+    createdAt: new Date('2026-03-02T08:30:00'),
+    updatedAt: new Date('2026-03-06T17:45:00'),
+    dataAsOf: null,
+    excludeFromReports: true,
+    excludeFromDebt: false,
+    rawData: { TienThueKH: 1800000 },
+  };
+
+  const buildOptional = (selectedColumns?: string[]) => {
+    const workbook = new ExcelJS.Workbook();
+    const summary = buildSheet1CompletedCases(
+      workbook,
+      [optionalCase],
+      {},
+      {},
+      {},
+      undefined,
+      {},
+      selectedColumns,
+    );
+    return {
+      sheet: workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet,
+      summary,
+    };
+  };
+
+  it('không chọn thì chỉ có 29 cột mặc định', () => {
+    expect(resolveCompletedCasesColumns()).toHaveLength(29);
+    expect(
+      resolveCompletedCasesColumns().some((c) => c.key === 'vatAmount'),
+    ).toBe(false);
+  });
+
+  it('chọn cột tùy chọn thì xuất đúng giá trị và cộng tổng thuế GTGT', () => {
+    const { sheet, summary } = buildOptional([
+      'vatAmount',
+      'exclusionRules',
+      'createdAt',
+    ]);
+
+    expect(summary.columns.map((c) => c.key)).toEqual([
+      'vatAmount',
+      'exclusionRules',
+      'createdAt',
+    ]);
+    expect(sheet.getRow(5).getCell(1).value).toBe(1800000);
+    expect(sheet.getRow(5).getCell(2).value).toBe('Loại khỏi báo cáo');
+    expect(sheet.getRow(5).getCell(3).value).toBe('02/03/2026 08:30');
+    expect(summary.sums.vatAmount).toBe(1800000);
+  });
+
+  it('dataAsOf rỗng hiển thị dấu gạch', () => {
+    const { sheet } = buildOptional(['dataAsOf']);
+    expect(sheet.getRow(5).getCell(1).value).toBe('—');
+  });
+});
