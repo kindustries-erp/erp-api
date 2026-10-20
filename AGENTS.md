@@ -48,7 +48,7 @@ Mandatory reading order when working on a specific family:
 - **Remote**: Always push to `github-industries`.
 
 ### Database & Environment
-- **By Default**: Dùng `DATABASE_URL` trong `.env` (DB `erp_local` trên `db-dev.liouni.com:5433`) làm DB master. Tenant khác dùng file `.env.<tenant>-<stage>` tương ứng với nhánh deploy (`greenway-production`, `greenway-staging`, `klotus-production`, `klotus-staging`). Không có biến `ERP_MASTER_DATABASE_URL`; `.env` trần có thể đang trỏ DB production nên luôn kiểm tra `DATABASE_URL` trước khi chạy script, và script phải nhận file env tường minh.
+- **By Default**: Dùng `DATABASE_URL` trong `.env` làm DB master (luôn đọc `.env` để xác nhận DB thực tế). Tenant khác dùng file `.env.<tenant>-<stage>` tương ứng với nhánh deploy (`greenway-production`, `greenway-staging`, `klotus-production`, `klotus-staging`). Không có biến `ERP_MASTER_DATABASE_URL`; `.env` trần có thể đang trỏ DB production nên luôn kiểm tra `DATABASE_URL` trước khi chạy script, và script phải nhận file env tường minh.
 - **Xác nhận DB**: trước khi quét hoặc ghi DB, chạy `SELECT current_database();` để biết DB thực tế, báo anh tên DB trước khi ghi; không suy ra DB từ tên file.
 - **Context Isolation**: Do NOT mix databases, `.env`, or schema between ERP and Klotus.
 - **Verify Runtime**: Read the actual `.env` before making changes (no outdated assumptions).
@@ -301,7 +301,7 @@ Source of truth for this repo (`./erp-api`).
 - **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (pull -> build -> check:ci -> test -> commit -> push).
 - push this repo with `github-industries`
 - when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account `admin@liouni.com` (mật khẩu lấy từ kênh bảo mật của team, không ghi vào repo)
-- by default, work on the `DATABASE_URL` in `.env` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
+- by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before forking parallel patterns
@@ -350,7 +350,7 @@ Source of truth for this repo (`./erp-api`).
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010
-- by default, work on the `DATABASE_URL` in `.env` (DB `erp_local`, master); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
+- by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - follow DB -> API -> UI -> QC
 - inspect current state before edits
