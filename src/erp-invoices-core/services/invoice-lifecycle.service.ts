@@ -193,6 +193,7 @@ export class InvoiceLifecycleService {
           preVatAmount: i.preVatAmount,
           sellerName: dto.sellerName,
           sellerTaxCode: dto.sellerTaxCode,
+          direction: dto.direction,
         });
         return {
           itemCode: resolved.itemCode || i.itemCode || null,
@@ -262,6 +263,7 @@ export class InvoiceLifecycleService {
           preVatAmount: i.preVatAmount,
           sellerName: existing.sellerName,
           sellerTaxCode: existing.sellerTaxCode,
+          direction: existing.direction,
         });
 
         return this.repository.manager.create(ErpInvoiceItem, {

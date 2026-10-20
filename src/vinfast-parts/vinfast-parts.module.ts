@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VinfastPartsService } from './vinfast-parts.service';
-import { VinfastPartsController } from './vinfast-parts.controller';
+import { VinfastPartsSyncController } from './controllers/vinfast-parts-sync.controller';
+import { VinfastPartsStockController } from './controllers/vinfast-parts-stock.controller';
+import { VinfastPartsLedgerController } from './controllers/vinfast-parts-ledger.controller';
+import { VinfastPartsStockExportController } from './controllers/vinfast-parts-stock-export.controller';
 import { VinfastPartsCatalog } from './entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from './entities/vinfast-parts-ledger.entity';
 import { ErpInvoiceItem } from '../erp-invoices-core/entities/erp_invoice_item.entity';
@@ -20,7 +23,12 @@ import { VinfastPartsStockExportBackgroundService } from './services/vinfast-par
       ErpInvoice,
     ]),
   ],
-  controllers: [VinfastPartsController],
+  controllers: [
+    VinfastPartsSyncController,
+    VinfastPartsStockController,
+    VinfastPartsLedgerController,
+    VinfastPartsStockExportController,
+  ],
   providers: [
     VinfastPartsService,
     VinfastPartsSyncService,

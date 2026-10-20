@@ -11,7 +11,10 @@ HỆ THỐNG TIỀN TỐ (PREFIX TAXONOMY) BẮT BUỘC:
      + "EEP30032001 - ẮC QUY 12V" -> item_code: "VF-EEP30032001", item_type: "PARTS"
      + "VF5_HV_BATTERY_PACK_38_KWH" -> item_code: "VF-EEP73110011AP", item_type: "PARTS"
      + "HV_BATTERY_41.9KWH" hoặc "BAT21001011" -> item_code: "VF-BAT21001011", item_type: "PARTS"
-     + "ĐỘNG CƠ ĐIỆN BẢO HÀNH" -> item_code: "VF-PVT20030000", item_type: "PARTS"
+     + "Thay thế động cơ bảo hành xe - Tên hàng hóa dịch vụ: PWT64093000AB - Động cơ điện" -> item_code: "VF-PWT64093000AB", item_type: "PARTS" (ưu tiên mã thật có trong mô tả)
+     + Chỉ khi mô tả KHÔNG có mã nào và chỉ ghi "ĐỘNG CƠ ĐIỆN BẢO HÀNH" -> item_code: "VF-PVT20030000", item_type: "PARTS"
+   - Mã số thuần đứng đầu dòng có đơn vị "công"/"giờ" là MÃ CÔNG LAO ĐỘNG, KHÔNG phải phụ tùng: -> item_code: "DV-SUACHUA", item_type: "SERVICE" (ví dụ "99400103 KIỂM TRA ... " đơn vị công)
+   - Mã số thuần trên hóa đơn của nhà bán lẻ/nhà cung cấp không phải VinFast (siêu thị, tạp hóa) KHÔNG phải mã VinFast -> KHÔNG gán tiền tố "VF-" (chọn nhóm phù hợp: PT-, VT-, HC-, CCDC-...)
      + "106206 - Đệm cao su" -> item_code: "VF-106206", item_type: "PARTS"
 
 2. PHỤ TÙNG OEM / CÁC HÃNG XE KHÁC (BẮT BUỘC TIỀN TỐ "PT-"):
@@ -42,6 +45,7 @@ HỆ THỐNG TIỀN TỐ (PREFIX TAXONOMY) BẮT BUỘC:
    - Phục hồi thước lái, tiện đĩa thắng -> item_code: "DV-GIACONG-THUOCLAI", item_type: "SERVICE"
    - Gia công cơ khí chung khác -> item_code: "DV-GIACONG", item_type: "SERVICE"
    - Sửa chữa củ đề, phục hồi vỏ pin, công thợ thuê ngoài -> item_code: "DV-SUACHUA", item_type: "SERVICE"
+   - Lệnh sửa chữa "SỬA XE <biển số> QT ..." và "Chi phí cứu hộ ..." -> item_code: "DV-SUACHUA" hoặc "DV-CUUHO", item_type: "SERVICE" (không coi số khung/số lệnh là mã phụ tùng)
 
 7. DỊCH VỤ TIỆN ÍCH QUẢN TRỊ (BẮT BUỘC "DV-*"):
    - Phí dịch vụ bảo vệ an ninh -> item_code: "DV-BAOVE", item_type: "SERVICE"
