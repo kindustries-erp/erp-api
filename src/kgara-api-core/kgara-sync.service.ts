@@ -124,4 +124,76 @@ export class KgaraSyncService {
       syncedIds,
     );
   }
+
+  async syncAllInOne(
+    branchExternalId: string,
+    options?: {
+      from?: string;
+      to?: string;
+      includeDetails?: boolean;
+      forceDetails?: boolean;
+    },
+  ): Promise<{
+    casesResult: { deletedCount: number; withLinkedInvoices: string[] };
+    grossProfitSuccess: boolean;
+    detailsResult?: {
+      totalCasesProcessed: number;
+      totalLinesSynced: number;
+      errorsCount: number;
+    };
+  }> {
+    this.logger.log(
+      `Starting All-In-One sync for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, includeDetails: ${options?.includeDetails}`,
+    );
+
+    try {
+      await this.syncBranches();
+    } catch (e: any) {
+      this.logger.warn(`Sync branches warning: ${e?.message}`);
+    }
+
+    const casesResult = await this.syncCasesForBranch(
+      branchExternalId,
+      options?.from,
+      options?.to,
+    );
+
+    let grossProfitSuccess = false;
+    try {
+      await this.syncGrossProfitForBranch(
+        branchExternalId,
+        options?.from,
+        options?.to,
+      );
+      grossProfitSuccess = true;
+    } catch (gpErr: any) {
+      this.logger.warn(`Sync gross profit warning: ${gpErr?.message}`);
+    }
+
+    let detailsResult:
+      | {
+          totalCasesProcessed: number;
+          totalLinesSynced: number;
+          errorsCount: number;
+        }
+      | undefined;
+
+    if (options?.includeDetails) {
+      try {
+        detailsResult = await this.syncCaseDetailsBatch(branchExternalId, {
+          from: options?.from,
+          to: options?.to,
+          force: options?.forceDetails,
+        });
+      } catch (detErr: any) {
+        this.logger.warn(`Sync case details warning: ${detErr?.message}`);
+      }
+    }
+
+    return {
+      casesResult,
+      grossProfitSuccess,
+      detailsResult,
+    };
+  }
 }

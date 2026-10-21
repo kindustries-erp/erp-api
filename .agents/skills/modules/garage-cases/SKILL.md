@@ -307,7 +307,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/services/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr`, `serviceType` | Lấy danh sách options phân trang distinct cho bộ lọc cột của bảng Chi tiết dòng dịch vụ & Phụ tùng |
 | `GET` | `/cases/services/export/excel` | `branchId`, `from`, `to`, `serviceType`, `filtersStr`, `sorts`, `q` | Xuất file Excel bảng kê chi tiết phụ tùng và công thợ dịch vụ (`Chi_tiet_phieu_dich_vu_YYYYMMDD_HHmmss.xlsx`) |
 | `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency` | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP |
-| `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
+| `POST`| `/sync/all` | `@BranchId()`, Body: `{ branchId, from, to, includeDetails, forceDetails }` | Chạy chuỗi đồng bộ toàn diện All-in-One: Chi nhánh -> Vụ việc -> Lợi nhuận gộp -> Chi tiết vật tư phụ tùng & công thợ (tùy chọn) |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
 | `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
@@ -921,6 +921,13 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - `updateCaseConfig`: gửi `categoryId` falsy + `classification` null/rỗng ("Chưa phân loại") → xóa **cả** `category_id` lẫn `classification` (trước đây `classification` bị giữ lại, UI vẫn hiện phân loại cũ).
 - Migration `20261014150000` backfill `category_id` cho phiếu có `classification` mà `category_id` NULL (70 phiếu trên greenway-production). Invariant: phiếu có `classification` thì phải có `category_id` tương ứng.
 - **Khóa sync (phương án B)**: cột `kgara_cases.classification_manually_cleared` (migration `20261014160000`). `updateCaseConfig` bật `true` khi người dùng chủ động bỏ phân loại, gỡ về `false` khi chọn lại phân loại. `SyncCaseService` (sync hàng loạt và `syncCaseDetail`) chỉ tự gán `classification`/`category_id` từ KGara khi `classification` NULL **và** cờ này `false`. Test sync mới chỉ phủ đường `syncCaseDetail`.
+
+## Join Lợi nhuận gộp & Còn phải trả: khóa đúng là `so_chung_tu` (cập nhật 2026-10-21)
+
+- **Join `kgara_gross_profit` ↔ `kgara_cases` theo `vu_viec_code = so_chung_tu`, KHÔNG theo `hd_phieu_dich_vu_id`.** 418 case có `hd_phieu_dich_vu_id` lệch giữa hai bảng (vd GR-PDV2607-0066: case `8866c6ff…`, gross_profit `9dac3cc7…`). Join theo id sẽ ra "không có chi phí" sai — đã mắc lỗi này khi kiểm tra phiếu GR-PDV2607-0066/0016/2606-0048.
+- `kgara_cases.chi_phi` thường NULL cho các phiếu này; chi phí thật nằm ở `kgara_gross_profit.chi_phi` (join theo `so_chung_tu`).
+- **Còn phải trả** (`conPhaiTra = phaiTra − daTra`, `kgara-completed-cases-sheet.builder.ts`): `phaiTra` = chi phí gross_profit, `daTra` = tổng settlement PAYMENT. Nếu chi phí = 0 mà đã có PAYMENT settlement → số âm. Ví dụ GR-PDV2607-0007: chi phí 0, đã chi 5.350.000 → **−5.350.000** (giữ nguyên, chưa sửa công thức). Web (`garageCasesTable.ts`) đang sàn 0 bằng `Math.max(0, …)`; Excel/dashboard không sàn → lệch giữa hai nơi.
+- **Clear nợ phải trả**: tạo phiếu chi garage PAID, hình thức TT "Khác", nội dung "9. Phụ tùng / vật tư", link `caseId`. Đã làm ngày 2026-10-21 cho 16 phiếu (ngày chi 2026-10-15, tổng 47.399.000 đ, bỏ GR-PDV2607-0007): `PC-GARA-261021-*`. Script: `erp-api/scripts/create-garage-payments-pdv2607.ts` (dry-run mặc định; `--apply --confirm=<tên DB>`; kiểm tra chi phí DB khớp số trước khi ghi).
 
 ## Bảng kê phiếu dịch vụ: Dự thu / Dự chi (cập nhật 2026-10-18)
 - Sheet `Bảng kê phiếu kết thúc` có 2 cột cuối: **Dự thu (VNĐ)** và **Dự chi (VNĐ)**, lấy qua `GarageHubService.getCaseLedger(caseIds)` → `GarageCaseLedgerHandler` (phiếu thu `EXPECTED` và phiếu chi `PENDING`/`APPROVED` gắn `case_id` của phiếu dịch vụ; phiếu đã hủy không tính). Hai cột đặt cuối để không lệch chữ cột công thức cũ.

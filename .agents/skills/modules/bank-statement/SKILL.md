@@ -363,15 +363,40 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `fetchOptions` mapping `next: res.page < res.totalPages ? res.page + 1 : null` để `useInfiniteQuery` cuộn tải liên tục mượt mà.
   - Hỗ trợ cú pháp lọc `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm) và `__BLANK__` (Lọc giá trị trống).
 
-### 8.5. Detail Drawer & Kiến Trúc 3 Tầng (`BankTransactionDetailDrawer`)
+### 8.5. Detail Drawer & Kiến Trúc 3 Tầng Chuẩn ERP-Invoice (`BankTransactionDetailDrawer` & `/ui-atomic-refactor`)
+- **Tổ chức 3 Top Tabs Chuẩn Hóa (Đồng bộ 100% với `erp-invoice`)**:
+  1. **Top Tab 1: `Chi tiết` (`txn_details`)**:
+     - *Sub-tab 1*: **`1. Chi tiết giao dịch`** (`details`): Xem trước chứng từ UNC / GBC / Phiếu thu chi (`BankTransactionVoucherPreview`).
+     - *Sub-tab 2*: **`2. Hạch toán kế toán`** (`accounting`): Định khoản nghiệp vụ & Sổ cái kế toán (`BankTransactionAccountingSection`), kèm badge đếm bút toán khi đã hạch toán (`isPosted ? 1 : 0`).
+     - *Sub-tab 3*: **`3. Chứng từ liên kết`** (`traceability`): Mạng lưới chứng từ liên kết & Cấn trừ Traceability Graph (`BankTransactionTraceabilitySection`), kèm badge đếm số hóa đơn liên kết (`netOffCount`).
+  2. **Top Tab 2: `Chi tiết theo đối tác` (`txn_partner`)**:
+     - Hiển thị thông tin đối tác phát sinh giao dịch, kèm badge đếm tổng số giao dịch cùng đối tác (`partnerTotal`).
+     - Tích hợp 2 sub-tabs:
+       - *Sub-tab 1*: **`1. Bảng kê đối tác`** (`partner`): Bảng kê toàn bộ giao dịch cùng đối tác (`BankTransactionPartnerSubTab`).
+       - *Sub-tab 2*: **`2. Biến động & Phân tích`** (`analytics`): Biểu đồ phân tích dòng tiền & xu hướng (`BankTransactionAnalyticsSubTab`).
+  3. **Top Tab 3: `Lịch sử & Kiểm duyệt` (`history`)**:
+     - Nhật ký kiểm toán thao tác & tạo giao dịch (`DrawerAuditTimeline`), kèm badge đếm số lượng logs (`auditItems.length`).
+- **Phân rã Kiến Trúc UI Atomic 5 Tầng (`bank-transaction-detail-drawer/`)**:
+  - Mọi file khống chế nghiêm ngặt **< 180 LoC**:
+    - `BankTransactionDetailDrawer.hook.ts`: Hook quản lý state, mutations, posting hydration (< 180 LoC).
+    - `BankTransactionDetailDrawer.type.ts`: Types, interfaces, props contract (< 80 LoC).
+    - `BankTransactionDrawerTabs.tsx`: Tabs builder xây dựng 3 Top Tabs & sub-tab content (< 180 LoC).
+    - `BankTransactionDetailTabNav.tsx`: Molecule PillTabs cho 3 sub-tabs trong tab Chi tiết (< 100 LoC).
+    - `BankTransactionAccountingSection.tsx`: Sub-organism hạch toán & định khoản kế toán (< 120 LoC).
+    - `BankTransactionTraceabilitySection.tsx`: Sub-organism mạng lưới liên kết & cấn trừ (< 120 LoC).
+    - `BankTransactionPartnerSection.tsx`: Sub-organism chi tiết đối tác & biến động phân tích (< 120 LoC).
+    - `BankTransactionDetailDrawer.tsx`: Organism chính lắp ghép `StandardFormDrawer` (< 120 LoC).
+    - `BankTransactionDetailDrawer.tsx` (gốc): Re-export facade bảo đảm 100% backward compatibility.
+    - `__tests__/BankTransactionDetailDrawer.test.tsx`: Co-located unit test suite.
+  - Tuân thủ No Blue Mandate (`0% blue-*`) và 100% i18n (`t("...")`).
 - **Quản lý Cập nhật Giao dịch**:
   - Cho phép chỉnh sửa Chi nhánh (`branchId` qua `Combobox`) và Ghi chú / Diễn giải (`description` qua `BufferedTextarea` debounce 500ms).
   - Tự động lưu qua `bankStatementApi.updateTransaction(transactionId, { branchId, description, accountingDescription })`.
-- **Cấu trúc Cột Phải (Right Panel) 3 Tầng Chuẩn Hóa**:
+- **Cấu trúc Cột Phải (Right Panel) 2 Tầng Chuẩn Hóa**:
   1. **Tầng 1 — `THÔNG TIN CHUNG` (`BankTransactionGeneralInfoSection`)**:
      - View mode: Icon `<Building2>` (Đối tác), `<MapPin>` (Chi nhánh kèm tên tường minh), `<CreditCard>` (Tài khoản nguồn), `<Calendar>` (Ngày GD), `<FileText>` (Ghi chú / Diễn giải), `<EntityTagSelector>` (Thẻ nhãn) kèm nút Copy.
      - Edit mode: Combobox chọn chi nhánh, BufferedTextarea nhập ghi chú, Thẻ nhãn.
-  2. **Tầng 2 & 3 — `THUỘC TÍNH MẶC ĐỊNH` & `THUỘC TÍNH TÙY CHỈNH` (`ModuleEntityCustomFieldsSection`)**:
+  2. **Tầng 2 — `THUỘC TÍNH TÙY CHỈNH` (`ModuleEntityCustomFieldsSection`)**:
      - Tích hợp `moduleKey="BANK_TXN"` quản lý danh mục và dynamic custom fields.
 
 ### 8.6. Chuẩn Hóa SubtotalSummaryCell tại Chân Bảng (`BankStatementsTab.tsx`)

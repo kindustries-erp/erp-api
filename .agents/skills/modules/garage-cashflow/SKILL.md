@@ -293,6 +293,11 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - **Khóa**: phiếu chi đã `PAID` không đổi được `paymentStatus` và `voucherType` (`BadRequestException` ở `updateVoucher`).
 - Migration: `20261017100000-AddSourceCashflowVoucherToKgaraOperatingExpenses` (cột `source_cashflow_voucher_id`, FK `ON DELETE CASCADE`), `20261017101000-RouteGarageCashflowPaymentVouchers` (xóa settlement PAYMENT không đủ điều kiện, backfill dòng opex; `down()` không khôi phục settlement đã xóa).
 
+### Phiếu chi "9. Phụ tùng / vật tư" để clear công nợ (cập nhật 2026-10-21)
+
+- Nội dung `9. Phụ tùng / vật tư` KHÔNG nằm trong `OPEX_ROUTED_PAYMENT_CONTENTS` nên phiếu chi PAID với nội dung này **trừ công nợ** của vụ việc (tạo `kgara_case_settlements` PAYMENT), không ghi garage-opex.
+- Khi tạo qua `GarageCashflowTransactionService.createVoucher` với `caseId`, phải đúng số phiếu (`so_chung_tu`) — xem [mục Join Lợi nhuận gộp trong garage-cases](../garage-cases/SKILL.md).
+
 ## 10. Chuẩn Hóa Giao Diện Web (Cập nhật 2026-10-17)
 - **Toolbar Combobox Dropdown**: Tích hợp `GarageViewModeCombobox` (kế thừa `ViewModeCombobox`) vào `customActionsNode` của `SpreadsheetPageTemplate`:
   - **Tầng 1 (Filter Group - Loại phiếu)**: `Tất cả` (`ALL`), `Phiếu thu (Tiền vào)` (`RECEIPT`), `Phiếu chi (Tiền ra)` (`PAYMENT`). Tự động đồng bộ với `tableHook.columnFilters['voucherType']`.
