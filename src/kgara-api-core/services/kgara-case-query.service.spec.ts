@@ -21,6 +21,7 @@ describe('KgaraCaseQueryService', () => {
   let service: KgaraCaseQueryService;
 
   const mockCaseQueryBuilder: any = {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
     leftJoinAndMapOne: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),

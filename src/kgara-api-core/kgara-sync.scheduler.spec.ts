@@ -51,6 +51,7 @@ describe('KgaraSyncScheduler', () => {
         deletedCount: 0,
         withLinkedInvoices: [],
       }),
+      syncGrossProfitForBranch: jest.fn().mockResolvedValue(undefined),
       syncCaseDetailsBatch: jest.fn().mockResolvedValue({
         totalCasesProcessed: 1,
         totalLinesSynced: 4,
@@ -119,6 +120,7 @@ describe('KgaraSyncScheduler', () => {
       '/api/v1/gr/cases/list',
     );
     expect(syncService.syncCasesForBranch).toHaveBeenCalled();
+    expect(syncService.syncGrossProfitForBranch).toHaveBeenCalled();
     expect(syncService.syncCaseDetailsBatch).toHaveBeenCalledWith(
       'BRANCH-HN',
       expect.objectContaining({ force: false }),
