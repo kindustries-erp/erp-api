@@ -150,7 +150,20 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
               totalWithInvoices += result.withLinkedInvoices.length;
             }
 
-            // 2. Batch sync parts & labor details for cases that lack details
+            // 2. Sync gross profit report across the sync window
+            try {
+              await this.syncService.syncGrossProfitForBranch(
+                branch.externalId,
+                from,
+                to,
+              );
+            } catch (gpErr: any) {
+              this.logger.warn(
+                `Gross profit sync for branch ${branch.externalId} skipped: ${gpErr?.message}`,
+              );
+            }
+
+            // 3. Batch sync parts & labor details for cases that lack details
             try {
               const detailsRes = await this.syncService.syncCaseDetailsBatch(
                 branch.externalId,

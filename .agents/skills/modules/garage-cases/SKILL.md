@@ -307,7 +307,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/services/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr`, `serviceType` | Lấy danh sách options phân trang distinct cho bộ lọc cột của bảng Chi tiết dòng dịch vụ & Phụ tùng |
 | `GET` | `/cases/services/export/excel` | `branchId`, `from`, `to`, `serviceType`, `filtersStr`, `sorts`, `q` | Xuất file Excel bảng kê chi tiết phụ tùng và công thợ dịch vụ (`Chi_tiet_phieu_dich_vu_YYYYMMDD_HHmmss.xlsx`) |
 | `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency` | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP |
-| `POST`| `/sync/all` | `@BranchId()` | Chạy chuỗi đồng bộ toàn diện: Chi nhánh -> Vụ việc -> Phải thu -> Phải trả |
+| `POST`| `/sync/all` | `@BranchId()`, Body: `{ branchId, from, to, includeDetails, forceDetails }` | Chạy chuỗi đồng bộ toàn diện All-in-One: Chi nhánh -> Vụ việc -> Lợi nhuận gộp -> Chi tiết vật tư phụ tùng & công thợ (tùy chọn) |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
 | `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
 | `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
