@@ -10,6 +10,11 @@ import { PostBankTransactionDto } from '../dto/post-bank-transaction.dto';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import {
+  CashflowClassification,
+  CashflowPurpose,
+  isPurposeAllowed,
+} from '../constants/cashflow-attributes.constants';
 
 @Injectable()
 export class TransactionAccountingService {
@@ -20,12 +25,22 @@ export class TransactionAccountingService {
     private readonly accountingCoreService: AccountingCoreService,
   ) {}
 
+  private assertCashflowPair(
+    classification: CashflowClassification | null | undefined,
+    purpose: CashflowPurpose | null | undefined,
+  ): void {
+    if (!isPurposeAllowed(classification, purpose)) {
+      throw new BadRequestException('Mục đích không thuộc Phân loại đã chọn.');
+    }
+  }
+
   async createManualTransaction(dto: CreateBankTransactionDto) {
     if (!dto.bankAccountId && !dto.cashBookId) {
       throw new BadRequestException(
         'Must provide either bankAccountId or cashBookId',
       );
     }
+    this.assertCashflowPair(dto.cashflowClassification, dto.cashflowPurpose);
     const createData = { ...dto };
     delete (createData as any).attributes;
     const txn = this.transactionRepo.create(createData);
@@ -238,6 +253,14 @@ export class TransactionAccountingService {
     if (!txn) {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
+    this.assertCashflowPair(
+      dto.cashflowClassification !== undefined
+        ? dto.cashflowClassification
+        : txn.cashflowClassification,
+      dto.cashflowPurpose !== undefined
+        ? dto.cashflowPurpose
+        : txn.cashflowPurpose,
+    );
     const updateData = { ...dto };
     delete (updateData as any).attributes;
     Object.assign(txn, updateData);

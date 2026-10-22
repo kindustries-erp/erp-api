@@ -62,6 +62,47 @@ describe('TransactionAccountingService', () => {
     expect(result).toEqual(expect.objectContaining({ id: 'txn-1' }));
   });
 
+  describe('cashflow classification / purpose pairing', () => {
+    const baseCreateDto = {
+      sourceType: 'BANK',
+      branchId: 'branch-1',
+      bankAccountId: 'bank-1',
+      transDate: new Date('2026-08-09'),
+      debitAmount: 0,
+      creditAmount: 100,
+    };
+
+    it('createManualTransaction rejects purpose outside the chosen classification', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: 'FINANCING',
+          cashflowPurpose: 'SALARY',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createManualTransaction rejects purpose without classification', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: null,
+          cashflowPurpose: 'LOAN',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createManualTransaction accepts a valid pair', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: 'FINANCING',
+          cashflowPurpose: 'LOAN',
+        } as any),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe('refreshJournalEntriesForBankTransaction', () => {
     const originalEnv = process.env.ENABLE_LIVE_AUTO_POSTING;
 
