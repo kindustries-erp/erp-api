@@ -1,13 +1,13 @@
 ---
 name: invoice-netoff
-description: Module tri thức Quản lý Cấn trừ Hóa đơn & Chứng từ Thanh toán (Smart Net-Off Engine / Invoice-Voucher Net-Off) trong Liouni ERP (erp-invoices-core & bank-transactions-core). Chứa toàn bộ database schema, entities, topologies đối soát 1-1 / N-1 / 1-N, thuật toán Subset-Sum, xử lý bù trừ HĐ điều chỉnh giảm, xử lý HĐ bị thay thế, bóc tách khấu trừ bảo hiểm 500k, quy tắc an toàn số dư không âm và bộ công cụ scripts cấn trừ cho cả hóa đơn Mua vào (IN) và Bán ra (OUT).
+description: Module tri thức Quản lý Cấn trừ Hóa đơn & Chứng từ Thanh toán (Smart Net-Off Engine / Invoice-Voucher Net-Off) trong ERP (erp-invoices-core & bank-transactions-core). Chứa toàn bộ database schema, entities, topologies đối soát 1-1 / N-1 / 1-N, thuật toán Subset-Sum, xử lý bù trừ HĐ điều chỉnh giảm, xử lý HĐ bị thay thế, bóc tách khấu trừ bảo hiểm 500k, quy tắc an toàn số dư không âm và bộ công cụ scripts cấn trừ cho cả hóa đơn Mua vào (IN) và Bán ra (OUT).
 ---
 
 # 📦 Module Tri Thức: Quản Lý Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine) - Backend (`erp-api`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Hệ thống **Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine)** trong Liouni ERP là hạt nhân quản lý vòng đời thanh toán và quyết toán công nợ giữa:
+Hệ thống **Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine)** trong ERP là hạt nhân quản lý vòng đời thanh toán và quyết toán công nợ giữa:
 - **Hóa đơn đầu ra (`direction = 'OUT'`)** $\leftrightarrow$ **Giao dịch ngân hàng thu tiền (`credit_amount > 0`)** hoặc **Sổ quỹ tiền mặt thu (`cashflow_vouchers`)**.
 - **Hóa đơn đầu vào (`direction = 'IN'`)** $\leftrightarrow$ **Giao dịch ngân hàng chi tiền (`debit_amount > 0` / Ủy nhiệm chi UNC)** hoặc **Phiếu chi tiền mặt (`payment_vouchers`)**.
 
@@ -162,7 +162,7 @@ graph TD
      GROUP BY id HAVING (credit_amount - SUM(net_off_amount)) < -0.01;
      ```
 4. **Cấu Hình `SET synchronous_commit = off` Khi Chạy Batch Lớn**:
-   - Khi kết nối qua PgBouncer/Neon Pooler hoặc remote server có độ trễ I/O, lệnh `COMMIT` dễ bị kẹt `LWLock: WALWrite`. Khắc phục bằng cách chạy `SET synchronous_commit = off;` ngay trước `BEGIN`.
+   - Khi kết nối qua PgBouncer/pooler hoặc remote server có độ trễ I/O, lệnh `COMMIT` dễ bị kẹt `LWLock: WALWrite`. Khắc phục bằng cách chạy `SET synchronous_commit = off;` ngay trước `BEGIN`.
 5. **Không Tự Động Đổi `posting_status` hoặc Sinh `JournalEntry`**:
    - Chỉ tạo bản ghi cấn trừ trong `erp_invoice_voucher_netoff`. Giữ nguyên trạng thái `posting_status = 'UNPOSTED'` trừ khi có chỉ đạo tường minh từ Kế toán trưởng/User.
 

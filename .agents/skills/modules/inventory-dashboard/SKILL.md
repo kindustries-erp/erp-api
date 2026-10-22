@@ -1,13 +1,13 @@
 ---
 name: inventory-dashboard
-description: Module tri thức Dashboard Phân tích & Báo cáo Tồn kho Tổng quan trong Liouni ERP. Chứa toàn bộ database schema, API endpoints, DTOs, logic tính toán KPI, cảnh báo định mức BOM 5 xe, tỷ trọng danh mục, Top 20 mặt hàng và phân tích luân chuyển dòng xe (Vehicle BOM Stats & Trend).
+description: Module tri thức Dashboard Phân tích & Báo cáo Tồn kho Tổng quan trong ERP. Chứa toàn bộ database schema, API endpoints, DTOs, logic tính toán KPI, cảnh báo định mức BOM 5 xe, tỷ trọng danh mục, Top 20 mặt hàng và phân tích luân chuyển dòng xe (Vehicle BOM Stats & Trend).
 ---
 
 # 📦 Module Tri Thức: Dashboard Phân Tích Tồn Kho (`inventory-dashboard`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `inventory-dashboard` cung cấp màn hình điều hành trung tâm và báo cáo phân tích toàn diện về hoạt động lưu kho, biến động giá trị tồn kho, luân chuyển vật tư và định mức linh kiện sản xuất trong toàn bộ hệ thống Liouni ERP.
+Module `inventory-dashboard` cung cấp màn hình điều hành trung tâm và báo cáo phân tích toàn diện về hoạt động lưu kho, biến động giá trị tồn kho, luân chuyển vật tư và định mức linh kiện sản xuất trong toàn bộ hệ thống ERP.
 
 ### 1.1. Các tính năng cốt lõi:
 - **KPI Tổng quan Kho**:

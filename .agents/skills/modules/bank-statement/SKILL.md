@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Sao kê Ngân hàng & Sổ quỹ Tiề
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung tâm quản trị toàn bộ dòng tiền vật lý (tiền gửi ngân hàng và tiền mặt tại quỹ) của doanh nghiệp trong Liouni ERP.
+Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung tâm quản trị toàn bộ dòng tiền vật lý (tiền gửi ngân hàng và tiền mặt tại quỹ) của doanh nghiệp trong ERP.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Quản lý Master Data Tài khoản & Sổ quỹ**:

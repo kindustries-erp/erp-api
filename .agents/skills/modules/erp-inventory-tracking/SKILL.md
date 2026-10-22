@@ -1,13 +1,13 @@
 ---
 name: erp-inventory-tracking
-description: Module tri thức Quản lý Định danh & Truy xuất Nguồn gốc Tồn kho (Serials, VINs, Lots, Custom Barcodes, Serial Lifecycle) trong Liouni ERP. Chứa toàn bộ database schema, API endpoints, DTOs, luồng vòng đời Serial (IN_STOCK -> ASSEMBLED/SOLD), bàn giao xe và bảo hành điện tử.
+description: Module tri thức Quản lý Định danh & Truy xuất Nguồn gốc Tồn kho (Serials, VINs, Lots, Custom Barcodes, Serial Lifecycle) trong ERP. Chứa toàn bộ database schema, API endpoints, DTOs, luồng vòng đời Serial (IN_STOCK -> ASSEMBLED/SOLD), bàn giao xe và bảo hành điện tử.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Định Danh & Truy Xuất Nguồn Gốc (`erp-inventory-tracking`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ `erp-inventory-tracking` (thuộc `inventory-core`) đóng vai trò là **Hub Quản lý Định danh Tập trung (Central Identifier Hub)** cho mọi đơn vị hàng hóa có tính truy xuất nguồn gốc cá thể trong Liouni ERP (Xe điện, Khung sườn, Động cơ, Pin Lithium, Phụ tùng có Serial, Hàng theo Lô sản xuất, Mã Barcode/QR tùy chỉnh).
+Phân hệ `erp-inventory-tracking` (thuộc `inventory-core`) đóng vai trò là **Hub Quản lý Định danh Tập trung (Central Identifier Hub)** cho mọi đơn vị hàng hóa có tính truy xuất nguồn gốc cá thể trong ERP (Xe điện, Khung sườn, Động cơ, Pin Lithium, Phụ tùng có Serial, Hàng theo Lô sản xuất, Mã Barcode/QR tùy chỉnh).
 
 ### 1.1. Các tính năng cốt lõi:
 - **Hub Định danh Đa Chính sách (Hub Tracking Pattern)**:

@@ -1,9 +1,9 @@
 ---
-name: liouni-erp-api-current-truth
-description: API-specific local-only skill for Liouni ERP. Use when working in this repo to load the repo-local current-truth context, runtime contract, and implementation rules for the active ERP API lane.
+name: erp-api-current-truth
+description: API-specific local-only skill for ERP. Use when working in this repo to load the repo-local current-truth context, runtime contract, and implementation rules for the active ERP API lane.
 ---
 
-# Liouni ERP API Current-Truth
+# ERP API Current-Truth
 
 Use this skill only inside this repository.
 
@@ -44,7 +44,7 @@ Use this skill only inside this repository.
 - Query Postgres directly through the active `DATABASE_URL` before changing DTOs, filters, persistence, or business rules
 - **New Module Registration**: Always verify that newly created NestJS modules (e.g. `feature.module.ts`) are explicitly imported in `src/app.module.ts` to prevent 404 Not Found endpoint errors.
 - **TypeScript Build Configuration**: If adding `.ts` files outside of `src/` (e.g. in `scripts/`), ensure the directory is added to the `exclude` array in `tsconfig.build.json`. Otherwise, TypeScript alters the root directory structure in `dist/`, causing the runtime entrypoint (`dist/main.js`) to fail.
-- **Git Commit & Push Process**: When the user requests to "commit and push", determine whether the changes belong to `liouni-erp-web` or `liouni-erp-api` (or both) and execute Git commands inside the respective repository directory. Do not commit/push from the workspace parent.
+- **Git Commit & Push Process**: When the user requests to "commit and push", determine whether the changes belong to `erp-web` or `erp-api` (or both) and execute Git commands inside the respective repository directory. Do not commit/push from the workspace parent.
 
 ## Module Knowledge Repository (.agents/skills/modules/)
 

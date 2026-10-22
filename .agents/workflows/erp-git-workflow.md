@@ -1,10 +1,10 @@
 ---
-description: Quy trình Git chuẩn Master-First & Branch Sync (Test-First Guard, Knowledge Sync Guard, Push erp-master, Downstream Sync) trong Liouni ERP
+description: Quy trình Git chuẩn Master-First & Branch Sync (Test-First Guard, Knowledge Sync Guard, Push erp-master, Downstream Sync) trong ERP
 ---
 
-# 🐙 Liouni ERP Git Workflow (`/erp-git-workflow`)
+# 🐙 ERP Git Workflow (`/erp-git-workflow`)
 
-Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho mọi thao tác Git (Commit, Pull, Rebase, Push, Master-First Modification, Conflict Resolution, và Downstream Branch Sync) trong workspace Liouni ERP (`erp-api` và `erp-web`).
+Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho mọi thao tác Git (Commit, Pull, Rebase, Push, Master-First Modification, Conflict Resolution, và Downstream Branch Sync) trong workspace ERP (`erp-api` và `erp-web`).
 
 ---
 

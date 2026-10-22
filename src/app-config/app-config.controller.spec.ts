@@ -15,7 +15,7 @@ describe('AppConfigController', () => {
     service = {
       getPublicConfig: jest.fn().mockReturnValue({
         appEnv: 'greenway-staging',
-        appName: 'Liouni ERP',
+        appName: 'ERP',
         version: '1.0.0',
       }),
       getChangelog: jest.fn().mockReturnValue({
@@ -63,7 +63,7 @@ describe('AppConfigController', () => {
     const result = controller.getPublicConfig();
     expect(result).toEqual({
       appEnv: 'greenway-staging',
-      appName: 'Liouni ERP',
+      appName: 'ERP',
       version: '1.0.0',
     });
     expect(service.getPublicConfig).toHaveBeenCalled();
