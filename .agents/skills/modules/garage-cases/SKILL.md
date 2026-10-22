@@ -910,7 +910,7 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 ## 10. Thuộc tính Mặc định vs Tùy chỉnh (từ 2026-10-14)
 
-- **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi.
+- **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi. 2 def hệ thống `exclude_from_*` trong `erp_module_attribute_defs` đã soft-delete (migration `20261019100000`), không còn hiện ở Trường tùy chỉnh. Client gửi 2 cờ này ở top-level của `updateCaseConfig`, không đưa vào `customAttributes`; `isBuiltinCode` (module-field-registry) bỏ qua chúng nếu lỡ gửi.
 - **Tùy chỉnh**: EAV qua `StrictCustomFieldsHelper` (xem skill `module-config` mục 10).
 - `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → tự bật `excludeFromDebt` nếu client không gửi.
 - `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`).

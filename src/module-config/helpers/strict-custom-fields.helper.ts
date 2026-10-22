@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { ErpModuleAttributeDef } from '../entities/erp_module_attribute_def.entity';
 import { ErpEntityAttributeValue } from '../entities/erp_entity_attribute_value.entity';
-import { isBuiltinOrLegacyCode } from '../registry/module-field-registry';
+import { isBuiltinCode } from '../registry/module-field-registry';
 
 const TRUE_VALUES = new Set(['true', '1']);
 const FALSE_VALUES = new Set(['false', '0']);
@@ -82,7 +82,7 @@ export class StrictCustomFieldsHelper {
     const unknownKeys: string[] = [];
 
     for (const [key, raw] of Object.entries(customAttributes)) {
-      if (isBuiltinOrLegacyCode(moduleKey, key)) continue;
+      if (isBuiltinCode(moduleKey, key)) continue;
       const def = byId.get(key) ?? byCode.get(key.trim().toLowerCase());
       if (!def) {
         unknownKeys.push(key);
