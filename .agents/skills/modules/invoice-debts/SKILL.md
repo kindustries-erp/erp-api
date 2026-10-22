@@ -1,6 +1,6 @@
 ---
 name: invoice-debts
-description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong Liouni ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
+description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
 ---
 
 # 📦 Module Tri Thức: Công Nợ Theo Đối Tượng (Invoice Debts) - Backend & Frontend

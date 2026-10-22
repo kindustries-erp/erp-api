@@ -19,24 +19,24 @@ graph LR
     E --> F["6. Knowledge-Sync"]
 ```
 
-1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local; không dùng Cloud/Neon; dừng kiểm tra `.env.local`).
+1. **Plan-First (Strict Read-Only Discovery & Zero Execution)**: Không sửa code và **TUYỆT ĐỐI KHÔNG CHẠY TEST RUNNER** (`jest`, `bun run test`, `bun run check:ci`, build script) khi chưa có Plan được duyệt. Toàn bộ Phase 1 đến Phase 4 hoạt động ở **CHẾ ĐỘ READ-ONLY 100%**. Luôn đọc mã nguồn thực tế, kiểm tra đúng repo đích (`erp-api`), branch đích (`erp-master`) và cấu hình runtime thực tế (`.env`, DB theo `DATABASE_URL` trong `.env`; không dùng file env cục bộ khác).
 2. **Delivery Sequence Bắt Buộc**: `Database (Phase 1)` ➔ `API Backend (Phase 2)` ➔ `QC & Security (Phase 3)`.
 3. **Task Breakdown 3 Cấp (`X.Y.Z`) & Scoped DoD Verification**: Đánh số `Phase.Group.Task` (ví dụ `1.1.1`, `2.2.1`, `3.1.2`). Mỗi task nhỏ gọn (1–2 files), bắt buộc có **Definition of Done (DoD)** và **Verification Command thu hẹp (Scoped Test < 10s)**:
    - *Quy tắc Lập Plan (Zero Execution)*: Mã lệnh trong mục `Verification` chỉ là **ĐẶC TẢ VĂN BẢN (Text Specification)** để cam kết tiêu chí hoàn thành, **TUYỆT ĐỐI KHÔNG ĐƯỢC CHẠY** trong lúc lập Plan. Lệnh này CHỈ ĐƯỢC CHẠY ở Phase 5 sau khi User đã duyệt Plan.
    - *Test Runner Duy Nhất*: Trong `erp-api`, test runner duy nhất là **`jest`** (`bunx jest <spec>`, `bunx jest --findRelatedTests <file>`) hoặc `bunx tsc --noEmit`. **TUYỆT ĐỐI CẤM GÕ LỆNH `vitest` TRONG `erp-api`**.
    - *Atomic Task (`Z`)*: BẮT BUỘC dùng Scoped Test nhanh (< 5–10s). **TUYỆT ĐỐI CẤM** chạy full test suite (`bunx jest`, `bun run test`, `bun run check:ci`) ở từng task nhỏ để tránh nghẽn CPU.
-   - *Final Gate (Phase 3)*: Chỉ chạy `bun run verify:final` DUY NHẤT một lần ở Task 3.1.1 trên commit cuối trước khi nghiệm thu/push.
+   - *Final Gate (Phase 3)*: Chỉ chạy `bun run verify:final` DUY NHẤT một lần ở Task 3.1.1, **sau khi đã commit và `git pull --rebase`** (script yêu cầu working tree sạch), rồi mới push `--no-verify`.
 4. **Real-time Tracking & Test-First Tick**: Tại mỗi thời điểm **chỉ có duy nhất 1 task** ở trạng thái `[/] In Progress`. Tuyệt đối không tick `[x]` nếu lệnh kiểm thử chưa PASS 100%. Cập nhật tiến độ vào file `implementation_plan.md` ngay sau mỗi task.
 5. **Session Checkpoint Protocol (Pause & Resume)**: Hỗ trợ tạm dừng và tiếp tục mượt mà. Khi tạm dừng, bắt buộc ghi log vào mục `## ⏸️ Session Checkpoint`. Khi tiếp tục, Agent đọc lại Checkpoint để xác định chính xác task đang dang dở và bắt đầu làm tiếp ngay mà không phải hỏi lại từ đầu.
-6. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
+6. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `erp/erp-api/.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
 
 ---
 
 ## 🧭 Quy Trình 5 Giai Đoạn Chuẩn (5-Phase SOP)
 
 ### 🔹 GIAI ĐOẠN 1: Discovery & Deep Research (Khảo Sát & Ranh Giới)
-- **Runtime Truth Verification**: Đọc trực tiếp `.env` để kiểm tra kết nối DB (PostgreSQL dedicated tại `db-dev.liouni.com:5433` hoặc local). Tuyệt đối dừng kiểm tra `.env.local` và không dùng thông tin cũ/Neon.
-- **Scan Codebase & Tri thức (READ-ONLY)**: Dùng `grep_search`, `view_file` rà soát Entities, Services, DTOs liên quan và đọc module SKILL (`.agents/skills/modules/...`). Tuyệt đối KHÔNG chạy test runner ở bước này.
+- **Runtime Truth Verification**: Đọc trực tiếp `.env` để kiểm tra kết nối DB (theo `DATABASE_URL` trong `.env`). Chạy `SELECT current_database();` và báo tên DB trước khi ghi. Không suy ra DB từ tên file hay thông tin cũ.
+- **Scan Codebase & Tri thức (READ-ONLY)**: Dùng `grep_search`, `view_file` rà soát Entities, Services, DTOs liên quan và đọc module SKILL (`erp/erp-api/.agents/skills/modules/...`). Tuyệt đối KHÔNG chạy test runner ở bước này.
 - **Scope Boundaries**: Định rõ **In-Scope** (làm gì) và **Out-of-Scope** (không làm gì) để triệt tiêu Scope Creep.
 - **Threat Model**: Đánh giá RBAC permissions, SQL injection, khóa bi quan (pessimistic lock khi trừ kho/sổ quỹ), và rủi ro cross-module.
 
@@ -128,10 +128,10 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 4. **Thực thi liền mạch**: Bắt tay làm tiếp ngay từ đúng bước trong checkpoint mà không làm lại từ đầu.
 
 #### 4. Nghiệm thu, Cập nhật Tri thức & Báo cáo (Walkthrough & Knowledge Sync)
-- **Nghiệm thu cuối cùng (Final Gate)**: Chạy `bun run verify:final` DUY NHẤT một lần ở cuối toàn bộ kế hoạch; sau đó push bằng `--no-verify`.
+- **Nghiệm thu cuối cùng (Final Gate)**: Chạy `bun run verify:final` DUY NHẤT một lần ở cuối toàn bộ kế hoạch, sau khi commit và `git pull --rebase`; sau đó push bằng `--no-verify`.
 - **Knowledge & Skill Sync (Bắt buộc kiểm tra & cập nhật liền sau khi xong task)**:
-  - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
-  - Nếu là module hoàn toàn mới: tạo file skill mới tại `.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `liouni-erp-api-current-truth`.
+  - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
+  - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-current-truth`.
   - Tuyệt đối không để tri thức chỉ nằm trong commit hoặc đầu óc mà không ghi vào skill.
 - **Tạo Báo cáo Nghiệm thu**: Tạo file `walkthrough.md` đính kèm bằng chứng test logs và trạng thái đồng bộ skill.
 
@@ -186,7 +186,7 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
   - **Phân hệ**: `DB` | **Ưu tiên**: `P0`
   - **Files**: `[NEW]` [src/migrations/1780000000000-CreateCustomTable.ts](erp/erp-api/src/migrations/1780000000000-CreateCustomTable.ts)
   - **DoD**: Có cả `up()` và `down()`.
-  - **Verification**: `bun run typeorm migration:run`
+  - **Verification**: `bun run migration:run`
 
 ### Phase 2: Backend API
 #### 2.1 DTOs & Validation
@@ -253,5 +253,5 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
 ## 🧠 Tri Thức & Skill Đồng Bộ (Knowledge Sync)
 - **Module Skill**: Đã cập nhật `[path/to/SKILL.md]` (hoặc: *Không có thay đổi schema/contract*).
-- **Current Truth**: Đã liên kết vào `liouni-erp-api-current-truth`.
+- **Current Truth**: Đã liên kết vào `erp-api-current-truth`.
 ```

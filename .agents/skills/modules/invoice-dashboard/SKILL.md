@@ -7,7 +7,7 @@ description: Module tri thức Dashboard & Báo cáo Phân tích Hóa đơn (Inv
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `invoice-dashboard` (được triển khai tại `src/erp-invoices-core/invoice-dashboard.service.ts` và `src/erp-invoices-core/invoice-dashboard.controller.ts`) là trung tâm dữ liệu phân tích hóa đơn tài chính và đối soát công nợ VAT trong hệ thống Liouni ERP.
+Module `invoice-dashboard` (được triển khai tại `src/erp-invoices-core/invoice-dashboard.service.ts` và `src/erp-invoices-core/invoice-dashboard.controller.ts`) là trung tâm dữ liệu phân tích hóa đơn tài chính và đối soát công nợ VAT trong hệ thống ERP.
 
 > [!IMPORTANT]
 > **Phân định Ranh giới Kiến trúc & Đồng bộ Hệ Thống**:

@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Cấu hình Danh mục, Thuộc tính 
 
 ## 1. Tổng quan Nghiệp vụ & Kiến trúc Hệ thống
 
-Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (EAV - Entity-Attribute-Value)** thống nhất, tinh gọn và có khả năng scale vô hạn cho toàn bộ hệ sinh thái Liouni ERP:
+Module `module-config` cung cấp nền tảng **Dynamic Custom Fields Engine (EAV - Entity-Attribute-Value)** thống nhất, tinh gọn và có khả năng scale vô hạn cho toàn bộ hệ sinh thái ERP:
 1. **Thuộc tính Mặc định Hệ thống (`is_system = true`)**:
    - Khởi tạo sẵn các trường cốt lõi của từng phân hệ chuẩn hóa theo mã `category` (VD: `category` cho `INVOICE_IN`, `INVOICE_OUT`, `GOODS_RECEIPT`, `GOODS_ISSUE`, `INVENTORY_ADJUSTMENT`; cùng các thuộc tính chuyên biệt như `is_valid`, `color`, `version`, `type_production_order`).
    - Tự động map 2 chiều (Dual-Key / Alias Mapping) giữa mã chuẩn `category` và các mã alias cũ (`type_invoice_in`, `type_invoice_out`, `type_inventory_receipt`, `type_inventory_issue`, `type_inventory_adjustment`).
@@ -302,7 +302,7 @@ Trang quản lý Master Data các trường tùy chỉnh và danh mục động:
 
 ```bash
 # 1. Backend tests
-cd erp/erp-api && bun test src/module-config
+cd erp/erp-api && bunx jest src/module-config
 
 # 2. Backend CI checks (Type, Lint, Prettier)
 cd erp/erp-api && bun run check:ci
@@ -318,7 +318,7 @@ cd erp/erp-web && bun run type:check && bun run test
 
 **Nguyên tắc (áp dụng từ 2026-10-14, pilot `GARAGE_CASE`):**
 - **Built-in (mặc định)** = field do code sở hữu, lưu **cột typed** trên bảng thực thể (nguồn sự thật duy nhất), khai báo trong `src/module-config/registry/module-field-registry.ts` (`MODULE_FIELD_REGISTRY`). KHÔNG ghi vào EAV.
-- **Custom (tùy chỉnh)** = EAV `erp_entity_attribute_values`, chỉ def `is_system = false`. Ghi bằng `StrictCustomFieldsHelper.saveInTx` (`helpers/strict-custom-fields.helper.ts`): validate theo `field_type` (NUMBER/DATE/CHECKBOX/SELECT), key lạ → 400, upsert theo def (rỗng → xóa riêng def đó, def không có trong payload giữ nguyên), bỏ qua key built-in/legacy.
+- **Custom (tùy chỉnh)** = EAV `erp_entity_attribute_values`, chỉ def `is_system = false`. Ghi bằng `StrictCustomFieldsHelper.saveInTx` (`helpers/strict-custom-fields.helper.ts`): validate theo `field_type` (NUMBER/DATE/CHECKBOX/SELECT), key lạ → 400, upsert theo def (rỗng → xóa riêng def đó, def không có trong payload giữ nguyên), bỏ qua key built-in (theo key hoặc tên cột, `isBuiltinCode`).
 - `EntityCustomFieldsHelper.saveInTx` (cũ, xóa-rồi-chèn) vẫn dùng cho các module chưa có registry.
 - `enrichOne`/`enrichMany`: module có registry được thêm `builtin` (từ cột) và `custom.byCode` (EAV tùy chỉnh) bên cạnh alias cũ `customAttributes`/`attributes`/`attributeValues`. **TODO dọn alias** khi mọi module chuyển xong (đã chốt giữ alias 1 release).
 - `PUT /module-config/values/:entityType/:id` với module có registry → 400; ghi qua endpoint riêng của module (vd `PATCH /cases/:id/config`).
@@ -331,7 +331,7 @@ cd erp/erp-web && bun run type:check && bun run test
 
 ### Checklist thêm module mới có "mặc định + tùy chỉnh"
 1. Đặt field mặc định thành **cột typed** trên bảng thực thể (migration có `up()`/`down()`), không tạo def `is_system` ghi đôi vào EAV.
-2. Đăng ký module trong `MODULE_FIELD_REGISTRY` (builtin + `legacySystemCodes` nếu có).
+2. Đăng ký module trong `MODULE_FIELD_REGISTRY` (builtin; cột typed của module, không tạo def EAV cho chúng).
 3. Nếu nghiệp vụ phân nhánh theo category: thêm `semantic_key` + backfill, so sánh theo `semantic_key`.
 4. Service ghi: cột built-in + `StrictCustomFieldsHelper.saveInTx` trong CÙNG transaction.
 5. Thêm `entityType → resource` vào `ENTITY_TYPE_RESOURCE` (`guards/entity-values-permission.guard.ts`).

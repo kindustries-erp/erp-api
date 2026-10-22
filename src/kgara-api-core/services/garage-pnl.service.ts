@@ -880,8 +880,8 @@ export class GaragePnlService {
   async exportPnlExcel(year?: number, month?: number): Promise<Buffer> {
     const report = await this.getPnlReport(year, month);
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet(

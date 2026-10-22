@@ -1,6 +1,6 @@
 ---
 name: db-migrate
-description: Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, kết nối PostgreSQL Dedicated/Local (db-dev.liouni.com), backup trước khi apply schema và runbook migrate Production DB.
+description: Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, kết nối PostgreSQL theo `DATABASE_URL` của file env đang dùng, backup trước khi apply schema và runbook migrate Production DB.
 ---
 
 # Hướng dẫn DB Migrate & Production Runbook (`erp-api`)
@@ -12,8 +12,8 @@ Bất cứ khi nào làm việc với Database liên quan đến migration hay c
 
 ## 0. Quy tắc Database Connection (Bắt buộc)
 
-- **PostgreSQL Dedicated:** Môi trường hiện tại sử dụng PostgreSQL Dedicated / nội bộ (`db-dev.liouni.com:5433` hoặc local container). Không còn sử dụng Neon DB Cloud.
-- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env` hoặc `.env.production`).
+- **Kết nối DB:** DB thực tế lấy từ `DATABASE_URL` trong file env đang dùng. Chạy `SELECT current_database();` và báo tên DB trước khi ghi; không suy ra DB từ tên file.
+- **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env` hoặc `.env.<tenant>-<stage>`).
 - **Fallback `DB_HOST` / `DB_PORT`:** Nếu file `.env` không có `DATABASE_URL` nhưng có cấu hình `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, `DB_SSL`, runner sẽ tự động ghép chuỗi kết nối chuẩn `postgresql://USER:PASS@HOST:PORT/DB?sslmode=...`.
 - **Pooler Compatibility Guard:** Runner vẫn giữ bộ lọc tự động chuẩn hóa URL nếu gặp chuỗi kết nối pooler legacy để đảm bảo an toàn tuyệt đối khi chạy DDL migration.
 
@@ -51,7 +51,7 @@ Dựa vào câu lệnh của User, tự suy luận xem họ đang cần ở Mode
    - Dùng `bun` hoặc `bunx` độc quyền.
 4. **Dọn dẹp Code & Script thừa sau khi migrate:**
    - Xóa ngay mọi script thử nghiệm, scratch files, file dump tạm thời ngoài thư mục backups.
-   - Chỉ giữ lại các file migration chuẩn trong `src/migrations/` và bản backup tự động trong `.agents/skills/db-migrate/backups/`.
+   - Chỉ giữ lại các file migration chuẩn trong `src/migrations/` và bản backup tự động trong `backups/`.
 
 ---
 
@@ -96,7 +96,7 @@ bash .agents/skills/db-migrate/scripts/typeorm-runner.sh sync <SOURCE_ENV_FILE> 
 - Pipeline: `typeorm-runner.sh run` dùng `dist/db/run-migrations.js` khi có `dist/`, không có thì `ts-node`.
 - Không sửa tên migration đã chạy trên bất kỳ DB nào. Muốn đổi thứ tự thì thêm cặp vào `src/db/migration-order.repo.spec.ts`, không đổi tên file.
 - Migration mới có thể dùng epoch (`Date.now()`, plop `api-migration`) hoặc 14 số: cả hai đều được sắp đúng.
-- Trước khi chạy trên DB có dữ liệu: backup đầy đủ `pg_dump -Fc` vào `.agents/skills/db-migrate/backups/` (runner chỉ tạo schema `.sql`, không đủ để khôi phục dữ liệu), ghi log lần chạy cùng thư mục, rồi chạy `migration:show` xem danh sách pending.
+- Trước khi chạy trên DB có dữ liệu: backup đầy đủ `pg_dump -Fc` vào `backups/` (runner chỉ tạo schema `.sql`, không đủ để khôi phục dữ liệu), ghi log lần chạy cùng thư mục, rồi chạy `migration:show` xem danh sách pending.
 
 ## 4. Hướng dẫn Viết Migration EAV Mới (Idempotent Standard)
 
@@ -198,7 +198,7 @@ Dưới đây là quy trình chuẩn từng bước để tiến hành migrate C
 # 1. Chạy runner tự động tạo backup snapshot
 bash .agents/skills/db-migrate/scripts/typeorm-runner.sh run .env.production
 ```
-*(Script sẽ tự động chạy `pg_dump` tạo file `.sql` nén trong thư mục `.agents/skills/db-migrate/backups/` trước khi áp dụng bất kỳ lệnh DDL nào).*
+*(Script sẽ tự động chạy `pg_dump` tạo file `.sql` nén trong thư mục `backups/` trước khi áp dụng bất kỳ lệnh DDL nào).*
 
 #### Bước 2: Kiểm tra danh sách Pending Migrations
 ```bash

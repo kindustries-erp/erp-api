@@ -361,7 +361,7 @@ export class VinfastPartsService {
     onProgress?.(80, totalProgress, 'Đang tạo workbook Excel...');
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
+    workbook.creator = 'ERP';
 
     // Sheet 1: Tổng hợp tồn kho
     const summarySheet = workbook.addWorksheet('Tổng Hợp Tồn Kho');

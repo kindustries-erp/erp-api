@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Trạng thái Tác vụ Toàn cục, K
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module Tác vụ Hệ thống (`system-operations-core`) là hạ tầng kiểm soát xung đột và đồng bộ trạng thái giao dịch nặng trên toàn hệ thống Liouni ERP:
+Module Tác vụ Hệ thống (`system-operations-core`) là hạ tầng kiểm soát xung đột và đồng bộ trạng thái giao dịch nặng trên toàn hệ thống ERP:
 - **Chống Submit Trùng Lặp & Race Condition**: Khi người dùng thực hiện các nghiệp vụ tính toán lớn (nhập kho theo PO, chạy BOM đa cấp, phân bổ giá vốn FIFO, kết chuyển số dư), hệ thống tự động đăng ký một bản ghi khóa (`is_blocking_ui = true`).
 - **Đồng bộ Tiến độ & Khóa Giao diện Đa Thiết bị (Multi-Device & Tab Resilience)**: Dù người dùng F5 reload trang, chuyển tab hoặc đăng nhập từ máy tính khác, trạng thái tác vụ đang chạy vẫn được bảo tồn và hiển thị minh bạch.
 - **Tối ưu Hiệu năng Cực Hạn (Zero-Cost Polling)**:

@@ -1,13 +1,13 @@
 ---
 name: cashflow-dashboard
-description: Module tri thức Báo cáo, Phân tích & Dự báo Dòng tiền (Cashflow Dashboard & Forecast) trong Liouni ERP (dashboard-core & bank-transactions-core). Chứa toàn bộ database schema, API endpoints, DTOs, logic tính toán KPI dòng tiền, phân bổ đối tác, dự báo chi phí và gợi ý ngân sách tự động từ sao kê.
+description: Module tri thức Báo cáo, Phân tích & Dự báo Dòng tiền (Cashflow Dashboard & Forecast) trong ERP (dashboard-core & bank-transactions-core). Chứa toàn bộ database schema, API endpoints, DTOs, logic tính toán KPI dòng tiền, phân bổ đối tác, dự báo chi phí và gợi ý ngân sách tự động từ sao kê.
 ---
 
 # 📦 Module Tri Thức: Dashboard Phân Tích & Dự Báo Dòng Tiền (`cashflow-dashboard`) - Backend (`erp-api`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `cashflow-dashboard` (được hiện thực qua `src/bank-transactions-core/services/transaction-analytics.service.ts` và `src/dashboard-core/`) là trung tâm tình báo tài chính, chịu trách nhiệm tổng hợp, phân tích số liệu thực thu/thực chi và dự phóng dòng tiền tương lai trong hệ thống Liouni ERP.
+Module `cashflow-dashboard` (được hiện thực qua `src/bank-transactions-core/services/transaction-analytics.service.ts` và `src/dashboard-core/`) là trung tâm tình báo tài chính, chịu trách nhiệm tổng hợp, phân tích số liệu thực thu/thực chi và dự phóng dòng tiền tương lai trong hệ thống ERP.
 
 ### 1.1. Các tính năng cốt lõi:
 - **KPI Dòng tiền Tổng quan (`dashboard-stats`)**:

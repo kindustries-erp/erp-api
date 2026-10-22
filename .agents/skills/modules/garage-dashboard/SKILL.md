@@ -7,7 +7,7 @@ description: Module tri thức Dashboard, Báo cáo Hiệu quả Garage, Quản 
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) là trung tâm tình báo điều hành, phân tích tài chính xưởng dịch vụ và quản lý chi phí vận hành (OPEX) trong hệ thống Liouni ERP.
+Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) là trung tâm tình báo điều hành, phân tích tài chính xưởng dịch vụ và quản lý chi phí vận hành (OPEX) trong hệ thống ERP.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Quy tắc Tính toán Doanh thu & Chi phí theo Ngày hoàn thành (Strict Completion Date Rule)**:

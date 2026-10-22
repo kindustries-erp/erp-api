@@ -47,7 +47,7 @@ describe('AppConfigService', () => {
     const result = service.getPublicConfig();
     expect(result).toEqual({
       appEnv: 'greenway-staging',
-      appName: 'Liouni ERP',
+      appName: 'ERP',
       version: '1.0.0',
     });
   });

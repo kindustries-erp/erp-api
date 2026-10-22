@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vố
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc lõi `kgara-api-core` trong hệ thống Liouni ERP. Module này chịu trách nhiệm số hóa, phân loại, lưu trữ và tổng hợp toàn bộ các khoản chi phí phát sinh ngoài các chi phí trực tiếp trên phiếu dịch vụ (như phụ tùng, công thợ), phục vụ việc lập Báo cáo Lợi nhuận P&L (`getPnlReport`) và phân tích điểm hòa vốn cho xưởng dịch vụ Greenway.
+Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc lõi `kgara-api-core` trong hệ thống ERP. Module này chịu trách nhiệm số hóa, phân loại, lưu trữ và tổng hợp toàn bộ các khoản chi phí phát sinh ngoài các chi phí trực tiếp trên phiếu dịch vụ (như phụ tùng, công thợ), phục vụ việc lập Báo cáo Lợi nhuận P&L (`getPnlReport`) và phân tích điểm hòa vốn cho xưởng dịch vụ Greenway.
 
 ### Các nghiệp vụ trọng tâm:
 - **3 Nhóm Chi Phí Cốt Lõi (`CostGroupType`)**:
@@ -186,7 +186,7 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
   ```
 - **Chạy kiểm thử Unit Tests**:
   ```bash
-  bun test src/kgara-api-core/services/garage-opex.service.spec.ts
+  bunx jest src/kgara-api-core/services/garage-opex.service.spec.ts
   ```
 
 ## Dòng opex sinh từ phiếu chi garage (cập nhật 2026-10-17)

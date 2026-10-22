@@ -40,5 +40,5 @@
 ## Notes
 
 - `.env` trỏ `erp_greenway_production`; migration không dùng file này.
-- Migration được chạy bằng `.env.local`, database `erp_local`, sau khi xác nhận `SELECT current_database()`.
+- Migration được chạy trên database cục bộ `erp_local`, sau khi xác nhận `SELECT current_database()`.
 - Không commit file untracked `.claude/commands/clean-brain.md` có sẵn từ trước.

@@ -35,8 +35,8 @@ export class InvoiceDebtsExportService {
     },
   ): Promise<Buffer> {
     const workbook = new Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     const partnerType = queryDto.partner_type || InvoicePartnerType.CUSTOMER;
