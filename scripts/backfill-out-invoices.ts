@@ -55,7 +55,9 @@ async function run() {
       if (expectedBranchId && inv.branch_id !== expectedBranchId) {
         if (!DRY_RUN) {
           await client.query(
-            'UPDATE erp_invoices SET branch_id = $1 WHERE id = $2',
+            // Chỉ cập nhật hóa đơn chưa gán hoặc gán đúng một chi nhánh; không ghi đè hóa đơn nhiều chi nhánh
+            `UPDATE erp_invoices SET branch_id = $1, branch_ids = ARRAY[$1]::uuid[]
+             WHERE id = $2 AND (cardinality(branch_ids) = 0 OR branch_ids = ARRAY[branch_id]::uuid[])`,
             [expectedBranchId, inv.id],
           );
         }

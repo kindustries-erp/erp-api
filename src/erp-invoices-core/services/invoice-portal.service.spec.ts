@@ -78,6 +78,9 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       mockR2Service,
       mockNotificationsService,
       mockLifecycleService,
+      {
+        assign: jest.fn().mockResolvedValue({ updated: [], skipped: [] }),
+      } as any,
       mockVinfastPartsService,
     );
   });

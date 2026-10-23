@@ -1,12 +1,14 @@
 import { NotFoundException } from '@nestjs/common';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import { ErpInvoiceVoucherNetOff } from '../entities/erp_invoice_voucher_netoff.entity';
+import { ErpInvoice } from '../entities/erp_invoice.entity';
 
 describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
   let service: InvoiceLifecycleService;
   let repository: any;
   let bankTransactionsCoreService: any;
   let transactionAccountingService: any;
+  let branchService: { assign: jest.Mock };
 
   beforeEach(() => {
     repository = {
@@ -27,6 +29,10 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       },
     };
 
+    repository.manager.transaction = jest.fn((run: (m: unknown) => unknown) =>
+      run(repository.manager),
+    );
+
     bankTransactionsCoreService = {};
 
     transactionAccountingService = {
@@ -35,6 +41,9 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
         .mockResolvedValue(undefined),
     };
 
+    branchService = {
+      assign: jest.fn().mockResolvedValue({ updated: [], skipped: [] }),
+    };
     service = new InvoiceLifecycleService(
       repository,
       { find: jest.fn().mockResolvedValue([]) } as any,
@@ -46,6 +55,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
         updateJournalEntryBranch: jest.fn(),
       } as any,
       transactionAccountingService,
+      branchService as any,
     );
   });
 
@@ -65,10 +75,9 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       { bankTransactionId: 'txn-2', netOffAmount: 50 },
     ]);
 
-    expect(repository.save).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'inv-1', branchId: 'branch-a' }),
-    );
-    expect(repository.manager.save).toHaveBeenCalled();
+    expect(branchService.assign).toHaveBeenCalledWith(['inv-1'], ['branch-a'], {
+      onlyIfUnassigned: true,
+    });
     expect(
       transactionAccountingService.refreshJournalEntriesForBankTransaction,
     ).toHaveBeenCalledWith('txn-1');
@@ -223,7 +232,8 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
 
     await service.update('inv-1', { notes: 'updated' } as any);
 
-    expect(repository.save).toHaveBeenCalledWith(
+    expect(repository.manager.save).toHaveBeenCalledWith(
+      ErpInvoice,
       expect.objectContaining({ id: 'inv-1', notes: 'updated' }),
     );
     expect(
@@ -372,42 +382,32 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
     });
   });
   describe('bulkSetBranch', () => {
-    beforeEach(() => {
-      repository.update = jest.fn().mockResolvedValue({ affected: 1 });
-      repository.find = jest
-        .fn()
-        .mockResolvedValueOnce([{ id: 'inv-1' }])
-        .mockResolvedValue([]);
-    });
-
-    it('checks branch existence with is_active, not is_deleted', async () => {
-      repository.manager.query.mockResolvedValueOnce([{ id: 'branch-a' }]);
-
-      await service.bulkSetBranch(['inv-1'], ['branch-a']);
-
-      const sql = repository.manager.query.mock.calls[0][0] as string;
-      expect(sql).toContain('is_active = true');
-      expect(sql).not.toContain('is_deleted');
-    });
-
-    it('rejects when a branch does not exist or is inactive', async () => {
-      repository.manager.query.mockResolvedValueOnce([]);
-
-      await expect(
-        service.bulkSetBranch(['inv-1'], ['branch-a']),
-      ).rejects.toThrow('Có chi nhánh không tồn tại.');
-      expect(repository.update).not.toHaveBeenCalled();
-    });
-
-    it('skips the branch check when the branch list is empty (unassign)', async () => {
-      const result = await service.bulkSetBranch(['inv-1'], []);
-
-      expect(repository.manager.query).not.toHaveBeenCalled();
-      expect(repository.update).toHaveBeenCalledWith(
-        { id: expect.anything() },
-        { branchIds: [], branchId: null },
+    it('delegates to InvoiceBranchService and reports every touched invoice', async () => {
+      const branchService = {
+        assign: jest
+          .fn()
+          .mockResolvedValue({ updated: ['inv-1'], skipped: ['inv-2'] }),
+      };
+      const local = new InvoiceLifecycleService(
+        repository,
+        { find: jest.fn().mockResolvedValue([]) } as any,
+        { deleteObject: jest.fn() } as any,
+        bankTransactionsCoreService,
+        { createJournalEntry: jest.fn() } as any,
+        transactionAccountingService,
+        branchService as any,
       );
-      expect(result).toEqual({ updated: 1, ids: ['inv-1'] });
+
+      const result = await local.bulkSetBranch(
+        ['inv-1', 'inv-2'],
+        ['branch-a'],
+      );
+
+      expect(branchService.assign).toHaveBeenCalledWith(
+        ['inv-1', 'inv-2'],
+        ['branch-a'],
+      );
+      expect(result).toEqual({ updated: 2, ids: ['inv-1', 'inv-2'] });
     });
   });
 

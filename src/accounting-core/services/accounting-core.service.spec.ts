@@ -549,4 +549,91 @@ describe('AccountingCoreService', () => {
       expect(result).toBeDefined();
     });
   });
+  describe('reallocateJournalEntriesBySource', () => {
+    const existing = {
+      date: new Date('2026-07-17'),
+      documentDate: null,
+      description: 'Hóa đơn',
+      subjectName: 'NCC',
+      reference: null,
+      lines: [
+        { accountId: '152', debit: 100, credit: 0, description: 'a' },
+        { accountId: '331', debit: 0, credit: 100, description: 'b' },
+      ],
+    };
+    let txManager: any;
+
+    beforeEach(() => {
+      txManager = {
+        query: jest.fn().mockResolvedValue([{ current_value: 1 }]),
+      };
+      journalEntryRepo.manager.transaction = jest.fn((run) => run(txManager));
+    });
+
+    it('runs read, delete and recreate inside one transaction with the same manager', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([existing] as any);
+      const deleteSpy = jest
+        .spyOn(service, 'deleteJournalEntryBySource')
+        .mockResolvedValue(undefined);
+      const createSpy = jest
+        .spyOn(service, 'createJournalEntriesForBranches')
+        .mockResolvedValue({ id: 'new' } as any);
+
+      const result = await service.reallocateJournalEntriesBySource(
+        'inv-1',
+        'INVOICE',
+        ['b1', 'b2'],
+        'HĐM',
+      );
+
+      expect(journalEntryRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(service.getJournalEntriesBySource).toHaveBeenCalledWith(
+        'inv-1',
+        'INVOICE',
+        txManager,
+      );
+      expect(deleteSpy).toHaveBeenCalledWith('inv-1', 'INVOICE', txManager);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branchIds: ['b1', 'b2'],
+          entryNoPrefix: 'HĐM',
+        }),
+        txManager,
+      );
+      expect(result).toEqual({ id: 'new' });
+    });
+
+    it('propagates a failure during recreate so the transaction is rolled back', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([existing] as any);
+      jest
+        .spyOn(service, 'deleteJournalEntryBySource')
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service, 'createJournalEntriesForBranches')
+        .mockRejectedValue(new Error('insert failed'));
+
+      await expect(
+        service.reallocateJournalEntriesBySource('inv-1', 'INVOICE', ['b1']),
+      ).rejects.toThrow('insert failed');
+      expect(journalEntryRepo.manager.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null without deleting when the source has no entries', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([] as any);
+      const deleteSpy = jest.spyOn(service, 'deleteJournalEntryBySource');
+
+      expect(
+        await service.reallocateJournalEntriesBySource('inv-1', 'INVOICE', [
+          'b1',
+        ]),
+      ).toBeNull();
+      expect(deleteSpy).not.toHaveBeenCalled();
+    });
+  });
 });

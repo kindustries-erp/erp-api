@@ -8,6 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
+import { InvoiceBranchService } from './invoice-branch.service';
+import { readBranchIds } from '../../common/utils/branch-ids.util';
 import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
 import { ErpInvoiceVoucherNetOff } from '../entities/erp_invoice_voucher_netoff.entity';
 import { CreateErpInvoiceDto } from '../dto/create-erp-invoice.dto';
@@ -54,6 +56,7 @@ export class InvoiceLifecycleService {
     private readonly bankTransactionsCoreService: BankTransactionsCoreService,
     private readonly accountingCoreService: AccountingCoreService,
     private readonly transactionAccountingService: TransactionAccountingService,
+    private readonly branchService: InvoiceBranchService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -261,71 +264,70 @@ export class InvoiceLifecycleService {
     if (dto.totalAmount != null)
       updatePayload.totalAmount = String(dto.totalAmount);
 
-    const oldBranchIds = currentBranchIds(existing);
-    const wasPosted = existing.postingStatus === 'POSTED';
+    await this.repository.manager.transaction(async (manager) => {
+      const oldBranchIds = currentBranchIds(existing);
+      const wasPosted = existing.postingStatus === 'POSTED';
 
-    this.repository.merge(existing, updatePayload);
+      this.repository.merge(existing, updatePayload);
 
-    if (dto.items) {
-      // Preserve Guard: preserve existing itemCode if set previously
-      const existingMap = new Map<string, string>();
-      for (const ex of existing.items || []) {
-        if (ex.description && ex.itemCode) {
-          existingMap.set(ex.description.trim(), ex.itemCode);
+      if (dto.items) {
+        // Preserve Guard: preserve existing itemCode if set previously
+        const existingMap = new Map<string, string>();
+        for (const ex of existing.items || []) {
+          if (ex.description && ex.itemCode) {
+            existingMap.set(ex.description.trim(), ex.itemCode);
+          }
         }
+
+        await manager.delete(ErpInvoiceItem, { invoiceId: id });
+        const newItems = dto.items.map((i) => {
+          const existingCode = i.description
+            ? existingMap.get(i.description.trim())
+            : undefined;
+          const resolved = extractStandardItemCode({
+            description: i.description,
+            itemCode: i.itemCode || existingCode,
+            unit: i.unit,
+            discountAmount: i.discountAmount,
+            preVatAmount: i.preVatAmount,
+            sellerName: existing.sellerName,
+            sellerTaxCode: existing.sellerTaxCode,
+            direction: existing.direction,
+          });
+
+          return manager.create(ErpInvoiceItem, {
+            invoiceId: id,
+            itemCode: resolved.itemCode || existingCode || i.itemCode || null,
+            description: i.description,
+            unit: i.unit,
+            quantity: i.quantity != null ? String(i.quantity) : null,
+            unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
+            preVatAmount: String(i.preVatAmount ?? 0),
+            vatRate: i.vatRate != null ? String(i.vatRate) : null,
+            vatAmount: String(i.vatAmount ?? 0),
+            discountAmount: String(i.discountAmount ?? 0),
+            totalAmount: String(i.totalAmount ?? 0),
+          });
+        });
+        await manager.save(ErpInvoiceItem, newItems);
+        delete (existing as any).items;
       }
 
-      await this.repository.manager.delete(ErpInvoiceItem, { invoiceId: id });
-      const newItems = dto.items.map((i) => {
-        const existingCode = i.description
-          ? existingMap.get(i.description.trim())
-          : undefined;
-        const resolved = extractStandardItemCode({
-          description: i.description,
-          itemCode: i.itemCode || existingCode,
-          unit: i.unit,
-          discountAmount: i.discountAmount,
-          preVatAmount: i.preVatAmount,
-          sellerName: existing.sellerName,
-          sellerTaxCode: existing.sellerTaxCode,
-          direction: existing.direction,
-        });
+      extractInvoiceMetadata(existing);
+      await manager.save(ErpInvoice, existing);
 
-        return this.repository.manager.create(ErpInvoiceItem, {
-          invoiceId: id,
-          itemCode: resolved.itemCode || existingCode || i.itemCode || null,
-          description: i.description,
-          unit: i.unit,
-          quantity: i.quantity != null ? String(i.quantity) : null,
-          unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
-          preVatAmount: String(i.preVatAmount ?? 0),
-          vatRate: i.vatRate != null ? String(i.vatRate) : null,
-          vatAmount: String(i.vatAmount ?? 0),
-          discountAmount: String(i.discountAmount ?? 0),
-          totalAmount: String(i.totalAmount ?? 0),
-        });
-      });
-      await this.repository.manager.save(ErpInvoiceItem, newItems);
-      delete (existing as any).items;
-    }
-
-    extractInvoiceMetadata(existing);
-    await this.repository.save(existing);
-
-    const newBranchIds = currentBranchIds(existing);
-    if (wasPosted && !sameIds(oldBranchIds, newBranchIds)) {
-      await this.accountingCoreService
-        .reallocateJournalEntriesBySource(
+      const newBranchIds = currentBranchIds(existing);
+      if (wasPosted && !sameIds(oldBranchIds, newBranchIds)) {
+        // Tái phân bổ cùng transaction: lỗi thì hóa đơn và bút toán đều không đổi
+        await this.accountingCoreService.reallocateJournalEntriesBySource(
           id,
           'INVOICE',
           newBranchIds,
           existing.direction === 'IN' ? 'HĐM' : 'HĐB',
-        )
-        .catch((e) =>
-          this.logger.warn(`UC2 branch sync failed for ${id}: ${e.message}`),
+          manager,
         );
-    }
-
+      }
+    });
     return this.findOne(id);
   }
 
@@ -374,54 +376,11 @@ export class InvoiceLifecycleService {
   // Bulk operations
   // ---------------------------------------------------------------------------
 
+  /** Gán chi nhánh hàng loạt. Logic kiểm tra, ghi hai cột và tái phân bổ nằm ở InvoiceBranchService. */
   async bulkSetBranch(ids: string[], branchIds: string[]) {
-    if (!ids || !ids.length) return { updated: 0, ids: [] };
-
-    const targetIds = [...new Set(branchIds ?? [])];
-    if (targetIds.length > 0) {
-      const found: { id: string }[] = await this.repository.manager.query(
-        `SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true`,
-        [targetIds],
-      );
-      if (found.length !== targetIds.length) {
-        throw new BadRequestException('Có chi nhánh không tồn tại.');
-      }
-    }
-
-    const existingInvoices = await this.repository.find({
-      where: { id: In(ids), isDeleted: false },
-      select: ['id'],
-    });
-    const validIds = existingInvoices.map((inv) => inv.id);
-    if (validIds.length === 0) return { updated: 0, ids: [] };
-
-    await this.repository.update(
-      { id: In(validIds) },
-      { branchIds: targetIds, branchId: targetIds[0] ?? null },
-    );
-
-    const postedInvoices = await this.repository.find({
-      where: { id: In(validIds), postingStatus: 'POSTED', isDeleted: false },
-      select: ['id', 'direction'],
-    });
-
-    // Tái phân bổ bút toán từng hóa đơn đã ghi sổ (tuần tự để tránh tranh chấp số chứng từ)
-    for (const inv of postedInvoices) {
-      await this.accountingCoreService
-        .reallocateJournalEntriesBySource(
-          inv.id,
-          'INVOICE',
-          targetIds,
-          inv.direction === 'IN' ? 'HĐM' : 'HĐB',
-        )
-        .catch((e) =>
-          this.logger.warn(
-            `UC2 bulk branch sync failed for ${inv.id}: ${e.message}`,
-          ),
-        );
-    }
-
-    return { updated: validIds.length, ids: validIds };
+    const result = await this.branchService.assign(ids, branchIds ?? []);
+    const touched = [...result.updated, ...result.skipped];
+    return { updated: touched.length, ids: touched };
   }
 
   async bulkSetNotes(ids: string[], notes: string) {
@@ -633,12 +592,14 @@ export class InvoiceLifecycleService {
           relations: ['bankTransaction'],
         },
       );
-      const validBranch = netOffs.find(
-        (n) =>
-          n.bankTransaction &&
-          !n.bankTransaction.isDeleted &&
-          n.bankTransaction.branchId,
-      )?.bankTransaction?.branchId;
+      // Chỉ suy từ sao kê có đúng một chi nhánh (đọc cả branch_ids, không chỉ branch_id)
+      const validBranch = netOffs
+        .map((n) =>
+          n.bankTransaction && !n.bankTransaction.isDeleted
+            ? readBranchIds(n.bankTransaction)
+            : [],
+        )
+        .find((ids) => ids.length === 1)?.[0];
 
       // Chưa suy được chi nhánh thì vẫn ghi sổ với chi nhánh rỗng; gán sau sẽ tái phân bổ bút toán
       const systemBranches: { id: string }[] = validBranch
@@ -652,7 +613,9 @@ export class InvoiceLifecycleService {
       if (inferred) {
         invoice.branchId = inferred;
         invoice.branchIds = [inferred];
-        await this.repository.save(invoice);
+        await this.branchService.assign([id], [inferred], {
+          onlyIfUnassigned: true,
+        });
       }
     }
 
@@ -768,23 +731,25 @@ export class InvoiceLifecycleService {
         ErpBankTransaction,
         {
           where: { id: In(uniqueTxnIds), isDeleted: false },
-          select: ['id', 'branchId'],
+          select: ['id', 'branchId', 'branchIds'],
         },
       );
 
       const hasAllTransactions =
         linkedTransactions.length === uniqueTxnIds.length;
-      const hasAllBranches = linkedTransactions.every((t) => !!t.branchId);
+      const statementBranches = linkedTransactions.map((t) => readBranchIds(t));
+      const hasAllBranches = statementBranches.every((ids) => ids.length > 0);
 
       if (hasAllTransactions && hasAllBranches) {
-        const uniqueBranches = [
-          ...new Set(linkedTransactions.map((t) => t.branchId)),
-        ];
+        const uniqueBranches = [...new Set(statementBranches.flat())];
         const [onlyBranch] = uniqueBranches;
         if (uniqueBranches.length === 1 && onlyBranch) {
           invoice.branchId = onlyBranch;
           invoice.branchIds = [onlyBranch];
-          await this.repository.save(invoice);
+          // Qua InvoiceBranchService: ghi cả hai cột và tái phân bổ bút toán nếu đã ghi sổ
+          await this.branchService.assign([invoiceId], [onlyBranch], {
+            onlyIfUnassigned: true,
+          });
         }
       }
     }
