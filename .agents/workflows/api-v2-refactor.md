@@ -91,6 +91,7 @@ bun run verify:final                               # chỉ một lần, trên co
 Không tự động migrate. Chỉ làm khi người dùng ra lệnh cho từng module:
 1. Đọc module hiện tại và liệt kê các endpoint, DTO, và phụ thuộc từ module khác (module khác import service này).
 2. Giữ nguyên hợp đồng: cùng route, cùng hình dạng response, cùng quyền RBAC.
+   - Nếu module đã refactor v2-ready (Facade + query/command + mapper + spec hợp đồng) thì chỉ cần di chuyển và wiring; spec hợp đồng cũ là chuẩn so sánh.
 3. Lưu bản gốc file cũ ra ngoài repo (scratchpad), xóa file trùng tên với generator, rồi sinh. Không để `*.legacy.ts` trong `src/`, vì tsc sẽ lỗi. Chi tiết: skill `api-v2-refactor` mục 3b. So sánh response với bản gốc bằng spec hợp đồng.
 4. Chuyển controller và module cũ sang facade mới, xóa code cũ sau khi spec pass.
 5. Báo cáo: danh sách endpoint đã kiểm tra và phụ thuộc đã cập nhật.

@@ -5,6 +5,10 @@ import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
 import { TransactionAccountingService } from './transaction-accounting.service';
 import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
+import {
+  applyBranchIdsFilter,
+  resolveFilterBranchIds,
+} from '../helpers/branch-ids-filter.helper';
 
 @Injectable()
 export class TransactionQueryService {
@@ -91,8 +95,9 @@ export class TransactionQueryService {
         sourceType: filter.sourceType,
       });
     }
-    if (filter.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    const filterBranchIds = resolveFilterBranchIds(filter);
+    if (filterBranchIds.length > 0) {
+      applyBranchIdsFilter(qb, filterBranchIds, 'filterBranchIds');
     }
     if (filter.bankAccountId) {
       qb.andWhere('txn.bankAccountId = :bankAccountId', {
@@ -192,6 +197,11 @@ export class TransactionQueryService {
             continue;
           }
 
+          if (col === 'branch') {
+            applyBranchIdsFilter(qb, vals, `vals_${col}`);
+            continue;
+          }
+
           if (col === 'invoiceSubject') {
             const hasBlank = vals.includes('__BLANK__');
             const realVals = vals.filter((v) => v !== '__BLANK__');
@@ -256,6 +266,10 @@ export class TransactionQueryService {
           else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
+          else if (col === 'cashflowClassification')
+            filterField = 'txn.cashflowClassification';
+          else if (col === 'cashflowPurpose')
+            filterField = 'txn.cashflowPurpose';
 
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';
@@ -418,6 +432,10 @@ export class TransactionQueryService {
           else if (col === 'branch') searchField = 'branch.name';
           else if (col === 'referenceNumber')
             searchField = 'txn.referenceNumber';
+          else if (col === 'cashflowClassification')
+            searchField = 'txn.cashflowClassification';
+          else if (col === 'cashflowPurpose')
+            searchField = 'txn.cashflowPurpose';
 
           if (searchField) {
             if (col === 'transDate') {
@@ -507,6 +525,10 @@ export class TransactionQueryService {
         rawField === 'refNum'
       ) {
         orderExpr = 'txn.referenceNumber';
+      } else if (rawField === 'cashflowClassification') {
+        orderExpr = 'txn.cashflowClassification';
+      } else if (rawField === 'cashflowPurpose') {
+        orderExpr = 'txn.cashflowPurpose';
       } else if (rawField === 'description') {
         orderExpr = 'txn.description';
       } else if (
@@ -769,6 +791,9 @@ export class TransactionQueryService {
       labelField = 'branch.name';
     } else if (column === 'referenceNumber')
       selectField = 'txn.referenceNumber';
+    else if (column === 'cashflowClassification')
+      selectField = 'txn.cashflowClassification';
+    else if (column === 'cashflowPurpose') selectField = 'txn.cashflowPurpose';
     else if (column === 'invoiceSubject') {
       qb.innerJoin('txn.invoiceNetOffs', 'netoff');
       qb.innerJoin('netoff.invoice', 'inv');
@@ -829,6 +854,10 @@ export class TransactionQueryService {
           else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
+          else if (col === 'cashflowClassification')
+            filterField = 'txn.cashflowClassification';
+          else if (col === 'cashflowPurpose')
+            filterField = 'txn.cashflowPurpose';
 
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';

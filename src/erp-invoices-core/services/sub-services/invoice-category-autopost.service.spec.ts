@@ -113,7 +113,7 @@ describe('InvoiceCategoryAutopostService', () => {
     };
 
     mockAccountingService = {
-      createJournalEntry: jest
+      createJournalEntriesForBranches: jest
         .fn()
         .mockResolvedValue({ id: 'je-1', entryNo: 'HĐM-20260925-0001' }),
       generateEntryNo: jest.fn().mockResolvedValue('HĐM-20260925-0001'),
@@ -178,9 +178,11 @@ describe('InvoiceCategoryAutopostService', () => {
     const result = await service.autoPostInvoiceByCategory('inv-1', 'VF_PARTS');
 
     expect(result.postingStatus).toBe('POSTED');
-    expect(mockAccountingService.createJournalEntry).toHaveBeenCalledWith(
+    expect(
+      mockAccountingService.createJournalEntriesForBranches,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
-        branchId: 'branch-1',
+        branchIds: ['branch-1'],
         lines: [
           expect.objectContaining({
             accountId: 'coa-1561',
@@ -217,7 +219,9 @@ describe('InvoiceCategoryAutopostService', () => {
 
     await service.autoPostInvoiceByCategory('inv-2', null);
 
-    expect(mockAccountingService.createJournalEntry).toHaveBeenCalledWith(
+    expect(
+      mockAccountingService.createJournalEntriesForBranches,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         lines: expect.arrayContaining([
           expect.objectContaining({ accountId: 'coa-t0003' }),
@@ -282,7 +286,9 @@ describe('InvoiceCategoryAutopostService', () => {
       }),
     );
     // Should NOT create new JE
-    expect(mockAccountingService.createJournalEntry).not.toHaveBeenCalled();
+    expect(
+      mockAccountingService.createJournalEntriesForBranches,
+    ).not.toHaveBeenCalled();
   });
 
   it('should call AI in classifyAndAutoPost and set category correctly', async () => {
@@ -350,9 +356,11 @@ describe('InvoiceCategoryAutopostService', () => {
     );
 
     expect(result.postingStatus).toBe('POSTED');
-    expect(mockAccountingService.createJournalEntry).toHaveBeenCalledWith(
+    expect(
+      mockAccountingService.createJournalEntriesForBranches,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
-        branchId: 'branch-1',
+        branchIds: ['branch-1'],
         lines: expect.arrayContaining([
           expect.objectContaining({
             accountId: 'coa-1563',
@@ -382,7 +390,8 @@ describe('InvoiceCategoryAutopostService', () => {
     it('appends [T0003_FALLBACK] to the journal description when posting to T0003', async () => {
       mockInvoiceRepo.findOne.mockResolvedValue(unposted('inv-m1'));
       await service.autoPostInvoiceByCategory('inv-m1', null);
-      const arg = mockAccountingService.createJournalEntry.mock.calls[0][0];
+      const arg =
+        mockAccountingService.createJournalEntriesForBranches.mock.calls[0][0];
       expect(arg.description).toBe('777-C26TAA_Mua hàng [T0003_FALLBACK]');
     });
 
@@ -391,7 +400,8 @@ describe('InvoiceCategoryAutopostService', () => {
       await service.autoPostInvoiceByCategory('inv-m2', null, {
         fallbackReason: 'AI_ERROR',
       });
-      const arg = mockAccountingService.createJournalEntry.mock.calls[0][0];
+      const arg =
+        mockAccountingService.createJournalEntriesForBranches.mock.calls[0][0];
       expect(arg.description).toContain('[T0003_FALLBACK:AI_ERROR]');
     });
 
@@ -400,7 +410,8 @@ describe('InvoiceCategoryAutopostService', () => {
       await service.autoPostInvoiceByCategory('inv-m3', 'VF_PARTS', {
         fallbackReason: 'AI_ERROR',
       });
-      const arg = mockAccountingService.createJournalEntry.mock.calls[0][0];
+      const arg =
+        mockAccountingService.createJournalEntriesForBranches.mock.calls[0][0];
       expect(arg.description).not.toContain('T0003_FALLBACK');
     });
 
@@ -417,7 +428,8 @@ describe('InvoiceCategoryAutopostService', () => {
 
       expect(res.isFallback).toBe(true);
       expect(res.fallbackReason).toBe('AI_ERROR');
-      const arg = mockAccountingService.createJournalEntry.mock.calls[0][0];
+      const arg =
+        mockAccountingService.createJournalEntriesForBranches.mock.calls[0][0];
       expect(arg.description).toContain('[T0003_FALLBACK:AI_ERROR]');
     });
 
@@ -491,7 +503,9 @@ describe('InvoiceCategoryAutopostService', () => {
         undefined,
       );
       expect(mockInvoiceRepo.save).not.toHaveBeenCalled();
-      expect(mockAccountingService.createJournalEntry).not.toHaveBeenCalled();
+      expect(
+        mockAccountingService.createJournalEntriesForBranches,
+      ).not.toHaveBeenCalled();
     });
 
     it('classifyInvoiceOnly forwards a model override to the AI handler', async () => {

@@ -267,6 +267,25 @@ bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
 
 ---
 
+## 🔁 Hướng v2-ready (chuẩn bị migrate v2)
+
+Áp dụng khi refactor module v1 (track T1). Mục tiêu: hình dạng code sau refactor trùng với `api-module-v2`, để migrate về sau chỉ còn di chuyển và wiring.
+
+| Refactor v1 tạo ra | Tương ứng v2 (`/api-v2-refactor`) |
+| :--- | :--- |
+| `<module>.service.ts` là Facade delegate | Facade y hệt |
+| `services/<e>-query.service.ts` + `services/<e>-command.service.ts` | y hệt |
+| `helpers/<e>.mapper.ts` + `dto/<e>-response.dto.ts` (Pattern D bắt buộc) | y hệt |
+| Engine tính toán thuần (Pattern C) | y hệt |
+| Spec co-located + **spec hợp đồng** (route, RBAC, hình dạng response) | dùng lại để so sánh khi migrate |
+
+Quy tắc:
+- Tách theo trục đọc/ghi trước, rồi mới tách theo nghiệp vụ.
+- Giữ nguyên route, RBAC, response, DTO public.
+- **Không** tạo `src/v2/` bằng tay. `src/v2` chỉ sinh bằng `bunx plop api-module-v2` khi có lệnh migrate (track T2).
+- Module đã migrate hoặc đang migrate v2: không refactor v1 nữa, chuyển sang `/api-v2-refactor`.
+- Khi chạy scanner, dùng `--path=src/v2` để tách báo cáo v2 khỏi v1.
+
 ## 🧰 Script độc lập (`scripts/`, `src/**/scripts/`)
 
 Script chạy tay (backfill, seed, netoff...) vẫn phải theo chuẩn của app — đã từng xảy ra script tự gọi AI, tự đánh số chứng từ và tự map tài khoản **lệch** với app (6/14 danh mục khác tài khoản).
@@ -276,7 +295,7 @@ Script chạy tay (backfill, seed, netoff...) vẫn phải theo chuẩn của ap
 2. **Gọi AI qua `NineRouterClient`/handler**, không `fetch` thẳng tới 9router (mất retry/timeout/`NineRouterError`).
 3. **Env qua loader chuẩn** `src/common/scripts/load-script-env.ts` — tên file khớp pipeline (`erp-<tenant>-<stage>` ↔ `.env.<tenant>-<stage>` ↔ secret `<TENANT>_<STAGE>_API_ENV`). Thứ tự chọn nguồn:
    tham số vị trí `.env*` → `--env=<file>` → `--target=<tenant>-<stage>` → `ENV_FILE` → `.env` → `process.env` (container).
-   - **Hermetic**: đã chọn file thì chỉ dùng file đó; biến Bun tự nạp từ `.env`/`.env.local` mà file chọn không có sẽ bị gỡ (tránh lẫn tenant).
+   - **Hermetic**: đã chọn file thì chỉ dùng file đó; biến Bun tự nạp từ file env mặc định mà file chọn không có sẽ bị gỡ (tránh lẫn tenant).
    - File chỉ định không tồn tại ⇒ báo lỗi, **không** tự đổi file. **Không** hard-code tên file env mặc định.
    - Mặc định **dry-run**; ghi DB cần `--apply`; DB production (tên DB/tên file chứa `production`) cần thêm `--confirm=<tên DB>`.
    - Nếu env rơi về `.env` mặc định mà DB là production ⇒ script từ chối, buộc chỉ định env tường minh.
@@ -324,4 +343,5 @@ find src -name '*.controller.ts' ! -name '*.spec.ts' -exec wc -l {} + | awk '$1>
 - [ ] **Không nhân đôi logic**: script/handler mới gọi lại service, helper, hằng số sẵn có (VD: `VINFAST_TAX_CODES`, `CATEGORY_TO_DEBIT_ACCOUNT_MAP`), không tự định nghĩa lại.
 - [ ] **Script đạt chuẩn**: env qua loader, dry-run mặc định, không đường dẫn tuyệt đối, đã kiểm tra tĩnh (không chạy script ghi dữ liệu).
 - [ ] **Không đẩy service qua ngưỡng**: file sửa xong vẫn ≤ ngưỡng của loại (đo bằng `wc -l`).
+- [ ] **Sẵn sàng migrate v2** (nếu module sẽ migrate): Facade + query/command + mapper + response DTO + spec hợp đồng đã có; không còn logic nghiệp vụ trong controller.
 - [ ] **Build & Test Pass**: `bun run build`, `bunx jest --forceExit`, `bun run check:ci` hoàn toàn không có lỗi.

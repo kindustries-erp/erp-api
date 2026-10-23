@@ -92,4 +92,4 @@ description: Module tri thức <Tên Module> trong erp-api. Chứa toàn bộ da
 - [ ] File skill được lưu đúng tại `erp-api/.agents/skills/modules/<module-name>/SKILL.md`.
 - [ ] YAML frontmatter có `name` (trùng tên module) và `description` rõ ràng.
 - [ ] Thư mục `modules` đã được đăng ký trong `.agents/skills.json`.
-- [ ] Đã cập nhật tham chiếu trong `erp-api/.agents/skills/liouni-erp-api-current-truth/SKILL.md`.
+- [ ] Đã cập nhật tham chiếu trong `erp-api/.agents/skills/erp-api-current-truth/SKILL.md`.

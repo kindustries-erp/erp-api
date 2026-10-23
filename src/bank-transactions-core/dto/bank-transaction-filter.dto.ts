@@ -77,6 +77,19 @@ export class BankTransactionFilterDto {
   @IsOptional()
   branchId?: string;
 
+  @ApiProperty({
+    required: false,
+    type: [String],
+    description: 'Nhiều chi nhánh; "__BLANK__" = chưa gán chi nhánh',
+  })
+  @Transform(({ value }) =>
+    value === undefined ? undefined : Array.isArray(value) ? value : [value],
+  )
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  branchIds?: string[];
+
   @ApiProperty({ required: false })
   @IsUUID()
   @IsOptional()

@@ -1,13 +1,13 @@
 ---
 name: erp-inventory-transactions
-description: Module tri thức Sổ Nhật ký Giao dịch Kho & Sổ cái Phẳng (Inventory Flat Ledger) trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_transactions), phân loại giao dịch (RECEIPT, ISSUE, ADJUSTMENT), liên kết chứng từ gốc và nguyên tắc sổ cái bất biến (Immutable Audit Log).
+description: Module tri thức Sổ Nhật ký Giao dịch Kho & Sổ cái Phẳng (Inventory Flat Ledger) trong ERP. Chứa toàn bộ database schema (erp_inventory_transactions), phân loại giao dịch (RECEIPT, ISSUE, ADJUSTMENT), liên kết chứng từ gốc và nguyên tắc sổ cái bất biến (Immutable Audit Log).
 ---
 
 # 📦 Module Tri Thức: Sổ Nhật Ký Giao Dịch Kho (`erp-inventory-transactions`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ `erp-inventory-transactions` là **Sổ Cái Nhật Ký Giao Dịch Kho Bất Biến (Immutable Inventory Ledger)** của Liouni ERP. Mọi biến động tăng hoặc giảm số lượng, giá trị vốn tồn kho từ bất kỳ nguồn chứng từ nào (Mua hàng, Bán hàng, Sản xuất, Kiểm kê, Nhập số dư đầu kỳ) đều bắt buộc phải được ghi sổ thành các bản ghi giao dịch tại bảng `erp_inventory_transactions`.
+Phân hệ `erp-inventory-transactions` là **Sổ Cái Nhật Ký Giao Dịch Kho Bất Biến (Immutable Inventory Ledger)** của ERP. Mọi biến động tăng hoặc giảm số lượng, giá trị vốn tồn kho từ bất kỳ nguồn chứng từ nào (Mua hàng, Bán hàng, Sản xuất, Kiểm kê, Nhập số dư đầu kỳ) đều bắt buộc phải được ghi sổ thành các bản ghi giao dịch tại bảng `erp_inventory_transactions`.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Sổ cái Bất biến (Immutable Audit Trail)**:

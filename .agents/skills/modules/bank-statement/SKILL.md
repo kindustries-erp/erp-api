@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Sao kê Ngân hàng & Sổ quỹ Tiề
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung tâm quản trị toàn bộ dòng tiền vật lý (tiền gửi ngân hàng và tiền mặt tại quỹ) của doanh nghiệp trong Liouni ERP.
+Module `bank-statement` (đặt tại `src/bank-transactions-core/`) là trung tâm quản trị toàn bộ dòng tiền vật lý (tiền gửi ngân hàng và tiền mặt tại quỹ) của doanh nghiệp trong ERP.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Quản lý Master Data Tài khoản & Sổ quỹ**:
@@ -112,6 +112,22 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 - `erp_bank_account_balances` / `erp_cash_book_balances`: Lưu số dư đầu kỳ (`period_date`, `opening_balance`, `currency`, `note`).
 
 ---
+
+### 2.x Thuộc tính Phân loại dòng tiền (độc lập module-config)
+- Hai cột cố định trên `erp_bank_transactions` (nullable, không backfill dữ liệu cũ, không FK, không đi qua `erp_module_categories`/EAV):
+  - `cashflow_classification` varchar(50) — `OPERATING` | `INVESTING` | `FINANCING` | `OTHER` (không có `INTERNAL_TRANSFER`; mục này nằm ở Mục đích)
+  - `cashflow_purpose` varchar(50) — 12 giá trị, **phụ thuộc Phân loại** (cascading, không có migration riêng; ánh xạ nằm trong code):
+    - `OPERATING`: `CUSTOMER_PAYMENT`, `SUPPLIER_PAYMENT`, `SALARY`, `TAX`, `OPEX`, `OTHER`
+    - `INVESTING`: `ASSET_PURCHASE`, `ASSET_DISPOSAL`, `INVESTMENT`, `OTHER`
+    - `FINANCING`: `LOAN`, `CAPITAL`, `OTHER`
+    - `OTHER`: `INTERNAL_TRANSFER`, `OTHER`
+  - Quy tắc: Mục đích không thuộc Phân loại đã lưu (hoặc có Mục đích mà Phân loại rỗng) → `400 Mục đích không thuộc Phân loại đã chọn.` Kiểm tra trên giá trị đã gộp khi PATCH. Phía Web khóa ô Mục đích khi chưa chọn Phân loại và tự xóa Mục đích khi đổi sang nhóm không hợp lệ.
+  - Nguồn: `constants/cashflow-attributes.constants.ts` (`CASHFLOW_PURPOSES_BY_CLASSIFICATION`, `isPurposeAllowed`); kiểm tra trong `transaction-accounting.service.ts` (`assertCashflowPair`).
+- Index: `IDX_erp_bank_txn_cashflow_classification`, `IDX_erp_bank_txn_cashflow_purpose`.
+- Migration: `20261022100000-AddCashflowClassificationPurposeToBankTransactions.ts` (up/down, `IF NOT EXISTS`).
+- Nguồn option: hằng số trong `src/bank-transactions-core/constants/cashflow-attributes.constants.ts`; DTO `CreateBankTransactionDto` validate `@IsIn` (cho cả create và update qua `PartialType`).
+- Lọc/tìm/sắp xếp/gợi ý cột: `transaction-query.service.ts` nhận key `cashflowClassification`, `cashflowPurpose`.
+- Không liên quan `category_id` / `attributes` (module-config).
 
 ## 3. Cấu trúc Source Code Backend (`erp-api`)
 
@@ -445,3 +461,11 @@ src/modules/bank-statements/components/BankStatementsTab/
   - **Adaptive Polling Fallback 2.5s**: `historyQuery` trong `BankStatementExportDrawer.hook.ts` tự động bật polling mỗi `2500ms` khi phát hiện có job `RUNNING` hoặc job vừa trigger chưa tải xong. API truy vấn từ RAM (`Map<string, Job>`), zero tải DB PostgreSQL, phản hồi < 2ms.
   - **Two-Way Store Sync**: `useBankStatementExportSync.ts` đồng bộ ngược trạng thái `COMPLETED` từ lịch sử sang `useBankStatementExportProgressStore` (`current: 100`, `ready: true`) để chuyển Badge thành "Sẵn sàng tải" và tự động kích hoạt download ngay lập tức.
   - **Manual Refresh**: Drawer tích hợp nút Refresh lịch sử tại `DrawerSection.titleExtra` cho phép người dùng chủ động tải lại danh sách bất kỳ lúc nào.
+
+## Đa chi nhánh (branch_ids)
+
+- `erp_bank_transactions.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index); `branch_id` NULLABLE và là chi nhánh chính = `branch_ids[1]`. Mảng rỗng = không chi nhánh (vẫn ghi sổ được).
+- Lọc list/analytics: `branchIds` (mảng, `__BLANK__` = không chi nhánh) qua `applyBranchIdsFilter` (`src/bank-transactions-core/helpers/branch-ids-filter.helper.ts`); `branchId` đơn vẫn chấp nhận (tương thích).
+- Bút toán: mỗi nhóm × chi nhánh chia bình quân bằng `splitEvenly`; nhập tay (`postTransaction`) cũng chia theo `branchIds` qua `createJournalEntriesForBranches`.
+- Export: cột chi nhánh hóa đơn liên kết nối tên bằng `string_agg`.
+- Chưa làm: import file sao kê không có chi nhánh (`erp_bank_statement_file.branch_id` vẫn NOT NULL, `controller:327` vẫn bắt buộc `branchId`).

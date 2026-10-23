@@ -5,7 +5,7 @@ description: Quy trình chuẩn bóc tách mã tra cứu từ XML, tự động 
 
 # 📥 Download Provider Invoice PDF & RustFS Ingestion Standard
 
-Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướng dẫn vận hành để **tự động bóc tách mã tra cứu từ tệp XML hóa đơn điện tử**, kết nối trực tiếp cổng tra cứu của **Nhà Cung Cấp (NCC)** để tải về **bản PDF gốc có chữ ký số điện tử hợp pháp**, và lưu trữ an toàn vào cụm lưu trữ đối tượng **RustFS (S3-compatible) / Cloudflare R2** của Liouni ERP.
+Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướng dẫn vận hành để **tự động bóc tách mã tra cứu từ tệp XML hóa đơn điện tử**, kết nối trực tiếp cổng tra cứu của **Nhà Cung Cấp (NCC)** để tải về **bản PDF gốc có chữ ký số điện tử hợp pháp**, và lưu trữ an toàn vào cụm lưu trữ đối tượng **RustFS (S3-compatible) / Cloudflare R2** của ERP.
 
 ---
 
@@ -16,7 +16,7 @@ Skill này cung cấp toàn bộ tri thức, quy trình kỹ thuật và hướn
    - Chỉ lưu trữ và hiển thị **PDF gốc chuẩn từ cổng nhà cung cấp** (`pdf_source = 'provider_original'`) hoặc file do người dùng upload trực tiếp (`pdf_source = 'manual_upload'`).
 2. **Ưu tiên cấu hình môi trường DB & RustFS:**
    - Toàn bộ script và dịch vụ backend đọc cấu hình từ [erp/erp-api/.env](erp/erp-api/.env) (`erp_greenway_production` port `5433`, S3 endpoint `https://s3.liouni.com/`, bucket `erp-greenway-production`).
-   - Bỏ qua các file môi trường cục bộ `.env.local` nếu có xung đột cấu hình.
+   - Bỏ qua các file môi trường cục bộ không thuộc tenant đang chọn nếu có xung đột cấu hình.
 3. **Quy chuẩn liên kết kép (Unified Attachments & Legacy Compatibility):**
    - File PDF sau khi lưu vào RustFS phải được:
      1. Ghi vào `erp_invoices.pdf_file_key = 'invoices/pdf/{id}.pdf'` và `pdf_source = 'provider_original'`.
@@ -195,7 +195,7 @@ Script thực thi chính thức được đặt tại:
 Trước khi commit code hoặc kết thúc phiên làm việc:
 1. **Kiểm tra Unit Test của các Adapter:**
    ```bash
-   bun test src/erp-invoices-core/services/adapters/
+   bunx jest src/erp-invoices-core/services/adapters/
    ```
    *Yêu cầu:* 100% tests PASS (Hilo, Misa, Cyberbill, Vinfast, Viettel, EasyInvoice).
 2. **Kiểm tra TypeScript Backend & Frontend:**

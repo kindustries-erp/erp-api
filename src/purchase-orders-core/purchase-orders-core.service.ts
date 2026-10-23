@@ -2196,7 +2196,7 @@ export class PurchaseOrdersCoreService {
     ];
 
     const compRow1 = sheet1.addRow([
-      `Đơn vị: ${companyProfile?.company_name || 'CÔNG TY TNHH LIOUNI'}`,
+      `Đơn vị: ${companyProfile?.company_name || 'Chưa cấu hình tên công ty'}`,
     ]);
     sheet1.mergeCells(`A${compRow1.number}:L${compRow1.number}`);
     compRow1.getCell('A').font = { ...defaultFont, bold: true, size: 11 };
@@ -2409,7 +2409,7 @@ export class PurchaseOrdersCoreService {
     ];
 
     const s2CompRow1 = sheet2.addRow([
-      `Đơn vị: ${companyProfile?.company_name || 'CÔNG TY TNHH LIOUNI'}`,
+      `Đơn vị: ${companyProfile?.company_name || 'Chưa cấu hình tên công ty'}`,
     ]);
     sheet2.mergeCells(`A${s2CompRow1.number}:M${s2CompRow1.number}`);
     s2CompRow1.getCell('A').font = { ...defaultFont, bold: true, size: 11 };

@@ -26,7 +26,7 @@ export class AppConfigService {
 
     return {
       appEnv,
-      appName: 'Liouni ERP',
+      appName: 'ERP',
       version: '1.0.0',
     };
   }

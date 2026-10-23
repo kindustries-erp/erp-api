@@ -18,8 +18,6 @@ export interface BuiltinFieldDef {
 export interface ModuleFieldRegistryEntry {
   moduleKey: string;
   builtin: readonly BuiltinFieldDef[];
-  /** Code def hệ thống cũ từng bị ghi đôi vào EAV; bị loại khỏi custom. */
-  legacySystemCodes: readonly string[];
 }
 
 /** Semantic key của category GARAGE_CASE (code-owned, code admin đổi tự do). */
@@ -55,7 +53,6 @@ export const MODULE_FIELD_REGISTRY: Readonly<
         labelKey: 'cases.drawer.excludeFromDebt',
       },
     ],
-    legacySystemCodes: ['exclude_from_reports', 'exclude_from_debt'],
   },
 };
 
@@ -65,15 +62,9 @@ export function getModuleFieldRegistry(
   return MODULE_FIELD_REGISTRY[moduleKey];
 }
 
-/** True nếu `code` là field built-in hoặc def hệ thống cũ của module (không phải custom). */
-export function isBuiltinOrLegacyCode(
-  moduleKey: string,
-  code: string,
-): boolean {
+/** True nếu `code` là field built-in của module (theo key hoặc tên cột), không phải custom. */
+export function isBuiltinCode(moduleKey: string, code: string): boolean {
   const entry = MODULE_FIELD_REGISTRY[moduleKey];
   if (!entry) return false;
-  return (
-    entry.legacySystemCodes.includes(code) ||
-    entry.builtin.some((f) => f.key === code || f.column === code)
-  );
+  return entry.builtin.some((f) => f.key === code || f.column === code);
 }

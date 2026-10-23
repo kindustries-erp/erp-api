@@ -77,7 +77,7 @@ describe('StrictCustomFieldsHelper.saveInTx', () => {
     expect(valueRepo.save).not.toHaveBeenCalled();
   });
 
-  it('bỏ qua key built-in/legacy, upsert custom, giữ def không có trong payload', async () => {
+  it('bỏ qua key built-in (cột exclude_from_*), upsert custom, giữ def không có trong payload', async () => {
     const { manager, valueRepo } = build(defs, [
       { id: 'v2', attrDefId: 'd2', valueText: '5' },
     ]);

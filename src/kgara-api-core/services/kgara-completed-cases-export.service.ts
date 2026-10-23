@@ -94,8 +94,8 @@ export class KgaraCompletedCasesExportService {
     ]);
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     // Dashboard tạo đầu tiên để nằm đầu file; điền sau khi có số liệu Sheet 1.

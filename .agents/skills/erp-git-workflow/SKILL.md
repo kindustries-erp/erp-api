@@ -1,11 +1,11 @@
 ---
 name: erp-git-workflow
-description: Quy trình chuẩn cho thao tác Git (commit, pull, push, rebase resolve) trong workspace Liouni ERP (erp-api và erp-web). Hỗ trợ relative paths đa workspace, tự động commit local changes trước khi pull rebase, bắt buộc chạy unit tests và fix lỗi trước khi commit/push, và quy trình commit -> pull --rebase -> resolve -> push an toàn.
+description: Quy trình chuẩn cho thao tác Git (commit, pull, push, rebase resolve) trong workspace ERP (erp-api và erp-web). Hỗ trợ relative paths đa workspace, tự động commit local changes trước khi pull rebase, bắt buộc chạy unit tests và fix lỗi trước khi commit/push, và quy trình commit -> pull --rebase -> resolve -> push an toàn.
 ---
 
-# Liouni ERP Git Workflow (Commit, Pull, Push & Conflict Resolution)
+# ERP Git Workflow (Commit, Pull, Push & Conflict Resolution)
 
-Skill này định nghĩa quy trình chuẩn chỉnh và an toàn tuyệt đối cho mọi thao tác Git trong các workspace Liouni ERP (dùng được linh hoạt trên mọi thư mục workspace như `repos/erp`, `repos-dev/erp`, `repos-dev-1/erp`...).
+Skill này định nghĩa quy trình chuẩn chỉnh và an toàn tuyệt đối cho mọi thao tác Git trong các workspace ERP (dùng được linh hoạt trên mọi thư mục workspace như `repos/erp`, `repos-dev/erp`, `repos-dev-1/erp`...).
 
 ---
 

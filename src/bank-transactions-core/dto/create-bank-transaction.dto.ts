@@ -3,12 +3,19 @@ import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   IsObject,
+  IsArray,
+  ArrayUnique,
 } from 'class-validator';
+import {
+  CASHFLOW_CLASSIFICATIONS,
+  CASHFLOW_PURPOSES,
+} from '../constants/cashflow-attributes.constants';
 
 export class CreateBankTransactionDto {
   @ApiProperty({ enum: ['BANK', 'CASH'] })
@@ -25,9 +32,24 @@ export class CreateBankTransactionDto {
   @IsOptional()
   cashBookId?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    required: false,
+    description: 'Chi nhánh chính (tương thích cũ). Ưu tiên dùng branchIds.',
+  })
   @IsUUID()
-  branchId: string;
+  @IsOptional()
+  branchId?: string;
+
+  @ApiProperty({
+    required: false,
+    type: [String],
+    description: 'Nhiều chi nhánh; mảng rỗng = chưa gán chi nhánh',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  branchIds?: string[];
 
   @ApiProperty({ required: false })
   @IsNumber()
@@ -98,6 +120,16 @@ export class CreateBankTransactionDto {
   @IsString()
   @IsOptional()
   importBatchId?: string;
+
+  @ApiPropertyOptional({ enum: CASHFLOW_CLASSIFICATIONS, nullable: true })
+  @IsIn(CASHFLOW_CLASSIFICATIONS)
+  @IsOptional()
+  cashflowClassification?: (typeof CASHFLOW_CLASSIFICATIONS)[number] | null;
+
+  @ApiPropertyOptional({ enum: CASHFLOW_PURPOSES, nullable: true })
+  @IsIn(CASHFLOW_PURPOSES)
+  @IsOptional()
+  cashflowPurpose?: (typeof CASHFLOW_PURPOSES)[number] | null;
 
   @ApiPropertyOptional()
   @IsUUID()

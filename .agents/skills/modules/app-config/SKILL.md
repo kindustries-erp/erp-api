@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Cấu hình Ứng dụng & Tùy chọn
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `app-config` chịu trách nhiệm cung cấp cấu hình hệ thống công khai (Public App Config) và quản lý tùy chọn cá nhân hóa của người dùng (User Preferences) trên toàn bộ hệ sinh thái Liouni ERP.
+Module `app-config` chịu trách nhiệm cung cấp cấu hình hệ thống công khai (Public App Config) và quản lý tùy chọn cá nhân hóa của người dùng (User Preferences) trên toàn bộ hệ sinh thái ERP.
 
 Các nghiệp vụ trọng tâm:
 - **Cấu hình Môi trường Động (Dynamic `APP_ENV`)**: Cung cấp API công khai `GET /api/v1/app/config` để Frontend tự động nhận diện môi trường Backend đang chạy (`development`, `klotus-staging`, `klotus-production`, `greenway-staging`, `greenway-production`) mà không cần thay đổi file cấu hình `.env` ở Frontend.
