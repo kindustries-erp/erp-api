@@ -19,6 +19,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
+import { formatInvoiceProgressRef } from '../helpers/invoice-progress-ref.helper';
 import {
   fetchWithRetry,
   GdtNonJsonResponseError,
@@ -57,6 +58,8 @@ export type PortalProgressEvent = {
   current: number;
   message: string;
   completed: boolean;
+  /** Hóa đơn đang xử lý, ví dụ `HĐ 1847 · C26MSP · CÔNG TY ABC` */
+  currentItem?: string;
 };
 
 @Injectable()
@@ -690,7 +693,20 @@ export class InvoicePortalService implements OnModuleInit {
         const errors: string[] = [];
         const backgroundSyncIds: string[] = [];
 
-        for (const raw of rawItems) {
+        for (const [idx, raw] of rawItems.entries()) {
+          this.progress$.next({
+            processId: 'sync-progress',
+            type: 'bulk',
+            total: rawItems.length,
+            current: idx,
+            message: `Đang lưu hóa đơn (${idx + 1}/${rawItems.length})...`,
+            completed: false,
+            currentItem: formatInvoiceProgressRef({
+              invoiceNo: String(raw.shdon ?? ''),
+              serialNo: raw.khhdon ?? null,
+              partnerName: direction === 'IN' ? raw.nbten : raw.nmten,
+            }),
+          });
           try {
             const invoiceNo = String(raw.shdon ?? '');
             const serialNo = raw.khhdon ?? null;
@@ -982,6 +998,20 @@ export class InvoicePortalService implements OnModuleInit {
 
       let current = 0;
       for (const inv of invoices) {
+        const currentItem = formatInvoiceProgressRef({
+          invoiceNo: inv.invoiceNo,
+          serialNo: inv.serialNo,
+          partnerName: inv.direction === 'IN' ? inv.sellerName : inv.buyerName,
+        });
+        this.progress$.next({
+          processId,
+          type: 'bulk',
+          total,
+          current,
+          message: `Đang tải chi tiết & XML hàng loạt (${current + 1}/${total})...`,
+          completed: false,
+          currentItem,
+        });
         try {
           await this.downloadAndSaveXml(inv as any, activeToken, activeCookies);
           current++;
@@ -992,6 +1022,7 @@ export class InvoicePortalService implements OnModuleInit {
             current,
             message: `Đang tải chi tiết & XML hàng loạt (${current}/${total})...`,
             completed: false,
+            currentItem,
           });
           await new Promise((r) => setTimeout(r, 500));
         } catch (e) {
@@ -1151,6 +1182,20 @@ export class InvoicePortalService implements OnModuleInit {
     let current = 0;
     for (let i = 0; i < targets.length; i++) {
       const inv = targets[i];
+      const currentItem = formatInvoiceProgressRef({
+        invoiceNo: inv.invoiceNo,
+        serialNo: inv.serialNo,
+        partnerName: inv.direction === 'IN' ? inv.sellerName : inv.buyerName,
+      });
+      this.progress$.next({
+        processId,
+        type: 'sync',
+        total,
+        current,
+        message: `Đang tải chi tiết & XML (${current + 1}/${total})...`,
+        completed: false,
+        currentItem,
+      });
       await this.downloadAndSaveXml(inv, token, cookies).catch((e) =>
         this.logger.error(`Error downloading XML for ${inv.invoiceNo}:`, e),
       );
@@ -1162,6 +1207,7 @@ export class InvoicePortalService implements OnModuleInit {
         current,
         message: `Đang tải chi tiết & XML (${current}/${total})...`,
         completed: false,
+        currentItem,
       });
       if (i + 1 < targets.length) {
         const delay = (4 + Math.random() * 3) * 1000;

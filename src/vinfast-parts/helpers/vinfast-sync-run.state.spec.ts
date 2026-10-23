@@ -70,4 +70,24 @@ describe('VinfastSyncRunState', () => {
 
     expect(before.current).toBe(0);
   });
+
+  it('tracks the current invoice item and clears it when the run finishes', () => {
+    const state = new VinfastSyncRunState();
+    state.start();
+
+    state.applyProgress({
+      type: 'ledger',
+      current: 200,
+      total: 500,
+      message: 'Đang xử lý Sổ cái: 200/500 dòng...',
+      completed: false,
+      currentItem: 'HĐ 1847 · C26MSP · ABC · 0001-XYZ',
+    });
+    expect(state.snapshot().currentItem).toBe(
+      'HĐ 1847 · C26MSP · ABC · 0001-XYZ',
+    );
+
+    state.finish();
+    expect(state.snapshot().currentItem).toBeNull();
+  });
 });
