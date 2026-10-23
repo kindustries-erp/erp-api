@@ -93,9 +93,33 @@ describe('TransactionAccountingService', () => {
 
     const result = await service.createManualTransaction(dto);
 
-    expect(transactionRepo.create).toHaveBeenCalledWith(dto);
+    expect(transactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchId: 'branch-1',
+        branchIds: ['branch-1'],
+      }),
+    );
     expect(transactionRepo.save).toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({ id: 'txn-1' }));
+  });
+
+  it('createManualTransaction keeps branch_id in sync with branch_ids', async () => {
+    await service.createManualTransaction({
+      sourceType: 'BANK',
+      branchIds: ['branch-a', 'branch-b'],
+      bankAccountId: 'bank-1',
+      transDate: new Date('2026-08-09'),
+      debitAmount: 0,
+      creditAmount: 100,
+      description: 'Thu tien',
+    } as any);
+
+    expect(transactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchIds: ['branch-a', 'branch-b'],
+        branchId: 'branch-a',
+      }),
+    );
   });
 
   describe('cashflow classification / purpose pairing', () => {

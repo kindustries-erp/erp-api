@@ -14,6 +14,10 @@ import {
   ColumnOptionItem,
   ColumnOptionsResponse,
 } from '../invoice-debts.service';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 @Injectable()
 export class InvoiceDebtsQueryService {
@@ -199,7 +203,7 @@ export class InvoiceDebtsQueryService {
           0
         ) as "weightedAgingDays",
         TO_CHAR(MAX(inv.invoice_date), 'YYYY-MM-DD') as "latestInvoiceDate",
-        MAX(inv.branch_id::text) as "branchId"
+        MAX(inv.branch_ids[1]::text) as "branchId"
       FROM erp_invoices inv
       LEFT JOIN (
         SELECT invoice_id, SUM(net_off_amount) as net_off_amount
@@ -229,13 +233,9 @@ export class InvoiceDebtsQueryService {
         date_to.length === 10 ? `${date_to} 23:59:59.999` : date_to;
       baseQuery += ` AND inv.invoice_date <= '${effDateTo.replace(/'/g, "''")}'`;
     }
-    if (branch_id) {
-      if (branch_id === 'null') {
-        baseQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        baseQuery += ` AND inv.branch_id = '${branch_id.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(branch_id);
+    if (branchFilter)
+      baseQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 
@@ -643,13 +643,9 @@ export class InvoiceDebtsQueryService {
         date_to.length === 10 ? `${date_to} 23:59:59.999` : date_to;
       baseQuery += ` AND inv.invoice_date <= '${effDateTo.replace(/'/g, "''")}'`;
     }
-    if (branch_id) {
-      if (branch_id === 'null') {
-        baseQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        baseQuery += ` AND inv.branch_id = '${branch_id.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(branch_id);
+    if (branchFilter)
+      baseQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 

@@ -16,6 +16,10 @@ import {
   formatSummaryDataRow,
   formatDetailDataRow,
 } from './invoice-debts-export-styles.helper';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 @Injectable()
 export class InvoiceDebtsExportService {
@@ -244,13 +248,9 @@ export class InvoiceDebtsExportService {
           : queryDto.date_to;
       detailedInvoicesQuery += ` AND inv.invoice_date <= '${effTo.replace(/'/g, "''")}'`;
     }
-    if (queryDto.branch_id) {
-      if (queryDto.branch_id === 'null') {
-        detailedInvoicesQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        detailedInvoicesQuery += ` AND inv.branch_id = '${queryDto.branch_id.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(queryDto.branch_id);
+    if (branchFilter)
+      detailedInvoicesQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     detailedInvoicesQuery += ` ORDER BY inv.invoice_date DESC, inv.invoice_no DESC`;
 

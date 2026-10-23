@@ -19,6 +19,7 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { ErpInvoicesCronService } from './erp-invoices-cron.service';
 import { InvoiceLifecycleService } from './services/invoice-lifecycle.service';
+import { InvoiceBranchService } from './services/invoice-branch.service';
 import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
@@ -113,6 +114,7 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
   ],
   providers: [
     InvoiceLifecycleService,
+    InvoiceBranchService,
     InvoicePortalService,
     InvoiceImportService,
     InvoiceFilesService,

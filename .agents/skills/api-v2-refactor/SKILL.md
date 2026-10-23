@@ -105,6 +105,9 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 | Module V1 | Module V2 (`src/v2/`) | Trạng thái |
 | :--- | :--- | :--- |
 | `business-partners-core` | `src/v2/business-partners-core/` | Đã v2 (module mẫu) |
+| `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Entity `Invoice`, `InvoiceItem` trỏ cùng bảng, không migration. v2 không import v1: helper copy sang `helpers/`. Giữ ở v1: attributes, stats, export, netoff, post/unpost/cancel/category, portal GDT, import XML, file/PDF, dashboard, debts, UC2 (accounting-core). |
+
+Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới cần đổi tay path sang `api/v2/...` và cập nhật `global-prefix.config.ts` nếu cần.
 
 Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và cập nhật `.agents/skills/modules/<module>/SKILL.md` của module đó.
 

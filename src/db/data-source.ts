@@ -83,6 +83,8 @@ import { ErpSystemOperation } from '../system-operations-core/entities/erp_syste
 import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
 import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
 import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
+import { Invoice } from '@/v2/invoices/entities/invoice.entity'; // api-v2-module:invoices:entity-imports
+import { InvoiceItem } from '@/v2/invoices/entities/invoice-item.entity';
 // plop:api-v2-entity-imports
 const entities = [
   CoreUser,
@@ -168,6 +170,8 @@ const entities = [
   ErpEmailAttachment,
   VinfastPartsCatalog,
   VinfastPartsLedger,
+  Invoice, // api-v2-module:invoices:entities
+  InvoiceItem,
   // plop:api-v2-entities
 ];
 
