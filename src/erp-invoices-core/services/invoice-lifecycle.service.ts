@@ -380,7 +380,7 @@ export class InvoiceLifecycleService {
     const targetIds = [...new Set(branchIds ?? [])];
     if (targetIds.length > 0) {
       const found: { id: string }[] = await this.repository.manager.query(
-        `SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_deleted = false`,
+        `SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true`,
         [targetIds],
       );
       if (found.length !== targetIds.length) {
@@ -644,7 +644,7 @@ export class InvoiceLifecycleService {
       const systemBranches: { id: string }[] = validBranch
         ? []
         : await this.repository.manager.query(
-            `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 2`,
+            `SELECT id FROM erp_branches WHERE is_active = true LIMIT 2`,
           );
       const inferred =
         validBranch ??

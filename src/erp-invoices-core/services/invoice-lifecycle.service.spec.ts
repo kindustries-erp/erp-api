@@ -371,4 +371,73 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       );
     });
   });
+  describe('bulkSetBranch', () => {
+    beforeEach(() => {
+      repository.update = jest.fn().mockResolvedValue({ affected: 1 });
+      repository.find = jest
+        .fn()
+        .mockResolvedValueOnce([{ id: 'inv-1' }])
+        .mockResolvedValue([]);
+    });
+
+    it('checks branch existence with is_active, not is_deleted', async () => {
+      repository.manager.query.mockResolvedValueOnce([{ id: 'branch-a' }]);
+
+      await service.bulkSetBranch(['inv-1'], ['branch-a']);
+
+      const sql = repository.manager.query.mock.calls[0][0] as string;
+      expect(sql).toContain('is_active = true');
+      expect(sql).not.toContain('is_deleted');
+    });
+
+    it('rejects when a branch does not exist or is inactive', async () => {
+      repository.manager.query.mockResolvedValueOnce([]);
+
+      await expect(
+        service.bulkSetBranch(['inv-1'], ['branch-a']),
+      ).rejects.toThrow('Có chi nhánh không tồn tại.');
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('skips the branch check when the branch list is empty (unassign)', async () => {
+      const result = await service.bulkSetBranch(['inv-1'], []);
+
+      expect(repository.manager.query).not.toHaveBeenCalled();
+      expect(repository.update).toHaveBeenCalledWith(
+        { id: expect.anything() },
+        { branchIds: [], branchId: null },
+      );
+      expect(result).toEqual({ updated: 1, ids: ['inv-1'] });
+    });
+  });
+
+  describe('autoPostStandard branch inference', () => {
+    it('does not query the removed is_deleted column on erp_branches', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      repository.findOne.mockResolvedValue({
+        id: 'inv-1',
+        isDeleted: false,
+        branchId: null,
+        branchIds: [],
+        postingStatus: 'UNPOSTED',
+        direction: 'IN',
+        totalAmount: 1000,
+        invoiceNo: '1',
+      });
+      repository.manager.find.mockResolvedValue([]);
+      repository.manager.query.mockResolvedValue([]);
+
+      await service.autoPostStandard('inv-1').catch(() => undefined);
+
+      const sqls = repository.manager.query.mock.calls.map(
+        (c: unknown[]) => c[0] as string,
+      );
+      expect(
+        sqls.some(
+          (sql: string) =>
+            sql.includes('is_deleted = false') && sql.includes('erp_branches'),
+        ),
+      ).toBe(false);
+    });
+  });
 });
