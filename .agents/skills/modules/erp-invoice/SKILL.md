@@ -321,6 +321,8 @@ src/erp-invoices-core/
 | `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB) |
 | `GET (SSE)` | `/erp-invoices/portal/progress` | — | — | Stream SSE tiến độ đồng bộ hóa đơn GDT thời gian thực |
 
+Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem` (`HĐ 1847 · C26MSP · TÊN ĐỐI TÁC`) cho các bước lưu HĐ và tải XML (cả hàng loạt lẫn nền), dựng bởi `helpers/invoice-progress-ref.helper.ts`. Event trước và sau một HĐ dùng cùng `message` để phía web gộp thành một dòng log.
+
 ### 4.4. Nhóm API Tệp Đính Kèm, File R2 & Import/Export
 
 | Method | Endpoint | Resource | Action | Mô tả chi tiết |

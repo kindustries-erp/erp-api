@@ -188,6 +188,7 @@ Khi chỉnh sửa `vinfast-parts`:
 
 ## Trạng thái và tiến trình đồng bộ (giai đoạn 6)
 - `GET /vinfast-parts/sync/status`: trạng thái lượt đồng bộ hiện tại hoặc gần nhất (`running`, `startedAt`, `finishedAt`, `phase`, `current`, `total`, `message`, `lastError`). Drawer web hỏi định kỳ (2 giây khi đang chạy) và không phụ thuộc SSE.
+- Trường `currentItem` (chuỗi, có thể `null`) trong `sync/status` và trong payload SSE `sync/progress`: hóa đơn / dòng sổ cái đang xử lý, dạng `HĐ 1847 · C26MSP · ABC · 0001-XYZ`. Được xóa khi lượt kết thúc (`helpers/vinfast-sync-run.state.ts`). Event sổ cái chỉ phát mỗi 200 dòng nên `currentItem` nhảy theo bước đó.
 - `POST /vinfast-parts/sync-ledger` trả 409 khi đang có lượt chạy (chặn chạy trùng trong một tiến trình API). Lượt chạy là `runFullSync`: danh mục rồi sổ cái.
 - `syncLedger` nạp trước sổ cái và danh mục theo lô, bỏ qua dòng không đổi, tiến trình theo vị trí (mỗi 200 dòng).
 - Hai luồng SSE (`sync/progress`, `stock/export/excel/progress/stream`) đặt `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform`, nhịp ping 10 giây (`helpers/sse-headers.helper.ts`).
