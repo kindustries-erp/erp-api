@@ -278,21 +278,32 @@ src/erp-invoices-core/
 
 ## 4. Danh sách API Endpoints & RBAC Contract
 
-### 4.0. API v2 lõi (`/api/v1/v2/invoices`, module `src/v2/invoices/`)
+### 4.0. API v2 lõi (`/api/v2/invoices`, module `src/v2/invoices/`)
 
-Chạy song song với v1, cùng bảng `erp_invoices`, không đổi schema. Entity `Invoice` (`src/v2/invoices/entities/invoice.entity.ts`) là bản phản ánh cột thật, không đồng bộ schema (`synchronize: false`).
+Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schema. URL v2 dùng `api/v2` nhờ `GLOBAL_PREFIX_EXCLUDE` (`src/common/config/global-prefix.config.ts`); các route khác vẫn `/api/v1`. Entity `Invoice`, `InvoiceItem` là bản phản ánh cột thật (`synchronize: false`).
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
-| `GET` | `/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
-| `GET` | `/v2/invoices/:id` | `invoices` | `read` | `{ message, data }` |
-| `POST` | `/v2/invoices` | `invoices` | `create` | `invoiceDate` ISO date, `direction` ∈ `IN/OUT` |
-| `PATCH` | `/v2/invoices/:id` | `invoices` | `update` | Cập nhật một phần |
-| `DELETE` | `/v2/invoices/:id` | `invoices` | `delete` | Chỉ xóa nháp (`status = DRAFT`), xóa mềm, sau đó xóa XML trên R2 (lỗi R2 chỉ ghi log) |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
+| `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
+| `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |
+| `PATCH` | `/api/v2/invoices/:id` | `invoices` | `update` | Gửi `items` thì thay toàn bộ dòng hàng, giữ mã cũ theo diễn giải |
+| `PATCH` | `/api/v2/invoices/bulk-set-branch` | `invoices` | `update` | Bỏ qua hóa đơn POSTED, trả `{ updated, ids, skipped }` |
+| `PATCH` | `/api/v2/invoices/bulk-set-notes` | `invoices` | `update` | `notes` rỗng lưu thành null |
+| `DELETE` | `/api/v2/invoices/:id` | `invoices` | `delete` | Chỉ xóa nháp (`status = DRAFT`), xóa mềm, sau đó xóa XML trên R2 (lỗi R2 chỉ ghi log) |
 
-Quy tắc: `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`.
-`message` là mã (`src/v2/invoices/invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`. Web map mã sang translation key; API không trả câu tiếng Việt.
+Quy tắc:
+- `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`; route tĩnh khai báo trước `:id`.
+- Chi nhánh (`branchIds`/`branchId`) phải tồn tại và `is_active = true` trong `erp_branches` (cột `is_active`, không có `is_deleted`). `branch_id` = phần tử đầu của `branch_ids`.
+- Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
+- `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
+- Metadata: `settlement_order`, `license_plate` được trích từ diễn giải/ghi chú/dòng hàng (ghi đè khi có khớp).
+- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được copy vào `src/v2/invoices/helpers/` (`uom`, `invoice-metadata`, `invoice-item-code`, `invoice-no`, `invoice-branch`, `invoice-items`).
+
+`message` là mã (`src/v2/invoices/invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
+
+Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, post/unpost/cancel/validate/category, portal GDT, import XML, files/PDF, dashboard, debts, UC2.
 
 ### 4.1. Nhóm API Quản trị Hóa đơn (`/api/v1/erp-invoices`)
 

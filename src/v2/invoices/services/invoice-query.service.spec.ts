@@ -1,11 +1,16 @@
 import { Repository } from 'typeorm';
 import { Invoice } from '../entities/invoice.entity';
+import { InvoiceItem } from '../entities/invoice-item.entity';
 import { QueryInvoiceDto } from '../dto/query-invoice.dto';
 import { InvoiceQueryService } from './invoice-query.service';
 
 describe('InvoiceQueryService', () => {
   let qb: Record<string, jest.Mock>;
-  let repo: { createQueryBuilder: jest.Mock; findOne: jest.Mock };
+  let repo: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    query: jest.Mock;
+  };
   let service: InvoiceQueryService;
 
   beforeEach(() => {
@@ -27,8 +32,15 @@ describe('InvoiceQueryService', () => {
       getRawMany: jest.fn().mockResolvedValue([]),
     };
     qb.clone = jest.fn(() => qb);
-    repo = { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn() };
-    service = new InvoiceQueryService(repo as unknown as Repository<Invoice>);
+    repo = {
+      createQueryBuilder: jest.fn(() => qb),
+      findOne: jest.fn(),
+      query: jest.fn(),
+    };
+    service = new InvoiceQueryService(
+      repo as unknown as Repository<Invoice>,
+      { find: jest.fn() } as unknown as Repository<InvoiceItem>,
+    );
   });
 
   it('excludes soft-deleted rows and paginates', async () => {
@@ -96,5 +108,23 @@ describe('InvoiceQueryService', () => {
     expect(repo.findOne).toHaveBeenCalledWith({
       where: { id: 'id-1', isDeleted: false },
     });
+  });
+  it('finds only active branches by id', async () => {
+    repo.query = jest.fn().mockResolvedValue([{ id: 'b1' }]);
+
+    const found = await service.findExistingBranchIds(['b1', 'b2']);
+
+    expect(found).toEqual(['b1']);
+    expect(repo.query).toHaveBeenCalledWith(
+      expect.stringContaining('is_active = true'),
+      [['b1', 'b2']],
+    );
+  });
+
+  it('returns no branches for an empty list without querying', async () => {
+    repo.query = jest.fn();
+
+    expect(await service.findExistingBranchIds([])).toEqual([]);
+    expect(repo.query).not.toHaveBeenCalled();
   });
 });

@@ -37,7 +37,7 @@ describe('Invoice mapper', () => {
     isDeleted: false,
     createdAt,
     updatedAt: createdAt,
-  } as Invoice;
+  } as unknown as Invoice;
 
   it('maps the entity to the response DTO without isDeleted', () => {
     expect(toInvoiceResponse(entity)).toEqual({

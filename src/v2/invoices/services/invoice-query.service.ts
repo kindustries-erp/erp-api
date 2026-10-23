@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from '../entities/invoice.entity';
+import { InvoiceItem } from '../entities/invoice-item.entity';
 import { QueryInvoiceDto } from '../dto/query-invoice.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
@@ -97,6 +98,8 @@ export class InvoiceQueryService {
   constructor(
     @InjectRepository(Invoice)
     private readonly repo: Repository<Invoice>,
+    @InjectRepository(InvoiceItem)
+    private readonly itemRepo: Repository<InvoiceItem>,
   ) {}
 
   async findAll(query: QueryInvoiceDto): Promise<InvoicePageResult> {
@@ -161,6 +164,27 @@ export class InvoiceQueryService {
 
   findById(id: string): Promise<Invoice | null> {
     return this.repo.findOne({ where: { id, isDeleted: false } });
+  }
+
+  /** Các dòng hàng của một hóa đơn, theo thứ tự nhập. */
+  findItems(invoiceId: string): Promise<InvoiceItem[]> {
+    return this.itemRepo.find({
+      where: { invoiceId },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Trả về các id chi nhánh còn hoạt động. Bảng `erp_branches` dùng cột `is_active`
+   * (không có `is_deleted`). Dùng để kiểm tra trước khi gán chi nhánh.
+   */
+  async findExistingBranchIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows: { id: string }[] = await this.repo.query(
+      'SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true',
+      [ids],
+    );
+    return rows.map((row) => row.id);
   }
 
   private baseQuery() {

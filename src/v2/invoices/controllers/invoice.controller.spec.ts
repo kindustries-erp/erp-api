@@ -12,6 +12,8 @@ describe('InvoiceController', () => {
     create: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    bulkSetBranch: jest.Mock;
+    bulkSetNotes: jest.Mock;
   };
   let controller: InvoiceController;
 
@@ -23,6 +25,8 @@ describe('InvoiceController', () => {
       create: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      bulkSetBranch: jest.fn(),
+      bulkSetNotes: jest.fn(),
     };
     controller = new InvoiceController(service as unknown as InvoicesService);
   });
@@ -58,13 +62,20 @@ describe('InvoiceController', () => {
     const updateDto = {} as UpdateInvoiceDto;
 
     await controller.findOne('id-1');
-    await controller.create(createDto);
+    await controller.create(createDto, { user: { sub: 'user-1' } });
     await controller.update('id-1', updateDto);
     await controller.remove('id-1');
 
     expect(service.findOne).toHaveBeenCalledWith('id-1');
-    expect(service.create).toHaveBeenCalledWith(createDto);
+    expect(service.create).toHaveBeenCalledWith(createDto, 'user-1');
     expect(service.update).toHaveBeenCalledWith('id-1', updateDto);
     expect(service.remove).toHaveBeenCalledWith('id-1');
+  });
+  it('delegates bulk branch and bulk notes to the service', async () => {
+    await controller.bulkSetBranch({ ids: ['a'], branchIds: ['b1'] } as any);
+    await controller.bulkSetNotes({ ids: ['a'], notes: null } as any);
+
+    expect(service.bulkSetBranch).toHaveBeenCalledWith(['a'], ['b1']);
+    expect(service.bulkSetNotes).toHaveBeenCalledWith(['a'], null);
   });
 });

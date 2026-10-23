@@ -35,15 +35,52 @@ export class Invoice {
   @Column({ type: 'varchar', length: 128, name: 'invoice_no' })
   invoiceNo: string;
 
+  // Không phải cột sinh tự động: v2 tự tính khi ghi (xem normalizeInvoiceNo trong helpers)
   @Column({
     type: 'varchar',
     length: 100,
     name: 'invoice_no_normalized',
     nullable: true,
-    insert: false,
-    update: false,
   })
   invoiceNoNormalized: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'license_plate',
+    nullable: true,
+  })
+  licensePlate: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'settlement_order',
+    nullable: true,
+  })
+  settlementOrder: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 128,
+    name: 'related_invoice_no',
+    nullable: true,
+  })
+  relatedInvoiceNo: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    name: 'related_serial_no',
+    nullable: true,
+  })
+  relatedSerialNo: string | null;
+
+  @Column({ type: 'int', name: 'tax_invoice_status', nullable: true })
+  taxInvoiceStatus: number | null;
+
+  @Column({ type: 'int', name: 'tax_process_status', nullable: true })
+  taxProcessStatus: number | null;
 
   @Column({ type: 'varchar', length: 64, name: 'serial_no', nullable: true })
   serialNo: string | null;
@@ -75,9 +112,23 @@ export class Invoice {
   @Column({ type: 'text', name: 'seller_address', nullable: true })
   sellerAddress: string | null;
 
+  @Column({ type: 'varchar', length: 255, name: 'seller_bank', nullable: true })
+  sellerBank: string | null;
+
   // --- Bên mua ---
   @Column({ type: 'varchar', length: 255, name: 'buyer_name', nullable: true })
   buyerName: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'buyer_personal_name',
+    nullable: true,
+  })
+  buyerPersonalName: string | null;
+
+  @Column({ type: 'varchar', length: 64, name: 'buyer_cccd', nullable: true })
+  buyerCccd: string | null;
 
   @Column({
     type: 'varchar',
@@ -155,9 +206,27 @@ export class Invoice {
   })
   totalAmount: string;
 
+  // --- Liên kết chứng từ ---
+  @Column({ type: 'uuid', name: 'purchase_order_id', nullable: true })
+  purchaseOrderId: string | null;
+
+  @Column({ type: 'uuid', name: 'sales_order_id', nullable: true })
+  salesOrderId: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 500,
+    name: 'payment_document_nos',
+    nullable: true,
+  })
+  paymentDocumentNos: string | null;
+
   // --- Metadata & file ---
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes: string | null;
+
+  @Column({ type: 'uuid', name: 'created_by', nullable: true })
+  createdBy: string | null;
 
   @Column({
     type: 'varchar',

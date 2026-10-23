@@ -9,6 +9,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoiceDto } from './dto/query-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { toInvoiceResponse } from './helpers/invoice.mapper';
+import { resolveBranchIds } from './helpers/invoice-branch.helper';
 import { INVOICE_MESSAGES } from './invoice-messages';
 import { InvoiceCommandService } from './services/invoice-command.service';
 import { InvoiceQueryService } from './services/invoice-query.service';
@@ -55,14 +56,16 @@ export class InvoicesService {
 
   async findOne(id: string) {
     const entity = await this.requireById(id);
+    const items = await this.query.findItems(id);
     return {
       message: INVOICE_MESSAGES.FETCHED,
-      data: toInvoiceResponse(entity),
+      data: toInvoiceResponse(entity, items),
     };
   }
 
-  async create(dto: CreateInvoiceDto) {
-    const entity = await this.command.create(dto);
+  async create(dto: CreateInvoiceDto, userId?: string) {
+    await this.assertBranchesExist(resolveBranchIds(dto));
+    const entity = await this.command.create(dto, userId ?? null);
     return {
       message: INVOICE_MESSAGES.CREATED,
       data: toInvoiceResponse(entity),
@@ -71,6 +74,7 @@ export class InvoicesService {
 
   async update(id: string, dto: UpdateInvoiceDto) {
     const entity = await this.requireById(id);
+    await this.assertBranchesExist(resolveBranchIds(dto));
     const saved = await this.command.update(entity, dto);
     return {
       message: INVOICE_MESSAGES.UPDATED,
@@ -100,11 +104,34 @@ export class InvoicesService {
     };
   }
 
+  async bulkSetBranch(ids: string[], branchIds: string[]) {
+    const unique = [...new Set(branchIds)];
+    await this.assertBranchesExist(unique);
+    const result = await this.command.bulkSetBranch(ids, unique);
+    return { message: INVOICE_MESSAGES.BULK_UPDATED, data: result };
+  }
+
+  async bulkSetNotes(ids: string[], notes: string | null) {
+    const result = await this.command.bulkSetNotes(ids, notes);
+    return { message: INVOICE_MESSAGES.BULK_UPDATED, data: result };
+  }
+
   private async requireById(id: string): Promise<Invoice> {
     const entity = await this.query.findById(id);
     if (!entity) {
       throw new NotFoundException(INVOICE_MESSAGES.NOT_FOUND);
     }
     return entity;
+  }
+
+  /** Mọi chi nhánh được gán phải còn hoạt động, nếu không thì từ chối. */
+  private async assertBranchesExist(
+    branchIds: string[] | undefined,
+  ): Promise<void> {
+    if (!branchIds?.length) return;
+    const found = await this.query.findExistingBranchIds(branchIds);
+    if (found.length !== new Set(branchIds).size) {
+      throw new BadRequestException(INVOICE_MESSAGES.BRANCH_NOT_FOUND);
+    }
   }
 }

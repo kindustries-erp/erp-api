@@ -22,8 +22,16 @@ describe('InvoicesService', () => {
     findAll: jest.Mock;
     findById: jest.Mock;
     findColumnOptions: jest.Mock;
+    findItems: jest.Mock;
+    findExistingBranchIds: jest.Mock;
   };
-  let command: { create: jest.Mock; update: jest.Mock; softDelete: jest.Mock };
+  let command: {
+    create: jest.Mock;
+    update: jest.Mock;
+    softDelete: jest.Mock;
+    bulkSetBranch: jest.Mock;
+    bulkSetNotes: jest.Mock;
+  };
   let r2: { deleteObject: jest.Mock };
   let service: InvoicesService;
 
@@ -32,8 +40,16 @@ describe('InvoicesService', () => {
       findAll: jest.fn(),
       findById: jest.fn(),
       findColumnOptions: jest.fn(),
+      findItems: jest.fn().mockResolvedValue([]),
+      findExistingBranchIds: jest.fn(),
     };
-    command = { create: jest.fn(), update: jest.fn(), softDelete: jest.fn() };
+    command = {
+      create: jest.fn(),
+      update: jest.fn(),
+      softDelete: jest.fn(),
+      bulkSetBranch: jest.fn(),
+      bulkSetNotes: jest.fn(),
+    };
     r2 = { deleteObject: jest.fn().mockResolvedValue(undefined) };
     service = new InvoicesService(
       query as unknown as InvoiceQueryService,
@@ -149,5 +165,39 @@ describe('InvoicesService', () => {
     const result = await service.remove('id-1');
 
     expect(result.data.id).toBe('id-1');
+  });
+  it('rejects a branch that does not exist or is inactive', async () => {
+    query.findExistingBranchIds.mockResolvedValue([]);
+
+    await expect(
+      service.create({ branchIds: ['b1'] } as unknown as CreateInvoiceDto),
+    ).rejects.toThrow(
+      new BadRequestException(INVOICE_MESSAGES.BRANCH_NOT_FOUND),
+    );
+    expect(command.create).not.toHaveBeenCalled();
+  });
+
+  it('passes the logged-in user to create', async () => {
+    command.create.mockResolvedValue(row);
+
+    await service.create({} as CreateInvoiceDto, 'user-1');
+
+    expect(command.create).toHaveBeenCalledWith({}, 'user-1');
+  });
+
+  it('returns the bulk result with the bulk message', async () => {
+    query.findExistingBranchIds.mockResolvedValue(['b1']);
+    command.bulkSetBranch.mockResolvedValue({
+      updated: 1,
+      ids: ['a'],
+      skipped: [],
+    });
+
+    const result = await service.bulkSetBranch(['a'], ['b1']);
+
+    expect(result).toEqual({
+      message: INVOICE_MESSAGES.BULK_UPDATED,
+      data: { updated: 1, ids: ['a'], skipped: [] },
+    });
   });
 });

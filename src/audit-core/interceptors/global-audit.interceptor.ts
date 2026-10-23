@@ -46,17 +46,7 @@ export class GlobalAuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    // Parse module từ URL. Ví dụ /api/v1/inventory-items -> inventory-items
-    let defaultModule = 'UNKNOWN';
-    try {
-      const parts = url.split('?')[0].split('/').filter(Boolean);
-      const v1Index = parts.indexOf('v1');
-      if (v1Index >= 0 && parts.length > v1Index + 1) {
-        defaultModule = parts[v1Index + 1];
-      } else if (parts.length > 0) {
-        defaultModule = parts[0];
-      }
-    } catch {}
+    const defaultModule = resolveAuditModule(url);
 
     const actionType = auditMeta?.actionType || method;
     const moduleName = auditMeta?.module || defaultModule;
@@ -154,4 +144,17 @@ export class GlobalAuditInterceptor implements NestInterceptor {
       // Không để lỗi ghi log làm gián đoạn luồng nghiệp vụ chính
     }
   }
+}
+
+/**
+ * Lấy tên module từ URL: segment ngay sau version (`/api/v1/x`, `/api/v2/x`) → `x`.
+ * Không có version thì lấy segment đầu tiên.
+ */
+export function resolveAuditModule(url: string): string {
+  const parts = url.split('?')[0].split('/').filter(Boolean);
+  const versionIndex = parts.findIndex((part) => /^v\d+$/.test(part));
+  if (versionIndex >= 0 && parts.length > versionIndex + 1) {
+    return parts[versionIndex + 1];
+  }
+  return parts[0] ?? 'UNKNOWN';
 }

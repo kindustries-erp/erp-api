@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -20,11 +21,17 @@ import { InvoicesService } from '../invoices.service';
 import { CreateInvoiceDto } from '../dto/create-invoice.dto';
 import { QueryInvoiceDto } from '../dto/query-invoice.dto';
 import { UpdateInvoiceDto } from '../dto/update-invoice.dto';
+import { BulkSetBranchDto, BulkSetNotesDto } from '../dto/bulk-invoice.dto';
 
-@ApiTags('v2/invoices')
+/** JWT payload đưa vào `req.user` bởi JwtStrategy (`sub` = id người dùng). */
+interface RequestWithUser {
+  user?: { sub?: string };
+}
+
+@ApiTags('invoices')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('v2/invoices')
+@Controller('api/v2/invoices')
 export class InvoiceController {
   constructor(private readonly service: InvoicesService) {}
 
@@ -79,8 +86,31 @@ export class InvoiceController {
   })
   @ApiOperation({ summary: 'Create an invoice' })
   @Post()
-  create(@Body() dto: CreateInvoiceDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateInvoiceDto, @Req() req: RequestWithUser) {
+    return this.service.create(dto, req.user?.sub);
+  }
+
+  // Đặt trước `:id` để `bulk-set-*` không bị hiểu thành id
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary: 'Set the branches of many invoices (POSTED ones are skipped)',
+  })
+  @Patch('bulk-set-branch')
+  bulkSetBranch(@Body() dto: BulkSetBranchDto) {
+    return this.service.bulkSetBranch(dto.ids, dto.branchIds);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Set the notes of many invoices' })
+  @Patch('bulk-set-notes')
+  bulkSetNotes(@Body() dto: BulkSetNotesDto) {
+    return this.service.bulkSetNotes(dto.ids, dto.notes ?? null);
   }
 
   @RequirePermissions({
