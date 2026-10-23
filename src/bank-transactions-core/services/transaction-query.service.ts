@@ -8,7 +8,7 @@ import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
 import {
   applyBranchIdsFilter,
   resolveFilterBranchIds,
-} from '../helpers/branch-ids-filter.helper';
+} from '../../common/utils/branch-ids-filter.util';
 
 @Injectable()
 export class TransactionQueryService {
@@ -263,7 +263,6 @@ export class TransactionQueryService {
             filterField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
             filterField = 'txn.correspondentBank';
-          else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
           else if (col === 'cashflowClassification')
@@ -429,7 +428,9 @@ export class TransactionQueryService {
             searchField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
             searchField = 'txn.correspondentBank';
-          else if (col === 'branch') searchField = 'branch.name';
+          else if (col === 'branch')
+            searchField =
+              "(SELECT string_agg(bb.name, ' ') FROM erp_branches bb WHERE bb.id = ANY(txn.branch_ids))";
           else if (col === 'referenceNumber')
             searchField = 'txn.referenceNumber';
           else if (col === 'cashflowClassification')
@@ -786,8 +787,9 @@ export class TransactionQueryService {
     else if (column === 'correspondentBank')
       selectField = 'txn.correspondentBank';
     else if (column === 'branch') {
-      qb.leftJoin('txn.branch', 'branch');
-      selectField = 'txn.branchId';
+      // Mọi chi nhánh của dòng (join theo mảng branch_ids), không chỉ chi nhánh đầu
+      qb.innerJoin('erp_branches', 'branch', 'branch.id = ANY(txn.branch_ids)');
+      selectField = 'branch.id';
       labelField = 'branch.name';
     } else if (column === 'referenceNumber')
       selectField = 'txn.referenceNumber';
@@ -851,7 +853,6 @@ export class TransactionQueryService {
             filterField = 'txn.correspondentAccount';
           else if (col === 'correspondentBank')
             filterField = 'txn.correspondentBank';
-          else if (col === 'branch') filterField = 'txn.branchId';
           else if (col === 'referenceNumber')
             filterField = 'txn.referenceNumber';
           else if (col === 'cashflowClassification')
@@ -859,6 +860,16 @@ export class TransactionQueryService {
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
 
+          if (col === 'branch') {
+            // Lọc theo mọi chi nhánh của dòng (branch_ids), gồm cả dòng chưa gán
+            applyBranchIdsFilter(
+              qb,
+              vals,
+              `casc_branch_${column}`,
+              'txn.branchIds',
+            );
+            continue;
+          }
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';
             if (isAllMatching) {

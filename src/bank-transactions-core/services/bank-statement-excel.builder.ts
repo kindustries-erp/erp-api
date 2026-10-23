@@ -273,7 +273,10 @@ export class BankStatementExcelBuilder {
         correspondentAccount: item.correspondentAccount || '',
         correspondentName: item.correspondentName || '',
         correspondentBank: item.correspondentBank || '',
-        branchName: item.branch?.name || '',
+        branchName:
+          (item as { branchNames?: string }).branchNames ??
+          item.branch?.name ??
+          '',
         invoiceBranchName: invBranchNames,
         invoiceDate: invDates,
         invoiceNo: invNos,

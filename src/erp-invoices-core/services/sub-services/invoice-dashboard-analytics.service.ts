@@ -4,6 +4,10 @@ import { Repository } from 'typeorm';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { InvoiceDashboardStatsService } from './invoice-dashboard-stats.service';
 import { normalizeEffectiveDateTo } from './invoice-dashboard-helpers';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 export interface DebtsAnalyticsSummary {
   totalReceivable: number;
@@ -106,14 +110,9 @@ export class InvoiceDashboardAnalyticsService {
       dateFilter += ` AND inv.invoice_date <= $${pIdx++}`;
       params.push(effTo);
     }
-    if (branchId) {
-      if (branchId === 'null') {
-        dateFilter += ` AND inv.branch_id IS NULL`;
-      } else {
-        dateFilter += ` AND inv.branch_id = $${pIdx++}`;
-        params.push(branchId);
-      }
-    }
+    const branchFilter = parseBranchFilter(branchId);
+    if (branchFilter)
+      dateFilter += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     // 1. Overall Aggregation by Direction and Aging
     const summaryQuery = `

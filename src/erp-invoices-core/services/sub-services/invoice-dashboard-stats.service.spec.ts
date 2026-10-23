@@ -53,7 +53,7 @@ describe('InvoiceDashboardStatsService', () => {
 
       expect(mockInvoiceRepo.createQueryBuilder).toHaveBeenCalledWith('inv');
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'inv.branch_id IS NULL',
+        'cardinality(inv.branch_ids) = 0',
       );
       expect(result.cashTrend).toHaveLength(2);
       expect(result.cashTrend[0]).toEqual({
@@ -78,12 +78,11 @@ describe('InvoiceDashboardStatsService', () => {
       await service.getDashboardStats(
         '2026-01-01',
         '2026-09-30',
-        'branch-uuid-123',
+        '6d37f290-b465-4af1-91b6-265ced4b30bb',
       );
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'inv.branch_id = :branchId',
-        { branchId: 'branch-uuid-123' },
+        `inv.branch_ids && ARRAY['6d37f290-b465-4af1-91b6-265ced4b30bb']::uuid[]`,
       );
     });
   });

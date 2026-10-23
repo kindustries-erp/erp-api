@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { normalizeEffectiveDateTo } from './invoice-dashboard-helpers';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 export interface MonthlyCashTrendItem {
   label: string;
@@ -64,13 +68,8 @@ export class InvoiceDashboardStatsService {
       const effectiveDateTo = normalizeEffectiveDateTo(dateTo);
       qb.andWhere('inv.invoice_date <= :dateTo', { dateTo: effectiveDateTo });
     }
-    if (branchId) {
-      if (branchId === 'null') {
-        qb.andWhere('inv.branch_id IS NULL');
-      } else {
-        qb.andWhere('inv.branch_id = :branchId', { branchId });
-      }
-    }
+    const branchFilter = parseBranchFilter(branchId);
+    if (branchFilter) qb.andWhere(branchIdsSqlCondition(branchFilter));
 
     qb.groupBy("TO_CHAR(inv.invoice_date, 'YYYY-MM')");
     qb.orderBy('month', 'ASC');

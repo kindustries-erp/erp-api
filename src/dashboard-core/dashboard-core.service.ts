@@ -148,7 +148,7 @@ export class DashboardCoreService {
       let branchFilter = '';
 
       if (query.branchId) {
-        branchFilter = ' AND branch_id = $4';
+        branchFilter = ' AND branch_ids && ARRAY[$4]::uuid[]';
         queryParams.push(query.branchId);
       }
 

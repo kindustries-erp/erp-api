@@ -139,17 +139,6 @@ export class AccountingCoreService {
     );
   }
 
-  async updateJournalEntryBranch(
-    sourceId: string,
-    sourceType: string,
-    branchId: string,
-  ): Promise<void> {
-    await this.journalEntryRepo.update(
-      { sourceId, sourceType, isDeleted: false },
-      { branchId },
-    );
-  }
-
   /**
    * Tạo N bút toán cho một chứng từ, mỗi chi nhánh một bút toán (tiền chia bình quân).
    * branchIds rỗng → 1 bút toán với branchId = null.

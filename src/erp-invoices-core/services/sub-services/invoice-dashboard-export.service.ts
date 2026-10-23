@@ -9,6 +9,10 @@ import {
   getExcelColLetter,
   normalizeEffectiveDateTo,
 } from './invoice-dashboard-helpers';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 export interface DetailedInvoiceItem {
   invoiceNo: string;
@@ -79,13 +83,8 @@ export class InvoiceDashboardExportService {
     if (effectiveDateTo) {
       whereConditions.push(`inv.invoice_date <= '${effectiveDateTo}'`);
     }
-    if (branchId) {
-      if (branchId === 'null') {
-        whereConditions.push(`inv.branch_id IS NULL`);
-      } else {
-        whereConditions.push(`inv.branch_id = '${branchId}'`);
-      }
-    }
+    const branchFilter = parseBranchFilter(branchId);
+    if (branchFilter) whereConditions.push(branchIdsSqlCondition(branchFilter));
 
     if (whereConditions.length > 0) {
       query += ` AND ${whereConditions.join(' AND ')}`;

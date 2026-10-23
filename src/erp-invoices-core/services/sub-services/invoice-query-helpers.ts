@@ -344,7 +344,13 @@ export function _applyColumnSearch(
     } else if (key === 'notes') {
       applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
     } else if (key === 'branchId' || key === 'branchName') {
-      applyMultiKeywordFilter(qb, 'inv.branch_id', val, 'branchIdSearch');
+      // Tìm theo tên hoặc mã của mọi chi nhánh gán cho hóa đơn (không chỉ chi nhánh đầu)
+      applyMultiKeywordFilter(
+        qb,
+        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+        val,
+        'branchIdSearch',
+      );
     } else if (key === 'status') {
       applyMultiKeywordFilter(qb, 'inv.status', val, 'statusSearch');
     } else if (key === 'postingStatus') {
