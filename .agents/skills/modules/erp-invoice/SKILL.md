@@ -833,4 +833,7 @@ Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-
 - Ghi sổ: `AccountingCoreService.createJournalEntriesForBranches` tạo N bút toán (một chi nhánh một bút toán, số chứng từ có hậu tố a/b/c). Tiền chia bình quân theo cặp chuyển bằng `splitBalancedLinesByBranch` (`src/common/utils/money-split.util.ts`), mỗi bút toán vẫn cân Nợ = Có.
 - Đổi chi nhánh sau khi ghi sổ: `reallocateJournalEntriesBySource` (xóa mềm bút toán cũ, tạo lại theo chi nhánh mới). Dùng cho `PATCH bulk-set-branch` (body `{ids, branchIds}`, `branchIds: []` = bỏ gán) và `update`.
 - Thống kê `byBranch` (`invoice-stats.service.ts`): hóa đơn nhiều chi nhánh được tách `total / N` theo SQL (`unnest`), hóa đơn rỗng vào nhóm NULL.
-- Chưa làm: `invoice-debts*` và `invoice-dashboard*` vẫn dùng `branch_id` đơn (chi nhánh chính).
+- Lọc công nợ, dashboard, xuất, dòng hàng và tìm kiếm theo `branch_ids` (`branchIdsSqlCondition` / `parseBranchFilter` ở `src/erp-invoices-core/helpers/invoice-branch-filter.helper.ts`; giá trị chi nhánh phải là UUID hoặc `null`). Phân rã theo chi nhánh chia đều giữa các chi nhánh của hóa đơn.
+- Gán chi nhánh: luôn qua `InvoiceBranchService.assign` (ghi cả hai cột, kiểm tra `erp_branches.is_active`, tái phân bổ bút toán trong cùng transaction). Import/cổng thuế dùng `onlyIfUnassigned`.
+- `erp_branches` không có `is_deleted`; dùng `is_active`.
+- Chưa làm: 12 hóa đơn có `branch_id` khác phần tử đầu của `branch_ids` và ~278 hóa đơn đã ghi sổ có bút toán ở chi nhánh khác (xem audit); migration chuẩn hóa và CHECK constraint chờ quyết định.
