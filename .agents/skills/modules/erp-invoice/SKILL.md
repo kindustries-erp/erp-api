@@ -278,6 +278,22 @@ src/erp-invoices-core/
 
 ## 4. Danh sách API Endpoints & RBAC Contract
 
+### 4.0. API v2 lõi (`/api/v1/v2/invoices`, module `src/v2/invoices/`)
+
+Chạy song song với v1, cùng bảng `erp_invoices`, không đổi schema. Entity `Invoice` (`src/v2/invoices/entities/invoice.entity.ts`) là bản phản ánh cột thật, không đồng bộ schema (`synchronize: false`).
+
+| Method | Endpoint | Resource | Action | Ghi chú |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
+| `GET` | `/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
+| `GET` | `/v2/invoices/:id` | `invoices` | `read` | `{ message, data }` |
+| `POST` | `/v2/invoices` | `invoices` | `create` | `invoiceDate` ISO date, `direction` ∈ `IN/OUT` |
+| `PATCH` | `/v2/invoices/:id` | `invoices` | `update` | Cập nhật một phần |
+| `DELETE` | `/v2/invoices/:id` | `invoices` | `delete` | Chỉ xóa nháp (`status = DRAFT`), xóa mềm, sau đó xóa XML trên R2 (lỗi R2 chỉ ghi log) |
+
+Quy tắc: `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`.
+`message` là mã (`src/v2/invoices/invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`. Web map mã sang translation key; API không trả câu tiếng Việt.
+
 ### 4.1. Nhóm API Quản trị Hóa đơn (`/api/v1/erp-invoices`)
 
 | Method | Endpoint | Resource | Action | Mô tả chi tiết |
